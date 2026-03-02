@@ -1,0 +1,100 @@
+services:
+  aerie-caddy:
+    image: caddy:latest
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./:/app
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - aerie-php
+
+  aerie-php:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ./:/app
+    environment:
+      DATABASE_URL: mysql://symfony:symfony_password@aerie-database:3306/symfony_db?serverVersion=mariadb-11.8.0
+      REDIS_URL: redis://aerie-redis:6379
+    depends_on:
+      - aerie-database
+      - aerie-redis
+  
+  # The Market Ticker
+  # aerie-ticker:
+  #   build:
+  #     context: .
+  #     dockerfile: docker/php/Dockerfile
+  #   command: php bin/console app:market-ticker --env=prod --no-debug
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ./:/app
+  #   environment:
+  #     DATABASE_URL: mysql://symfony:symfony_password@aerie-database:3306/symfony_db?serverVersion=mariadb-11.8.0
+  #     REDIS_URL: redis://aerie-redis:6379
+  #   depends_on:
+  #     - aerie-redis
+  #     - aerie-database
+
+  # The Trade Worker
+  # aerie-worker:
+  #   build:
+  #     context: .
+  #     dockerfile: docker/php/Dockerfile
+  #   command: php bin/console app:trade-worker --env=prod --no-debug
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ./:/app
+  #   environment:
+  #     DATABASE_URL: mysql://symfony:symfony_password@aerie-database:3306/symfony_db?serverVersion=mariadb-11.8.0
+  #     REDIS_URL: redis://aerie-redis:6379
+  #   depends_on:
+  #     - aerie-redis
+  #     - aerie-database
+
+  # The WebSocket Server
+  # aerie-websocket:
+  #   build:
+  #     context: .
+  #     dockerfile: docker/php/Dockerfile
+  #   command: php bin/console app:websocket-server --env=prod --no-debug
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ./:/app
+  #   environment:
+  #     REDIS_URL: redis://aerie-redis:6379
+  #   ports:
+  #     - "8080:8080" # Expose the Workerman port to the outside world!
+  #   depends_on:
+  #     - aerie-redis
+
+  aerie-database:
+    image: mariadb:11.8
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: symfony_db
+      MYSQL_USER: symfony
+      MYSQL_PASSWORD: symfony_password
+    volumes:
+      - db_data:/var/lib/mysql
+    ports:
+      - "3306:3306" 
+
+  aerie-redis:
+    image: redis:8.6-trixie
+    restart: unless-stopped
+    ports:
+      - "6379:6379" 
+
+volumes:
+  caddy_data:
+  caddy_config:
+  db_data:
