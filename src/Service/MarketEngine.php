@@ -54,8 +54,9 @@ class MarketEngine
             $shockPct = ($jumpMultiplier - 1) * 100;
         }
 
-        // Fundamental Gravity
         $intermediatePrice = $gbmPrice * $jumpMultiplier;
+
+        // Fundamental Gravity
         $valuationEps = max($earningsPerShare, 0.10);
         $fairValue = $valuationEps * $targetPE;
 
