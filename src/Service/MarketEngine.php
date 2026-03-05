@@ -2,9 +2,20 @@
 
 namespace App\Service;
 
+/**
+ * Service responsible for calculating stock price movements based on various market factors.
+ *
+ * This engine uses a hybrid model incorporating Geometric Brownian Motion (GBM),
+ * Jump Diffusion processes, and Mean Reversion to simulate realistic stock price behavior.
+ */
 class MarketEngine
 {
 
+    /**
+     * Generates a standard normal random variable using the Box-Muller transform.
+     *
+     * @return float A random number from a standard normal distribution.
+     */
     private function generateStandardNormal(): float
     {
         do {
@@ -16,6 +27,26 @@ class MarketEngine
     }
     /**
      * Calculates the next stock price using a hybrid model.
+     *
+     * This method combines:
+     * 1. Geometric Brownian Motion (GBM) for standard drift and volatility.
+     * 2. Jump Diffusion for sudden market shocks.
+     * 3. Mean Reversion to pull the price towards a fundamental fair value based on PE.
+     *
+     * @param float $currentPrice     The current price of the stock.
+     * @param float $earningsPerShare The current earnings per share (EPS).
+     * @param float $targetPE         The target P/E ratio for the stock's sector.
+     * @param float $volatility       The stock's volatility (sigma).
+     * @param float $dt               The time step for the simulation (in years).
+     * @param float $drift            The expected return (drift) of the stock.
+     * @param float $lambda           The jump intensity (average number of jumps per year).
+     * @param float $jumpMean         The mean size of a jump (log-return).
+     * @param float $jumpVol          The volatility of the jump size.
+     * @param float $beta             The stock's beta (sensitivity to market movements).
+     * @param float $marketNoise      The systemic market noise component.
+     * @param float $reversionSpeed   The speed at which the price reverts to fair value.
+     *
+     * @return array{price: float, shock: float|null} The calculated next price and any shock percentage (if a jump occurred).
      */
     public function calculateNextPrice(
         float $currentPrice, 
