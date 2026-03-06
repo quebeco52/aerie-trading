@@ -140,7 +140,9 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $this->entityManager->commit();
 
             } catch (\Exception $e) {
-                $this->entityManager->rollback();
+                if ($this->entityManager->getConnection()->isTransactionActive()) {
+                    $this->entityManager->rollback();
+                }
                 $output->writeln("<error>Error: " . $e->getMessage() . "</error>");
                 sleep(5); 
             } finally {

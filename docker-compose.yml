@@ -28,20 +28,20 @@ services:
       - aerie-redis
   
   # The Market Ticker
-  # aerie-ticker:
-  #   build:
-  #     context: .
-  #     dockerfile: docker/php/Dockerfile
-  #   command: php bin/console app:market-ticker --env=prod --no-debug
-  #   restart: unless-stopped
-  #   volumes:
-  #     - ./:/app
-  #   environment:
-  #     DATABASE_URL: mysql://symfony:symfony_password@aerie-database:3306/symfony_db?serverVersion=mariadb-11.8.0
-  #     REDIS_URL: redis://aerie-redis:6379
-  #   depends_on:
-  #     - aerie-redis
-  #     - aerie-database
+  aerie-ticker:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    command: sh -c "php bin/console cache:clear --env=prod && php bin/console app:market-ticker --env=prod --no-debug"
+    restart: unless-stopped
+    volumes:
+      - ./:/app
+    environment:
+      DATABASE_URL: mysql://symfony:symfony_password@aerie-database:3306/symfony_db?serverVersion=mariadb-11.8.0
+      REDIS_URL: redis://aerie-redis:6379
+    depends_on:
+      - aerie-redis
+      - aerie-database
 
   # The Trade Worker
   # aerie-worker:
@@ -60,20 +60,20 @@ services:
   #     - aerie-database
 
   # The WebSocket Server
-  # aerie-websocket:
-  #   build:
-  #     context: .
-  #     dockerfile: docker/php/Dockerfile
-  #   command: php bin/console app:websocket-server --env=prod --no-debug
-  #   restart: unless-stopped
-  #   volumes:
-  #     - ./:/app
-  #   environment:
-  #     REDIS_URL: redis://aerie-redis:6379
-  #   ports:
-  #     - "8080:8080" # Expose the Workerman port to the outside world!
-  #   depends_on:
-  #     - aerie-redis
+  aerie-websocket:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    command: php bin/console app:websocket-server --env=prod --no-debug
+    restart: unless-stopped
+    volumes:
+      - ./:/app
+    environment:
+      REDIS_URL: redis://aerie-redis:6379
+    ports:
+      - "8080:8080" # Expose the Workerman port to the outside world!
+    depends_on:
+      - aerie-redis
 
   aerie-database:
     image: mariadb:11.8
