@@ -1,205 +1,208 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}{{ asset.ticker }} | Aerie Exchange{% endblock %}
-
-{% block body %}
-<div class="mb-6">
-    <a href="/" class="text-indigo-600 hover:text-indigo-400 font-medium">← Back to Dashboard</a>
-</div>
-
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <div class="lg:col-span-2 space-y-6">
-        <div class="bg-slate-800 shadow rounded-lg p-6">
-            <div class="flex justify-between items-start">
-                <div>
-                    <div class="flex items-center gap-2">
-                        <h2 class="text-3xl font-bold text-white">{{ asset.name }}</h2>
-                        <span class="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10">
-                            {{ isEtf ? 'Market Index' : asset.sector }}
-                        </span>
-                    </div>
-                    <p class="text-lg text-gray-400 font-mono mt-1">{{ asset.ticker }}</p>
-                </div>
-                <div class="text-right">
-                    <span class="block text-5xl font-mono font-bold text-white transition-colors duration-300" id="big-price">
-                        ${{ asset.price|number_format(2) }}
-                    </span>
-                    <span class="text-sm text-gray-400" id="live-indicator">● Live Market</span>
-                </div>
-            </div>
-            <div class="flex justify-end space-x-2 mt-4">
-                <button class="range-btn px-3 py-1 text-xs font-semibold rounded bg-slate-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition" data-range="1w">1W</button>
-                <button class="range-btn px-3 py-1 text-xs font-semibold rounded bg-slate-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition" data-range="1m">1M</button>
-                <button class="range-btn px-3 py-1 text-xs font-semibold rounded bg-slate-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition" data-range="6m">6M</button>
-                <button class="range-btn px-3 py-1 text-xs font-semibold rounded bg-indigo-600 text-white transition" data-range="1y">1Y</button>
-                <button class="range-btn px-3 py-1 text-xs font-semibold rounded bg-slate-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition" data-range="3y">3Y</button>
-                <button class="range-btn px-3 py-1 text-xs font-semibold rounded bg-slate-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition" data-range="5y">5Y</button>
-                <button class="range-btn px-3 py-1 text-xs font-semibold rounded bg-slate-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition" data-range="10y">10Y</button>
-                <button class="range-btn px-3 py-1 text-xs font-semibold rounded bg-slate-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition" data-range="max">MAX</button>
-            </div>
-            <div class="w-full h-96 mt-2">
-                <canvas id="mainChart"></canvas>
-            </div>
-        </div>
-
-        <div class="bg-slate-800 shadow rounded-lg p-6">
-            <h3 class="text-lg font-medium leading-6 text-white mb-4">About {{ asset.name }}</h3>
-            <div class="text-sm text-gray-300 leading-relaxed">
-                <p>{{ generalInfo }}</p>
-            </div>
-        </div>
-    </div>
-
-    <div class="space-y-6">
-        <div class="bg-slate-800 shadow rounded-lg p-6 border-l-4 border-indigo-500">
-            <h3 class="text-base font-semibold leading-6 text-white mb-4">Trade {{ asset.ticker }}</h3>
-
-            {% if userQuantity > 0 %}
-                <div class="mb-4 p-3 bg-slate-700 rounded-md border border-indigo-500/30">
-                    <div class="flex justify-between items-center">
-                        <span class="text-sm text-indigo-300 font-medium">Your Position:</span>
-                        <span class="text-sm font-bold text-indigo-100">{{ userQuantity|number_format }} Shares</span>
-                    </div>
-                    <div class="flex justify-between items-center mt-1">
-                        <span class="text-sm text-indigo-300 font-medium">Market Value:</span>
-                        <span class="text-sm font-bold text-indigo-100" id="user-holding-value">${{ (userQuantity * asset.price)|number_format(2) }}</span>
-                    </div>
-                </div>
-            {% endif %}
-
-            <form action="/trade" method="POST" class="space-y-4">
-                <input type="hidden" name="stock_id" value="{{ asset.id }}">
-                <div>
-                    <label class="block text-sm font-medium leading-6 text-white">Quantity</label>
-                    <input type="number" name="quantity" min="1" value="10" class="mt-1 block w-full rounded-md border-0 py-1.5 text-black px-3 shadow-sm ring-1 ring-inset ring-gray-300">
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <button type="submit" name="action" value="buy" class="flex w-full justify-center rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-indigo-500">Buy</button>
-                    <button type="submit" name="action" value="sell" class="flex w-full justify-center rounded-md bg-slate-600 px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-slate-500">Sell</button>
-                </div>
-            </form>
-        </div>
-
-        {% if not isEtf %}
-            <div class="bg-slate-800 shadow rounded-lg p-6">
-                <h3 class="text-base font-semibold leading-6 text-white mb-4">Market Fundamentals</h3>
-                <dl class="divide-y divide-gray-700">
-                    <div class="px-0 py-3 sm:grid sm:grid-cols-2 sm:gap-4 sm:px-0">
-                        <dt class="text-sm font-medium leading-6 text-gray-400">Market Cap</dt>
-                        <dd class="mt-1 text-sm leading-6 text-white sm:mt-0 sm:text-right font-mono font-bold" id="stat-mkt-cap">
-                            ${{ (marketCap / 1000000)|number_format(2) }}M
-                        </dd>
-                    </div>
-                    <div class="px-0 py-3 sm:grid sm:grid-cols-2 sm:gap-4 sm:px-0">
-                        <dt class="text-sm font-medium leading-6 text-gray-400">P/E Ratio</dt>
-                        <dd class="mt-1 text-sm leading-6 text-white sm:mt-0 sm:text-right font-mono" id="stat-pe">
-                            {{ peRatio|number_format(2) }}
-                        </dd>
-                    </div>
-                    <div class="px-0 py-3 sm:grid sm:grid-cols-2 sm:gap-4 sm:px-0">
-                        <dt class="text-sm font-medium leading-6 text-gray-400">EPS (Earnings)</dt>
-                        <dd class="mt-1 text-sm leading-6 text-white sm:mt-0 sm:text-right font-mono" id="stat-eps">
-                            ${{ asset.earningsPerShare|number_format(2) }}
-                        </dd>
-                    </div>
-                    <div class="px-0 py-3 sm:grid sm:grid-cols-2 sm:gap-4 sm:px-0">
-                        <dt class="text-sm font-medium leading-6 text-gray-400">Volatility</dt>
-                        <dd class="mt-1 text-sm leading-6 text-white sm:mt-0 sm:text-right font-mono">
-                            {{ asset.volatility * 100 }}%
-                        </dd>
-                    </div>
-                    <div class="px-0 py-3 sm:grid sm:grid-cols-2 sm:gap-4 sm:px-0">
-                        <dt class="text-sm font-medium leading-6 text-gray-400">Beta</dt>
-                        <dd class="mt-1 text-sm leading-6 text-white sm:mt-0 sm:text-right font-mono">
-                            {{ asset.beta|number_format(2) }}
-                        </dd>
-                    </div>
-                </dl>
-            </div>
-
-            <div class="bg-slate-800 shadow rounded-lg p-6">
-                <h3 class="text-base font-semibold leading-6 text-white mb-2">Risk Profile</h3>
-                <div class="text-sm text-gray-400">
-                    <p>Jump Intensity: <strong class="text-white">{{ asset.jumpIntensity }}</strong></p>
-                    <p class="mt-1">Sector Target P/E: <strong class="text-white">{{ targetPE|number_format(2) }}</strong></p>
-                </div>
-            </div>
-        {% else %}
-            <div class="bg-slate-800 shadow rounded-lg p-6">
-                <h3 class="text-base font-semibold leading-6 text-white mb-4">Index Composition</h3>
-                <div class="relative h-72 w-full flex justify-center">
-                    <canvas id="etfPieChart"></canvas>
-                </div>
-            </div>
-        {% endif %}
-
-        <div class="bg-slate-800 shadow rounded-lg p-6">
-            <h3 class="text-base font-semibold leading-6 text-white mb-4">Recent News & Events</h3>
-
-            {% if events is empty %}
-                <p class="text-sm text-gray-400 italic">No recent news reported.</p>
-            {% else %}
-                <ul role="list" class="divide-y divide-gray-700">
-                    {% for event in events %}
-                        {% set isPositive = event.changePercent >= 0 %}
-                        <li class="py-3">
-                            <div class="flex items-start justify-between">
-                                <div class="flex items-start gap-2">
-                                    <span class="flex-shrink-0 text-lg mt-0.5">{{ event.eventType == 'SHOCK' ? '⚡' : '📢' }}</span>
-                                    <div>
-                                        <p class="text-sm font-medium text-white">{{ event.eventType }}</p>
-                                        <p class="text-xs text-gray-400 break-words" style="max-width: 200px;">
-                                            {{ event.description }}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div class="text-right flex-shrink-0 ml-2"> 
-                                    <span class="inline-flex items-center rounded-md {{ isPositive ? 'bg-green-900/50 text-green-400 ring-green-500/20' : 'bg-red-900/50 text-red-400 ring-red-500/20' }} px-2 py-1 text-xs font-medium ring-1 ring-inset">
-                                        {{ isPositive ? '+' : '' }}{{ event.changePercent|number_format(2) }}%
-                                    </span>
-                                    <p class="text-xs text-gray-500 mt-1">
-                                        {{ event.recordedAt|date('H:i') }}
-                                    </p>
-                                </div>
-                            </div>
-                        </li>
-                    {% endfor %}
-                </ul>
-            {% endif %}
-        </div>
-        </div>
-
-        
-    </div>
-</div>
+{% block title %}
+	{{ asset.ticker }}
+	| Aerie Exchange
 {% endblock %}
 
-{% block javascripts %}
+{% block body %}
+	<div class="mb-6">
+		<a href="/" class="text-indigo-600 hover:text-indigo-400 font-medium">← Back to Dashboard</a>
+	</div>
+
+	<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+		<div class="lg:col-span-2 space-y-6">
+			<div class="bg-slate-800 shadow rounded-lg p-6">
+				<div class="flex justify-between items-start">
+					<div>
+						<div class="flex items-center gap-2">
+							<h2 class="text-3xl font-bold text-white">{{ asset.name }}</h2>
+							<span class="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10">
+								{{ isEtf ? 'Market Index' : asset.sector }}
+							</span>
+						</div>
+						<p class="text-lg text-gray-400 font-mono mt-1">{{ asset.ticker }}</p>
+					</div>
+					<div class="text-right">
+						<span class="block text-5xl font-mono font-bold text-white transition-colors duration-300" id="big-price">
+							${{ asset.price|number_format(2) }}
+						</span>
+						<span class="text-sm text-gray-400" id="live-indicator">● Live Market</span>
+					</div>
+				</div>
+				<div class="flex justify-end space-x-2 mt-4">
+					<button class="range-btn px-3 py-1 text-xs font-semibold rounded bg-slate-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition" data-range="1w">1W</button>
+					<button class="range-btn px-3 py-1 text-xs font-semibold rounded bg-slate-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition" data-range="1m">1M</button>
+					<button class="range-btn px-3 py-1 text-xs font-semibold rounded bg-slate-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition" data-range="6m">6M</button>
+					<button class="range-btn px-3 py-1 text-xs font-semibold rounded bg-indigo-600 text-white transition" data-range="1y">1Y</button>
+					<button class="range-btn px-3 py-1 text-xs font-semibold rounded bg-slate-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition" data-range="3y">3Y</button>
+					<button class="range-btn px-3 py-1 text-xs font-semibold rounded bg-slate-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition" data-range="5y">5Y</button>
+					<button class="range-btn px-3 py-1 text-xs font-semibold rounded bg-slate-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition" data-range="10y">10Y</button>
+					<button class="range-btn px-3 py-1 text-xs font-semibold rounded bg-slate-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition" data-range="max">MAX</button>
+				</div>
+				<div class="w-full h-96 mt-2">
+					<canvas id="mainChart"></canvas>
+				</div>
+			</div>
+
+			<div class="bg-slate-800 shadow rounded-lg p-6">
+				<h3 class="text-lg font-medium leading-6 text-white mb-4">About
+					{{ asset.name }}</h3>
+				<div class="text-sm text-gray-300 leading-relaxed">
+					<p>{{ generalInfo }}</p>
+				</div>
+			</div>
+		</div>
+
+		<div class="space-y-6">
+			<div class="bg-slate-800 shadow rounded-lg p-6 border-l-4 border-indigo-500">
+				<h3 class="text-base font-semibold leading-6 text-white mb-4">Trade
+					{{ asset.ticker }}</h3>
+
+				{% if userQuantity > 0 %}
+					<div class="mb-4 p-3 bg-slate-700 rounded-md border border-indigo-500/30">
+						<div class="flex justify-between items-center">
+							<span class="text-sm text-indigo-300 font-medium">Your Position:</span>
+							<span class="text-sm font-bold text-indigo-100">{{ userQuantity|number_format }}
+								Shares
+                            </span>
+						</div>
+						<div class="flex justify-between items-center mt-1">
+							<span class="text-sm text-indigo-300 font-medium">Market Value:</span>
+							<span class="text-sm font-bold text-indigo-100" id="user-holding-value">${{ (userQuantity * asset.price)|number_format(2) }}</span>
+						</div>
+					</div>
+				{% endif %}
+
+				<form action="/trade" method="POST" class="space-y-4">
+					<input type="hidden" name="stock_id" value="{{ asset.id }}">
+					<div>
+						<label class="block text-sm font-medium leading-6 text-white">Quantity</label>
+						<input type="number" name="quantity" min="1" value="10" class="mt-1 block w-full rounded-md border-0 py-1.5 text-black px-3 shadow-sm ring-1 ring-inset ring-gray-300">
+					</div>
+					<div class="grid grid-cols-2 gap-4">
+						<button type="submit" name="action" value="buy" class="flex w-full justify-center rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-indigo-500">Buy</button>
+						<button type="submit" name="action" value="sell" class="flex w-full justify-center rounded-md bg-slate-600 px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-slate-500">Sell</button>
+					</div>
+				</form>
+			</div>
+
+			{% if not isEtf %}
+				<div class="bg-slate-800 shadow rounded-lg p-6">
+					<h3 class="text-base font-semibold leading-6 text-white mb-4">Market Fundamentals</h3>
+					<dl class="divide-y divide-gray-700">
+						<div class="px-0 py-3 sm:grid sm:grid-cols-2 sm:gap-4 sm:px-0">
+							<dt class="text-sm font-medium leading-6 text-gray-400">Market Cap</dt>
+							<dd class="mt-1 text-sm leading-6 text-white sm:mt-0 sm:text-right font-mono font-bold" id="stat-mkt-cap">
+								${{ (marketCap / 1000000)|number_format(2) }}M
+							</dd>
+						</div>
+						<div class="px-0 py-3 sm:grid sm:grid-cols-2 sm:gap-4 sm:px-0">
+							<dt class="text-sm font-medium leading-6 text-gray-400">P/E Ratio</dt>
+							<dd class="mt-1 text-sm leading-6 text-white sm:mt-0 sm:text-right font-mono" id="stat-pe">
+								{{ peRatio|number_format(2) }}
+							</dd>
+						</div>
+						<div class="px-0 py-3 sm:grid sm:grid-cols-2 sm:gap-4 sm:px-0">
+							<dt class="text-sm font-medium leading-6 text-gray-400">EPS (Earnings)</dt>
+							<dd class="mt-1 text-sm leading-6 text-white sm:mt-0 sm:text-right font-mono" id="stat-eps">
+								${{ asset.earningsPerShare|number_format(2) }}
+							</dd>
+						</div>
+						<div class="px-0 py-3 sm:grid sm:grid-cols-2 sm:gap-4 sm:px-0">
+							<dt class="text-sm font-medium leading-6 text-gray-400">Volatility</dt>
+							<dd class="mt-1 text-sm leading-6 text-white sm:mt-0 sm:text-right font-mono">
+								{{ asset.volatility * 100 }}%
+							</dd>
+						</div>
+						<div class="px-0 py-3 sm:grid sm:grid-cols-2 sm:gap-4 sm:px-0">
+							<dt class="text-sm font-medium leading-6 text-gray-400">Beta</dt>
+							<dd class="mt-1 text-sm leading-6 text-white sm:mt-0 sm:text-right font-mono">
+								{{ asset.beta|number_format(2) }}
+							</dd>
+						</div>
+					</dl>
+				</div>
+
+				<div class="bg-slate-800 shadow rounded-lg p-6">
+					<h3 class="text-base font-semibold leading-6 text-white mb-2">Risk Profile</h3>
+					<div class="text-sm text-gray-400">
+						<p>Jump Intensity:
+							<strong class="text-white">{{ asset.jumpIntensity }}</strong>
+						</p>
+						<p class="mt-1">Sector Target P/E:
+							<strong class="text-white">{{ targetPE|number_format(2) }}</strong>
+						</p>
+					</div>
+				</div>
+			{% else %}
+				<div class="bg-slate-800 shadow rounded-lg p-6">
+					<h3 class="text-base font-semibold leading-6 text-white mb-4">Index Composition</h3>
+					<div class="relative h-72 w-full flex justify-center">
+						<canvas id="etfPieChart"></canvas>
+					</div>
+				</div>
+			{% endif %}
+
+			<div class="bg-slate-800 shadow rounded-lg p-6">
+				<h3 class="text-base font-semibold leading-6 text-white mb-4">Recent News & Events</h3>
+
+				<p id="no-events-msg" class="text-sm text-gray-400 italic {{ events is not empty ? 'hidden' : '' }}">No recent news reported.</p>
+				<ul id="events-list" role="list" class="divide-y divide-gray-700">
+					{% for event in events %}
+						{% set isPositive = event.changePercent >= 0 %}
+						<li class="py-3">
+							<div class="flex items-start justify-between">
+								<div class="flex items-start gap-2">
+									<span class="flex-shrink-0 text-lg mt-0.5">{{ event.eventType == 'SHOCK' ? '⚡' : '📢' }}</span>
+									<div>
+										<p class="text-sm font-medium text-white">{{ event.eventType }}</p>
+										<p class="text-xs text-gray-400 break-words" style="max-width: 200px;">
+											{{ event.description }}
+										</p>
+									</div>
+								</div>
+
+								<div class="text-right flex-shrink-0 ml-2">
+									<span class="inline-flex items-center rounded-md {{ isPositive ? 'bg-green-900/50 text-green-400 ring-green-500/20' : 'bg-red-900/50 text-red-400 ring-red-500/20' }} px-2 py-1 text-xs font-medium ring-1 ring-inset">
+										{{ isPositive ? '+' : '' }}{{ event.changePercent|number_format(2) }}%
+									</span>
+									<p class="text-xs text-gray-500 mt-1">
+										{{ event.recordedAt|date('H:i') }}
+									</p>
+								</div>
+							</div>
+						</li>
+					{% endfor %}
+				</ul>
+			</div>
+		</div>
+
+
+	</div>
+</div>{% endblock %}{% block javascripts %}
 <script>
-    // Pass Twig variables to the global window object
-    window.AERIE_DATA = {
-        ticker: "{{ asset.ticker }}",
-        isEtf: {{ isEtf ? 'true' : 'false' }},
-        sharesOutstanding: {{ isEtf ? 0 : asset.sharesOutstanding }},
-        userQuantity: {{ userQuantity }},
-        eps: {{ isEtf ? 0 : asset.earningsPerShare }},
-        
-        // Build the ETF data arrays if this is an ETF
-        pieLabels: [
-            {% if isEtf and allAssets is defined %}{% for a in allAssets %}"{{ a.ticker }}"{{ not loop.last ? ',' : '' }}{% endfor %}{% endif %}
-        ],
-        pieData: [
-            {% if isEtf and allAssets is defined %}{% for a in allAssets %}{{ a.price * a.sharesOutstanding }}{{ not loop.last ? ',' : '' }}{% endfor %}{% endif %}
-        ],
-        sharesMap: {
-            {% if isEtf and allAssets is defined %}{% for a in allAssets %}"{{ a.ticker }}": {{ a.sharesOutstanding }}{{ not loop.last ? ',' : '' }}{% endfor %}{% endif %}
-        }
-    };
+	// Pass Twig variables to the global window object
+window.AERIE_DATA = {
+ticker: "{{ asset.ticker }}",
+isEtf: {{ isEtf ? 'true' : 'false' }},
+sharesOutstanding: {{ isEtf ? 0 : asset.sharesOutstanding }},
+userQuantity: {{ userQuantity }},
+eps: {{ isEtf ? 0 : asset.earningsPerShare }},
+
+// Build the ETF data arrays if this is an ETF
+pieLabels: [{% if isEtf and allAssets is defined %}
+{% for a in allAssets %}"{{ a.ticker }}"{{ not loop.last ? ',' : '' }}{% endfor %}{% endif %}],
+pieData: [{% if isEtf and allAssets is defined %}
+{% for a in allAssets %}{{ a.price * a.sharesOutstanding }}{{ not loop.last ? ',' : '' }}{% endfor %}{% endif %}],
+sharesMap: {
+{% if isEtf and allAssets is defined %}
+{% for a in allAssets %}"{{ a.ticker }}" : {{ a.sharesOutstanding }}
+{{ not loop.last ? ',' : '' }}{% endfor %}{% endif %}
+}
+};
 </script>
 
 <script src="{{ asset('js/colors.js') }}"></script>
-    
-<script src="{{ asset('js/stock.js') }}"></script>
 
-{% endblock %}
+<script src="{{ asset('js/stock.js') }}"></script>{% endblock %}

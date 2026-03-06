@@ -15,7 +15,7 @@ let fallbackIndex = 0;
 if (IS_ETF) {
     for (let i = 0; i < pieLabels.length; i++) {
         const currentTicker = pieLabels[i];
-        
+
         let sliceColor = BRAND_COLORS[currentTicker];
         if (!sliceColor) {
             sliceColor = FALLBACK_PALETTE[fallbackIndex % FALLBACK_PALETTE.length];
@@ -84,7 +84,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     },
                     tooltip: {
                         callbacks: {
-                            label: function(context) {
+                            label: function (context) {
                                 let value = context.raw;
                                 let total = context.chart._metasets[context.datasetIndex].total;
                                 let percentage = ((value / total) * 100).toFixed(1) + "%";
@@ -173,7 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('stat-mkt-cap').innerText = '$' + (newMarketCap / 1000000).toFixed(2) + 'M';
                 document.getElementById('stat-pe').innerText = newPeRatio.toFixed(2);
             } else if (IS_ETF && etfPieChart) {
-                
+
                 // Update our structured objects with new live values
                 let updated = false;
                 payload.stocks.forEach(stock => {
@@ -192,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     etfPieChart.data.labels = etfComponents.map(c => c.ticker);
                     etfPieChart.data.datasets[0].data = etfComponents.map(c => c.value);
                     etfPieChart.data.datasets[0].backgroundColor = etfComponents.map(c => c.color);
-                    
+
                     etfPieChart.update('none');
                 }
             }
@@ -219,5 +219,67 @@ document.addEventListener('DOMContentLoaded', () => {
                 mainChart.update('none');
             }
         }
+
+        if (payload.events && payload.events.length > 0) {
+            payload.events.forEach(evt => {
+
+                // Only show the event if it belongs to the stock we are currently looking at
+                if (evt.ticker === CURRENT_TICKER) {
+                    const noMsg = document.getElementById('no-events-msg');
+                    const list = document.getElementById('events-list');
+
+                    // Hide the "No news" message if it's currently showing
+                    if (noMsg) noMsg.classList.add('hidden');
+
+                    const isPositive = parseFloat(evt.change_percent) >= 0;
+                    const icon = evt.type === 'SHOCK' ? '⚡' : '📢';
+
+                    // Fallback description just in case the backend payload didn't include one
+                    const desc = evt.description || (evt.type === 'SHOCK' ? 'Sudden market shock detected.' : 'Earnings report released.');
+
+                    const colorClass = isPositive ? 'bg-green-900/50 text-green-400 ring-green-500/20' : 'bg-red-900/50 text-red-400 ring-red-500/20';
+                    const sign = isPositive ? '+' : '';
+                    const pct = parseFloat(evt.change_percent).toFixed(2);
+
+                    // Get the live current time
+                    const now = new Date();
+                    const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+
+                    // Build the new list item
+                    const li = document.createElement('li');
+                    li.className = 'py-3';
+                    li.innerHTML = `
+                    <div class="flex items-start justify-between">
+                        <div class="flex items-start gap-2">
+                            <span class="flex-shrink-0 text-lg mt-0.5">${icon}</span>
+                            <div>
+                                <p class="text-sm font-medium text-white">${evt.type}</p>
+                                <p class="text-xs text-gray-400 break-words" style="max-width: 200px;">
+                                    ${desc}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="text-right flex-shrink-0 ml-2"> 
+                            <span class="inline-flex items-center rounded-md ${colorClass} px-2 py-1 text-xs font-medium ring-1 ring-inset">
+                                ${sign}${pct}%
+                            </span>
+                            <p class="text-xs text-gray-500 mt-1">${timeStr}</p>
+                        </div>
+                    </div>
+                `;
+
+                    // Pop it right to the top of the list
+                    if (list) {
+                        list.prepend(li);
+
+                        // Keep the list clean: Remove the oldest event if we have more than 10
+                        if (list.children.length > 10) {
+                            list.removeChild(list.lastChild);
+                        }
+                    }
+                }
+            });
+        }
+
     };
 });
