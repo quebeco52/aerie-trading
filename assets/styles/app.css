@@ -1,3 +1,9 @@
+@import "tailwindcss";
+
+@source "../../templates";
+@source "../../src";
+@source "../../public/js";
+
 body {
     background-color: skyblue;
 }

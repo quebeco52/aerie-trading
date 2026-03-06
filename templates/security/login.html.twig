@@ -1,38 +1,58 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Log in!{% endblock %}
+{% block title %}Log in! | Aerie Exchange{% endblock %}
 
 {% block body %}
-    <form method="post">
-        {% if error %}
-            <div class="alert alert-danger">{{ error.messageKey|trans(error.messageData, 'security') }}</div>
-        {% endif %}
+<div class="flex min-h-full flex-col justify-center px-6 py-12 lg:px-8">
+    <div class="sm:mx-auto sm:w-full sm:max-w-sm">
+        <h2 class="mt-10 text-center text-2xl font-bold leading-9 tracking-tight text-white">Sign in to Aerie</h2>
+    </div>
 
-        {% if app.user %}
-            <div class="mb-3">
-                You are logged in as {{ app.user.userIdentifier }}, <a href="{{ logout_path() }}">Logout</a>
+    <div class="mt-10 sm:mx-auto sm:w-full sm:max-w-sm">
+        <form class="space-y-6" method="post">
+            
+            {# Show errors #}
+            {% if error %}
+                <div class="text-red-400 text-sm font-bold bg-red-900/50 p-3 rounded">
+                    {{ error.messageKey|trans(error.messageData, 'security') }}
+                </div>
+            {% endif %}
+
+            {# If they are already logged in but somehow hit this page #}
+            {% if app.user %}
+                <div class="text-indigo-300 text-sm font-bold bg-indigo-900/50 p-3 rounded mb-3">
+                    You are logged in as {{ app.user.userIdentifier }}, <a href="{{ path('app_logout') }}" class="underline hover:text-white">Logout</a>
+                </div>
+            {% endif %}
+
+            <div>
+                <label for="username" class="block text-sm font-medium leading-6 text-white">Email address</label>
+                <div class="mt-2">
+                    <input type="email" value="{{ last_username }}" name="_username" id="username" class="block w-full rounded-md border-0 bg-white/5 py-1.5 text-white shadow-sm ring-1 ring-inset ring-white/10 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm sm:leading-6 px-3" autocomplete="email" required autofocus>
+                </div>
             </div>
-        {% endif %}
 
-        <h1 class="h3 mb-3 font-weight-normal">Please sign in</h1>
-        <label for="username">Email</label>
-        <input type="email" value="{{ last_username }}" name="_username" id="username" class="form-control" autocomplete="email" required autofocus>
-        <label for="password">Password</label>
-        <input type="password" name="_password" id="password" class="form-control" autocomplete="current-password" required>
-        <input type="hidden" name="_csrf_token" data-controller="csrf-protection" value="{{ csrf_token('authenticate') }}">
-
-        {#
-            Uncomment this section and add a remember_me option below your firewall to activate remember me functionality.
-            See https://symfony.com/doc/current/security/remember_me.html
-
-            <div class="checkbox mb-3">
-                <input type="checkbox" name="_remember_me" id="_remember_me">
-                <label for="_remember_me">Remember me</label>
+            <div>
+                <label for="password" class="block text-sm font-medium leading-6 text-white">Password</label>
+                <div class="mt-2">
+                    <input type="password" name="_password" id="password" class="block w-full rounded-md border-0 bg-white/5 py-1.5 text-white shadow-sm ring-1 ring-inset ring-white/10 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm sm:leading-6 px-3" autocomplete="current-password" required>
+                </div>
             </div>
-        #}
 
-        <button class="btn btn-lg btn-primary" type="submit">
-            Sign in
-        </button>
-    </form>
+            {# CRITICAL: CSRF Protection for the form #}
+            <input type="hidden" name="_csrf_token" data-controller="csrf-protection" value="{{ csrf_token('authenticate') }}">
+
+            <div>
+                <button type="submit" class="flex w-full justify-center rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
+                    Sign in
+                </button>
+            </div>
+        </form>
+
+        <p class="mt-10 text-center text-sm text-gray-400">
+            Not a member?
+            <a href="{{ path('app_register') }}" class="font-semibold leading-6 text-indigo-400 hover:text-indigo-300">Create an account</a>
+        </p>
+    </div>
+</div>
 {% endblock %}
