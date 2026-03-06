@@ -107,7 +107,7 @@ class StockController extends AbstractController
 
         if (!$ticker) return $this->json([]);
 
-        // USE RAW DBAL CONNECTION FOR MASSIVE QUERIES
+        // USE RAW DBAL CONNECTION FOR BIG QUERIES
         $conn = $entityManager->getConnection();
 
         $stock = $entityManager->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);

@@ -1,3 +1,5 @@
 2026-03-06 12:39:32 pid:1 Workerman[console] start in DEBUG mode
 2026-03-06 12:48:39 pid:1 Workerman[console] received signal SIGQUIT
 2026-03-06 12:48:39 pid:1 Workerman[console] stopping
+2026-03-06 15:16:54 pid:1 Workerman[console] start in DEBUG mode
+2026-03-06 15:16:54 pid:1 Master pid:1 is not alive
