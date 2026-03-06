@@ -17,11 +17,6 @@ use Doctrine\ORM\EntityManagerInterface;
  */
 class StockTracker
 {
-    /**
-     * @param EntityManagerInterface $entityManager The Doctrine Entity Manager
-     * @param MarketEngine           $marketEngine  Service for calculating stock price movements
-     * @param EarningsEngine         $earningsEngine Service for simulating earnings reports
-     */
     public function __construct(
         private EntityManagerInterface $entityManager,
         private MarketEngine $marketEngine,
@@ -29,21 +24,6 @@ class StockTracker
     ) {
     }
 
-    /**
-     * Updates all tracked stocks for a given time step.
-     *
-     * This method fetches all stocks, applies market noise and specific stock volatility
-     * to calculate new prices, checks for market shocks and earnings events,
-     * and persists the updates and history to the database.
-     *
-     * @param float $dt The time step for the simulation (e.g., fraction of a year).
-     *
-     * @return array{
-     *     updates: list<array{ticker: string, price: float, market_cap: float}>,
-     *     total_cap: float,
-     *     events: list<array>
-     * } An array containing stock updates, total market capitalization, and any events that occurred.
-     */
     public function updateStocks(float $dt): array
     {
         // Fetch all Stock entities from the database
@@ -53,7 +33,7 @@ class StockTracker
         $totalMarketCap = 0.0;
         $events = [];
 
-        // Market noise calculation
+        // Market noise calculation (Systemic shock applied to all stocks)
         do {
             $mx = mt_rand() / mt_getrandmax();
             $my = mt_rand() / mt_getrandmax();
@@ -62,27 +42,36 @@ class StockTracker
         $marketVol = 0.15;
         $marketNoise = $marketVol * sqrt($dt) * $marketZ;
 
+
         foreach ($stocks as $stock) {
             // Target PE fallback
             $targetPE = SectorPE::TARGETS[$stock->getSector()] ?? 20.0;
 
+            // Determine Volatility
+            $baselineVol = (float) $stock->getVolatility();
+            $currentVol = $stock->getCurrentVolatility() !== null 
+                ? (float) $stock->getCurrentVolatility() 
+                : $baselineVol;
+
             // Calculate new price
             $calculation = $this->marketEngine->calculateNextPrice(
-                (float) $stock->getPrice(),
-                (float) $stock->getEarningsPerShare(),
-                $targetPE,
-                (float) $stock->getVolatility(),
-                $dt,
-                0.1, // Drift
-                (float) $stock->getJumpIntensity(),
-                (float) $stock->getJumpMean(),
-                (float) $stock->getJumpVol(),
-                (float) $stock->getBeta(),
-                $marketNoise,
-                0.3 // Reversion speed
+                currentPrice: (float) $stock->getPrice(),
+                currentVolatility: $currentVol,
+                longTermVolatility: $baselineVol,
+                earningsPerShare: (float) $stock->getEarningsPerShare(),
+                targetPE: $targetPE,
+                dt: $dt,
+                drift: 0.1,
+                lambda: (float) $stock->getJumpIntensity(),
+                jumpMean: (float) $stock->getJumpMean(),
+                jumpVol: (float) $stock->getJumpVol(),
+                beta: (float) $stock->getBeta(),
+                marketNoise: $marketNoise,
+                reversionSpeed: 0.3
             );
 
             $newPrice = $calculation['price'];
+            $nextVolatility = $calculation['next_volatility'];
 
             // Handle Market Shocks via Doctrine Entities
             if ($calculation['shock'] !== null) {
@@ -95,7 +84,6 @@ class StockTracker
                 $event->setDescription("Sudden market shock detected.");
                 $event->setChangePercent((string) $calculation['shock']);
                 
-                // Save this new entity
                 $this->entityManager->persist($event);
 
                 $events[] = [
@@ -105,16 +93,17 @@ class StockTracker
                 ];
             }
 
-            // (You'll need to update EarningsEngine to use Entities just like we did above)
+            // Earnings Engine
             $earningsEvent = $this->earningsEngine->calculate($stock, $dt);
             if ($earningsEvent) {
                 $events[] = $earningsEvent;
             }
 
-            // 4. Update the Stock Object
+            // Update the Stock Object (Price AND Volatility)
             $stock->setPrice((string) $newPrice);
+            $stock->setCurrentVolatility((string) $nextVolatility);
 
-            // 5. Create the History Record
+            // Create the History Record
             $history = new StockHistory();
             $history->setStock($stock);
             $history->setPrice((string) $newPrice);

@@ -94,6 +94,9 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         ";
 
         while ($this->keepRunning) {
+            
+            pcntl_signal_dispatch();
+
             if ($tickCount % 10 === 0) {
                 $simDay = ($tickCount / self::TICKS_PER_YEAR) * 365;
                 $output->writeln("Updating Market Prices... (Day: " . number_format($simDay, 1) . ") [Tick: $tickCount]");

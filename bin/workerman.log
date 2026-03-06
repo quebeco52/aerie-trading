@@ -3,3 +3,19 @@
 2026-03-06 12:48:39 pid:1 Workerman[console] stopping
 2026-03-06 15:16:54 pid:1 Workerman[console] start in DEBUG mode
 2026-03-06 15:16:54 pid:1 Master pid:1 is not alive
+2026-03-06 20:04:53 pid:1 Workerman[console] received signal SIGQUIT
+2026-03-06 20:04:53 pid:1 Workerman[console] stopping
+2026-03-06 20:06:45 pid:1 Workerman[console] start in DEBUG mode
+2026-03-06 20:06:45 pid:1 Master pid:1 is not alive
+2026-03-06 20:08:30 pid:1 Workerman[console] received signal SIGQUIT
+2026-03-06 20:08:30 pid:1 Workerman[console] stopping
+2026-03-06 20:13:06 pid:1 Workerman[console] start in DEBUG mode
+2026-03-06 20:13:06 pid:1 Master pid:1 is not alive
+2026-03-06 20:22:15 pid:1 Workerman[console] received signal SIGQUIT
+2026-03-06 20:22:15 pid:1 Workerman[console] stopping
+2026-03-06 20:22:30 pid:1 Workerman[console] start in DEBUG mode
+2026-03-06 20:22:30 pid:1 Master pid:1 is not alive
+2026-03-06 20:22:53 pid:1 Workerman[console] received signal SIGQUIT
+2026-03-06 20:22:53 pid:1 Workerman[console] stopping
+2026-03-06 20:23:16 pid:1 Workerman[console] start in DEBUG mode
+2026-03-06 20:23:16 pid:1 Master pid:1 is not alive

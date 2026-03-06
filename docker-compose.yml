@@ -32,7 +32,7 @@ services:
     build:
       context: .
       dockerfile: docker/php/Dockerfile
-    command: sh -c "php bin/console cache:clear --env=prod && php bin/console app:market-ticker --env=prod --no-debug"
+    command: ["php", "bin/console", "app:market-ticker", "--env=prod", "--no-debug"]
     restart: unless-stopped
     volumes:
       - ./:/app

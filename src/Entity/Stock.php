@@ -35,6 +35,9 @@ class Stock
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.02'])]
     private ?string $volatility = '0.02';
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $currentVolatility = null;
+
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 2, nullable: true, options: ['default' => '1.00'])]
     private ?string $beta = '1.00';
 
@@ -132,6 +135,18 @@ class Stock
     public function setVolatility(string $volatility): static
     {
         $this->volatility = $volatility;
+
+        return $this;
+    }
+
+    public function getCurrentVolatility(): ?string
+    {
+        return $this->currentVolatility;
+    }
+
+    public function setCurrentVolatility(?string $currentVolatility): static
+    {
+        $this->currentVolatility = $currentVolatility;
 
         return $this;
     }

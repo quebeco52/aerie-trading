@@ -14,8 +14,7 @@ class AppFixtures extends Fixture
 {
     public function __construct(
         private UserPasswordHasherInterface $passwordHasher
-    ) {
-    }
+    ) {}
 
     public function load(ObjectManager $manager): void
     {
@@ -37,12 +36,16 @@ class AppFixtures extends Fixture
             $stock->setPrice((string) $stockData['price']);
             $stock->setEarningsPerShare((string) $stockData['eps']);
             $stock->setSharesOutstanding((string) $stockData['shares_outstanding']);
+
             $stock->setVolatility((string) $stockData['volatility']);
+
+            $stock->setCurrentVolatility((string) $stockData['volatility']);
+
             $stock->setBeta((string) $stockData['beta']);
             $stock->setJumpIntensity((string) $stockData['jump_intensity']);
             $stock->setJumpMean((string) $stockData['jump_mean']);
             $stock->setJumpVol((string) $stockData['jump_vol']);
-            
+
             $manager->persist($stock);
         }
 
@@ -50,11 +53,11 @@ class AppFixtures extends Fixture
         $user = new User();
         $user->setEmail('trader@lakebird.com');
         $user->setCashBalance('10000.00');
-        
+
         // Hash the password
         $hashedPassword = $this->passwordHasher->hashPassword($user, 'password123');
         $user->setPassword($hashedPassword);
-        
+
         $manager->persist($user);
 
         $manager->flush();
