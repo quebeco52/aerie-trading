@@ -24,7 +24,7 @@ public const STOCKS = [
             'price' => 550.00, 'eps' => 25.14, // (The absolute largest titan in the district)
             'shares_outstanding' => 1000000000,
             // Mega Cap Tech: High beta because it drives the market, but structurally lower volatility than small cap tech due to its massive monopoly moat
-            'volatility' => 0.22, 'beta' => 1.25, 'jump_intensity' => 1.5, 'jump_mean' => 0.02, 'jump_vol' => 0.06
+            'volatility' => 0.22, 'beta' => 1.25, 'jump_intensity' => 1.5, 'jump_mean' => -0.02, 'jump_vol' => 0.06
         ],
         [
             'ticker' => 'OWLS', 'name' => 'Owl Capital Partners', 'sector' => 'Asset Management',
@@ -164,7 +164,7 @@ public const STOCKS = [
             'price' => 70.00, 'eps' => 4.02, //
             'shares_outstanding' => 1000000000,
             // Oil Upstream: Hyper exposed to commodity spot prices
-            'volatility' => 0.35, 'beta' => 0.95, 'jump_intensity' => 1.5, 'jump_mean' => 0.05, 'jump_vol' => 0.08
+            'volatility' => 0.35, 'beta' => 0.95, 'jump_intensity' => 1.5, 'jump_mean' => -0.05, 'jump_vol' => 0.08
         ],
         [
             'ticker' => 'CASC', 'name' => 'Cascade Refining', 'sector' => 'Oil & Gas Refining & Marketing',
@@ -276,7 +276,7 @@ public const STOCKS = [
             'price' => 400.00, 'eps' => 13.78, //
             'shares_outstanding' => 1000000000,
             // The Aggregator: High beta tied directly to consumer spending, high volatility from retail trends
-            'volatility' => 0.30, 'beta' => 1.40, 'jump_intensity' => 1.5, 'jump_mean' => 0.03, 'jump_vol' => 0.10 
+            'volatility' => 0.30, 'beta' => 1.40, 'jump_intensity' => 1.5, 'jump_mean' => -0.03, 'jump_vol' => 0.10 
         ],
         [
             'ticker' => 'CROP', 'name' => 'Poultry Crop Operations', 'sector' => 'Farm Products',

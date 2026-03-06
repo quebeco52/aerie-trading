@@ -11,6 +11,7 @@ namespace App\Service;
 class MarketEngine
 {
 
+    private ?float $spareNormal = null;
     /**
      * Generates a standard normal random variable using the Box-Muller transform.
      *
@@ -18,12 +19,26 @@ class MarketEngine
      */
     private function generateStandardNormal(): float
     {
+        // If we have a spare from the last calculation, use it.
+        if ($this->spareNormal !== null) {
+            $result = $this->spareNormal;
+            $this->spareNormal = null;
+            return $result;
+        }
+
         do {
             $x = mt_rand() / mt_getrandmax();
             $y = mt_rand() / mt_getrandmax();
         } while ($x <= 0);
 
-        return sqrt(-2 * log($x)) * cos(2 * M_PI * $y);
+        $radius = sqrt(-2 * log($x));
+        $angle = 2 * M_PI * $y;
+
+        // Calculate both! Store the sine one for next time.
+        $this->spareNormal = $radius * sin($angle);
+
+        // Return the cosine one now.
+        return $radius * cos($angle);
     }
     /**
      * Calculates the next stock price using a hybrid model.
@@ -64,10 +79,23 @@ class MarketEngine
     ): array {
         $gbmZ = $this->generateStandardNormal();
 
-        // GBM (Standard Volatility) 
-        $gbmExponent = ($drift - 0.5 * pow($volatility, 2)) * $dt
-            + $volatility * sqrt($dt) * $gbmZ
-            + ($beta * $marketNoise);
+        // Calculate Fair Value
+        $valuationEps = max($earningsPerShare, 0.10);
+        $fairValue = $valuationEps * $targetPE;
+
+        // Calculate Fundamental Gravity
+        $logFairValue = log(max($fairValue, 0.01));
+        
+        // Safety check to prevent log(0)
+        $logCurrent = log(max($currentPrice, 0.01)); 
+        
+        // The drift is modified by how far away it is from fair value
+        $gravityDrift = $reversionSpeed * ($logFairValue - $logCurrent);
+
+        // Apply GBM with the Gravity Drift included
+        $gbmExponent = ($drift + $gravityDrift - 0.5 * pow($volatility, 2)) * $dt
+             + $volatility * sqrt($dt) * $gbmZ
+             + ($beta * $marketNoise);
 
         $gbmPrice = $currentPrice * exp($gbmExponent);
 
@@ -85,16 +113,11 @@ class MarketEngine
             $shockPct = ($jumpMultiplier - 1) * 100;
         }
 
-        $intermediatePrice = $gbmPrice * $jumpMultiplier;
-
-        // Fundamental Gravity
-        $valuationEps = max($earningsPerShare, 0.10);
-        $fairValue = $valuationEps * $targetPE;
-
-        $gravity = ($fairValue - $intermediatePrice) * $reversionSpeed * $dt;
+        // Final Price Calculation
+        $finalPrice = $gbmPrice * $jumpMultiplier;
 
         return [
-            'price' => max(0.01, $intermediatePrice + $gravity),
+            'price' => max(0.01, $finalPrice), // Ensure the price never goes to absolute zero
             'shock' => $shockPct
         ];
     }
