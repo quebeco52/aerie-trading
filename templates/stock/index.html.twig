@@ -65,7 +65,7 @@
 							<span class="text-sm text-indigo-300 font-medium">Your Position:</span>
 							<span class="text-sm font-bold text-indigo-100">{{ userQuantity|number_format }}
 								Shares
-                            </span>
+							</span>
 						</div>
 						<div class="flex justify-between items-center mt-1">
 							<span class="text-sm text-indigo-300 font-medium">Market Value:</span>
@@ -110,9 +110,16 @@
 							</dd>
 						</div>
 						<div class="px-0 py-3 sm:grid sm:grid-cols-2 sm:gap-4 sm:px-0">
-							<dt class="text-sm font-medium leading-6 text-gray-400">Volatility</dt>
+							<dt class="text-sm font-medium leading-6 text-gray-400">Current Volatility</dt>
+							<dd
+								class="mt-1 text-sm leading-6 text-white sm:mt-0 sm:text-right font-mono" id="stat-volatility">
+								{{ ((asset.currentVolatility ?? asset.volatility) * 100)|number_format(2) }}%
+							</dd>
+						</div>
+						<div class="px-0 py-3 sm:grid sm:grid-cols-2 sm:gap-4 sm:px-0">
+							<dt class="text-sm font-medium leading-6 text-gray-400">Historical Volatility</dt>
 							<dd class="mt-1 text-sm leading-6 text-white sm:mt-0 sm:text-right font-mono">
-								{{ asset.volatility * 100 }}%
+								{{ (asset.volatility * 100)|number_format(2) }}%
 							</dd>
 						</div>
 						<div class="px-0 py-3 sm:grid sm:grid-cols-2 sm:gap-4 sm:px-0">
@@ -131,7 +138,7 @@
 							<strong class="text-white">{{ asset.jumpIntensity }}</strong>
 						</p>
 						<p class="mt-1">Sector Target P/E:
-							<strong class="text-white">{{ targetPE|number_format(2) }}</strong>
+							<strong id="live-target-pe" class="text-white">{{ targetPE|number_format(2) }}</strong>
 						</p>
 					</div>
 				</div>
@@ -189,16 +196,17 @@ isEtf: {{ isEtf ? 'true' : 'false' }},
 sharesOutstanding: {{ isEtf ? 0 : asset.sharesOutstanding }},
 userQuantity: {{ userQuantity }},
 eps: {{ isEtf ? 0 : asset.earningsPerShare }},
+baselineVol: {{ isEtf ? 0.15 : asset.volatility }},
 
 // Build the ETF data arrays if this is an ETF
-pieLabels: [{% if isEtf and allAssets is defined %}
-{% for a in allAssets %}"{{ a.ticker }}"{{ not loop.last ? ',' : '' }}{% endfor %}{% endif %}],
-pieData: [{% if isEtf and allAssets is defined %}
-{% for a in allAssets %}{{ a.price * a.sharesOutstanding }}{{ not loop.last ? ',' : '' }}{% endfor %}{% endif %}],
+pieLabels: [{% if isEtf and allAssets is defined %}{% for a in allAssets %}"{{ a.ticker }}"{{ not loop.last ? ',' : '' }}{% endfor %}{% endif %}],
+pieData: [{% if isEtf and allAssets is defined %}{% for a in allAssets %}
+{{ a.price * a.sharesOutstanding }}{{ not loop.last ? ',' : '' }}{% endfor %}{% endif %}],
 sharesMap: {
 {% if isEtf and allAssets is defined %}
 {% for a in allAssets %}"{{ a.ticker }}" : {{ a.sharesOutstanding }}
-{{ not loop.last ? ',' : '' }}{% endfor %}{% endif %}
+{{ not loop.last ? ',' : '' }}
+{% endfor %}{% endif %}
 }
 };
 </script>

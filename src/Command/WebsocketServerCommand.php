@@ -53,6 +53,7 @@ class WebsocketServerCommand extends Command
             echo " [-] Browser disconnected.\n";
         };
 
+
         // Start the infinite event loop
         Worker::runAll();
 

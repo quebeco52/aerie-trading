@@ -56,4 +56,16 @@ class SectorPE
         'Utilities - Regulated Electric' => 21.63, 'Utilities - Regulated Gas' => 18.36,
         'Utilities - Regulated Water' => 21.77, 'Waste Management' => 28.84, 'General' => 20.00
     ];
+
+    public const MACRO_SECTORS = [
+        'Technology' => 26.0,          // High growth, high multiple
+        'Financials' => 14.0,          // Banks, Capital Markets, Insurance
+        'Healthcare' => 24.0,          // Biotech, Medical
+        'Consumer Discretionary' => 25.0, // Retail, Autos, Entertainment
+        'Consumer Staples' => 20.0,    // Food, Beverages, Tobacco
+        'Industrials' => 26.0,         // Aerospace, Defense, Freight
+        'Energy & Materials' => 18.0,  // Oil, Gas, Chemicals, Steel
+        'Real Estate' => 25.0,         // REITs, Development
+        'Utilities & Telecom' => 19.0, // Regulated safe havens
+    ];
 }

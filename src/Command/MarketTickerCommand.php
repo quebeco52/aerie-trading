@@ -4,6 +4,8 @@ namespace App\Command;
 
 use App\Service\StockTracker;
 use App\Service\EtfTracker;
+use App\Service\MacroEngine;
+use App\Service\MathUtility;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -37,7 +39,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
     public function __construct(
         private EntityManagerInterface $entityManager,
         private StockTracker $stockTracker,
-        private EtfTracker $etfTracker
+        private EtfTracker $etfTracker,
+        private MacroEngine $macroEngine
     ) {
         parent::__construct();
     }
@@ -51,7 +54,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
     {
         return [\SIGINT, \SIGTERM];
     }
-    
+
 
     /**
      * Handles a signal to gracefully stop the command.
@@ -94,7 +97,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         ";
 
         while ($this->keepRunning) {
-            
+
             pcntl_signal_dispatch();
 
             if ($tickCount % 10 === 0) {
@@ -105,13 +108,17 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             try {
                 $this->entityManager->beginTransaction();
 
-                $result = $this->stockTracker->updateStocks($dt);
+                // 1. Update the Macro Economy (Sector P/Es drift)
+                $liveSectorPEs = $this->macroEngine->updateSectorMultiples($dt);
+
+                // 2. Update the Stocks
+                $result = $this->stockTracker->updateStocks($dt, $liveSectorPEs);
                 $stockUpdates = $result['updates'];
                 $totalMarketCap = $result['total_cap'];
                 $events = $result['events'] ?? [];
 
                 $etfUpdate = $this->etfTracker->updateIndex($totalMarketCap);
-                
+
                 $allUpdates = array_merge($stockUpdates, [$etfUpdate]);
 
                 $this->entityManager->flush();
@@ -120,7 +127,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     $redis->publish('market_updates', json_encode([
                         'timestamp' => time(),
                         'stocks' => $allUpdates,
-                        'events' => $events
+                        'events' => $events,
+                        'sectors' => $liveSectorPEs
                     ]));
 
                     $redis->set('stocks_live_data', json_encode($stockUpdates));
@@ -141,13 +149,12 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 }
 
                 $this->entityManager->commit();
-
             } catch (\Exception $e) {
                 if ($this->entityManager->getConnection()->isTransactionActive()) {
                     $this->entityManager->rollback();
                 }
                 $output->writeln("<error>Error: " . $e->getMessage() . "</error>");
-                sleep(5); 
+                sleep(5);
             } finally {
                 $this->entityManager->clear();
             }

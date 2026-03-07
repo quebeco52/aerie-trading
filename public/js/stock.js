@@ -172,6 +172,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const newPeRatio = EPS > 0 ? (newPrice / EPS) : 0;
                 document.getElementById('stat-mkt-cap').innerText = '$' + (newMarketCap / 1000000).toFixed(2) + 'M';
                 document.getElementById('stat-pe').innerText = newPeRatio.toFixed(2);
+
+                if (stockUpdate.current_volatility !== undefined) {
+                    document.getElementById('stat-volatility').innerText = stockUpdate.current_volatility.toFixed(2) + '%';
+                }
+
+                if (payload.sectors && payload.sectors[stockUpdate.sector]) {
+                    document.getElementById('live-target-pe').innerText = parseFloat(payload.sectors[stockUpdate.sector]).toFixed(2);
+                }
             } else if (IS_ETF && etfPieChart) {
 
                 // Update our structured objects with new live values

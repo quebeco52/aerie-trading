@@ -2,6 +2,7 @@
 
 namespace App\Service;
 
+
 /**
  * Service responsible for calculating stock price movements based on various market factors.
  *
@@ -10,35 +11,12 @@ namespace App\Service;
  */
 class MarketEngine
 {
-
-    private ?float $spareNormal = null;
-    /**
-     * Generates a standard normal random variable using the Box-Muller transform.
-     *
-     * @return float A random number from a standard normal distribution.
-     */
-    private function generateStandardNormal(): float
-    {
-        // If we have a spare from the last calculation, use it.
-        if ($this->spareNormal !== null) {
-            $result = $this->spareNormal;
-            $this->spareNormal = null;
-            return $result;
+    public function __construct(
+        private ?MathUtility $mathUtility = null
+    ) {
+        if ($this->mathUtility === null) {
+            $this->mathUtility = new MathUtility();
         }
-
-        do {
-            $x = mt_rand() / mt_getrandmax();
-            $y = mt_rand() / mt_getrandmax();
-        } while ($x <= 0);
-
-        $radius = sqrt(-2 * log($x));
-        $angle = 2 * M_PI * $y;
-
-        // Calculate both! Store the sine one for next time.
-        $this->spareNormal = $radius * sin($angle);
-
-        // Return the cosine one now.
-        return $radius * cos($angle);
     }
     /**
      * Calculates the next stock price using a hybrid model.
@@ -88,8 +66,8 @@ class MarketEngine
     ): array {
         
         //Generate Correlated Random Variables
-        $z1 = $this->generateStandardNormal();
-        $z2 = $this->generateStandardNormal();
+        $z1 = $this->mathUtility->generateStandardNormal();
+        $z2 = $this->mathUtility->generateStandardNormal();
 
         // w1 drives the stock price, w2 drives the volatility
         $w1 = $z1;
@@ -128,7 +106,7 @@ class MarketEngine
         $shockPct = null;
 
         if ((mt_rand() / mt_getrandmax()) < $jumpProb) {
-            $jumpZ = $this->generateStandardNormal();
+            $jumpZ = $this->mathUtility->generateStandardNormal();
             
             $jumpExponent = $jumpMean + ($jumpVol * $jumpZ);
             $jumpMultiplier = exp($jumpExponent);

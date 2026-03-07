@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Service\MacroEngine;
 use App\Entity\Stock;
 use App\Entity\Etf;
 use App\Entity\User;
@@ -19,7 +20,7 @@ use Symfony\Component\Routing\Attribute\Route;
 class StockController extends AbstractController
 {
     #[Route('/stock/{ticker}', name: 'app_stock_view')]
-    public function view(string $ticker, EntityManagerInterface $entityManager): Response
+    public function view(string $ticker, EntityManagerInterface $entityManager, MacroEngine $macroEngine): Response
     {
         $isEtf = false;
         $asset = $entityManager->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);
@@ -46,11 +47,13 @@ class StockController extends AbstractController
         $peRatio = 0;
         $targetPE = 20.00;
 
+        $liveSectorPEs = $macroEngine->getLiveSectors();
+
         if (!$isEtf) {
             $marketCap = (float) $asset->getPrice() * (float) $asset->getSharesOutstanding();
             $eps = (float) $asset->getEarningsPerShare();
             $peRatio = ($eps > 0) ? ((float) $asset->getPrice() / $eps) : 0;
-            $targetPE = SectorPE::TARGETS[$asset->getSector()] ?? 20.00;
+            $targetPE = $liveSectorPEs[$asset->getSector()] ?? 20.00;
         }
 
         $generalInfo = StockInfo::getDescription([
@@ -83,7 +86,8 @@ class StockController extends AbstractController
             'targetPE' => $targetPE,
             'generalInfo' => $generalInfo,
             'allAssets' => $allAssets,
-            'events' => $events
+            'events' => $events,
+            'targetPE' => $targetPE,
         ]);
     }
 

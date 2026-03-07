@@ -24,7 +24,7 @@ class StockTracker
     ) {
     }
 
-    public function updateStocks(float $dt): array
+    public function updateStocks(float $dt, array $liveSectorPEs): array
     {
         // Fetch all Stock entities from the database
         $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
@@ -44,8 +44,8 @@ class StockTracker
 
 
         foreach ($stocks as $stock) {
-            // Target PE fallback
-            $targetPE = SectorPE::TARGETS[$stock->getSector()] ?? 20.0;
+            $sectorName = $stock->getSector();
+            $targetPE = $liveSectorPEs[$sectorName] ?? 20.0;
 
             // Determine Volatility
             $baselineVol = (float) $stock->getVolatility();
@@ -115,8 +115,10 @@ class StockTracker
 
             $stockUpdates[] = [
                 'ticker' => $stock->getTicker(),
+                'sector' => $sectorName,
                 'price' => round($newPrice, 2),
                 'market_cap' => $currentMarketCap,
+                'current_volatility' => round($nextVolatility * 100, 2),
             ];
         }
 
