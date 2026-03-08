@@ -6,6 +6,7 @@ use App\Entity\Etf;
 use App\Entity\Stock;
 use App\Entity\User;
 use App\Data\InitialMarket;
+use App\Data\SectorPE;
 use Doctrine\Bundle\FixturesBundle\Fixture;
 use Doctrine\Persistence\ObjectManager;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
@@ -18,6 +19,27 @@ class AppFixtures extends Fixture
 
     public function load(ObjectManager $manager): void
     {
+        echo "Preparing a clean slate...\n";
+
+        // WIPE REDIS CLEAN
+        try {
+            $redisUrl = parse_url($_ENV['REDIS_URL'] ?? 'tcp://127.0.0.1:6379');
+            $host = $redisUrl['host'] ?? '127.0.0.1';
+            $port = $redisUrl['port'] ?? 6379;
+
+            // Open a raw TCP socket to the Redis container
+            $fp = @fsockopen($host, $port, $errno, $errstr, 3);
+            if ($fp) {
+                fwrite($fp, "FLUSHALL\r\n"); // Send the raw flush command
+                fclose($fp);
+                echo "✅ Redis cache successfully wiped via TCP socket!\n";
+            } else {
+                echo "⚠️  Warning: Could not connect to Redis socket. Is Redis running?\n";
+            }
+        } catch (\Exception $e) {
+            echo "⚠️  Warning: Could not clear Redis. (" . $e->getMessage() . ")\n";
+        }
+
         echo "Seeding the Lakebird Exchange...\n";
 
         // Create the ETF (The Lakebird Index)
@@ -34,13 +56,15 @@ class AppFixtures extends Fixture
             $stock->setName($stockData['name']);
             $stock->setSector($stockData['sector']);
             $stock->setPrice((string) $stockData['price']);
-            $stock->setEarningsPerShare((string) $stockData['eps']);
+
+            // Calculate Neutral EPS
+            $targetPE = SectorPE::MACRO_SECTORS[$stockData['sector']] ?? 20.0;
+            $neutralEps = (float) $stockData['price'] / $targetPE;
+            $stock->setEarningsPerShare((string) round($neutralEps, 2));
+
             $stock->setSharesOutstanding((string) $stockData['shares_outstanding']);
-
             $stock->setVolatility((string) $stockData['volatility']);
-
             $stock->setCurrentVolatility((string) $stockData['volatility']);
-
             $stock->setBeta((string) $stockData['beta']);
             $stock->setJumpIntensity((string) $stockData['jump_intensity']);
             $stock->setJumpMean((string) $stockData['jump_mean']);
@@ -51,17 +75,17 @@ class AppFixtures extends Fixture
 
         // Create a Test User
         $user = new User();
-        $user->setEmail('trader@lakebird.com');
+        $user->setEmail('test.test@test.se');
         $user->setCashBalance('10000.00');
 
         // Hash the password
-        $hashedPassword = $this->passwordHasher->hashPassword($user, 'password123');
+        $hashedPassword = $this->passwordHasher->hashPassword($user, 'test');
         $user->setPassword($hashedPassword);
 
         $manager->persist($user);
 
         $manager->flush();
 
-        echo "Database successfully seeded!\n";
+        echo "Database successfully seeded with Neutral P/E balances\n";
     }
 }

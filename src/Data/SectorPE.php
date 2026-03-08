@@ -64,7 +64,7 @@ class SectorPE
         'Consumer Discretionary' => 25.0, // Retail, Autos, Entertainment
         'Consumer Staples' => 20.0,    // Food, Beverages, Tobacco
         'Industrials' => 26.0,         // Aerospace, Defense, Freight
-        'Energy & Materials' => 18.0,  // Oil, Gas, Chemicals, Steel
+        'Energy & Materials' => 19.0,  // Oil, Gas, Chemicals, Steel
         'Real Estate' => 25.0,         // REITs, Development
         'Utilities & Telecom' => 19.0, // Regulated safe havens
     ];

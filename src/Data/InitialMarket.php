@@ -7,112 +7,112 @@ class InitialMarket
     public const STOCKS = [
         [
             'ticker' => 'LAKE', 'name' => 'Lakebird Bank', 'sector' => 'Financials',
-            'price' => 520.00, 'eps' => 37.42, 
+            'price' => 500.00, 'eps' => 37.42, 
             'shares_outstanding' => 1000000000,
             // Banks: Moderate vol, occasional negative shocks from credit fears
             'volatility' => 0.18, 'beta' => 1.15, 'jump_intensity' => 0.75, 'jump_mean' => -0.02, 'jump_vol' => 0.06
         ],
         [
             'ticker' => 'SWAN', 'name' => 'Black Swan Capital', 'sector' => 'Financials',
-            'price' => 400.00, 'eps' => 28.63,
+            'price' => 380.00, 'eps' => 28.63,
             'shares_outstanding' => 1000000000,
             // Asset Management: Aggressive activist fund. High beta due to leveraged AUM, jumps frequently on hostile takeover news
             'volatility' => 0.24, 'beta' => 1.35, 'jump_intensity' => 1.25, 'jump_mean' => 0.02, 'jump_vol' => 0.10
         ],
         [
             'ticker' => 'HUMM', 'name' => 'Hummingbird Interactive', 'sector' => 'Technology',
-            'price' => 480.00, 'eps' => 19.14, 
+            'price' => 420.00, 'eps' => 19.14, 
             'shares_outstanding' => 1000000000,
             // Mega Cap Tech: High beta because it drives the market, but structurally lower volatility than small cap tech due to its massive monopoly moat
             'volatility' => 0.22, 'beta' => 1.25, 'jump_intensity' => 0.75, 'jump_mean' => -0.02, 'jump_vol' => 0.06
         ],
         [
             'ticker' => 'OWLS', 'name' => 'Owl Capital Partners', 'sector' => 'Financials',
-            'price' => 300.00, 'eps' => 20.15, 
+            'price' => 289.00, 'eps' => 20.15, 
             'shares_outstanding' => 1000000000,
             // Value Holding Company: Hoards cash, very low beta, buys the dip
             'volatility' => 0.15, 'beta' => 0.85, 'jump_intensity' => 0.20, 'jump_mean' => 0.01, 'jump_vol' => 0.04
         ],
         [
             'ticker' => 'KING', 'name' => 'Kingfisher Capital', 'sector' => 'Financials',
-            'price' => 220.00, 'eps' => 14.61, 
+            'price' => 250.00, 'eps' => 14.61, 
             'shares_outstanding' => 1000000000,
             // Investment Banking: Highly leveraged. When the market bleeds banks hemorrhage. Highest beta
             'volatility' => 0.28, 'beta' => 1.55, 'jump_intensity' => 1.25, 'jump_mean' => -0.04, 'jump_vol' => 0.12
         ],
         [
             'ticker' => 'PERE', 'name' => 'Peregrine Prime Securities', 'sector' => 'Financials',
-            'price' => 220.00, 'eps' => 14.02, 
+            'price' => 250.00, 'eps' => 14.02, 
             'shares_outstanding' => 1000000000,
             // The Volatility Harvester: Low beta, highly defensive, occasionally spikes during macroeconomic panics
             'volatility' => 0.18, 'beta' => 0.35, 'jump_intensity' => 1.25, 'jump_mean' => 0.05, 'jump_vol' => 0.12 
         ],
         [
             'ticker' => 'RIVR', 'name' => 'Riverstone Financial', 'sector' => 'Financials',
-            'price' => 45.00, 'eps' => 3.16, 
+            'price' => 60.00, 'eps' => 3.16, 
             'shares_outstanding' => 1000000000,
             // Regional Bank: Less diversified than LAKE. Highly sensitive to local commercial real estate
             'volatility' => 0.22, 'beta' => 1.20, 'jump_intensity' => 0.90, 'jump_mean' => -0.03, 'jump_vol' => 0.08
         ],
         [
             'ticker' => 'SAFE', 'name' => 'Safe Harbor Reinsurance', 'sector' => 'Financials',
-            'price' => 110.00, 'eps' => 8.91, 
+            'price' => 140.00, 'eps' => 8.91, 
             'shares_outstanding' => 1000000000,
             // Reinsurance: Almost entirely untethered to the stock market. Driven by natural disasters
             'volatility' => 0.15, 'beta' => 0.40, 'jump_intensity' => 0.20, 'jump_mean' => -0.15, 'jump_vol' => 0.20
         ],
         [
             'ticker' => 'DOVE', 'name' => 'White Dove Insurance', 'sector' => 'Financials',
-            'price' => 80.00, 'eps' => 7.26, 
+            'price' => 110.00, 'eps' => 7.26, 
             'shares_outstanding' => 1000000000,
             // Standard Insurance: Very steady, defensive. Under reacts to tech booms and busts
             'volatility' => 0.17, 'beta' => 0.85, 'jump_intensity' => 0.50, 'jump_mean' => -0.03, 'jump_vol' => 0.06
         ],
         [
             'ticker' => 'SHRK', 'name' => 'Shrike Standard Ratings', 'sector' => 'Financials',
-            'price' => 90.00, 'eps' => 3.87, 
+            'price' => 160.00, 'eps' => 3.87, 
             'shares_outstanding' => 1000000000,
             // Credit Agency: An untouchable monopoly. Causes volatility in others but experiences almost none itself
             'volatility' => 0.15, 'beta' => 0.70, 'jump_intensity' => 0.40, 'jump_mean' => 0.01, 'jump_vol' => 0.04
         ],
         [
             'ticker' => 'BIRD', 'name' => 'Bird Power Inc', 'sector' => 'Utilities & Telecom',
-            'price' => 65.00, 'eps' => 3.00, 
+            'price' => 45.00, 'eps' => 3.00, 
             'shares_outstanding' => 1000000000,
             // Utilities: Very low volatility, rare jumps. Defensive, low correlation to macro swings
             'volatility' => 0.15, 'beta' => 0.60, 'jump_intensity' => 0.30, 'jump_mean' => 0.00, 'jump_vol' => 0.04
         ],
         [
             'ticker' => 'WATCH', 'name' => 'Bird Watch Security', 'sector' => 'Industrials',
-            'price' => 25.00, 'eps' => 1.09, 
+            'price' => 50.00, 'eps' => 1.09, 
             'shares_outstanding' => 1000000000,
             // Security: Stable, service based, sticky contracts. Slightly defensive
             'volatility' => 0.20, 'beta' => 0.90, 'jump_intensity' => 0.60, 'jump_mean' => -0.08, 'jump_vol' => 0.05
         ],
         [
             'ticker' => 'WING', 'name' => 'Steel Wings Smelting & Corp', 'sector' => 'Energy & Materials',
-            'price' => 40.00, 'eps' => 1.68, 
+            'price' => 70.00, 'eps' => 1.68, 
             'shares_outstanding' => 1000000000,
             // Steel Commodities: Highly cyclical, sensitive to global trade
             'volatility' => 0.32, 'beta' => 1.10, 'jump_intensity' => 1.00, 'jump_mean' => -0.02, 'jump_vol' => 0.10
         ],
         [
             'ticker' => 'PENG', 'name' => 'Penguin Computing', 'sector' => 'Technology',
-            'price' => 85.00, 'eps' => 3.82, 
+            'price' => 95.00, 'eps' => 3.82, 
             'shares_outstanding' => 1000000000,
             // Tech Hardware: High volatility, aggressive growth stock. Swings hard with market sentiment
             'volatility' => 0.32, 'beta' => 1.45, 'jump_intensity' => 1.25, 'jump_mean' => 0.04, 'jump_vol' => 0.15
         ],
         [
             'ticker' => 'SHOR', 'name' => 'Lakeshore Living', 'sector' => 'Real Estate',
-            'price' => 55.00, 'eps' => 3.36, 
+            'price' => 75.00, 'eps' => 3.36, 
             'shares_outstanding' => 1000000000,
             // Real Estate: Sensitive to interest rates, moderate vol, slightly more aggressive than average market
             'volatility' => 0.24, 'beta' => 1.20, 'jump_intensity' => 0.75, 'jump_mean' => -0.03, 'jump_vol' => 0.07
         ],
         [
             'ticker' => 'RIVE', 'name' => 'River Stream Industries', 'sector' => 'Industrials',
-            'price' => 60.00, 'eps' => 1.79, 
+            'price' => 120.00, 'eps' => 1.79, 
             'shares_outstanding' => 1000000000,
             // Industrials: Standard cyclical behavior, slightly above market neutral
             'volatility' => 0.26, 'beta' => 1.15, 'jump_intensity' => 0.90, 'jump_mean' => 0.00, 'jump_vol' => 0.08
@@ -140,7 +140,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'TRIV', 'name' => 'Three Rivers Manufacturing', 'sector' => 'Industrials',
-            'price' => 220.00, 'eps' => 8.70, 
+            'price' => 180.00, 'eps' => 8.70, 
             'shares_outstanding' => 1000000000,
             // Conglomerate: Being massively diversified inherently pushes its beta toward the market average
             'volatility' => 0.20, 'beta' => 1.05, 'jump_intensity' => 0.75, 'jump_mean' => -0.02, 'jump_vol' => 0.07 
@@ -175,7 +175,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'GULL', 'name' => 'Silver Gull Resorts', 'sector' => 'Consumer Discretionary',
-            'price' => 30.00, 'eps' => 1.52, 
+            'price' => 50.00, 'eps' => 1.52, 
             'shares_outstanding' => 1000000000,
             // Physical Casinos: Highly discretionary and cyclical. When the economy is good people flock to resorts
             'volatility' => 0.30, 'beta' => 1.40, 'jump_intensity' => 0.75, 'jump_mean' => -0.01, 'jump_vol' => 0.08
@@ -217,7 +217,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'SGRB', 'name' => 'Sugarbird Confectionery', 'sector' => 'Consumer Staples',
-            'price' => 45.00, 'eps' => 2.64, 
+            'price' => 50.00, 'eps' => 2.64, 
             'shares_outstanding' => 1000000000,
             // Confectionery: The affordable luxury effect. Highly defensive, resilient to recessions
             'volatility' => 0.16, 'beta' => 0.55, 'jump_intensity' => 0.40, 'jump_mean' => 0.01, 'jump_vol' => 0.04
@@ -238,14 +238,14 @@ class InitialMarket
         ],
         [
             'ticker' => 'CLAW', 'name' => 'Clear Rivers Law', 'sector' => 'Industrials',
-            'price' => 40.00, 'eps' => 1.49, 
+            'price' => 50.00, 'eps' => 1.49, 
             'shares_outstanding' => 1000000000,
             // Consulting Services: Unyielding legal monopoly. Defensive beta, steady retainer cash flow
             'volatility' => 0.18, 'beta' => 0.80, 'jump_intensity' => 1.00, 'jump_mean' => 0.02, 'jump_vol' => 0.08
         ],
         [
             'ticker' => 'ROOK', 'name' => 'Rook Proprietary Trading', 'sector' => 'Financials',
-            'price' => 15.00, 'eps' => 0.83, 
+            'price' => 20.00, 'eps' => 0.83, 
             'shares_outstanding' => 1000000000,
             // Elite Prop Desk: Highly volatile, extreme beta tied directly to absolute market friction
             'volatility' => 0.38, 'beta' => 1.85, 'jump_intensity' => 1.50, 'jump_mean' => 0.00, 'jump_vol' => 0.25
@@ -259,28 +259,28 @@ class InitialMarket
         ],
         [
             'ticker' => 'LYRE', 'name' => 'Lyrebird Media', 'sector' => 'Consumer Discretionary',
-            'price' => 40.00, 'eps' => 2.22, 
+            'price' => 45.00, 'eps' => 2.22, 
             'shares_outstanding' => 1000000000,
             // The Spin Doctors: Moderate volatility, features sudden positive jumps during district PR crises
             'volatility' => 0.22, 'beta' => 1.10, 'jump_intensity' => 0.90, 'jump_mean' => 0.04, 'jump_vol' => 0.08 
         ],
         [
             'ticker' => 'STAR', 'name' => 'Starling Academic Systems', 'sector' => 'Consumer Discretionary',
-            'price' => 33.00, 'eps' => 2.11, 
+            'price' => 43.00, 'eps' => 2.11, 
             'shares_outstanding' => 1000000000,
             // The Talent Pipeline: Extremely stable revenue from corporate subsidies, acts as a defensive hedge
             'volatility' => 0.14, 'beta' => 0.55, 'jump_intensity' => 0.30, 'jump_mean' => -0.02, 'jump_vol' => 0.04 
         ],
         [
             'ticker' => 'WEAV', 'name' => 'Weaver Marketplace', 'sector' => 'Consumer Discretionary',
-            'price' => 350.00, 'eps' => 13.68, 
+            'price' => 320.00, 'eps' => 13.68, 
             'shares_outstanding' => 1000000000,
             // The Aggregator: High beta tied directly to consumer spending, high volatility from retail trends
             'volatility' => 0.30, 'beta' => 1.30, 'jump_intensity' => 0.75, 'jump_mean' => -0.03, 'jump_vol' => 0.10 
         ],
         [
             'ticker' => 'CROP', 'name' => 'Poultry Crop Operations', 'sector' => 'Consumer Staples',
-            'price' => 165.00, 'eps' => 9.26, 
+            'price' => 130.00, 'eps' => 9.26, 
             'shares_outstanding' => 1000000000,
             // The Land Bank: Highly defensive baseline due to constant food demand and massive real estate holdings
             'volatility' => 0.16, 'beta' => 0.65, 'jump_intensity' => 0.50, 'jump_mean' => 0.02, 'jump_vol' => 0.05
