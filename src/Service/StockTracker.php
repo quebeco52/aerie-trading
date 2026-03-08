@@ -21,8 +21,7 @@ class StockTracker
         private EntityManagerInterface $entityManager,
         private MarketEngine $marketEngine,
         private EarningsEngine $earningsEngine
-    ) {
-    }
+    ) {}
 
     public function updateStocks(float $dt, array $liveSectorPEs): array
     {
@@ -40,7 +39,6 @@ class StockTracker
         } while ($mx <= 0);
         $marketZ = sqrt(-2 * log($mx)) * cos(2 * M_PI * $my);
         $marketVol = 0.15;
-        $marketNoise = $marketVol * sqrt($dt) * $marketZ;
 
 
         foreach ($stocks as $stock) {
@@ -49,8 +47,8 @@ class StockTracker
 
             // Determine Volatility
             $baselineVol = (float) $stock->getVolatility();
-            $currentVol = $stock->getCurrentVolatility() !== null 
-                ? (float) $stock->getCurrentVolatility() 
+            $currentVol = $stock->getCurrentVolatility() !== null
+                ? (float) $stock->getCurrentVolatility()
                 : $baselineVol;
 
             // Calculate new price
@@ -66,7 +64,8 @@ class StockTracker
                 jumpMean: (float) $stock->getJumpMean(),
                 jumpVol: (float) $stock->getJumpVol(),
                 beta: (float) $stock->getBeta(),
-                marketNoise: $marketNoise,
+                marketZ: $marketZ,
+                marketVol: $marketVol,
                 reversionSpeed: 0.3
             );
 
@@ -83,7 +82,7 @@ class StockTracker
                 $event->setEventType('SHOCK');
                 $event->setDescription("Sudden market shock detected.");
                 $event->setChangePercent((string) $calculation['shock']);
-                
+
                 $this->entityManager->persist($event);
 
                 $events[] = [

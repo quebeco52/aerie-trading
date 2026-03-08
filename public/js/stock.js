@@ -41,8 +41,42 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const mainChart = new Chart(ctx, {
         type: 'line',
-        data: { labels: [], datasets: [{ label: 'Price', data: [], borderColor: '#10b981', backgroundColor: gradient, borderWidth: 2, tension: 0.4, pointRadius: 0, fill: true, normalized: true, spanGaps: true }] },
-        options: { responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: true, position: 'right', grid: { color: '#334155', borderDash: [5, 5] } } } }
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Price',
+                data: [],
+                borderColor: '#10b981',
+                backgroundColor: gradient,
+                borderWidth: 2,
+                tension: 0.4,
+                pointRadius: 0,
+                fill: true,
+                normalized: true,
+                spanGaps: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { display: false },
+                y: {
+                    display: true,
+                    position: 'right',
+                    grid: {
+                        color: '#334155',
+                        borderDash: [5, 5]
+                    }
+                }
+            }
+        }
     });
 
     // Init ETF Pie Chart
