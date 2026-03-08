@@ -20,7 +20,7 @@ class InitialMarket
             'volatility' => 0.24, 'beta' => 1.35, 'jump_intensity' => 1.25, 'jump_mean' => 0.02, 'jump_vol' => 0.10
         ],
         [
-            'ticker' => 'HUMM', 'name' => 'Hummingbird Interactive', 'sector' => 'Technology',
+            'ticker' => 'HUMM', 'name' => 'Hummingbird Interactive', 'sector' => 'Information Technology',
             'price' => 420.00, 'eps' => 19.14, 
             'shares_outstanding' => 1000000000,
             // Mega Cap Tech: High beta because it drives the market, but structurally lower volatility than small cap tech due to its massive monopoly moat
@@ -76,7 +76,7 @@ class InitialMarket
             'volatility' => 0.15, 'beta' => 0.70, 'jump_intensity' => 0.40, 'jump_mean' => 0.01, 'jump_vol' => 0.04
         ],
         [
-            'ticker' => 'BIRD', 'name' => 'Bird Power Inc', 'sector' => 'Utilities & Telecom',
+            'ticker' => 'BIRD', 'name' => 'Bird Power Inc', 'sector' => 'Utilities',
             'price' => 45.00, 'eps' => 3.00, 
             'shares_outstanding' => 1000000000,
             // Utilities: Very low volatility, rare jumps. Defensive, low correlation to macro swings
@@ -90,14 +90,14 @@ class InitialMarket
             'volatility' => 0.20, 'beta' => 0.90, 'jump_intensity' => 0.60, 'jump_mean' => -0.08, 'jump_vol' => 0.05
         ],
         [
-            'ticker' => 'WING', 'name' => 'Steel Wings Smelting & Corp', 'sector' => 'Energy & Materials',
+            'ticker' => 'WING', 'name' => 'Steel Wings Smelting & Corp', 'sector' => 'Materials',
             'price' => 70.00, 'eps' => 1.68, 
             'shares_outstanding' => 1000000000,
             // Steel Commodities: Highly cyclical, sensitive to global trade
             'volatility' => 0.32, 'beta' => 1.10, 'jump_intensity' => 1.00, 'jump_mean' => -0.02, 'jump_vol' => 0.10
         ],
         [
-            'ticker' => 'PENG', 'name' => 'Penguin Computing', 'sector' => 'Technology',
+            'ticker' => 'PENG', 'name' => 'Penguin Computing', 'sector' => 'Information Technology',
             'price' => 95.00, 'eps' => 3.82, 
             'shares_outstanding' => 1000000000,
             // Tech Hardware: High volatility, aggressive growth stock. Swings hard with market sentiment
@@ -125,7 +125,7 @@ class InitialMarket
             'volatility' => 0.20, 'beta' => 0.80, 'jump_intensity' => 0.75, 'jump_mean' => 0.02, 'jump_vol' => 0.07
         ],
         [
-            'ticker' => 'LOON', 'name' => 'Loon Call Telecom', 'sector' => 'Utilities & Telecom',
+            'ticker' => 'LOON', 'name' => 'Loon Call Telecom', 'sector' => 'Communication Services',
             'price' => 140.00, 'eps' => 9.18, 
             'shares_outstanding' => 1000000000,
             // Telecom: Classic boring defensive stock. People pay phone bills even in recessions
@@ -160,14 +160,14 @@ class InitialMarket
             'volatility' => 0.22, 'beta' => 1.10, 'jump_intensity' => 1.00, 'jump_mean' => 0.02, 'jump_vol' => 0.06
         ],
         [
-            'ticker' => 'SINK', 'name' => 'Sinking Shore Extraction', 'sector' => 'Energy & Materials',
+            'ticker' => 'SINK', 'name' => 'Sinking Shore Extraction', 'sector' => 'Energy',
             'price' => 70.00, 'eps' => 4.02, 
             'shares_outstanding' => 1000000000,
             // Oil Upstream: Hyper exposed to commodity spot prices
             'volatility' => 0.35, 'beta' => 0.95, 'jump_intensity' => 0.75, 'jump_mean' => -0.05, 'jump_vol' => 0.08
         ],
         [
-            'ticker' => 'CASC', 'name' => 'Cascade Refining', 'sector' => 'Energy & Materials',
+            'ticker' => 'CASC', 'name' => 'Cascade Refining', 'sector' => 'Energy',
             'price' => 55.00, 'eps' => 2.48, 
             'shares_outstanding' => 1000000000,
             // Downstream is usually less volatile than Upstream, but susceptible to refinery outage shocks
@@ -181,7 +181,7 @@ class InitialMarket
             'volatility' => 0.30, 'beta' => 1.40, 'jump_intensity' => 0.75, 'jump_mean' => -0.01, 'jump_vol' => 0.08
         ],
         [
-            'ticker' => 'WADE', 'name' => 'Heron Regional Water', 'sector' => 'Utilities & Telecom',
+            'ticker' => 'WADE', 'name' => 'Heron Regional Water', 'sector' => 'Utilities',
             'price' => 80.00, 'eps' => 3.67, 
             'shares_outstanding' => 1000000000,
             // The Ultimate Dividend Aristocrat: Extreme low volatility, ignores the market, practically a bond
