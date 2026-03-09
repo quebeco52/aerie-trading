@@ -41,6 +41,8 @@ const BRAND_COLORS = {
     'WEAV': '#facc15',  // Digital Gold
     'PERE': '#0284c7',  // Pristine Cerulean
     'CROP': '#15803d',  // Earth Green
+    'BRKW': '#00674F',  // Emerald green
+    'ELDE': '#fb923c'   // soft sunset orange
 };
 
 const FALLBACK_PALETTE = [

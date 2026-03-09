@@ -277,7 +277,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     const icon = evt.type === 'SHOCK' ? '⚡' : '📢';
 
                     // Fallback description just in case the backend payload didn't include one
-                    const desc = evt.description || (evt.type === 'SHOCK' ? 'Sudden market shock detected.' : 'Earnings report released.');
+                    let desc = evt.description || (evt.type === 'SHOCK' ? 'Sudden market shock detected.' : 'Earnings report released.');
+                    desc = desc.replace(/\n/g, '<br>');
 
                     const colorClass = isPositive ? 'bg-green-900/50 text-green-400 ring-green-500/20' : 'bg-red-900/50 text-red-400 ring-red-500/20';
                     const sign = isPositive ? '+' : '';
