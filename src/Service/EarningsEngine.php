@@ -33,45 +33,39 @@ class EarningsEngine
         // Quarterly Earnings (4 times per year)
         if ((mt_rand() / mt_getrandmax()) < (4.0 * $dt)) {
             $oldEps = (float) $stock->getEarningsPerShare();
-
-            $z = $this->mathUtility->generateStandardNormal();
-
-            $volatility = (float) $stock->getVolatility();
-            $earningsSurprise = ($volatility / 2) * $z;
-
-            // 60% Beta / 40% Volatility + Saturation
-            $beta = (float) $stock->getBeta();
-            $baselineVol = (float) $stock->getVolatility(); // Use baseline, not the Heston spiked
-
-            // Normalize Volatility (Average market vol is ~0.20, so 0.20 becomes a score of 1.0)
-            $volScore = $baselineVol / 0.20;
-
-            // Blend Systematic Risk (Beta) with Idiosyncratic Risk (Vol)
-            $riskMultiplier = (0.60 * $beta) + (0.40 * $volScore);
             
             // The Law of Large Numbers: Massive companies grow slower
             $currentEpsForMath = max(0.10, abs($oldEps));
             $saturationPenalty = max(1.0, log10($currentEpsForMath / 20) + 1.0); 
 
-            // Base 2% quarterly growth, scaled by our 60/40 risk blend, dampened by size
-            $quarterlyGrowth = (0.02 * $riskMultiplier) / $saturationPenalty;
+            // Base economic drift
+            $baseQuarterlyDrift = 0.02 / $saturationPenalty;
 
-            $pctChangeDecimal = $quarterlyGrowth + $earningsSurprise;
+            // Convert annual baseline volatility to quarterly volatility 
+            // (Volatility scales with the square root of time: sqrt(0.25) = 0.5)
+            $baselineVol = (float) $stock->getVolatility();
+            $quarterlyVol = $baselineVol * 0.5; 
+
+            // Generate a random Z-score for this specific quarter's business performance
+            $businessZ = $this->mathUtility->generateStandardNormal();
+
+            // Calculate the actual earnings growth percentage for this quarter
+            $pctChangeDecimal = $baseQuarterlyDrift + ($quarterlyVol * $businessZ);
             $pctChange = round($pctChangeDecimal * 100, 2);
 
+            // VOLATILITY SHOCK
             $currentVol = (float) $stock->getCurrentVolatility();
-            $baselineVol = (float) $stock->getVolatility();
-
-            if (abs($pctChange) > 10.0) {
-                // MASSIVE SURPRISE: Volatility explodes
-                // Cap the explosion at 3x the baseline to prevent the math from breaking
-                $newVol = min($currentVol * 1.5, $baselineVol * 3.0);
+            
+            if (abs($businessZ) > 1.5) {
+                // MASSIVE SURPRISE: Increase Volatility based on how extreme the Z-score was.
+                // A Z-score of 2.0 means a 20% increase in volatility (2.0 * 0.10 = 0.20)
+                $shockMultiplier = 1.0 + (abs($businessZ) * 0.15); 
+                
+                // Apply the shock, but cap the explosion at 3x the baseline
+                $newVol = min($currentVol * $shockMultiplier, $baselineVol * 3.0);
                 $stock->setCurrentVolatility((string) $newVol);
-            } else {
-                // EXPECTED RESULT: "Vol Crush" - Uncertainty is removed
-                $stock->setCurrentVolatility((string) $baselineVol);
             }
-
+            
             // Treat the EPS as at least $1.00 when calculating the raw dollar movement
             // This prevents penny stocks from getting permanently stuck due to rounding
             $effectiveEpsForChange = max(abs($oldEps), 1.00);
@@ -99,7 +93,7 @@ class EarningsEngine
 
             $this->entityManager->persist($event);
 
-            echo "\n BREAKING NEWS: {$stock->getTicker()} just released earnings! ({$pctChange}%)\n";
+            echo "\n [!] BREAKING NEWS: {$stock->getTicker()} reported earnings! ({$pctChange}%)\n";
 
             return [
                 'type' => 'EARNINGS',

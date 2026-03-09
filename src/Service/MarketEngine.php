@@ -62,7 +62,7 @@ class MarketEngine
         float $marketZ = 0.0,
         float $marketVol = 0.15,
         float $reversionSpeed = 0.3,
-        float $kappa = 2.0,
+        float $kappa = 5.0,
         float $volOfVol = 0.2,
         float $rho = -0.7
     ): array {
@@ -123,6 +123,12 @@ class MarketEngine
             $jumpExponent = $jumpMean + ($jumpVol * $jumpZ);
             $jumpMultiplier = exp($jumpExponent);
             $shockPct = ($jumpMultiplier - 1) * 100;
+
+            // If the price violently jumps, panic sets in and volatility instantly spikes.
+            // We add a multiple of the jump's absolute size to the volatility.
+            $nextVolatility += abs($jumpExponent) * 1.5;
+
+            $nextVolatility = min($nextVolatility, $longTermVolatility * 3.0);
         }
 
         $finalPrice = $gbmPrice * $jumpMultiplier;

@@ -42,8 +42,8 @@ class MacroEngine
             // 3. Calculate new Live P/E
             $newPE = $currentPE + $pull + $drift;
 
-            // Don't let P/E drop below a catastrophic 5.0 or inflate past a bubblicious 60.0
-            $newPE = max(5.0, min(60.0, $newPE)); 
+            // Don't let P/E drop below a catastrophic 5.0 or inflate past a bubblicious 50.0
+            $newPE = max(5.0, min(50.0, $newPE)); 
 
             $updatedSectors[$sectorName] = $newPE;
         }

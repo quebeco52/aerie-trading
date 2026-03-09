@@ -130,16 +130,16 @@ class SectorPE
     ];
 
     public const MACRO_SECTORS = [
-        'Information Technology' => 28.0, // High growth, high premium
+        'Information Technology' => 24.0, // High growth, high premium
         'Financials' => 14.0,             // Banks, Capital Markets, Insurance
-        'Health Care' => 22.0,            // Biotech, Medical
-        'Consumer Discretionary' => 24.0, // Retail, Casinos, Luxury
-        'Consumer Staples' => 19.0,       // Food, Beverages, Tobacco
-        'Industrials' => 21.0,            // Aerospace, Defense, Freight
-        'Real Estate' => 24.0,            // REITs, Development
-        'Energy' => 12.0,                 // Oil, Gas (Typically trades at a discount)
-        'Materials' => 16.0,              // Steel, Chemicals, Mining
-        'Utilities' => 17.0,              // Regulated safe havens (Water, Power)
-        'Communication Services' => 18.0, // Telecom, Media, Entertainment
+        'Health Care' => 19.0,            // Biotech, Medical
+        'Consumer Discretionary' => 21.0, // Retail, Casinos, Luxury
+        'Consumer Staples' => 18.0,       // Food, Beverages, Tobacco
+        'Industrials' => 20.0,            // Aerospace, Defense, Freight
+        'Real Estate' => 22.0,            // REITs, Development
+        'Energy' => 14.0,                 // Oil, Gas (Typically trades at a discount)
+        'Materials' => 15.0,              // Steel, Chemicals, Mining
+        'Utilities' => 16.0,              // Regulated safe havens (Water, Power)
+        'Communication Services' => 17.0, // Telecom, Media, Entertainment
     ];
 }
