@@ -2,8 +2,16 @@
 
 namespace App\Service;
 
-use App\Data\SectorPE; // Wherever you store the MACRO_SECTORS array
+use App\Data\SectorPE;
 
+/**
+ * Service responsible for simulating the macroeconomic environment.
+ *
+ * This engine manages "Sector Rotation" by simulating how the Price-to-Earnings (P/E)
+ * ratios of different industrial sectors drift over time. It uses an Ornstein-Uhlenbeck
+ * process (mean-reverting stochastic process) to ensure sectors can experience
+ * bubbles and crashes but eventually return to their historical averages.
+ */
 class MacroEngine
 {
     private \Redis $redis;
@@ -18,7 +26,17 @@ class MacroEngine
     }
 
     /**
-     * Drifts the P/E multiples for all macro sectors.
+     * Simulates one time step of sector rotation.
+     *
+     * This method applies a mean-reverting drift to the P/E ratio of every sector.
+     * It calculates the new P/E based on:
+     * 1. The distance from the historical baseline (Gravity).
+     * 2. A random stochastic shock (Volatility).
+     *
+     * The calculation is performed in Log Space to ensure P/E ratios never become negative.
+     *
+     * @param float $dt The time step in years (e.g., 1/252 for a trading day).
+     * @return array<string, float> The updated list of sector P/E ratios.
      */
     public function updateSectorMultiples(float $dt): array
     {
@@ -26,24 +44,26 @@ class MacroEngine
         $updatedSectors = [];
 
         // Macro factors: Sector P/Es slowly drift, reverting to their historical baseline
-        $reversionSpeed = 0.5; // Takes about 2 years to revert to normal
-        $macroVol = 2.0;       // How much P/E expands/contracts per year (e.g., +/- 2 points)
+        $reversionSpeed = 0.40;
+        $macroVol = 0.20;
 
         foreach ($liveSectors as $sectorName => $currentPE) {
             $baselinePE = SectorPE::MACRO_SECTORS[$sectorName] ?? 20.0;
 
-            // 1. Mean Reversion Pull (Gravity)
-            $pull = $reversionSpeed * ($baselinePE - $currentPE) * $dt;
+            // 1. Convert to Log Space
+            $logCurrent = log($currentPE);
+            $logBaseline = log($baselinePE);
 
-            // 2. Random Macro Drift
+            // 2. Calculate the Log-Gravity and Log-Drift
+            $logPull = $reversionSpeed * ($logBaseline - $logCurrent) * $dt;
             $z = $this->mathUtility->generateStandardNormal();
-            $drift = $macroVol * sqrt($dt) * $z;
+            $logDrift = $macroVol * sqrt($dt) * $z;
 
-            // 3. Calculate new Live P/E
-            $newPE = $currentPE + $pull + $drift;
+            // 3. Apply the changes in Log Space
+            $newLogPE = $logCurrent + $logPull + $logDrift;
 
-            // Don't let P/E drop below a catastrophic 5.0 or inflate past a bubblicious 50.0
-            $newPE = max(5.0, min(50.0, $newPE)); 
+            // 4. Convert back to Linear Space
+            $newPE = exp($newLogPE);
 
             $updatedSectors[$sectorName] = $newPE;
         }
@@ -55,12 +75,17 @@ class MacroEngine
     }
 
     /**
-     * Fetches current Live P/E from Redis, or seeds it if empty.
+     * Retrieves the current live P/E ratios for all sectors from Redis.
+     *
+     * If the simulation has just started and Redis is empty, this method
+     * seeds the state with the historical defaults defined in SectorPE::MACRO_SECTORS.
+     *
+     * @return array<string, float> Associative array of 'Sector Name' => PE Ratio.
      */
     public function getLiveSectors(): array
     {
         $data = $this->redis->get('macro_sectors_live');
-        
+
         if ($data) {
             return json_decode($data, true);
         }
