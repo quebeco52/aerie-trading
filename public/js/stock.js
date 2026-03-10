@@ -204,7 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!IS_ETF) {
                 const newMarketCap = newPrice * SHARES_OUTSTANDING;
                 const newPeRatio = EPS > 0 ? (newPrice / EPS) : 0;
-                document.getElementById('stat-mkt-cap').innerText = '$' + (newMarketCap / 1000000).toFixed(2) + 'M';
+                document.getElementById('stat-mkt-cap').innerText = '$' + (newMarketCap / 1000000000).toFixed(2) + 'B';
                 document.getElementById('stat-pe').innerText = newPeRatio.toFixed(2);
 
                 if (stockUpdate.current_volatility !== undefined) {

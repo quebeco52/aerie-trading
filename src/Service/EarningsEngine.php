@@ -36,7 +36,7 @@ class EarningsEngine
             
             // The Law of Large Numbers: Massive companies grow slower
             $currentEpsForMath = max(0.10, abs($oldEps));
-            $saturationPenalty = max(1.0, log10($currentEpsForMath / 20) + 1.0); 
+            $saturationPenalty = max(1.0, log10($currentEpsForMath / 60) + 1.0); 
 
             // Base economic drift
             $baseQuarterlyDrift = 0.02 / $saturationPenalty;

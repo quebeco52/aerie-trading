@@ -15,7 +15,7 @@ const BRAND_COLORS = {
     'PENG': '#06b6d4',  // Cyan
     'SHOR': '#14b8a6',  // Teal
     'RIVE': '#4f46e5',  // Indigo
-    'LBI': '#4338ca',   // Deep Indigo
+    'LBI':  '#4338ca',   // Deep Indigo
     'GRIP': '#1e3a8a',  // Navy Blue
     'LOON': '#0369a1',  // Lake Blue
     'PHIL': '#7c2d12',  // Rust Brown
@@ -42,7 +42,8 @@ const BRAND_COLORS = {
     'PERE': '#0284c7',  // Pristine Cerulean
     'CROP': '#15803d',  // Earth Green
     'BRKW': '#00674F',  // Emerald green
-    'ELDE': '#fb923c'   // soft sunset orange
+    'ELDE': '#fb923c',  // soft sunset orange
+    'SWFT': '#FFBC0D',  // soft yellow/orange
 };
 
 const FALLBACK_PALETTE = [

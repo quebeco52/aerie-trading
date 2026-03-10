@@ -74,15 +74,17 @@
 					</div>
 				{% endif %}
 
-				<form action="/trade" method="POST" class="space-y-4">
-					<input type="hidden" name="stock_id" value="{{ asset.id }}">
+				<form action="/trade/execute" method="POST" class="space-y-4">
+					<input type="hidden" name="ticker" value="{{ asset.ticker }}">
+
 					<div>
 						<label class="block text-sm font-medium leading-6 text-white">Quantity</label>
 						<input type="number" name="quantity" min="1" value="10" class="mt-1 block w-full rounded-md border-0 py-1.5 text-black px-3 shadow-sm ring-1 ring-inset ring-gray-300">
 					</div>
+
 					<div class="grid grid-cols-2 gap-4">
-						<button type="submit" name="action" value="buy" class="flex w-full justify-center rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-indigo-500">Buy</button>
-						<button type="submit" name="action" value="sell" class="flex w-full justify-center rounded-md bg-slate-600 px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-slate-500">Sell</button>
+						<button type="submit" name="action" value="BUY" class="flex w-full justify-center rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-indigo-500">Buy</button>
+						<button type="submit" name="action" value="SELL" class="flex w-full justify-center rounded-md bg-slate-600 px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-slate-500">Sell</button>
 					</div>
 				</form>
 			</div>
@@ -94,7 +96,7 @@
 						<div class="px-0 py-3 sm:grid sm:grid-cols-2 sm:gap-4 sm:px-0">
 							<dt class="text-sm font-medium leading-6 text-gray-400">Market Cap</dt>
 							<dd class="mt-1 text-sm leading-6 text-white sm:mt-0 sm:text-right font-mono font-bold" id="stat-mkt-cap">
-								${{ (marketCap / 1000000)|number_format(2) }}M
+								${{ (marketCap / 1000000000)|number_format(2) }}B
 							</dd>
 						</div>
 						<div class="px-0 py-3 sm:grid sm:grid-cols-2 sm:gap-4 sm:px-0">
@@ -111,8 +113,7 @@
 						</div>
 						<div class="px-0 py-3 sm:grid sm:grid-cols-2 sm:gap-4 sm:px-0">
 							<dt class="text-sm font-medium leading-6 text-gray-400">Current Volatility</dt>
-							<dd
-								class="mt-1 text-sm leading-6 text-white sm:mt-0 sm:text-right font-mono" id="stat-volatility">
+							<dd class="mt-1 text-sm leading-6 text-white sm:mt-0 sm:text-right font-mono" id="stat-volatility">
 								{{ ((asset.currentVolatility ?? asset.volatility) * 100)|number_format(2) }}%
 							</dd>
 						</div>
@@ -200,13 +201,14 @@ baselineVol: {{ isEtf ? 0.15 : asset.volatility }},
 
 // Build the ETF data arrays if this is an ETF
 pieLabels: [{% if isEtf and allAssets is defined %}{% for a in allAssets %}"{{ a.ticker }}"{{ not loop.last ? ',' : '' }}{% endfor %}{% endif %}],
-pieData: [{% if isEtf and allAssets is defined %}{% for a in allAssets %}
-{{ a.price * a.sharesOutstanding }}{{ not loop.last ? ',' : '' }}{% endfor %}{% endif %}],
+pieData: [{% if isEtf and allAssets is defined %}{% for a in allAssets %}{{ a.price * a.sharesOutstanding }}
+{{ not loop.last ? ',' : '' }}{% endfor %}{% endif %}],
 sharesMap: {
 {% if isEtf and allAssets is defined %}
 {% for a in allAssets %}"{{ a.ticker }}" : {{ a.sharesOutstanding }}
 {{ not loop.last ? ',' : '' }}
-{% endfor %}{% endif %}
+{% endfor %}
+{% endif %}
 }
 };
 </script>
