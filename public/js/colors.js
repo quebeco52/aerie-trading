@@ -14,10 +14,10 @@ const BRAND_COLORS = {
     'WING': '#64748b',  // Steel Gray
     'PENG': '#06b6d4',  // Cyan
     'SHOR': '#14b8a6',  // Teal
-    'RIVE': '#4f46e5',  // Indigo
-    'LBI':  '#4338ca',   // Deep Indigo
+    'RIVE': '#0369a1',  // Lake Blue
+    'LBI':  '#4338ca',  // Deep Indigo
     'GRIP': '#1e3a8a',  // Navy Blue
-    'LOON': '#0369a1',  // Lake Blue
+    'LOON': '#4f46e5',  // Indigo
     'PHIL': '#7c2d12',  // Rust Brown
     'TRIV': '#ca8a04',  // Gold
     'IBHI': '#991b1b',  // Dark Red

@@ -36,7 +36,7 @@ class EarningsEngine
             
             // The Law of Large Numbers: Massive companies grow slower
             $currentEpsForMath = max(0.10, abs($oldEps));
-            $saturationPenalty = max(1.0, log10($currentEpsForMath / 60) + 1.0); 
+            $saturationPenalty = max(1.0, log10($currentEpsForMath / 20) + 1.0); 
 
             // Base economic drift
             $baseQuarterlyDrift = 0.02 / $saturationPenalty;
@@ -44,7 +44,7 @@ class EarningsEngine
             // Convert annual baseline volatility to quarterly volatility 
             // (Volatility scales with the square root of time: sqrt(0.25) = 0.5)
             $baselineVol = (float) $stock->getVolatility();
-            $quarterlyVol = $baselineVol * 0.5; 
+            $quarterlyVol = $baselineVol * 0.5;
 
             // Generate a random Z-score for this specific quarter's business performance
             $businessZ = $this->mathUtility->generateStandardNormal();
@@ -57,9 +57,9 @@ class EarningsEngine
             $currentVol = (float) $stock->getCurrentVolatility();
             
             if (abs($businessZ) > 1.5) {
-                // MASSIVE SURPRISE: Increase Volatility based on how extreme the Z-score was.
-                // A Z-score of 2.0 means a 20% increase in volatility (2.0 * 0.10 = 0.20)
-                $shockMultiplier = 1.0 + (abs($businessZ) * 0.15); 
+                // SURPRISE: Increase Volatility based on how extreme the Z-score was.
+                // A Z-score of 2.0 means a 30% increase in volatility (2.0 * 0.15 = 0.30)
+                $shockMultiplier = 1.0 + (abs($businessZ) * 0.15);
                 
                 // Apply the shock, but cap the explosion at 3x the baseline
                 $newVol = min($currentVol * $shockMultiplier, $baselineVol * 3.0);

@@ -125,7 +125,7 @@ class MarketEngine
             $shockPct = ($jumpMultiplier - 1) * 100;
 
             // If the price violently jumps, panic sets in and volatility instantly spikes.
-            // We add a multiple of the jump's absolute size to the volatility.
+            // Add a multiple of the jump's absolute size to the volatility.
             $nextVolatility += abs($jumpExponent) * 1.5;
 
             $nextVolatility = min($nextVolatility, $longTermVolatility * 3.0);

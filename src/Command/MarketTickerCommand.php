@@ -142,7 +142,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     }
                 }
 
-                if ($tickCount % 10 === 0) {
+                if ($tickCount % 600 === 0) {
                     $conn->executeStatement($snapshotSql, [
                         'now' => (new \DateTime())->format('Y-m-d H:i:s')
                     ]);
