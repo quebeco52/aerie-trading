@@ -29,8 +29,8 @@ class Stock
     #[ORM\Column(type: Types::BIGINT, options: ['unsigned' => true, 'default' => 1000000])]
     private ?string $sharesOutstanding = '1000000';
 
-    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 2, nullable: true, options: ['default' => '10.00'])]
-    private ?string $earningsPerShare = '10.00';
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 8, nullable: true, options: ['default' => '10.00000000'])]
+    private ?string $earningsPerShare = '10.00000000';
 
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.02'])]
     private ?string $volatility = '0.02';

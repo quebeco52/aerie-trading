@@ -2,6 +2,7 @@
 
 namespace App\Command;
 
+use App\Entity\Stock;
 use App\Service\StockTracker;
 use App\Service\EtfTracker;
 use App\Service\MacroEngine;
@@ -55,6 +56,7 @@ class MarketSimulateCommand extends Command
      */
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
+        ini_set('memory_limit', '1G');
         $years = (float) $input->getArgument('years');
         $totalTicks = (int) ($years * self::TICKS_PER_YEAR);
         $dt = 1.0 / self::TICKS_PER_YEAR;
@@ -72,15 +74,25 @@ class MarketSimulateCommand extends Command
         $redis->connect($redisUrl['host'], $redisUrl['port'] ?? 6379);
 
 
+        // Load the stocks into RAM initially
+        $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
+
         for ($tick = 1; $tick <= $totalTicks; $tick++) {
             
             $liveSectorPEs = $this->macroEngine->updateSectorMultiples($dt);
-            $result = $this->stockTracker->updateStocks($dt, $liveSectorPEs, true);
+
+            $isHistoryTick = ($tick % 30 === 0);
+            
+            // Pass the $stocks array in
+            $result = $this->stockTracker->updateStocks($stocks, $dt, $liveSectorPEs, $isHistoryTick); 
             $this->etfTracker->updateIndex($result['total_cap']);
 
-            if ($tick % 1200 === 0) {
+            // Batch flush every 1200 ticks to save RAM
+            if ($tick % 365 === 0) {
                 $this->entityManager->flush();
-                $this->entityManager->clear();
+                $this->entityManager->clear(); // Wipes RAM 
+                
+                $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
                 
                 $redis->set('stocks_live_data', json_encode($result['updates']));
             }

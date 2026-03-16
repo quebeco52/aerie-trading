@@ -2,6 +2,7 @@
 
 namespace App\Command;
 
+use App\Entity\Stock;
 use App\Service\StockTracker;
 use App\Service\EtfTracker;
 use App\Service\MacroEngine;
@@ -79,6 +80,9 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
     {
         $output->writeln("<info>Market Ticker Started...</info>");
 
+        // 1. Fetch the stocks ONCE into RAM before the loop starts!
+        $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
+
         $redisUrl = parse_url($_ENV['REDIS_URL'] ?? 'redis://127.0.0.1:6379');
         $redis = new \Redis();
         $redis->connect($redisUrl['host'], $redisUrl['port'] ?? 6379);
@@ -115,7 +119,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $isHistoryTick = ($tickCount % 600 === 0);
 
                 // 2. Update the Stocks
-                $result = $this->stockTracker->updateStocks($dt, $liveSectorPEs, $isHistoryTick);
+                $result = $this->stockTracker->updateStocks($stocks ,$dt, $liveSectorPEs, $isHistoryTick);
                 $stockUpdates = $result['updates'];
                 $totalMarketCap = $result['total_cap'];
                 $events = $result['events'] ?? [];
@@ -158,8 +162,6 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 }
                 $output->writeln("<error>Error: " . $e->getMessage() . "</error>");
                 sleep(5);
-            } finally {
-                $this->entityManager->clear();
             }
 
             $tickCount++;

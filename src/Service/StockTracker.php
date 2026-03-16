@@ -24,10 +24,10 @@ class StockTracker
         private CorporateActionEngine $corporateActionEngine
     ) {}
 
-    public function updateStocks(float $dt, array $liveSectorPEs, bool $recordHistory): array
+    public function updateStocks(array $stocks, float $dt, array $liveSectorPEs, bool $recordHistory): array
     {
         // Fetch all Stock entities from the database
-        $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
+        // $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
 
         $stockUpdates = [];
         $totalMarketCap = 0.0;
@@ -153,7 +153,7 @@ class StockTracker
         }
 
         // Executes all the SELECTs, UPDATEs, and INSERTs.
-        $this->entityManager->flush();
+        // $this->entityManager->flush();
 
         return [
             'updates' => $stockUpdates,

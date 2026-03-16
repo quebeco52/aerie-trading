@@ -45,7 +45,7 @@ class CorporateActionEngine
 
             // Retroactively divide all historical chart prices by 2!
             $this->entityManager->getConnection()->executeStatement(
-                'UPDATE stock_history SET price = price / 2.0 WHERE stock_id = :stock_id',
+                'UPDATE stock_history SET price = GREATEST(price / 2.0, 0.00000001) WHERE stock_id = :stock_id',
                 ['stock_id' => $stock->getId()]
             );
         }
