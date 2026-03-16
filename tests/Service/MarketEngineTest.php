@@ -1,0 +1,115 @@
+<?php
+
+namespace App\Tests\Service;
+
+use PHPUnit\Framework\TestCase;
+use App\Service\MarketEngine;
+use App\Service\MathUtility;
+use PHPUnit\Framework\MockObject\MockObject;
+
+class MarketEngineTest extends TestCase
+{
+    private MathUtility|MockObject $mathUtilityMock;
+    private MarketEngine $engine;
+
+    protected function setUp(): void
+    {
+        $this->mathUtilityMock = $this->createMock(MathUtility::class);
+        $this->engine = new MarketEngine($this->mathUtilityMock);
+    }
+
+    public function testCalculateNextPriceWithoutJump()
+    {
+        // Mock standard normal variables to be exactly 0 for zero volatility noise
+        // This completely isolates the drift and gravity mechanics.
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $currentPrice = 100.0;
+        $currentVolatility = 0.2;
+        $longTermVolatility = 0.2;
+        $earningsPerShare = 5.0;
+        $targetPE = 20.0; // Fair value = 100
+        $dt = 1.0;
+        $drift = 0.1;
+
+        $result = $this->engine->calculateNextPrice(
+            $currentPrice,
+            $currentVolatility,
+            $longTermVolatility,
+            $earningsPerShare,
+            $targetPE,
+            $dt,
+            $drift,
+            0.0 // lambda = 0 means NO jump
+        );
+
+        $this->assertIsArray($result);
+        $this->assertNull($result['shock'], 'Shock should be null when no jump occurs.');
+        
+        // The variance math: dv = kappa * (long - current) * dt + volOfVol * current * w2
+        // Since current == long, and w2 == 0, dv = 0. Volatility remains unchanged.
+        $this->assertEquals($currentVolatility, $result['next_volatility']);
+        
+        // The price math:
+        // fairValue = 100
+        // logFairValue = log(100), logCurrent = log(100) -> gravityDrift = 0
+        // gbmExponent = (drift + gravityDrift - 0.5 * currentVariance) * dt 
+        //             = (0.1 + 0 - 0.5 * 0.04) * 1.0 = 0.08
+        // price = 100 * exp(0.08)
+        $expectedPrice = 100.0 * exp(0.08);
+        $this->assertEqualsWithDelta($expectedPrice, $result['price'], 0.0001);
+    }
+
+    public function testCalculateNextPriceWithGuaranteedJump()
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $currentPrice = 100.0;
+
+        // Force a jump by setting lambda very high
+        $result = $this->engine->calculateNextPrice(
+            $currentPrice,
+            0.2, // current volatility
+            0.2, // long term volatility
+            5.0,
+            20.0,
+            1.0, // dt
+            0.1, // drift
+            1000.0, // massive lambda guarantees mt_rand check triggers
+            0.05, // jumpMean
+            0.0 // jumpVol (no noise)
+        );
+
+        $this->assertNotNull($result['shock'], 'Shock should occur due to high lambda.');
+        
+        $expectedGbmPrice = 100.0 * exp(0.08); // Baseline drift from previous test
+        $expectedJumpPrice = $expectedGbmPrice * exp(0.05);
+
+        $this->assertEqualsWithDelta($expectedJumpPrice, $result['price'], 0.0001);
+        $this->assertEqualsWithDelta((exp(0.05) - 1) * 100, $result['shock'], 0.0001);
+        
+        // Volatility increases by abs(jumpExponent) * 1.5
+        $this->assertEqualsWithDelta(0.275, $result['next_volatility'], 0.0001);
+    }
+    
+    public function testReversionToFairValue()
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        // Undervalued stock
+        $currentPrice = 50.0;
+        $reversionSpeed = 0.5;
+        
+        // Lambda 0.0 isolates the jump, drift 0.0 isolates normal growth
+        $result = $this->engine->calculateNextPrice(
+            $currentPrice, 0.2, 0.2, 5.0, 20.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.15, $reversionSpeed
+        );
+
+        // gravityDrift = 0.5 * (log(100) - log(50)) = 0.5 * log(2)
+        // gbmExponent = (0.0 + gravityDrift - 0.02) * 1.0
+        $expectedPrice = 50.0 * exp(0.5 * log(2) - 0.02);
+        
+        $this->assertEqualsWithDelta($expectedPrice, $result['price'], 0.0001);
+        $this->assertGreaterThan($currentPrice, $result['price'], 'Undervalued price should drift upwards towards fair value.');
+    }
+}
