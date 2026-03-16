@@ -75,7 +75,7 @@ class MarketSimulateCommand extends Command
         for ($tick = 1; $tick <= $totalTicks; $tick++) {
             
             $liveSectorPEs = $this->macroEngine->updateSectorMultiples($dt);
-            $result = $this->stockTracker->updateStocks($dt, $liveSectorPEs);
+            $result = $this->stockTracker->updateStocks($dt, $liveSectorPEs, true);
             $this->etfTracker->updateIndex($result['total_cap']);
 
             if ($tick % 1200 === 0) {

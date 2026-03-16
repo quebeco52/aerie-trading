@@ -111,8 +111,11 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 // 1. Update the Macro Economy (Sector P/Es drift)
                 $liveSectorPEs = $this->macroEngine->updateSectorMultiples($dt);
 
+                // Check if it's time to record a database snapshot (every 600 ticks = 1 minute)
+                $isHistoryTick = ($tickCount % 600 === 0);
+
                 // 2. Update the Stocks
-                $result = $this->stockTracker->updateStocks($dt, $liveSectorPEs);
+                $result = $this->stockTracker->updateStocks($dt, $liveSectorPEs, $isHistoryTick);
                 $stockUpdates = $result['updates'];
                 $totalMarketCap = $result['total_cap'];
                 $events = $result['events'] ?? [];

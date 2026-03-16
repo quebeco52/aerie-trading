@@ -7,14 +7,14 @@ class InitialMarket
     public const STOCKS = [
         [
             'ticker' => 'LAKE', 'name' => 'Lakebird Bank', 'sector' => 'Financials',
-            'price' => 700.00, 'eps' => 37.42, 
+            'price' => 900.00, 'eps' => 37.42, 
             'shares_outstanding' => 1000000000,
             // Banks: Moderate vol, occasional negative shocks from credit fears
             'volatility' => 0.18, 'beta' => 1.15, 'jump_intensity' => 0.75, 'jump_mean' => -0.02, 'jump_vol' => 0.06
         ],
         [
             'ticker' => 'SWAN', 'name' => 'Black Swan Capital', 'sector' => 'Financials',
-            'price' => 550.00, 'eps' => 28.63,
+            'price' => 650.00, 'eps' => 28.63,
             'shares_outstanding' => 1000000000,
             // Asset Management: Aggressive activist fund. High beta due to leveraged AUM, jumps frequently on hostile takeover news
             'volatility' => 0.24, 'beta' => 1.35, 'jump_intensity' => 1.25, 'jump_mean' => 0.02, 'jump_vol' => 0.10
@@ -287,7 +287,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'BRKW', 'name' => 'Breakwater Trust', 'sector' => 'Financials',
-            'price' => 450.00, 'eps' => 10.00,
+            'price' => 650.00, 'eps' => 10.00,
             'shares_outstanding' => 1000000000,
             // The Leviathan: Massive holding company. Very low beta, low baseline volatility, 
             // but subject to sudden violent jumps if activist investors (SWAN) threaten to unlock its hidden NAV.

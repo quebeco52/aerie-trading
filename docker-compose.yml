@@ -29,6 +29,7 @@ services:
   
   # The Market Ticker
   aerie-ticker:
+    profiles: ["live"]
     build:
       context: .
       dockerfile: docker/php/Dockerfile

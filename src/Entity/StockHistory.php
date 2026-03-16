@@ -19,7 +19,7 @@ class StockHistory
     #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
     private ?Stock $stock = null;
 
-    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 2)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 8)]
     private ?string $price = null;
 
     #[ORM\Column(type: Types::DATETIME_MUTABLE)]

@@ -34,9 +34,15 @@ class EarningsEngine
         if ((mt_rand() / mt_getrandmax()) < (4.0 * $dt)) {
             $oldEps = (float) $stock->getEarningsPerShare();
             
-            // The Law of Large Numbers: Massive companies grow slower
+            // 1. Get the real size of the company
             $currentEpsForMath = max(0.10, abs($oldEps));
-            $saturationPenalty = max(1.0, log10($currentEpsForMath / 20) + 1.0); 
+            $sharesOutstanding = (int) $stock->getSharesOutstanding();
+            
+            // Total Net Income = EPS * Shares
+            $totalEarnings = $currentEpsForMath * $sharesOutstanding;
+
+            // 2. The Uncheatable Saturation Penalty
+            $saturationPenalty = max(1.0, log10($totalEarnings / 10000000) + 1.0); 
 
             // Base economic drift
             $baseQuarterlyDrift = 0.02 / $saturationPenalty;

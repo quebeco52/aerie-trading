@@ -20,10 +20,11 @@ class StockTracker
     public function __construct(
         private EntityManagerInterface $entityManager,
         private MarketEngine $marketEngine,
-        private EarningsEngine $earningsEngine
+        private EarningsEngine $earningsEngine,
+        private CorporateActionEngine $corporateActionEngine
     ) {}
 
-    public function updateStocks(float $dt, array $liveSectorPEs): array
+    public function updateStocks(float $dt, array $liveSectorPEs, bool $recordHistory): array
     {
         // Fetch all Stock entities from the database
         $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
@@ -98,15 +99,38 @@ class StockTracker
                 $events[] = $earningsEvent;
             }
 
-            // Update the Stock Object (Price AND Volatility)
+
+            $newEps = (float) $stock->getEarningsPerShare();
+            $sharesOutstanding = (int) $stock->getSharesOutstanding();
+
+            // ==========================================
+            // CORPORATE ACTIONS (SPLITS)
+            // ==========================================
+            $splitResult = $this->corporateActionEngine->processSplits(
+                $stock, 
+                $newPrice, 
+                $newEps, 
+                $sharesOutstanding
+            );
+
+            // Unpack the results (they will be identical if no split occurred)
+            $newPrice = $splitResult['price'];
+            $newEps = $splitResult['eps'];
+            $sharesOutstanding = $splitResult['shares'];
+            $splitEvent = $splitResult['event'];
+
+            // ==========================================
+            // UPDATE THE DOCTRINE ENTITY
+            // ==========================================
             $stock->setPrice((string) $newPrice);
             $stock->setCurrentVolatility((string) $nextVolatility);
-
-            // Create the History Record
-            $history = new StockHistory();
-            $history->setStock($stock);
-            $history->setPrice((string) $newPrice);
-            $this->entityManager->persist($history);
+            
+            // Only update these if a split actually happened
+            if ($splitEvent) {
+                $stock->setEarningsPerShare((string) $newEps);
+                $stock->setSharesOutstanding($sharesOutstanding);
+                $events[] = $splitEvent;
+            }
 
             // Calculate Market Cap
             $currentMarketCap = $newPrice * (float) $stock->getSharesOutstanding();
@@ -119,6 +143,13 @@ class StockTracker
                 'market_cap' => $currentMarketCap,
                 'current_volatility' => round($nextVolatility * 100, 2),
             ];
+
+            if ($recordHistory) {
+                $history = new StockHistory();
+                $history->setStock($stock);
+                $history->setPrice((string) $newPrice);
+                $this->entityManager->persist($history);
+            }
         }
 
         // Executes all the SELECTs, UPDATEs, and INSERTs.

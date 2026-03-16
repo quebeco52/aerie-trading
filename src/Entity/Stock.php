@@ -23,8 +23,8 @@ class Stock
     #[ORM\Column(length: 50, options: ['default' => 'General'])]
     private ?string $sector = 'General';
 
-    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 2, options: ['default' => '100.00'])]
-    private ?string $price = '100.00';
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 8, options: ['default' => '100.00000000'])]
+    private ?string $price = '100.00000000';
 
     #[ORM\Column(type: Types::BIGINT, options: ['unsigned' => true, 'default' => 1000000])]
     private ?string $sharesOutstanding = '1000000';
@@ -198,5 +198,4 @@ class Stock
 
         return $this;
     }
-
 }
