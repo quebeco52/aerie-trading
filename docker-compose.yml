@@ -65,7 +65,7 @@ services:
     build:
       context: .
       dockerfile: docker/php/Dockerfile
-    command: php bin/console app:websocket-server --env=prod --no-debug
+    command: php bin/websocket-server.php start
     restart: unless-stopped
     volumes:
       - ./:/app

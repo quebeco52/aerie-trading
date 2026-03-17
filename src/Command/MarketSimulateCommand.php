@@ -36,7 +36,8 @@ class MarketSimulateCommand extends Command
         private EntityManagerInterface $entityManager,
         private StockTracker $stockTracker,
         private EtfTracker $etfTracker,
-        private MacroEngine $macroEngine
+        private MacroEngine $macroEngine,
+        private \Redis $redis,
     ) {
         parent::__construct();
     }
@@ -69,9 +70,6 @@ class MarketSimulateCommand extends Command
         $progressBar->setFormat(' %current%/%max% [%bar%] %percent:3s%% %elapsed:6s%/%estimated:-6s% | %memory:6s%');
         $progressBar->start();
 
-        $redisUrl = parse_url($_ENV['REDIS_URL'] ?? 'redis://127.0.0.1:6379');
-        $redis = new \Redis();
-        $redis->connect($redisUrl['host'], $redisUrl['port'] ?? 6379);
 
 
         // Load the stocks into RAM initially
@@ -94,7 +92,7 @@ class MarketSimulateCommand extends Command
                 
                 $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
                 
-                $redis->set('stocks_live_data', json_encode($result['updates']));
+                $this->redis->set('stocks_live_data', json_encode($result['updates']));
             }
 
             $progressBar->advance();

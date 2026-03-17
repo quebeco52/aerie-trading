@@ -41,7 +41,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private EntityManagerInterface $entityManager,
         private StockTracker $stockTracker,
         private EtfTracker $etfTracker,
-        private MacroEngine $macroEngine
+        private MacroEngine $macroEngine,
+        private \Redis $redis,
     ) {
         parent::__construct();
     }
@@ -82,10 +83,6 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
         // 1. Fetch the stocks ONCE into RAM before the loop starts!
         $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
-
-        $redisUrl = parse_url($_ENV['REDIS_URL'] ?? 'redis://127.0.0.1:6379');
-        $redis = new \Redis();
-        $redis->connect($redisUrl['host'], $redisUrl['port'] ?? 6379);
 
         $dt = 1.0 / self::TICKS_PER_YEAR;
         $tickCount = 0;
@@ -131,21 +128,21 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $this->entityManager->flush();
 
                 if (!empty($allUpdates)) {
-                    $redis->publish('market_updates', json_encode([
+                    $this->redis->publish('market_updates', json_encode([
                         'timestamp' => time(),
                         'stocks' => $allUpdates,
                         'events' => $events,
                         'sectors' => $liveSectorPEs
                     ]));
 
-                    $redis->set('stocks_live_data', json_encode($stockUpdates));
-                    $redis->set('etf_live_data', json_encode([$etfUpdate]));
+                    $this->redis->set('stocks_live_data', json_encode($stockUpdates));
+                    $this->redis->set('etf_live_data', json_encode([$etfUpdate]));
 
                     if (!empty($events)) {
                         foreach ($events as $event) {
-                            $redis->lPush('market_events_list', json_encode($event));
+                            $this->redis->lPush('market_events_list', json_encode($event));
                         }
-                        $redis->lTrim('market_events_list', 0, 49);
+                        $this->redis->lTrim('market_events_list', 0, 49);
                     }
                 }
 
