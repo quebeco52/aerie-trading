@@ -8,6 +8,7 @@ use Doctrine\ORM\EntityManagerInterface;
 
 /**
  * Handles the simulation of quarterly earnings reports.
+ * Models revenue, operating leverage, analyst consensus, and corporate saturation.
  */
 class EarningsEngine
 {
@@ -20,95 +21,82 @@ class EarningsEngine
         }
     }
 
-    /**
-     * Determines if an earnings event occurs and calculates the result.
-     *
-     * @param Stock $stock The stock entity to evaluate and update.
-     * @param float $dt    Time step in years.
-     *
-     * @return array|null The event data if earnings occurred, or null.
-     */
     public function calculate(Stock $stock, float $dt): ?array
     {
-        // Quarterly Earnings (4 times per year)
-        if ((mt_rand() / mt_getrandmax()) < (4.0 * $dt)) {
-            $oldEps = (float) $stock->getEarningsPerShare();
-            
-            // 1. Get the real size of the company
-            $currentEpsForMath = max(0.10, abs($oldEps));
-            $sharesOutstanding = (int) $stock->getSharesOutstanding();
-            
-            // Total Net Income = EPS * Shares
-            $totalEarnings = $currentEpsForMath * $sharesOutstanding;
-
-            // 2. The Uncheatable Saturation Penalty
-            $saturationPenalty = max(1.0, log10($totalEarnings / 10000000) + 1.0); 
-
-            // Base economic drift
-            $baseQuarterlyDrift = 0.02 / $saturationPenalty;
-
-            // Convert annual baseline volatility to quarterly volatility 
-            // (Volatility scales with the square root of time: sqrt(0.25) = 0.5)
-            $baselineVol = (float) $stock->getVolatility();
-            $quarterlyVol = $baselineVol * 0.5;
-
-            // Generate a random Z-score for this specific quarter's business performance
-            $businessZ = $this->mathUtility->generateStandardNormal();
-
-            // Calculate the actual earnings growth percentage for this quarter
-            $pctChangeDecimal = $baseQuarterlyDrift + ($quarterlyVol * $businessZ);
-            $pctChange = round($pctChangeDecimal * 100, 2);
-
-            // VOLATILITY SHOCK
-            $currentVol = (float) $stock->getCurrentVolatility();
-            
-            if (abs($businessZ) > 1.5) {
-                // SURPRISE: Increase Volatility based on how extreme the Z-score was.
-                // A Z-score of 2.0 means a 30% increase in volatility (2.0 * 0.15 = 0.30)
-                $shockMultiplier = 1.0 + (abs($businessZ) * 0.15);
-                
-                // Apply the shock, but cap the explosion at 3x the baseline
-                $newVol = min($currentVol * $shockMultiplier, $baselineVol * 3.0);
-                $stock->setCurrentVolatility((string) $newVol);
-            }
-            
-            // Treat the EPS as at least $1.00 when calculating the raw dollar movement
-            // This prevents penny stocks from getting permanently stuck due to rounding
-            $effectiveEpsForChange = max(abs($oldEps), 1.00);
-            $changeAmount = $effectiveEpsForChange * $pctChangeDecimal;
-
-            // If the company is bleeding money, they ruthlessly cut costs to return to profitability
-            if ($oldEps < 0) {
-                $recoveryBoost = abs($oldEps) * 0.10; // Cut 10% of losses per quarter
-                $changeAmount += $recoveryBoost;
-            }
-
-            $newEps = round($oldEps + $changeAmount, 2);
-
-            // Update the Stock Entity
-            $stock->setEarningsPerShare((string) $newEps);
-
-            $description = "EPS Update: $" . number_format($oldEps, 2) . " -> $" . number_format($newEps, 2);
-
-            // Create and Persist the Event Entity
-            $event = new StockEvent();
-            $event->setStock($stock);
-            $event->setEventType('EARNINGS');
-            $event->setDescription($description);
-            $event->setChangePercent((string) $pctChange);
-
-            $this->entityManager->persist($event);
-
-            echo "\n [!] BREAKING NEWS: {$stock->getTicker()} reported earnings! ({$pctChange}%)\n";
-
-            return [
-                'type' => 'EARNINGS',
-                'ticker' => $stock->getTicker(),
-                'description' => $description,
-                'change_percent' => $pctChange
-            ];
+        // Quarterly Earnings (Roughly 4 times per year)
+        if ((mt_rand() / mt_getrandmax()) >= (4.0 * $dt)) {
+            return null;
         }
 
-        return null;
+        $oldEps = (float) $stock->getEarningsPerShare();
+        $sharesOutstanding = (int) $stock->getSharesOutstanding();
+        $baselineVol = (float) $stock->getVolatility();
+        
+        // The Saturation Penalty (Gravity for massive corporations)
+        $currentEpsForMath = max(0.10, abs($oldEps));
+        $totalEarnings = $currentEpsForMath * $sharesOutstanding;
+        $saturationPenalty = max(1.0, log10($totalEarnings / 10000000) + 1.0); 
+
+        // Analyst Consensus
+        // Analysts expect the base growth, slightly handicapped by how massive the company is
+        $expectedEpsGrowth = 0.02 / $saturationPenalty;
+        $expectedEps = $oldEps * (1.0 + $expectedEpsGrowth);
+
+        // Model Revenue & Operating Leverage
+        $quarterlyVol = $baselineVol * 0.5;
+        $revenueZ = $this->mathUtility->generateStandardNormal();
+        
+        // Actual revenue shifts based on standard distribution
+        $revenuePctChange = $expectedEpsGrowth + ($quarterlyVol * 0.5 * $revenueZ);
+        
+        // Operating Leverage: Fixed costs mean EPS swings harder than Revenue
+        $operatingLeverage = 1.5 + $baselineVol; 
+        $actualEpsGrowth = $revenuePctChange * $operatingLeverage;
+        
+        // Calculate Actual EPS
+        $actualEps = round($oldEps + (max(abs($oldEps), 0.50) * $actualEpsGrowth), 2);
+
+        // Calculate the SURPRISE (Actual vs Expected)
+        $surpriseAmount = $actualEps - $expectedEps;
+        $surprisePct = $surpriseAmount / max(0.10, abs($expectedEps));
+
+        // VOLATILITY SHOCK
+        $currentVol = (float) $stock->getCurrentVolatility();
+        if (abs($surprisePct) > 0.10) {
+            // A 20% surprise = 20% volatility spike
+            $shockMultiplier = 1.0 + abs($surprisePct);
+            $newVol = min($currentVol * $shockMultiplier, $baselineVol * 3.0);
+            $stock->setCurrentVolatility((string) $newVol);
+        }
+
+        // Update the Stock Entity
+        $stock->setEarningsPerShare((string) $actualEps);
+
+        // Build the Financial Report String
+        $beatOrMiss = $surpriseAmount >= 0 ? 'Beat' : 'Missed';
+        $description = sprintf(
+            "Q-Earnings: $%.2f (%s expectations by $%.2f).",
+            $actualEps,
+            $beatOrMiss,
+            abs($surpriseAmount)
+        );
+
+        // Create and Persist the Event
+        $event = new StockEvent();
+        $event->setStock($stock);
+        $event->setEventType('EARNINGS');
+        $event->setDescription($description);
+        $event->setChangePercent((string) round($surprisePct * 100, 2));
+
+        $this->entityManager->persist($event);
+
+        echo "\n [!] BREAKING NEWS: {$stock->getTicker()} reported earnings! ({$beatOrMiss} expectations by $" . abs($surpriseAmount) . ")\n";
+
+        return [
+            'type' => 'EARNINGS',
+            'ticker' => $stock->getTicker(),
+            'description' => $description,
+            'change_percent' => round($surprisePct * 100, 2)
+        ];
     }
 }

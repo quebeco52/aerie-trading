@@ -298,7 +298,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (noMsg) noMsg.classList.add('hidden');
 
                     const isPositive = parseFloat(evt.change_percent) >= 0;
-                    const icon = evt.type === 'SHOCK' ? '⚡' : '📢';
+                    let icon = '📢';
+                    if (evt.type === 'SHOCK') icon = '⚡';
+                    if (evt.type === 'SPLIT' || evt.type === 'REVSPLIT') icon = '✂️';
 
                     // Fallback description just in case the backend payload didn't include one
                     let desc = evt.description || (evt.type === 'SHOCK' ? 'Sudden market shock detected.' : 'Earnings report released.');

@@ -3,6 +3,7 @@
 namespace App\Service;
 
 use App\Entity\Stock;
+use App\Entity\StockEvent;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -24,55 +25,83 @@ class CorporateActionEngine
     {
         $splitEvent = null;
 
-        // 1. The Stock Split (Price gets too high)
-        while ($newPrice >= 500.0) {
-            $newPrice = $newPrice / 2.0;
-            $newEps = $newEps / 2.0;
-            $sharesOutstanding *= 2;
+        // The Stock Split (Price gets too high)
+        $splitFactor = 1;
+        while ($newPrice >= 400.0) {
+            $newPrice = $newPrice / 4.0;
+            $newEps = $newEps / 4.0;
+            $splitFactor *= 4;
+        }
+
+        if ($splitFactor > 1) {
+            $sharesOutstanding *= $splitFactor;
+
+            $desc = "{$stock->getName()} has executed a {$splitFactor}-for-1 stock split.";
+
+            $eventEntity = new StockEvent();
+            $eventEntity->setStock($stock);
+            $eventEntity->setEventType('SPLIT');
+            $eventEntity->setDescription($desc);
+            $eventEntity->setChangePercent('0.00');
+            $this->entityManager->persist($eventEntity);
 
             $splitEvent = [
-                'type' => 'STOCK_SPLIT',
+                'type' => 'SPLIT',
                 'ticker' => $stock->getTicker(),
-                'message' => "{$stock->getName()} has executed a 2-for-1 stock split.",
-                'timestamp' => time()
+                'description' => $desc,
+                'change_percent' => '0.00'
             ];
 
-            // Safely double the players' shares
+            // Safely multiply the players' shares by the dynamic factor
             $this->entityManager->getConnection()->executeStatement(
-                'UPDATE user_stocks SET quantity = quantity * 2, version = version + 1 WHERE stock_id = :stock_id',
-                ['stock_id' => $stock->getId()]
+                'UPDATE user_stocks SET quantity = quantity * :factor, version = version + 1 WHERE stock_id = :stock_id',
+                ['factor' => $splitFactor, 'stock_id' => $stock->getId()]
             );
 
-            // Retroactively divide all historical chart prices by 2!
+            // Retroactively divide all historical chart prices by the dynamic factor
             $this->entityManager->getConnection()->executeStatement(
-                'UPDATE stock_history SET price = GREATEST(price / 2.0, 0.00000001) WHERE stock_id = :stock_id',
-                ['stock_id' => $stock->getId()]
+                'UPDATE stock_history SET price = GREATEST(price / :factor, 0.00000001) WHERE stock_id = :stock_id',
+                ['factor' => $splitFactor, 'stock_id' => $stock->getId()]
             );
         }
         
-        // 2. The Reverse Split (Price < 5)
-        while ($newPrice < 5.0) {
-            $newPrice = $newPrice * 5.0;
-            $newEps = $newEps * 5.0;
-            $sharesOutstanding = max(1, (int)($sharesOutstanding / 5));
+        // The Reverse Split (Price drops into Penny Stock territory)
+        $reverseFactor = 1;
+        while ($newPrice < 2.0) {
+            $newPrice = $newPrice * 10.0;
+            $newEps = $newEps * 10.0;
+            $reverseFactor *= 10;
+        }
+
+        if ($reverseFactor > 1) {
+            $sharesOutstanding = max(1, (int)($sharesOutstanding / $reverseFactor));
+
+            $desc = "{$stock->getName()} executed a 1-for-{$reverseFactor} reverse split.";
+
+            $eventEntity = new StockEvent();
+            $eventEntity->setStock($stock);
+            $eventEntity->setEventType('REVSPLIT');
+            $eventEntity->setDescription($desc);
+            $eventEntity->setChangePercent('0.00');
+            $this->entityManager->persist($eventEntity);
 
             $splitEvent = [
-                'type' => 'REVERSE_SPLIT',
+                'type' => 'REVSPLIT',
                 'ticker' => $stock->getTicker(),
-                'message' => "{$stock->getName()} executed a 1-for-5 reverse split.",
-                'timestamp' => time()
+                'description' => $desc,
+                'change_percent' => '0.00'
             ];
 
-            // Safely divide players' shares
+            // Safely divide players' shares by the dynamic factor
             $this->entityManager->getConnection()->executeStatement(
-                'UPDATE user_stocks SET quantity = FLOOR(quantity / 5), version = version + 1 WHERE stock_id = :stock_id',
-                ['stock_id' => $stock->getId()]
+                'UPDATE user_stocks SET quantity = FLOOR(quantity / :factor), version = version + 1 WHERE stock_id = :stock_id',
+                ['factor' => $reverseFactor, 'stock_id' => $stock->getId()]
             );
 
-            // Retroactively multiply all historical chart prices by 5!
+            // Retroactively multiply all historical chart prices by the dynamic factor
             $this->entityManager->getConnection()->executeStatement(
-                'UPDATE stock_history SET price = LEAST(price * 5.0, 900000000000.0) WHERE stock_id = :stock_id',
-                ['stock_id' => $stock->getId()]
+                'UPDATE stock_history SET price = LEAST(price * :factor, 900000000000.0) WHERE stock_id = :stock_id',
+                ['factor' => $reverseFactor, 'stock_id' => $stock->getId()]
             );
         }
 
