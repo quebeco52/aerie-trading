@@ -39,7 +39,7 @@ class EtfTracker
      *
      * @return array{ticker: string, price: float, name: string, is_etf: bool} Array containing updated ETF data.
      */
-    public function updateIndex(float $totalMarketCap, string $ticker = 'LBI'): array
+    public function updateIndex(float $totalMarketCap, bool $recordHistory = false, string $ticker = 'LBI'): array
     {
         $divisor = $this->redis->get('market_index_divisor');
 
@@ -56,11 +56,13 @@ class EtfTracker
         if ($etf) {
             $etf->setPrice((string) $price);
 
-            $history = new EtfHistory();
-            $history->setEtf($etf);
-            $history->setPrice((string) $price);
-            
-            $this->entityManager->persist($history);
+            if ($recordHistory) {
+                $history = new EtfHistory();
+                $history->setEtf($etf);
+                $history->setPrice((string) $price);
+                
+                $this->entityManager->persist($history);
+            }
         }
 
         return [

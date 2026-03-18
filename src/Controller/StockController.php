@@ -11,6 +11,7 @@ use App\Entity\StockEvent;
 use App\Data\SectorPE;
 use App\Data\StockInfo;
 use Doctrine\ORM\EntityManagerInterface;
+use Redis;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -92,24 +93,39 @@ class StockController extends AbstractController
     }
 
     #[Route('/api/history', name: 'api_history')]
-    public function history(Request $request, EntityManagerInterface $entityManager): JsonResponse
+    public function history(Request $request, EntityManagerInterface $entityManager, \Redis $redis): JsonResponse
     {
         $ticker = $request->query->get('ticker');
         $range = $request->query->get('range', '1y');
 
+        if (!$ticker) return $this->json([]);
+
+        if (in_array($range, ['1w', '1m'])) {
+            $limit = $range === '1w' ? 277 : 1200;
+            $cacheKey = "chart_buffer:{$ticker}";
+            
+            $redisData = $redis->lRange($cacheKey, 0, $limit - 1);
+
+            $results = [];
+
+            foreach ($redisData as $jsonStr) {
+                $results[] = json_decode($jsonStr, true);
+            }
+
+            return $this->json(array_reverse($results));
+        }
+
+
         $ranges = [
-            '1w'  => 277,
-            '1m'  => 1200,
-            '6m'  => 7200,
-            '1y'  => 14400,
-            '3y'  => 43200,
-            '5y'  => 72000,
-            '10y' => 144000,
-            'max' => 999999999
+            '3m'  => 1200, 
+            '6m'  => 2400, 
+            '1y'  => 4800, 
+            '3y'  => 14400, 
+            '5y'  => 24000, 
+            '10y' => 48000, 
+            'max' => 999999
         ];
         $limit = $ranges[$range] ?? 14400;
-
-        if (!$ticker) return $this->json([]);
 
         // USE RAW DBAL CONNECTION FOR BIG QUERIES
         $conn = $entityManager->getConnection();

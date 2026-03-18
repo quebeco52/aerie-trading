@@ -134,8 +134,32 @@ document.addEventListener('DOMContentLoaded', () => {
     // Dynamic Range Logic
     let currentRange = '1y';
     let tickCounter = 0;
-    const rangeSteps = { '1w': 1, '1m': 1, '6m': 2, '1y': 3, '3y': 9, '5y': 15, '10y': 29, 'max': 100 };
-    const rangeLimits = { '1w': 277, '1m': 1200, '6m': 3600, '1y': 4800, '3y': 4800, '5y': 4800, '10y': 4966, 'max': 5000 };
+
+    // How many live ticks to wait before locking a permanent point into the chart
+    const rangeSteps = {
+        '1w': 1,
+        '1m': 1,
+        '3m': 3,
+        '6m': 3,
+        '1y': 3,
+        '3y': 9,
+        '5y': 14,
+        '10y': 29,
+        'max': 100
+    };
+
+    const rangeLimits = {
+        '1w': 277,
+        '1m': 1200,
+        '3m': 1200, // Matches the downsampled MariaDB limits
+        '6m': 2400,
+        '1y': 4800,
+        '3y': 5000,
+        '5y': 5000,
+        '10y': 5000,
+        'max': 5000
+    };
+    
     let currentLimit = rangeLimits['1y'];
 
     function loadHistory(range) {

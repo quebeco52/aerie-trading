@@ -112,8 +112,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 // 1. Update the Macro Economy (Sector P/Es drift)
                 $liveSectorPEs = $this->macroEngine->updateSectorMultiples($dt);
 
-                // Check if it's time to record a database snapshot (every 600 ticks = 1 minute)
-                $isHistoryTick = ($tickCount % 600 === 0);
+                // Check if it's time to record a database snapshot
+                $isHistoryTick = ($tickCount % 3 === 0);
 
                 // 2. Update the Stocks
                 $result = $this->stockTracker->updateStocks($stocks ,$dt, $liveSectorPEs, $isHistoryTick);
@@ -121,13 +121,30 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $totalMarketCap = $result['total_cap'];
                 $events = $result['events'] ?? [];
 
-                $etfUpdate = $this->etfTracker->updateIndex($totalMarketCap);
+                $etfUpdate = $this->etfTracker->updateIndex($totalMarketCap, $isHistoryTick);
 
                 $allUpdates = array_merge($stockUpdates, [$etfUpdate]);
 
                 $this->entityManager->flush();
 
+                // Clear memory to prevent leaks
+                if ($isHistoryTick) {
+                    $this->entityManager->clear();
+                    $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
+                }
+
                 if (!empty($allUpdates)) {
+
+                    $nowStr = (new \DateTime())->format('Y-m-d H:i:s');
+
+                    foreach ($stockUpdates as $update) {
+                        $cacheKey = "chart_buffer:{$update['ticker']}";
+                        $point = json_encode(['price' => $update['price'], 'recorded_at' => $nowStr]);
+                        $this->redis->lPush($cacheKey, $point);
+                        $this->redis->lTrim($cacheKey, 0, 1199);
+                        
+                    }
+
                     $this->redis->publish('market_updates', json_encode([
                         'timestamp' => time(),
                         'stocks' => $allUpdates,

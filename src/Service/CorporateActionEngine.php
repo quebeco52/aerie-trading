@@ -39,7 +39,7 @@ class CorporateActionEngine
 
             // Safely double the players' shares
             $this->entityManager->getConnection()->executeStatement(
-                'UPDATE user_stocks SET quantity = quantity * 2 WHERE stock_id = :stock_id',
+                'UPDATE user_stocks SET quantity = quantity * 2, version = version + 1 WHERE stock_id = :stock_id',
                 ['stock_id' => $stock->getId()]
             );
 
@@ -65,7 +65,7 @@ class CorporateActionEngine
 
             // Safely divide players' shares
             $this->entityManager->getConnection()->executeStatement(
-                'UPDATE user_stocks SET quantity = FLOOR(quantity / 5) WHERE stock_id = :stock_id',
+                'UPDATE user_stocks SET quantity = FLOOR(quantity / 5), version = version + 1 WHERE stock_id = :stock_id',
                 ['stock_id' => $stock->getId()]
             );
 

@@ -25,6 +25,10 @@ class UserStock
     #[ORM\Column(options: ['default' => 0])]
     private ?int $quantity = 0;
 
+    #[ORM\Version]
+    #[ORM\Column(type: 'integer')]
+    private int $version = 1;
+
     public function getId(): ?int
     {
         return $this->id;
@@ -64,5 +68,10 @@ class UserStock
         $this->stock = $stock;
 
         return $this;
+    }
+
+    public function getVersion(): int
+    {
+        return $this->version;
     }
 }
