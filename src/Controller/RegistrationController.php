@@ -10,8 +10,21 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
 
+/**
+ * Controller responsible for handling new user registrations and initial account setup.
+ */
 class RegistrationController extends AbstractController
 {
+    /**
+     * Handles the display and processing of the user registration form.
+     *
+     * @param Request                     $request            The HTTP request.
+     * @param UserPasswordHasherInterface $userPasswordHasher The service to securely hash user passwords.
+     * @param EntityManagerInterface      $entityManager      The entity manager for database operations.
+     *
+     * @return Response Returns a redirect response on successful registration or if already logged in,
+     *                  otherwise renders the registration form view.
+     */
     #[Route('/register', name: 'app_register', methods: ['GET', 'POST'])]
     public function register(
         Request $request, 

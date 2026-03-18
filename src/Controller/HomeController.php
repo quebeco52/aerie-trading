@@ -9,8 +9,18 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
+/**
+ * Controller responsible for the main landing page and market dashboard.
+ */
 class HomeController extends AbstractController
 {
+    /**
+     * Displays the home page with the current market overview.
+     *
+     * @param EntityManagerInterface $entityManager The entity manager for database queries.
+     *
+     * @return Response Returns the rendered home page view.
+     */
     #[Route('/', name: 'app_home')]
     public function index(EntityManagerInterface $entityManager): Response
     {
@@ -42,6 +52,13 @@ class HomeController extends AbstractController
         ]);
     }
 
+    /**
+     * API endpoint to retrieve the latest market data, often used for live client-side updates.
+     *
+     * @param EntityManagerInterface $entityManager The entity manager for database queries.
+     *
+     * @return Response Returns a JSON response containing ETF and stock overview data.
+     */
     #[Route('/api/market', name: 'api_market')]
     public function apiMarket(EntityManagerInterface $entityManager): Response
     {

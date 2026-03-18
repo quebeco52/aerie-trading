@@ -137,7 +137,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                     $nowStr = (new \DateTime())->format('Y-m-d H:i:s');
 
-                    foreach ($stockUpdates as $update) {
+                    foreach ($allUpdates as $update) {
                         $cacheKey = "chart_buffer:{$update['ticker']}";
                         $point = json_encode(['price' => $update['price'], 'recorded_at' => $nowStr]);
                         $this->redis->lPush($cacheKey, $point);

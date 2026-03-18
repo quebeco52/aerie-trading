@@ -34,10 +34,10 @@ class AppFixtures extends Fixture
                 fclose($fp);
                 echo "✅ Redis cache successfully wiped via TCP socket!\n";
             } else {
-                echo "⚠️  Warning: Could not connect to Redis socket. Is Redis running?\n";
+                echo "Warning: Could not connect to Redis socket. Is Redis running?\n";
             }
         } catch (\Exception $e) {
-            echo "⚠️  Warning: Could not clear Redis. (" . $e->getMessage() . ")\n";
+            echo "Warning: Could not clear Redis. (" . $e->getMessage() . ")\n";
         }
 
         echo "Seeding the Lakebird Exchange...\n";

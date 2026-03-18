@@ -18,8 +18,20 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
+/**
+ * Controller responsible for handling stock and ETF views and historical data.
+ */
 class StockController extends AbstractController
 {
+    /**
+     * Displays the detailed view for a specific stock or ETF.
+     *
+     * @param string                 $ticker      The ticker symbol of the asset.
+     * @param EntityManagerInterface $entityManager The entity manager for database operations.
+     * @param MacroEngine            $macroEngine   The service for macro-economic data.
+     *
+     * @return Response Returns the rendered view with asset details.
+     */
     #[Route('/stock/{ticker}', name: 'app_stock_view')]
     public function view(string $ticker, EntityManagerInterface $entityManager, MacroEngine $macroEngine): Response
     {
@@ -92,6 +104,15 @@ class StockController extends AbstractController
         ]);
     }
 
+    /**
+     * API endpoint to retrieve historical price data for charting.
+     *
+     * @param Request                $request       The HTTP request containing 'ticker' and 'range' parameters.
+     * @param EntityManagerInterface $entityManager The entity manager.
+     * @param \Redis                 $redis         The Redis instance for caching short-term data.
+     *
+     * @return JsonResponse Returns a JSON array of historical data points.
+     */
     #[Route('/api/history', name: 'api_history')]
     public function history(Request $request, EntityManagerInterface $entityManager, \Redis $redis): JsonResponse
     {
