@@ -6,6 +6,7 @@ use App\Entity\Stock;
 use App\Service\StockTracker;
 use App\Service\EtfTracker;
 use App\Service\MacroEngine;
+use App\Service\MarketOperator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -37,6 +38,7 @@ class MarketSimulateCommand extends Command
         private StockTracker $stockTracker,
         private EtfTracker $etfTracker,
         private MacroEngine $macroEngine,
+        private MarketOperator $marketOperator,
         private \Redis $redis,
     ) {
         parent::__construct();
@@ -72,28 +74,39 @@ class MarketSimulateCommand extends Command
 
 
 
+
+
         // Load the stocks into RAM initially
         $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
 
         for ($tick = 1; $tick <= $totalTicks; $tick++) {
-            
+
             $liveSectorPEs = $this->macroEngine->updateSectorMultiples($dt);
 
             $isHistoryTick = ($tick % 30 === 0);
-            
+
             // Pass the $stocks array in
-            $result = $this->stockTracker->updateStocks($stocks, $dt, $liveSectorPEs, $isHistoryTick); 
+            $result = $this->stockTracker->updateStocks($stocks, $dt, $liveSectorPEs, $isHistoryTick);
             $this->etfTracker->updateIndex($result['total_cap'], $isHistoryTick);
 
             // Batch flush every 1200 ticks to save RAM
             if ($tick % 365 === 0) {
                 $this->entityManager->flush();
                 $this->entityManager->clear(); // Wipes RAM 
-                
+
+                gc_collect_cycles();
+
                 $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
-                
+
                 $this->redis->set('stocks_live_data', json_encode($result['updates']));
+
+                
             }
+
+            if ($tick % 100 === 0) {
+                $this->marketOperator->enforceMarketStability($stocks);
+            }
+
 
             $progressBar->advance();
         }

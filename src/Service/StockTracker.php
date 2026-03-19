@@ -3,7 +3,6 @@
 namespace App\Service;
 
 use App\Entity\Stock;
-use App\Entity\StockEvent;
 use App\Entity\StockHistory;
 use App\Data\SectorPE;
 use Doctrine\ORM\EntityManagerInterface;
@@ -21,7 +20,8 @@ class StockTracker
         private EntityManagerInterface $entityManager,
         private MarketEngine $marketEngine,
         private EarningsEngine $earningsEngine,
-        private CorporateActionEngine $corporateActionEngine
+        private CorporateActionEngine $corporateActionEngine,
+        private MarketEvent $eventService
     ) {}
 
     public function updateStocks(array $stocks, float $dt, array $liveSectorPEs, bool $recordHistory): array
@@ -75,22 +75,7 @@ class StockTracker
 
             // Handle Market Shocks via Doctrine Entities
             if ($calculation['shock'] !== null) {
-                $color = $calculation['shock'] > 0 ? "\033[32m" : "\033[31m";
-                echo " [!] {$color}MARKET SHOCK on {$stock->getTicker()}: " . number_format($calculation['shock'], 2) . "% \033[0m\n";
-
-                $event = new StockEvent();
-                $event->setStock($stock);
-                $event->setEventType('SHOCK');
-                $event->setDescription("Sudden market shock detected.");
-                $event->setChangePercent((string) $calculation['shock']);
-
-                $this->entityManager->persist($event);
-
-                $events[] = [
-                    'type' => 'SHOCK',
-                    'ticker' => $stock->getTicker(),
-                    'change_percent' => round($calculation['shock'], 2)
-                ];
+                $events[] = $this->eventService->publish($stock, 'SHOCK', "Sudden market shock detected.", $calculation['shock']);
             }
 
             // Earnings Engine

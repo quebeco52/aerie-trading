@@ -7,6 +7,7 @@ use App\Service\StockTracker;
 use App\Service\EtfTracker;
 use App\Service\MacroEngine;
 use App\Service\MathUtility;
+use App\Service\MarketOperator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -42,6 +43,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private StockTracker $stockTracker,
         private EtfTracker $etfTracker,
         private MacroEngine $macroEngine,
+        private MarketOperator $marketOperator,
         private \Redis $redis,
     ) {
         parent::__construct();
@@ -106,6 +108,12 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $output->writeln("Updating Market Prices... (Day: " . number_format($simDay, 1) . ") [Tick: $tickCount]");
             }
 
+            if ($tickCount % 1200 === 0) {
+                $operatorEvents = $this->marketOperator->enforceMarketStability($stocks);
+            } else {
+                $operatorEvents = [];
+            }
+
             try {
                 $this->entityManager->beginTransaction();
 
@@ -116,10 +124,14 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $isHistoryTick = ($tickCount % 3 === 0);
 
                 // 2. Update the Stocks
-                $result = $this->stockTracker->updateStocks($stocks ,$dt, $liveSectorPEs, $isHistoryTick);
+                $result = $this->stockTracker->updateStocks($stocks, $dt, $liveSectorPEs, $isHistoryTick);
                 $stockUpdates = $result['updates'];
                 $totalMarketCap = $result['total_cap'];
                 $events = $result['events'] ?? [];
+                
+                if (!empty($operatorEvents)) {
+                    $events = array_merge($events, $operatorEvents);
+                }
 
                 $etfUpdate = $this->etfTracker->updateIndex($totalMarketCap, $isHistoryTick);
 
@@ -142,7 +154,6 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                         $point = json_encode(['price' => $update['price'], 'recorded_at' => $nowStr]);
                         $this->redis->lPush($cacheKey, $point);
                         $this->redis->lTrim($cacheKey, 0, 1199);
-                        
                     }
 
                     $this->redis->publish('market_updates', json_encode([
@@ -154,13 +165,6 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                     $this->redis->set('stocks_live_data', json_encode($stockUpdates));
                     $this->redis->set('etf_live_data', json_encode([$etfUpdate]));
-
-                    if (!empty($events)) {
-                        foreach ($events as $event) {
-                            $this->redis->lPush('market_events_list', json_encode($event));
-                        }
-                        $this->redis->lTrim('market_events_list', 0, 49);
-                    }
                 }
 
                 if ($tickCount % 600 === 0) {

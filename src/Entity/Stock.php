@@ -169,7 +169,15 @@ class Stock
 
     public function setEarningsPerShare(?string $earningsPerShare): static
     {
-        $this->earningsPerShare = $earningsPerShare;
+        if ($earningsPerShare !== null) {
+            $val = (float) $earningsPerShare;
+            // Clamp to prevent SQL DECIMAL(20,8) out of range errors
+            // Max 12 digits before the decimal point
+            $val = max(-99999999999.0, min(99999999999.0, $val));
+            $this->earningsPerShare = (string) $val;
+        } else {
+            $this->earningsPerShare = null;
+        }
 
         return $this;
     }

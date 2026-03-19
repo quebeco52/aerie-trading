@@ -3,7 +3,6 @@
 namespace App\Service;
 
 use App\Entity\Stock;
-use App\Entity\StockEvent;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -13,7 +12,8 @@ use Doctrine\ORM\EntityManagerInterface;
 class CorporateActionEngine
 {
     public function __construct(
-        private EntityManagerInterface $entityManager
+        private EntityManagerInterface $entityManager,
+        private MarketEvent $marketEvent
     ) {}
 
     /**
@@ -38,19 +38,9 @@ class CorporateActionEngine
 
             $desc = "{$stock->getName()} has executed a {$splitFactor}-for-1 stock split.";
 
-            $eventEntity = new StockEvent();
-            $eventEntity->setStock($stock);
-            $eventEntity->setEventType('SPLIT');
-            $eventEntity->setDescription($desc);
-            $eventEntity->setChangePercent('0.00');
-            $this->entityManager->persist($eventEntity);
+            $splitEvent = $this->marketEvent->publish($stock, 'SPLIT', $desc, 0.00);
 
-            $splitEvent = [
-                'type' => 'SPLIT',
-                'ticker' => $stock->getTicker(),
-                'description' => $desc,
-                'change_percent' => '0.00'
-            ];
+            $this->entityManager->flush();
 
             // Safely multiply the players' shares by the dynamic factor
             $this->entityManager->getConnection()->executeStatement(
@@ -73,24 +63,18 @@ class CorporateActionEngine
             $reverseFactor *= 10;
         }
 
+        // Clamp EPS to prevent SQL DECIMAL(20,8) out of range errors
+        // 20 precision, 8 scale = 12 digits max before decimal point
+        $newEps = max(-99999999999.0, min(99999999999.0, $newEps));
+
         if ($reverseFactor > 1) {
             $sharesOutstanding = max(1, (int)($sharesOutstanding / $reverseFactor));
 
             $desc = "{$stock->getName()} executed a 1-for-{$reverseFactor} reverse split.";
 
-            $eventEntity = new StockEvent();
-            $eventEntity->setStock($stock);
-            $eventEntity->setEventType('REVSPLIT');
-            $eventEntity->setDescription($desc);
-            $eventEntity->setChangePercent('0.00');
-            $this->entityManager->persist($eventEntity);
-
-            $splitEvent = [
-                'type' => 'REVSPLIT',
-                'ticker' => $stock->getTicker(),
-                'description' => $desc,
-                'change_percent' => '0.00'
-            ];
+            $splitEvent = $this->marketEvent->publish($stock, 'REVSPLIT', $desc, 0.00);
+            
+            $this->entityManager->flush();
 
             // Safely divide players' shares by the dynamic factor
             $this->entityManager->getConnection()->executeStatement(

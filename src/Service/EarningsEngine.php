@@ -3,7 +3,6 @@
 namespace App\Service;
 
 use App\Entity\Stock;
-use App\Entity\StockEvent;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -14,6 +13,7 @@ class EarningsEngine
 {
     public function __construct(
         private EntityManagerInterface $entityManager,
+        private MarketEvent $marketEvent,
         private ?MathUtility $mathUtility = null
     ) {
         if ($this->mathUtility === null) {
@@ -31,30 +31,27 @@ class EarningsEngine
         $oldEps = (float) $stock->getEarningsPerShare();
         $sharesOutstanding = (int) $stock->getSharesOutstanding();
         $baselineVol = (float) $stock->getVolatility();
-        
-        // The Saturation Penalty (Gravity for massive corporations)
-        $currentEpsForMath = max(0.10, abs($oldEps));
-        $totalEarnings = $currentEpsForMath * $sharesOutstanding;
-        $saturationPenalty = max(1.0, log10($totalEarnings / 10000000) + 1.0); 
+
+        $totalEarnings = max(1.0, abs($oldEps) * $sharesOutstanding);
+        $saturationPenalty = max(1.0, log10($totalEarnings / 10000000) + 1.0);
+
+        // Floor the base so penny stocks/low EPS companies can still grow absolute cents
+        $growthBase = max(abs($oldEps), 0.50);
 
         // Analyst Consensus
-        // Analysts expect the base growth, slightly handicapped by how massive the company is
+        // Analysts expect the base growth
         $expectedEpsGrowth = 0.02 / $saturationPenalty;
-        $expectedEps = $oldEps * (1.0 + $expectedEpsGrowth);
+        $expectedEps = $oldEps + ($growthBase * $expectedEpsGrowth);
 
         // Model Revenue & Operating Leverage
         $quarterlyVol = $baselineVol * 0.5;
         $revenueZ = $this->mathUtility->generateStandardNormal();
         
         // Actual revenue shifts based on standard distribution
-        $revenuePctChange = $expectedEpsGrowth + ($quarterlyVol * 0.5 * $revenueZ);
-        
-        // Operating Leverage: Fixed costs mean EPS swings harder than Revenue
-        $operatingLeverage = 1.5 + $baselineVol; 
-        $actualEpsGrowth = $revenuePctChange * $operatingLeverage;
+        $actualEpsGrowth = $expectedEpsGrowth + ($quarterlyVol * $revenueZ);
         
         // Calculate Actual EPS
-        $actualEps = round($oldEps + (max(abs($oldEps), 0.50) * $actualEpsGrowth), 2);
+        $actualEps = round($oldEps + ($growthBase * $actualEpsGrowth), 2);
 
         // Calculate the SURPRISE (Actual vs Expected)
         $surpriseAmount = $actualEps - $expectedEps;
@@ -81,22 +78,6 @@ class EarningsEngine
             abs($surpriseAmount)
         );
 
-        // Create and Persist the Event
-        $event = new StockEvent();
-        $event->setStock($stock);
-        $event->setEventType('EARNINGS');
-        $event->setDescription($description);
-        $event->setChangePercent((string) round($surprisePct * 100, 2));
-
-        $this->entityManager->persist($event);
-
-        echo "\n [!] BREAKING NEWS: {$stock->getTicker()} reported earnings! ({$beatOrMiss} expectations by $" . abs($surpriseAmount) . ")\n";
-
-        return [
-            'type' => 'EARNINGS',
-            'ticker' => $stock->getTicker(),
-            'description' => $description,
-            'change_percent' => round($surprisePct * 100, 2)
-        ];
+        return $this->marketEvent->publish($stock, 'EARNINGS', $description, $surprisePct * 100);
     }
 }
