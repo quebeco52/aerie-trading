@@ -1,49 +1,81 @@
 document.addEventListener('DOMContentLoaded', () => {
     
-    setInterval(() => {
-        fetch('/api/market')
-            .then(response => response.json())
-            .then(data => {
+    // Connect to the WebSocket
+    const marketSocket = new WebSocket('ws://127.0.0.1:8080');
+
+    // Midnight Atelier Colors for flashes
+    const COLOR_SECONDARY = '#4edea3'; // Green (Up)
+    const COLOR_TERTIARY = '#ffb3ad';  // Red (Down)
+    const COLOR_DEFAULT = '#dae2fd';
+    const COLOR_MUTED = '#c2c6d6';
+
+    marketSocket.onmessage = function (event) {
+        const payload = JSON.parse(event.data);
+
+        // Update the Market Index (ETF) Live
+        const lbiStock = payload.stocks.find(s => s.ticker === 'LBI');
+        if (lbiStock) {
+            const etfEl = document.getElementById('etf-price');
+            if (etfEl) etfEl.innerText = '$' + parseFloat(lbiStock.price).toFixed(2);
+        }
+
+        // Loop through the live prices and update the DOM
+        payload.stocks.forEach(stock => {
+            const priceEl = document.getElementById(`price-${stock.ticker}`);
+            const mcapEl = document.getElementById(`mcap-${stock.ticker}`);
+            const rowEl = document.getElementById(`row-${stock.ticker}`);
+
+            if (priceEl && mcapEl && rowEl) {
+                // Get the old price to check if it went up or down
+                const oldPrice = parseFloat(priceEl.innerText.replace('$', '').replace(/,/g, ''));
+                const newPrice = parseFloat(stock.price);
+
+                // Update Price Text
+                priceEl.innerText = '$' + newPrice.toFixed(2);
+
+                // Calculate & Update Market Cap (Shares * Live Price)
+                const shares = window.MARKET_SHARES[stock.ticker] || 0;
+                const newMcap = newPrice * shares;
+                mcapEl.innerText = '$' + (newMcap / 1000000000).toFixed(2) + 'B';
                 
-                // Update the ETF Price
-                const etfElement = document.getElementById('etf-price');
-                if (etfElement && data.etf) {
-                    etfElement.innerText = '$' + data.etf.price;
+                // Update the data attribute used for sorting
+                rowEl.setAttribute('data-mcap', newMcap);
+
+                // Flash the price Green or Red based on movement
+                if (newPrice > oldPrice) {
+                    priceEl.style.color = COLOR_SECONDARY;
+                    mcapEl.style.color = COLOR_SECONDARY;
+                } else if (newPrice < oldPrice) {
+                    priceEl.style.color = COLOR_TERTIARY;
+                    mcapEl.style.color = COLOR_TERTIARY;
                 }
 
-                // Redraw the entire table body so the sorting updates live
-                const tbody = document.getElementById('market-table-body');
-                if (!tbody) return; 
-                
-                tbody.innerHTML = ''; 
-                
-                data.stocks.forEach(stock => {
-                    const tr = document.createElement('tr');
-                    
-                    tr.className = 'hover:bg-surface-container-high/40 transition-colors cursor-pointer group';
-                    tr.onclick = () => window.location.href = '/stock/' + stock.ticker;
+                // Reset back to normal color after 500ms
+                setTimeout(() => {
+                    priceEl.style.color = COLOR_DEFAULT;
+                    mcapEl.style.color = COLOR_MUTED; 
+                }, 500);
+            }
+        });
+    };
 
+    // Throttled Table Sorter
+    setInterval(() => {
+        const tbody = document.getElementById('market-table-body');
+        if (!tbody) return;
 
-                    tr.innerHTML = `
-                        <td class="px-8 py-5">
-                            <div class="flex flex-col">
-                                <div class="font-bold text-on-surface text-base group-hover:text-primary transition-colors">${stock.name}</div>
-                                <div class="text-on-surface-variant text-[10px] uppercase tracking-widest mt-0.5">${stock.ticker}</div>
-                            </div>
-                        </td>
-                        <td class="px-6 py-5 hidden sm:table-cell text-on-surface-variant">
-                            ${stock.sector}
-                        </td>
-                        <td class="px-6 py-5 text-right font-bold text-on-surface">
-                            $${stock.price}
-                        </td>
-                        <td class="px-8 py-5 text-right font-medium text-on-surface-variant">
-                            $${stock.marketCap}
-                        </td>
-                    `;
-                    tbody.appendChild(tr);
-                });
-            })
-            .catch(error => console.error("Error fetching market data:", error));
-    }, 5000); // 5 Seconds
+        // Get all rows as an array
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+
+        // Sort them by the data-mcap attribute we are updating live
+        rows.sort((a, b) => {
+            const mcapA = parseFloat(a.getAttribute('data-mcap'));
+            const mcapB = parseFloat(b.getAttribute('data-mcap'));
+            return mcapB - mcapA; // Descending (Highest cap at the top)
+        });
+
+        rows.forEach(row => tbody.appendChild(row));
+        
+    }, 5000); 
+
 });
