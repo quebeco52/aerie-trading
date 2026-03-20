@@ -1,9 +1,42 @@
 @import "tailwindcss";
 
-@source "../../templates";
-@source "../../src";
-@source "../../public/js";
+@theme {
+  --color-primary: #adc6ff;
+  --color-primary-container: #4d8eff;
+  --color-secondary: #4edea3; 
+  --color-tertiary: #ffb3ad;  
+  
+  --color-surface: #0b1326;   
+  --color-surface-container-lowest: #060e20;
+  --color-surface-container-low: #131b2e; 
+  --color-surface-container: #171f33;
+  --color-surface-container-high: #222a3d;
+  --color-surface-bright: #31394d;
+  
+  --color-on-surface: #dae2fd; 
+  --color-on-surface-variant: #c2c6d6; 
+  --color-outline-variant: #424754; 
 
-body {
-    background-color: skyblue;
+  --font-headline: "Courier Prime", monospace;
+  --font-body: "Courier Prime", monospace;
+  --font-serif: "Times New Roman", Times, serif;
+}
+
+@layer utilities {
+  .glass-panel {
+    background: rgba(19, 27, 46, 0.6);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+  }
+
+  .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { 
+    background: var(--color-outline-variant); 
+    border-radius: 10px; 
+  }
+
+  .material-symbols-outlined { 
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; 
+  }
 }

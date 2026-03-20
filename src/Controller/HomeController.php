@@ -15,11 +15,14 @@ use Symfony\Component\Routing\Attribute\Route;
 class HomeController extends AbstractController
 {
     /**
-     * Displays the home page with the current market overview.
+     * Displays the main landing page and market dashboard.
      *
-     * @param EntityManagerInterface $entityManager The entity manager for database queries.
+     * Fetches the primary market ETF and a list of all available stocks,
+     * calculates their current market capitalization, and sorts them from largest to smallest.
      *
-     * @return Response Returns the rendered home page view.
+     * @param EntityManagerInterface $entityManager The entity manager for database operations.
+     *
+     * @return Response Returns the rendered home page view with market data.
      */
     #[Route('/', name: 'app_home')]
     public function index(EntityManagerInterface $entityManager): Response
@@ -39,10 +42,10 @@ class HomeController extends AbstractController
                 'name' => $stock->getName(),
                 'sector' => $stock->getSector(),
                 'price' => $price,
+                'shares' => $shares,
                 'marketCap' => $marketCap
             ];
         }
-
 
         usort($marketData, fn($a, $b) => $b['marketCap'] <=> $a['marketCap']);
 
