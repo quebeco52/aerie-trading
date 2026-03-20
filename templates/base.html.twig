@@ -1,33 +1,39 @@
 <!DOCTYPE html>
-<html>
+<html class="dark">
 <head>
     <meta charset="UTF-8">
     <title>{% block title %}Aerie Exchange{% endblock %}</title>
     
+    <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
     <link rel="stylesheet" href="{{ asset('styles/app.css') }}">
-
-    <style>
-        body { background: #121212; color: white; }
-    </style>
+    
     {% block stylesheets %}{% endblock %}
 </head>
-<body class="p-8">
 
-    <body class="p-8">
-    
-    {# Display Flash Messages #}
-    {% for label, messages in app.flashes %}
-        {% for message in messages %}
-            <div class="mb-6 p-4 rounded-md {{ label == 'success' ? 'bg-green-800/50 text-green-200 border border-green-500' : 'bg-red-800/50 text-red-200 border border-red-500' }}">
-                {{ message }}
-            </div>
+<body class="bg-surface text-on-surface font-body selection:bg-primary/30 antialiased min-h-screen flex flex-col">
+
+    {# Inject the Site-Wide Navbar #}
+    {% include 'partials/_navbar.html.twig' %}
+
+    {# Flash Messages #}
+    <div class="fixed top-20 right-4 z-50 space-y-2">
+        {% for label, messages in app.flashes %}
+            {% for message in messages %}
+                <div class="p-4 rounded-lg flex items-center gap-3 shadow-lg shadow-black/40 {{ label == 'success' ? 'bg-secondary/10 text-secondary border border-secondary/20' : 'bg-tertiary/10 text-tertiary border border-tertiary/20' }}">
+                    <span class="material-symbols-outlined">{{ label == 'success' ? 'check_circle' : 'warning' }}</span>
+                    <span class="text-sm font-bold">{{ message }}</span>
+                </div>
+            {% endfor %}
         {% endfor %}
-    {% endfor %}
+    </div>
     
-    {% block body %}{% endblock %}
+    {# The Page Content #}
+    <main class="flex-grow">
+        {% block body %}{% endblock %}
+    </main>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
     {% block javascripts %}{% endblock %}
     
 </body>

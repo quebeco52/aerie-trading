@@ -8,7 +8,11 @@ const pieLabels = window.AERIE_DATA.pieLabels;
 const pieData = window.AERIE_DATA.pieData;
 const sharesMap = window.AERIE_DATA.sharesMap;
 
-// Build the ETF Components Array
+const COLOR_PRIMARY = '#adc6ff';
+const COLOR_SECONDARY = '#4edea3'; // Positive
+const COLOR_TERTIary = '#ffb3ad';  // Negative
+const COLOR_GRID = '#2d3449';
+
 let etfComponents = [];
 let fallbackIndex = 0;
 
@@ -35,9 +39,11 @@ if (IS_ETF) {
 document.addEventListener('DOMContentLoaded', () => {
     // Init Main Chart
     const ctx = document.getElementById('mainChart').getContext('2d');
+    
+    // Create a smooth gradient
     const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-    gradient.addColorStop(0, 'rgba(16, 185, 129, 0.25)');
-    gradient.addColorStop(1, 'rgba(16, 185, 129, 0)');
+    gradient.addColorStop(0, 'rgba(78, 222, 163, 0.2)'); // Secondary at 20%
+    gradient.addColorStop(1, 'rgba(78, 222, 163, 0)');
 
     const mainChart = new Chart(ctx, {
         type: 'line',
@@ -46,7 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
             datasets: [{
                 label: 'Price',
                 data: [],
-                borderColor: '#10b981',
+                borderColor: COLOR_SECONDARY,
                 backgroundColor: gradient,
                 borderWidth: 2,
                 tension: 0.4,
@@ -71,8 +77,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     display: true,
                     position: 'right',
                     grid: {
-                        color: '#334155',
+                        color: COLOR_GRID,
                         borderDash: [5, 5]
+                    },
+                    ticks: {
+                        color: '#c2c6d6',
+                        font: {
+                            family: '"Courier Prime", monospace'
+                        }
                     }
                 }
             }
@@ -90,12 +102,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 datasets: [{
                     data: etfComponents.map(c => c.value), // Sorted data
                     backgroundColor: etfComponents.map(c => c.color), // Locked colors
-                    borderWidth: 0
+                    borderWidth: 0,
+                    hoverOffset: 4
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                cutout: '75%', // Thinner, more modern ring
                 onHover: (event, chartElement) => {
                     event.native.target.style.cursor = chartElement.length ? 'pointer' : 'default';
                 },
@@ -112,17 +126,28 @@ document.addEventListener('DOMContentLoaded', () => {
                     legend: {
                         position: 'right',
                         labels: {
-                            boxWidth: 10,
-                            color: '#e2e8f0'
+                            boxWidth: 8,
+                            usePointStyle: true,
+                            color: '#c2c6d6',
+                            font: {
+                                family: '"Courier Prime", monospace',
+                                size: 10
+                            }
                         }
                     },
                     tooltip: {
+                        backgroundColor: 'rgba(19, 27, 46, 0.9)',
+                        titleColor: '#dae2fd',
+                        bodyColor: '#c2c6d6',
+                        borderColor: '#424754',
+                        borderWidth: 1,
+                        padding: 12,
                         callbacks: {
                             label: function (context) {
                                 let value = context.raw;
                                 let total = context.chart._metasets[context.datasetIndex].total;
                                 let percentage = ((value / total) * 100).toFixed(1) + "%";
-                                return context.label + ': ' + percentage;
+                                return ' ' + context.label + ': ' + percentage;
                             }
                         }
                     }
@@ -151,7 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const rangeLimits = {
         '1w': 277,
         '1m': 1200,
-        '3m': 1200, // Matches the downsampled MariaDB limits
+        '3m': 1200, 
         '6m': 2400,
         '1y': 4800,
         '3y': 5000,
@@ -169,11 +194,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         document.querySelectorAll('.range-btn').forEach(btn => {
             if (btn.dataset.range === range) {
-                btn.classList.replace('bg-slate-700', 'bg-indigo-600');
-                btn.classList.replace('text-gray-300', 'text-white');
+                // Active State
+                btn.className = 'range-btn px-4 py-1.5 text-xs font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors';
             } else {
-                btn.classList.replace('bg-indigo-600', 'bg-slate-700');
-                btn.classList.replace('text-white', 'text-gray-300');
+                // Inactive State
+                btn.className = 'range-btn px-4 py-1.5 text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors';
             }
         });
 
@@ -215,11 +240,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             el.innerText = '$' + newPrice.toFixed(2);
             if (newPrice > oldPrice) {
-                el.style.color = '#00ff00';
+                el.style.color = COLOR_SECONDARY; // Green
             } else if (newPrice < oldPrice) {
-                el.style.color = '#ef4444';
+                el.style.color = COLOR_TERTIary; // Red
             }
-            setTimeout(() => el.style.color = 'white', 500);
+            setTimeout(() => el.style.color = '#dae2fd', 500);
 
             if (USER_QUANTITY > 0) {
                 document.getElementById('user-holding-value').innerText = '$' + (newPrice * USER_QUANTITY).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -294,54 +319,52 @@ document.addEventListener('DOMContentLoaded', () => {
                     const noMsg = document.getElementById('no-events-msg');
                     const list = document.getElementById('events-list');
 
-                    // Hide the "No news" message if it's currently showing
                     if (noMsg) noMsg.classList.add('hidden');
 
                     const isPositive = parseFloat(evt.change_percent) >= 0;
-                    let icon = '📢';
-                    if (evt.type === 'SHOCK') icon = '⚡';
-                    if (evt.type === 'SPLIT' || evt.type === 'REVSPLIT') icon = '✂️';
+                    
+                    // Match the material symbols from the Twig template
+                    let icon = evt.type === 'SHOCK' ? 'bolt' : 'campaign';
+                    if (evt.type === 'SPLIT' || evt.type === 'REVSPLIT') icon = 'content_cut';
 
-                    // Fallback description just in case the backend payload didn't include one
                     let desc = evt.description || (evt.type === 'SHOCK' ? 'Sudden market shock detected.' : 'Earnings report released.');
                     desc = desc.replace(/\n/g, '<br>');
 
-                    const colorClass = isPositive ? 'bg-green-900/50 text-green-400 ring-green-500/20' : 'bg-red-900/50 text-red-400 ring-red-500/20';
+                    // Event Colors
+                    const iconBg = isPositive ? 'bg-secondary/10 text-secondary' : 'bg-tertiary/10 text-tertiary';
+                    const pctColor = isPositive ? 'text-secondary' : 'text-tertiary';
                     const sign = isPositive ? '+' : '';
                     const pct = parseFloat(evt.change_percent).toFixed(2);
 
-                    // Get the live current time
                     const now = new Date();
                     const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
 
-                    // Build the new list item
                     const li = document.createElement('li');
                     li.className = 'py-3';
                     li.innerHTML = `
                     <div class="flex items-start justify-between">
-                        <div class="flex items-start gap-2">
-                            <span class="flex-shrink-0 text-lg mt-0.5">${icon}</span>
+                        <div class="flex items-start gap-3">
+                            <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBg}">
+                                <span class="material-symbols-outlined text-sm">${icon}</span>
+                            </div>
                             <div>
-                                <p class="text-sm font-medium text-white">${evt.type}</p>
-                                <p class="text-xs text-gray-400 break-words" style="max-width: 200px;">
+                                <p class="text-xs font-bold text-on-surface">${evt.type}</p>
+                                <p class="text-[11px] text-on-surface-variant mt-1 leading-relaxed max-w-[200px]">
                                     ${desc}
                                 </p>
                             </div>
                         </div>
                         <div class="text-right flex-shrink-0 ml-2"> 
-                            <span class="inline-flex items-center rounded-md ${colorClass} px-2 py-1 text-xs font-medium ring-1 ring-inset">
+                            <span class="inline-flex items-center rounded bg-transparent px-1 py-0.5 text-xs font-bold ${pctColor}">
                                 ${sign}${pct}%
                             </span>
-                            <p class="text-xs text-gray-500 mt-1">${timeStr}</p>
+                            <p class="text-[10px] text-on-surface-variant mt-1">${timeStr}</p>
                         </div>
                     </div>
-                `;
+                    `;
 
-                    // Pop it right to the top of the list
                     if (list) {
                         list.prepend(li);
-
-                        // Keep the list clean: Remove the oldest event if we have more than 10
                         if (list.children.length > 10) {
                             list.removeChild(list.lastChild);
                         }
@@ -349,6 +372,5 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
         }
-
     };
 });
