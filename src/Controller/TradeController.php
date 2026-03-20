@@ -13,23 +13,22 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 /**
- * Controller responsible for handling stock trade executions.
- *
- * This controller processes Buy and Sell orders submitted by users.
- * It validates sufficient funds (for buys) or sufficient shares (for sells),
- * updates the user's cash balance and portfolio holdings, and persists
- * the transaction state to the database.
+ * Controller responsible for handling the execution of stock trades.
+ * 
+ * Access is restricted to authenticated users only.
  */
 #[IsGranted('ROLE_USER')]
 class TradeController extends AbstractController
 {
     /**
-     * Executes a trade order (Buy or Sell).
+     * Executes a trade order (BUY or SELL) for a specific stock.
+     *
+     * This method uses a database transaction to ensure data integrity and prevent race conditions.
      *
      * @param Request                $request The HTTP request containing trade details (ticker, action, quantity).
-     * @param EntityManagerInterface $em      The Doctrine Entity Manager for database transactions.
+     * @param EntityManagerInterface $em      The entity manager for database operations.
      *
-     * @return Response Redirects back to the referrer page with a success or error flash message.
+     * @return Response Redirects back to the referring page with a success or error flash message.
      */
     #[Route('/trade/execute', name: 'app_trade_execute', methods: ['POST'])]
     public function execute(Request $request, EntityManagerInterface $em): Response
@@ -46,69 +45,72 @@ class TradeController extends AbstractController
             return $this->redirect($request->headers->get('referer') ?? '/');
         }
 
-        // Fetch the stock
-        $stock = $em->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);
-        if (!$stock) {
-            $this->addFlash('error', 'Asset not found on the Aerie Exchange.');
-            return $this->redirect('/');
+        // Prevents the background Ticker from splitting or bankrupting the stock mid-trade
+        $em->getConnection()->beginTransaction();
+
+        try {
+            // Fetch the stock
+            $stock = $em->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);
+            if (!$stock) {
+                throw new \Exception('Asset not found on the Aerie Exchange.');
+            }
+
+            $livePrice = (float) $stock->getPrice();
+            $totalValue = $livePrice * $quantity;
+            $currentCash = (float) $user->getCashBalance();
+
+            $userStock = $em->getRepository(UserStock::class)->findOneBy([
+                'user' => $user,
+                'stock' => $stock
+            ]);
+
+            if ($action === 'BUY') {
+                if ($currentCash < $totalValue) {
+                    throw new \Exception('Insufficient funds for this transaction.');
+                }
+
+                $user->setCashBalance((string)($currentCash - $totalValue));
+
+                if (!$userStock) {
+                    $userStock = new UserStock();
+                    $userStock->setUser($user);
+                    $userStock->setStock($stock);
+                    $userStock->setQuantity(0);
+                    $em->persist($userStock);
+                }
+
+                $userStock->setQuantity($userStock->getQuantity() + $quantity);
+                $this->addFlash('success', "Successfully purchased {$quantity} shares of {$ticker}.");
+
+            } elseif ($action === 'SELL') {
+                if (!$userStock || $userStock->getQuantity() < $quantity) {
+                    throw new \Exception('You do not own enough shares to execute this sale.');
+                }
+
+                $user->setCashBalance((string)($currentCash + $totalValue));
+                $userStock->setQuantity($userStock->getQuantity() - $quantity);
+
+                if ($userStock->getQuantity() === 0) {
+                    $em->remove($userStock);
+                }
+                
+                $this->addFlash('success', "Successfully sold {$quantity} shares of {$ticker}.");
+                
+            } else {
+                throw new \Exception('Invalid order type.');
+            }
+
+            // Save everything and release the database lock!
+            $em->persist($user);
+            $em->flush();
+            $em->getConnection()->commit();
+
+        } catch (\Exception $e) {
+            // If the user tries to exploit a glitch, cancel the trade entirely
+            $em->getConnection()->rollBack();
+            $this->addFlash('error', $e->getMessage());
         }
 
-        $livePrice = (float) $stock->getPrice();
-        $totalValue = $livePrice * $quantity;
-        $currentCash = (float) $user->getCashBalance();
-
-        $userStock = $em->getRepository(UserStock::class)->findOneBy([
-            'user' => $user,
-            'stock' => $stock
-        ]);
-
-        if ($action === 'BUY') {
-            if ($currentCash < $totalValue) {
-                $this->addFlash('error', 'Insufficient funds for this transaction.');
-                return $this->redirect($request->headers->get('referer'));
-            }
-
-            $user->setCashBalance((string)($currentCash - $totalValue));
-
-            if (!$userStock) {
-                $userStock = new UserStock();
-                $userStock->setUser($user);
-                $userStock->setStock($stock);
-                $userStock->setQuantity(0);
-                $em->persist($userStock);
-            }
-
-            // Add the shares
-            $userStock->setQuantity($userStock->getQuantity() + $quantity);
-            $this->addFlash('success', "Successfully purchased {$quantity} shares of {$ticker}.");
-
-        } elseif ($action === 'SELL') {
-            // Check if they have enough shares to sell
-            if (!$userStock || $userStock->getQuantity() < $quantity) {
-                $this->addFlash('error', 'You do not own enough shares to execute this sale.');
-                return $this->redirect($request->headers->get('referer'));
-            }
-
-            $user->setCashBalance((string)($currentCash + $totalValue));
-            
-            $userStock->setQuantity($userStock->getQuantity() - $quantity);
-
-            // Clean up the database row if they sold out of their entire position
-            if ($userStock->getQuantity() === 0) {
-                $em->remove($userStock);
-            }
-            
-            $this->addFlash('success', "Successfully sold {$quantity} shares of {$ticker}.");
-            
-        } else {
-            $this->addFlash('error', 'Invalid order type.');
-            return $this->redirect($request->headers->get('referer'));
-        }
-
-        // Save everything to the database
-        $em->persist($user);
-        $em->flush();
-
-        return $this->redirect($request->headers->get('referer'));
+        return $this->redirect($request->headers->get('referer') ?? '/');
     }
 }

@@ -79,12 +79,18 @@
 
 					<div>
 						<label class="block text-sm font-medium leading-6 text-white">Quantity</label>
-						<input type="number" name="quantity" min="1" value="10" class="mt-1 block w-full rounded-md border-0 py-1.5 text-black px-3 shadow-sm ring-1 ring-inset ring-gray-300">
+						<div class="mt-1 relative rounded-md shadow-sm">
+							<input type="number" name="quantity" min="1" value="10" class="block w-full rounded-md border-0 bg-slate-900 py-2 text-white px-4 ring-1 ring-inset ring-slate-700 focus:ring-2 focus:ring-inset focus:ring-emerald-500 sm:text-sm sm:leading-6 font-mono">
+						</div>
 					</div>
 
-					<div class="grid grid-cols-2 gap-4">
-						<button type="submit" name="action" value="BUY" class="flex w-full justify-center rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-indigo-500">Buy</button>
-						<button type="submit" name="action" value="SELL" class="flex w-full justify-center rounded-md bg-slate-600 px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-slate-500">Sell</button>
+					<div class="grid grid-cols-2 gap-4 pt-2">
+						<button type="submit" name="action" value="BUY" class="flex w-full justify-center rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 focus-visible:outline focus-visible:outline-emerald-500 transition-colors">
+							Buy
+						</button>
+						<button type="submit" name="action" value="SELL" class="flex w-full justify-center rounded-md bg-slate-700 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-600 ring-1 ring-inset ring-slate-600 transition-colors">
+							Sell
+						</button>
 					</div>
 				</form>
 			</div>
@@ -207,8 +213,8 @@ baselineVol: {{ isEtf ? 0.15 : asset.volatility }},
 
 // Build the ETF data arrays if this is an ETF
 pieLabels: [{% if isEtf and allAssets is defined %}{% for a in allAssets %}"{{ a.ticker }}"{{ not loop.last ? ',' : '' }}{% endfor %}{% endif %}],
-pieData: [{% if isEtf and allAssets is defined %}{% for a in allAssets %}{{ a.price * a.sharesOutstanding }}
-{{ not loop.last ? ',' : '' }}{% endfor %}{% endif %}],
+pieData: [{% if isEtf and allAssets is defined %}{% for a in allAssets %}{{ a.price * a.sharesOutstanding }}{{ not loop.last ? ',' : '' }}
+{% endfor %}{% endif %}],
 sharesMap: {
 {% if isEtf and allAssets is defined %}
 {% for a in allAssets %}"{{ a.ticker }}" : {{ a.sharesOutstanding }}
