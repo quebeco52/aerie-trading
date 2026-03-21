@@ -1,3 +1,5 @@
+let previousPrice = null;
+
 const CURRENT_TICKER = window.AERIE_DATA.ticker;
 const IS_ETF = window.AERIE_DATA.isEtf;
 const SHARES_OUTSTANDING = window.AERIE_DATA.sharesOutstanding;
@@ -236,7 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (stockUpdate) {
             const newPrice = parseFloat(stockUpdate.price);
             const el = document.getElementById('big-price');
-            const oldPrice = parseFloat(el.innerText.replace('$', '').replace(/,/g, ''));
+            const oldPrice = previousPrice || newPrice;
 
             el.innerText = '$' + newPrice.toFixed(2);
             if (newPrice > oldPrice) {
@@ -244,6 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (newPrice < oldPrice) {
                 el.style.color = COLOR_TERTIary; // Red
             }
+            previousPrice = newPrice;
             setTimeout(() => el.style.color = '#dae2fd', 500);
 
             if (USER_QUANTITY > 0) {
@@ -327,8 +330,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     let icon = evt.type === 'SHOCK' ? 'bolt' : 'campaign';
                     if (evt.type === 'SPLIT' || evt.type === 'REVSPLIT') icon = 'content_cut';
 
-                    let desc = evt.description || (evt.type === 'SHOCK' ? 'Sudden market shock detected.' : 'Earnings report released.');
-                    desc = desc.replace(/\n/g, '<br>');
+                    // 1. Get the raw description text
+                    let rawDesc = evt.description || (evt.type === 'SHOCK' ? 'Sudden market shock detected.' : 'Earnings report released.');
+                    
+                    // 2. Escape HTML characters to prevent Cross-Site Scripting (XSS)
+                    let safeDesc = String(rawDesc).replace(/[&<>"']/g, match => {
+                        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[match];
+                    });
+
+                    // 3. Safely convert newlines to <br> tags AFTER escaping
+                    let desc = safeDesc.replace(/\n/g, '<br>');
 
                     // Event Colors
                     const iconBg = isPositive ? 'bg-secondary/10 text-secondary' : 'bg-tertiary/10 text-tertiary';

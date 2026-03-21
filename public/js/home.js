@@ -1,3 +1,5 @@
+const previousPrices = {};
+
 document.addEventListener('DOMContentLoaded', () => {
     
     // Connect to the WebSocket
@@ -27,8 +29,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (priceEl && mcapEl && rowEl) {
                 // Get the old price to check if it went up or down
-                const oldPrice = parseFloat(priceEl.innerText.replace('$', '').replace(/,/g, ''));
                 const newPrice = parseFloat(stock.price);
+                const oldPrice = previousPrices[stock.ticker] || newPrice;
 
                 // Update Price Text
                 priceEl.innerText = '$' + newPrice.toFixed(2);
@@ -49,6 +51,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     priceEl.style.color = COLOR_TERTIARY;
                     mcapEl.style.color = COLOR_TERTIARY;
                 }
+                
+                previousPrices[stock.ticker] = newPrice;
 
                 // Reset back to normal color after 500ms
                 setTimeout(() => {

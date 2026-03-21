@@ -11,26 +11,13 @@
 		<div class="flex flex-col md:flex-row justify-between items-center bg-surface-container-low shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-8 lg:p-10 border border-outline-variant/15 relative overflow-hidden">
 			<div class="absolute -right-20 -top-20 w-64 h-64 bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
 
-			<div class="relative z-10">
+			<div class="relative z-10 w-full">
 				<div class="flex items-center gap-2 mb-3">
 					<span class="w-2 h-2 rounded-full bg-secondary animate-pulse shadow-[0_0_8px_rgba(78,222,163,0.6)]"></span>
 					<span class="text-[10px] font-bold tracking-widest text-secondary uppercase">Live Market Data</span>
 				</div>
 				<h1 class="text-4xl md:text-5xl font-bold text-on-surface tracking-tight mb-2">The Aerie Exchange</h1>
 				<p class="text-on-surface-variant text-sm">The central financial hub. All markets are currently open.</p>
-			</div>
-
-			<div class="mt-8 md:mt-0 flex items-center space-x-4 relative z-10">
-				{% if app.user %}
-					<span class="inline-flex flex-col items-end text-xs text-on-surface-variant mr-2">
-						<span>Logged in as</span>
-						<strong class="text-on-surface">{{ app.user.userIdentifier|split('@')[0] }}</strong>
-					</span>
-					<a href="/dashboard" class="rounded-xl bg-primary px-6 py-3 text-sm font-bold text-[#001a42] shadow-lg shadow-primary/20 hover:brightness-110 active:scale-95 transition-all">My Portfolio</a>
-				{% else %}
-					<a href="{{ path('app_login') }}" class="rounded-xl bg-surface-container-high px-6 py-3 text-sm font-bold text-on-surface hover:bg-surface-bright active:scale-95 transition-all border border-outline-variant/10">Log in</a>
-					<a href="{{ path('app_register') }}" class="rounded-xl bg-primary px-6 py-3 text-sm font-bold text-[#001a42] shadow-lg shadow-primary/20 hover:brightness-110 active:scale-95 transition-all">Start Trading</a>
-				{% endif %}
 			</div>
 		</div>
 
@@ -75,7 +62,7 @@
 					</thead>
 					<tbody id="market-table-body" class="divide-y divide-outline-variant/5 text-sm relative">
 						{% for stock in stocks|default([]) %}
-                            {# ADD IDs and data-mcap #}
+							{# ADD IDs and data-mcap #}
 							<tr id="row-{{ stock.ticker }}" data-mcap="{{ stock.marketCap }}" class="hover:bg-surface-container-high/40 transition-colors cursor-pointer group" onclick="window.location.href='/stock/{{ stock.ticker }}'">
 								<td class="px-8 py-5">
 									<div class="flex flex-col">
@@ -86,11 +73,11 @@
 								<td class="px-6 py-5 hidden sm:table-cell text-on-surface-variant">
 									{{ stock.sector }}
 								</td>
-                                {# ADD price ID #}
+								{# ADD price ID #}
 								<td id="price-{{ stock.ticker }}" class="px-6 py-5 text-right font-bold text-on-surface transition-colors duration-300">
 									${{ stock.price|number_format(2) }}
 								</td>
-                                {# ADD mcap ID #}
+								{# ADD mcap ID #}
 								<td id="mcap-{{ stock.ticker }}" class="px-8 py-5 text-right font-medium text-on-surface-variant transition-colors duration-300">
 									${{ (stock.marketCap / 1000000000)|number_format(2) }}B
 								</td>
@@ -107,14 +94,13 @@
 {% block javascripts %}
 	{{ parent() }}
 
-    {# Pass the shares to Javascript so we can calculate live Market Caps #}
-    <script>
-        window.MARKET_SHARES = {
-            {% for stock in stocks|default([]) %}
-                "{{ stock.ticker }}": {{ stock.shares }},
-            {% endfor %}
-        };
-    </script>
+	{# Pass the shares to Javascript so we can calculate live Market Caps #}
+	<script>
+		window.MARKET_SHARES = {
+{% for stock in stocks|default([]) %}
+"{{ stock.ticker }}" : {{ stock.shares }},{% endfor %}
+};
+	</script>
 
 	<script src="{{ asset('js/home.js') }}"></script>
 {% endblock %}

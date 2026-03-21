@@ -1,3 +1,9 @@
+const UI_COLORS = {
+    POSITIVE: '#4edea3',
+    NEGATIVE: '#ffb3ad',
+    GRID: '#2d3449'
+};
+
 const BRAND_COLORS = {
     'LAKE': '#045729',  // Green
     'SWAN': '#770707',  // Red
