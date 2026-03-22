@@ -59,7 +59,7 @@ class InitialMarket
             'price' => 210.00, 'eps' => 8.91, 
             'shares_outstanding' => 1000000000,
             // Reinsurance: Almost entirely untethered to the stock market. Driven by natural disasters
-            'volatility' => 0.12, 'beta' => 0.20, 'jump_intensity' => 0.10, 'jump_mean' => -0.15, 'jump_vol' => 0.20
+            'volatility' => 0.10, 'beta' => 0.15, 'jump_intensity' => 0.10, 'jump_mean' => -0.15, 'jump_vol' => 0.20
         ],
         [
             'ticker' => 'DOVE', 'name' => 'White Dove Insurance', 'sector' => 'Financials',
@@ -80,7 +80,7 @@ class InitialMarket
             'price' => 110.00, 'eps' => 3.00, 
             'shares_outstanding' => 1000000000,
             // Utilities: Very low volatility, rare jumps. Defensive, low correlation to macro swings
-            'volatility' => 0.15, 'beta' => 0.60, 'jump_intensity' => 0.30, 'jump_mean' => 0.00, 'jump_vol' => 0.04
+            'volatility' => 0.10, 'beta' => 0.30, 'jump_intensity' => 0.30, 'jump_mean' => 0.00, 'jump_vol' => 0.04
         ],
         [
             'ticker' => 'WATCH', 'name' => 'Bird Watch Security', 'sector' => 'Industrials',
@@ -153,7 +153,7 @@ class InitialMarket
             'volatility' => 0.28, 'beta' => 1.25, 'jump_intensity' => 0.90, 'jump_mean' => -0.01, 'jump_vol' => 0.09
         ],
         [
-            'ticker' => 'TICK', 'name' => 'Tickbird Data Systems', 'sector' => 'Financials',
+            'ticker' => 'TICK', 'name' => 'Tickbird Data Systems', 'sector' => 'Information Technology',
             'price' => 200.00, 'eps' => 6.46, 
             'shares_outstanding' => 1000000000,
             // Financial Data SaaS: Sticky revenue, but slightly aggressive tech multiples
@@ -307,5 +307,13 @@ class InitialMarket
             // The Defensive Anchor: A master-franchise real estate holding company masquerading as fast food.
             'volatility' => 0.14, 'beta' => 0.50, 'jump_intensity' => 0.05, 'jump_mean' => -0.04, 'jump_vol' => 0.06
         ],
+    ];
+
+    public const ETFS = [
+        [
+            'ticker' => 'LBI',
+            'name' => 'Lakebird Index', // Or whatever you want LBI to stand for!
+            'price' => 100.00,           // The starting price before the engine takes over
+        ]
     ];
 }

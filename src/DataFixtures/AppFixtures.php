@@ -42,12 +42,15 @@ class AppFixtures extends Fixture
 
         echo "Seeding the Lakebird Exchange...\n";
 
-        // Create the ETF (The Lakebird Index)
-        $etf = new Etf();
-        $etf->setTicker('LBI');
-        $etf->setName('Lakebird Index');
-        $etf->setPrice('100.00');
-        $manager->persist($etf);
+        // Loop through ETFs (Future-proofed for multiple indices!)
+        foreach (InitialMarket::ETFS as $etfData) {
+            $etf = new Etf();
+            $etf->setTicker($etfData['ticker']);
+            $etf->setName($etfData['name']);
+            $etf->setPrice((string) $etfData['price']);
+            
+            $manager->persist($etf);
+        }
 
         // Loop through Stocks
         foreach (InitialMarket::STOCKS as $stockData) {

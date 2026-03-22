@@ -53,17 +53,28 @@ class EarningsEngine
         // Calculate Actual EPS
         $actualEps = round($oldEps + ($growthBase * $actualEpsGrowth), 2);
 
-        // Calculate the SURPRISE (Actual vs Expected)
+        // Calculate the SURPRISE (Keep this strictly for the UI/News Feed)
         $surpriseAmount = $actualEps - $expectedEps;
         $surprisePct = $surpriseAmount / max(0.10, abs($expectedEps));
 
-        // VOLATILITY SHOCK
+        // VOLATILITY SHOCK: Based strictly on the Z-Score (Statistical Rarity)
         $currentVol = (float) $stock->getCurrentVolatility();
-        if (abs($surprisePct) > 0.10) {
-            // A 20% surprise = 20% volatility spike
-            $shockMultiplier = 1.0 + abs($surprisePct);
+        $zScore = abs($revenueZ); // How many standard deviations away from expectations
+
+        if ($zScore > 1.5) {
+            // A 1.5+ sigma event is a genuine surprise. Spike the volatility.
+            // Example: Z=2.5 -> (2.5 - 1.0) * 0.2 = 0.3 (A 30% Volatility Spike)
+            $shockMultiplier = 1.0 + (($zScore - 1.0) * 0.2);
             $newVol = min($currentVol * $shockMultiplier, $baselineVol * 3.0);
+            
             $stock->setCurrentVolatility((string) $newVol);
+            
+        } elseif ($zScore < 0.5 && $currentVol > $baselineVol) {
+            // A boring, highly predictable quarter (Z < 0.5). 
+            // The market calms down. Volatility cools off by 25% toward the baseline.
+            $newVol = $currentVol - (($currentVol - $baselineVol) * 0.25);
+            
+            $stock->setCurrentVolatility((string) max($newVol, $baselineVol));
         }
 
         // Update the Stock Entity
