@@ -16,11 +16,15 @@
                         <div>
                             <div class="flex items-center gap-3 mb-2">
                                 <h2 class="text-3xl font-bold text-on-surface tracking-tight">{{ asset.name }}</h2>
+                                <img class="w-14 h-14 rounded-full" src="{{ asset('icons/' ~ asset.ticker ~ '.svg') }}" onerror="this.onerror=null; this.src='{{ asset('icons/default.svg') }}';" alt="{{ asset.ticker }} icon">
                                 <span class="inline-flex items-center rounded-md bg-surface-container-highest px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
                                     {{ isEtf ? 'Market Index' : asset.sector }}
                                 </span>
+                                
                             </div>
                             <p class="text-lg text-on-surface-variant">{{ asset.ticker }}</p>
+
+                            
                         </div>
                         <div class="md:text-right">
                             <div class="flex items-center md:justify-end gap-2 mb-1">
