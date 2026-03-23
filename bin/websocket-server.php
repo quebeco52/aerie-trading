@@ -16,7 +16,6 @@ if (file_exists(dirname(__DIR__) . '/.env')) {
 $env = $_SERVER['APP_ENV'] ?? 'prod';
 $debug = (bool) ($_SERVER['APP_DEBUG'] ?? ('prod' !== $env));
 
-// Boot the Symfony Kernel 
 $kernel = new Kernel($env, $debug);
 $kernel->boot();
 
@@ -25,6 +24,48 @@ echo "Starting Aerie WebSocket Server on port 8080...\n";
 // Initialize Workerman
 $worker = new Worker('websocket://0.0.0.0:8080');
 $worker->count = 4;
+
+// THE BOUNCER
+
+$worker->onWebSocketConnect = function ($connection, $http_buffer) {
+    // Extract the ticket safely (fallback to raw HTTP buffer if $_GET is empty)
+    $ticket = $_GET['ticket'] ?? '';
+    if (empty($ticket) && preg_match('/ticket=([a-zA-Z0-9]+)/', $http_buffer, $matches)) {
+        $ticket = $matches[1];
+    }
+
+    if (empty($ticket)) {
+        echo " [!] Rejected connection: No ticket provided.\n";
+        $connection->close();
+        return;
+    }
+
+    // Lazily initialize a synchronous Redis client per-worker
+    static $syncRedis = null;
+    if ($syncRedis === null) {
+        $syncRedis = new \Redis();
+        $redisUrl = parse_url($_ENV['REDIS_URL'] ?? 'redis://127.0.0.1:6379');
+        $syncRedis->connect($redisUrl['host'], $redisUrl['port'] ?? 6379);
+    }
+
+    // Check if the ticket exists in Redis
+    $userId = $syncRedis->get("ws_ticket:{$ticket}");
+
+    if (!$userId) {
+        echo " [!] Rejected connection: Invalid or expired ticket.\n";
+        $connection->close();
+        return;
+    }
+
+    // Validated! Destroy the ticket so it can NEVER be reused by a replay attack
+    $syncRedis->del("ws_ticket:{$ticket}");
+
+    // Attach the User ID to this specific connection object for future reference
+    $connection->uid = $userId;
+    
+    echo " [+] Authenticated User ID {$userId} connected! (IP: {$connection->getRemoteIp()})\n";
+};
+
 
 // Subscribe to Redis ONCE when the worker boots up
 $worker->onWorkerStart = function (Worker $worker) {
@@ -40,6 +81,11 @@ $worker->onWorkerStart = function (Worker $worker) {
     echo " [√] Worker {$worker->id} connected to Async Redis! Listening for market updates...\n";
 };
 
+// Graceful Shutdown to prevent Docker Exit Code 137
+$worker->onWorkerStop = function (Worker $worker) {
+    echo " [x] Worker {$worker->id} shutting down gracefully.\n";
+};
+
 // Handle incoming messages from the browser without blocking
 $worker->onMessage = function ($connection, $data) {
     if ($data === 'ping') {
@@ -48,11 +94,11 @@ $worker->onMessage = function ($connection, $data) {
 };
 
 $worker->onConnect = function ($connection) {
-    echo " [+] New browser connected! (IP: {$connection->getRemoteIp()})\n";
 };
 
 $worker->onClose = function ($connection) {
-    echo " [-] Browser disconnected.\n";
+    $userId = $connection->uid ?? 'Unknown';
+    echo " [-] Browser disconnected (User ID: {$userId}).\n";
 };
 
 // Run the worker

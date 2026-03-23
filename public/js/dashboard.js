@@ -2,6 +2,14 @@ const previousPrices = {};
 let previousPortfolioValue = null;
 
 document.addEventListener('DOMContentLoaded', () => {
+
+    if (!window.WS_TICKET || window.WS_TICKET === "") {
+        console.log("Guest mode: Live WebSocket updates disabled.");
+        return; 
+    }
+
+    const marketSocket = new WebSocket('ws://127.0.0.1:8080/?ticket=' + window.WS_TICKET);
+
     // Initialize Portfolio Chart
     const canvas = document.getElementById('portfolioChart');
     let portfolioChart = null;
@@ -62,8 +70,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Live Market Data via WebSockets
-    const marketSocket = new WebSocket('ws://127.0.0.1:8080');
 
     let tickCounter = 0;
 

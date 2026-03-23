@@ -34,6 +34,11 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        window.WS_TICKET = "{{ generate_ws_ticket() }}";
+    </script>
+    
     {% block javascripts %}{% endblock %}
     
 </body>

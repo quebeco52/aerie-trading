@@ -2,8 +2,12 @@ const previousPrices = {};
 
 document.addEventListener('DOMContentLoaded', () => {
     
-    // Connect to the WebSocket
-    const marketSocket = new WebSocket('ws://127.0.0.1:8080');
+    if (!window.WS_TICKET || window.WS_TICKET === "") {
+        console.log("Guest mode: Live WebSocket updates disabled.");
+        return; 
+    }
+
+    const marketSocket = new WebSocket('ws://127.0.0.1:8080/?ticket=' + window.WS_TICKET);
 
     // Midnight Atelier Colors for flashes
     const COLOR_SECONDARY = '#4edea3'; // Green (Up)
