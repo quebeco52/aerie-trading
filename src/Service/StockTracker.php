@@ -60,14 +60,12 @@ class StockTracker
                 earningsPerShare: (float) $stock->getEarningsPerShare(),
                 targetPE: $targetPE,
                 dt: $dt,
-                drift: 0.1,
                 lambda: (float) $stock->getJumpIntensity(),
                 jumpMean: (float) $stock->getJumpMean(),
                 jumpVol: (float) $stock->getJumpVol(),
                 beta: (float) $stock->getBeta(),
                 marketZ: $marketZ,
-                marketVol: $marketVol,
-                reversionSpeed: 0.3
+                marketVol: $marketVol
             );
 
             $newPrice = $calculation['price'];

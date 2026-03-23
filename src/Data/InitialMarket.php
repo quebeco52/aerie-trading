@@ -7,42 +7,42 @@ class InitialMarket
     public const STOCKS = [
         [
             'ticker' => 'LAKE', 'name' => 'Lakebird Bank', 'sector' => 'Financials',
-            'price' => 900.00, 'eps' => 37.42, 
+            'price' => 1500.00, 'eps' => 37.42, 
             'shares_outstanding' => 1000000000,
             // Banks: Moderate vol, occasional negative shocks from credit fears
             'volatility' => 0.18, 'beta' => 1.15, 'jump_intensity' => 0.75, 'jump_mean' => -0.02, 'jump_vol' => 0.06
         ],
         [
             'ticker' => 'SWAN', 'name' => 'Black Swan Capital', 'sector' => 'Financials',
-            'price' => 650.00, 'eps' => 28.63,
+            'price' => 1350.00, 'eps' => 28.63,
             'shares_outstanding' => 1000000000,
             // Asset Management: Aggressive activist fund. High beta due to leveraged AUM, jumps frequently on hostile takeover news
             'volatility' => 0.24, 'beta' => 1.35, 'jump_intensity' => 1.25, 'jump_mean' => 0.02, 'jump_vol' => 0.10
         ],
         [
             'ticker' => 'HUMM', 'name' => 'Hummingbird Interactive', 'sector' => 'Information Technology',
-            'price' => 350.00, 'eps' => 19.14, 
+            'price' => 550.00, 'eps' => 19.14, 
             'shares_outstanding' => 1000000000,
             // Mega Cap Tech: High beta because it drives the market, but structurally lower volatility than small cap tech due to its massive monopoly moat
             'volatility' => 0.22, 'beta' => 1.25, 'jump_intensity' => 0.75, 'jump_mean' => -0.02, 'jump_vol' => 0.06
         ],
         [
             'ticker' => 'OWLS', 'name' => 'Owl Capital Partners', 'sector' => 'Financials',
-            'price' => 280.00, 'eps' => 20.15, 
+            'price' => 480.00, 'eps' => 20.15, 
             'shares_outstanding' => 1000000000,
             // Value Holding Company: Hoards cash, very low beta, buys the dip
             'volatility' => 0.15, 'beta' => 0.85, 'jump_intensity' => 0.20, 'jump_mean' => 0.01, 'jump_vol' => 0.04
         ],
         [
             'ticker' => 'KING', 'name' => 'Kingfisher Capital', 'sector' => 'Financials',
-            'price' => 250.00, 'eps' => 14.61, 
+            'price' => 450.00, 'eps' => 14.61, 
             'shares_outstanding' => 1000000000,
             // Investment Banking: Highly leveraged. When the market bleeds banks hemorrhage. Highest beta
             'volatility' => 0.28, 'beta' => 1.55, 'jump_intensity' => 1.25, 'jump_mean' => -0.04, 'jump_vol' => 0.12
         ],
         [
             'ticker' => 'PERE', 'name' => 'Peregrine Prime Securities', 'sector' => 'Financials',
-            'price' => 250.00, 'eps' => 14.02, 
+            'price' => 450.00, 'eps' => 14.02, 
             'shares_outstanding' => 1000000000,
             // The Volatility Harvester: Low beta, highly defensive, occasionally spikes during macroeconomic panics
             'volatility' => 0.18, 'beta' => 0.35, 'jump_intensity' => 1.25, 'jump_mean' => 0.05, 'jump_vol' => 0.12 
@@ -56,7 +56,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'SAFE', 'name' => 'Safe Harbor Reinsurance', 'sector' => 'Financials',
-            'price' => 210.00, 'eps' => 8.91, 
+            'price' => 270.00, 'eps' => 8.91, 
             'shares_outstanding' => 1000000000,
             // Reinsurance: Almost entirely untethered to the stock market. Driven by natural disasters
             'volatility' => 0.10, 'beta' => 0.15, 'jump_intensity' => 0.10, 'jump_mean' => -0.15, 'jump_vol' => 0.20
@@ -77,14 +77,14 @@ class InitialMarket
         ],
         [
             'ticker' => 'BIRD', 'name' => 'Bird Power Inc', 'sector' => 'Utilities',
-            'price' => 110.00, 'eps' => 3.00, 
+            'price' => 150.00, 'eps' => 3.00, 
             'shares_outstanding' => 1000000000,
             // Utilities: Very low volatility, rare jumps. Defensive, low correlation to macro swings
             'volatility' => 0.10, 'beta' => 0.30, 'jump_intensity' => 0.30, 'jump_mean' => 0.00, 'jump_vol' => 0.04
         ],
         [
             'ticker' => 'WATCH', 'name' => 'Bird Watch Security', 'sector' => 'Industrials',
-            'price' => 120.00, 'eps' => 1.09, 
+            'price' => 180.00, 'eps' => 1.09, 
             'shares_outstanding' => 1000000000,
             // Security: Stable, service based, sticky contracts. Slightly defensive
             'volatility' => 0.20, 'beta' => 0.90, 'jump_intensity' => 0.60, 'jump_mean' => -0.04, 'jump_vol' => 0.05
@@ -287,7 +287,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'BRKW', 'name' => 'Breakwater Trust', 'sector' => 'Financials',
-            'price' => 650.00, 'eps' => 10.00,
+            'price' => 850.00, 'eps' => 10.00,
             'shares_outstanding' => 1000000000,
             // The Leviathan: Massive holding company. Very low beta, low baseline volatility, 
             // but subject to sudden violent jumps if activist investors (SWAN) threaten to unlock its hidden NAV.

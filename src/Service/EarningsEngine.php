@@ -33,7 +33,7 @@ class EarningsEngine
         $baselineVol = (float) $stock->getVolatility();
 
         $totalEarnings = max(1.0, abs($oldEps) * $sharesOutstanding);
-        $saturationPenalty = max(1.0, log10($totalEarnings / 10000000) + 1.0);
+        $saturationPenalty = max(1.0, log10($totalEarnings / 20000000) + 1.0);
 
         // Floor the base so penny stocks/low EPS companies can still grow absolute cents
         $growthBase = max(abs($oldEps), 0.50);
@@ -41,7 +41,8 @@ class EarningsEngine
         // Analyst Consensus
         // Analysts expect the base growth
         $expectedEpsGrowth = 0.02 / $saturationPenalty;
-        $expectedEps = $oldEps + ($growthBase * $expectedEpsGrowth);
+        // Round expected EPS to 2 decimals to prevent floating-point "ghost misses"
+        $expectedEps = round($oldEps + ($growthBase * $expectedEpsGrowth), 2);
 
         // Model Revenue & Operating Leverage
         $quarterlyVol = $baselineVol * 0.5;
@@ -54,7 +55,7 @@ class EarningsEngine
         $actualEps = round($oldEps + ($growthBase * $actualEpsGrowth), 2);
 
         // Calculate the SURPRISE (Keep this strictly for the UI/News Feed)
-        $surpriseAmount = $actualEps - $expectedEps;
+        $surpriseAmount = round($actualEps - $expectedEps, 2);
         $surprisePct = $surpriseAmount / max(0.10, abs($expectedEps));
 
         // VOLATILITY SHOCK: Based strictly on the Z-Score (Statistical Rarity)
@@ -80,14 +81,16 @@ class EarningsEngine
         // Update the Stock Entity
         $stock->setEarningsPerShare((string) $actualEps);
 
-        // Build the Financial Report String
-        $beatOrMiss = $surpriseAmount >= 0 ? 'Beat' : 'Missed';
-        $description = sprintf(
-            "Q-Earnings: $%.2f (%s expectations by $%.2f).",
-            $actualEps,
-            $beatOrMiss,
-            abs($surpriseAmount)
-        );
+        $formattedEps = $actualEps < 0 ? '-$' . number_format(abs($actualEps), 2) : '$' . number_format($actualEps, 2);
+        $formattedSurprise = '$' . number_format(abs($surpriseAmount), 2);
+
+        if ($surpriseAmount > 0.0) {
+            $description = "Q-Earnings: {$formattedEps} (Beat expectations by {$formattedSurprise}).";
+        } elseif ($surpriseAmount < 0.0) {
+            $description = "Q-Earnings: {$formattedEps} (Missed expectations by {$formattedSurprise}).";
+        } else {
+            $description = "Q-Earnings: {$formattedEps} (Met expectations exactly).";
+        }
 
         return $this->marketEvent->publish($stock, 'EARNINGS', $description, $surprisePct * 100);
     }

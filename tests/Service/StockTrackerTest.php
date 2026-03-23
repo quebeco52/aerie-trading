@@ -8,6 +8,7 @@ use App\Service\StockTracker;
 use App\Service\MarketEngine;
 use App\Service\EarningsEngine;
 use App\Service\CorporateActionEngine;
+use App\Service\MarketEvent;
 use Doctrine\ORM\EntityManagerInterface;
 use App\Entity\Stock;
 use App\Entity\StockEvent;
@@ -19,6 +20,7 @@ class StockTrackerTest extends TestCase
     private MarketEngine|MockObject $marketEngineMock;
     private EarningsEngine|MockObject $earningsEngineMock;
     private CorporateActionEngine|MockObject $corporateActionEngineMock;
+    private MarketEvent|MockObject $marketEventMock;
     private StockTracker $tracker;
 
     protected function setUp(): void
@@ -27,12 +29,14 @@ class StockTrackerTest extends TestCase
         $this->marketEngineMock = $this->createMock(MarketEngine::class);
         $this->earningsEngineMock = $this->createMock(EarningsEngine::class);
         $this->corporateActionEngineMock = $this->createMock(CorporateActionEngine::class);
+        $this->marketEventMock = $this->createMock(MarketEvent::class);
         
         $this->tracker = new StockTracker(
             $this->entityManagerMock,
             $this->marketEngineMock,
             $this->earningsEngineMock,
-            $this->corporateActionEngineMock
+            $this->corporateActionEngineMock,
+            $this->marketEventMock
         );
     }
 
@@ -113,20 +117,20 @@ class StockTrackerTest extends TestCase
             'event' => null
         ]);
 
-        // Persist should be called exactly TWICE:
-        // 1. To save the StockEvent for the shock
-        // 2. To save the StockHistory tick
-        $this->entityManagerMock->expects($this->exactly(2))
+        $this->marketEventMock->method('publish')->willReturn([
+            'type' => 'SHOCK',
+            'ticker' => 'TEST',
+            'description' => 'Sudden market shock detected.',
+            'change_percent' => -10.0
+        ]);
+
+        // Persist should be called exactly ONCE:
+        // 1. To save the StockHistory tick
+        $this->entityManagerMock->expects($this->once())
             ->method('persist')
-            ->with($this->logicalOr(
-                $this->isInstanceOf(StockEvent::class),
-                $this->isInstanceOf(StockHistory::class)
-            ));
+            ->with($this->isInstanceOf(StockHistory::class));
             
         $this->entityManagerMock->expects($this->never())->method('flush');
-
-        // Suppress the terminal echo during PHPUnit tests but verify it happened
-        $this->expectOutputRegex('/MARKET SHOCK on TEST: \-10\.00\%/');
 
         $result = $this->tracker->updateStocks([$stock], 1.0, [], true);
 

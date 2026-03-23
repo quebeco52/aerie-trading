@@ -54,15 +54,15 @@ class MarketEngine
         float $earningsPerShare,
         float $targetPE,
         float $dt,
-        float $drift = 0.1,
         float $lambda = 2.0,
         float $jumpMean = 0.01,
         float $jumpVol = 0.1,
         float $beta = 1.0,
         float $marketZ = 0.0,
         float $marketVol = 0.15,
+        float $drift = 0.1,
         float $reversionSpeed = 0.3,
-        float $kappa = 5.0,
+        float $kappa = 6.0,
         float $volOfVol = 0.2,
         float $rho = -0.7
     ): array {

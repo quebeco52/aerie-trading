@@ -36,11 +36,11 @@ class MarketOperator
 
             // RULE 1: THE OLIGARCHY (Plot Armor for the Titans LAKE, SWAN and BRKW)
             if (in_array($ticker, ['LAKE', 'SWAN', 'BRKW'])) {
-                if ($marketCap < 500000000000) { // $500B Floor
-                    $stock->setPrice((string) ($price * 1.05));
+                if ($marketCap < 600000000000) { // $600B Floor
+                    $stock->setPrice((string) ($price * 1.03));
                     
-                    // Gradually push EPS up to $1.00 if it falls below, otherwise buff by 2%
-                    $newEps = $eps < 1.0 ? min(1.0, $eps + 0.25) : $eps * 1.02;
+                    // Gradually push EPS up to $1.00 if it falls below, otherwise buff by 3%
+                    $newEps = $eps < 1.0 ? min(1.0, $eps + 0.20) : $eps * 1.03;
                     $stock->setEarningsPerShare((string) $newEps); 
                     
                     $this->logger->info("TITAN PROTECTION: {$ticker} subsidized by the District.");
