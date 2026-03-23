@@ -80,10 +80,10 @@ services:
     image: mariadb:11.8
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: symfony_db
       MYSQL_USER: symfony
-      MYSQL_PASSWORD: symfony_password
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - db_data:/var/lib/mysql
     ports:
@@ -93,8 +93,8 @@ services:
     image: redis:8.6-trixie
     restart: unless-stopped
     ports:
-      - "6379:6379" 
-
+      - "6379:6379"
+  
 volumes:
   caddy_data:
   caddy_config:
