@@ -14,11 +14,20 @@ Aerie Trading uses the tech stack:
 
 ### The application should:
 
-- Use secure session handling
-- Store user info safely
+- Use session handling
+- Store user/stock data safely
 - Be mobile friendly
-- Be publicly accessible
-- The market simulator should be realistic (as realistic a synthetic market can be)
+- Be publicly accessible securely
+
+#### Market simulator
+- Be a "complete market solution"
+- should "feel" realist to the extent that it can be done with synthetic data
+- Handle earning reports
+- Handle the underling microeconomic situation of the market (boom busts, etc)
+
+#### Market Stretch goal
+- The market should react dynamically on event's appearing in universe
+- Should be unable to be "beaten" or manipulate by players
 
 ### User should be able to:
 
@@ -32,3 +41,6 @@ Aerie Trading uses the tech stack:
 - Stock comment sections
 - User leaderboard
 - Options trading
+- Optimize the application to run on as little resources as possible
+- Be fun to use
+- Teach players about the real stock market

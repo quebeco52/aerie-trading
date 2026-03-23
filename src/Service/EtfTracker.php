@@ -30,28 +30,27 @@ class EtfTracker
 
     /**
      * Updates the price of the market index ETF based on total market capitalization.
-     *
-     * If the index divisor is not set in Redis, it initializes it based on the
-     * current total market cap to set a baseline price (e.g., 100.00).
-     *
-     * @param float  $totalMarketCap The sum of market caps of all tracked stocks.
-     * @param string $ticker         The ticker symbol of the ETF to update (default: 'LBI').
-     *
-     * @return array{ticker: string, price: float, name: string, is_etf: bool} Array containing updated ETF data.
      */
     public function updateIndex(float $totalMarketCap, bool $recordHistory = false, string $ticker = 'LBI'): array
     {
+
+        $etf = $this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => $ticker]);
+        
         $divisor = $this->redis->get('market_index_divisor');
 
         if (!$divisor && $totalMarketCap > 0) {
-            $divisor = $totalMarketCap / 100.00;
+            
+            if ($etf && (float)$etf->getPrice() > 0) {
+                $lastKnownPrice = (float) $etf->getPrice();
+                $divisor = $totalMarketCap / $lastKnownPrice;
+            } else {
+                $divisor = $totalMarketCap / 100.00;
+            }
+            
             $this->redis->set('market_index_divisor', (string) $divisor);
         }
 
         $price = ($divisor > 0) ? ($totalMarketCap / (float) $divisor) : 100.00;
-
-        // Fetch a fresh ETF entity so Doctrine knows it exists after the clear()
-        $etf = $this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => $ticker]);
 
         if ($etf) {
             $etf->setPrice((string) $price);

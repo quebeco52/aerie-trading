@@ -50,6 +50,7 @@ class StockController extends AbstractController
         if (!$currentUser) {
             throw $this->createAccessDeniedException();
         }
+        
 
         $user = $entityManager->getRepository(User::class)->find($currentUser->getId());
 

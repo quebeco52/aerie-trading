@@ -42,7 +42,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'PERE', 'name' => 'Peregrine Prime Securities', 'sector' => 'Financials',
-            'price' => 450.00, 'eps' => 14.02, 
+            'price' => 550.00, 'eps' => 14.02, 
             'shares_outstanding' => 1000000000,
             // The Volatility Harvester: Low beta, highly defensive, occasionally spikes during macroeconomic panics
             'volatility' => 0.18, 'beta' => 0.35, 'jump_intensity' => 1.25, 'jump_mean' => 0.05, 'jump_vol' => 0.12 

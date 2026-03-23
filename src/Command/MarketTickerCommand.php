@@ -8,6 +8,7 @@ use App\Service\EtfTracker;
 use App\Service\MacroEngine;
 use App\Service\MathUtility;
 use App\Service\MarketOperator;
+use App\Service\Portfolio;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -44,6 +45,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private EtfTracker $etfTracker,
         private MacroEngine $macroEngine,
         private MarketOperator $marketOperator,
+        private Portfolio $portfolio,
         private \Redis $redis,
     ) {
         parent::__construct();
@@ -90,14 +92,6 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         $tickCount = 0;
 
         $conn = $this->entityManager->getConnection();
-        $snapshotSql = "
-            INSERT INTO portfolio_history (user_id, total_value, recorded_at)
-            SELECT u.id, (u.cash_balance + COALESCE(SUM(us.quantity * s.price), 0)), :now
-            FROM users u
-            LEFT JOIN user_stocks us ON u.id = us.user_id
-            LEFT JOIN stocks s ON us.stock_id = s.id
-            GROUP BY u.id
-        ";
 
         while ($this->keepRunning) {
 
@@ -167,10 +161,9 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     $this->redis->set('etf_live_data', json_encode([$etfUpdate]));
                 }
 
-                if ($tickCount % 600 === 0) {
-                    $conn->executeStatement($snapshotSql, [
-                        'now' => (new \DateTime())->format('Y-m-d H:i:s')
-                    ]);
+                // Save Portfolio Snapshots once a "Simulation Week"
+                if ($tickCount % 277 === 0) {
+                    $this->portfolio->recordBulkSnapshots();
                 }
 
                 $this->entityManager->commit();

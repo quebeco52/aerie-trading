@@ -5,6 +5,7 @@ namespace App\Controller;
 use App\Entity\Stock;
 use App\Entity\User;
 use App\Entity\UserStock;
+use App\Service\Portfolio;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -14,24 +15,16 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 /**
  * Controller responsible for handling the execution of stock trades.
- * 
- * Access is restricted to authenticated users only.
+ * * Access is restricted to authenticated users only.
  */
 #[IsGranted('ROLE_USER')]
 class TradeController extends AbstractController
 {
     /**
      * Executes a trade order (BUY or SELL) for a specific stock.
-     *
-     * This method uses a database transaction to ensure data integrity and prevent race conditions.
-     *
-     * @param Request                $request The HTTP request containing trade details (ticker, action, quantity).
-     * @param EntityManagerInterface $em      The entity manager for database operations.
-     *
-     * @return Response Redirects back to the referring page with a success or error flash message.
      */
     #[Route('/trade/execute', name: 'app_trade_execute', methods: ['POST'])]
-    public function execute(Request $request, EntityManagerInterface $em): Response
+    public function execute(Request $request, EntityManagerInterface $em, Portfolio $portfolio): Response
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -39,6 +32,12 @@ class TradeController extends AbstractController
         $ticker = $request->request->get('ticker');
         $action = $request->request->get('action');
         $quantity = (int) $request->request->get('quantity');
+
+        $csrfToken = $request->request->get('_token');
+        if (!$this->isCsrfTokenValid('execute_trade', $csrfToken)) {
+            $this->addFlash('error', 'Invalid security token. Please try again.');
+            return $this->redirect($request->headers->get('referer') ?? '/');
+        }
 
         if ($quantity <= 0) {
             $this->addFlash('error', 'Invalid quantity. You must trade at least 1 share.');
@@ -49,6 +48,9 @@ class TradeController extends AbstractController
         $em->getConnection()->beginTransaction();
 
         try {
+            // Lock the user record to prevent race conditions (double spending)
+            $em->lock($user, \Doctrine\DBAL\LockMode::PESSIMISTIC_WRITE);
+
             // Fetch the stock
             $stock = $em->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);
             if (!$stock) {
@@ -100,8 +102,14 @@ class TradeController extends AbstractController
                 throw new \Exception('Invalid order type.');
             }
 
-            // Save everything and release the database lock!
+            // 1. Save the trade to the database so the new cash/quantities exist
             $em->persist($user);
+            $em->flush(); 
+
+            // 2. Record the historical snapshot using the fresh data
+            $portfolio->recordUserSnapshot($user);
+
+            // 3. Save the snapshot and release the database lock!
             $em->flush();
             $em->getConnection()->commit();
 

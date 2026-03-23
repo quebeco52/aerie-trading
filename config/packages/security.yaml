@@ -19,12 +19,13 @@ security:
         main:
             lazy: true
             provider: app_user_provider
+            login_throttling: true
 
             form_login:
                 login_path: app_login
                 check_path: app_login
                 enable_csrf: true
-                default_target_path: / # Redirect to dashboard after login
+                default_target_path: /
             
             # 4. Enable Logout
             logout:
@@ -37,6 +38,7 @@ security:
 
             # https://symfony.com/doc/current/security/impersonating_user.html
             # switch_user: true
+
 
     # Note: Only the *first* matching rule is applied
     access_control:

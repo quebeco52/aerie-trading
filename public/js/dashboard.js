@@ -143,26 +143,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Update the Portfolio Chart Line dynamically
                 if (portfolioChart && document.visibilityState === 'visible') {
-                    tickCounter++;
-                    const now = new Date();
-                    const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
-
-                    // Add a new dot occasionally, otherwise update the active edge
-                    if (tickCounter >= 3) {
-                        portfolioChart.data.labels.push(timeStr);
-                        portfolioChart.data.datasets[0].data.push(totalPortfolioValue);
-                        tickCounter = 0;
-
-                        if (portfolioChart.data.labels.length > 100) {
-                            portfolioChart.data.labels.shift();
-                            portfolioChart.data.datasets[0].data.shift();
-                        }
-                    } else {
-                        portfolioChart.data.labels[portfolioChart.data.labels.length - 1] = timeStr;
-                        portfolioChart.data.datasets[0].data[portfolioChart.data.datasets[0].data.length - 1] = totalPortfolioValue;
+                    // Instead of adding new points every 3 ticks, we just update the 
+                    // VERY LAST historical point to reflect the live, to-the-second value.
+                    const lastIndex = portfolioChart.data.datasets[0].data.length - 1;
+                    
+                    if (lastIndex >= 0) {
+                        portfolioChart.data.datasets[0].data[lastIndex] = totalPortfolioValue;
+                        portfolioChart.update('none'); // Update without full animation redraw
                     }
-
-                    portfolioChart.update('none');
                 }
             }
         }
