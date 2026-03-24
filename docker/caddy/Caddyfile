@@ -1,10 +1,16 @@
 trade.lakebird.org {
+
+    basic_auth {
+        # Username   HashedPassword
+        admin        $2a$14$3B8xeYqw4kwh1DfjkNrTy.Je/g8FCsmkUejhkWwEqIBDsALbCy8dm
+    }
+
     root * /app/public
     encode gzip
 
     # 1. Route WebSockets to the Workerman container
     # Any request starting with /ws will be forwarded securely
-    reverse_proxy /ws/* aerie-websocket:8080
+   reverse_proxy /ws/* aerie-websocket:8080
 
     # 2. Route standard PHP requests to Symfony
     php_fastcgi aerie-php:9000
