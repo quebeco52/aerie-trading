@@ -30,17 +30,17 @@ class MarketEngineTest extends TestCase
         $earningsPerShare = 5.0;
         $targetPE = 20.0; // Fair value = 100
         $dt = 1.0;
-        $drift = 0.1;
 
+        // Using PHP 8 named arguments ensures changes to signature orders do not break tests
         $result = $this->engine->calculateNextPrice(
-            $currentPrice,
-            $currentVolatility,
-            $longTermVolatility,
-            $earningsPerShare,
-            $targetPE,
-            $dt,
-            $drift,
-            0.0 // lambda = 0 means NO jump
+            currentPrice: $currentPrice,
+            currentVolatility: $currentVolatility,
+            longTermVolatility: $longTermVolatility,
+            earningsPerShare: $earningsPerShare,
+            targetPE: $targetPE,
+            dt: $dt,
+            lambda: 0.0, // lambda = 0 means NO jump
+            drift: 0.1
         );
 
         $this->assertIsArray($result);
@@ -68,16 +68,16 @@ class MarketEngineTest extends TestCase
 
         // Force a jump by setting lambda very high
         $result = $this->engine->calculateNextPrice(
-            $currentPrice,
-            0.2, // current volatility
-            0.2, // long term volatility
-            5.0,
-            20.0,
-            1.0, // dt
-            0.1, // drift
-            1000.0, // massive lambda guarantees mt_rand check triggers
-            0.05, // jumpMean
-            0.0 // jumpVol (no noise)
+            currentPrice: $currentPrice,
+            currentVolatility: 0.2,
+            longTermVolatility: 0.2,
+            earningsPerShare: 5.0,
+            targetPE: 20.0,
+            dt: 1.0,
+            lambda: 1000.0, // massive lambda guarantees mt_rand check triggers
+            jumpMean: 0.05,
+            jumpVol: 0.0, // no noise
+            drift: 0.1
         );
 
         $this->assertNotNull($result['shock'], 'Shock should occur due to high lambda.');
@@ -102,7 +102,15 @@ class MarketEngineTest extends TestCase
         
         // Lambda 0.0 isolates the jump, drift 0.0 isolates normal growth
         $result = $this->engine->calculateNextPrice(
-            $currentPrice, 0.2, 0.2, 5.0, 20.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.15, $reversionSpeed
+            currentPrice: $currentPrice,
+            currentVolatility: 0.2,
+            longTermVolatility: 0.2,
+            earningsPerShare: 5.0,
+            targetPE: 20.0,
+            dt: 1.0,
+            lambda: 0.0,
+            drift: 0.0,
+            reversionSpeed: $reversionSpeed
         );
 
         // gravityDrift = 0.5 * (log(100) - log(50)) = 0.5 * log(2)

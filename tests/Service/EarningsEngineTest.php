@@ -5,8 +5,8 @@ namespace App\Tests\Service;
 use PHPUnit\Framework\TestCase;
 use App\Service\EarningsEngine;
 use App\Service\MathUtility;
+use App\Service\MarketEvent;
 use App\Entity\Stock;
-use App\Entity\StockEvent;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\MockObject\MockObject;
 
@@ -14,6 +14,7 @@ class EarningsEngineTest extends TestCase
 {
     private EntityManagerInterface|MockObject $entityManagerMock;
     private MathUtility|MockObject $mathUtilityMock;
+    private MarketEvent|MockObject $marketEventMock;
     private EarningsEngine $engine;
 
     protected function setUp(): void
@@ -21,11 +22,22 @@ class EarningsEngineTest extends TestCase
         // 1. Mock the Database Connection
         $this->entityManagerMock = $this->createMock(EntityManagerInterface::class);
         
-        // 2. Mock MathUtility to control the stochastic Z-scores
+        // 2. Mock MarketEvent (now responsible for outputs and persisting)
+        $this->marketEventMock = $this->createMock(MarketEvent::class);
+        $this->marketEventMock->method('publish')->willReturnCallback(function($stock, $type, $desc, $pct) {
+            return [
+                'type' => $type,
+                'ticker' => $stock->getTicker(),
+                'description' => $desc,
+                'change_percent' => $pct
+            ];
+        });
+
+        // 3. Mock MathUtility to control the stochastic Z-scores
         $this->mathUtilityMock = $this->createMock(MathUtility::class);
 
-        // 3. Instantiate the Engine
-        $this->engine = new EarningsEngine($this->entityManagerMock, $this->mathUtilityMock);
+        // 4. Instantiate the Engine
+        $this->engine = new EarningsEngine($this->entityManagerMock, $this->marketEventMock, $this->mathUtilityMock);
     }
 
     public function testCalculateReturnsNullWhenNoEventOccurs()
@@ -33,7 +45,7 @@ class EarningsEngineTest extends TestCase
         $stock = new Stock();
         
         // A dt of 0.0 guarantees the probability check (mt_rand / max < 4.0 * dt) will fail
-        $result = $this->engine->calculate($stock, 0.0, []);
+        $result = $this->engine->calculate($stock, 0.0);
         
         $this->assertNull($result, 'Engine should return null when the earnings probability check fails.');
     }
@@ -50,16 +62,8 @@ class EarningsEngineTest extends TestCase
         // Force a mildly positive business quarter
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.5);
 
-        // Assert that the StockEvent is persisted
-        $this->entityManagerMock->expects($this->once())
-            ->method('persist')
-            ->with($this->isInstanceOf(StockEvent::class));
-
-        // Suppress the echo output to keep PHPUnit clean, but assert it happened
-        $this->expectOutputRegex('/BREAKING NEWS: TEST reported earnings!/');
-
         // A dt of 1.0 guarantees the earnings event triggers
-        $result = $this->engine->calculate($stock, 1.0, []);
+        $result = $this->engine->calculate($stock, 1.0);
 
         $this->assertNotNull($result);
         $this->assertEquals('EARNINGS', $result['type']);
@@ -81,8 +85,7 @@ class EarningsEngineTest extends TestCase
         // Force an extreme blowout quarter (Z > 1.5 triggers the shock)
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(2.0);
 
-        $this->expectOutputRegex('/BREAKING NEWS:/');
-        $this->engine->calculate($stock, 1.0, []);
+        $this->engine->calculate($stock, 1.0);
 
         $this->assertGreaterThan(0.20, (float) $stock->getCurrentVolatility(), 'Volatility should have spiked due to the extreme surprise.');
     }
@@ -99,8 +102,7 @@ class EarningsEngineTest extends TestCase
         // Neutral quarter (0.0) isolates the recovery boost math
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
-        $this->expectOutputRegex('/BREAKING NEWS:/');
-        $this->engine->calculate($stock, 1.0, []);
+        $this->engine->calculate($stock, 1.0);
 
         $this->assertNotEquals(-10.00, (float) $stock->getEarningsPerShare(), 'A company with negative EPS should still see EPS changes.');
     }

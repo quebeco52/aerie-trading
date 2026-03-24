@@ -4,6 +4,7 @@ namespace App\Tests\Service;
 
 use PHPUnit\Framework\TestCase;
 use App\Service\CorporateActionEngine;
+use App\Service\MarketEvent;
 use App\Entity\Stock;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\DBAL\Connection;
@@ -21,8 +22,10 @@ class CorporateActionEngineTest extends TestCase
         $mockEntityManager = $this->createMock(EntityManagerInterface::class);
         $mockEntityManager->method('getConnection')->willReturn($mockConnection);
 
+        $mockMarketEvent = $this->createMock(MarketEvent::class);
+
         // 2. Instantiate the Engine with our fake database
-        $this->engine = new CorporateActionEngine($mockEntityManager);
+        $this->engine = new CorporateActionEngine($mockEntityManager, $mockMarketEvent);
     }
 
     public function testRecursiveForwardSplitProtectsNetWorth()
@@ -72,12 +75,12 @@ class CorporateActionEngineTest extends TestCase
         $result = $this->engine->processSplits($stock, $startingPrice, $startingEps, $startingShares);
 
         // Assert: The math must hold up!
-        // 0.10 -> 0.50 -> 2.50 -> 12.50 (It should take 3 reverse splits)
-        $this->assertGreaterThanOrEqual(5.0, $result['price'], 'Price did not reverse split above $5!');
-        $this->assertEquals(12.50, $result['price']);
+        // 0.10 -> 1.00 -> 10.00 (It should take 2 reverse splits of 1-for-10)
+        $this->assertGreaterThanOrEqual(2.0, $result['price'], 'Price did not reverse split above $2!');
+        $this->assertEquals(10.00, $result['price']);
 
-        // Shares should be divided by 5, three times (100,000 -> 20,000 -> 4,000 -> 800)
-        $this->assertEquals(800, $result['shares']);
+        // Shares should be divided by 10, two times (100,000 -> 10,000 -> 1,000)
+        $this->assertEquals(1000, $result['shares']);
 
         // CRITICAL: Net worth must remain exactly $10,000
         $newNetWorth = $result['price'] * $result['shares'];
