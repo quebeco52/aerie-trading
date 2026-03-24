@@ -42,10 +42,10 @@ class InitialMarket
         ],
         [
             'ticker' => 'PERE', 'name' => 'Peregrine Prime Securities', 'sector' => 'Financials',
-            'price' => 550.00, 'eps' => 14.02, 
+            'price' => 650.00, 'eps' => 14.02, 
             'shares_outstanding' => 1000000000,
-            // The Volatility Harvester: Low beta, highly defensive, occasionally spikes during macroeconomic panics
-            'volatility' => 0.18, 'beta' => 0.35, 'jump_intensity' => 1.25, 'jump_mean' => 0.05, 'jump_vol' => 0.12 
+            // The Volatility Harvester: negative beta, highly defensive, occasionally spikes during macroeconomic panics
+            'volatility' => 0.18, 'beta' => -0.20, 'jump_intensity' => 1.25, 'jump_mean' => 0.05, 'jump_vol' => 0.12 
         ],
         [
             'ticker' => 'RIVR', 'name' => 'Riverstone Financial', 'sector' => 'Financials',
@@ -188,7 +188,7 @@ class InitialMarket
             'volatility' => 0.08, 'beta' => 0.25, 'jump_intensity' => 0.10, 'jump_mean' => 0.00, 'jump_vol' => 0.02
         ],
         [
-            'ticker' => 'VULT', 'name' => 'Vulture Environmental', 'sector' => 'Industrials',
+            'ticker' => 'CORM', 'name' => 'Cormorant Environmental', 'sector' => 'Industrials',
             'price' => 125.00, 'eps' => 2.25, 
             'shares_outstanding' => 1000000000,
             // Waste Management: The ultimate recession proof monopoly. It steadily consumes the trash with zero drama
@@ -306,6 +306,13 @@ class InitialMarket
             'shares_outstanding' => 1000000000,
             // The Defensive Anchor: A master-franchise real estate holding company masquerading as fast food.
             'volatility' => 0.14, 'beta' => 0.50, 'jump_intensity' => 0.05, 'jump_mean' => -0.04, 'jump_vol' => 0.06
+        ],
+        [
+            'ticker' => 'VULT', 'name' => 'Vulture Capital Recovery', 'sector' => 'Financials',
+            'price' => 450.00, 'eps' => 14.02, 
+            'shares_outstanding' => 1000000000,
+            // The Volatility Harvester: negative beta, highly defensive, occasionally spikes during macroeconomic panics
+            'volatility' => 0.24, 'beta' => -0.65, 'jump_intensity' => 1.25, 'jump_mean' => 0.05, 'jump_vol' => 0.12 
         ],
     ];
 

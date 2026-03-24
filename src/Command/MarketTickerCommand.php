@@ -190,10 +190,10 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $output->writeln("<comment>⚠️ Lag Spike: Tick {$tickCount} took too long! Dropped behind by " . round($overtimeMs, 2) . "ms</comment>");
             }
 
-            // 3. Subtract execution time from 100,000 microsecond target
+            // Subtract execution time from 100,000 microsecond target
             $timeToSleepUs = self::TICK_INTERVAL_US - $executionTimeUs;
 
-            // 4. Only sleep if finished faster than 0.10 seconds!
+            // Only sleep if finished faster than 0.10 seconds!
             if ($timeToSleepUs > 0) {
                 usleep($timeToSleepUs);
             }
