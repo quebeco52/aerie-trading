@@ -1,6 +1,27 @@
+trade.lakebird.org {
+    root * /app/public
+    encode gzip
+
+    # 1. Route WebSockets to the Workerman container
+    # Any request starting with /ws will be forwarded securely
+    reverse_proxy /ws/* aerie-websocket:8080
+
+    # 2. Route standard PHP requests to Symfony
+    php_fastcgi aerie-php:9000
+
+    # 3. Serve static files directly (CSS, JS, Images)
+    file_server
+}
+
+
+
+
 localhost {
     root * /app/public
     encode gzip
+
+    # 1. Route WebSockets to the Workerman container locally!
+    reverse_proxy /ws/* aerie-websocket:8080
 
     # Route PHP requests to the PHP-FPM container
     php_fastcgi aerie-php:9000

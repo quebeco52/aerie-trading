@@ -8,7 +8,12 @@ document.addEventListener('DOMContentLoaded', () => {
         return; 
     }
 
-    const marketSocket = new WebSocket('ws://127.0.0.1:8080/?ticket=' + window.WS_TICKET);
+    // Automatically use WSS (Secure) if on HTTPS, and detect the current domain
+    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const host = window.location.host;
+
+    // Connect to the Caddy reverse proxy endpoint
+    const marketSocket = new WebSocket(`${protocol}${host}/ws/?ticket=${window.WS_TICKET}`);
 
     // Initialize Portfolio Chart
     const canvas = document.getElementById('portfolioChart');
