@@ -20,9 +20,6 @@ services:
     restart: unless-stopped
     volumes:
       - ./:/app
-    environment:
-      DATABASE_URL: mysql://symfony:symfony_password@aerie-database:3306/symfony_db?serverVersion=mariadb-11.8.0
-      REDIS_URL: redis://aerie-redis:6379
     depends_on:
       - aerie-database
       - aerie-redis
@@ -37,9 +34,6 @@ services:
     restart: unless-stopped
     volumes:
       - ./:/app
-    environment:
-      DATABASE_URL: mysql://symfony:symfony_password@aerie-database:3306/symfony_db?serverVersion=mariadb-11.8.0
-      REDIS_URL: redis://aerie-redis:6379
     depends_on:
       - aerie-redis
       - aerie-database
@@ -53,9 +47,6 @@ services:
   #   restart: unless-stopped
   #   volumes:
   #     - ./:/app
-  #   environment:
-  #     DATABASE_URL: mysql://symfony:symfony_password@aerie-database:3306/symfony_db?serverVersion=mariadb-11.8.0
-  #     REDIS_URL: redis://aerie-redis:6379
   #   depends_on:
   #     - aerie-redis
   #     - aerie-database
@@ -69,10 +60,8 @@ services:
     restart: unless-stopped
     volumes:
       - ./:/app
-    environment:
-      REDIS_URL: redis://aerie-redis:6379
     ports:
-      - "8080:8080" # Expose the Workerman port to the outside world!
+      - "127.0.0.1:8080:8080"
     depends_on:
       - aerie-redis
 
@@ -87,13 +76,13 @@ services:
     volumes:
       - db_data:/var/lib/mysql
     ports:
-      - "3306:3306" 
+      - "127.0.0.1:3306:3306"
 
   aerie-redis:
     image: redis:8.6-trixie
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
   
 volumes:
   caddy_data:
