@@ -95,6 +95,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
         while ($this->keepRunning) {
 
+            $tickStartTime = microtime(true);
+
             pcntl_signal_dispatch();
 
             if ($tickCount % 10 === 0) {
@@ -177,8 +179,24 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
             $tickCount++;
 
-            // Wait 0.10
-            usleep(self::TICK_INTERVAL_US);
+            // Stop the stopwatch and calculate how long the work took
+            $executionTimeSec = microtime(true) - $tickStartTime;
+            $executionTimeUs = (int) ($executionTimeSec * 1000000);
+
+            // LAG WARNING
+            if ($executionTimeUs > self::TICK_INTERVAL_US) {
+                // Calculate how many milliseconds over the 100ms limit
+                $overtimeMs = ($executionTimeUs - self::TICK_INTERVAL_US) / 1000;
+                $output->writeln("<comment>⚠️ Lag Spike: Tick {$tickCount} took too long! Dropped behind by " . round($overtimeMs, 2) . "ms</comment>");
+            }
+
+            // 3. Subtract execution time from 100,000 microsecond target
+            $timeToSleepUs = self::TICK_INTERVAL_US - $executionTimeUs;
+
+            // 4. Only sleep if finished faster than 0.10 seconds!
+            if ($timeToSleepUs > 0) {
+                usleep($timeToSleepUs);
+            }
         }
 
         $output->writeln("<comment> Market Ticker shut down.</comment>");
