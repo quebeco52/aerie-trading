@@ -88,7 +88,7 @@ class MarketEngine
         $nextVolatility = sqrt($nextVariance);
 
         // Calculate Fair Value & Gravity
-        $valuationEps = max($earningsPerShare, 0.10);
+        $valuationEps = max($earningsPerShare, 0.01);
         $fairValue = $valuationEps * $targetPE;
 
         $logFairValue = log(max($fairValue, 0.01));

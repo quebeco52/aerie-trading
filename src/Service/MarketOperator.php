@@ -75,16 +75,16 @@ class MarketOperator
                     );
 
                     // The Restructuring Stats
-                    $stock->setPrice("100.00");
+                    $stock->setPrice("50.00");
                     $stock->setSharesOutstanding("1000000000"); // 1B shares
-                    $stock->setEarningsPerShare((string) (mt_rand(625, 833) / 100));
+                    $stock->setEarningsPerShare((string) (mt_rand(325, 433) / 100));
 
 
                     $event1Desc = "{$name} ({$ticker}) was liquidated in a hostile takeover by Black Swan Capital. Shareholder equity wiped to 0.";
-                    $event2Desc = "Black Swan Capital has stripped {$ticker} of its assets and relisted the hollowed-out shell at $100.00.";
+                    $event2Desc = "Black Swan Capital has stripped {$ticker} of its assets and relisted the hollowed-out shell at $50.00.";
                 } else {
                     //  LAKEBIRD BANK (Savior)
-                    $this->logger->info("BANKRUPTCY IMMINENT: {$ticker} collapsing. Lakebird Bank initiating White Knight bailout.");
+                    $this->logger->info("BANKRUPTCY IMMINENT: {$ticker} collapsing. Lakebird Bank initiating a bailout.");
 
                     // Dilute the players shares to 0
                     $this->entityManager->getConnection()->executeStatement(
@@ -93,13 +93,13 @@ class MarketOperator
                     );
 
                     // The Restructuring Stats
-                    $stock->setPrice("100.00");
+                    $stock->setPrice("50.00");
                     $stock->setSharesOutstanding("1000000000"); // 1B shares
-                    $stock->setEarningsPerShare((string) (mt_rand(625, 833) / 100));
+                    $stock->setEarningsPerShare((string) (mt_rand(325, 433) / 100));
 
 
                     $event1Desc = "{$name} ({$ticker}) secured a last-minute emergency bailout from Lakebird Bank. Retail shares diluted to secure funding.";
-                    $event2Desc = "Lakebird Bank has stabilized {$ticker}'s balance sheet. Trading resumes at $100.00.";
+                    $event2Desc = "Lakebird Bank has stabilized {$ticker}'s balance sheet. Trading resumes at $50.00.";
                 }
 
                 // Erase the historical chart data for the fresh start

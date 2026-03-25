@@ -87,6 +87,8 @@
                     <form action="/trade/execute" method="POST" class="space-y-5 relative z-10">
                         <input type="hidden" name="ticker" value="{{ asset.ticker }}">
 
+                        <input type="hidden" name="_token" value="{{ csrf_token('execute_trade') }}">
+
                         <div>
                             <label class="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">Quantity ({{ asset.ticker }})</label>
                             <div class="relative">
