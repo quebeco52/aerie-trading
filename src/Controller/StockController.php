@@ -70,12 +70,7 @@ class StockController extends AbstractController
             $targetPE = $liveSectorPEs[$asset->getSector()] ?? 20.00;
         }
 
-        $generalInfo = StockInfo::getDescription([
-            'ticker' => $asset->getTicker(),
-            'name' => $asset->getName(),
-            'sector' => $isEtf ? 'ETF' : $asset->getSector(),
-            'type' => $isEtf ? 'etf' : 'stock'
-        ]);
+        $generalInfo = $asset->getDescription();
 
         $allAssets = [];
         if ($isEtf) {

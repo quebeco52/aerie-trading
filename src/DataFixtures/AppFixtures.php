@@ -48,6 +48,8 @@ class AppFixtures extends Fixture
             $etf->setTicker($etfData['ticker']);
             $etf->setName($etfData['name']);
             $etf->setPrice((string) $etfData['price']);
+
+            $etf->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$etfData['ticker']] ?? null);
             
             $manager->persist($etf);
         }
@@ -72,6 +74,8 @@ class AppFixtures extends Fixture
             $stock->setJumpIntensity((string) $stockData['jump_intensity']);
             $stock->setJumpMean((string) $stockData['jump_mean']);
             $stock->setJumpVol((string) $stockData['jump_vol']);
+
+            $stock->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$stockData['ticker']] ?? null);
 
             $manager->persist($stock);
         }
