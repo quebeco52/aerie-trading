@@ -26,6 +26,13 @@ security:
                 check_path: app_login
                 enable_csrf: true
                 default_target_path: /
+
+            remember_me:
+                secret: '%kernel.secret%'
+                lifetime: 2592000 # 30 days in seconds
+                path: /
+                # Set this to true if you don't have a "Remember Me" checkbox on your login form yet
+                always_remember_me: true
             
             # 4. Enable Logout
             logout:
