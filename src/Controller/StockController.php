@@ -144,19 +144,39 @@ class StockController extends AbstractController
         ];
         $limit = $ranges[$range] ?? 14400;
 
+        // SQL-Level Downsampling
+        // If  ask for more than 10,000 rows, we calculate how many to skip.
+        // For 'max', limit is 999999 / 5000 = Skip 200 rows at a time.
+        $sqlStep = 1;
+        if ($limit > 10000) {
+            $sqlStep = (int) ceil($limit / 5000); 
+        }
+
         // USE RAW DBAL CONNECTION FOR BIG QUERIES
         $conn = $entityManager->getConnection();
+        $results = [];
 
         $stock = $entityManager->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);
         if ($stock) {
-            $sql = 'SELECT id, price, recorded_at FROM stock_history WHERE stock_id = :id ORDER BY id DESC LIMIT ' . (int)$limit;
-            $results = $conn->fetchAllAssociative($sql, ['id' => $stock->getId()]);
+            if ($sqlStep > 1) {
+                //  using Modulo
+                $sql = 'SELECT id, price, recorded_at FROM stock_history WHERE stock_id = :id AND id % :step = 0 ORDER BY id DESC LIMIT 5000';
+                $results = $conn->fetchAllAssociative($sql, ['id' => $stock->getId(), 'step' => $sqlStep]);
+            } else {
+                $sql = 'SELECT id, price, recorded_at FROM stock_history WHERE stock_id = :id ORDER BY id DESC LIMIT ' . (int)$limit;
+                $results = $conn->fetchAllAssociative($sql, ['id' => $stock->getId()]);
+            }
         } else {
             $etf = $entityManager->getRepository(Etf::class)->findOneBy(['ticker' => $ticker]);
             if (!$etf) return $this->json([]);
 
-            $sql = 'SELECT id, price, recorded_at FROM etf_history WHERE etf_id = :id ORDER BY id DESC LIMIT ' . (int)$limit;
-            $results = $conn->fetchAllAssociative($sql, ['id' => $etf->getId()]);
+            if ($sqlStep > 1) {
+                $sql = 'SELECT id, price, recorded_at FROM etf_history WHERE etf_id = :id AND id % :step = 0 ORDER BY id DESC LIMIT 5000';
+                $results = $conn->fetchAllAssociative($sql, ['id' => $etf->getId(), 'step' => $sqlStep]);
+            } else {
+                $sql = 'SELECT id, price, recorded_at FROM etf_history WHERE etf_id = :id ORDER BY id DESC LIMIT ' . (int)$limit;
+                $results = $conn->fetchAllAssociative($sql, ['id' => $etf->getId()]);
+            }
         }
 
         // DOWNSAMPLING ENGINE
