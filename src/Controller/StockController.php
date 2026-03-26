@@ -117,21 +117,17 @@ class StockController extends AbstractController
 
         if (!$ticker) return $this->json([]);
 
+        // Redis cache for short timeframes stays exactly the same
         if (in_array($range, ['1w', '1m'])) {
             $limit = $range === '1w' ? 277 : 1200;
             $cacheKey = "chart_buffer:{$ticker}";
-            
             $redisData = $redis->lRange($cacheKey, 0, $limit - 1);
-
             $results = [];
-
             foreach ($redisData as $jsonStr) {
                 $results[] = json_decode($jsonStr, true);
             }
-
             return $this->json(array_reverse($results));
         }
-
 
         $ranges = [
             '3m'  => 1200, 
@@ -144,42 +140,26 @@ class StockController extends AbstractController
         ];
         $limit = $ranges[$range] ?? 14400;
 
-        // SQL-Level Downsampling
-        // If  ask for more than 10,000 rows, we calculate how many to skip.
-        // For 'max', limit is 999999 / 5000 = Skip 200 rows at a time.
-        $sqlStep = 1;
-        if ($limit > 10000) {
-            $sqlStep = (int) ceil($limit / 5000); 
-        }
+        // We will never ask MariaDB for more than 50,000 rows at once.
+        $dbLimit = min($limit, 50000); 
 
-        // USE RAW DBAL CONNECTION FOR BIG QUERIES
         $conn = $entityManager->getConnection();
         $results = [];
 
         $stock = $entityManager->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);
         if ($stock) {
-            if ($sqlStep > 1) {
-                //  using Modulo
-                $sql = 'SELECT id, price, recorded_at FROM stock_history WHERE stock_id = :id AND id % :step = 0 ORDER BY id DESC LIMIT 5000';
-                $results = $conn->fetchAllAssociative($sql, ['id' => $stock->getId(), 'step' => $sqlStep]);
-            } else {
-                $sql = 'SELECT id, price, recorded_at FROM stock_history WHERE stock_id = :id ORDER BY id DESC LIMIT ' . (int)$limit;
-                $results = $conn->fetchAllAssociative($sql, ['id' => $stock->getId()]);
-            }
+            // indexed fetch of the newest rows.
+            $sql = 'SELECT id, price, recorded_at FROM stock_history WHERE stock_id = :id ORDER BY id DESC LIMIT ' . (int)$dbLimit;
+            $results = $conn->fetchAllAssociative($sql, ['id' => $stock->getId()]);
         } else {
             $etf = $entityManager->getRepository(Etf::class)->findOneBy(['ticker' => $ticker]);
             if (!$etf) return $this->json([]);
 
-            if ($sqlStep > 1) {
-                $sql = 'SELECT id, price, recorded_at FROM etf_history WHERE etf_id = :id AND id % :step = 0 ORDER BY id DESC LIMIT 5000';
-                $results = $conn->fetchAllAssociative($sql, ['id' => $etf->getId(), 'step' => $sqlStep]);
-            } else {
-                $sql = 'SELECT id, price, recorded_at FROM etf_history WHERE etf_id = :id ORDER BY id DESC LIMIT ' . (int)$limit;
-                $results = $conn->fetchAllAssociative($sql, ['id' => $etf->getId()]);
-            }
+            $sql = 'SELECT id, price, recorded_at FROM etf_history WHERE etf_id = :id ORDER BY id DESC LIMIT ' . (int)$dbLimit;
+            $results = $conn->fetchAllAssociative($sql, ['id' => $etf->getId()]);
         }
 
-        // DOWNSAMPLING ENGINE
+        // DOWNSAMPLING ENGINE: Shrink the data safely in PHP RAM
         $maxChartPoints = 5000;
         $count = count($results);
 
@@ -191,9 +171,9 @@ class StockController extends AbstractController
                 $downsampled[] = $results[$i];
             }
 
-            // Compare IDs to ensure latest point is always included
-            if ($downsampled[0]['id'] !== $results[0]['id']) {
-                array_unshift($downsampled, $results[0]);
+            // Ensure the absolute newest point is not lost
+            if (isset($downsampled[0]) && $downsampled[0]['id'] !== $results[0]['id']) {
+                $downsampled[0] = $results[0]; 
             }
             $results = $downsampled;
         }
