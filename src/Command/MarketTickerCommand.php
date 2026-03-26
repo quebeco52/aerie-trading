@@ -94,7 +94,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         $tickCount = 0;
 
 
-        $historyInterval = (int) max(1, $this->ticksPerYear / 4800); // 4800 points per year
+        $historyInterval = (int) max(1, $this->ticksPerYear / 2400); // 2400 points per year
         $operatorInterval = (int) max(1, $this->ticksPerYear / 12);  // Operator audits once a game "month"
         $snapshotInterval = (int) max(1, $this->ticksPerYear / 52);  // Snapshots once a game "week"
 
@@ -152,11 +152,13 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                     $nowStr = (new \DateTime())->format('Y-m-d H:i:s');
 
+                    $redisBufferSize = (int) ceil($this->ticksPerYear / 12);
+
                     foreach ($allUpdates as $update) {
                         $cacheKey = "chart_buffer:{$update['ticker']}";
                         $point = json_encode(['price' => $update['price'], 'recorded_at' => $nowStr]);
                         $this->redis->lPush($cacheKey, $point);
-                        $this->redis->lTrim($cacheKey, 0, 1199);
+                        $this->redis->lTrim($cacheKey, 0,  $redisBufferSize - 1);
                     }
 
                     $this->redis->publish('market_updates', json_encode([

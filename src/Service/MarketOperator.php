@@ -44,9 +44,6 @@ class MarketOperator
                     $stock->setEarningsPerShare((string) round($newEps, 2)); 
                     
                     $this->logger->info("TITAN PROTECTION: {$ticker} subsidized by the District.");
-                    
-                    // Flush to DB
-                    $this->entityManager->flush(); 
 
                 }
             }
@@ -61,9 +58,6 @@ class MarketOperator
                     $stock->setEarningsPerShare((string) round($newEps, 2)); 
                     
                     $this->logger->info("TITAN PROTECTION: {$ticker} subsidized by the District.");
-                    
-                    // Flush to DB
-                    $this->entityManager->flush(); 
 
                 }
             }
