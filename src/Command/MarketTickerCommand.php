@@ -15,6 +15,7 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Command\SignalableCommandInterface;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 #[AsCommand(
     name: 'app:market-ticker',
@@ -29,8 +30,6 @@ use Symfony\Component\Console\Output\OutputInterface;
  */
 class MarketTickerCommand extends Command implements SignalableCommandInterface
 {
-    private const TICK_INTERVAL_US = 100000; // 0.10 seconds per tick
-    private const TICKS_PER_YEAR = 14400;    // 1 Simulation Year
 
     private bool $keepRunning = true;
 
@@ -47,6 +46,9 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private MarketOperator $marketOperator,
         private Portfolio $portfolio,
         private \Redis $redis,
+
+        private int $tickIntervalUs,
+        private int $ticksPerYear,
     ) {
         parent::__construct();
     }
@@ -88,8 +90,13 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         // 1. Fetch the stocks ONCE into RAM before the loop starts!
         $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
 
-        $dt = 1.0 / self::TICKS_PER_YEAR;
+        $dt = 1.0 / $this->ticksPerYear;
         $tickCount = 0;
+
+
+        $historyInterval = (int) max(1, $this->ticksPerYear / 4800); // 4800 points per year
+        $operatorInterval = (int) max(1, $this->ticksPerYear / 12);  // Operator audits once a game "month"
+        $snapshotInterval = (int) max(1, $this->ticksPerYear / 52);  // Snapshots once a game "week"
 
         $conn = $this->entityManager->getConnection();
 
@@ -100,11 +107,11 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             pcntl_signal_dispatch();
 
             if ($tickCount % 10 === 0) {
-                $simDay = ($tickCount / self::TICKS_PER_YEAR) * 365;
+                $simDay = ($tickCount / $this->ticksPerYear) * 365;
                 $output->writeln("Updating Market Prices... (Day: " . number_format($simDay, 1) . ") [Tick: $tickCount]");
             }
 
-            if ($tickCount % 1200 === 0) {
+            if ($tickCount % $operatorInterval === 0) {
                 $operatorEvents = $this->marketOperator->enforceMarketStability($stocks);
             } else {
                 $operatorEvents = [];
@@ -117,7 +124,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $liveSectorPEs = $this->macroEngine->updateSectorMultiples($dt);
 
                 // Check if it's time to record a database snapshot
-                $isHistoryTick = ($tickCount % 3 === 0);
+                $isHistoryTick = ($tickCount % $historyInterval === 0);
 
                 // 2. Update the Stocks
                 $result = $this->stockTracker->updateStocks($stocks, $dt, $liveSectorPEs, $isHistoryTick);
@@ -164,7 +171,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 }
 
                 // Save Portfolio Snapshots once a "Simulation Week"
-                if ($tickCount % 277 === 0) {
+                if ($tickCount % $snapshotInterval === 0) {
                     $this->portfolio->recordBulkSnapshots();
                 }
 
@@ -184,16 +191,13 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             $executionTimeUs = (int) ($executionTimeSec * 1000000);
 
             // LAG WARNING
-            if ($executionTimeUs > self::TICK_INTERVAL_US) {
-                // Calculate how many milliseconds over the 100ms limit
-                $overtimeMs = ($executionTimeUs - self::TICK_INTERVAL_US) / 1000;
+            if ($executionTimeUs > $this->tickIntervalUs) {
+                $overtimeMs = ($executionTimeUs - $this->tickIntervalUs) / 1000;
                 $output->writeln("<comment>⚠️ Lag Spike: Tick {$tickCount} took too long! Dropped behind by " . round($overtimeMs, 2) . "ms</comment>");
             }
 
-            // Subtract execution time from 100,000 microsecond target
-            $timeToSleepUs = self::TICK_INTERVAL_US - $executionTimeUs;
+            $timeToSleepUs = $this->tickIntervalUs - $executionTimeUs;
 
-            // Only sleep if finished faster than 0.10 seconds!
             if ($timeToSleepUs > 0) {
                 usleep($timeToSleepUs);
             }
