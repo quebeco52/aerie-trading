@@ -39,9 +39,9 @@ class MarketOperator
                 if ($marketCap < 600000000000) { // $600B Floor
                     $stock->setPrice((string) ($price * 1.03));
                     
-                    // Gradually push EPS up to $1.00 if it falls below, otherwise buff by 3%
-                    $newEps = $eps < 1.0 ? min(1.0, $eps + 0.20) : $eps * 1.03;
-                    $stock->setEarningsPerShare((string) $newEps); 
+                    // Gradually push EPS up to $0.40 if it falls below, otherwise buff by 3%
+                    $newEps = $eps < 0.4 ? min(0.4, $eps + 0.20) : $eps * 1.03;
+                    $stock->setEarningsPerShare((string) round($newEps, 2)); 
                     
                     $this->logger->info("TITAN PROTECTION: {$ticker} subsidized by the District.");
                     
@@ -54,11 +54,11 @@ class MarketOperator
             // RULE 2: second class protection ()
             if (in_array($ticker, ['IBHI', 'KING', 'PERE', 'OWLS', 'SHRK', 'VULT', 'SAFE'])) {
                 if ($marketCap < 200000000000) { // $200B Floor
-                    $stock->setPrice((string) ($price * 1.01));
+                    $stock->setPrice((string) ($price * 1.02));
                     
-                    // Gradually push EPS up to $1.00 if it falls below, otherwise buff by 2%
-                    $newEps = $eps < 1.0 ? min(1.0, $eps + 0.20) : $eps * 1.02;
-                    $stock->setEarningsPerShare((string) $newEps); 
+                    // Gradually push EPS up to $0.40 if it falls below, otherwise buff by 2%
+                    $newEps = $eps < 0.4 ? min(0.4, $eps + 0.20) : $eps * 1.02;
+                    $stock->setEarningsPerShare((string) round($newEps, 2)); 
                     
                     $this->logger->info("TITAN PROTECTION: {$ticker} subsidized by the District.");
                     

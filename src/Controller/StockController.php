@@ -140,8 +140,8 @@ class StockController extends AbstractController
         ];
         $limit = $ranges[$range] ?? 14400;
 
-        // We will never ask MariaDB for more than 50,000 rows at once.
-        $dbLimit = min($limit, 50000); 
+        // We will never ask MariaDB for more than 100,000 rows at once.
+        $dbLimit = min($limit, 100000); 
 
         $conn = $entityManager->getConnection();
         $results = [];

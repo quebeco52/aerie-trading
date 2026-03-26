@@ -23,6 +23,18 @@ services:
     depends_on:
       - aerie-database
       - aerie-redis
+
+  aerie-scheduler:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    restart: unless-stopped
+    command: php bin/console messenger:consume scheduler_default -vv
+    volumes:
+      - ./:/app
+    depends_on:
+      - aerie-database
+      - aerie-redis
   
   # The Market Ticker
   aerie-ticker:
