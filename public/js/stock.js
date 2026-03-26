@@ -207,16 +207,20 @@ document.addEventListener('DOMContentLoaded', () => {
         currentLimit = rangeLimits[range];
         tickCounter = 0;
 
+        // Show the spinner
+        const spinner = document.getElementById('chart-spinner');
+        if (spinner) spinner.classList.remove('hidden');
+
+        // Update button active states
         document.querySelectorAll('.range-btn').forEach(btn => {
             if (btn.dataset.range === range) {
-                // Active State
                 btn.className = 'range-btn px-4 py-1.5 text-xs font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors';
             } else {
-                // Inactive State
                 btn.className = 'range-btn px-4 py-1.5 text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors';
             }
         });
 
+        // Fetch the data
         fetch('/api/history?ticker=' + CURRENT_TICKER + '&range=' + range)
             .then(res => res.json())
             .then(data => {
@@ -225,6 +229,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     mainChart.data.datasets[0].data = data.map(d => parseFloat(d.price));
                     mainChart.update();
                 }
+            })
+            .catch(err => {
+                console.error("Failed to load history:", err);
+            })
+            .finally(() => {
+                // Hide the spinner when finished
+                if (spinner) spinner.classList.add('hidden');
             });
     }
 
