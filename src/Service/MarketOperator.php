@@ -45,7 +45,24 @@ class MarketOperator
                     
                     $this->logger->info("TITAN PROTECTION: {$ticker} subsidized by the District.");
                     
-                    // Optional: Flush to DB if you want to ensure the chart is perfectly smooth
+                    // Flush to DB
+                    $this->entityManager->flush(); 
+
+                }
+            }
+
+            // RULE 2: second class protection ()
+            if (in_array($ticker, ['IBHI', 'KING', 'PERE', 'OWLS', 'SHRK', 'VULT', 'SAFE'])) {
+                if ($marketCap < 200000000000) { // $200B Floor
+                    $stock->setPrice((string) ($price * 1.01));
+                    
+                    // Gradually push EPS up to $1.00 if it falls below, otherwise buff by 2%
+                    $newEps = $eps < 1.0 ? min(1.0, $eps + 0.20) : $eps * 1.02;
+                    $stock->setEarningsPerShare((string) $newEps); 
+                    
+                    $this->logger->info("TITAN PROTECTION: {$ticker} subsidized by the District.");
+                    
+                    // Flush to DB
                     $this->entityManager->flush(); 
 
                 }
@@ -53,7 +70,7 @@ class MarketOperator
             
             
 
-            // RULE 2: THE RESTRUCTURING (Hostile Takeover vs. White Knight Bailout)
+            // RULE 3: THE RESTRUCTURING (Hostile Takeover vs. White Knight Bailout)
 
             if ($marketCap < 1000000000) {
 
@@ -117,13 +134,13 @@ class MarketOperator
                 continue;
             }
 
-            // RULE 3: The Anti-Hyperinflation Gravity Well
+            // RULE 4: The Anti-Hyperinflation Gravity Well
             if ($marketCap > 20000000000000) { // $20 Trillion
                 $stock->setEarningsPerShare((string) ($eps * 0.98));
                 $this->logger->info("{$ticker} cut down");
             }
 
-            // RULE 4: Volatility Dampening
+            // RULE 5: Volatility Dampening
 
             $currentVol = (float) $stock->getCurrentVolatility();
             if ($currentVol > 1.50) {
