@@ -14,15 +14,10 @@ use App\Data\SectorPE;
  */
 class MacroEngine
 {
-    private \Redis $redis;
-
     public function __construct(
-        private MathUtility $mathUtility
+        private MathUtility $mathUtility,
+        private \Redis $redis
     ) {
-        // Connect to the existing Redis instance
-        $redisUrl = parse_url($_ENV['REDIS_URL'] ?? 'redis://127.0.0.1:6379');
-        $this->redis = new \Redis();
-        $this->redis->connect($redisUrl['host'], $redisUrl['port'] ?? 6379);
     }
 
     /**

@@ -15,17 +15,14 @@ use Doctrine\ORM\EntityManagerInterface;
  */
 class EtfTracker
 {
-    private \Redis $redis;
-
     /**
      * @param EntityManagerInterface $entityManager The Doctrine Entity Manager
+     * @param \Redis $redis The Redis connection instance
      */
     public function __construct(
-        private EntityManagerInterface $entityManager
+        private EntityManagerInterface $entityManager,
+        private \Redis $redis
     ) {
-        $redisUrl = parse_url($_ENV['REDIS_URL'] ?? 'redis://127.0.0.1:6379');
-        $this->redis = new \Redis();
-        $this->redis->connect($redisUrl['host'], $redisUrl['port'] ?? 6379);
     }
 
     /**

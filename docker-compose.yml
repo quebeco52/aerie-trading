@@ -80,6 +80,10 @@ services:
   aerie-database:
     image: mariadb:11.8
     restart: unless-stopped
+    command: 
+      - --innodb-buffer-pool-size=1G
+      - --innodb-log-file-size=512M
+      - --innodb-flush-log-at-trx-commit=2
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: symfony_db
