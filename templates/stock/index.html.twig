@@ -226,7 +226,8 @@ window.AERIE_DATA = {
         {% if isEtf and allAssets is defined %}
             {% for a in allAssets %}"{{ a.ticker }}" : {{ a.sharesOutstanding }}{{ not loop.last ? ',' : '' }}{% endfor %}
         {% endif %}
-    }
+    },
+    ticksPerYear: {{ ticksPerYear }},
 };
 </script>
 

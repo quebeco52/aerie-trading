@@ -10,6 +10,10 @@ const pieLabels = window.AERIE_DATA.pieLabels;
 const pieData = window.AERIE_DATA.pieData;
 const sharesMap = window.AERIE_DATA.sharesMap;
 
+const TICKS_PER_YEAR = window.AERIE_DATA.ticksPerYear || 14400;
+const TICKS_PER_MONTH = Math.ceil(TICKS_PER_YEAR / 12);
+const TICKS_PER_WEEK = Math.ceil(TICKS_PER_YEAR / 52);
+
 const COLOR_PRIMARY = '#adc6ff';
 const COLOR_SECONDARY = '#4edea3'; // Positive
 const COLOR_TERTIary = '#ffb3ad';  // Negative
@@ -177,20 +181,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // How many live ticks to wait before locking a permanent point into the chart
     const rangeSteps = {
-        '1w': 1,
-        '1m': 1,
-        '3m': 3,
-        '6m': 3,
-        '1y': 3,
-        '3y': 9,
-        '5y': 14,
-        '10y': 29,
-        'max': 100
+        '1w': 1, // Draw every tick
+        '1m': 1, // Draw every tick
+        '3m': Math.max(1, Math.floor((TICKS_PER_MONTH * 3) / 1200)),
+        '6m': Math.max(1, Math.floor((TICKS_PER_MONTH * 6) / 2400)),
+        '1y': Math.max(1, Math.floor(TICKS_PER_YEAR / 4800)),
+        '3y': Math.max(1, Math.floor((TICKS_PER_YEAR * 3) / 5000)),
+        '5y': Math.max(1, Math.floor((TICKS_PER_YEAR * 5) / 5000)),
+        '10y': Math.max(1, Math.floor((TICKS_PER_YEAR * 10) / 5000)),
+        'max': Math.max(1, Math.floor((TICKS_PER_YEAR * 20) / 5000))
     };
 
+    // How many points the chart is allowed to hold before deleting the oldest one
     const rangeLimits = {
-        '1w': 277,
-        '1m': 1200,
+        '1w': TICKS_PER_WEEK,
+        '1m': TICKS_PER_MONTH,
         '3m': 1200, 
         '6m': 2400,
         '1y': 4800,

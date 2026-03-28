@@ -97,6 +97,7 @@ class StockController extends AbstractController
             'allAssets' => $allAssets,
             'events' => $events,
             'targetPE' => $targetPE,
+            'ticksPerYear' => (int) ($_ENV['SIM_TICKS_PER_YEAR'] ?? 14400),
         ]);
     }
 
@@ -117,9 +118,13 @@ class StockController extends AbstractController
 
         if (!$ticker) return $this->json([]);
 
+        $ticksPerYear = (int) ($_ENV['SIM_TICKS_PER_YEAR'] ?? 14400);
+        $ticksPerMonth = (int) ceil($ticksPerYear / 12);
+        $ticksPerWeek = (int) ceil($ticksPerYear / 52);
+
         // Redis cache for short timeframes
         if (in_array($range, ['1w', '1m'])) {
-            $limit = $range === '1w' ? 277 : 1200;
+            $limit = $range === '1w' ? $ticksPerWeek : $ticksPerMonth;
             $cacheKey = "chart_buffer:{$ticker}";
             $redisData = $redis->lRange($cacheKey, 0, $limit - 1);
             $results = [];
