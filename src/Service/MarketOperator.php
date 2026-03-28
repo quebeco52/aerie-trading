@@ -26,6 +26,14 @@ class MarketOperator
         $this->logger->info("The Market Operator is reviewing the district...");
         $generatedEvents = [];
 
+        // 1. Calculate the Total Market Cap of the entire district on the fly
+        $totalMarketCap = 0;
+        foreach ($stocks as $stock) {
+            $totalMarketCap += ((float) $stock->getPrice()) * ((int) $stock->getSharesOutstanding());
+        }
+        // Fallback to prevent division by zero in case of total economic collapse
+        if ($totalMarketCap <= 0) $totalMarketCap = 1;
+
         foreach ($stocks as $stock) {
             $price = (float) $stock->getPrice();
             $shares = (int) $stock->getSharesOutstanding();
@@ -128,10 +136,33 @@ class MarketOperator
                 continue;
             }
 
-            // RULE 4: The Anti-Hyperinflation Gravity Well
-            if ($marketCap > 20000000000000) { // $20 Trillion
-                $stock->setEarningsPerShare((string) ($eps * 0.98));
-                $this->logger->info("{$ticker} cut down");
+            // RULE 4: The Market Dominance Rubber Band (Law of Large Numbers)
+            $dominanceRatio = $marketCap / $totalMarketCap;
+
+            // Soft cap: Gravity starts pulling at 10% of the total index
+            // Hard cap: Maximum gravity applied at 15% of the total index
+            $softCap = 0.10; 
+            $hardCap = 0.15;
+
+            if ($dominanceRatio > $softCap) {
+                // Calculate how far into the "danger zone" they are (0.0 to 1.0)
+                $excess = ($dominanceRatio - $softCap) / ($hardCap - $softCap);
+                
+                // Cap it at 1.0 so we don't accidentally invert their earnings
+                $excess = min(1.0, max(0.0, $excess));
+
+                // Progressive gravity: 0% at soft cap, max 2.5% EPS drag per tick at hard cap
+                $maxDrag = 0.025; 
+                $gravityPull = $excess * $maxDrag;
+
+                // Apply the rubber band
+                $stock->setEarningsPerShare((string) ($eps * (1.0 - $gravityPull)));
+                
+                // Only log if they are getting seriously clamped (over 30% stretched)
+                if ($excess > 0.3) {
+                    $pct = round($dominanceRatio * 100, 2);
+                    $this->logger->info("GRAVITY WELL: {$ticker} rubber-banded (Dominance: {$pct}%)");
+                }
             }
 
             // RULE 5: Volatility Dampening
