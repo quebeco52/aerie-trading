@@ -117,7 +117,7 @@ class StockController extends AbstractController
 
         if (!$ticker) return $this->json([]);
 
-        // Redis cache for short timeframes stays exactly the same
+        // Redis cache for short timeframes
         if (in_array($range, ['1w', '1m'])) {
             $limit = $range === '1w' ? 277 : 1200;
             $cacheKey = "chart_buffer:{$ticker}";
@@ -140,12 +140,11 @@ class StockController extends AbstractController
         ];
         $limit = $ranges[$range] ?? 14400;
 
-        // We will never ask MariaDB for more than 100,000 rows at once.
         $dbLimit = min($limit, 100000);
         $maxChartPoints = 5000;
         $conn = $entityManager->getConnection();
 
-        // Fetch the target asset
+        // Fetch the target asset ID
         $stock = $entityManager->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);
         if ($stock) {
             $targetId = $stock->getId();
@@ -160,45 +159,39 @@ class StockController extends AbstractController
             $foreignKey = 'etf_id';
         }
 
-        // Get the actual count up to limit to calculate the correct step size.
+        // Count rows to determine step size
         $countSql = sprintf(
             'SELECT COUNT(id) FROM (SELECT id FROM %s WHERE %s = :id ORDER BY id DESC LIMIT %d) as sub',
-            $tableName,
-            $foreignKey,
-            (int)$dbLimit
+            $tableName, $foreignKey, (int)$dbLimit
         );
         $actualCount = (int) $conn->fetchOne($countSql, ['id' => $targetId]);
 
-        if ($actualCount === 0) {
-            return $this->json([]);
-        }
+        if ($actualCount === 0) return $this->json([]);
 
-        // Calculate the downsampling step
         $step = 1;
         if ($actualCount > $maxChartPoints) {
             $step = (int) ceil($actualCount / $maxChartPoints);
         }
 
-        // Fetch the downsampled data directly from the DB
-        $sql = sprintf('
-        WITH RankedData AS (
-            SELECT 
-                id, price, recorded_at,
-                ROW_NUMBER() OVER(ORDER BY id DESC) as row_num
-            FROM %s 
-            WHERE %s = :id 
-            LIMIT %d
-            )
-            SELECT id, price, recorded_at 
-            FROM RankedData 
-            WHERE row_num %% :step = 0 OR row_num = 1
-            ORDER BY id DESC
-        ', $tableName, $foreignKey, (int)$dbLimit);
+        // simple query
+        $sql = sprintf(
+            'SELECT id, price, recorded_at FROM %s WHERE %s = :id ORDER BY id DESC LIMIT %d',
+            $tableName, $foreignKey, (int)$dbLimit
+        );
+        
+        $stmt = $conn->executeQuery($sql, ['id' => $targetId]);
+        
+        $results = [];
+        $rowIndex = 0;
 
-        $results = $conn->fetchAllAssociative($sql, [
-            'id'   => $targetId,
-            'step' => $step
-        ]);
+        // Stream the rows one by one.
+        foreach ($stmt->iterateAssociative() as $row) {
+            // Keep the very first row (newest price), then every Nth row
+            if ($rowIndex === 0 || $rowIndex % $step === 0) {
+                $results[] = $row;
+            }
+            $rowIndex++;
+        }
 
         return $this->json(array_reverse($results));
     }
