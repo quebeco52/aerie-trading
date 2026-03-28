@@ -43,30 +43,30 @@ class MarketOperator
             $ticker = $stock->getTicker();
 
             // RULE 1: THE OLIGARCHY (Plot Armor for the Titans LAKE, SWAN and BRKW)
+            $titanFloor = $totalMarketCap * 0.045; // Floor is 4.5% of the index economy
             if (in_array($ticker, ['LAKE', 'SWAN', 'BRKW'])) {
-                if ($marketCap < 600000000000) { // $600B Floor
+                if ($marketCap < $titanFloor) { 
                     $stock->setPrice((string) ($price * 1.03));
                     
                     // Gradually push EPS up to $0.40 if it falls below, otherwise buff by 3%
                     $newEps = $eps < 0.4 ? min(0.4, $eps + 0.20) : $eps * 1.03;
                     $stock->setEarningsPerShare((string) round($newEps, 2)); 
                     
-                    $this->logger->info("TITAN PROTECTION: {$ticker} subsidized by the District.");
-
+                    $this->logger->info("TITAN PROTECTION: {$ticker} subsidized (Fell below 4% index dominance).");
                 }
             }
 
-            // RULE 2: second class protection ()
+            // RULE 2: SECOND CLASS PROTECTION
+            $systemicFloor = $totalMarketCap * 0.018; // Floor is 1.8% of the index economy
             if (in_array($ticker, ['IBHI', 'KING', 'PERE', 'OWLS', 'SHRK', 'VULT', 'SAFE'])) {
-                if ($marketCap < 200000000000) { // $200B Floor
+                if ($marketCap < $systemicFloor) { 
                     $stock->setPrice((string) ($price * 1.02));
                     
                     // Gradually push EPS up to $0.40 if it falls below, otherwise buff by 2%
                     $newEps = $eps < 0.4 ? min(0.4, $eps + 0.20) : $eps * 1.02;
                     $stock->setEarningsPerShare((string) round($newEps, 2)); 
                     
-                    $this->logger->info("TITAN PROTECTION: {$ticker} subsidized by the District.");
-
+                    $this->logger->info("SYSTEMIC BAILOUT: {$ticker} subsidized (Fell below 1.5% index dominance).");
                 }
             }
             
@@ -165,10 +165,8 @@ class MarketOperator
                     $dragType = "Price";
                 }
                 
-                if ($excess > 0.2) {
-                    $pct = round($dominanceRatio * 100, 2);
-                    $this->logger->info("GRAVITY WELL: {$ticker} {$dragType} rubber-banded (Dominance: {$pct}%, PE: " . round($peRatio, 1) . ")");
-                }
+                $pct = round($dominanceRatio * 100, 2);
+                $this->logger->info("GRAVITY WELL: {$ticker} {$dragType} rubber-banded (Dominance: {$pct}%, PE: " . round($peRatio, 1) . ")");
             }
 
             // RULE 5: Volatility Dampening
