@@ -50,7 +50,7 @@ class StockController extends AbstractController
         if (!$currentUser) {
             throw $this->createAccessDeniedException();
         }
-        
+
 
         $user = $entityManager->getRepository(User::class)->find($currentUser->getId());
 
@@ -130,53 +130,75 @@ class StockController extends AbstractController
         }
 
         $ranges = [
-            '3m'  => 1200, 
-            '6m'  => 2400, 
-            '1y'  => 4800, 
-            '3y'  => 14400, 
-            '5y'  => 24000, 
-            '10y' => 48000, 
+            '3m'  => 1200,
+            '6m'  => 2400,
+            '1y'  => 4800,
+            '3y'  => 14400,
+            '5y'  => 24000,
+            '10y' => 48000,
             'max' => 999999
         ];
         $limit = $ranges[$range] ?? 14400;
 
         // We will never ask MariaDB for more than 100,000 rows at once.
-        $dbLimit = min($limit, 100000); 
-
+        $dbLimit = min($limit, 100000);
+        $maxChartPoints = 5000;
         $conn = $entityManager->getConnection();
-        $results = [];
 
+        // Fetch the target asset
         $stock = $entityManager->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);
         if ($stock) {
-            // indexed fetch of the newest rows.
-            $sql = 'SELECT id, price, recorded_at FROM stock_history WHERE stock_id = :id ORDER BY id DESC LIMIT ' . (int)$dbLimit;
-            $results = $conn->fetchAllAssociative($sql, ['id' => $stock->getId()]);
+            $targetId = $stock->getId();
+            $tableName = 'stock_history';
+            $foreignKey = 'stock_id';
         } else {
             $etf = $entityManager->getRepository(Etf::class)->findOneBy(['ticker' => $ticker]);
             if (!$etf) return $this->json([]);
 
-            $sql = 'SELECT id, price, recorded_at FROM etf_history WHERE etf_id = :id ORDER BY id DESC LIMIT ' . (int)$dbLimit;
-            $results = $conn->fetchAllAssociative($sql, ['id' => $etf->getId()]);
+            $targetId = $etf->getId();
+            $tableName = 'etf_history';
+            $foreignKey = 'etf_id';
         }
 
-        // DOWNSAMPLING ENGINE: Shrink the data safely in PHP RAM
-        $maxChartPoints = 5000;
-        $count = count($results);
+        // Get the actual count up to limit to calculate the correct step size.
+        $countSql = sprintf(
+            'SELECT COUNT(id) FROM (SELECT id FROM %s WHERE %s = :id ORDER BY id DESC LIMIT %d) as sub',
+            $tableName,
+            $foreignKey,
+            (int)$dbLimit
+        );
+        $actualCount = (int) $conn->fetchOne($countSql, ['id' => $targetId]);
 
-        if ($count > $maxChartPoints) {
-            $step = ceil($count / $maxChartPoints);
-            $downsampled = [];
-
-            for ($i = 0; $i < $count; $i += $step) {
-                $downsampled[] = $results[$i];
-            }
-
-            // Ensure the absolute newest point is not lost
-            if (isset($downsampled[0]) && $downsampled[0]['id'] !== $results[0]['id']) {
-                $downsampled[0] = $results[0]; 
-            }
-            $results = $downsampled;
+        if ($actualCount === 0) {
+            return $this->json([]);
         }
+
+        // Calculate the downsampling step
+        $step = 1;
+        if ($actualCount > $maxChartPoints) {
+            $step = (int) ceil($actualCount / $maxChartPoints);
+        }
+
+        // Fetch the downsampled data directly from the DB
+        $sql = sprintf('
+        WITH RankedData AS (
+            SELECT 
+                id, price, recorded_at,
+                ROW_NUMBER() OVER(ORDER BY id DESC) as row_num
+            FROM %s 
+            WHERE %s = :id 
+            LIMIT %d
+            )
+            SELECT id, price, recorded_at 
+            FROM RankedData 
+            WHERE row_num %% :step = 0 OR row_num = 1
+            ORDER BY id DESC
+        ', $tableName, $foreignKey, (int)$dbLimit);
+
+        $results = $conn->fetchAllAssociative($sql, [
+            'id'   => $targetId,
+            'step' => $step
+        ]);
 
         return $this->json(array_reverse($results));
     }

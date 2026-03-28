@@ -32,10 +32,6 @@ services:
 
     Redis:
         class: Redis
-        public: true
-        factory: ['Symfony\Component\Cache\Adapter\RedisAdapter', 'createConnection']
-        arguments:
-            - '%env(REDIS_URL)%'
-
+        factory: ['App\Factory\RedisFactory', 'createConnection']
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones
