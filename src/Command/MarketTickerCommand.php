@@ -95,7 +95,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
 
         $historyInterval = (int) max(1, $this->ticksPerYear / 2400); // 2400 points per year
-        $operatorInterval = (int) max(1, $this->ticksPerYear / 12);  // Operator audits once a game "month"
+        $operatorInterval = (int) max(1, $this->ticksPerYear / 24);  // Operator audits once a game "month"
         $snapshotInterval = (int) max(1, $this->ticksPerYear / 52);  // Snapshots once a game "week"
 
         $conn = $this->entityManager->getConnection();

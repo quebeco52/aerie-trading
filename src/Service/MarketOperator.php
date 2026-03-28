@@ -142,26 +142,32 @@ class MarketOperator
             // Soft cap: Gravity starts pulling at 10% of the total index
             // Hard cap: Maximum gravity applied at 15% of the total index
             $softCap = 0.10; 
-            $hardCap = 0.15;
+            $hardCap = 0.18;
 
             if ($dominanceRatio > $softCap) {
-                // Calculate how far into the "danger zone" they are (0.0 to 1.0)
                 $excess = ($dominanceRatio - $softCap) / ($hardCap - $softCap);
-                
-                // Cap it at 1.0 so we don't accidentally invert their earnings
                 $excess = min(1.0, max(0.0, $excess));
 
-                // Progressive gravity: 0% at soft cap, max 2.5% EPS drag per tick at hard cap
+                // Progressive gravity: 0% at soft cap, max 2.5% drag per tick at hard cap
                 $maxDrag = 0.025; 
                 $gravityPull = $excess * $maxDrag;
 
-                // Apply the rubber band
-                $stock->setEarningsPerShare((string) ($eps * (1.0 - $gravityPull)));
+                // CHECK P/E RATIO
+                $peRatio = $eps > 0 ? $price / $eps : 999;
                 
-                // Only log if they are getting seriously clamped (over 30% stretched)
-                if ($excess > 0.3) {
+                // If P/E is healthy, apply EPS drag (Bureaucracy)
+                if ($peRatio < 35.0 && $eps > 0) {
+                    $stock->setEarningsPerShare((string) ($eps * (1.0 - $gravityPull)));
+                    $dragType = "EPS";
+                } else {
+                    // If P/E is a hype bubble, apply Price drag (Multiple Compression)
+                    $stock->setPrice((string) ($price * (1.0 - $gravityPull)));
+                    $dragType = "Price";
+                }
+                
+                if ($excess > 0.2) {
                     $pct = round($dominanceRatio * 100, 2);
-                    $this->logger->info("GRAVITY WELL: {$ticker} rubber-banded (Dominance: {$pct}%)");
+                    $this->logger->info("GRAVITY WELL: {$ticker} {$dragType} rubber-banded (Dominance: {$pct}%, PE: " . round($peRatio, 1) . ")");
                 }
             }
 
