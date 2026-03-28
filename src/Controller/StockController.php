@@ -140,7 +140,7 @@ class StockController extends AbstractController
         ];
         $limit = $ranges[$range] ?? 14400;
 
-        $dbLimit = min($limit, 100000);
+        $dbLimit = min($limit, 500000);
         $maxChartPoints = 5000;
         $conn = $entityManager->getConnection();
 
@@ -162,7 +162,9 @@ class StockController extends AbstractController
         // Count rows to determine step size
         $countSql = sprintf(
             'SELECT COUNT(id) FROM (SELECT id FROM %s WHERE %s = :id ORDER BY id DESC LIMIT %d) as sub',
-            $tableName, $foreignKey, (int)$dbLimit
+            $tableName,
+            $foreignKey,
+            (int)$dbLimit
         );
         $actualCount = (int) $conn->fetchOne($countSql, ['id' => $targetId]);
 
@@ -175,12 +177,14 @@ class StockController extends AbstractController
 
         // simple query
         $sql = sprintf(
-            'SELECT id, price, recorded_at FROM %s WHERE %s = :id ORDER BY id DESC LIMIT %d',
-            $tableName, $foreignKey, (int)$dbLimit
+            'SELECT id, price, recorded_at FROM %s WHERE %s = :id ORDER BY recorded_at DESC LIMIT %d',
+            $tableName,
+            $foreignKey,
+            (int)$dbLimit
         );
-        
+
         $stmt = $conn->executeQuery($sql, ['id' => $targetId]);
-        
+
         $results = [];
         $rowIndex = 0;
 
