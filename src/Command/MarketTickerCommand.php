@@ -131,6 +131,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $stockUpdates = $result['updates'];
                 $totalMarketCap = $result['total_cap'];
                 $events = $result['events'] ?? [];
+                $marketVol = $result['market_vol'] ?? 0.15;
                 
                 if (!empty($operatorEvents)) {
                     $events = array_merge($events, $operatorEvents);
@@ -165,7 +166,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                         'timestamp' => time(),
                         'stocks' => $allUpdates,
                         'events' => $events,
-                        'sectors' => $liveSectorPEs
+                        'sectors' => $liveSectorPEs,
+                        'market_vol' => $marketVol,
                     ]));
 
                     $this->redis->set('stocks_live_data', json_encode($stockUpdates));

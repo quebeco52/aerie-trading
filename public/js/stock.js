@@ -261,6 +261,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     marketSocket.onmessage = function (event) {
         const payload = JSON.parse(event.data);
+
+        if (IS_ETF && payload.market_vol) {
+            const vixEl = document.getElementById('district-vix');
+            if (vixEl) {
+                const currentVix = (payload.market_vol * 100).toFixed(2);
+                vixEl.innerText = currentVix + '%';
+                
+                // If volatility spikes above 30%, flash the text red to warn the user!
+                if (payload.market_vol > 0.30) {
+                    vixEl.style.color = COLOR_TERTIary; // Matches your red variable
+                } else {
+                    vixEl.style.color = '#dae2fd'; // Default text-on-surface color
+                }
+            }
+        }
+        
         const stockUpdate = payload.stocks.find(s => s.ticker === CURRENT_TICKER);
 
         if (stockUpdate) {

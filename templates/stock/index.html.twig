@@ -161,7 +161,16 @@
 
                 {% else %}
                     <div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15">
-                        <h3 class="text-xs font-bold uppercase tracking-widest text-on-surface mb-6">Index Composition</h3>
+                        
+                        <div class="flex justify-between items-center mb-6 pb-4 border-b border-outline-variant/10">
+                            <h3 class="text-xs font-bold uppercase tracking-widest text-on-surface">Index Composition</h3>
+                            
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">District Volatility (VIX):</span>
+                                <span id="district-vix" class="text-sm font-bold text-on-surface transition-colors">15.00%</span>
+                            </div>
+                        </div>
+                        
                         <div class="relative h-72 w-full flex justify-center">
                             <canvas id="etfPieChart"></canvas>
                         </div>

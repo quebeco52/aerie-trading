@@ -36,10 +36,10 @@ class StockTracker
 
         // Market noise calculation (Systemic shock applied to all stocks)
         $marketZ = $this->mathUtility->generateStandardNormal();
-        
+
         // THE DISTRICT VIX (Dynamic Market Volatility)
-        $this->updateDistrictVix($dt);
-        
+        $this->updateDistrictVariance($dt);
+
         $marketVol = $this->currentMarketVol;
 
         foreach ($stocks as $stock) {
@@ -88,9 +88,9 @@ class StockTracker
 
             // CORPORATE ACTIONS (SPLITS)
             $splitResult = $this->corporateActionEngine->processSplits(
-                $stock, 
-                $newPrice, 
-                $newEps, 
+                $stock,
+                $newPrice,
+                $newEps,
                 $sharesOutstanding
             );
 
@@ -105,7 +105,7 @@ class StockTracker
             // ==========================================
             $stock->setPrice((string) $newPrice);
             $stock->setCurrentVolatility((string) $nextVolatility);
-            
+
             // Only update these if a split actually happened
             if ($splitEvent) {
                 $stock->setEarningsPerShare((string) $newEps);
@@ -136,24 +136,48 @@ class StockTracker
         return [
             'updates' => $stockUpdates,
             'total_cap' => $totalMarketCap,
-            'events' => $events
+            'events' => $events,
+            'market_vol' => $this->currentMarketVol
         ];
     }
 
-    private function updateDistrictVix(float $dt): void
+    private function updateDistrictVariance(float $dt): void
     {
-        // Generate a separate Z-score to drive the VIX itself
-        $vixZ = $this->mathUtility->generateStandardNormal();
+        $kappa = 6.0;
+        $longTermVolatility = 0.15;
+        $volOfVol = 0.30;
 
-        $vixKappa = 4.0;       // Speed of reversion (Pulls it back to normal)
-        $vixBaseline = 0.15;   // The long-term normal market volatility (15%)
-        $vixVolOfVol = 0.08;   // How violently the VIX itself can swing
+        $currentVariance = pow($this->currentMarketVol, 2);
+        $longTermVariance = pow($longTermVolatility, 2);
 
-        // Mean-reverting random walk for global volatility
-        $this->currentMarketVol += $vixKappa * ($vixBaseline - $this->currentMarketVol) * $dt 
-                                 + $vixVolOfVol * sqrt($dt) * $vixZ;
+        // Base Heston Variance Process
+        $w2 = $this->mathUtility->generateStandardNormal();
+        
+        $dv = $kappa * ($longTermVariance - $currentVariance) * $dt
+            + $volOfVol * sqrt($currentVariance) * sqrt($dt) * $w2;
 
-        // Hard bounds to prevent the math from breaking (5% floor, 50% ceiling)
-        $this->currentMarketVol = max(0.05, min(0.50, $this->currentMarketVol));
+        $nextVariance = $currentVariance + $dv;
+
+        // The Jump Mechanism (Applied directly to variance)
+        $annualJumpProbability = 0.80;
+        $stepJumpProbability = $annualJumpProbability * $dt;
+
+        if (mt_rand() / mt_getrandmax() < $stepJumpProbability) {
+            $jumpZ = $this->mathUtility->generateStandardNormal();
+            
+            // Calculate volatility jump severity (e.g., 5% to 35% absolute)
+            $volJumpSeverity = 0.05 + (abs($jumpZ) * 0.10);
+            
+            // Convert the current state + jump back into variance
+            $spikedVolatility = sqrt(max(0.000001, $nextVariance)) + $volJumpSeverity;
+            $nextVariance = pow($spikedVolatility, 2);
+        }
+
+        // Full Truncation & Conversion back to Volatility
+        $nextVariance = max(0.000001, $nextVariance);
+        $this->currentMarketVol = sqrt($nextVariance);
+
+        // Hard bounds (Converted back to volatility terms)
+        $this->currentMarketVol = max(0.08, min(0.80, $this->currentMarketVol));
     }
 }
