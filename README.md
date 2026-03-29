@@ -5,9 +5,11 @@ Aerie Trading is a fullstack trading application with a stock market simulator a
 Aerie Trading uses the tech stack:
 
 - PHP/Symfony
+- Workerman (websocket)
 - Redis
 - MariaDB
 - Caddy
+- tailwind (frontend)
 - Docker
 
 ## Requirements specification
@@ -16,7 +18,7 @@ Aerie Trading uses the tech stack:
 
 - Use session handling
 - Store user/stock data safely
-- Be mobile friendly
+- Be mobile "semi friendly"
 - Be publicly accessible securely
 
 #### Market simulator
@@ -44,3 +46,4 @@ Aerie Trading uses the tech stack:
 - Optimize the application to run on as little resources as possible
 - Be fun to use
 - Teach players about the real stock market
+- Should consistent narrative

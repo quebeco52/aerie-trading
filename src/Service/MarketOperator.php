@@ -58,7 +58,7 @@ class MarketOperator
 
             // RULE 2: SECOND CLASS PROTECTION
             $systemicFloor = $totalMarketCap * 0.018; // Floor is 1.8% of the index economy
-            if (in_array($ticker, ['IBHI', 'KING', 'PERE', 'OWLS', 'SHRK', 'VULT', 'SAFE'])) {
+            if (in_array($ticker, ['IBHI', 'KING', 'PERE', 'OWLS', 'SHRK', 'VULT', 'SAFE', 'WATCH'])) {
                 if ($marketCap < $systemicFloor) { 
                     $stock->setPrice((string) ($price * 1.02));
                     
@@ -140,9 +140,9 @@ class MarketOperator
             $dominanceRatio = $marketCap / $totalMarketCap;
 
             // Soft cap: Gravity starts pulling at 10% of the total index
-            // Hard cap: Maximum gravity applied at 15% of the total index
+            // Hard cap: Maximum gravity applied at 20% of the total index
             $softCap = 0.10; 
-            $hardCap = 0.18;
+            $hardCap = 0.20;
 
             if ($dominanceRatio > $softCap) {
                 $excess = ($dominanceRatio - $softCap) / ($hardCap - $softCap);

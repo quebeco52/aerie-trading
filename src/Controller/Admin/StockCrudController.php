@@ -3,12 +3,13 @@
 namespace App\Controller\Admin;
 
 use App\Entity\Stock;
+use EasyCorp\Bundle\EasyAdminBundle\Config\Crud;
 use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractCrudController;
-use EasyCorp\Bundle\EasyAdminBundle\Field\IdField;
+use EasyCorp\Bundle\EasyAdminBundle\Field\ChoiceField;
+use EasyCorp\Bundle\EasyAdminBundle\Field\FormField;
+use EasyCorp\Bundle\EasyAdminBundle\Field\NumberField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\TextareaField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\TextField;
-use EasyCorp\Bundle\EasyAdminBundle\Field\NumberField;
-use EasyCorp\Bundle\EasyAdminBundle\Field\ChoiceField;
 
 class StockCrudController extends AbstractCrudController
 {
@@ -17,11 +18,16 @@ class StockCrudController extends AbstractCrudController
         return Stock::class;
     }
 
-
     public function configureFields(string $pageName): iterable
     {
         return [
-            TextField::new('ticker'),
+            // --- SECTION 1: IDENTITY ---
+            FormField::addFieldset('Corporate Identity')->setIcon('fas fa-building'),
+            
+            // Lock the ticker so you don't accidentally break foreign keys or Redis caches
+            TextField::new('ticker')
+                ->setDisabled($pageName === Crud::PAGE_EDIT),
+            
             TextField::new('name'),
             ChoiceField::new('sector')
                 ->setChoices([
@@ -37,10 +43,41 @@ class StockCrudController extends AbstractCrudController
                     'Utilities' => 'Utilities',
                     'Communication Services' => 'Communication Services',
                 ]),
-            NumberField::new('price'),
-            NumberField::new('beta'),
-            NumberField::new('volatility'),
 
+            // --- SECTION 2: LIVE DATA (LOCKED) ---
+            FormField::addFieldset('Live Market Data (Protected)')->setIcon('fas fa-chart-line')
+                ->setHelp('These values are actively managed by the simulation engine and cannot be edited manually.'),
+            
+            NumberField::new('price')
+                ->setDisabled(), // Greyed out, read-only
+            
+            NumberField::new('earningsPerShare', 'EPS')
+                ->setDisabled(), // Greyed out, read-only
+            
+            NumberField::new('currentVolatility', 'Current Vol.')
+                ->setDisabled()  // Greyed out, read-only
+                ->hideOnIndex(),
+
+            // --- SECTION 3: PHYSICS CONSTANTS (EDITABLE) ---
+            FormField::addFieldset('Simulation Physics (Constants)')->setIcon('fas fa-cogs')
+                ->setHelp('Adjusting these will instantly change how the stock behaves in the next engine tick.'),
+            
+            NumberField::new('sharesOutstanding', 'Shares')
+                ->hideOnIndex(),
+            NumberField::new('beta'),
+            NumberField::new('volatility', 'Baseline Volatility'),
+
+            // --- SECTION 4: SHOCK ENGINE (EDITABLE) ---
+            FormField::addFieldset('Jump Engine (Shocks)')->setIcon('fas fa-bolt')
+                ->setHelp('Controls the frequency and severity of sudden market events.'),
+            
+            NumberField::new('jumpIntensity', 'Intensity')->hideOnIndex(),
+            NumberField::new('jumpMean', 'Mean')->hideOnIndex(),
+            NumberField::new('jumpVol', 'Volatility')->hideOnIndex(),
+
+            // --- SECTION 5: LORE (EDITABLE) ---
+            FormField::addFieldset('Lore & Description')->setIcon('fas fa-book'),
+            
             TextareaField::new('description')
                 ->hideOnIndex()
                 ->renderAsHtml(),
