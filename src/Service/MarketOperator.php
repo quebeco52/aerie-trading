@@ -43,7 +43,7 @@ class MarketOperator
             $ticker = $stock->getTicker();
 
             // RULE 1: THE OLIGARCHY (Plot Armor for the Titans LAKE, SWAN and BRKW)
-            $titanFloor = $totalMarketCap * 0.045; // Floor is 4.5% of the index economy
+            $titanFloor = $totalMarketCap * 0.04; // Floor is 4% of the index economy
             if (in_array($ticker, ['LAKE', 'SWAN', 'BRKW'])) {
                 if ($marketCap < $titanFloor) { 
                     $stock->setPrice((string) ($price * 1.03));
@@ -57,8 +57,8 @@ class MarketOperator
             }
 
             // RULE 2: SECOND CLASS PROTECTION
-            $systemicFloor = $totalMarketCap * 0.018; // Floor is 1.8% of the index economy
-            if (in_array($ticker, ['IBHI', 'KING', 'PERE', 'OWLS', 'SHRK', 'VULT', 'SAFE', 'WATCH'])) {
+            $systemicFloor = $totalMarketCap * 0.015; // Floor is 1.5% of the index economy
+            if (in_array($ticker, ['IBHI', 'KING', 'PERE', 'OWLS', 'SHRK', 'VULT', 'SAFE', 'WATCH', 'OSPR'])) {
                 if ($marketCap < $systemicFloor) { 
                     $stock->setPrice((string) ($price * 1.02));
                     
@@ -69,10 +69,24 @@ class MarketOperator
                     $this->logger->info("SYSTEMIC BAILOUT: {$ticker} subsidized (Fell below 1.5% index dominance).");
                 }
             }
+
+            // RULE 3: BASE CLASS PROTECTION
+            $baseFloor = $totalMarketCap * 0.01; // Floor is 1% of the index economy
+            if (in_array($ticker, ['WING', 'BIRD', 'DOVE', 'WADE', 'CROP'])) {
+                if ($marketCap < $baseFloor) { 
+                    $stock->setPrice((string) ($price * 1.02));
+                    
+                    // Gradually push EPS up to $0.40 if it falls below, otherwise buff by 2%
+                    $newEps = $eps < 0.4 ? min(0.4, $eps + 0.20) : $eps * 1.02;
+                    $stock->setEarningsPerShare((string) round($newEps, 2)); 
+                    
+                    $this->logger->info("BASE CLASS BAILOUT: {$ticker} subsidized (Fell below 1% index dominance).");
+                }
+            }
             
             
 
-            // RULE 3: THE RESTRUCTURING (Hostile Takeover vs. White Knight Bailout)
+            // RULE 4: THE RESTRUCTURING (Hostile Takeover vs. White Knight Bailout)
 
             if ($marketCap < 1000000000) {
 
@@ -136,7 +150,7 @@ class MarketOperator
                 continue;
             }
 
-            // RULE 4: The Market Dominance Rubber Band (Law of Large Numbers)
+            // RULE 5: The Market Dominance Rubber Band (Law of Large Numbers)
             $dominanceRatio = $marketCap / $totalMarketCap;
 
             // Soft cap: Gravity starts pulling at 10% of the total index
@@ -169,7 +183,7 @@ class MarketOperator
                 $this->logger->info("GRAVITY WELL: {$ticker} {$dragType} rubber-banded (Dominance: {$pct}%, PE: " . round($peRatio, 1) . ")");
             }
 
-            // RULE 5: Volatility Dampening
+            // RULE 6: Volatility Dampening
 
             $currentVol = (float) $stock->getCurrentVolatility();
             if ($currentVol > 1.50) {
