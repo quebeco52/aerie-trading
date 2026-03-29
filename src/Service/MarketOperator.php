@@ -169,9 +169,10 @@ class MarketOperator
                 // CHECK P/E RATIO
                 $peRatio = $eps > 0 ? $price / $eps : 999;
                 
-                // If P/E is healthy, apply EPS drag (Bureaucracy)
+                // If P/E is healthy, apply EPS drag (Bureaucracy) small price drag
                 if ($peRatio < 35.0 && $eps > 0) {
                     $stock->setEarningsPerShare((string) ($eps * (1.0 - $gravityPull)));
+                    $stock->setPrice((string) ($price * (1.0 - ($gravityPull / 2.0))));
                     $dragType = "EPS";
                 } else {
                     // If P/E is a hype bubble, apply Price drag (Multiple Compression)
