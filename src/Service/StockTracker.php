@@ -16,31 +16,31 @@ use Doctrine\ORM\EntityManagerInterface;
  */
 class StockTracker
 {
+    private float $currentMarketVol = 0.15;
+
     public function __construct(
         private EntityManagerInterface $entityManager,
         private MarketEngine $marketEngine,
         private EarningsEngine $earningsEngine,
         private CorporateActionEngine $corporateActionEngine,
-        private MarketEvent $eventService
+        private MarketEvent $eventService,
+        private MathUtility $mathUtility,
     ) {}
 
     public function updateStocks(array $stocks, float $dt, array $liveSectorPEs, bool $recordHistory): array
     {
-        // Fetch all Stock entities from the database
-        // $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
 
         $stockUpdates = [];
         $totalMarketCap = 0.0;
         $events = [];
 
         // Market noise calculation (Systemic shock applied to all stocks)
-        do {
-            $mx = mt_rand() / mt_getrandmax();
-            $my = mt_rand() / mt_getrandmax();
-        } while ($mx <= 0);
-        $marketZ = sqrt(-2 * log($mx)) * cos(2 * M_PI * $my);
-        $marketVol = 0.15;
-
+        $marketZ = $this->mathUtility->generateStandardNormal();
+        
+        // THE DISTRICT VIX (Dynamic Market Volatility)
+        $this->updateDistrictVix($dt);
+        
+        $marketVol = $this->currentMarketVol;
 
         foreach ($stocks as $stock) {
             $sectorName = $stock->getSector();
@@ -86,9 +86,7 @@ class StockTracker
             $newEps = (float) $stock->getEarningsPerShare();
             $sharesOutstanding = (int) $stock->getSharesOutstanding();
 
-            // ==========================================
             // CORPORATE ACTIONS (SPLITS)
-            // ==========================================
             $splitResult = $this->corporateActionEngine->processSplits(
                 $stock, 
                 $newPrice, 
@@ -135,13 +133,27 @@ class StockTracker
             }
         }
 
-        // Executes all the SELECTs, UPDATEs, and INSERTs.
-        // $this->entityManager->flush();
-
         return [
             'updates' => $stockUpdates,
             'total_cap' => $totalMarketCap,
             'events' => $events
         ];
+    }
+
+    private function updateDistrictVix(float $dt): void
+    {
+        // Generate a separate Z-score to drive the VIX itself
+        $vixZ = $this->mathUtility->generateStandardNormal();
+
+        $vixKappa = 4.0;       // Speed of reversion (Pulls it back to normal)
+        $vixBaseline = 0.15;   // The long-term normal market volatility (15%)
+        $vixVolOfVol = 0.08;   // How violently the VIX itself can swing
+
+        // Mean-reverting random walk for global volatility
+        $this->currentMarketVol += $vixKappa * ($vixBaseline - $this->currentMarketVol) * $dt 
+                                 + $vixVolOfVol * sqrt($dt) * $vixZ;
+
+        // Hard bounds to prevent the math from breaking (5% floor, 50% ceiling)
+        $this->currentMarketVol = max(0.05, min(0.50, $this->currentMarketVol));
     }
 }
