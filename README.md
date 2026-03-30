@@ -15,11 +15,11 @@ Aerie Trading uses the tech stack:
 ## Requirements specification
 
 ### The application should:
-
 - Use session handling
 - Store user/stock data safely
 - Be mobile "semi friendly"
 - Be publicly accessible securely
+- Have a admin panel to edit data (handel user handel stock data etc...) in prod 
 
 #### Market simulator
 - Be a "complete market solution"
@@ -32,21 +32,19 @@ Aerie Trading uses the tech stack:
 - Should be unable to be "beaten" or manipulate by players
 
 ### User should be able to:
-
 - Register and login
 - Browse stock data (fundamentals and stock history)
 - Buy and sell stocks
 - Keep track of there portfolio
 
 ### Stretch goal
-
 - Stock comment sections
 - User leaderboard
 - Options trading
 - Optimize the application to run on as little resources as possible
 - Be fun to use
 - Teach players about the real stock market
-- Should consistent narrative
+- Should have a consistent narrative
 
 
 
