@@ -47,3 +47,11 @@ Aerie Trading uses the tech stack:
 - Be fun to use
 - Teach players about the real stock market
 - Should consistent narrative
+
+
+
+
+## AI policy
+- AI may be used to write code snippets and analys code with human oversight.
+- No autonomous AI agents are allowed to write code.
+- The developer how commit's the code stands for the code and understands the code.
