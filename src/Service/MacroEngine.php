@@ -2,7 +2,9 @@
 
 namespace App\Service;
 
+use App\Data\EconomicCycle;
 use App\Data\SectorPE;
+use Psr\Log\LoggerInterface;
 
 /**
  * Service responsible for simulating the macroeconomic environment.
@@ -14,8 +16,12 @@ use App\Data\SectorPE;
  */
 class MacroEngine
 {
+    private const REDIS_ECONOMY_STATE_KEY = 'economy_state';
+    private const REDIS_ECONOMY_TIME_KEY = 'economy_time_in_state';
+
     public function __construct(
         private MathUtility $mathUtility,
+        private LoggerInterface $logger,
         private \Redis $redis
     ) {
     }
@@ -67,6 +73,81 @@ class MacroEngine
         $this->redis->set('macro_sectors_live', json_encode($updatedSectors));
 
         return $updatedSectors;
+    }
+
+    /**
+     * Updates the state of the economy using a time-aware Hazard Function.
+     *
+     * Enforces a minimum time spent in each state, and ramps up the probability
+     * of a transition as the state approaches its maximum allowed duration.
+     *
+     * @param float $dt The time step in years.
+     * @return EconomicCycle The current (and possibly new) state of the economy.
+     */
+    public function updateBoomBust(float $dt): EconomicCycle
+    {
+        $currentStateStr = $this->redis->get(self::REDIS_ECONOMY_STATE_KEY) ?: EconomicCycle::EXPANSION->value;
+        $currentState = EconomicCycle::from($currentStateStr);
+        
+        // Retrieve the time spent in the current state (default to 0.0)
+        $timeInState = (float) ($this->redis->get(self::REDIS_ECONOMY_TIME_KEY) ?: 0.0);
+        $timeInState += $dt;
+
+        // Target duration of each phase in years
+        $durations = [
+            EconomicCycle::RECESSION->value => 1.5,  // Target: 1.5 years
+            EconomicCycle::RECOVERY->value  => 1.0,  // Target: 1.0 year
+            EconomicCycle::EXPANSION->value => 3.0,  // Target: 3.0 years
+            EconomicCycle::PEAK->value      => 0.75, // Target: 9 months
+        ];
+
+        $targetDuration = $durations[$currentState->value];
+        
+        // Define our boundaries
+        $minDuration = $targetDuration * 0.50; // Must spend at least 50% of target time
+        $maxDuration = $targetDuration * 1.50; // Forced exit at 150% of target time
+
+        $transitioned = false;
+
+        // The Ceiling (Force a transition if it's been going on too long)
+        if ($timeInState >= $maxDuration) {
+            $transitioned = true;
+        } 
+        // The Hazard Zone (Roll the dice with increasing probability)
+        elseif ($timeInState >= $minDuration) {
+            // As timeInState approaches maxDuration, the remaining window shrinks to zero.
+            // Dividing $dt by a shrinking window means the probability continuously rises.
+            $remainingWindow = max(0.0001, $maxDuration - $timeInState);
+            $transitionProbability = $dt / $remainingWindow;
+
+            if ((mt_rand() / mt_getrandmax()) < $transitionProbability) {
+                $transitioned = true;
+            }
+        }
+        // The Floor (If timeInState < minDuration, do nothing. Transition is impossible.)
+
+        if ($transitioned) {
+            // Time to transition to the next state
+            $newState = match ($currentState) {
+                EconomicCycle::RECESSION => EconomicCycle::RECOVERY,
+                EconomicCycle::RECOVERY  => EconomicCycle::EXPANSION,
+                EconomicCycle::EXPANSION => EconomicCycle::PEAK,
+                EconomicCycle::PEAK      => EconomicCycle::RECESSION,
+            };
+            
+            // Save the new state and RESET the timer back to 0
+            $this->redis->set(self::REDIS_ECONOMY_STATE_KEY, $newState->value);
+            $this->redis->set(self::REDIS_ECONOMY_TIME_KEY, 0.0);
+
+            $this->logger->info("New economy state: {$newState} ");
+            
+            return $newState;
+        }
+
+        // No transition occurred. Save the incremented time back to Redis.
+        $this->redis->set(self::REDIS_ECONOMY_TIME_KEY, (string) $timeInState);
+
+        return $currentState;
     }
 
     /**

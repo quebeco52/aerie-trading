@@ -2,6 +2,7 @@
 
 namespace App\Service;
 
+use App\Data\EconomicCycle;
 use App\Entity\Stock;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -39,9 +40,10 @@ class EarningsEngine
      *
      * @param Stock $stock The stock entity to process earnings for.
      * @param float $dt    The time step (delta time) used to determine the probability of an earnings event.
+     * @param EconomicCycle|null $economicCycle The current state of the macroeconomic cycle.
      * @return array|null  Returns the generated market event array if an earnings report occurred, otherwise null.
      */
-    public function calculate(Stock $stock, float $dt): ?array
+    public function calculate(Stock $stock, float $dt, ?EconomicCycle $economicCycle = null): ?array
     {
         // Quarterly Earnings (Roughly 4 times per year)
         if ((mt_rand() / mt_getrandmax()) >= (4.0 * $dt)) {
@@ -58,9 +60,12 @@ class EarningsEngine
         // Floor the base so penny stocks/low EPS companies can still grow absolute cents
         $growthBase = max(abs($oldEps), 0.50);
 
+        // Factor in the economic cycle
+        $cycleModifier = $economicCycle ? $economicCycle->getGrowthModifier() : 0.0;
+
         // Analyst Consensus
         // Analysts expect the base growth
-        $expectedEpsGrowth = 0.02 / $saturationPenalty;
+        $expectedEpsGrowth = (0.02 / $saturationPenalty) + $cycleModifier;
         // Round expected EPS to 2 decimals to prevent floating-point "ghost misses"
         $expectedEps = round($oldEps + ($growthBase * $expectedEpsGrowth), 2);
 

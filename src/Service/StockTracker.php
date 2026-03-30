@@ -2,6 +2,7 @@
 
 namespace App\Service;
 
+use App\Data\EconomicCycle;
 use App\Entity\Stock;
 use App\Entity\StockHistory;
 use App\Data\SectorPE;
@@ -54,10 +55,11 @@ class StockTracker
      * @param float   $dt            The time step delta (e.g., in years).
      * @param array   $liveSectorPEs Associative array mapping sector names to their current live P/E ratios.
      * @param bool    $recordHistory Whether to persist the new prices to the stock history table.
+     * @param EconomicCycle|null $economicCycle The current state of the macroeconomic cycle.
      * 
      * @return array{updates: array, total_cap: float, events: array, market_vol: float} Aggregated results of the update.
      */
-    public function updateStocks(array $stocks, float $dt, array $liveSectorPEs, bool $recordHistory): array
+    public function updateStocks(array $stocks, float $dt, array $liveSectorPEs, bool $recordHistory, ?EconomicCycle $economicCycle = null): array
     {
 
         $stockUpdates = [];
@@ -107,7 +109,7 @@ class StockTracker
             }
 
             // Earnings Engine
-            $earningsEvent = $this->earningsEngine->calculate($stock, $dt);
+            $earningsEvent = $this->earningsEngine->calculate($stock, $dt, $economicCycle);
             if ($earningsEvent) {
                 $events[] = $earningsEvent;
             }

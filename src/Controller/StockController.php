@@ -33,7 +33,7 @@ class StockController extends AbstractController
      * @return Response Returns the rendered view with asset details.
      */
     #[Route('/stock/{ticker}', name: 'app_stock_view')]
-    public function view(string $ticker, EntityManagerInterface $entityManager, MacroEngine $macroEngine): Response
+    public function view(string $ticker, EntityManagerInterface $entityManager, MacroEngine $macroEngine, \Redis $redis): Response
     {
         $isEtf = false;
         $asset = $entityManager->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);
@@ -86,6 +86,8 @@ class StockController extends AbstractController
             );
         }
 
+        $economicCycle = $redis->get('economy_state') ?: 'Expansion';
+
         return $this->render('stock/index.html.twig', [
             'asset' => $asset,
             'isEtf' => $isEtf,
@@ -98,6 +100,7 @@ class StockController extends AbstractController
             'events' => $events,
             'targetPE' => $targetPE,
             'ticksPerYear' => (int) ($_ENV['SIM_TICKS_PER_YEAR'] ?? 14400),
+            'economic_cycle' => $economicCycle,
         ]);
     }
 

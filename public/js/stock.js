@@ -46,7 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!window.WS_TICKET || window.WS_TICKET === "") {
         console.log("Guest mode: Live WebSocket updates disabled.");
-        return; 
+        return;
     }
 
     // Automatically use WSS (Secure) if on HTTPS, and detect the current domain
@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Init Main Chart
     const ctx = document.getElementById('mainChart').getContext('2d');
-    
+
     // Create a smooth gradient
     const gradient = ctx.createLinearGradient(0, 0, 0, 400);
     gradient.addColorStop(0, 'rgba(78, 222, 163, 0.2)'); // Secondary at 20%
@@ -196,7 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const rangeLimits = {
         '1w': TICKS_PER_WEEK,
         '1m': TICKS_PER_MONTH,
-        '3m': 1200, 
+        '3m': 1200,
         '6m': 2400,
         '1y': 4800,
         '3y': 5000,
@@ -204,7 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
         '10y': 5000,
         'max': 5000
     };
-    
+
     let currentLimit = rangeLimits['1y'];
 
     function loadHistory(range) {
@@ -267,7 +267,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (vixEl) {
                 const currentVix = (payload.market_vol * 100).toFixed(2);
                 vixEl.innerText = currentVix + '%';
-                
+
                 // If volatility spikes above 30%, flash the text red to warn the user!
                 if (payload.market_vol > 0.30) {
                     vixEl.style.color = COLOR_TERTIary; // Matches your red variable
@@ -276,7 +276,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         }
-        
+
+        if (IS_ETF && payload.economic_cycle) {
+            const cycleElement = document.getElementById('market-economic-cycle');
+
+            if (cycleElement) {
+                cycleElement.innerText = payload.economic_cycle;
+            }
+        }
+
         const stockUpdate = payload.stocks.find(s => s.ticker === CURRENT_TICKER);
 
         if (stockUpdate) {
@@ -369,14 +377,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (noMsg) noMsg.classList.add('hidden');
 
                     const isPositive = parseFloat(evt.change_percent) >= 0;
-                    
+
                     // Match the material symbols from the Twig template
                     let icon = evt.type === 'SHOCK' ? 'bolt' : 'campaign';
                     if (evt.type === 'SPLIT' || evt.type === 'REVSPLIT') icon = 'content_cut';
 
                     // 1. Get the raw description text
                     let rawDesc = evt.description || (evt.type === 'SHOCK' ? 'Sudden market shock detected.' : 'Earnings report released.');
-                    
+
                     // 2. Escape HTML characters to prevent Cross-Site Scripting (XSS)
                     let safeDesc = String(rawDesc).replace(/[&<>"']/g, match => {
                         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[match];
