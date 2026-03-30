@@ -16,8 +16,21 @@ use Doctrine\ORM\EntityManagerInterface;
  */
 class StockTracker
 {
+    /**
+     * @var float The current systemic market volatility (VIX equivalent).
+     */
     private float $currentMarketVol = 0.15;
 
+    /**
+     * Constructor.
+     *
+     * @param EntityManagerInterface $entityManager The Doctrine entity manager.
+     * @param MarketEngine $marketEngine Engine for calculating stock price movements.
+     * @param EarningsEngine $earningsEngine Engine for processing quarterly earnings reports.
+     * @param CorporateActionEngine $corporateActionEngine Engine for handling corporate actions like stock splits.
+     * @param MarketEvent $eventService Publisher for market events, shocks, and headlines.
+     * @param MathUtility $mathUtility Utility for generating standard normal distributions.
+     */
     public function __construct(
         private EntityManagerInterface $entityManager,
         private MarketEngine $marketEngine,
@@ -27,6 +40,23 @@ class StockTracker
         private MathUtility $mathUtility,
     ) {}
 
+    /**
+     * Updates the prices and states of a collection of stocks for a single time step.
+     *
+     * This method orchestrates the full market simulation loop for each stock, including:
+     * - Calculating the next price and volatility using the MarketEngine.
+     * - Checking for and processing random market shocks.
+     * - Evaluating potential quarterly earnings reports.
+     * - Processing corporate actions like stock splits or reverse splits.
+     * - Optionally recording the historical price data.
+     *
+     * @param Stock[] $stocks        Array of Stock entities to update.
+     * @param float   $dt            The time step delta (e.g., in years).
+     * @param array   $liveSectorPEs Associative array mapping sector names to their current live P/E ratios.
+     * @param bool    $recordHistory Whether to persist the new prices to the stock history table.
+     * 
+     * @return array{updates: array, total_cap: float, events: array, market_vol: float} Aggregated results of the update.
+     */
     public function updateStocks(array $stocks, float $dt, array $liveSectorPEs, bool $recordHistory): array
     {
 
@@ -100,9 +130,7 @@ class StockTracker
             $sharesOutstanding = $splitResult['shares'];
             $splitEvent = $splitResult['event'];
 
-            // ==========================================
             // UPDATE THE DOCTRINE ENTITY
-            // ==========================================
             $stock->setPrice((string) $newPrice);
             $stock->setCurrentVolatility((string) $nextVolatility);
 
@@ -141,6 +169,14 @@ class StockTracker
         ];
     }
 
+    /**
+     * Updates the overarching market volatility (The District VIX).
+     *
+     * Applies a Heston-style stochastic variance process with mean reversion,
+     * along with a jump diffusion mechanism to simulate sudden market-wide volatility spikes.
+     *
+     * @param float $dt The time step delta.
+     */
     private function updateDistrictVariance(float $dt): void
     {
         $kappa = 6.0;

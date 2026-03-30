@@ -11,6 +11,13 @@ use Doctrine\ORM\EntityManagerInterface;
  */
 class EarningsEngine
 {
+    /**
+     * Constructor.
+     *
+     * @param EntityManagerInterface $entityManager The Doctrine entity manager.
+     * @param MarketEvent $marketEvent Publisher for all market events, news headlines, and shocks.
+     * @param MathUtility|null $mathUtility Utility for advanced mathematical operations (e.g., generating standard normal distribution).
+     */
     public function __construct(
         private EntityManagerInterface $entityManager,
         private MarketEvent $marketEvent,
@@ -21,6 +28,19 @@ class EarningsEngine
         }
     }
 
+    /**
+     * Calculates and processes a quarterly earnings report for a given stock.
+     *
+     * This method simulates the outcome of an earnings report based on a probability
+     * determined by the time step ($dt). If triggered, it calculates expected vs. actual
+     * earnings per share (EPS), applying growth baselines and a saturation penalty for
+     * larger companies. It also adjusts the stock's volatility based on the statistical
+     * rarity (Z-Score) of the revenue shift.
+     *
+     * @param Stock $stock The stock entity to process earnings for.
+     * @param float $dt    The time step (delta time) used to determine the probability of an earnings event.
+     * @return array|null  Returns the generated market event array if an earnings report occurred, otherwise null.
+     */
     public function calculate(Stock $stock, float $dt): ?array
     {
         // Quarterly Earnings (Roughly 4 times per year)

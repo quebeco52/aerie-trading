@@ -58,7 +58,7 @@ class MarketOperator
 
             // RULE 2: SECOND CLASS PROTECTION
             $systemicFloor = $totalMarketCap * 0.015; // Floor is 1.5% of the index economy
-            if (in_array($ticker, ['IBHI', 'KING', 'PERE', 'OWLS', 'SHRK', 'VULT', 'SAFE', 'WATCH', 'OSPR'])) {
+            if (in_array($ticker, ['IBHI', 'KING', 'PERE', 'OWLS', 'SHRK', 'VULT', 'SAFE', 'WATCH', 'OSPR', 'TICK'])) {
                 if ($marketCap < $systemicFloor) { 
                     $stock->setPrice((string) ($price * 1.02));
                     

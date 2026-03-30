@@ -24,7 +24,7 @@ class MarketEvent
      */
     public function publish(Stock $stock, string $type, string $description, float $changePercent): array
     {
-        // 1. Create the Doctrine Entity
+        // Create the Doctrine Entity
         $event = new StockEvent();
         $event->setStock($stock);
         $event->setEventType($type);
@@ -33,7 +33,7 @@ class MarketEvent
 
         $this->entityManager->persist($event);
 
-        // 2. Log it beautifully for the terminal
+        // Log it beautifully for the terminal
         $color = $changePercent >= 0 ? "\033[32m" : "\033[31m";
         if ($type === 'SHOCK') {
             echo " [!] {$color}MARKET SHOCK on {$stock->getTicker()}: " . number_format($changePercent, 2) . "% \033[0m\n";
@@ -48,11 +48,11 @@ class MarketEvent
             'change_percent' => round($changePercent, 2)
         ];
 
-        // 3. Push to Redis Feed
+        // Push to Redis Feed
         $this->redis->lPush('market_events_list', json_encode($eventData));
         $this->redis->lTrim('market_events_list', 0, 49);
 
-        // 4. Return the exact array format the WebSocket expects
+        // Return the exact array format the WebSocket expects
         return $eventData;
     }
 }
