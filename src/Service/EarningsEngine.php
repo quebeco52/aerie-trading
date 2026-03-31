@@ -53,6 +53,9 @@ class EarningsEngine
         $oldEps = (float) $stock->getEarningsPerShare();
         $sharesOutstanding = (int) $stock->getSharesOutstanding();
         $baselineVol = (float) $stock->getVolatility();
+        $beta = (float) $stock->getBeta();
+
+        // Saturation Penalty
 
         $totalEarnings = max(1.0, abs($oldEps) * $sharesOutstanding);
         $saturationPenalty = max(1.0, log10($totalEarnings / 20000000) + 1.0);
@@ -63,9 +66,11 @@ class EarningsEngine
         // Factor in the economic cycle
         $cycleModifier = $economicCycle ? $economicCycle->getGrowthModifier() : 0.0;
 
+        $companyCycleModifier = $cycleModifier * $beta;
+
         // Analyst Consensus
         // Analysts expect the base growth
-        $expectedEpsGrowth = (0.02 / $saturationPenalty) + $cycleModifier;
+        $expectedEpsGrowth = (0.02 / $saturationPenalty) + $companyCycleModifier;
         // Round expected EPS to 2 decimals to prevent floating-point "ghost misses"
         $expectedEps = round($oldEps + ($growthBase * $expectedEpsGrowth), 2);
 

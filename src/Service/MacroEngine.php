@@ -39,7 +39,7 @@ class MacroEngine
      * @param float $dt The time step in years (e.g., 1/252 for a trading day).
      * @return array<string, float> The updated list of sector P/E ratios.
      */
-    public function updateSectorMultiples(float $dt): array
+    public function updateSectorMultiples(float $dt, EconomicCycle $economicCycle): array
     {
         $liveSectors = $this->getLiveSectors();
         $updatedSectors = [];
@@ -48,22 +48,32 @@ class MacroEngine
         $reversionSpeed = 0.40;
         $macroVol = 0.20;
 
+        // shifts the target P/E up during booms and down during busts.
+        $cycleModifier = match ($economicCycle) {
+            EconomicCycle::RECESSION => 0.85,
+            EconomicCycle::RECOVERY  => 1.00,
+            EconomicCycle::EXPANSION => 1.15,
+            EconomicCycle::PEAK      => 1.25,
+        };
+
         foreach ($liveSectors as $sectorName => $currentPE) {
             $baselinePE = SectorPE::MACRO_SECTORS[$sectorName] ?? 20.0;
 
-            // 1. Convert to Log Space
-            $logCurrent = log($currentPE);
-            $logBaseline = log($baselinePE);
+            $targetPE = $baselinePE * $cycleModifier;
 
-            // 2. Calculate the Log-Gravity and Log-Drift
+            // Convert to Log Space
+            $logCurrent = log($currentPE);
+            $logBaseline = log($targetPE);
+
+            // Calculate the Log-Gravity and Log-Drift
             $logPull = $reversionSpeed * ($logBaseline - $logCurrent) * $dt;
             $z = $this->mathUtility->generateStandardNormal();
             $logDrift = $macroVol * sqrt($dt) * $z;
 
-            // 3. Apply the changes in Log Space
+            // Apply the changes in Log Space
             $newLogPE = $logCurrent + $logPull + $logDrift;
 
-            // 4. Convert back to Linear Space
+            // Convert back to Linear Space
             $newPE = exp($newLogPE);
 
             $updatedSectors[$sectorName] = $newPE;
