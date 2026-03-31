@@ -113,7 +113,6 @@ class MacroEngine
 
             case EconomicCycle::PEAK:
                 // The economy is suffocating under high rates. 
-                // At 5%, it's struggling. At 7%, an instant crash is almost guaranteed.
                 if ($councilRate > 0.04) {
                     $pressure = ($councilRate - 0.04) / 0.02; 
                     $transitionProbability = ($dt / 0.25) * $pressure;
@@ -146,27 +145,55 @@ class MacroEngine
     private const REDIS_COUNCIL_RATE_KEY = 'council_interest_rate';
 
     /**
-     * The Council of Thirteen adjusts the District's base interest rate.
+     * The Council of Thirteen meets periodically to adjust the District's base interest rate.
      */
     public function updateCouncilRate(float $dt, EconomicCycle $currentState): float
     {
-        // Default starting rate is 2% (0.02)
         $currentRate = (float) ($this->redis->get(self::REDIS_COUNCIL_RATE_KEY) ?: 0.02);
 
-        // How much the Council adjusts the rate per year
-        $rateChangePerYear = match ($currentState) {
-            EconomicCycle::RECOVERY  =>  0.000, // Hold steady at the bottom
-            EconomicCycle::EXPANSION =>  0.015, // Slow, steady rate hikes (+1.5% a year)
-            EconomicCycle::PEAK      =>  0.005, // Final squeeze (+0.5% a year)
-            EconomicCycle::RECESSION => -0.050, // PANIC CUTS! (-5.0% a year)
+        // The Meeting Schedule
+        $meetingFrequency = ($currentState === EconomicCycle::RECESSION) ? 24.0 : 8.0;
+        
+        // Roll the dice to see if a meeting is happening
+        if ((mt_rand() / mt_getrandmax()) > ($meetingFrequency * $dt)) {
+            // No meeting. Rates stay perfectly flat.
+            return $currentRate; 
+        }
+
+        // Determine the Council's Target Rate.
+        $targetRate = match ($currentState) {
+            EconomicCycle::RECOVERY  => 0.010, // Aim for 1.0% (Stimulative)
+            EconomicCycle::EXPANSION => 0.045, // Aim for 4.5% (Neutral/Tightening)
+            EconomicCycle::PEAK      => 0.065, // Aim for 6.5% (The Squeeze)
+            EconomicCycle::RECESSION => 0.000, // Aim for 0.0% (Panic Mode)
         };
 
-        $newRate = $currentRate + ($rateChangePerYear * $dt);
+        // Are we already at the target? The Council issues a "Pause" and holds rates steady.
+        if (abs($targetRate - $currentRate) < 0.001) {
+            return $currentRate; 
+        }
 
+        // 3. Make the Move in Basis Points (bps)
+        $moveDirection = ($targetRate > $currentRate) ? 1 : -1;
+        $bpsMove = 0.0025; // Standard move is 25 basis points (0.25%)
+
+        // Aggressive moves: If they are crashing, or way behind the curve at the peak
+        if ($currentState === EconomicCycle::RECESSION) {
+            $bpsMove = 0.0050; // 50 bps emergency cuts
+        } elseif ($currentState === EconomicCycle::PEAK && abs($targetRate - $currentRate) > 0.015) {
+            $bpsMove = 0.0050;
+        }
+
+        $newRate = $currentRate + ($bpsMove * $moveDirection);
+        
         // The Council never lets rates go below 0% or above 10%
         $newRate = max(0.00, min(0.10, $newRate));
 
         $this->redis->set(self::REDIS_COUNCIL_RATE_KEY, (string) $newRate);
+
+        // Optional: Log the meeting outcome to your server console
+        $action = $moveDirection > 0 ? "hiked" : "slashed";
+        $this->logger->info("BREAKING: The Council of Thirteen convened and {$action} rates to " . ($newRate * 100) . "%");
 
         return $newRate;
     }
