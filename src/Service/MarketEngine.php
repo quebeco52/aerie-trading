@@ -2,9 +2,6 @@
 
 namespace App\Service;
 
-use App\Data\EconomicCycle;
-
-
 /**
  * Service responsible for calculating stock price movements based on various market factors.
  *
@@ -35,6 +32,7 @@ class MarketEngine
      * @param float $earningsPerShare   The current earnings per share (EPS).
      * @param float $targetPE           The target P/E ratio for the stock's sector.
      * @param float $dt                 The time step for the simulation (in years).
+     * @param float $drift              The expected return (drift) of the stock.
      * @param float $lambda             The jump intensity (average number of jumps per year).
      * @param float $jumpMean           The mean size of a jump (log-return).
      * @param float $jumpVol            The volatility of the jump size.
@@ -46,7 +44,6 @@ class MarketEngine
      * @param float $volOfVol           The volatility of volatility (how much volatility fluctuates).
      * @param float $rho                The correlation between price and volatility (usually negative).
      *
-     * @param EconomicCycle|null $economicCycle The current macroeconomic state, which can influence the base drift.
      * @return array{price: float, shock: float|null, next_volatility: float} The calculated next price, shock percentage, and updated volatility.
      */
     public function calculateNextPrice(
@@ -62,29 +59,12 @@ class MarketEngine
         float $beta = 1.0,
         float $marketZ = 0.0,
         float $marketVol = 0.15,
-        float $reversionSpeed = 0.3,
+        float $drift = 0.1,
+        float $reversionSpeed = 0.4,
         float $kappa = 6.0,
         float $volOfVol = 0.2,
         float $rho = -0.7,
-        ?EconomicCycle $economicCycle = null
     ): array {
-
-        // Set the core market baselines
-        $riskFreeRate = 0.02;
-        $baseMarketPremium = 0.06;
-
-        // Get the current cycle's modifier
-        $macroModifier = 0.0;
-        if ($economicCycle) {
-            $macroModifier = $economicCycle->getDriftModifier();
-        }
-
-        // Combine the base premium with the current economic mood
-        $totalMarketPremium = $baseMarketPremium + $macroModifier;
-
-        // Calculate the final drift using CAPM
-        // The Beta ONLY scales the market risk portion, not the risk-free rate.
-        $drift = $riskFreeRate + ($totalMarketPremium * $beta);
 
         // Generate Correlated Random Variables
         $z1 = $this->mathUtility->generateStandardNormal();
@@ -105,6 +85,7 @@ class MarketEngine
         // Ensure variance never goes negative (Full Truncation method)
         $nextVariance = max(0.000001, $currentVariance + $dv);
         $nextVolatility = sqrt($nextVariance);
+        
 
         // Calculate Fair Value & Gravity
         $valuationEps = max($earningsPerShare, 0.01);

@@ -53,7 +53,7 @@ class MacroEngine
             EconomicCycle::RECESSION => 0.85,
             EconomicCycle::RECOVERY  => 1.00,
             EconomicCycle::EXPANSION => 1.15,
-            EconomicCycle::PEAK      => 1.25,
+            EconomicCycle::PEAK      => 1.30,
         };
 
         foreach ($liveSectors as $sectorName => $currentPE) {

@@ -16,24 +16,10 @@ enum EconomicCycle: string
     public function getGrowthModifier(): float
     {
         return match ($this) {
-            self::RECESSION => -0.015, // -1.5% base drag on earnings growth
-            self::RECOVERY  => 0.005, // +0.5% base boost
-            self::EXPANSION => 0.02, // +2% base boost
+            self::RECESSION => -0.045, // -4.5% base drag on earnings growth
+            self::RECOVERY  => 0.01, // +1% base boost
+            self::EXPANSION => 0.045, // +4.5% base boost
             self::PEAK      => 0.00,  // Growth flattens, preparing for a downturn
-        };
-    }
-
-    /**
-     * Returns a modifier to the base market drift (investor sentiment).
-     * A positive value is a tailwind, a negative value is a headwind.
-     */
-    public function getDriftModifier(): float
-    {
-        return match ($this) {
-            self::RECESSION => -0.18,
-            self::RECOVERY  => -0.02,
-            self::EXPANSION => 0.06,
-            self::PEAK      => -0.05,
         };
     }
 
@@ -52,7 +38,7 @@ enum EconomicCycle: string
         return match ($this) {
             self::RECESSION => 1.20,
             self::RECOVERY  => 1.00,
-            self::EXPANSION => 0.85,
+            self::EXPANSION => 0.90,
             self::PEAK      => 1.10,
         };
     }
