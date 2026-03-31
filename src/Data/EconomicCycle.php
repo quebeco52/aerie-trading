@@ -3,8 +3,8 @@
 namespace App\Data;
 
 /**
- * Represents the different states of the macroeconomic cycle.
- * Each state has a corresponding modifier that affects earnings growth expectations.
+ * Represents the different states of the macroeconomic cycle, each with corresponding
+ * modifiers that affect earnings growth expectations and overall market drift.
  */
 enum EconomicCycle: string
 {
@@ -20,6 +20,20 @@ enum EconomicCycle: string
             self::RECOVERY  => 0.005, // +0.5% base boost
             self::EXPANSION => 0.02, // +2% base boost
             self::PEAK      => 0.00,  // Growth flattens, preparing for a downturn
+        };
+    }
+
+    /**
+     * Returns a modifier to the base market drift (investor sentiment).
+     * A positive value is a tailwind, a negative value is a headwind.
+     */
+    public function getDriftModifier(): float
+    {
+        return match ($this) {
+            self::RECESSION => -0.06, // -6% drag on market sentiment/drift
+            self::RECOVERY  => 0.02,  // +2% boost
+            self::EXPANSION => 0.06,  // +6% boost
+            self::PEAK      => -0.01, // -1% drag as market anticipates a downturn
         };
     }
 }

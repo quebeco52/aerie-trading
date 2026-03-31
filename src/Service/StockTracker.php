@@ -97,7 +97,8 @@ class StockTracker
                 jumpVol: (float) $stock->getJumpVol(),
                 beta: (float) $stock->getBeta(),
                 marketZ: $marketZ,
-                marketVol: $marketVol
+                marketVol: $marketVol,
+                economicCycle: $economicCycle
             );
 
             $newPrice = $calculation['price'];

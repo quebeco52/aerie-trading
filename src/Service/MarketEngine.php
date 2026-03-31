@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Service;
+use App\Data\EconomicCycle;
 
 
 /**
@@ -45,6 +46,7 @@ class MarketEngine
      * @param float $volOfVol           The volatility of volatility (how much volatility fluctuates).
      * @param float $rho                The correlation between price and volatility (usually negative).
      *
+     * @param EconomicCycle|null $economicCycle The current macroeconomic state, which can influence the base drift.
      * @return array{price: float, shock: float|null, next_volatility: float} The calculated next price, shock percentage, and updated volatility.
      */
     public function calculateNextPrice(
@@ -60,13 +62,18 @@ class MarketEngine
         float $beta = 1.0,
         float $marketZ = 0.0,
         float $marketVol = 0.15,
-        float $drift = 0.1,
+        float $drift = 0.08,
         float $reversionSpeed = 0.3,
         float $kappa = 6.0,
         float $volOfVol = 0.2,
-        float $rho = -0.7
+        float $rho = -0.7,
+        ?EconomicCycle $economicCycle = null
     ): array {
 
+        // Adjust drift based on the macroeconomic cycle
+        if ($economicCycle) {
+            $drift += $economicCycle->getDriftModifier();
+        }
         // Generate Correlated Random Variables
         $z1 = $this->mathUtility->generateStandardNormal();
         $z2 = $this->mathUtility->generateStandardNormal();
