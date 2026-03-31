@@ -30,10 +30,10 @@ enum EconomicCycle: string
     public function getDriftModifier(): float
     {
         return match ($this) {
-            self::RECESSION => -0.06, // -6% drag on market sentiment/drift
-            self::RECOVERY  => 0.02,  // +2% boost
-            self::EXPANSION => 0.06,  // +6% boost
-            self::PEAK      => -0.01, // -1% drag as market anticipates a downturn
+            self::RECESSION => -0.08, // -8% drag on market sentiment/drift
+            self::RECOVERY  => 0.04,  // +4% boost
+            self::EXPANSION => 0.08,  // +8% boost
+            self::PEAK      => -0.02, // -2% drag as market anticipates a downturn
         };
     }
 }
