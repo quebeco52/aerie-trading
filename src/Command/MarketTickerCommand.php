@@ -121,7 +121,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $this->entityManager->beginTransaction();
 
                 // 1. Update the Macro Economy (Sector P/Es drift)
-                
+
                 $economicCycle = $this->macroEngine->updateBoomBust($dt);
                 $liveSectorPEs = $this->macroEngine->updateSectorMultiples($dt, $economicCycle);
 
@@ -129,12 +129,12 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $isHistoryTick = ($tickCount % $historyInterval === 0);
 
                 // 2. Update the Stocks
-                $result = $this->stockTracker->updateStocks($stocks, $dt, $liveSectorPEs, $isHistoryTick, $economicCycle);
+                $result = $this->stockTracker->updateStocks($stocks, $dt, $liveSectorPEs, $isHistoryTick, $economicCycle, $tickCount, $this->ticksPerYear);
                 $stockUpdates = $result['updates'];
                 $totalMarketCap = $result['total_cap'];
                 $events = $result['events'] ?? [];
                 $marketVol = $result['market_vol'] ?? 0.15;
-                
+
                 if (!empty($operatorEvents)) {
                     $events = array_merge($events, $operatorEvents);
                 }
@@ -152,18 +152,25 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 }
 
                 if (!empty($allUpdates)) {
-
                     $nowStr = (new \DateTime())->format('Y-m-d H:i:s');
-
                     $redisBufferSize = (int) ceil($this->ticksPerYear / 12);
+
+                    // Open the pipeline
+                    $pipeline = $this->redis->multi(\Redis::PIPELINE);
 
                     foreach ($allUpdates as $update) {
                         $cacheKey = "chart_buffer:{$update['ticker']}";
                         $point = json_encode(['price' => $update['price'], 'recorded_at' => $nowStr]);
-                        $this->redis->lPush($cacheKey, $point);
-                        $this->redis->lTrim($cacheKey, 0,  $redisBufferSize - 1);
+
+                        // Queue the commands in the pipeline instead of executing them immediately
+                        $pipeline->lPush($cacheKey, $point);
+                        $pipeline->lTrim($cacheKey, 0,  $redisBufferSize - 1);
                     }
 
+                    // Execute all queued commands in one massive, instantaneous burst
+                    $pipeline->exec();
+
+                    // Publish your standard pub/sub updates
                     $this->redis->publish('market_updates', json_encode([
                         'timestamp' => time(),
                         'stocks' => $allUpdates,

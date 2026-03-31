@@ -43,10 +43,28 @@ class EarningsEngine
      * @param EconomicCycle|null $economicCycle The current state of the macroeconomic cycle.
      * @return array|null  Returns the generated market event array if an earnings report occurred, otherwise null.
      */
-    public function calculate(Stock $stock, float $dt, ?EconomicCycle $economicCycle = null): ?array
+    public function calculate(Stock $stock, float $dt, ?EconomicCycle $economicCycle = null, int $tickCount, int $ticksPerYear): ?array
     {
-        // Quarterly Earnings (Roughly 4 times per year)
-        if ((mt_rand() / mt_getrandmax()) >= (4.0 * $dt)) {
+        
+        $ticksPerQuarter = (int) ($ticksPerYear / 4);
+        
+        // Define the season length (e.g., 30 days out of ~91 days in a quarter)
+        // 30 days is roughly 33% of a quarter.
+        $ticksPerSeason = (int) ($ticksPerQuarter * 0.20); 
+        
+        // Where are we currently within the 3-month quarter?
+        $currentQuarterTick = $tickCount % $ticksPerQuarter;
+        
+        // 1. Are we outside the Earnings Season?
+        if ($currentQuarterTick > $ticksPerSeason) {
+            return null;
+        }
+        
+        //  Assign this stock a permanent, deterministic reporting tick.
+        $reportingTick = abs(crc32($stock->getTicker())) % max(1, $ticksPerSeason);
+        
+        // Is it this specific stock's exact turn to report
+        if ($currentQuarterTick !== $reportingTick) {
             return null;
         }
 

@@ -59,7 +59,7 @@ class StockTracker
      * 
      * @return array{updates: array, total_cap: float, events: array, market_vol: float} Aggregated results of the update.
      */
-    public function updateStocks(array $stocks, float $dt, array $liveSectorPEs, bool $recordHistory, ?EconomicCycle $economicCycle = null): array
+    public function updateStocks(array $stocks, float $dt, array $liveSectorPEs, bool $recordHistory, ?EconomicCycle $economicCycle = null, int $tickCount, int $ticksPerYear): array
     {
 
         $stockUpdates = [];
@@ -81,8 +81,7 @@ class StockTracker
 
             // Determine Volatility
             $baselineVol = (float) $stock->getVolatility();
-            $currentVol = (float) $stock->getCurrentVolatility() ?? $baselineVol;
-
+            $currentVol = (float) ($stock->getCurrentVolatility() ?? $baselineVol);
             // Calculate new price
             $calculation = $this->marketEngine->calculateNextPrice(
                 currentPrice: (float) $stock->getPrice(),
@@ -108,7 +107,7 @@ class StockTracker
             }
 
             // Earnings Engine
-            $earningsEvent = $this->earningsEngine->calculate($stock, $dt, $economicCycle);
+            $earningsEvent = $this->earningsEngine->calculate($stock, $dt, $economicCycle, $tickCount, $ticksPerYear);
             if ($earningsEvent) {
                 $events[] = $earningsEvent;
             }
