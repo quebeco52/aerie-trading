@@ -183,6 +183,13 @@
 							</div>
 						</div>
 
+						<div class="bg-gray-800 text-white p-4 rounded-lg flex items-center justify-between">
+							<span class="text-sm text-gray-400">The Council Rate:</span>
+							<span id="council-rate-value" class="ml-2 font-bold text-lg text-[#dae2fd]">
+								--
+							</span>
+						</div>
+
 						<div class="relative h-72 w-full flex justify-center">
 							<canvas id="etfPieChart"></canvas>
 						</div>
@@ -247,7 +254,8 @@ sharesMap: {
 {% if isEtf and allAssets is defined %}
 {% for a in allAssets %}"{{ a.ticker }}" : {{ a.sharesOutstanding }}
 {{ not loop.last ? ',' : '' }}
-{% endfor %}{% endif %}
+{% endfor %}
+{% endif %}
 },
 ticksPerYear: {{ ticksPerYear }}
 };

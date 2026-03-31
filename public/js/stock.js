@@ -285,6 +285,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        if (IS_ETF && payload.council_rate !== undefined) {
+            const councilRateEl = document.getElementById('council-rate-value');
+
+            if (councilRateEl) {
+                // Convert 0.035 to "3.50%"
+                const formattedRate = (payload.council_rate * 100).toFixed(2) + '%';
+                councilRateEl.innerText = formattedRate;
+            }
+        }
+
         const stockUpdate = payload.stocks.find(s => s.ticker === CURRENT_TICKER);
 
         if (stockUpdate) {

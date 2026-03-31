@@ -2,6 +2,7 @@
 
 namespace App\Command;
 
+use App\Data\EconomicCycle;
 use App\Entity\Stock;
 use App\Service\StockTracker;
 use App\Service\EtfTracker;
@@ -120,16 +121,26 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             try {
                 $this->entityManager->beginTransaction();
 
-                // 1. Update the Macro Economy (Sector P/Es drift)
+                // Update the Macro Economy (Sector P/Es drift)
 
-                $economicCycle = $this->macroEngine->updateBoomBust($dt);
+                // Get the current cycle
+                $currentCycleStr = $this->redis->get('economy_state') ?: EconomicCycle::EXPANSION->value;
+                $economicCycle = EconomicCycle::from($currentCycleStr);
+
+                // The Council of Thirteen sets the new rate
+                $councilRate = $this->macroEngine->updateCouncilRate($dt, $economicCycle);
+
+                // The Economy reacts to the Council's rate
+                $economicCycle = $this->macroEngine->updateBoomBust($dt, $councilRate);
+
+                // Update the Sector P/Es
                 $liveSectorPEs = $this->macroEngine->updateSectorMultiples($dt, $economicCycle);
 
                 // Check if it's time to record a database snapshot
                 $isHistoryTick = ($tickCount % $historyInterval === 0);
 
                 // 2. Update the Stocks
-                $result = $this->stockTracker->updateStocks($stocks, $dt, $liveSectorPEs, $isHistoryTick, $economicCycle, $tickCount, $this->ticksPerYear);
+                $result = $this->stockTracker->updateStocks($stocks, $dt, $liveSectorPEs, $isHistoryTick, $economicCycle, $councilRate, $tickCount, $this->ticksPerYear);
                 $stockUpdates = $result['updates'];
                 $totalMarketCap = $result['total_cap'];
                 $events = $result['events'] ?? [];
@@ -178,6 +189,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                         'sectors' => $liveSectorPEs,
                         'market_vol' => $marketVol,
                         'economic_cycle' => $economicCycle->value,
+                        'council_rate'   => $councilRate,
                     ]));
 
                     $this->redis->set('stocks_live_data', json_encode($stockUpdates));

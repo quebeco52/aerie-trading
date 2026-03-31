@@ -86,70 +86,89 @@ class MacroEngine
     }
 
     /**
-     * Updates the state of the economy using a time-aware Hazard Function.
-     *
-     * Enforces a minimum time spent in each state, and ramps up the probability
-     * of a transition as the state approaches its maximum allowed duration.
-     *
-     * @param float $dt The time step in years.
-     * @return EconomicCycle The current (and possibly new) state of the economy.
+     * Updates the state of the economy based on the Council of Thirteen's interest rates.
      */
-    public function updateBoomBust(float $dt): EconomicCycle
+    public function updateBoomBust(float $dt, float $councilRate): EconomicCycle
     {
         $currentStateStr = $this->redis->get(self::REDIS_ECONOMY_STATE_KEY) ?: EconomicCycle::EXPANSION->value;
         $currentState = EconomicCycle::from($currentStateStr);
-        
-        // Retrieve the time spent in the current state (default to 0.0)
-        $timeInState = (float) ($this->redis->get(self::REDIS_ECONOMY_TIME_KEY) ?: 0.0);
-        $timeInState += $dt;
 
-        $targetDuration = $currentState->getTargetDuration();
-        
-        // Define our boundaries
-        $minDuration = $targetDuration * 0.50; // Must spend at least 50% of target time
-        $maxDuration = $targetDuration * 1.50; // Forced exit at 150% of target time
+        $transitionProbability = 0.0;
 
-        $transitioned = false;
+        switch ($currentState) {
+            case EconomicCycle::RECOVERY:
+                // Recovery naturally bleeds into an Expansion after the dust settles.
+                $transitionProbability = $dt / 1.0; 
+                $nextState = EconomicCycle::EXPANSION;
+                break;
 
-        // The Ceiling (Force a transition if it's been going on too long)
-        if ($timeInState >= $maxDuration) {
-            $transitioned = true;
-        } 
-        // The Hazard Zone (Roll the dice with increasing probability)
-        elseif ($timeInState >= $minDuration) {
-            // As timeInState approaches maxDuration, the remaining window shrinks to zero.
-            // Dividing $dt by a shrinking window means the probability continuously rises.
-            $remainingWindow = max(0.0001, $maxDuration - $timeInState);
-            $transitionProbability = $dt / $remainingWindow;
+            case EconomicCycle::EXPANSION:
+                // Below 3%, no chance of peaking. Above 3%, the pressure builds.
+                if ($councilRate > 0.03) {
+                    $pressure = ($councilRate - 0.03) / 0.03; // Scales from 0 to 1+
+                    $transitionProbability = ($dt / 0.5) * $pressure; 
+                }
+                $nextState = EconomicCycle::PEAK;
+                break;
 
-            if ((mt_rand() / mt_getrandmax()) < $transitionProbability) {
-                $transitioned = true;
-            }
-        }
-        // The Floor (If timeInState < minDuration, do nothing. Transition is impossible.)
+            case EconomicCycle::PEAK:
+                // The economy is suffocating under high rates. 
+                // At 5%, it's struggling. At 7%, an instant crash is almost guaranteed.
+                if ($councilRate > 0.04) {
+                    $pressure = ($councilRate - 0.04) / 0.02; 
+                    $transitionProbability = ($dt / 0.25) * $pressure;
+                }
+                $nextState = EconomicCycle::RECESSION;
+                break;
 
-        if ($transitioned) {
-            // Time to transition to the next state
-            $newState = match ($currentState) {
-                EconomicCycle::RECESSION => EconomicCycle::RECOVERY,
-                EconomicCycle::RECOVERY  => EconomicCycle::EXPANSION,
-                EconomicCycle::EXPANSION => EconomicCycle::PEAK,
-                EconomicCycle::PEAK      => EconomicCycle::RECESSION,
-            };
-            
-            // Save the new state and RESET the timer back to 0
-            $this->redis->set(self::REDIS_ECONOMY_STATE_KEY, $newState->value);
-            $this->redis->set(self::REDIS_ECONOMY_TIME_KEY, '0.0');
-
-            $this->logger->info("New economy state: {$newState->value} ");
-            
-            return $newState;
+            case EconomicCycle::RECESSION:
+                // The economy only stops crashing when the Council has slashed rates 
+                // back down to stimulate growth.
+                if ($councilRate < 0.02) {
+                    // Rates are cheap again The probability of recovery skyrockets.
+                    $relief = (0.02 - $councilRate) / 0.02;
+                    $transitionProbability = ($dt / 0.2) * $relief;
+                }
+                $nextState = EconomicCycle::RECOVERY;
+                break;
         }
 
-        // No transition occurred. Save the incremented time back to Redis.
-        $this->redis->set(self::REDIS_ECONOMY_TIME_KEY, (string) $timeInState);
+        // Roll the dice against the rate-driven probability
+        if ((mt_rand() / mt_getrandmax()) < $transitionProbability) {
+            $this->redis->set(self::REDIS_ECONOMY_STATE_KEY, $nextState->value);
+            $this->logger->info("The Council's actions pushed the economy into: {$nextState->value} (Rate: " . round($councilRate * 100, 2) . "%)");
+            return $nextState;
+        }
 
         return $currentState;
+    }
+
+    private const REDIS_COUNCIL_RATE_KEY = 'council_interest_rate';
+
+    /**
+     * The Council of Thirteen adjusts the District's base interest rate.
+     */
+    public function updateCouncilRate(float $dt, EconomicCycle $currentState): float
+    {
+        // Default starting rate is 2% (0.02)
+        $currentRate = (float) ($this->redis->get(self::REDIS_COUNCIL_RATE_KEY) ?: 0.02);
+
+        // How much the Council adjusts the rate per year
+        $rateChangePerYear = match ($currentState) {
+            EconomicCycle::RECOVERY  =>  0.000, // Hold steady at the bottom
+            EconomicCycle::EXPANSION =>  0.015, // Slow, steady rate hikes (+1.5% a year)
+            EconomicCycle::PEAK      =>  0.005, // Final squeeze (+0.5% a year)
+            EconomicCycle::RECESSION => -0.050, // PANIC CUTS! (-5.0% a year)
+        };
+
+        $newRate = $currentRate + ($rateChangePerYear * $dt);
+
+        // The Council never lets rates go below 0% or above 10%
+        $newRate = max(0.00, min(0.10, $newRate));
+
+        $this->redis->set(self::REDIS_COUNCIL_RATE_KEY, (string) $newRate);
+
+        return $newRate;
     }
 
     /**
