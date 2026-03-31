@@ -81,9 +81,7 @@ class StockTracker
 
             // Determine Volatility
             $baselineVol = (float) $stock->getVolatility();
-            $currentVol = $stock->getCurrentVolatility() !== null
-                ? (float) $stock->getCurrentVolatility()
-                : $baselineVol;
+            $currentVol = (float) $stock->getCurrentVolatility() ?? $baselineVol;
 
             // Calculate new price
             $calculation = $this->marketEngine->calculateNextPrice(
@@ -184,8 +182,16 @@ class StockTracker
     private function updateDistrictVariance(float $dt, ?EconomicCycle $economicCycle = null): void
     {
         $kappa = 6.0;
-        $longTermVolatility = 0.15;
+        $baseVolatility = 0.15;
         $volOfVol = 0.30;
+
+        $cycleVolModifier = 1.0;
+        if ($economicCycle) {
+            $cycleVolModifier = $economicCycle->getVolatilityModifier();
+        }
+
+        $longTermVolatility = $baseVolatility * $cycleVolModifier;
+
 
         $currentVariance = pow($this->currentMarketVol, 2);
         $longTermVariance = pow($longTermVolatility, 2);

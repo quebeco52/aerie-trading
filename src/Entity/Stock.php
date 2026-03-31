@@ -100,6 +100,9 @@ class Stock
     #[ORM\Column(type: Types::TEXT, nullable: true)]
     private ?string $description = null;
 
+    #[ORM\Column(length: 255)]
+    private ?string $systemicImportance = null;
+
     public function getId(): ?int
     {
         return $this->id;
@@ -265,6 +268,18 @@ class Stock
     public function setDescription(?string $description): static
     {
         $this->description = $description;
+        return $this;
+    }
+
+    public function getSystemicImportance(): ?string
+    {
+        return $this->systemicImportance;
+    }
+
+    public function setSystemicImportance(string $systemicImportance): static
+    {
+        $this->systemicImportance = $systemicImportance;
+
         return $this;
     }
 }

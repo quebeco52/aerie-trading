@@ -46,4 +46,14 @@ enum EconomicCycle: string
             self::PEAK      => 0.75, // 9 months
         };
     }
+
+    public function getVolatilityModifier(): float
+    {
+        return match ($this) {
+            self::RECESSION => 1.20,
+            self::RECOVERY  => 1.00,
+            self::EXPANSION => 0.85,
+            self::PEAK      => 1.10,
+        };
+    }
 }

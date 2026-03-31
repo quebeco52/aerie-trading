@@ -65,7 +65,8 @@ class MarketResetCommand extends Command
                     current_volatility = :vol,
                     beta = :beta,
                     jump_intensity = :jump_int,
-                    jump_mean = :jump_mean,
+                    jump_mean = :jump_mean, 
+                    systemic_importance = :importance,
                     jump_vol = :jump_vol
                 WHERE ticker = :ticker',
                 [
@@ -77,6 +78,7 @@ class MarketResetCommand extends Command
                     'jump_int' => $stockData['jump_intensity'],
                     'jump_mean' => $stockData['jump_mean'],
                     'jump_vol' => $stockData['jump_vol'],
+                    'importance' => $stockData['systemic_importance'] ?? 'none',
                     'ticker' => $stockData['ticker']
                 ]
             );

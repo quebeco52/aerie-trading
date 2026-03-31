@@ -26,7 +26,7 @@ class MarketOperator
         $this->logger->info("The Market Operator is reviewing the district...");
         $generatedEvents = [];
 
-        // 1. Calculate the Total Market Cap of the entire district on the fly
+        // Calculate the Total Market Cap of the entire district on the fly
         $totalMarketCap = 0;
         foreach ($stocks as $stock) {
             $totalMarketCap += ((float) $stock->getPrice()) * ((int) $stock->getSharesOutstanding());
@@ -40,54 +40,45 @@ class MarketOperator
             $marketCap = $price * $shares;
             $eps = (float) $stock->getEarningsPerShare();
             $name = $stock->getName();
-            $ticker = $stock->getTicker();
+            $systemicImportance = $stock->getSystemicImportance() ?? 'none';
 
-            // RULE 1: THE OLIGARCHY (Plot Armor for the Titans LAKE, SWAN and BRKW)
-            $titanFloor = $totalMarketCap * 0.04; // Floor is 4% of the index economy
-            if (in_array($ticker, ['LAKE', 'SWAN', 'BRKW'])) {
-                if ($marketCap < $titanFloor) { 
-                    $stock->setPrice((string) ($price * 1.03));
-                    
-                    // Gradually push EPS up to $0.40 if it falls below, otherwise buff by 3%
-                    $newEps = $eps < 0.4 ? min(0.4, $eps + 0.20) : $eps * 1.03;
-                    $stock->setEarningsPerShare((string) round($newEps, 2)); 
-                    
-                    $this->logger->info("TITAN PROTECTION: {$ticker} subsidized (Fell below 4% index dominance).");
-                }
+            // RULE : bailouts
+
+            $bailoutFloor = 0.0;
+            $bailoutMultiplier = 1.0;
+            $bailoutTier = null;
+
+            switch ($systemicImportance) {
+                case 'titan':
+                    $bailoutFloor = $totalMarketCap * 0.04; // Floor is 4% of the index economy
+                    $bailoutMultiplier = 1.03;
+                    $bailoutTier = 'TITAN PROTECTION';
+                    break;
+                case 'systemic':
+                    $bailoutFloor = $totalMarketCap * 0.015; // Floor is 1.5% of the index economy
+                    $bailoutMultiplier = 1.02;
+                    $bailoutTier = 'SYSTEMIC BAILOUT';
+                    break;
+                case 'base':
+                    $bailoutFloor = $totalMarketCap * 0.01; // Floor is 1% of the index economy
+                    $bailoutMultiplier = 1.02;
+                    $bailoutTier = 'BASE CLASS BAILOUT';
+                    break;
             }
 
-            // RULE 2: SECOND CLASS PROTECTION
-            $systemicFloor = $totalMarketCap * 0.015; // Floor is 1.5% of the index economy
-            if (in_array($ticker, ['IBHI', 'KING', 'PERE', 'OWLS', 'SHRK', 'VULT', 'SAFE', 'WATCH', 'OSPR', 'TICK'])) {
-                if ($marketCap < $systemicFloor) { 
-                    $stock->setPrice((string) ($price * 1.02));
-                    
-                    // Gradually push EPS up to $0.40 if it falls below, otherwise buff by 2%
-                    $newEps = $eps < 0.4 ? min(0.4, $eps + 0.20) : $eps * 1.02;
-                    $stock->setEarningsPerShare((string) round($newEps, 2)); 
-                    
-                    $this->logger->info("SYSTEMIC BAILOUT: {$ticker} subsidized (Fell below 1.5% index dominance).");
-                }
-            }
+            if ($bailoutTier && $marketCap < $bailoutFloor) {
+                $stock->setPrice((string) ($price * $bailoutMultiplier));
 
-            // RULE 3: BASE CLASS PROTECTION
-            $baseFloor = $totalMarketCap * 0.01; // Floor is 1% of the index economy
-            if (in_array($ticker, ['WING', 'BIRD', 'DOVE', 'WADE', 'CROP'])) {
-                if ($marketCap < $baseFloor) { 
-                    $stock->setPrice((string) ($price * 1.02));
-                    
-                    // Gradually push EPS up to $0.40 if it falls below, otherwise buff by 2%
-                    $newEps = $eps < 0.4 ? min(0.4, $eps + 0.20) : $eps * 1.02;
-                    $stock->setEarningsPerShare((string) round($newEps, 2)); 
-                    
-                    $this->logger->info("BASE CLASS BAILOUT: {$ticker} subsidized (Fell below 1% index dominance).");
-                }
+                // Gradually push EPS up to $0.40 if it falls below, otherwise buff by the multiplier
+                $newEps = $eps < 0.4 ? min(0.4, $eps + 0.20) : $eps * $bailoutMultiplier;
+                $stock->setEarningsPerShare((string) round($newEps, 2));
+
+                $this->logger->info("{$bailoutTier}: {$stock->getTicker()} subsidized (Fell below dominance floor).");
             }
             
             
 
-            // RULE 4: THE RESTRUCTURING (Hostile Takeover vs. White Knight Bailout)
-
+            // RULE : THE RESTRUCTURING (Hostile Takeover vs. White Knight Bailout)
             if ($marketCap < 1000000000) {
 
 
@@ -99,7 +90,7 @@ class MarketOperator
 
                 if ($isHostile) {
                     // BLACK SWAN CAPITAL (Hostile)
-                    $this->logger->info("BANKRUPTCY DETECTED: {$ticker} collapsed. Black Swan Capital initiating hostile liquidation.");
+                    $this->logger->info("BANKRUPTCY DETECTED: {$stock->getTicker()} collapsed. Black Swan Capital initiating hostile liquidation.");
 
                     // Vaporize the players shares 0
                     $this->entityManager->getConnection()->executeStatement(
@@ -113,11 +104,11 @@ class MarketOperator
                     $stock->setEarningsPerShare((string) (mt_rand(325, 433) / 100));
 
 
-                    $event1Desc = "{$name} ({$ticker}) was liquidated in a hostile takeover by Black Swan Capital. Shareholder equity wiped to 0.";
-                    $event2Desc = "Black Swan Capital has stripped {$ticker} of its assets and relisted the hollowed-out shell at $50.00.";
+                    $event1Desc = "{$name} ({$stock->getTicker()}) was liquidated in a hostile takeover by Black Swan Capital. Shareholder equity wiped to 0.";
+                    $event2Desc = "Black Swan Capital has stripped {$stock->getTicker()} of its assets and relisted the hollowed-out shell at $50.00.";
                 } else {
                     //  LAKEBIRD BANK (Savior)
-                    $this->logger->info("BANKRUPTCY IMMINENT: {$ticker} collapsing. Lakebird Bank initiating a bailout.");
+                    $this->logger->info("BANKRUPTCY IMMINENT: {$stock->getTicker()} collapsing. Lakebird Bank initiating a bailout.");
 
                     // Dilute the players shares to 0
                     $this->entityManager->getConnection()->executeStatement(
@@ -131,8 +122,8 @@ class MarketOperator
                     $stock->setEarningsPerShare((string) (mt_rand(325, 433) / 100));
 
 
-                    $event1Desc = "{$name} ({$ticker}) secured a last-minute emergency bailout from Lakebird Bank. Retail shares diluted to secure funding.";
-                    $event2Desc = "Lakebird Bank has stabilized {$ticker}'s balance sheet. Trading resumes at $50.00.";
+                    $event1Desc = "{$name} ({$stock->getTicker()}) secured a last-minute emergency bailout from Lakebird Bank. Retail shares diluted to secure funding.";
+                    $event2Desc = "Lakebird Bank has stabilized {$stock->getTicker()}'s balance sheet. Trading resumes at $50.00.";
                 }
 
                 // Erase the historical chart data for the fresh start
@@ -150,7 +141,7 @@ class MarketOperator
                 continue;
             }
 
-            // RULE 5: The Market Dominance Rubber Band (Law of Large Numbers)
+            // RULE : The Market Dominance Rubber Band (Law of Large Numbers)
             $dominanceRatio = $marketCap / $totalMarketCap;
 
             // Soft cap: Gravity starts pulling at 10% of the total index
@@ -181,10 +172,10 @@ class MarketOperator
                 }
                 
                 $pct = round($dominanceRatio * 100, 2);
-                $this->logger->info("GRAVITY WELL: {$ticker} {$dragType} rubber-banded (Dominance: {$pct}%, PE: " . round($peRatio, 1) . ")");
+                $this->logger->info("GRAVITY WELL: {$stock->getTicker()} {$dragType} rubber-banded (Dominance: {$pct}%, PE: " . round($peRatio, 1) . ")");
             }
 
-            // RULE 6: Volatility Dampening
+            // RULE : Volatility Dampening
 
             $currentVol = (float) $stock->getCurrentVolatility();
             if ($currentVol > 1.50) {
