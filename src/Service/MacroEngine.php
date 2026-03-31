@@ -93,15 +93,7 @@ class MacroEngine
         $timeInState = (float) ($this->redis->get(self::REDIS_ECONOMY_TIME_KEY) ?: 0.0);
         $timeInState += $dt;
 
-        // Target duration of each phase in years
-        $durations = [
-            EconomicCycle::RECESSION->value => 1.5,  // Target: 1.5 years
-            EconomicCycle::RECOVERY->value  => 1.0,  // Target: 1.0 year
-            EconomicCycle::EXPANSION->value => 3.0,  // Target: 3.0 years
-            EconomicCycle::PEAK->value      => 0.75, // Target: 9 months
-        ];
-
-        $targetDuration = $durations[$currentState->value];
+        $targetDuration = $currentState->getTargetDuration();
         
         // Define our boundaries
         $minDuration = $targetDuration * 0.50; // Must spend at least 50% of target time
@@ -137,9 +129,9 @@ class MacroEngine
             
             // Save the new state and RESET the timer back to 0
             $this->redis->set(self::REDIS_ECONOMY_STATE_KEY, $newState->value);
-            $this->redis->set(self::REDIS_ECONOMY_TIME_KEY, 0.0);
+            $this->redis->set(self::REDIS_ECONOMY_TIME_KEY, '0.0');
 
-            $this->logger->info("New economy state: {$newState} ");
+            $this->logger->info("New economy state: {$newState->value} ");
             
             return $newState;
         }

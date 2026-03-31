@@ -36,4 +36,14 @@ enum EconomicCycle: string
             self::PEAK      => -0.05,
         };
     }
+
+    public function getTargetDuration(): float
+    {
+        return match ($this) {
+            self::RECESSION => 1.5,  // 1.5 years
+            self::RECOVERY  => 1.0,  // 1.0 year
+            self::EXPANSION => 3.0,  // 3.0 years
+            self::PEAK      => 0.75, // 9 months
+        };
+    }
 }
