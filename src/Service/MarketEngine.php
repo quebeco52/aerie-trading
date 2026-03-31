@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Service;
+
 use App\Data\EconomicCycle;
 
 
@@ -34,7 +35,6 @@ class MarketEngine
      * @param float $earningsPerShare   The current earnings per share (EPS).
      * @param float $targetPE           The target P/E ratio for the stock's sector.
      * @param float $dt                 The time step for the simulation (in years).
-     * @param float $drift              The expected return (drift) of the stock.
      * @param float $lambda             The jump intensity (average number of jumps per year).
      * @param float $jumpMean           The mean size of a jump (log-return).
      * @param float $jumpVol            The volatility of the jump size.
@@ -62,7 +62,6 @@ class MarketEngine
         float $beta = 1.0,
         float $marketZ = 0.0,
         float $marketVol = 0.15,
-        float $drift = 0.08,
         float $reversionSpeed = 0.3,
         float $kappa = 6.0,
         float $volOfVol = 0.2,
@@ -70,10 +69,23 @@ class MarketEngine
         ?EconomicCycle $economicCycle = null
     ): array {
 
-        // Adjust drift based on the macroeconomic cycle
+        // Set the core market baselines
+        $riskFreeRate = 0.02;
+        $baseMarketPremium = 0.06;
+
+        // Get the current cycle's modifier
+        $macroModifier = 0.0;
         if ($economicCycle) {
-            $drift += $economicCycle->getDriftModifier();
+            $macroModifier = $economicCycle->getDriftModifier();
         }
+
+        // Combine the base premium with the current economic mood
+        $totalMarketPremium = $baseMarketPremium + $macroModifier;
+
+        // Calculate the final drift using CAPM
+        // The Beta ONLY scales the market risk portion, not the risk-free rate.
+        $drift = $riskFreeRate + ($totalMarketPremium * $beta);
+
         // Generate Correlated Random Variables
         $z1 = $this->mathUtility->generateStandardNormal();
         $z2 = $this->mathUtility->generateStandardNormal();

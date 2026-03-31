@@ -43,19 +43,4 @@ class MathUtility
         return $radius * cos($angle);
     }
 
-    /**
-     * Generates a random number from a normal distribution with a specified mean and standard deviation.
-     *
-     * @param float $mean   The desired mean of the distribution.
-     * @param float $stdDev The desired standard deviation of the distribution.
-     * @return float A random number following the specified normal distribution.
-     */
-    public function generateNormal(float $mean = 0.0, float $stdDev = 1.0): float
-    {
-        // Generate a standard normal random number (mean 0, stddev 1)
-        $z = $this->generateStandardNormal();
-
-        // Scale and shift it to the desired distribution
-        return $mean + ($stdDev * $z);
-    }
 }
