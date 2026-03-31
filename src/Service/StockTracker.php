@@ -66,11 +66,21 @@ class StockTracker
         $totalMarketCap = 0.0;
         $events = [];
 
-        // Market noise calculation (Systemic shock applied to all stocks)
-        $marketZ = $this->mathUtility->generateStandardNormal();
+        // Market noise calculation (Systemic shock applied to all stocks).
+        // The economic cycle can introduce a bias (mean) and alter the volatility (std dev) of the market shock.
+        $marketZMean = 0.0;
+        $marketZStdDev = 1.0;
+
+        if ($economicCycle) {
+            $marketZMean = $economicCycle->getMarketZMeanModifier();
+            $marketZStdDev = $economicCycle->getMarketZStdDevModifier();
+        }
+
+        // Generate the systemic shock for this tick
+        $marketZ = $this->mathUtility->generateNormal($marketZMean, $marketZStdDev);
 
         // THE DISTRICT VIX (Dynamic Market Volatility)
-        $this->updateDistrictVariance($dt);
+        $this->updateDistrictVariance($dt, $economicCycle);
 
         $marketVol = $this->currentMarketVol;
 
@@ -180,11 +190,15 @@ class StockTracker
      *
      * @param float $dt The time step delta.
      */
-    private function updateDistrictVariance(float $dt): void
+    private function updateDistrictVariance(float $dt, ?EconomicCycle $economicCycle = null): void
     {
         $kappa = 6.0;
         $longTermVolatility = 0.15;
         $volOfVol = 0.30;
+
+        if ($economicCycle) {
+            $longTermVolatility *= $economicCycle->getMarketZStdDevModifier();
+        }
 
         $currentVariance = pow($this->currentMarketVol, 2);
         $longTermVariance = pow($longTermVolatility, 2);
