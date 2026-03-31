@@ -62,7 +62,7 @@ class MarketEngine
         float $beta = 1.0,
         float $marketZ = 0.0,
         float $marketVol = 0.15,
-        float $drift = 0.05,
+        float $drift = 0.08,
         float $reversionSpeed = 0.3,
         float $kappa = 6.0,
         float $volOfVol = 0.2,
