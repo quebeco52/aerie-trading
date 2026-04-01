@@ -59,7 +59,7 @@ class StockTracker
      * 
      * @return array{updates: array, total_cap: float, events: array, market_vol: float} Aggregated results of the update.
      */
-    public function updateStocks(array $stocks, float $dt, array $liveSectorPEs, bool $recordHistory, ?EconomicCycle $economicCycle = null, float $councilRate = 0.0, int $tickCount = 0, int $ticksPerYear = 252): array
+    public function updateStocks(array $stocks, float $dt, array $liveSectorPEs, bool $recordHistory, ?EconomicCycle $economicCycle = null, int $tickCount = 0, int $ticksPerYear = 252): array
     {
 
         $stockUpdates = [];
@@ -96,7 +96,6 @@ class StockTracker
                 beta: (float) $stock->getBeta(),
                 marketZ: $marketZ,
                 marketVol: $marketVol,
-                councilRate: $councilRate,
             );
 
             $newPrice = $calculation['price'];

@@ -88,136 +88,56 @@ class MacroEngine
     }
 
     /**
-     * Translates the raw Market Heat into a recognizable Economic Phase.
+     * Updates the state of the economy using a time-aware Hazard Function.
      */
-    public function updateBoomBust(float $marketHeat): EconomicCycle
+    public function updateBoomBust(float $dt): EconomicCycle
     {
         $currentStateStr = $this->redis->get(self::REDIS_ECONOMY_STATE_KEY) ?: EconomicCycle::EXPANSION->value;
         $currentState = EconomicCycle::from($currentStateStr);
-        $newState = $currentState;
+        
+        $timeInState = (float) ($this->redis->get(self::REDIS_ECONOMY_TIME_KEY) ?: 0.0);
+        $timeInState += $dt;
 
-        if ($marketHeat > 80.0) {
-            $newState = EconomicCycle::PEAK;
-            
-        } elseif ($marketHeat > 55.0 && $marketHeat <= 80.0) {
-            $newState = EconomicCycle::EXPANSION;
-            
-        } elseif ($marketHeat >= 30.0 && $marketHeat <= 55.0) {
-            // THE TRANSITION ZONE: Direction matters here
-            if (in_array($currentState, [EconomicCycle::PEAK, EconomicCycle::EXPANSION])) {
-                $newState = EconomicCycle::RECESSION;
-            } elseif ($currentState === EconomicCycle::RECESSION) {
-                $newState = EconomicCycle::RECOVERY;
+        $targetDuration = $currentState->getTargetDuration();
+        
+        $minDuration = $targetDuration * 0.50; // Must spend at least 50% of target time
+        $maxDuration = $targetDuration * 1.50; // Forced exit at 150% of target time
+
+        $transitioned = false;
+
+        // The Ceiling (Force transition)
+        if ($timeInState >= $maxDuration) {
+            $transitioned = true;
+        } 
+        // The Hazard Zone (Increasing probability)
+        elseif ($timeInState >= $minDuration) {
+            $remainingWindow = max(0.0001, $maxDuration - $timeInState);
+            $transitionProbability = $dt / $remainingWindow;
+
+            if ((mt_rand() / mt_getrandmax()) < $transitionProbability) {
+                $transitioned = true;
             }
-            
-        } else { // $marketHeat < 30.0
-            $newState = EconomicCycle::RECESSION;
         }
 
-        if ($newState !== $currentState) {
+        if ($transitioned) {
+            $newState = match ($currentState) {
+                EconomicCycle::RECESSION => EconomicCycle::RECOVERY,
+                EconomicCycle::RECOVERY  => EconomicCycle::EXPANSION,
+                EconomicCycle::EXPANSION => EconomicCycle::PEAK,
+                EconomicCycle::PEAK      => EconomicCycle::RECESSION,
+            };
+            
             $this->redis->set(self::REDIS_ECONOMY_STATE_KEY, $newState->value);
-            $this->logger->info("Economy transitioned to: {$newState->value}");
+            $this->redis->set(self::REDIS_ECONOMY_TIME_KEY, '0.0');
+
+            $this->logger->info("New economy state: {$newState->value}");
+            
+            return $newState;
         }
 
-        return $newState;
-    }
+        $this->redis->set(self::REDIS_ECONOMY_TIME_KEY, (string) $timeInState);
 
-    /**
-     * The Council of Thirteen meets to try and tame the Market Heat.
-     */
-    public function updateCouncilRate(float $dt, float $marketHeat): float
-    {
-        $currentRate = (float) ($this->redis->get(self::REDIS_COUNCIL_RATE_KEY) ?: 0.02);
-
-        // They meet roughly 8 times a year, or 24 times if the heat is dangerously low
-        $meetingFrequency = ($marketHeat < 30.0) ? 24.0 : 8.0;
-        
-        if ((mt_rand() / mt_getrandmax()) > ($meetingFrequency * $dt)) {
-            return $currentRate; // No meeting today.
-        }
-
-        // The Council assesses the Heat and determines a Target Rate
-        if ($marketHeat > 85.0) {
-            $targetRate = 0.07; // Squeeze the massive bubble
-        } elseif ($marketHeat > 65.0) {
-            $targetRate = 0.045; // Cool down the expansion
-        } elseif ($marketHeat < 35.0) {
-            $targetRate = 0.00; // Emergency stimulus
-        } else {
-            $targetRate = 0.03; // Neutral
-        }
-
-        if (abs($targetRate - $currentRate) < 0.001) {
-            return $currentRate; // We are at the target. Pause.
-        }
-
-        // Execute the move in 25 basis point steps (0.25%)
-        $moveDirection = ($targetRate > $currentRate) ? 1 : -1;
-        $bpsMove = 0.0025; 
-
-        // Jumbo 50bps moves if they are panicking
-        if ($marketHeat < 25.0 || $marketHeat > 90.0) {
-            $bpsMove = 0.0050; 
-        }
-
-        $newRate = $currentRate + ($bpsMove * $moveDirection);
-        $newRate = max(0.00, min(0.10, $newRate));
-
-        $this->redis->set(self::REDIS_COUNCIL_RATE_KEY, (string) $newRate);
-        
-        $action = $moveDirection > 0 ? "hiked" : "slashed";
-        $this->logger->info("The Council of Thirteen {$action} rates to " . ($newRate * 100) . "% (Heat: {$marketHeat})");
-
-        return $newRate;
-    }
-
-    /**
-     * Calculates the internal "Market Heat" (0 to 100).
-     * This is driven by the Council's interest rate vs the Neutral Rate (3.0%).
-     */
-    public function updateMarketHeat(float $dt, float $councilRate): float
-    {
-        $currentHeat = (float) ($this->redis->get(self::REDIS_MARKET_HEAT_KEY) ?: 50.0);
-
-        // Calculate the Target Heat based on the Council Rate
-        // If rate is 3% (0.03), Target = 50.
-        $neutralRate = 0.03;
-        $targetHeat = 50.0 + (($neutralRate - $councilRate) * 1500.0);
-        
-        // Cap the target between 0 and 100
-        $targetHeat = max(0.0, min(100.0, $targetHeat));
-
-        // Apply Mean Reversion (Gravity) and Stochastic Noise
-        $reversionSpeed = 1.2; // How fast the economy reacts to the rate
-        $heatVol = 8.0; // Random daily economic noise
-
-        $pull = $reversionSpeed * ($targetHeat - $currentHeat) * $dt;
-        $noise = $heatVol * sqrt($dt) * $this->mathUtility->generateStandardNormal();
-
-        $newHeat = $currentHeat + $pull + $noise;
-
-        if ($newHeat > 85.0) {
-            // Calculate crash probability. 
-            // At 85 heat, probability is 0%. At 100 heat, probability is extremely high.
-           $annualCrashProb = ($newHeat - 85.0) / 15.0; // Scales from 0.0 to 1.0
-
-            // crash
-            if ((mt_rand() / mt_getrandmax()) < ($annualCrashProb * $dt)) {
-                $crashSeverity = mt_rand(40, 60);
-                $newHeat -= $crashSeverity;
-                
-                // Log this catastrophic event!
-                $this->logger->warning("MINSKY MOMENT: The market bubble violently popped! Heat collapsed by {$crashSeverity} points.");
-            }
-        }
-        // ==========================================
-        
-        // Hard physical bounds
-        $newHeat = max(0.0, min(100.0, $newHeat));
-
-        $this->redis->set(self::REDIS_MARKET_HEAT_KEY, (string) $newHeat);
-
-        return $newHeat;
+        return $currentState;
     }
 
     /**

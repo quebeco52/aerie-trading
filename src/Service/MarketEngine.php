@@ -59,7 +59,7 @@ class MarketEngine
         float $beta = 1.0,
         float $marketZ = 0.0,
         float $marketVol = 0.15,
-        float $drift = 0.07,
+        float $drift = 0.1,
         float $reversionSpeed = 0.4,
         float $kappa = 6.0,
         float $volOfVol = 0.2,
@@ -86,11 +86,6 @@ class MarketEngine
         // Ensure variance never goes negative (Full Truncation method)
         $nextVariance = max(0.000001, $currentVariance + $dv);
         $nextVolatility = sqrt($nextVariance);
-
-        // drift with interest rates
-
-        $drift = $drift + $councilRate;
-        
 
         // Calculate Fair Value & Gravity
         $valuationEps = max($earningsPerShare, 0.01);
