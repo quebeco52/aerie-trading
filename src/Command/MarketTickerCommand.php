@@ -88,7 +88,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
     {
         $output->writeln("<info>Market Ticker Started...</info>");
 
-        // 1. Fetch the stocks ONCE into RAM before the loop starts!
+        // Fetch the stocks ONCE into RAM before the loop starts!
         $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
 
         $dt = 1.0 / $this->ticksPerYear;
@@ -124,22 +124,22 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 // Update the Macro Economy (Sector P/Es drift)
 
                 // Get the current cycle
-                $currentCycleStr = $this->redis->get('economy_state') ?: EconomicCycle::EXPANSION->value;
-                $economicCycle = EconomicCycle::from($currentCycleStr);
+                $councilRate = (float) ($this->redis->get('council_interest_rate') ?: 0.02);
 
-                // The Council of Thirteen sets the new rate
-                $councilRate = $this->macroEngine->updateCouncilRate($dt, $economicCycle);
+                // The Market Heat reacts to the current rate
+                $marketHeat = $this->macroEngine->updateMarketHeat($dt, $councilRate);
 
-                // The Economy reacts to the Council's rate
-                $economicCycle = $this->macroEngine->updateBoomBust($dt, $councilRate);
+                // The Council holds a meeting to react to the new Heat
+                $councilRate = $this->macroEngine->updateCouncilRate($dt, $marketHeat);
 
-                // Update the Sector P/Es
+                // Update the labels and the Sector P/E math
+                $economicCycle = $this->macroEngine->updateBoomBust($marketHeat);
                 $liveSectorPEs = $this->macroEngine->updateSectorMultiples($dt, $economicCycle);
 
                 // Check if it's time to record a database snapshot
                 $isHistoryTick = ($tickCount % $historyInterval === 0);
 
-                // 2. Update the Stocks
+                // Update the Stocks
                 $result = $this->stockTracker->updateStocks($stocks, $dt, $liveSectorPEs, $isHistoryTick, $economicCycle, $councilRate, $tickCount, $this->ticksPerYear);
                 $stockUpdates = $result['updates'];
                 $totalMarketCap = $result['total_cap'];
@@ -190,6 +190,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                         'market_vol' => $marketVol,
                         'economic_cycle' => $economicCycle->value,
                         'council_rate'   => $councilRate,
+                        'market_heat'    => $marketHeat,
                     ]));
 
                     $this->redis->set('stocks_live_data', json_encode($stockUpdates));

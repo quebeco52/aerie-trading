@@ -277,6 +277,26 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        if (IS_ETF && payload.market_heat !== undefined) {
+            const heatEl = document.getElementById('market-heat-value');
+
+            if (heatEl) {
+                const currentHeat = parseFloat(payload.market_heat);
+                heatEl.innerText = currentHeat.toFixed(2);
+
+                // Color code the thermometer for easy testing!
+                if (currentHeat > 85.0) {
+                    heatEl.style.color = COLOR_TERTIary;
+                } else if (currentHeat < 30.0) {
+                    heatEl.style.color = '#7dd3fc';
+                } else if (currentHeat > 65.0) {
+                    heatEl.style.color = '#fde047';
+                } else {
+                    heatEl.style.color = COLOR_SECONDARY;
+                }
+            }
+        }
+
         if (IS_ETF && payload.economic_cycle) {
             const cycleElement = document.getElementById('market-economic-cycle');
 
