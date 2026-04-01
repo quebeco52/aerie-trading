@@ -370,11 +370,19 @@ class InitialMarket
         [
             'ticker' => 'OSPR', 'name' => 'Osprey Global Vanguard', 'sector' => 'Industrials',
             'systemic_importance' => 'systemic',
-            'price' => 140.00, 'eps' => 4.12,
+            'price' => 160.00, 'eps' => 4.12,
             'shares_outstanding' => 1000000000,
             // The War Profiteer: Very low (or negative) beta. Ignores domestic market crashes.
             // High jump intensity, but with a POSITIVE mean, meaning global shocks usually make the stock spike.
             'volatility' => 0.28, 'beta' => -0.15, 'jump_intensity' => 1.10, 'jump_mean' => 0.05, 'jump_vol' => 0.12
+        ],
+        [
+            'ticker' => 'CROW', 'name' => 'Crowfall Capital', 'sector' => 'Financials',
+            'systemic_importance' => 'systemic',
+            'price' => 230.00, 'eps' => 14.02,
+            'shares_outstanding' => 1000000000,
+            // The Volatility Harvester: negative beta, highly defensive, occasionally spikes during macroeconomic panics
+            'volatility' => 0.24, 'beta' => -0.50, 'jump_intensity' => 1.25, 'jump_mean' => 0.05, 'jump_vol' => 0.12 
         ],
     ];
 
