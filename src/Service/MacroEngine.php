@@ -92,10 +92,16 @@ class MacroEngine
      */
     public function updateBoomBust(float $dt): EconomicCycle
     {
-        $currentStateStr = $this->redis->get(self::REDIS_ECONOMY_STATE_KEY) ?: EconomicCycle::EXPANSION->value;
-        $currentState = EconomicCycle::from($currentStateStr);
+        $rawState = $this->redis->get(self::REDIS_ECONOMY_STATE_KEY);
+        $currentState = EconomicCycle::EXPANSION;
+
+        if ($rawState !== false) {
+            $typedState = is_int(EconomicCycle::EXPANSION->value) ? (int) $rawState : $rawState;
+            $currentState = EconomicCycle::tryFrom($typedState) ?? EconomicCycle::EXPANSION;
+        }
         
-        $timeInState = (float) ($this->redis->get(self::REDIS_ECONOMY_TIME_KEY) ?: 0.0);
+        $rawTime = $this->redis->get(self::REDIS_ECONOMY_TIME_KEY);
+        $timeInState = $rawTime !== false ? (float) $rawTime : 0.0;
         $timeInState += $dt;
 
         $targetDuration = $currentState->getTargetDuration();
