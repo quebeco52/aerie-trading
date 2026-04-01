@@ -19,7 +19,6 @@ Aerie Trading uses the tech stack:
 - [ ] Store user/stock data in mariadb, this data should be protect so not to be allowed to be lost, corrupted or comprised 
 - [ ] The site should be usable throw a mobile interface but will not be the optimal way to use the site
 - [ ] Should be hosted on the cloud, most likely a hetzer vps and should be open to the public
-- [ ] Has to be hosted securely "lock downed" in a way that that it is not vulnerable and follows good security practices
 - [ ] Should have Admin role and a user role
 
 ### User should be able to:
