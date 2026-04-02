@@ -16,9 +16,9 @@ enum EconomicCycle: string
     public function getGrowthModifier(): float
     {
         return match ($this) {
-            self::RECESSION => -0.045, // -4.5% base drag on earnings growth
+            self::RECESSION => -0.08, // -8% base drag on earnings growth
             self::RECOVERY  => 0.01, // +1% base boost
-            self::EXPANSION => 0.045, // +4.5% base boost
+            self::EXPANSION => 0.065, // +6.5% base boost
             self::PEAK      => 0.00,  // Growth flattens, preparing for a downturn
         };
     }
