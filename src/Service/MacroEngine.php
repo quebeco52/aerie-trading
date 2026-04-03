@@ -18,8 +18,6 @@ class MacroEngine
 {
     private const REDIS_ECONOMY_STATE_KEY = 'economy_state';
     private const REDIS_ECONOMY_TIME_KEY = 'economy_time_in_state';
-    private const REDIS_COUNCIL_RATE_KEY = 'council_interest_rate';
-    private const REDIS_MARKET_HEAT_KEY = 'market_heat';
 
     public function __construct(
         private MathUtility $mathUtility,
@@ -47,7 +45,7 @@ class MacroEngine
         $updatedSectors = [];
 
         // Macro factors: Sector P/Es slowly drift, reverting to their historical baseline
-        $reversionSpeed = 0.40;
+        $reversionSpeed = 1.7;
         $macroVol = 0.20;
 
         // shifts the target P/E up during booms and down during busts.

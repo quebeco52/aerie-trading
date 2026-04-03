@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Service;
+use App\Data\EconomicCycle;
 
 /**
  * Service responsible for calculating stock price movements based on various market factors.
@@ -43,6 +44,8 @@ class MarketEngine
      * @param float $kappa              The rate at which volatility reverts to the long-run mean.
      * @param float $volOfVol           The volatility of volatility (how much volatility fluctuates).
      * @param float $rho                The correlation between price and volatility (usually negative).
+     * 
+     * @param EconomicCycle|null $economicCycle The current macroeconomic state, which can influence the base drift.
      *
      * @return array{price: float, shock: float|null, next_volatility: float} The calculated next price, shock percentage, and updated volatility.
      */
@@ -59,13 +62,30 @@ class MarketEngine
         float $beta = 1.0,
         float $marketZ = 0.0,
         float $marketVol = 0.15,
-        float $drift = 0.1,
+        float $drift = 0.06,
         float $reversionSpeed = 0.4,
         float $kappa = 6.0,
         float $volOfVol = 0.2,
         float $rho = -0.7,
-        float $councilRate = 0.0,
+        ?EconomicCycle $economicCycle = null
     ): array {
+
+        // Set the core market baselines
+        $riskFreeRate = 0.02;
+        $baseMarketPremium = $drift;
+
+        // Get the current cycle's modifier
+        $macroModifier = 0.0;
+        if ($economicCycle) {
+            $macroModifier = $economicCycle->getDriftModifier();
+        }
+
+        // Combine the base premium with the current economic mood
+        $totalMarketPremium = $baseMarketPremium + $macroModifier;
+
+        // Calculate the final drift using CAPM
+        // The Beta ONLY scales the market risk portion, not the risk-free rate.
+        $drift = $riskFreeRate + ($totalMarketPremium * $beta);
 
         // Generate Correlated Random Variables
         $z1 = $this->mathUtility->generateStandardNormal();
