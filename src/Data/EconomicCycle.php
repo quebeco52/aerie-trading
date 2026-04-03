@@ -16,10 +16,10 @@ enum EconomicCycle: string
     public function getGrowthModifier(): float
     {
         return match ($this) {
-            self::RECESSION => -0.12,
+            self::RECESSION => -0.13,
             self::RECOVERY  =>  0.12,
-            self::EXPANSION =>  0.04,
-            self::PEAK      =>  0.015,
+            self::EXPANSION =>  0.03,
+            self::PEAK      =>  0.01,
         };
     }
 

@@ -19,7 +19,8 @@ Aerie Trading uses the tech stack:
 - [ ] Store user/stock data in mariadb, this data should be protect so not to be allowed to be lost, corrupted or comprised 
 - [ ] The site should be usable throw a mobile interface but will not be the optimal way to use the site
 - [ ] Should be hosted on the cloud, most likely a hetzer vps and should be open to the public
-- [ ] Should have Admin role and a user role
+- [ ] Should have a Admin role and a User role
+- [ ] everything relevant to users should be displayed in realtime via WebSocket/Redis
 
 ### User should be able to:
 - [ ] Register and login
@@ -31,17 +32,17 @@ Aerie Trading uses the tech stack:
 - [ ] Se register users and monitor there portfolios
 - [ ] Change the values/info of the stocks
 - [ ] Add new stocks
-- [ ] Should be able to do all this without casing downtime for users
+- [ ] Do all this without casing downtime for users
 
-### Market simulator
+### Market simulator should:
 - [ ] Simulate stock prices in a realistic way compared to a real world stock based on its fundamentals and microeconomic conditions
-- [ ] Handle earning reports and should integrate this result into the price of the stock
-- [ ] Handle the underlying microeconomic situation of the market (boom busts, etc) and have the effect directly and indirectly effect the stock prices
-- [ ] should use mathematical proven and well tested formulas (Geometric Brownian Motion, Heston Stochastic Volatility Model, etc) so to keep the simulation realistic compared to the real world economy. (as little magic numbers as possible)
+- [ ] Handle earning reports and should integrate the reports into the price of the stock
+- [ ] Have a boom and bust cycle
+- [ ] Use mathematical proven and well tested formulas (Geometric Brownian Motion, Heston Stochastic Volatility Model, etc) so to keep the simulation realistic compared to the real world economy. (as little magic numbers as possible)
 
 #### Market Stretch goal
 - [ ] The market should react dynamically on event's appearing in universe (news, conflict, etc)
-- [ ] Should be unable to be "beaten" or manipulate by players so to able to generate free money
+- [ ] Should be unable to be "beaten" or manipulate by users so to able to generate free money (For example a user should not be able to know the instant a bust will happen and dump there stocks)
 
 ### Stretch goal
 - [ ] Stock comment sections
@@ -49,7 +50,8 @@ Aerie Trading uses the tech stack:
 - [ ] Options trading
 - [ ] Optimize the application to run on as little resources as possible
 - [ ] Should have a consistent narrative (world building)
-
+- [ ] Transaction Fees
+- [ ] Transaction History. The system must keep an immutable log of every trade
 
 
 

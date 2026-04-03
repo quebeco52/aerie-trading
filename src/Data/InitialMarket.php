@@ -107,7 +107,7 @@ class InitialMarket
             'price' => 120.00, 'eps' => 1.68,
             'shares_outstanding' => 1000000000,
             // Steel Commodities: Highly cyclical, sensitive to global trade
-            'volatility' => 0.32, 'beta' => 1.10, 'jump_intensity' => 1.00, 'jump_mean' => -0.02, 'jump_vol' => 0.10
+            'volatility' => 0.32, 'beta' => 1.30, 'jump_intensity' => 1.00, 'jump_mean' => -0.02, 'jump_vol' => 0.10
         ],
         [
             'ticker' => 'PENG', 'name' => 'Penguin Computing', 'sector' => 'Information Technology',
