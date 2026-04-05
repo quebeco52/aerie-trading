@@ -49,10 +49,10 @@ enum EconomicCycle: string
     public function getDriftModifier(): float
     {
         return match ($this) {
-            self::RECESSION => -0.12,
-            self::RECOVERY  => 0.02,
+            self::RECESSION => -0.20,
+            self::RECOVERY  => 0.08,
             self::EXPANSION => 0.00,
-            self::PEAK      => -0.06,
+            self::PEAK      => -0.08,
         };
     }
 }

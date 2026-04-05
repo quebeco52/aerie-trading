@@ -41,8 +41,6 @@ class Portfolio
     /**
      * Calculates and records an immediate snapshot for a single user.
      * Best used immediately after a user executes a trade.
-     * * NOTE: This does NOT call flush(). The calling controller should flush
-     * to ensure the trade and the history are saved in the same transaction.
      */
     public function recordUserSnapshot(User $user): void
     {

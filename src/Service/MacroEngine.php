@@ -45,12 +45,12 @@ class MacroEngine
         $updatedSectors = [];
 
         // Macro factors: Sector P/Es slowly drift, reverting to their historical baseline
-        $reversionSpeed = 1.7;
+        $reversionSpeed = 2.0;
         $macroVol = 0.20;
 
         // shifts the target P/E up during booms and down during busts.
         $cycleModifier = match ($economicCycle) {
-            EconomicCycle::RECESSION => 0.85,
+            EconomicCycle::RECESSION => 0.70,
             EconomicCycle::RECOVERY  => 1.00,
             EconomicCycle::EXPANSION => 1.15,
             EconomicCycle::PEAK      => 1.30,

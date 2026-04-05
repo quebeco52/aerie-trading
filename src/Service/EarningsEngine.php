@@ -68,14 +68,11 @@ class EarningsEngine
         }
 
         $oldEps = (float) $stock->getEarningsPerShare();
-        $sharesOutstanding = (int) $stock->getSharesOutstanding();
         $baselineVol = (float) $stock->getVolatility();
         $beta = (float) $stock->getBeta();
 
-        // Saturation Penalty
 
-        $totalEarnings = max(1.0, abs($oldEps) * $sharesOutstanding);
-        $saturationPenalty = max(1.0, log10($totalEarnings / 20000000) + 1.0);
+        $freeGrowth = 0.02;
 
         // Floor the base so penny stocks/low EPS companies can still grow absolute cents
         $growthBase = max(abs($oldEps), 0.50);
@@ -87,7 +84,7 @@ class EarningsEngine
 
         // Analyst Consensus
         // Analysts expect the base growth
-        $expectedEpsGrowth = (0.02 / $saturationPenalty) + $companyCycleModifier;
+        $expectedEpsGrowth = $freeGrowth  + $companyCycleModifier;
         // Round expected EPS to 2 decimals to prevent floating-point "ghost misses"
         $expectedEps = round($oldEps + ($growthBase * $expectedEpsGrowth), 2);
 

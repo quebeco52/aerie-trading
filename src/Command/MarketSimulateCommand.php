@@ -81,7 +81,7 @@ class MarketSimulateCommand extends Command
 
         for ($tick = 1; $tick <= $totalTicks; $tick++) {
 
-            $liveSectorPEs = $this->macroEngine->updateSectorMultiples($dt);
+            $liveSectorPEs = $this->macroEngine->updateSectorMultiples($dt, $this->macroEngine->updateBoomBust($dt));
 
             $isHistoryTick = ($tick % 30 === 0);
 

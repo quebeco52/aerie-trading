@@ -43,4 +43,113 @@ class MathUtility
         return $radius * cos($angle);
     }
 
+    /**
+     * Calculates the next step in volatility using the Heston Stochastic Volatility Model.
+     * * This method handles the correlated random walk (Wiener process) internally. 
+     * It allows passing a pre-computed Z-score ($z1) if the volatility needs to be 
+     * correlated with a stock's underlying price movement.
+     *
+     * @param float $currentVolatility  Current instantaneous volatility.
+     * @param float $longTermVolatility Long-run mean volatility (Theta).
+     * @param float $kappa              Rate of mean reversion for volatility.
+     * @param float $volOfVol           Volatility of the volatility process (Xi).
+     * @param float $rho                Correlation coefficient between price and volatility [-1, 1].
+     * @param float $dt                 Time step in years.
+     * @param float|null $z1            Optional pre-computed standard normal (for price correlation).
+     * @param float|null $z2            Optional pre-computed standard normal.
+     * * @return float The next instantaneous volatility.
+     */
+    public function calculateHestonVolatility(
+        float $currentVolatility,
+        float $longTermVolatility,
+        float $kappa,
+        float $volOfVol,
+        float $rho,
+        float $dt,
+        ?float $z1 = null,
+        ?float $z2 = null
+    ): float {
+        // 1. Generate standard normal variables if the caller didn't provide them
+        $z1 = $z1 ?? $this->generateStandardNormal();
+        $z2 = $z2 ?? $this->generateStandardNormal();
+
+        // 2. Calculate the correlated Wiener process (w2) internally
+        // This ensures the volatility moves inversely to the stock price (Leverage Effect)
+        $w2 = ($rho * $z1) + (sqrt(1 - pow($rho, 2)) * $z2);
+
+        // 3. The Heston Variance Process
+        $currentVariance = pow($currentVolatility, 2);
+        $longTermVariance = pow($longTermVolatility, 2);
+
+        // Calculate the differential in variance
+        $dv = $kappa * ($longTermVariance - $currentVariance) * $dt
+            + $volOfVol * $currentVolatility * sqrt($dt) * $w2;
+
+        // 4. Ensure variance never goes negative (Full Truncation method)
+        $nextVariance = max(0.000001, $currentVariance + $dv);
+        
+        return sqrt($nextVariance);
+    }
+
+    /**
+     * Simulates the Merton Jump Diffusion process for sudden market shocks.
+     * Returns the price multiplier and the raw components of the jump.
+     *
+     * @param float $lambda   The jump intensity (average number of jumps per year).
+     * @param float $jumpMean The mean size of a jump (log-return).
+     * @param float $jumpVol  The volatility of the jump size.
+     * @param float $dt       The time step in years.
+     * @return array{multiplier: float, shock_pct: float|null, exponent: float|null}
+     */
+    public function calculateJumpDiffusion(
+        float $lambda, 
+        float $jumpMean, 
+        float $jumpVol, 
+        float $dt
+    ): array {
+        $jumpProb = $lambda * $dt;
+
+        // Roll the dice to see if a jump occurs this tick
+        if ((mt_rand() / mt_getrandmax()) < $jumpProb) {
+            $jumpZ = $this->generateStandardNormal();
+
+            $jumpExponent = $jumpMean + ($jumpVol * $jumpZ);
+            $jumpMultiplier = exp($jumpExponent);
+            $shockPct = ($jumpMultiplier - 1.0) * 100.0;
+
+            return [
+                'multiplier' => $jumpMultiplier,
+                'shock_pct'  => $shockPct,
+                'exponent'   => $jumpExponent
+            ];
+        }
+
+        // No jump occurred
+        return [
+            'multiplier' => 1.0,
+            'shock_pct'  => null,
+            'exponent'   => null
+        ];
+    }
+
+    /**
+     * Calculates the mean reversion drift (gravity) pulling a current value towards a target.
+     * Uses a log-normal Ornstein-Uhlenbeck process approach.
+     *
+     * @param float $currentValue   The current state of the variable.
+     * @param float $targetValue    The fundamental fair value or mean it is reverting to.
+     * @param float $reversionSpeed How aggressively the value is pulled towards the target.
+     * @return float The calculated gravity drift modifier.
+     */
+    public function calculateLogMeanReversion(
+        float $currentValue,
+        float $targetValue,
+        float $reversionSpeed
+    ): float {
+        // Floor values to prevent log(0) or negative logs in geometric models
+        $logTarget = log(max($targetValue, 0.000001));
+        $logCurrent = log(max($currentValue, 0.000001));
+        
+        return $reversionSpeed * ($logTarget - $logCurrent);
+    }
 }
