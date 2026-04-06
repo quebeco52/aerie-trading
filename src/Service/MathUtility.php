@@ -11,6 +11,36 @@ class MathUtility
      */
     private ?float $spareNormal = null;
 
+    private float $randMaxInverse;
+    private float $twoPi;
+
+    public function __construct()
+    {
+        $this->randMaxInverse = 1.0 / mt_getrandmax();
+        $this->twoPi = 2.0 * M_PI;
+    }
+
+    /**
+     * Generates a random float between 0 and 1 from a uniform distribution.
+     *
+     * @return float
+     */
+    public function generateUniform(): float
+    {
+        return mt_rand() * $this->randMaxInverse;
+    }
+
+    /**
+     * Checks if an event occurs given a specific probability [0, 1].
+     *
+     * @param float $probability The probability of the event occurring.
+     * @return bool True if the event occurred, false otherwise.
+     */
+    public function checkProbability(float $probability): bool
+    {
+        return $this->generateUniform() < $probability;
+    }
+
     /**
      * Generates a random number from a standard normal distribution (Gaussian).
      *
@@ -32,12 +62,12 @@ class MathUtility
         }
 
         do {
-            $x = mt_rand() / mt_getrandmax();
-            $y = mt_rand() / mt_getrandmax();
+            $x = $this->generateUniform();
+            $y = $this->generateUniform();
         } while ($x <= 0);
 
         $radius = sqrt(-2 * log($x));
-        $angle = 2 * M_PI * $y;
+        $angle = $this->twoPi * $y;
 
         $this->spareNormal = $radius * sin($angle);
         return $radius * cos($angle);
@@ -75,11 +105,11 @@ class MathUtility
 
         // Calculate the correlated Wiener process (w2) internally
         // This ensures the volatility moves inversely to the stock price (Leverage Effect)
-        $w2 = ($rho * $z1) + (sqrt(1 - pow($rho, 2)) * $z2);
+        $w2 = ($rho * $z1) + (sqrt(1 - ($rho * $rho)) * $z2);
 
         // The Heston Variance Process
-        $currentVariance = pow($currentVolatility, 2);
-        $longTermVariance = pow($longTermVolatility, 2);
+        $currentVariance = $currentVolatility * $currentVolatility;
+        $longTermVariance = $longTermVolatility * $longTermVolatility;
 
         // Calculate the differential in variance
         $dv = $kappa * ($longTermVariance - $currentVariance) * $dt
@@ -110,7 +140,7 @@ class MathUtility
         $jumpProb = $lambda * $dt;
 
         // Roll the dice to see if a jump occurs this tick
-        if ((mt_rand() / mt_getrandmax()) < $jumpProb) {
+        if ($this->checkProbability($jumpProb)) {
             $jumpZ = $this->generateStandardNormal();
 
             $jumpExponent = $jumpMean + ($jumpVol * $jumpZ);

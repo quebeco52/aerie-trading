@@ -4,7 +4,6 @@ namespace App\Service;
 
 use App\Data\EconomicCycle;
 use App\Entity\Stock;
-use Doctrine\ORM\EntityManagerInterface;
 
 /**
  * Handles the simulation of quarterly earnings reports.
@@ -12,15 +11,24 @@ use Doctrine\ORM\EntityManagerInterface;
  */
 class EarningsEngine
 {
+    // Volatility Adjustment Constants
+    private const SURPRISE_Z_SCORE_THRESHOLD = 1.5;
+    private const BORING_Z_SCORE_THRESHOLD = 0.5;
+    private const VOLATILITY_SHOCK_FACTOR = 0.2;
+    private const VOLATILITY_COOLING_FACTOR = 0.25;
+    private const MAX_VOLATILITY_MULTIPLIER = 3.0;
+
+    // Price Gap Constants
+    private const PRICE_GAP_DAMPENING = 0.20;
+    private const MAX_PRICE_GAP = 0.25;
+
     /**
      * Constructor.
      *
-     * @param EntityManagerInterface $entityManager The Doctrine entity manager.
      * @param MarketEvent $marketEvent Publisher for all market events, news headlines, and shocks.
      * @param MathUtility|null $mathUtility Utility for advanced mathematical operations (e.g., generating standard normal distribution).
      */
     public function __construct(
-        private EntityManagerInterface $entityManager,
         private MarketEvent $marketEvent,
         private ?MathUtility $mathUtility = null
     ) {
@@ -32,18 +40,19 @@ class EarningsEngine
     /**
      * Calculates and processes a quarterly earnings report for a given stock.
      *
-     * This method simulates the outcome of an earnings report based on a probability
-     * determined by the time step ($dt). If triggered, it calculates expected vs. actual
-     * earnings per share (EPS), applying growth baselines and a saturation penalty for
-     * larger companies. It also adjusts the stock's volatility based on the statistical
-     * rarity (Z-Score) of the revenue shift.
+     * This method simulates the outcome of an earnings report based on a deterministic
+     * schedule within the simulation's "Earnings Season". If it is the stock's turn to report, 
+     * it calculates expected vs. actual earnings per share (EPS), factoring in economic cycles 
+     * and statistical drift. It also adjusts the stock's volatility based on the statistical rarity 
+     * (Z-Score) of the revenue shift (e.g., punishing or rewarding surprise reports).
      *
      * @param Stock $stock The stock entity to process earnings for.
-     * @param float $dt    The time step (delta time) used to determine the probability of an earnings event.
      * @param EconomicCycle|null $economicCycle The current state of the macroeconomic cycle.
-     * @return array|null  Returns the generated market event array if an earnings report occurred, otherwise null.
+     * @param int $tickCount The current simulation tick, used to determine if it is earnings season.
+     * @param int $ticksPerYear The total number of ticks in a simulated year.
+     * @return array<string, mixed>|null  Returns the generated market event array if an earnings report occurred, otherwise null.
      */
-    public function calculate(Stock $stock, float $dt, ?EconomicCycle $economicCycle = null, int $tickCount = 0, int $ticksPerYear = 252): ?array
+    public function calculate(Stock $stock, ?EconomicCycle $economicCycle = null, int $tickCount = 0, int $ticksPerYear = 252): ?array
     {
         
         $ticksPerQuarter = (int) ($ticksPerYear / 4);
@@ -106,24 +115,36 @@ class EarningsEngine
         $currentVol = (float) $stock->getCurrentVolatility();
         $zScore = abs($revenueZ); // How many standard deviations away from expectations
 
-        if ($zScore > 1.5) {
+        if ($zScore > self::SURPRISE_Z_SCORE_THRESHOLD) {
             // A 1.5+ sigma event is a genuine surprise. Spike the volatility.
             // Example: Z=2.5 -> (2.5 - 1.0) * 0.2 = 0.3 (A 30% Volatility Spike)
-            $shockMultiplier = 1.0 + (($zScore - 1.0) * 0.2);
-            $newVol = min($currentVol * $shockMultiplier, $baselineVol * 3.0);
+            $shockMultiplier = 1.0 + (($zScore - 1.0) * self::VOLATILITY_SHOCK_FACTOR);
+            $newVol = min($currentVol * $shockMultiplier, $baselineVol * self::MAX_VOLATILITY_MULTIPLIER);
             
             $stock->setCurrentVolatility((string) $newVol);
             
-        } elseif ($zScore < 0.5 && $currentVol > $baselineVol) {
+        } elseif ($zScore < self::BORING_Z_SCORE_THRESHOLD && $currentVol > $baselineVol) {
             // A boring, highly predictable quarter (Z < 0.5). 
             // The market calms down. Volatility cools off by 25% toward the baseline.
-            $newVol = $currentVol - (($currentVol - $baselineVol) * 0.25);
+            $newVol = $currentVol - (($currentVol - $baselineVol) * self::VOLATILITY_COOLING_FACTOR);
             
             $stock->setCurrentVolatility((string) max($newVol, $baselineVol));
         }
 
         // Update the Stock Entity
         $stock->setEarningsPerShare((string) $actualEps);
+
+        // DAMPEN THE SHOCK
+        $priceGapPct = $surprisePct * self::PRICE_GAP_DAMPENING;
+
+        // CAP THE SHOCK
+        $priceGapPct = max(-self::MAX_PRICE_GAP, min(self::MAX_PRICE_GAP, $priceGapPct));
+
+        // APPLY THE GAP
+        $currentPrice = (float) $stock->getPrice();
+        $newPrice = $currentPrice * (1.0 + $priceGapPct);
+        
+        $stock->setPrice((string) round($newPrice, 2));
 
         $formattedEps = $actualEps < 0 ? '-$' . number_format(abs($actualEps), 2) : '$' . number_format($actualEps, 2);
         $formattedSurprise = '$' . number_format(abs($surpriseAmount), 2);

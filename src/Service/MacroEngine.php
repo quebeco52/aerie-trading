@@ -61,12 +61,12 @@ class MacroEngine
 
             $targetPE = $baselinePE * $cycleModifier;
 
-            // Convert to Log Space
             $logCurrent = log(max(0.01, $currentPE));
-            $logBaseline = log($targetPE);
 
             // Calculate the Log-Gravity and Log-Drift
-            $logPull = $reversionSpeed * ($logBaseline - $logCurrent) * $dt;
+            $logPullRate = $this->mathUtility->calculateLogMeanReversion($currentPE, $targetPE, $reversionSpeed);
+            $logPull = $logPullRate * $dt;
+
             $z = $this->mathUtility->generateStandardNormal();
             $logDrift = $macroVol * sqrt($dt) * $z;
 
@@ -118,7 +118,7 @@ class MacroEngine
             $remainingWindow = max(0.0001, $maxDuration - $timeInState);
             $transitionProbability = $dt / $remainingWindow;
 
-            if ((mt_rand() / mt_getrandmax()) < $transitionProbability) {
+            if ($this->mathUtility->checkProbability($transitionProbability)) {
                 $transitioned = true;
             }
         }

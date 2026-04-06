@@ -93,6 +93,8 @@ class MarketEngine
         // The Beta ONLY scales the market risk portion, not the risk-free rate.
         $drift = $riskFreeRate + ($totalMarketPremium * $beta);
 
+        $sqrtDt = sqrt($dt);
+
         // Generate the random variable for the STOCK PRICE
         $z1 = $this->mathUtility->generateStandardNormal();
         $w1 = $z1; 
@@ -126,10 +128,10 @@ class MarketEngine
         $marketCorrelation = max(-0.99, min(0.99, $impliedRho));
 
         // Split the volatility
-        $systematicDrift = $currentVolatility * $marketCorrelation * $marketZ * sqrt($dt);
-        $idiosyncraticDrift = $currentVolatility * sqrt(1 - pow($marketCorrelation, 2)) * $w1 * sqrt($dt);
+        $systematicDrift = $currentVolatility * $marketCorrelation * $marketZ * $sqrtDt;
+        $idiosyncraticDrift = $currentVolatility * sqrt(1 - ($marketCorrelation * $marketCorrelation)) * $w1 * $sqrtDt;
 
-        $currentVariance = pow($currentVolatility, 2);
+        $currentVariance = $currentVolatility * $currentVolatility;
 
         // Apply GBM with the properly decoupled components
         $gbmExponent = ($drift + $gravityDrift - 0.5 * $currentVariance) * $dt

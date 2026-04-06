@@ -211,7 +211,7 @@ class InitialMarket
             'price' => 130.00, 'eps' => 3.67,
             'shares_outstanding' => 1000000000,
             // The Ultimate Dividend Aristocrat: Extreme low volatility, ignores the market, practically a bond
-            'volatility' => 0.08, 'beta' => 0.25, 'jump_intensity' => 0.10, 'jump_mean' => 0.00, 'jump_vol' => 0.02
+            'volatility' => 0.08, 'beta' => 0.15, 'jump_intensity' => 0.10, 'jump_mean' => 0.00, 'jump_vol' => 0.02
         ],
         [
             'ticker' => 'CORM', 'name' => 'Cormorant Environmental', 'sector' => 'Industrials',
@@ -219,7 +219,7 @@ class InitialMarket
             'price' => 125.00, 'eps' => 2.25,
             'shares_outstanding' => 1000000000,
             // Waste Management: The ultimate recession proof monopoly. It steadily consumes the trash with zero drama
-            'volatility' => 0.15, 'beta' => 0.60, 'jump_intensity' => 0.20, 'jump_mean' => 0.01, 'jump_vol' => 0.04
+            'volatility' => 0.15, 'beta' => 0.40, 'jump_intensity' => 0.20, 'jump_mean' => 0.01, 'jump_vol' => 0.04
         ],
         [
             'ticker' => 'CRAN', 'name' => 'Crane Medical Network', 'sector' => 'Healthcare',
@@ -227,7 +227,7 @@ class InitialMarket
             'price' => 145.00, 'eps' => 4.01,
             'shares_outstanding' => 1000000000,
             // Healthcare: Highly subsidized, defensive
-            'volatility' => 0.16, 'beta' => 0.70, 'jump_intensity' => 0.75, 'jump_mean' => 0.01, 'jump_vol' => 0.05
+            'volatility' => 0.16, 'beta' => 0.40, 'jump_intensity' => 0.75, 'jump_mean' => 0.01, 'jump_vol' => 0.05
         ],
         [
             'ticker' => 'TALN', 'name' => 'Talon Credit', 'sector' => 'Financials',
@@ -243,7 +243,7 @@ class InitialMarket
             'price' => 175.00, 'eps' => 5.02,
             'shares_outstanding' => 1000000000,
             // Ground Freight: Fleet of delivery trucks. A pure gauge of global parcel volume
-            'volatility' => 0.22, 'beta' => 1.05, 'jump_intensity' => 0.60, 'jump_mean' => 0.00, 'jump_vol' => 0.05
+            'volatility' => 0.22, 'beta' => 1.10, 'jump_intensity' => 0.60, 'jump_mean' => 0.00, 'jump_vol' => 0.05
         ],
         [
             'ticker' => 'SGRB', 'name' => 'Sugarbird Confectionery', 'sector' => 'Consumer Staples',
@@ -283,7 +283,7 @@ class InitialMarket
             'price' => 80.00, 'eps' => 0.83,
             'shares_outstanding' => 1000000000,
             // Elite Prop Desk: Highly volatile, extreme beta tied directly to absolute market friction
-            'volatility' => 0.38, 'beta' => 1.85, 'jump_intensity' => 1.50, 'jump_mean' => 0.00, 'jump_vol' => 0.25
+            'volatility' => 0.38, 'beta' => 1.70, 'jump_intensity' => 1.50, 'jump_mean' => 0.00, 'jump_vol' => 0.25
         ],
         [
             'ticker' => 'PLZA', 'name' => 'Plaza Civic River Trust', 'sector' => 'Real Estate',

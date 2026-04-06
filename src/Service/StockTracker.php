@@ -53,11 +53,11 @@ class StockTracker
      *
      * @param Stock[] $stocks        Array of Stock entities to update.
      * @param float   $dt            The time step delta (e.g., in years).
-     * @param array   $liveSectorPEs Associative array mapping sector names to their current live P/E ratios.
+     * @param array<string, float>   $liveSectorPEs Associative array mapping sector names to their current live P/E ratios.
      * @param bool    $recordHistory Whether to persist the new prices to the stock history table.
      * @param EconomicCycle|null $economicCycle The current state of the macroeconomic cycle.
      * 
-     * @return array{updates: array, total_cap: float, events: array, market_vol: float} Aggregated results of the update.
+     * @return array{updates: array<int, array{ticker: string, sector: string, price: float, market_cap: float, current_volatility: float}>, total_cap: float, events: array<int, array<string, mixed>>, market_vol: float} Aggregated results of the update.
      */
     public function updateStocks(array $stocks, float $dt, array $liveSectorPEs, bool $recordHistory, ?EconomicCycle $economicCycle = null, int $tickCount = 0, int $ticksPerYear = 252): array
     {
@@ -71,7 +71,7 @@ class StockTracker
         $marketZ = $this->mathUtility->generateStandardNormal();
 
         // THE DISTRICT VIX (Dynamic Market Volatility)
-        $this->updateDistrictVariance($dt, $economicCycle);
+        $this->updateDistrictVariance($dt, $marketZ, $economicCycle);
 
         $marketVol = $this->currentMarketVol;
 
@@ -108,7 +108,7 @@ class StockTracker
             }
 
             // Earnings Engine
-            $earningsEvent = $this->earningsEngine->calculate($stock, $dt, $economicCycle, $tickCount, $ticksPerYear);
+            $earningsEvent = $this->earningsEngine->calculate($stock, $economicCycle, $tickCount, $ticksPerYear);
             if ($earningsEvent) {
                 $events[] = $earningsEvent;
             }
@@ -138,7 +138,7 @@ class StockTracker
             // Only update these if a split actually happened
             if ($splitEvent) {
                 $stock->setEarningsPerShare((string) $newEps);
-                $stock->setSharesOutstanding($sharesOutstanding);
+                $stock->setSharesOutstanding((string) $sharesOutstanding);
                 $events[] = $splitEvent;
             }
 
@@ -177,50 +177,40 @@ class StockTracker
      * along with a jump diffusion mechanism to simulate sudden market-wide volatility spikes.
      *
      * @param float $dt The time step delta.
+     * @param float $marketZ The systemic market shock generated for this tick.
+     * @param EconomicCycle|null $economicCycle The current macro cycle.
      */
-    private function updateDistrictVariance(float $dt, ?EconomicCycle $economicCycle = null): void
+    private function updateDistrictVariance(float $dt, float $marketZ,?EconomicCycle $economicCycle = null): void
     {
-        $kappa = 6.0;
-        $baseVolatility = 0.15;
-        $volOfVol = 0.30;
 
         $cycleVolModifier = 1.0;
         if ($economicCycle) {
             $cycleVolModifier = $economicCycle->getVolatilityModifier();
         }
 
-        $longTermVolatility = $baseVolatility * $cycleVolModifier;
+        $this->currentMarketVol = $this->mathUtility->calculateHestonVolatility(
+            currentVolatility: $this->currentMarketVol,
+            longTermVolatility: 0.15 * $cycleVolModifier,
+            kappa: 6.0,
+            volOfVol: 0.30,
+            rho: -0.7,
+            dt: $dt,
+            z1: $marketZ,
+        );
 
 
-        $currentVariance = pow($this->currentMarketVol, 2);
-        $longTermVariance = pow($longTermVolatility, 2);
+        $jumpData = $this->mathUtility->calculateJumpDiffusion(
+            lambda: 0.80,
+            jumpMean: 0.05,
+            jumpVol: 0.10,
+            dt: $dt
+        );
 
-        // Base Heston Variance Process
-        $w2 = $this->mathUtility->generateStandardNormal();
-        
-        $dv = $kappa * ($longTermVariance - $currentVariance) * $dt
-            + $volOfVol * sqrt($currentVariance) * sqrt($dt) * $w2;
-
-        $nextVariance = $currentVariance + $dv;
-
-        // The Jump Mechanism (Applied directly to variance)
-        $annualJumpProbability = 0.80;
-        $stepJumpProbability = $annualJumpProbability * $dt;
-
-        if (mt_rand() / mt_getrandmax() < $stepJumpProbability) {
-            $jumpZ = $this->mathUtility->generateStandardNormal();
-            
-            // Calculate volatility jump severity (e.g., 5% to 35% absolute)
-            $volJumpSeverity = 0.05 + (abs($jumpZ) * 0.10);
-            
-            // Convert the current state + jump back into variance
-            $spikedVolatility = sqrt(max(0.000001, $nextVariance)) + $volJumpSeverity;
-            $nextVariance = pow($spikedVolatility, 2);
+        if ($jumpData['exponent'] !== null) {
+            // Apply the volatility jump directly
+            $volJumpSeverity = abs($jumpData['exponent']);
+            $this->currentMarketVol += $volJumpSeverity;
         }
-
-        // Full Truncation & Conversion back to Volatility
-        $nextVariance = max(0.000001, $nextVariance);
-        $this->currentMarketVol = sqrt($nextVariance);
 
         // Hard bounds (Converted back to volatility terms)
         $this->currentMarketVol = max(0.08, min(0.80, $this->currentMarketVol));
