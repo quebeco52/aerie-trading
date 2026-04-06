@@ -27,6 +27,8 @@ class EtfTracker
 
     /**
      * Updates the price of the market index ETF based on total market capitalization.
+     *
+     * @return array{ticker: string, price: float, name: string, is_etf: bool}
      */
     public function updateIndex(float $totalMarketCap, bool $recordHistory = false, string $ticker = 'LBI'): array
     {

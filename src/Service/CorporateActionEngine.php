@@ -19,7 +19,7 @@ class CorporateActionEngine
     /**
      * Evaluates a stock's price and executes a split or reverse-split if necessary.
      *
-     * @return array Contains the potentially modified price, eps, shares, and any event generated.
+     * @return array{price: float, eps: float, shares: int, event: array<string, mixed>|null} Contains the potentially modified price, eps, shares, and any event generated.
      */
     public function processSplits(Stock $stock, float $newPrice, float $newEps, int $sharesOutstanding): array
     {

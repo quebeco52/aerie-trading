@@ -25,3 +25,6 @@
 .vscode
 deploy.sh
 /backups
+###> phpstan/phpstan ###
+phpstan.neon
+###< phpstan/phpstan ###
