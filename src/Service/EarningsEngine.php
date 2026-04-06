@@ -72,18 +72,18 @@ class EarningsEngine
         $beta = (float) $stock->getBeta();
 
 
-        $freeGrowth = 0.02;
+        $freeGrowth = 0.02 / 4;
 
         // Floor the base so penny stocks/low EPS companies can still grow absolute cents
         $growthBase = max(abs($oldEps), 0.50);
 
         // Factor in the economic cycle
-        $cycleModifier = $economicCycle ? $economicCycle->getGrowthModifier() : 0.0;
+        $annualCycleModifier = $economicCycle ? $economicCycle->getGrowthModifier() : 0.0;
+        $cycleModifier = $annualCycleModifier / 4;
 
         $companyCycleModifier = $cycleModifier * $beta;
 
         // Analyst Consensus
-        // Analysts expect the base growth
         $expectedEpsGrowth = $freeGrowth  + $companyCycleModifier;
         // Round expected EPS to 2 decimals to prevent floating-point "ghost misses"
         $expectedEps = round($oldEps + ($growthBase * $expectedEpsGrowth), 2);
@@ -98,7 +98,7 @@ class EarningsEngine
         // Calculate Actual EPS
         $actualEps = round($oldEps + ($growthBase * $actualEpsGrowth), 2);
 
-        // Calculate the SURPRISE (Keep this strictly for the UI/News Feed)
+        // Calculate the SURPRISE
         $surpriseAmount = round($actualEps - $expectedEps, 2);
         $surprisePct = $surpriseAmount / max(0.10, abs($expectedEps));
 

@@ -384,6 +384,20 @@ class InitialMarket
             // The Volatility Harvester: negative beta, highly defensive, occasionally spikes during macroeconomic panics
             'volatility' => 0.24, 'beta' => -0.50, 'jump_intensity' => 1.25, 'jump_mean' => 0.05, 'jump_vol' => 0.12 
         ],
+        [
+            'ticker' => 'CNDR', 'name' => 'Condor Extraction', 'sector' => 'Materials',
+            'systemic_importance' => 'systemic',
+            'price' => 250.00, 'eps' => 13.60,
+            'shares_outstanding' => 1000000000,
+            'volatility' => 0.28, 'beta' => 1.35, 'jump_intensity' => 0.90, 'jump_mean' => -0.01, 'jump_vol' => 0.09
+        ],
+        [
+            'ticker' => 'SILC', 'name' => 'Silicon Creek Foundries', 'sector' => 'Information Technology',
+            'systemic_importance' => 'systemic',
+            'price' => 290.00, 'eps' => 15.82,
+            'shares_outstanding' => 1000000000,
+            'volatility' => 0.30, 'beta' => 1.50, 'jump_intensity' => 1.25, 'jump_mean' => 0.04, 'jump_vol' => 0.15
+        ],
     ];
 
     public const ETFS = [

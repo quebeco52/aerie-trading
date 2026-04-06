@@ -69,15 +69,15 @@ class MathUtility
         ?float $z1 = null,
         ?float $z2 = null
     ): float {
-        // 1. Generate standard normal variables if the caller didn't provide them
+        // Generate standard normal variables if the caller didn't provide them
         $z1 = $z1 ?? $this->generateStandardNormal();
         $z2 = $z2 ?? $this->generateStandardNormal();
 
-        // 2. Calculate the correlated Wiener process (w2) internally
+        // Calculate the correlated Wiener process (w2) internally
         // This ensures the volatility moves inversely to the stock price (Leverage Effect)
         $w2 = ($rho * $z1) + (sqrt(1 - pow($rho, 2)) * $z2);
 
-        // 3. The Heston Variance Process
+        // The Heston Variance Process
         $currentVariance = pow($currentVolatility, 2);
         $longTermVariance = pow($longTermVolatility, 2);
 
@@ -85,7 +85,7 @@ class MathUtility
         $dv = $kappa * ($longTermVariance - $currentVariance) * $dt
             + $volOfVol * $currentVolatility * sqrt($dt) * $w2;
 
-        // 4. Ensure variance never goes negative (Full Truncation method)
+        // Ensure variance never goes negative (Full Truncation method)
         $nextVariance = max(0.000001, $currentVariance + $dv);
         
         return sqrt($nextVariance);
