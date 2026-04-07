@@ -98,7 +98,6 @@ class StockController extends AbstractController
             'generalInfo' => $generalInfo,
             'allAssets' => $allAssets,
             'events' => $events,
-            'targetPE' => $targetPE,
             'ticksPerYear' => (int) ($_ENV['SIM_TICKS_PER_YEAR'] ?? 14400),
             'economic_cycle' => $economicCycle,
         ]);

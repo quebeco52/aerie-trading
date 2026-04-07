@@ -16,14 +16,14 @@ class UserStock
 
     #[ORM\ManyToOne(targetEntity: User::class)]
     #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
-    private ?User $user = null;
+    private User $user;
 
     #[ORM\ManyToOne(targetEntity: Stock::class)]
     #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
-    private ?Stock $stock = null;
+    private Stock $stock;
 
     #[ORM\Column(options: ['default' => 0])]
-    private ?int $quantity = 0;
+    private int $quantity = 0;
 
     #[ORM\Version]
     #[ORM\Column(type: 'integer')]

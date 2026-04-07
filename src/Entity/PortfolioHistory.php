@@ -17,13 +17,13 @@ class PortfolioHistory
 
     #[ORM\ManyToOne(targetEntity: User::class)]
     #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
-    private ?User $user = null;
+    private User $user;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 15, scale: 2)]
-    private ?string $totalValue = null;
+    private string $totalValue;
 
     #[ORM\Column(type: Types::DATETIME_MUTABLE)]
-    private ?\DateTimeInterface $recordedAt = null;
+    private \DateTime $recordedAt;
 
     public function __construct()
     {
@@ -47,7 +47,7 @@ class PortfolioHistory
         return $this;
     }
 
-    public function getRecordedAt(): ?\DateTime
+    public function getRecordedAt(): \DateTime
     {
         return $this->recordedAt;
     }
@@ -59,7 +59,7 @@ class PortfolioHistory
         return $this;
     }
 
-    public function getUser(): ?User
+    public function getUser(): User
     {
         return $this->user;
     }

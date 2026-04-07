@@ -17,19 +17,19 @@ class EtfEvent
 
     #[ORM\ManyToOne(targetEntity: Etf::class)]
     #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
-    private ?Etf $etf = null;
+    private Etf $etf;
 
     #[ORM\Column(length: 50)]
-    private ?string $eventType = null;
+    private string $eventType;
 
     #[ORM\Column(length: 255)]
-    private ?string $description = null;
+    private string $description;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 2, nullable: true)]
     private ?string $changePercent = null;
 
     #[ORM\Column(type: Types::DATETIME_MUTABLE)]
-    private ?\DateTimeInterface $recordedAt = null;
+    private \DateTimeInterface $recordedAt;
 
     public function __construct()
     {
@@ -41,7 +41,7 @@ class EtfEvent
         return $this->id;
     }
 
-    public function getEventType(): ?string
+    public function getEventType(): string
     {
         return $this->eventType;
     }
@@ -53,7 +53,7 @@ class EtfEvent
         return $this;
     }
 
-    public function getDescription(): ?string
+    public function getDescription(): string
     {
         return $this->description;
     }
@@ -77,24 +77,24 @@ class EtfEvent
         return $this;
     }
 
-    public function getRecordedAt(): ?\DateTime
+    public function getRecordedAt(): \DateTimeInterface
     {
         return $this->recordedAt;
     }
 
-    public function setRecordedAt(\DateTime $recordedAt): static
+    public function setRecordedAt(\DateTimeInterface $recordedAt): static
     {
         $this->recordedAt = $recordedAt;
 
         return $this;
     }
 
-    public function getEtf(): ?Etf
+    public function getEtf(): Etf
     {
         return $this->etf;
     }
 
-    public function setEtf(?Etf $etf): static
+    public function setEtf(Etf $etf): static
     {
         $this->etf = $etf;
 

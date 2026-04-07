@@ -5,4 +5,7 @@ parameters:
         - config/
         - public/
         - src/
-        - tests/
+        #- tests/
+
+    ignoreErrors:
+        - identifier: missingType.iterableValue

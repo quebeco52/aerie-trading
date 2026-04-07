@@ -21,6 +21,8 @@ class MarketEvent
 
     /**
      * Publishes an event to the database, logs it, and formats it for the WebSocket.
+     *
+     * @return array{type: string, ticker: string, description: string, change_percent: float}
      */
     public function publish(Stock $stock, string $type, string $description, float $changePercent): array
     {

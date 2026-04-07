@@ -13,6 +13,9 @@ use EasyCorp\Bundle\EasyAdminBundle\Field\NumberField;
 use Symfony\Component\Form\Extension\Core\Type\PasswordType;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
+/**
+ * @extends AbstractCrudController<User>
+ */
 class UserCrudController extends AbstractCrudController
 {
     private UserPasswordHasherInterface $passwordHasher;
@@ -62,7 +65,7 @@ class UserCrudController extends AbstractCrudController
         parent::updateEntity($entityManager, $entityInstance);
     }
 
-    private function hashPassword($user): void
+    private function hashPassword(mixed $user): void
     {
         if (!$user instanceof User) {
             return;

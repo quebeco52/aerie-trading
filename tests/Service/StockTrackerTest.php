@@ -9,6 +9,7 @@ use App\Service\MarketEngine;
 use App\Service\EarningsEngine;
 use App\Service\CorporateActionEngine;
 use App\Service\MarketEvent;
+use App\Service\MathUtility;
 use Doctrine\ORM\EntityManagerInterface;
 use App\Entity\Stock;
 use App\Entity\StockEvent;
@@ -21,6 +22,7 @@ class StockTrackerTest extends TestCase
     private EarningsEngine|MockObject $earningsEngineMock;
     private CorporateActionEngine|MockObject $corporateActionEngineMock;
     private MarketEvent|MockObject $marketEventMock;
+    private MathUtility|MockObject $mathUtilityMock;
     private StockTracker $tracker;
 
     protected function setUp(): void
@@ -30,13 +32,21 @@ class StockTrackerTest extends TestCase
         $this->earningsEngineMock = $this->createMock(EarningsEngine::class);
         $this->corporateActionEngineMock = $this->createMock(CorporateActionEngine::class);
         $this->marketEventMock = $this->createMock(MarketEvent::class);
+        $this->mathUtilityMock = $this->createMock(MathUtility::class);
+        
+        $this->mathUtilityMock->method('calculateJumpDiffusion')->willReturn([
+            'multiplier' => 1.0,
+            'shock_pct' => null,
+            'exponent' => null
+        ]);
         
         $this->tracker = new StockTracker(
             $this->entityManagerMock,
             $this->marketEngineMock,
             $this->earningsEngineMock,
             $this->corporateActionEngineMock,
-            $this->marketEventMock
+            $this->marketEventMock,
+            $this->mathUtilityMock
         );
     }
 

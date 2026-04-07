@@ -31,10 +31,20 @@ class HomeController extends AbstractController
 
         $stocks = $entityManager->getRepository(Stock::class)->findAll();
 
+        /**
+         * @var array<int, array{
+         *  ticker: string,
+         *  name: string,
+         *  sector: string,
+         *  price: float,
+         *  shares: float,
+         *  marketCap: float
+         * }> $marketData
+         */
         $marketData = [];
         foreach ($stocks as $stock) {
-            $price = $stock->getPrice();
-            $shares = $stock->getSharesOutstanding();
+            $price = (float) $stock->getPrice();
+            $shares = (float) $stock->getSharesOutstanding();
             $marketCap = $price * $shares;
 
             $marketData[] = [

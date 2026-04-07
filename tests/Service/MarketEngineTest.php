@@ -14,15 +14,18 @@ class MarketEngineTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->mathUtilityMock = $this->createMock(MathUtility::class);
+        // Use a partial mock so the actual math methods run, but we can control randomness
+        $this->mathUtilityMock = $this->getMockBuilder(MathUtility::class)
+            ->onlyMethods(['generateStandardNormal', 'checkProbability'])
+            ->getMock();
+            
         $this->engine = new MarketEngine($this->mathUtilityMock);
     }
 
     public function testCalculateNextPriceWithoutJump()
     {
-        // Mock standard normal variables to be exactly 0 for zero volatility noise
-        // This completely isolates the drift and gravity mechanics.
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
 
         $currentPrice = 100.0;
         $currentVolatility = 0.2;
@@ -53,16 +56,17 @@ class MarketEngineTest extends TestCase
         // The price math:
         // fairValue = 100
         // logFairValue = log(100), logCurrent = log(100) -> gravityDrift = 0
-        // gbmExponent = (drift + gravityDrift - 0.5 * currentVariance) * dt 
-        //             = (0.1 + 0 - 0.5 * 0.04) * 1.0 = 0.08
-        // price = 100 * exp(0.08)
-        $expectedPrice = 100.0 * exp(0.08);
+        // CAPM drift = 0.020 (risk-free) + 0.1 * 1.0 (beta) = 0.12
+        // gbmExponent = (0.12 + 0 - 0.5 * 0.04) * 1.0 = 0.10
+        // price = 100 * exp(0.10)
+        $expectedPrice = 100.0 * exp(0.10);
         $this->assertEqualsWithDelta($expectedPrice, $result['price'], 0.0001);
     }
 
     public function testCalculateNextPriceWithGuaranteedJump()
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(true);
 
         $currentPrice = 100.0;
 
@@ -82,7 +86,7 @@ class MarketEngineTest extends TestCase
 
         $this->assertNotNull($result['shock'], 'Shock should occur due to high lambda.');
         
-        $expectedGbmPrice = 100.0 * exp(0.08); // Baseline drift from previous test
+        $expectedGbmPrice = 100.0 * exp(0.10); // Baseline drift from previous test
         $expectedJumpPrice = $expectedGbmPrice * exp(0.05);
 
         $this->assertEqualsWithDelta($expectedJumpPrice, $result['price'], 0.0001);
@@ -95,6 +99,7 @@ class MarketEngineTest extends TestCase
     public function testReversionToFairValue()
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
 
         // Undervalued stock
         $currentPrice = 50.0;
@@ -114,8 +119,9 @@ class MarketEngineTest extends TestCase
         );
 
         // gravityDrift = 0.5 * (log(100) - log(50)) = 0.5 * log(2)
-        // gbmExponent = (0.0 + gravityDrift - 0.02) * 1.0
-        $expectedPrice = 50.0 * exp(0.5 * log(2) - 0.02);
+        // CAPM drift = 0.020 + (0.0 * 1.0) = 0.020
+        // gbmExponent = (0.020 + gravityDrift - 0.02) * 1.0 = gravityDrift
+        $expectedPrice = 50.0 * exp(0.5 * log(2));
         
         $this->assertEqualsWithDelta($expectedPrice, $result['price'], 0.0001);
         $this->assertGreaterThan($currentPrice, $result['price'], 'Undervalued price should drift upwards towards fair value.');

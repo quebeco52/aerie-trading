@@ -49,7 +49,7 @@ class AppFixtures extends Fixture
             $etf->setName($etfData['name']);
             $etf->setPrice((string) $etfData['price']);
 
-            $etf->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$etfData['ticker']] ?? null);
+            $etf->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$etfData['ticker']]);
             
             $manager->persist($etf);
         }

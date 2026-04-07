@@ -90,9 +90,10 @@ class TradeController extends AbstractController
                 }
 
                 $user->setCashBalance((string)($currentCash + $totalValue));
-                $userStock->setQuantity($userStock->getQuantity() - $quantity);
+                $newQuantity = $userStock->getQuantity() - $quantity;
+                $userStock->setQuantity($newQuantity);
 
-                if ($userStock->getQuantity() === 0) {
+                if ($newQuantity === 0) {
                     $em->remove($userStock);
                 }
                 
@@ -102,14 +103,14 @@ class TradeController extends AbstractController
                 throw new \Exception('Invalid order type.');
             }
 
-            // 1. Save the trade to the database so the new cash/quantities exist
+            // Save the trade to the database so the new cash/quantities exist
             $em->persist($user);
             $em->flush(); 
 
-            // 2. Record the historical snapshot using the fresh data
+            // Record the historical snapshot using the fresh data
             $portfolio->recordUserSnapshot($user);
 
-            // 3. Save the snapshot and release the database lock!
+            // Save the snapshot and release the database lock!
             $em->flush();
             $em->getConnection()->commit();
 

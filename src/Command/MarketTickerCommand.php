@@ -135,8 +135,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $result = $this->stockTracker->updateStocks($stocks, $dt, $liveSectorPEs, $isHistoryTick, $economicCycle, $tickCount, $this->ticksPerYear);
                 $stockUpdates = $result['updates'];
                 $totalMarketCap = $result['total_cap'];
-                $events = $result['events'] ?? [];
-                $marketVol = $result['market_vol'] ?? 0.15;
+                $events = $result['events'];
+                $marketVol = $result['market_vol'];
 
                 if (!empty($operatorEvents)) {
                     $events = array_merge($events, $operatorEvents);
@@ -154,38 +154,36 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
                 }
 
-                if (!empty($allUpdates)) {
-                    $nowStr = (new \DateTime())->format('Y-m-d H:i:s');
-                    $redisBufferSize = (int) ceil($this->ticksPerYear / 12);
+                $nowStr = (new \DateTime())->format('Y-m-d H:i:s');
+                $redisBufferSize = (int) ceil($this->ticksPerYear / 12);
 
-                    // Open the pipeline
-                    $pipeline = $this->redis->multi(\Redis::PIPELINE);
+                // Open the pipeline
+                $pipeline = $this->redis->multi(\Redis::PIPELINE);
 
-                    foreach ($allUpdates as $update) {
-                        $cacheKey = "chart_buffer:{$update['ticker']}";
-                        $point = json_encode(['price' => $update['price'], 'recorded_at' => $nowStr]);
+                foreach ($allUpdates as $update) {
+                    $cacheKey = "chart_buffer:{$update['ticker']}";
+                    $point = json_encode(['price' => $update['price'], 'recorded_at' => $nowStr]);
 
-                        // Queue the commands in the pipeline instead of executing them immediately
-                        $pipeline->lPush($cacheKey, $point);
-                        $pipeline->lTrim($cacheKey, 0,  $redisBufferSize - 1);
-                    }
-
-                    // Execute all queued commands in one massive, instantaneous burst
-                    $pipeline->exec();
-
-                    // Publish your standard pub/sub updates
-                    $this->redis->publish('market_updates', json_encode([
-                        'timestamp' => time(),
-                        'stocks' => $allUpdates,
-                        'events' => $events,
-                        'sectors' => $liveSectorPEs,
-                        'market_vol' => $marketVol,
-                        'economic_cycle' => $economicCycle->value,
-                    ]));
-
-                    $this->redis->set('stocks_live_data', json_encode($stockUpdates));
-                    $this->redis->set('etf_live_data', json_encode([$etfUpdate]));
+                    // Queue the commands in the pipeline instead of executing them immediately
+                    $pipeline->lPush($cacheKey, $point);
+                    $pipeline->lTrim($cacheKey, 0,  $redisBufferSize - 1);
                 }
+
+                // Execute all queued commands in one massive, instantaneous burst
+                $pipeline->exec();
+
+                // Publish your standard pub/sub updates
+                $this->redis->publish('market_updates', json_encode([
+                    'timestamp' => time(),
+                    'stocks' => $allUpdates,
+                    'events' => $events,
+                    'sectors' => $liveSectorPEs,
+                    'market_vol' => $marketVol,
+                    'economic_cycle' => $economicCycle->value,
+                ]));
+
+                $this->redis->set('stocks_live_data', json_encode($stockUpdates));
+                $this->redis->set('etf_live_data', json_encode([$etfUpdate]));
 
                 // Save Portfolio Snapshots once a "Simulation Week"
                 if ($tickCount % $snapshotInterval === 0) {

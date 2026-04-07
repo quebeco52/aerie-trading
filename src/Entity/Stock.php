@@ -26,34 +26,34 @@ class Stock
     private ?int $id = null;
 
     /**
-     * @var string|null The unique stock ticker symbol (e.g., 'LAKE').
+     * @var string The unique stock ticker symbol (e.g., 'LAKE').
      */
     #[ORM\Column(length: 10, unique: true)]
-    private ?string $ticker = null;
+    private string $ticker;
 
     /**
-     * @var string|null The full corporate name of the company.
+     * @var string The full corporate name of the company.
      */
     #[ORM\Column(length: 255)]
-    private ?string $name = null;
+    private string $name;
 
     /**
-     * @var string|null The economic sector, used for macroeconomic P/E drift and sector rotation.
+     * @var string The economic sector, used for macroeconomic P/E drift and sector rotation.
      */
     #[ORM\Column(length: 50, options: ['default' => 'General'])]
-    private ?string $sector = 'General';
+    private string $sector = 'General';
 
     /**
-     * @var string|null The current trading price of the stock.
+     * @var string The current trading price of the stock.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 8, options: ['default' => '100.00000000'])]
-    private ?string $price = '100.00000000';
+    private string $price = '100.00000000';
 
     /**
-     * @var string|null The total number of shares, used to calculate total Market Capitalization.
+     * @var int|string The total number of shares, used to calculate total Market Capitalization.
      */
     #[ORM\Column(type: Types::BIGINT, options: ['unsigned' => true, 'default' => 1000000])]
-    private ?string $sharesOutstanding = '1000000';
+    private int|string $sharesOutstanding = '1000000';
 
     /**
      * @var string|null Earnings per share, used to calculate fundamental valuation (P/E ratio).
@@ -62,10 +62,10 @@ class Stock
     private ?string $earningsPerShare = '10.00000000';
 
     /**
-     * @var string|null Baseline annual volatility (sigma) used in the stochastic pricing models.
+     * @var string Baseline annual volatility (sigma) used in the stochastic pricing models.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.02'])]
-    private ?string $volatility = '0.02';
+    private string $volatility = '0.02';
 
     /**
      * @var string|null Dynamic current volatility, allowing the stock to experience periods of high/low turbulence.
@@ -101,14 +101,14 @@ class Stock
     private ?string $description = null;
 
     #[ORM\Column(length: 255)]
-    private ?string $systemicImportance = null;
+    private string $systemicImportance;
 
     public function getId(): ?int
     {
         return $this->id;
     }
 
-    public function getTicker(): ?string
+    public function getTicker(): string
     {
         return $this->ticker;
     }
@@ -120,7 +120,7 @@ class Stock
         return $this;
     }
 
-    public function getName(): ?string
+    public function getName(): string
     {
         return $this->name;
     }
@@ -132,7 +132,7 @@ class Stock
         return $this;
     }
 
-    public function getSector(): ?string
+    public function getSector(): string
     {
         return $this->sector;
     }
@@ -144,7 +144,7 @@ class Stock
         return $this;
     }
 
-    public function getPrice(): ?string
+    public function getPrice(): string
     {
         return $this->price;
     }
@@ -156,12 +156,12 @@ class Stock
         return $this;
     }
 
-    public function getSharesOutstanding(): ?string
+    public function getSharesOutstanding(): int|string
     {
         return $this->sharesOutstanding;
     }
 
-    public function setSharesOutstanding(string $sharesOutstanding): static
+    public function setSharesOutstanding(int|string $sharesOutstanding): static
     {
         $this->sharesOutstanding = $sharesOutstanding;
 
@@ -188,7 +188,7 @@ class Stock
         return $this;
     }
 
-    public function getVolatility(): ?string
+    public function getVolatility(): string
     {
         return $this->volatility;
     }
@@ -271,7 +271,7 @@ class Stock
         return $this;
     }
 
-    public function getSystemicImportance(): ?string
+    public function getSystemicImportance(): string
     {
         return $this->systemicImportance;
     }

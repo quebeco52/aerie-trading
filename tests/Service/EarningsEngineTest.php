@@ -6,21 +6,18 @@ use PHPUnit\Framework\TestCase;
 use App\Service\EarningsEngine;
 use App\Service\MathUtility;
 use App\Service\MarketEvent;
+use App\Data\EconomicCycle;
 use App\Entity\Stock;
-use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\MockObject\MockObject;
 
 class EarningsEngineTest extends TestCase
 {
-    private EntityManagerInterface|MockObject $entityManagerMock;
     private MathUtility|MockObject $mathUtilityMock;
     private MarketEvent|MockObject $marketEventMock;
     private EarningsEngine $engine;
 
     protected function setUp(): void
     {
-        // 1. Mock the Database Connection
-        $this->entityManagerMock = $this->createMock(EntityManagerInterface::class);
         
         // 2. Mock MarketEvent (now responsible for outputs and persisting)
         $this->marketEventMock = $this->createMock(MarketEvent::class);
@@ -37,15 +34,24 @@ class EarningsEngineTest extends TestCase
         $this->mathUtilityMock = $this->createMock(MathUtility::class);
 
         // 4. Instantiate the Engine
-        $this->engine = new EarningsEngine($this->entityManagerMock, $this->marketEventMock, $this->mathUtilityMock);
+        $this->engine = new EarningsEngine($this->marketEventMock, $this->mathUtilityMock);
+    }
+
+    private function getReportingTick(string $ticker, int $ticksPerYear = 252): int
+    {
+        $ticksPerQuarter = (int) ($ticksPerYear / 4);
+        $ticksPerSeason = (int) ($ticksPerQuarter * 0.15); 
+        return abs(crc32($ticker)) % max(1, $ticksPerSeason);
     }
 
     public function testCalculateReturnsNullWhenNoEventOccurs()
     {
         $stock = new Stock();
+        $stock->setTicker('TEST');
         
-        // A dt of 0.0 guarantees the probability check (mt_rand / max < 4.0 * dt) will fail
-        $result = $this->engine->calculate($stock, 0.0);
+        // Tick 50 is outside the earnings season for a standard 252-tick year
+        // (Season is the first ~9 ticks of the 63-tick quarter)
+        $result = $this->engine->calculate($stock, null, 50, 252);
         
         $this->assertNull($result, 'Engine should return null when the earnings probability check fails.');
     }
@@ -58,12 +64,13 @@ class EarningsEngineTest extends TestCase
         $stock->setSharesOutstanding('1000000');
         $stock->setVolatility('0.20');
         $stock->setCurrentVolatility('0.20');
+        $stock->setBeta('1.0');
 
         // Force a mildly positive business quarter
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.5);
 
-        // A dt of 1.0 guarantees the earnings event triggers
-        $result = $this->engine->calculate($stock, 1.0);
+        $reportingTick = $this->getReportingTick('TEST');
+        $result = $this->engine->calculate($stock, null, $reportingTick, 252);
 
         $this->assertNotNull($result);
         $this->assertEquals('EARNINGS', $result['type']);
@@ -81,11 +88,13 @@ class EarningsEngineTest extends TestCase
         $stock->setSharesOutstanding('1000000');
         $stock->setVolatility('0.20');
         $stock->setCurrentVolatility('0.20');
+        $stock->setBeta('1.0');
 
         // Force an extreme blowout quarter (Z > 1.5 triggers the shock)
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(2.0);
 
-        $this->engine->calculate($stock, 1.0);
+        $reportingTick = $this->getReportingTick('SHOCK');
+        $this->engine->calculate($stock, null, $reportingTick, 252);
 
         $this->assertGreaterThan(0.20, (float) $stock->getCurrentVolatility(), 'Volatility should have spiked due to the extreme surprise.');
     }
@@ -98,11 +107,13 @@ class EarningsEngineTest extends TestCase
         $stock->setSharesOutstanding('1000000');
         $stock->setVolatility('0.20');
         $stock->setCurrentVolatility('0.20');
+        $stock->setBeta('1.0');
 
         // Neutral quarter (0.0) isolates the recovery boost math
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
-        $this->engine->calculate($stock, 1.0);
+        $reportingTick = $this->getReportingTick('RECOV');
+        $this->engine->calculate($stock, EconomicCycle::RECOVERY, $reportingTick, 252);
 
         $this->assertNotEquals(-10.00, (float) $stock->getEarningsPerShare(), 'A company with negative EPS should still see EPS changes.');
     }

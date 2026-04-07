@@ -7,6 +7,7 @@ use PHPUnit\Framework\MockObject\MockObject;
 use App\Service\MacroEngine;
 use App\Service\MathUtility;
 use App\Data\SectorPE;
+use App\Data\EconomicCycle;
 
 class MacroEngineTest extends TestCase
 {
@@ -16,7 +17,10 @@ class MacroEngineTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->mathUtilityMock = $this->createMock(MathUtility::class);
+        // Use a partial mock so the actual math methods run, but we can control randomness
+        $this->mathUtilityMock = $this->getMockBuilder(MathUtility::class)
+            ->onlyMethods(['generateStandardNormal', 'checkProbability'])
+            ->getMock();
         $this->redisMock = $this->createMock(\Redis::class);
 
         // Bypass the constructor to avoid making an actual Redis connection
@@ -77,16 +81,16 @@ class MacroEngineTest extends TestCase
             ->willReturn(json_encode($initialSectors));
 
         $dt = 1.0; // 1 year time step
-        $result = $this->engine->updateSectorMultiples($dt);
+        $result = $this->engine->updateSectorMultiples($dt, EconomicCycle::EXPANSION);
 
         $newPE = $result['Information Technology'];
 
-        // Expected math: log(20) + 0.40 * (log(24) - log(20)) * 1.0
-        $expectedLogPe = log(20.0) + 0.40 * (log(24.0) - log(20.0));
+        // Expected math: log(20) + 2.0 * (log(24 * 1.15) - log(20)) * 1.0
+        $expectedLogPe = log(20.0) + 2.0 * (log(24.0 * 1.15) - log(20.0));
         $expectedPe = exp($expectedLogPe);
 
         $this->assertEqualsWithDelta($expectedPe, $newPE, 0.0001);
-        $this->assertGreaterThan(20.0, $newPE, 'PE should have drifted upwards towards the 24.0 baseline.');
+        $this->assertGreaterThan(20.0, $newPE, 'PE should have drifted upwards towards the 27.6 baseline.');
     }
 
     public function testUpdateSectorMultiplesAppliesVolatilityDrift()
@@ -94,24 +98,25 @@ class MacroEngineTest extends TestCase
         // Set Z to 1.0 to trigger an upward volatility shock
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(1.0);
 
-        // Start exactly AT the baseline to isolate the volatility (gravity becomes 0)
+        // Start exactly AT the target PE to isolate the volatility (gravity becomes 0)
         $baseline = SectorPE::MACRO_SECTORS['Financials']; // 14.0
-        $initialSectors = ['Financials' => $baseline];
+        $targetPe = $baseline * 1.15; // 1.15 is the EXPANSION cycle modifier
+        $initialSectors = ['Financials' => $targetPe];
         $this->redisMock->expects($this->once())
             ->method('get')
             ->with('macro_sectors_live')
             ->willReturn(json_encode($initialSectors));
 
         $dt = 1.0;
-        $result = $this->engine->updateSectorMultiples($dt);
+        $result = $this->engine->updateSectorMultiples($dt, EconomicCycle::EXPANSION);
 
         $newPE = $result['Financials'];
 
         // Volatility drift math: macroVol(0.20) * sqrt(1.0) * Z(1.0) = 0.20
-        $expectedLogPe = log($baseline) + 0.20;
+        $expectedLogPe = log($targetPe) + 0.20;
         $expectedPe = exp($expectedLogPe);
 
         $this->assertEqualsWithDelta($expectedPe, $newPE, 0.0001);
-        $this->assertGreaterThan($baseline, $newPE, 'PE should spike due to positive Z score shock.');
+        $this->assertGreaterThan($targetPe, $newPE, 'PE should spike due to positive Z score shock.');
     }
 }

@@ -17,13 +17,13 @@ class StockHistory
 
     #[ORM\ManyToOne(targetEntity: Stock::class)]
     #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
-    private ?Stock $stock = null;
+    private Stock $stock;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 8)]
-    private ?string $price = null;
+    private string $price;
 
     #[ORM\Column(type: Types::DATETIME_MUTABLE)]
-    private ?\DateTimeInterface $recordedAt = null;
+    private \DateTime $recordedAt;
 
     public function __construct()
     {
@@ -47,7 +47,7 @@ class StockHistory
         return $this;
     }
 
-    public function getRecordedAt(): ?\DateTime
+    public function getRecordedAt(): \DateTime
     {
         return $this->recordedAt;
     }
@@ -59,7 +59,7 @@ class StockHistory
         return $this;
     }
 
-    public function getStock(): ?Stock
+    public function getStock(): Stock
     {
         return $this->stock;
     }

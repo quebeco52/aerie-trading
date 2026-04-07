@@ -21,10 +21,13 @@
 /assets/vendor/
 ###< symfony/asset-mapper ###
 
-
+### costume
 .vscode
 deploy.sh
 /backups
+/.aiexclude
+###
+
 ###> phpstan/phpstan ###
 phpstan.neon
 ###< phpstan/phpstan ###

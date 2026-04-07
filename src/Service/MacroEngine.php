@@ -94,8 +94,7 @@ class MacroEngine
         $currentState = EconomicCycle::EXPANSION;
 
         if ($rawState !== false) {
-            $typedState = is_int(EconomicCycle::EXPANSION->value) ? (int) $rawState : $rawState;
-            $currentState = EconomicCycle::tryFrom($typedState) ?? EconomicCycle::EXPANSION;
+            $currentState = EconomicCycle::tryFrom((string) $rawState) ?? EconomicCycle::EXPANSION;
         }
         
         $rawTime = $this->redis->get(self::REDIS_ECONOMY_TIME_KEY);

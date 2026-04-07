@@ -17,13 +17,13 @@ class EtfHistory
 
     #[ORM\ManyToOne(targetEntity: Etf::class)]
     #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
-    private ?Etf $etf = null;
+    private Etf $etf;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 2)]
-    private ?string $price = null;
+    private string $price;
 
     #[ORM\Column(type: Types::DATETIME_MUTABLE)]
-    private ?\DateTimeInterface $recordedAt = null;
+    private \DateTime $recordedAt;
 
     public function __construct()
     {
@@ -47,7 +47,7 @@ class EtfHistory
         return $this;
     }
 
-    public function getRecordedAt(): ?\DateTime
+    public function getRecordedAt(): \DateTime
     {
         return $this->recordedAt;
     }
@@ -59,7 +59,7 @@ class EtfHistory
         return $this;
     }
 
-    public function getEtf(): ?Etf
+    public function getEtf(): Etf
     {
         return $this->etf;
     }

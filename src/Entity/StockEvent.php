@@ -17,19 +17,19 @@ class StockEvent
 
     #[ORM\ManyToOne(targetEntity: Stock::class)]
     #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
-    private ?Stock $stock = null;
+    private Stock $stock;
 
     #[ORM\Column(length: 20)]
-    private ?string $eventType = null;
+    private string $eventType;
 
     #[ORM\Column(length: 255)]
-    private ?string $description = null;
+    private string $description;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 2, nullable: true)]
     private ?string $changePercent = null;
 
     #[ORM\Column(type: Types::DATETIME_MUTABLE)]
-    private ?\DateTimeInterface $recordedAt = null;
+    private \DateTime $recordedAt;
 
     public function __construct()
     {
@@ -77,7 +77,7 @@ class StockEvent
         return $this;
     }
 
-    public function getRecordedAt(): ?\DateTime
+    public function getRecordedAt(): \DateTime
     {
         return $this->recordedAt;
     }
@@ -89,7 +89,7 @@ class StockEvent
         return $this;
     }
 
-    public function getStock(): ?Stock
+    public function getStock(): Stock
     {
         return $this->stock;
     }
