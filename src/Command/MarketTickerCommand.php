@@ -146,10 +146,30 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                 $allUpdates = array_merge($stockUpdates, [$etfUpdate]);
 
-                $this->entityManager->flush();
-
-                // Clear memory to prevent leaks
+                
                 if ($isHistoryTick) {
+
+                    $this->entityManager->flush();
+
+                    $historyData = $result['history'];
+                    if (!empty($historyData)) {
+                        $sql = "INSERT INTO stock_history (stock_id, price, recorded_at) VALUES ";
+                        $insertValues = [];
+                        $params = [];
+                        $now = (new \DateTime())->format('Y-m-d H:i:s');
+
+                        foreach ($historyData as $row) {
+                            $insertValues[] = "(?, ?, ?)";
+                            $params[] = $row['stock_id'];
+                            $params[] = $row['price'];
+                            $params[] = $now;
+                        }
+
+                        $sql .= implode(', ', $insertValues);
+
+                        $conn->executeStatement($sql, $params);
+                    }
+
                     $this->entityManager->clear();
                     $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
                 }

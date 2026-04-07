@@ -65,6 +65,7 @@ class StockTracker
         $stockUpdates = [];
         $totalMarketCap = 0.0;
         $events = [];
+        $historyData = [];
 
 
         // Generate the systemic shock for this tick
@@ -155,10 +156,11 @@ class StockTracker
             ];
 
             if ($recordHistory) {
-                $history = new StockHistory();
-                $history->setStock($stock);
-                $history->setPrice((string) $newPrice);
-                $this->entityManager->persist($history);
+
+                $historyData[] = [
+                    'stock_id' => $stock->getId(),
+                    'price' => $newPrice
+                ];
             }
         }
 
@@ -166,7 +168,8 @@ class StockTracker
             'updates' => $stockUpdates,
             'total_cap' => $totalMarketCap,
             'events' => $events,
-            'market_vol' => $this->currentMarketVol
+            'market_vol' => $this->currentMarketVol,
+            'history' => $historyData,
         ];
     }
 
