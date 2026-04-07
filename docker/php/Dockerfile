@@ -33,9 +33,6 @@ RUN composer install --no-dev --optimize-autoloader --no-scripts
 RUN php bin/console tailwind:build --minify
 RUN php bin/console asset-map:compile
 
-# Warm up the production cache inside the image
-RUN php bin/console cache:clear
-RUN php bin/console cache:warmup
 
 ### dev
 FROM base AS dev

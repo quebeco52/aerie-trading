@@ -27,6 +27,10 @@ $DC build --no-cache aerie-php aerie-scheduler aerie-ticker aerie-websocket
 
 echo -e "\e[33m[5/6] Swapping to New Images & Running Migrations...\e[0m"
 $DC up -d
+
+$DC exec -T aerie-php php bin/console cache:clear
+$DC exec -T aerie-php php bin/console cache:warmup
+
 $DC exec -T aerie-php php bin/console doctrine:migrations:migrate --no-interaction
 
 echo -e "\e[33m[6/6] Reigniting the Engines...\e[0m"
