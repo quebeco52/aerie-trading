@@ -1,6 +1,9 @@
 services:
   aerie-caddy:
-    image: caddy:latest
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      target: caddy_prod
     restart: always
     ports:
       - "80:80"

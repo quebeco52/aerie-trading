@@ -48,3 +48,8 @@ RUN echo "xdebug.mode=debug,profile" >> /usr/local/etc/php/conf.d/docker-php-ext
     && echo "xdebug.client_port=9003" >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini \
     && echo "xdebug.output_dir=/app/var/profiling" >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini \
     && echo "xdebug.profiler_output_name=cachegrind.out.%R" >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+
+
+## Caddy prod fix    
+FROM caddy:latest AS caddy_prod
+COPY --from=prod /app/public /app/public
