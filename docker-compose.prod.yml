@@ -1,12 +1,11 @@
 services:
   aerie-caddy:
     image: caddy:latest
-    restart: unless-stopped
+    restart: always
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./:/app
       - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
       - caddy_config:/config
@@ -17,9 +16,8 @@ services:
     build:
       context: .
       dockerfile: docker/php/Dockerfile
-    restart: unless-stopped
-    volumes:
-      - ./:/app
+      target: prod
+    restart: always
     depends_on:
       - aerie-database
       - aerie-redis
@@ -28,58 +26,38 @@ services:
     build:
       context: .
       dockerfile: docker/php/Dockerfile
-    restart: unless-stopped
+      target: prod
+    restart: always
     command: php bin/console messenger:consume scheduler_default -vv
-    volumes:
-      - ./:/app
     depends_on:
       - aerie-database
       - aerie-redis
   
-  # The Market Ticker
   aerie-ticker:
     profiles: ["live"]
     build:
       context: .
       dockerfile: docker/php/Dockerfile
+      target: prod
     command: sh -c "sleep 5 && exec php bin/console app:market-ticker --env=prod --no-debug"
-    restart: unless-stopped
-    volumes:
-      - ./:/app
+    restart: always
     depends_on:
       - aerie-redis
       - aerie-database
 
-  # The Trade Worker
-  # aerie-worker:
-  #   build:
-  #     context: .
-  #     dockerfile: docker/php/Dockerfile
-  #   command: php bin/console app:trade-worker --env=prod --no-debug
-  #   restart: unless-stopped
-  #   volumes:
-  #     - ./:/app
-  #   depends_on:
-  #     - aerie-redis
-  #     - aerie-database
-
-  # The WebSocket Server
   aerie-websocket:
     build:
       context: .
       dockerfile: docker/php/Dockerfile
+      target: prod
     command: php bin/websocket-server.php start
-    restart: unless-stopped
-    volumes:
-      - ./:/app
-    # ports:
-    #   - "127.0.0.1:8080:8080"
+    restart: always
     depends_on:
       - aerie-redis
 
   aerie-database:
     image: mariadb:11.8
-    restart: unless-stopped
+    restart: always
     command: 
       - --innodb-buffer-pool-size=1G
       - --innodb-log-file-size=512M
@@ -91,15 +69,11 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - db_data:/var/lib/mysql
-    ports:
-      - "127.0.0.1:3306:3306"
 
   aerie-redis:
     image: redis:8.6-trixie
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:6379:6379"
-  
+    restart: always
+
 volumes:
   caddy_data:
   caddy_config:

@@ -23,7 +23,6 @@
 
 ### costume
 .vscode
-deploy.sh
 /backups
 /.aiexclude
 ###
