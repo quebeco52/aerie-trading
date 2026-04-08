@@ -16,7 +16,7 @@ const TICKS_PER_WEEK = Math.ceil(TICKS_PER_YEAR / 52);
 
 const COLOR_PRIMARY = '#adc6ff';
 const COLOR_SECONDARY = '#4edea3'; // Positive
-const COLOR_TERTIary = '#ffb3ad';  // Negative
+const COLOR_TERTIARY = '#ffb3ad';  // Negative
 const COLOR_GRID = '#2d3449';
 
 let etfComponents = [];
@@ -55,60 +55,106 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Connect to the Caddy reverse proxy endpoint
     const marketSocket = new WebSocket(`${protocol}${host}/ws/?ticket=${window.WS_TICKET}`);
+    let currentRange = '1y';
 
-    // Init Main Chart
-    const ctx = document.getElementById('mainChart').getContext('2d');
 
-    // Create a smooth gradient
-    const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-    gradient.addColorStop(0, 'rgba(78, 222, 163, 0.2)'); // Secondary at 20%
-    gradient.addColorStop(1, 'rgba(78, 222, 163, 0)');
+    // main chart
 
-    const mainChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: [],
-            datasets: [{
-                label: 'Price',
-                data: [],
-                borderColor: COLOR_SECONDARY,
-                backgroundColor: gradient,
-                borderWidth: 2,
-                tension: 0.4,
-                pointRadius: 0,
-                fill: true,
-                normalized: true,
-                spanGaps: true
-            }]
+    const chartContainer = document.getElementById('mainChartContainer');
+
+    const lwChart = LightweightCharts.createChart(chartContainer, {
+        layout: {
+            background: { type: 'solid', color: 'transparent' },
+            textColor: '#c2c6d6',
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: false,
-            interaction: {
-                mode: 'index',
-                intersect: false
+        grid: {
+            vertLines: { visible: false },
+            horzLines: {
+                color: COLOR_GRID,
+                style: LightweightCharts.LineStyle.SparseDotted
             },
-            plugins: { legend: { display: false } },
-            scales: {
-                x: { display: false },
-                y: {
-                    display: true,
-                    position: 'right',
-                    grid: {
-                        color: COLOR_GRID,
-                        borderDash: [5, 5]
-                    },
-                    ticks: {
-                        color: '#c2c6d6',
-                        font: {
-                            family: '"Courier Prime", monospace'
-                        }
-                    }
-                }
-            }
-        }
+        },
+        rightPriceScale: {
+            borderVisible: false,
+        },
+        timeScale: {
+            borderVisible: false,
+            timeVisible: true,
+            secondsVisible: true,
+        },
+        crosshair: {
+            mode: LightweightCharts.CrosshairMode.Normal,
+        },
     });
+
+    const areaSeries = lwChart.addSeries(LightweightCharts.AreaSeries, {
+        lineColor: COLOR_SECONDARY,
+        topColor: 'rgba(78, 222, 163, 0.4)',
+        bottomColor: 'rgba(78, 222, 163, 0.0)',
+        lineWidth: 2,
+        priceFormat: {
+            type: 'price',
+            precision: 2,
+            minMove: 0.01,
+        },
+    });
+
+    // Make the chart responsive to window resizing
+    new ResizeObserver(entries => {
+        if (entries.length === 0 || entries[0].target !== chartContainer) { return; }
+        const newRect = entries[0].contentRect;
+        lwChart.applyOptions({ height: newRect.height, width: newRect.width });
+    }).observe(chartContainer);
+
+    function loadHistory(range) {
+        currentRange = range;
+
+        const spinner = document.getElementById('chart-spinner');
+        if (spinner) spinner.classList.remove('hidden');
+
+        // Update active button styling
+        document.querySelectorAll('.range-btn').forEach(btn => {
+            btn.className = btn.dataset.range === range
+                ? 'range-btn px-4 py-1.5 text-xs font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors'
+                : 'range-btn px-4 py-1.5 text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors';
+        });
+
+        fetch(`/api/history?ticker=${CURRENT_TICKER}&range=${range}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data && data.length > 0) {
+                    
+                    const uniquePoints = new Map();
+
+                    data.forEach(d => {
+                        const safeDateString = d.recorded_at.replace(' ', 'T');
+                        
+                        const unixTime = Math.floor(new Date(safeDateString).getTime() / 1000);
+                        const priceValue = parseFloat(d.price);
+
+                        if (!isNaN(unixTime) && !isNaN(priceValue)) {
+                            uniquePoints.set(unixTime, priceValue);
+                        }
+                    });
+
+                    const chartData = Array.from(uniquePoints, ([time, value]) => ({ time, value }));
+
+                    chartData.sort((a, b) => a.time - b.time);
+
+                    areaSeries.setData(chartData);
+                    lwChart.timeScale().fitContent(); 
+                }
+            })
+            .catch(console.error)
+            .finally(() => {
+                if (spinner) spinner.classList.add('hidden');
+            });
+    }
+
+    document.querySelectorAll('.range-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => loadHistory(e.target.dataset.range));
+    });
+    loadHistory('1y');
 
     // Init ETF Pie Chart
     let etfPieChart = null;
@@ -128,7 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                cutout: '75%', // Thinner, more modern ring
+                cutout: '75%',
                 onHover: (event, chartElement) => {
                     event.native.target.style.cursor = chartElement.length ? 'pointer' : 'default';
                 },
@@ -175,81 +221,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Dynamic Range Logic
-    let currentRange = '1y';
-    let tickCounter = 0;
-
-    // How many live ticks to wait before locking a permanent point into the chart
-    const rangeSteps = {
-        '1w': 1, // Draw every tick
-        '1m': 1, // Draw every tick
-        '3m': Math.max(1, Math.floor((TICKS_PER_MONTH * 3) / 1200)),
-        '6m': Math.max(1, Math.floor((TICKS_PER_MONTH * 6) / 2400)),
-        '1y': Math.max(1, Math.floor(TICKS_PER_YEAR / 4800)),
-        '3y': Math.max(1, Math.floor((TICKS_PER_YEAR * 3) / 5000)),
-        '5y': Math.max(1, Math.floor((TICKS_PER_YEAR * 5) / 5000)),
-        '10y': Math.max(1, Math.floor((TICKS_PER_YEAR * 10) / 5000)),
-        'max': Math.max(1, Math.floor((TICKS_PER_YEAR * 20) / 5000))
-    };
-
-    // How many points the chart is allowed to hold before deleting the oldest one
-    const rangeLimits = {
-        '1w': TICKS_PER_WEEK,
-        '1m': TICKS_PER_MONTH,
-        '3m': 1200,
-        '6m': 2400,
-        '1y': 4800,
-        '3y': 5000,
-        '5y': 5000,
-        '10y': 5000,
-        'max': 5000
-    };
-
-    let currentLimit = rangeLimits['1y'];
-
-    function loadHistory(range) {
-        currentRange = range;
-        currentLimit = rangeLimits[range];
-        tickCounter = 0;
-
-        // Show the spinner
-        const spinner = document.getElementById('chart-spinner');
-        if (spinner) spinner.classList.remove('hidden');
-
-        // Update button active states
-        document.querySelectorAll('.range-btn').forEach(btn => {
-            if (btn.dataset.range === range) {
-                btn.className = 'range-btn px-4 py-1.5 text-xs font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors';
-            } else {
-                btn.className = 'range-btn px-4 py-1.5 text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors';
-            }
-        });
-
-        // Fetch the data
-        fetch('/api/history?ticker=' + CURRENT_TICKER + '&range=' + range)
-            .then(res => res.json())
-            .then(data => {
-                if (data && data.length > 0) {
-                    mainChart.data.labels = data.map(d => d.recorded_at.split(' ')[1]);
-                    mainChart.data.datasets[0].data = data.map(d => parseFloat(d.price));
-                    mainChart.update();
-                }
-            })
-            .catch(err => {
-                console.error("Failed to load history:", err);
-            })
-            .finally(() => {
-                // Hide the spinner when finished
-                if (spinner) spinner.classList.add('hidden');
-            });
-    }
-
-    document.querySelectorAll('.range-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => loadHistory(e.target.dataset.range));
-    });
-
-    // Load default history
-    loadHistory('1y');
 
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
@@ -268,11 +239,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const currentVix = (payload.market_vol * 100).toFixed(2);
                 vixEl.innerText = currentVix + '%';
 
-                // If volatility spikes above 30%, flash the text red to warn the user!
+                // If volatility spikes above 30%, flash the text red
                 if (payload.market_vol > 0.30) {
-                    vixEl.style.color = COLOR_TERTIary; // Matches your red variable
+                    vixEl.style.color = COLOR_TERTIARY;
                 } else {
-                    vixEl.style.color = '#dae2fd'; // Default text-on-surface color
+                    vixEl.style.color = '#dae2fd';
                 }
             }
         }
@@ -284,9 +255,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const currentHeat = parseFloat(payload.market_heat);
                 heatEl.innerText = currentHeat.toFixed(2);
 
-                // Color code the thermometer for easy testing!
                 if (currentHeat > 85.0) {
-                    heatEl.style.color = COLOR_TERTIary;
+                    heatEl.style.color = COLOR_TERTIARY;
                 } else if (currentHeat < 30.0) {
                     heatEl.style.color = '#7dd3fc';
                 } else if (currentHeat > 65.0) {
@@ -309,7 +279,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const councilRateEl = document.getElementById('council-rate-value');
 
             if (councilRateEl) {
-                // Convert 0.035 to "3.50%"
                 const formattedRate = (payload.council_rate * 100).toFixed(2) + '%';
                 councilRateEl.innerText = formattedRate;
             }
@@ -326,7 +295,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (newPrice > oldPrice) {
                 el.style.color = COLOR_SECONDARY; // Green
             } else if (newPrice < oldPrice) {
-                el.style.color = COLOR_TERTIary; // Red
+                el.style.color = COLOR_TERTIARY; // Red
             }
             previousPrice = newPrice;
             setTimeout(() => el.style.color = '#dae2fd', 500);
@@ -350,7 +319,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else if (IS_ETF && etfPieChart) {
 
-                // Update our structured objects with new live values
                 let updated = false;
                 payload.stocks.forEach(stock => {
                     let comp = etfComponents.find(c => c.ticker === stock.ticker);
@@ -374,32 +342,18 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (document.visibilityState === 'visible') {
-                tickCounter++;
-                const now = new Date();
-                const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0') + ':' + now.getSeconds().toString().padStart(2, '0');
-
-                if (tickCounter >= rangeSteps[currentRange]) {
-                    mainChart.data.labels.push(timeStr);
-                    mainChart.data.datasets[0].data.push(newPrice);
-                    tickCounter = 0;
-
-                    if (mainChart.data.labels.length > currentLimit) {
-                        mainChart.data.labels.shift();
-                        mainChart.data.datasets[0].data.shift();
-                    }
-                } else {
-                    mainChart.data.labels[mainChart.data.labels.length - 1] = timeStr;
-                    mainChart.data.datasets[0].data[mainChart.data.datasets[0].data.length - 1] = newPrice;
-                }
-
-                mainChart.update('none');
+                const nowUnix = Math.floor(Date.now() / 1000);
+                areaSeries.update({
+                    time: nowUnix,
+                    value: newPrice
+                });
             }
         }
 
         if (payload.events && payload.events.length > 0) {
             payload.events.forEach(evt => {
 
-                // Only show the event if it belongs to the stock we are currently looking at
+                // Only show the event if it belongs to the stock currently looking at
                 if (evt.ticker === CURRENT_TICKER) {
                     const noMsg = document.getElementById('no-events-msg');
                     const list = document.getElementById('events-list');
@@ -412,15 +366,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     let icon = evt.type === 'SHOCK' ? 'bolt' : 'campaign';
                     if (evt.type === 'SPLIT' || evt.type === 'REVSPLIT') icon = 'content_cut';
 
-                    // 1. Get the raw description text
+                    // Get the raw description text
                     let rawDesc = evt.description || (evt.type === 'SHOCK' ? 'Sudden market shock detected.' : 'Earnings report released.');
 
-                    // 2. Escape HTML characters to prevent Cross-Site Scripting (XSS)
+                    // Escape HTML characters to prevent Cross-Site Scripting (XSS)
                     let safeDesc = String(rawDesc).replace(/[&<>"']/g, match => {
                         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[match];
                     });
 
-                    // 3. Safely convert newlines to <br> tags AFTER escaping
+                    // Safely convert newlines to <br> tags AFTER escaping
                     let desc = safeDesc.replace(/\n/g, '<br>');
 
                     // Event Colors

@@ -60,7 +60,7 @@
 							</svg>
 						</div>
 
-						<canvas id="mainChart"></canvas>
+						<div id="mainChartContainer" class="w-full h-full"></div>
 					</div>
 				</div>
 
@@ -238,8 +238,8 @@
 ticker: "{{ asset.ticker }}",
 isEtf: {{ isEtf ? 'true' : 'false' }},
 sharesOutstanding: {{ isEtf ? 0 : asset.sharesOutstanding }},
-userQuantity: {{ userQuantity }},
-eps: {{ isEtf ? 0 : asset.earningsPerShare }},
+userQuantity: {{ userQuantity|default(0) }},
+eps: {{ isEtf ? 0 : asset.earningsPerShare|default(0) }},
 baselineVol: {{ isEtf ? 0.15 : asset.volatility }},
 pieLabels: [{% if isEtf and allAssets is defined %}{% for a in allAssets %}"{{ a.ticker }}"{{ not loop.last ? ',' : '' }}{% endfor %}{% endif %}],
 pieData: [{% if isEtf and allAssets is defined %}{% for a in allAssets %}{{ a.price * a.sharesOutstanding }}{{ not loop.last ? ',' : '' }}{% endfor %}{% endif %}],
