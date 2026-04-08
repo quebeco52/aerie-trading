@@ -121,8 +121,6 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             try {
                 $this->entityManager->beginTransaction();
 
-                // Update the Macro Economy (Sector P/Es drift)
-
 
                 // Update the labels and the Sector P/E math
                 $economicCycle = $this->macroEngine->updateBoomBust($dt);

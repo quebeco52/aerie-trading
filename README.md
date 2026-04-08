@@ -33,14 +33,21 @@ Aerie Trading uses the tech stack:
 - [ ] Change the values/info of the stocks
 - [ ] Add new stocks
 - [ ] Do all this without casing downtime for users
+- [ ] have a dashboard to see the health of the application (latency of market ticks, etc...)
+
 
 ### Market simulator should:
 - [ ] Simulate stock prices in a realistic way compared to a real world stock based on its fundamentals and microeconomic conditions
 - [ ] Handle earning reports and should integrate the reports into the price of the stock
-- [ ] Have a boom and bust cycle
+- [ ] Change Volatility dynamically for individual stocks and the market
+- [ ] Have a boom and bust cycle that alter the trajectory of the market
+- [ ] Have etfs that change its price based on the underlying stocks it made out of
 - [ ] Use mathematical proven and well tested formulas (Geometric Brownian Motion, Heston Stochastic Volatility Model, etc) so to keep the simulation realistic compared to the real world economy. (as little magic numbers as possible)
+- [ ] All formulas should be tested and pass in PHPUnit
+- [ ] Use Telemetry to log statistical properties like volatility clustering and variance to be able to prove the feasibility of the math
 
 #### Market Stretch goal
+- [ ] Have a narrative engine that fires generated events
 - [ ] The market should react dynamically on event's appearing in universe (news, conflict, etc)
 - [ ] Should be unable to be "beaten" or manipulate by users so to able to generate free money (For example a user should not be able to know the instant a bust will happen and dump there stocks)
 
