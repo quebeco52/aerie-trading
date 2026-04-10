@@ -16,7 +16,7 @@ Aerie Trading uses the tech stack:
 
 ### The application should:
 - [ ] Use session handling
-- [ ] Store user/stock data in mariadb, this data should be protect so not to be allowed to be lost, corrupted or comprised 
+- [ ] Store user/stock data in mariadb
 - [ ] The site should be usable throw a mobile interface but will not be the optimal way to use the site
 - [ ] Should be hosted on the cloud, most likely a hetzer vps and should be open to the public
 - [ ] Should have a Admin role and a User role
@@ -27,6 +27,7 @@ Aerie Trading uses the tech stack:
 - [ ] Browse stock data (fundamentals and stock history)
 - [ ] Buy and sell stocks
 - [ ] Keep track of there portfolio
+- [ ] compare stock throw a screener
 
 ### Admin should be able to:
 - [ ] Se register users and monitor there portfolios
@@ -44,12 +45,14 @@ Aerie Trading uses the tech stack:
 - [ ] Have etfs that change its price based on the underlying stocks it made out of
 - [ ] Use mathematical proven and well tested formulas (Geometric Brownian Motion, Heston Stochastic Volatility Model, etc) so to keep the simulation realistic compared to the real world economy. (as little magic numbers as possible)
 - [ ] All formulas should be tested and pass in PHPUnit
-- [ ] Use Telemetry to log statistical properties like volatility clustering and variance to be able to prove the feasibility of the math
+- [ ] Handle stock splits and reverse stocksplits
+- [ ] Handle stock dividend
 
 #### Market Stretch goal
 - [ ] Have a narrative engine that fires generated events
 - [ ] The market should react dynamically on event's appearing in universe (news, conflict, etc)
 - [ ] Should be unable to be "beaten" or manipulate by users so to able to generate free money (For example a user should not be able to know the instant a bust will happen and dump there stocks)
+- [ ] Use Telemetry to log statistical properties like volatility clustering and variance to be able to prove the feasibility of the math
 
 ### Stretch goal
 - [ ] Stock comment sections
@@ -58,7 +61,7 @@ Aerie Trading uses the tech stack:
 - [ ] Optimize the application to run on as little resources as possible
 - [ ] Should have a consistent narrative (world building)
 - [ ] Transaction Fees
-- [ ] Transaction History. The system must keep an immutable log of every trade
+- [ ] Code and infrastructure hardening (immutable logs, encrypt all data in transit and at rest, etc)
 
 
 

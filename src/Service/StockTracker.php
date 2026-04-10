@@ -57,7 +57,7 @@ class StockTracker
      * @param bool    $recordHistory Whether to persist the new prices to the stock history table.
      * @param EconomicCycle|null $economicCycle The current state of the macroeconomic cycle.
      * 
-     * @return array{updates: array<int, array{ticker: string, sector: string, price: float, market_cap: float, current_volatility: float}>, total_cap: float, events: array<int, array<string, mixed>>, market_vol: float} Aggregated results of the update.
+     * @return array{updates: array<mixed>, total_cap: float, events: array<mixed>, market_vol: float, history: array<mixed>}
      */
     public function updateStocks(array $stocks, float $dt, array $liveSectorPEs, bool $recordHistory, ?EconomicCycle $economicCycle = null, int $tickCount = 0, int $ticksPerYear = 252): array
     {

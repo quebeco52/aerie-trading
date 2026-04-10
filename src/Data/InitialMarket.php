@@ -404,7 +404,7 @@ class InitialMarket
         [
             'ticker' => 'LBI',
             'name' => 'Lakebird Index', // Or whatever you want LBI to stand for!
-            'price' => 100.00,           // The starting price before the engine takes over
+            'price' => 10.00,           // The starting price before the engine takes over
         ]
     ];
 }

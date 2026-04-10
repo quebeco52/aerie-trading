@@ -43,13 +43,13 @@ class EtfTracker
                 $lastKnownPrice = (float) $etf->getPrice();
                 $divisor = $totalMarketCap / $lastKnownPrice;
             } else {
-                $divisor = $totalMarketCap / 100.00;
+                $divisor = $totalMarketCap / 10.00;
             }
             
             $this->redis->set('market_index_divisor', (string) $divisor);
         }
 
-        $price = ($divisor > 0) ? ($totalMarketCap / (float) $divisor) : 100.00;
+        $price = ($divisor > 0) ? ($totalMarketCap / (float) $divisor) : 10.00;
 
         if ($etf) {
             $etf->setPrice((string) $price);

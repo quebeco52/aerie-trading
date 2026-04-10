@@ -20,8 +20,8 @@ class Etf
     #[ORM\Column(length: 255)]
     private string $name;
 
-    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 2, options: ['default' => '100.00'])]
-    private string $price = '100.00';
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 2, options: ['default' => '10.00'])]
+    private string $price = '10.00';
 
     #[ORM\Column(type: Types::DATETIME_MUTABLE)]
     private \DateTimeInterface $updatedAt;
