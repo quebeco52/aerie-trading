@@ -109,6 +109,9 @@ class MarketEngine
         // Convert back to volatility for the return payload
         $nextVolatility = sqrt($nextVar);
 
+        // Hard bounds to prevent the stock from completely freezing unbounded explosions
+        $nextVolatility = max(0.05, min(2.00, $nextVolatility));
+
         // Correlated Price Diffusion
         $z1 = $this->mathUtility->generateStandardNormal();
         $w1 = $z1; 
