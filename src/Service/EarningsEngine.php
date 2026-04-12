@@ -80,20 +80,12 @@ class EarningsEngine
         $baselineVol = (float) $stock->getVolatility();
         $beta = (float) $stock->getBeta();
 
-
-        $freeGrowth = 0.02 / 4;
-
         // Floor the base so penny stocks/low EPS companies can still grow absolute cents
         $growthBase = max(abs($oldEps), 0.50);
 
-        // Factor in the economic cycle
-        $annualCycleModifier = $economicCycle ? $economicCycle->getGrowthModifier() : 0.0;
-        $cycleModifier = $annualCycleModifier / 4;
-
-        $companyCycleModifier = $cycleModifier * $beta;
-
-        // Analyst Consensus
-        $expectedEpsGrowth = $freeGrowth  + $companyCycleModifier;
+        // Analyst Consensus (Expected EPS Growth)
+        $expectedEpsGrowth = $this->calculateExpectedEpsGrowth($beta, $economicCycle);
+        
         // Round expected EPS to 2 decimals to prevent floating-point "ghost misses"
         $expectedEps = round($oldEps + ($growthBase * $expectedEpsGrowth), 2);
 
@@ -112,33 +104,12 @@ class EarningsEngine
         $surprisePct = $surpriseAmount / max(0.10, abs($expectedEps));
 
         // VOLATILITY SHOCK: Based strictly on the Z-Score (Statistical Rarity)
-        $currentVol = (float) $stock->getCurrentVolatility();
-        $zScore = abs($revenueZ); // How many standard deviations away from expectations
-
-        if ($zScore > self::SURPRISE_Z_SCORE_THRESHOLD) {
-            // A 1.5+ sigma event is a genuine surprise. Spike the volatility.
-            // Example: Z=2.5 -> (2.5 - 1.0) * 0.2 = 0.3 (A 30% Volatility Spike)
-            $shockMultiplier = 1.0 + (($zScore - 1.0) * self::VOLATILITY_SHOCK_FACTOR);
-            $newVol = min($currentVol * $shockMultiplier, $baselineVol * self::MAX_VOLATILITY_MULTIPLIER);
-            
-            $stock->setCurrentVolatility((string) $newVol);
-            
-        } elseif ($zScore < self::BORING_Z_SCORE_THRESHOLD && $currentVol > $baselineVol) {
-            // A boring, highly predictable quarter (Z < 0.5). 
-            // The market calms down. Volatility cools off by 25% toward the baseline.
-            $newVol = $currentVol - (($currentVol - $baselineVol) * self::VOLATILITY_COOLING_FACTOR);
-            
-            $stock->setCurrentVolatility((string) max($newVol, $baselineVol));
-        }
+        $this->applyVolatilityShock($stock, $revenueZ, $baselineVol);
 
         // Update the Stock Entity
         $stock->setEarningsPerShare((string) $actualEps);
 
-        // DAMPEN THE SHOCK
-        $priceGapPct = $surprisePct * self::PRICE_GAP_DAMPENING;
-
-        // CAP THE SHOCK
-        $priceGapPct = max(-self::MAX_PRICE_GAP, min(self::MAX_PRICE_GAP, $priceGapPct));
+        $priceGapPct = $this->calculatePriceGap($surprisePct);
 
         // APPLY THE GAP
         $currentPrice = (float) $stock->getPrice();
@@ -158,5 +129,54 @@ class EarningsEngine
         }
 
         return $this->marketEvent->publish($stock, 'EARNINGS', $description, $surprisePct * 100);
+    }
+
+    /**
+     * Applies a volatility shock or cooling effect based on the statistical rarity of the earnings report.
+     *
+     * @param Stock $stock The stock entity to update.
+     * @param float $revenueZ The Z-score (standard normal) representing the revenue shift.
+     * @param float $baselineVol The baseline long-term volatility of the stock.
+     */
+    private function applyVolatilityShock(Stock $stock, float $revenueZ, float $baselineVol): void
+    {
+        $currentVol = (float) $stock->getCurrentVolatility();
+        $zScore = abs($revenueZ); // How many standard deviations away from expectations
+
+        if ($zScore > self::SURPRISE_Z_SCORE_THRESHOLD) {
+            // A 1.5+ sigma event is a genuine surprise. Spike the volatility.
+            $shockMultiplier = 1.0 + (($zScore - 1.0) * self::VOLATILITY_SHOCK_FACTOR);
+            $newVol = min($currentVol * $shockMultiplier, $baselineVol * self::MAX_VOLATILITY_MULTIPLIER);
+            $stock->setCurrentVolatility((string) $newVol);
+        } elseif ($zScore < self::BORING_Z_SCORE_THRESHOLD && $currentVol > $baselineVol) {
+            // A boring, highly predictable quarter. Volatility cools off.
+            $newVol = $currentVol - (($currentVol - $baselineVol) * self::VOLATILITY_COOLING_FACTOR);
+            $stock->setCurrentVolatility((string) max($newVol, $baselineVol));
+        }
+    }
+
+    /**
+     * Calculates the dampened and capped price gap percentage based on the earnings surprise.
+     */
+    private function calculatePriceGap(float $surprisePct): float
+    {
+        $priceGapPct = $surprisePct * self::PRICE_GAP_DAMPENING;
+        return max(-self::MAX_PRICE_GAP, min(self::MAX_PRICE_GAP, $priceGapPct));
+    }
+
+    /**
+     * Calculates the expected quarter-over-quarter EPS growth rate based on the 
+     * macroeconomic cycle and the stock's sensitivity to it (beta).
+     */
+    private function calculateExpectedEpsGrowth(float $beta, ?EconomicCycle $economicCycle): float
+    {
+        $freeGrowth = 0.02 / 4; // 2% annual baseline growth divided by 4 quarters
+
+        $annualCycleModifier = $economicCycle ? $economicCycle->getGrowthModifier() : 0.0;
+        $cycleModifier = $annualCycleModifier / 4;
+        
+        $companyCycleModifier = $cycleModifier * $beta;
+
+        return $freeGrowth + $companyCycleModifier;
     }
 }

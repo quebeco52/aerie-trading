@@ -57,111 +57,90 @@ class MarketEngine
         float $targetPE,
         float $dt,
         float $lambda = 2.0,
-        float $jumpMean = 0.01,
-        float $jumpVol = 0.1,
         float $beta = 1.0,
         float $marketZ = 0.0,
         float $marketVol = 0.15,
         float $drift = 0.08,
         float $reversionSpeed = 0.4,
         float $kappa = 6.0,
-        float $volOfVol = 0.2,
+        float $volOfVol = 0.3,
         float $rho = -0.7,
         ?EconomicCycle $economicCycle = null,
     ): array {
-
-        // Set the core market baselines
-        $riskFreeRate = match ($economicCycle) {
+        
+        // CAPM & Macro Drift
+        $riskFreeRate = $economicCycle ? match ($economicCycle) {
             EconomicCycle::RECESSION => 0.000,
             EconomicCycle::RECOVERY  => 0.010,
             EconomicCycle::EXPANSION => 0.025,
             EconomicCycle::PEAK      => 0.050,
-            null                     => 0.020,
-        };
-        $baseMarketPremium = $drift;
+        } : 0.020;
 
-        // Get the current cycle's modifier
-        $macroModifier = 0.0;
-        if ($economicCycle) {
-            $macroModifier = $economicCycle->getDriftModifier();
-        }
+        $macroModifier = $economicCycle ? $economicCycle->getDriftModifier() : 0.0;
+        $totalMarketPremium = $drift + $macroModifier;
+        $finalDrift = $riskFreeRate + ($totalMarketPremium * $beta);
 
-        // Combine the base premium with the current economic mood
-        $totalMarketPremium = $baseMarketPremium + $macroModifier;
+        // State Variables
+        $currentVar = $currentVolatility * $currentVolatility;
+        $longTermVar = $longTermVolatility * $longTermVolatility;
 
-        // Calculate the final drift using CAPM
-        // The Beta ONLY scales the market risk portion, not the risk-free rate.
-        $drift = $riskFreeRate + ($totalMarketPremium * $beta);
+        // The SVJJ Jump Process (Kou Distribution)
+        $jumpData = $this->mathUtility->calculateSVJJJumps(
+            lambda: $lambda,
+            pUp: 0.30,     // Asymmetric tails: 30% chance of upside jump, 70% chance of downside crash
+            etaUp: 10.0,   // ~10% avg up-jump
+            etaDown: 8.0,  // ~12.5% avg down-jump (fatter left tail)
+            muV: 0.04,     // Base variance jump size
+            dt: $dt
+        );
 
-        $sqrtDt = sqrt($dt);
+        // Variance Process via Quadratic-Exponential (QE) Scheme
+        $nextVar = $this->mathUtility->calculateQEVarianceStep(
+            currentVar: $currentVar,
+            theta: $longTermVar,
+            kappa: $kappa,
+            sigma: $volOfVol,
+            dt: $dt
+        );
 
-        // Generate the random variable for the STOCK PRICE
+        // Add the contemporaneous volatility jump from the SVJJ model
+        $nextVar += $jumpData['var_jump'];
+        
+        // Convert back to volatility for the return payload
+        $nextVolatility = sqrt($nextVar);
+
+        // Correlated Price Diffusion
         $z1 = $this->mathUtility->generateStandardNormal();
         $w1 = $z1; 
 
-        // Let the MathUtility handle the correlation and the Heston math!
-        $nextVolatility = $this->mathUtility->calculateHestonVolatility(
-            currentVolatility: $currentVolatility,
-            longTermVolatility: $longTermVolatility,
-            kappa: $kappa,
-            volOfVol: $volOfVol,
-            rho: $rho,
-            dt: $dt,
-            z1: $z1
-        );
-
-        // Calculate the financial Fair Value
+        // Mean Reversion (Gravity)
         $valuationEps = max($earningsPerShare, 0.01);
         $fairValue = $valuationEps * $targetPE;
-
-        // Calculate Gravity (Mean Reversion) using the generalized math utility
         $gravityDrift = $this->mathUtility->calculateLogMeanReversion(
             currentValue: $currentPrice,
             targetValue: $fairValue,
             reversionSpeed: $reversionSpeed
         );
 
-        // Calculate Correlation (Rho) to the broad market
-        $impliedRho = $beta * ($marketVol / max($currentVolatility, 0.01));
-
-        // Cap correlation so the math doesn't break (max 99% correlated)
-        $marketCorrelation = max(-0.99, min(0.99, $impliedRho));
-
-        // Split the volatility
-        $systematicDrift = $currentVolatility * $marketCorrelation * $marketZ * $sqrtDt;
-        $idiosyncraticDrift = $currentVolatility * sqrt(1 - ($marketCorrelation * $marketCorrelation)) * $w1 * $sqrtDt;
-
-        $currentVariance = $currentVolatility * $currentVolatility;
-
-        // Apply GBM with the properly decoupled components
-        $gbmExponent = ($drift + $gravityDrift - 0.5 * $currentVariance) * $dt
-            + $systematicDrift
-            + $idiosyncraticDrift;
-
-        $gbmPrice = $currentPrice * exp($gbmExponent);
-
-        // Calculate Jump Diffusion (Market Shocks)
-        $jumpData = $this->mathUtility->calculateJumpDiffusion(
-            lambda: $lambda,
-            jumpMean: $jumpMean,
-            jumpVol: $jumpVol,
-            dt: $dt
+        // Calculate continuous price diffusion using the current variance
+        $gbmPrice = $this->mathUtility->calculateCorrelatedGBM(
+            currentPrice: $currentPrice,
+            currentVolatility: $currentVolatility,
+            drift: $finalDrift,
+            gravityDrift: $gravityDrift,
+            dt: $dt,
+            beta: $beta,
+            marketVol: $marketVol,
+            marketZ: $marketZ,
+            w1: $w1
         );
 
-        // Apply the price multiplier (will just be * 1.0 if no jump occurred)
-        $finalPrice = $gbmPrice * $jumpData['multiplier'];
-        $shockPct = $jumpData['shock_pct'];
-
-        // If a jump DID occur, spike vol
-        if ($jumpData['exponent'] !== null) {
-            // Add a multiple of the jump's absolute size to the volatility
-            $nextVolatility += abs($jumpData['exponent']) * 1.5;
-            $nextVolatility = min($nextVolatility, $longTermVolatility * 3.0);
-        }
+        // Apply Simultaneous Price Jump
+        $finalPrice = $gbmPrice * $jumpData['price_multiplier'];
 
         return [
-            'price' => max(0.01, $finalPrice),
-            'shock' => $shockPct,
+            'price'           => max(0.01, $finalPrice),
+            'shock'           => $jumpData['shock_pct'],
             'next_volatility' => $nextVolatility
         ];
     }
