@@ -182,4 +182,161 @@ class MathUtility
         
         return $reversionSpeed * ($logTarget - $logCurrent);
     }
+
+    /**
+     * Calculates the next price using Geometric Brownian Motion (GBM) with correlated market drift.
+     *
+     * @param float $currentPrice      The current price of the stock.
+     * @param float $currentVolatility The current instantaneous volatility.
+     * @param float $drift             The expected return (drift) of the stock.
+     * @param float $gravityDrift      The mean reversion drift pulling to fair value.
+     * @param float $dt                The time step in years.
+     * @param float $beta              The stock's beta (sensitivity to market movements).
+     * @param float $marketVol         The volatility of the broader market.
+     * @param float $marketZ           The systemic market shock Z-score.
+     * @param float $w1                The idiosyncratic shock Z-score.
+     * @return float The new price calculated via GBM.
+     */
+    public function calculateCorrelatedGBM(
+        float $currentPrice,
+        float $currentVolatility,
+        float $drift,
+        float $gravityDrift,
+        float $dt,
+        float $beta,
+        float $marketVol,
+        float $marketZ,
+        float $w1
+    ): float {
+        $impliedRho = $beta * ($marketVol / max($currentVolatility, 0.01));
+        $marketCorrelation = max(-0.99, min(0.99, $impliedRho));
+
+        $sqrtDt = sqrt($dt);
+        $systematicDrift = $currentVolatility * $marketCorrelation * $marketZ * $sqrtDt;
+        $idiosyncraticDrift = $currentVolatility * sqrt(1 - ($marketCorrelation * $marketCorrelation)) * $w1 * $sqrtDt;
+        $currentVariance = $currentVolatility * $currentVolatility;
+
+        $gbmExponent = ($drift + $gravityDrift - 0.5 * $currentVariance) * $dt + $systematicDrift + $idiosyncraticDrift;
+
+        return $currentPrice * exp($gbmExponent);
+    }
+
+
+    /**
+     * Generates a random number from an Exponential distribution.
+     */
+    public function generateExponential(float $rate = 1.0): float
+    {
+        // Prevent log(0)
+        $u = max($this->generateUniform(), 0.0000001);
+        return -log($u) / $rate;
+    }
+
+    /**
+     * Andersen's Quadratic-Exponential (QE) Discretization Scheme (2008).
+     * Calculates the next variance state strictly positively, without bias.
+     *
+     * @param float $currentVar Current variance (Volatility squared).
+     * @param float $theta      Long-term mean variance.
+     * @param float $kappa      Reversion speed.
+     * @param float $sigma      Volatility of volatility.
+     * @param float $dt         Time step.
+     * @return float The next strictly positive variance.
+     */
+    public function calculateQEVarianceStep(
+        float $currentVar,
+        float $theta,
+        float $kappa,
+        float $sigma,
+        float $dt
+    ): float {
+        $expKappaDt = exp(-$kappa * $dt);
+        
+        // Calculate mean (m) and variance (s^2) of the next variance state
+        $m = $theta + ($currentVar - $theta) * $expKappaDt;
+        $s2 = ($currentVar * $sigma * $sigma * $expKappaDt / $kappa) * (1 - $expKappaDt) 
+            + ($theta * $sigma * $sigma / (2 * $kappa)) * pow(1 - $expKappaDt, 2);
+
+        // Psi determines whether to use Quadratic or Exponential approximation
+        $psi = $m > 0 ? $s2 / ($m * $m) : 2.0;
+
+        $nextVar = 0.0;
+
+        if ($psi <= 1.5) {
+            // Non-central chi-square approximation (Quadratic)
+            $b2 = 2 / $psi - 1 + sqrt((2 / $psi) * (2 / $psi - 1));
+            $a = $m / (1 + $b2);
+            $Zv = $this->generateStandardNormal();
+            $nextVar = $a * pow(sqrt($b2) + $Zv, 2);
+        } else {
+            // Exponential approximation
+            $p = ($psi - 1) / ($psi + 1);
+            $beta = (1 - $p) / $m;
+            $U = $this->generateUniform();
+            
+            if ($U > $p) {
+                // Prevent log(0) if U is extremely close to 1
+                $U = min($U, 0.9999999);
+                $nextVar = (1 / $beta) * log((1 - $p) / (1 - $U));
+            } else {
+                $nextVar = 0.0;
+            }
+        }
+
+        // Failsafe floor
+        return max($nextVar, 0.0000001);
+    }
+
+    /**
+     * SVJJ Model: Correlated Price and Variance Jumps using Kou Double-Exponential.
+     *
+     * @param float $lambda   Jump intensity (arrivals per year).
+     * @param float $pUp      Probability that a jump is upwards (e.g., 0.3 for heavy left-tail).
+     * @param float $etaUp    Rate of up-jump exponential decay.
+     * @param float $etaDown  Rate of down-jump exponential decay.
+     * @param float $muV      Mean of the variance jump (exponentially distributed).
+     * @param float $dt       Time step.
+     * @return array{price_multiplier: float, var_jump: float, shock_pct: float|null}
+     */
+    public function calculateSVJJJumps(
+        float $lambda,
+        float $pUp,
+        float $etaUp,
+        float $etaDown,
+        float $muV,
+        float $dt
+    ): array {
+        $jumpProb = $lambda * $dt;
+
+        if ($this->checkProbability($jumpProb)) {
+            // Price Jump (Kou Double-Exponential)
+            $isUpJump = $this->generateUniform() < $pUp;
+            
+            if ($isUpJump) {
+                $jumpSize = $this->generateExponential($etaUp);
+            } else {
+                $jumpSize = -$this->generateExponential($etaDown);
+            }
+
+            $priceMultiplier = exp($jumpSize);
+            $shockPct = ($priceMultiplier - 1.0) * 100.0;
+
+            // Variance Jump (Contemporaneous)
+            // Market crashes usually spike volatility harder than market rallies
+            $varianceJumpRate = $isUpJump ? (1.0 / ($muV * 0.5)) : (1.0 / $muV);
+            $varJump = $this->generateExponential($varianceJumpRate);
+
+            return [
+                'price_multiplier' => $priceMultiplier,
+                'var_jump'         => $varJump,
+                'shock_pct'        => $shockPct
+            ];
+        }
+
+        return [
+            'price_multiplier' => 1.0,
+            'var_jump'         => 0.0,
+            'shock_pct'        => null
+        ];
+    }
 }
