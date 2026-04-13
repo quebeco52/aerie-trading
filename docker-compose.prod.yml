@@ -25,6 +25,17 @@ services:
       - aerie-database
       - aerie-redis
 
+  aerie-worker:
+    build: 
+      context: .
+      dockerfile: docker/php/Dockerfile
+      target: prod
+    depends_on:
+      - aerie-database
+      - aerie-redis
+    command: php bin/console messenger:consume async --memory-limit=128M --time-limit=3600
+    restart: unless-stopped
+
   aerie-scheduler:
     build:
       context: .
