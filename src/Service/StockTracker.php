@@ -2,7 +2,6 @@
 
 namespace App\Service;
 
-use App\Data\EconomicCycle;
 use App\Entity\Stock;
 use App\Entity\StockHistory;
 use App\Data\SectorPE;
@@ -55,11 +54,11 @@ class StockTracker
      * @param float   $dt            The time step delta (e.g., in years).
      * @param array<string, float>   $liveSectorPEs Associative array mapping sector names to their current live P/E ratios.
      * @param bool    $recordHistory Whether to persist the new prices to the stock history table.
-     * @param EconomicCycle|null $economicCycle The current state of the macroeconomic cycle.
+     * @param array   $macroState    The current state of the macroeconomic cycle.
      * 
      * @return array{updates: array<mixed>, total_cap: float, events: array<mixed>, market_vol: float, history: array<mixed>}
      */
-    public function updateStocks(array $stocks, float $dt, array $liveSectorPEs, bool $recordHistory, ?EconomicCycle $economicCycle = null, int $tickCount = 0, int $ticksPerYear = 252): array
+    public function updateStocks(array $stocks, float $dt, array $liveSectorPEs, bool $recordHistory, array $macroState = [], int $tickCount = 0, int $ticksPerYear = 252): array
     {
 
         $stockUpdates = [];
@@ -72,7 +71,7 @@ class StockTracker
         $marketZ = $this->mathUtility->generateStandardNormal();
 
         // THE DISTRICT VIX (Dynamic Market Volatility)
-        $this->updateDistrictVariance($dt, $marketZ, $economicCycle);
+        $this->updateDistrictVariance($dt, $marketZ, $macroState);
 
         $marketVol = $this->currentMarketVol;
 
@@ -92,12 +91,13 @@ class StockTracker
                 targetPE: $targetPE,
                 dt: $dt,
                 lambda: (float) $stock->getJumpIntensity(),
-                jumpMean: (float) $stock->getJumpMean(),
-                jumpVol: (float) $stock->getJumpVol(),
+                // jumpMean: (float) $stock->getJumpMean(),
+                // jumpVol: (float) $stock->getJumpVol(),
                 beta: (float) $stock->getBeta(),
                 marketZ: $marketZ,
                 marketVol: $marketVol,
-                economicCycle: $economicCycle,
+                macroState: $macroState,
+                fcfPerShare: $stock->getFreeCashFlowPerShare() !== null ? (float) $stock->getFreeCashFlowPerShare() : null,
             );
 
             $newPrice = $calculation['price'];
@@ -109,7 +109,7 @@ class StockTracker
             }
 
             // Earnings Engine
-            $earningsEvent = $this->earningsEngine->calculate($stock, $economicCycle, $tickCount, $ticksPerYear);
+            $earningsEvent = $this->earningsEngine->calculate($stock, $macroState, $tickCount, $ticksPerYear);
             if ($earningsEvent) {
                 $events[] = $earningsEvent;
             }
@@ -176,46 +176,60 @@ class StockTracker
     /**
      * Updates the overarching market volatility (The District VIX).
      *
-     * Applies a Heston-style stochastic variance process with mean reversion,
-     * along with a jump diffusion mechanism to simulate sudden market-wide volatility spikes.
+     * Applies the advanced Quadratic-Exponential (QE) scheme for the variance process,
+     * along with the SVJJ Kou double-exponential jump mechanism to simulate 
+     * mathematically rigorous market-wide panics.
      *
-     * @param float $dt The time step delta.
-     * @param float $marketZ The systemic market shock generated for this tick.
-     * @param EconomicCycle|null $economicCycle The current macro cycle.
+     * @param float $dt         The time step delta.
+     * @param float $marketZ    The systemic market shock generated for this tick.
+     * @param array $macroState The current macro state (inflation, output gap, etc).
      */
-    private function updateDistrictVariance(float $dt, float $marketZ,?EconomicCycle $economicCycle = null): void
+    private function updateDistrictVariance(float $dt, float $marketZ, array $macroState = []): void
     {
-
         $cycleVolModifier = 1.0;
-        if ($economicCycle) {
-            $cycleVolModifier = $economicCycle->getVolatilityModifier();
+        if (!empty($macroState)) {
+            // Positive output gap (boom) reduces vol slightly, negative gap (bust) increases vol
+            $cycleVolModifier = 1.0 - ($macroState['output_gap'] ?? 0.0);
         }
 
-        $this->currentMarketVol = $this->mathUtility->calculateHestonVolatility(
-            currentVolatility: $this->currentMarketVol,
-            longTermVolatility: 0.15 * $cycleVolModifier,
-            kappa: 6.0,
-            volOfVol: 0.30,
-            rho: -0.7,
-            dt: $dt,
-            z1: $marketZ,
-        );
+        $longTermVol = 0.15 * $cycleVolModifier;
+        
+        $currentVar = $this->currentMarketVol * $this->currentMarketVol;
+        $longTermVar = $longTermVol * $longTermVol;
 
-
-        $jumpData = $this->mathUtility->calculateJumpDiffusion(
-            lambda: 0.80,
-            jumpMean: 0.05,
-            jumpVol: 0.10,
+        // Calculate macro shocks using the new SVJJ Kou model
+        // Macro panics are highly asymmetric: 10% chance of a sudden volatility crush, 90% chance of a volatility explosion
+        $jumpData = $this->mathUtility->calculateSVJJJumps(
+            lambda: 0.80, 
+            pUp: 0.10,     
+            etaUp: 10.0, 
+            etaDown: 5.0,  // Very fat left tail for deep macroeconomic panics
+            muV: 0.05,     // Base variance jump size
             dt: $dt
         );
 
-        if ($jumpData['exponent'] !== null) {
-            // Apply the volatility jump directly
-            $volJumpSeverity = abs($jumpData['exponent']);
-            $this->currentMarketVol += $volJumpSeverity;
-        }
+        // Adjust theta downwards so the steady state expectation equals longTermVar
+        // E[VarJump] = (pUp * muV * 0.5) + (pDown * muV)
+        $expectedVarJump = (0.10 * 0.05 * 0.5) + (0.90 * 0.05);
+        $jumpVarianceDrag = (0.80 * $expectedVarJump) / 6.0;
+        $adjustedTheta = max(0.0001, $longTermVar - $jumpVarianceDrag);
 
-        // Hard bounds (Converted back to volatility terms)
+        // Advance the variance using the strictly positive QE scheme
+        $nextVar = $this->mathUtility->calculateQEVarianceStep(
+            currentVar: $currentVar,
+            theta: $adjustedTheta,
+            kappa: 6.0,
+            sigma: 0.30,
+            dt: $dt
+        );
+
+        // Add the contemporaneous market-wide variance jump
+        $nextVar += $jumpData['var_jump'];
+
+        // Convert back to volatility
+        $this->currentMarketVol = sqrt($nextVar);
+
+        // Hard bounds to prevent the global simulation from permanently breaking
         $this->currentMarketVol = max(0.08, min(0.80, $this->currentMarketVol));
     }
 }
