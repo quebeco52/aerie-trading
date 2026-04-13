@@ -2,7 +2,6 @@
 
 namespace App\Service;
 
-use App\Data\EconomicCycle;
 use App\Entity\Stock;
 
 /**
@@ -47,30 +46,30 @@ class EarningsEngine
      * (Z-Score) of the revenue shift (e.g., punishing or rewarding surprise reports).
      *
      * @param Stock $stock The stock entity to process earnings for.
-     * @param EconomicCycle|null $economicCycle The current state of the macroeconomic cycle.
+     * @param array $macroState The current state of the macroeconomic cycle.
      * @param int $tickCount The current simulation tick, used to determine if it is earnings season.
      * @param int $ticksPerYear The total number of ticks in a simulated year.
      * @return array<string, mixed>|null  Returns the generated market event array if an earnings report occurred, otherwise null.
      */
-    public function calculate(Stock $stock, ?EconomicCycle $economicCycle = null, int $tickCount = 0, int $ticksPerYear = 252): ?array
+    public function calculate(Stock $stock, array $macroState = [], int $tickCount = 0, int $ticksPerYear = 252): ?array
     {
-        
+
         $ticksPerQuarter = (int) ($ticksPerYear / 4);
-        
+
         // Define the season length
-        $ticksPerSeason = (int) ($ticksPerQuarter * 0.15); 
-        
+        $ticksPerSeason = (int) ($ticksPerQuarter * 0.15);
+
         // Where are we currently within the 3-month quarter?
         $currentQuarterTick = $tickCount % $ticksPerQuarter;
-        
+
         // Are we outside the Earnings Season?
         if ($currentQuarterTick > $ticksPerSeason) {
             return null;
         }
-        
+
         //  Assign this stock a permanent, deterministic reporting tick.
         $reportingTick = abs(crc32($stock->getTicker())) % max(1, $ticksPerSeason);
-        
+
         // Is it this specific stock's exact turn to report
         if ($currentQuarterTick !== $reportingTick) {
             return null;
@@ -79,25 +78,28 @@ class EarningsEngine
         $oldEps = (float) $stock->getEarningsPerShare();
         $baselineVol = (float) $stock->getVolatility();
         $beta = (float) $stock->getBeta();
+        $sharesOutstanding = (int) $stock->getSharesOutstanding();
 
         // Floor the base so penny stocks/low EPS companies can still grow absolute cents
         $growthBase = max(abs($oldEps), 0.50);
 
         // Analyst Consensus (Expected EPS Growth)
-        $expectedEpsGrowth = $this->calculateExpectedEpsGrowth($beta, $economicCycle);
-        
+        $expectedEpsGrowth = $this->calculateExpectedEpsGrowth($beta, $macroState);
+
         // Round expected EPS to 2 decimals to prevent floating-point "ghost misses"
         $expectedEps = round($oldEps + ($growthBase * $expectedEpsGrowth), 2);
 
         // Model Revenue & Operating Leverage
         $quarterlyVol = $baselineVol * 0.5;
         $revenueZ = $this->mathUtility->generateStandardNormal();
-        
+
         // Actual revenue shifts based on standard distribution
         $actualEpsGrowth = $expectedEpsGrowth + ($quarterlyVol * $revenueZ);
-        
+
         // Calculate Actual EPS
         $actualEps = round($oldEps + ($growthBase * $actualEpsGrowth), 2);
+
+
 
         // Calculate the SURPRISE
         $surpriseAmount = round($actualEps - $expectedEps, 2);
@@ -109,12 +111,15 @@ class EarningsEngine
         // Update the Stock Entity
         $stock->setEarningsPerShare((string) $actualEps);
 
+        $fcfPerShare = $this->calculateFreeCashFlowPerShare($actualEps, $sharesOutstanding, $stock->getSector(), $macroState);
+        $stock->setFreeCashFlowPerShare((string) $fcfPerShare);
+
         $priceGapPct = $this->calculatePriceGap($surprisePct);
 
         // APPLY THE GAP
         $currentPrice = (float) $stock->getPrice();
         $newPrice = $currentPrice * (1.0 + $priceGapPct);
-        
+
         $stock->setPrice((string) round($newPrice, 2));
 
         $formattedEps = $actualEps < 0 ? '-$' . number_format(abs($actualEps), 2) : '$' . number_format($actualEps, 2);
@@ -168,15 +173,50 @@ class EarningsEngine
      * Calculates the expected quarter-over-quarter EPS growth rate based on the 
      * macroeconomic cycle and the stock's sensitivity to it (beta).
      */
-    private function calculateExpectedEpsGrowth(float $beta, ?EconomicCycle $economicCycle): float
+    private function calculateExpectedEpsGrowth(float $beta, array $macroState): float
     {
         $freeGrowth = 0.02 / 4; // 2% annual baseline growth divided by 4 quarters
 
-        $annualCycleModifier = $economicCycle ? $economicCycle->getGrowthModifier() : 0.0;
+        $annualCycleModifier = $macroState['output_gap'] ?? 0.0;
         $cycleModifier = $annualCycleModifier / 4;
-        
+
         $companyCycleModifier = $cycleModifier * $beta;
 
         return $freeGrowth + $companyCycleModifier;
+    }
+
+    /**
+     * Converts accrual EPS into Free Cash Flow per Share based on Sector CapEx requirements.
+     */
+    private function calculateFreeCashFlowPerShare(
+        float $actualEps, 
+        int $sharesOutstanding, 
+        string $sector, 
+        array $macroState
+    ): float {
+        if ($sharesOutstanding <= 0) return 0.0;
+
+        $netIncome = $actualEps * $sharesOutstanding;
+        $operatingCashFlow = $netIncome * 1.20; // OCF proxy
+
+        $capExRatio = match($sector) {
+            'Information Technology', 'Financials' => 0.15,
+            'Healthcare', 'Consumer Discretionary' => 0.30,
+            'Industrials', 'Energy', 'Utilities'   => 0.60,
+            default                                => 0.40,
+        };
+
+        // If the Output Gap is positive, the economy is booming, CapEx increases.
+        // If it's negative, we are in a recession, companies cut CapEx to survive.
+        $outputGap = $macroState['output_gap'] ?? 0.0;
+        $cycleCapExModifier = 1.00 + ($outputGap * 5.0); // e.g., 2% gap = +10% CapEx
+        
+        // Floor the modifier so CapEx doesn't go negative in a deep depression
+        $cycleCapExModifier = max(0.50, $cycleCapExModifier);
+
+        $actualCapEx = $operatingCashFlow * ($capExRatio * $cycleCapExModifier);
+        $fcff = $operatingCashFlow - $actualCapEx;
+
+        return $fcff / $sharesOutstanding;
     }
 }

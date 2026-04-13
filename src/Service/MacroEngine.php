@@ -2,165 +2,137 @@
 
 namespace App\Service;
 
-use App\Data\EconomicCycle;
 use App\Data\SectorPE;
 use Psr\Log\LoggerInterface;
 
-/**
- * Service responsible for simulating the macroeconomic environment.
- *
- * This engine manages "Sector Rotation" by simulating how the Price-to-Earnings (P/E)
- * ratios of different industrial sectors drift over time. It uses an Ornstein-Uhlenbeck
- * process (mean-reverting stochastic process) to ensure sectors can experience
- * bubbles and crashes but eventually return to their historical averages.
- */
 class MacroEngine
 {
-    private const REDIS_ECONOMY_STATE_KEY = 'economy_state';
-    private const REDIS_ECONOMY_TIME_KEY = 'economy_time_in_state';
+    private const REDIS_MACRO_STATE = 'macroeconomic_state';
 
     public function __construct(
         private MathUtility $mathUtility,
         private LoggerInterface $logger,
         private \Redis $redis
-    ) {
+    ) {}
+
+    /**
+     * Advances the macroeconomic state by one tick.
+     * Calculates Inflation, Output Gap, Taylor Rule (Short Rate), and the Yield Curve.
+     *
+     * @return array{
+     * inflation: float, output_gap: float, target_rate: float, policy_rate: float,
+     * ns_level: float, ns_slope: float, ns_curvature: float, yield_10y: float
+     * }
+     */
+    public function updateMacroState(float $dt): array
+    {
+        // Load Current State or Set Defaults
+        $rawState = $this->redis->get(self::REDIS_MACRO_STATE);
+        $state = $rawState ? json_decode($rawState, true) : [
+            'inflation' => 0.02,    // 2%
+            'output_gap' => 0.00,   // 0% (Economy at potential)
+            'policy_rate' => 0.04,  // Current Fed Funds Rate 4%
+        ];
+
+        // Core Economic Constants
+        $targetInflation = 0.02;
+        $naturalRate = 0.02; // r* (Real neutral rate)
+
+        // Simulate Inflation (Mean-reverting to target, driven by output gap)
+        $infZ = $this->mathUtility->generateStandardNormal();
+        $inflationDrift = 1.0 * ($targetInflation - $state['inflation']) * $dt;
+        // Phillips Curve effect: Positive output gap (hot economy) drives inflation up
+        $phillipsEffect = 0.1 * $state['output_gap'] * $dt; 
+        $state['inflation'] += $inflationDrift + $phillipsEffect + (0.02 * sqrt($dt) * $infZ);
+
+        // Simulate Output Gap (Mean-reverting to 0, suppressed by high interest rates)
+        $outZ = $this->mathUtility->generateStandardNormal();
+        $gapDrift = 1.5 * (0.0 - $state['output_gap']) * $dt;
+        // IS Curve effect: High real rates suppress economic output
+        $realRate = $state['policy_rate'] - $state['inflation'];
+        $rateDrag = 0.5 * ($realRate - $naturalRate) * $dt;
+        $state['output_gap'] += $gapDrift - $rateDrag + (0.03 * sqrt($dt) * $outZ);
+
+        // The Taylor Rule (Central Bank Target Rate)
+        $targetRate = $naturalRate + $state['inflation'] 
+            + 0.5 * ($state['inflation'] - $targetInflation) 
+            + 0.5 * ($state['output_gap']);
+            
+        // Zero Lower Bound (ZLB) - Rates generally don't go below 0
+        $targetRate = max(0.00, $targetRate);
+
+        // Rate Smoothing (Central banks hate sudden shocks)
+        $smoothing = 0.85; // High inertia
+        $state['policy_rate'] = ($smoothing * $state['policy_rate']) + ((1 - $smoothing) * $targetRate);
+
+        // Nelson-Siegel Yield Curve Factors
+        // Level (Long-term rate): Anchored to long-term inflation expectations + natural rate
+        $level = $naturalRate + (0.8 * $targetInflation) + (0.2 * $state['inflation']);
+        
+        // Slope: The difference between short rate and long rate.
+        // If Policy Rate > Level, Slope is negative (Inverted Yield Curve!)
+        $slope = $state['policy_rate'] - $level;
+        
+        // Curvature: Mid-term risk premium
+        $curvature = 0.02; 
+
+        // Calculate the critical 10-Year Yield using Nelson-Siegel formula (lambda = 0.5)
+        $lambda = 0.5;
+        $tau = 10.0;
+        $term1 = (1 - exp(-$lambda * $tau)) / ($lambda * $tau);
+        $term2 = $term1 - exp(-$lambda * $tau);
+        $yield10y = $level + ($slope * $term1) + ($curvature * $term2);
+
+        // Save State
+        $payload = [
+            'inflation' => $state['inflation'],
+            'output_gap' => $state['output_gap'],
+            'target_rate' => $targetRate,
+            'policy_rate' => $state['policy_rate'],
+            'ns_level' => $level,
+            'ns_slope' => $slope,
+            'ns_curvature' => $curvature,
+            'yield_10y' => $yield10y
+        ];
+        
+        $this->redis->set(self::REDIS_MACRO_STATE, json_encode($payload));
+        return $payload;
     }
 
     /**
-     * Simulates one time step of sector rotation.
-     *
-     * This method applies a mean-reverting drift to the P/E ratio of every sector.
-     * It calculates the new P/E based on:
-     * 1. The distance from the historical baseline (Gravity).
-     * 2. A random stochastic shock (Volatility).
-     *
-     * The calculation is performed in Log Space to ensure P/E ratios never become negative.
-     *
-     * @param float $dt The time step in years (e.g., 1/252 for a trading day).
-     * @return array<string, float> The updated list of sector P/E ratios.
+     * Updates Sector P/E Multiples based on the 10-Year Yield (Cost of Capital).
      */
-    public function updateSectorMultiples(float $dt, EconomicCycle $economicCycle): array
+    public function updateSectorMultiples(float $dt, array $macroState): array
     {
         $liveSectors = $this->getLiveSectors();
         $updatedSectors = [];
 
-        // Macro factors: Sector P/Es slowly drift, reverting to their historical baseline
-        $reversionSpeed = 2.0;
-        $macroVol = 0.20;
-
-        // shifts the target P/E up during booms and down during busts.
-        $cycleModifier = match ($economicCycle) {
-            EconomicCycle::RECESSION => 0.70,
-            EconomicCycle::RECOVERY  => 1.00,
-            EconomicCycle::EXPANSION => 1.15,
-            EconomicCycle::PEAK      => 1.30,
-        };
-
+        // When the 10-Year Yield goes up, the cost of capital rises, compressing P/E multiples.
+        // Assume a baseline 10Y yield of 4% (0.04). 
+        $yieldSpread = $macroState['yield_10y'] - 0.04;
+        
         foreach ($liveSectors as $sectorName => $currentPE) {
             $baselinePE = SectorPE::MACRO_SECTORS[$sectorName] ?? 20.0;
-
-            $targetPE = $baselinePE * $cycleModifier;
-
+            
+            // Apply the Discount Rate Shock (Higher yields = lower target PE)
+            // Tech stocks (high duration) get crushed harder by rate hikes than utilities
+            $durationRisk = ($sectorName === 'Information Technology') ? 25.0 : 15.0;
+            $targetPE = $baselinePE * exp(-$durationRisk * $yieldSpread);
+            
+            // Mean Reversion in Log Space
             $logCurrent = log(max(0.01, $currentPE));
+            $logPull = $this->mathUtility->calculateLogMeanReversion($currentPE, $targetPE, 2.0) * $dt;
+            $logDrift = 0.15 * sqrt($dt) * $this->mathUtility->generateStandardNormal();
 
-            // Calculate the Log-Gravity and Log-Drift
-            $logPullRate = $this->mathUtility->calculateLogMeanReversion($currentPE, $targetPE, $reversionSpeed);
-            $logPull = $logPullRate * $dt;
-
-            $z = $this->mathUtility->generateStandardNormal();
-            $logDrift = $macroVol * sqrt($dt) * $z;
-
-            // Apply the changes in Log Space
-            $newLogPE = $logCurrent + $logPull + $logDrift;
-
-            // Convert back to Linear Space
-            $newPE = exp($newLogPE);
-
-            $updatedSectors[$sectorName] = $newPE;
+            $updatedSectors[$sectorName] = exp($logCurrent + $logPull + $logDrift);
         }
 
-        // Save the new live multiples back to Redis
         $this->redis->set('macro_sectors_live', json_encode($updatedSectors));
-
         return $updatedSectors;
     }
-
-    /**
-     * Updates the state of the economy using a time-aware Hazard Function.
-     */
-    public function updateBoomBust(float $dt): EconomicCycle
-    {
-        $rawState = $this->redis->get(self::REDIS_ECONOMY_STATE_KEY);
-        $currentState = EconomicCycle::EXPANSION;
-
-        if ($rawState !== false) {
-            $currentState = EconomicCycle::tryFrom((string) $rawState) ?? EconomicCycle::EXPANSION;
-        }
-        
-        $rawTime = $this->redis->get(self::REDIS_ECONOMY_TIME_KEY);
-        $timeInState = $rawTime !== false ? (float) $rawTime : 0.0;
-        $timeInState += $dt;
-
-        $targetDuration = $currentState->getTargetDuration();
-        
-        $minDuration = $targetDuration * 0.50; // Must spend at least 50% of target time
-        $maxDuration = $targetDuration * 1.50; // Forced exit at 150% of target time
-
-        $transitioned = false;
-
-        // The Ceiling (Force transition)
-        if ($timeInState >= $maxDuration) {
-            $transitioned = true;
-        } 
-        // The Hazard Zone (Increasing probability)
-        elseif ($timeInState >= $minDuration) {
-            $remainingWindow = max(0.0001, $maxDuration - $timeInState);
-            $transitionProbability = $dt / $remainingWindow;
-
-            if ($this->mathUtility->checkProbability($transitionProbability)) {
-                $transitioned = true;
-            }
-        }
-
-        if ($transitioned) {
-            $newState = match ($currentState) {
-                EconomicCycle::RECESSION => EconomicCycle::RECOVERY,
-                EconomicCycle::RECOVERY  => EconomicCycle::EXPANSION,
-                EconomicCycle::EXPANSION => EconomicCycle::PEAK,
-                EconomicCycle::PEAK      => EconomicCycle::RECESSION,
-            };
-            
-            $this->redis->set(self::REDIS_ECONOMY_STATE_KEY, $newState->value);
-            $this->redis->set(self::REDIS_ECONOMY_TIME_KEY, '0.0');
-
-            $this->logger->info("New economy state: {$newState->value}");
-            
-            return $newState;
-        }
-
-        $this->redis->set(self::REDIS_ECONOMY_TIME_KEY, (string) $timeInState);
-
-        return $currentState;
-    }
-
-    /**
-     * Retrieves the current live P/E ratios for all sectors from Redis.
-     *
-     * If the simulation has just started and Redis is empty, this method
-     * seeds the state with the historical defaults defined in SectorPE::MACRO_SECTORS.
-     *
-     * @return array<string, float> Associative array of 'Sector Name' => PE Ratio.
-     */
-    public function getLiveSectors(): array
-    {
+    
+    public function getLiveSectors(): array {
         $data = $this->redis->get('macro_sectors_live');
-
-        if ($data) {
-            return json_decode($data, true);
-        }
-
-        // If Redis is empty (first run), start with the historical baselines
-        $this->redis->set('macro_sectors_live', json_encode(SectorPE::MACRO_SECTORS));
-        return SectorPE::MACRO_SECTORS;
+        return $data ? json_decode($data, true) : SectorPE::MACRO_SECTORS;
     }
 }

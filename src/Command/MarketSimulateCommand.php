@@ -81,12 +81,13 @@ class MarketSimulateCommand extends Command
 
         for ($tick = 1; $tick <= $totalTicks; $tick++) {
 
-            $liveSectorPEs = $this->macroEngine->updateSectorMultiples($dt, $this->macroEngine->updateBoomBust($dt));
+            $macroState = $this->macroEngine->updateMacroState($dt);
+            $liveSectorPEs = $this->macroEngine->updateSectorMultiples($dt, $macroState);
 
             $isHistoryTick = ($tick % 30 === 0);
 
             // Pass the $stocks array in
-            $result = $this->stockTracker->updateStocks($stocks, $dt, $liveSectorPEs, $isHistoryTick);
+            $result = $this->stockTracker->updateStocks($stocks, $dt, $liveSectorPEs, $isHistoryTick, $macroState);
             $this->etfTracker->updateIndex($result['total_cap'], $isHistoryTick);
 
             // Batch flush every 1200 ticks to save RAM

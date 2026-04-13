@@ -1,7 +1,6 @@
 <?php
 
 namespace App\Service;
-use App\Data\EconomicCycle;
 
 /**
  * Service responsible for calculating stock price movements based on various market factors.
@@ -45,7 +44,7 @@ class MarketEngine
      * @param float $volOfVol           The volatility of volatility (how much volatility fluctuates).
      * @param float $rho                The correlation between price and volatility.
      * 
-     * @param EconomicCycle|null $economicCycle The current macroeconomic state, which can influence the base drift.
+     * @param array $macroState         The current macroeconomic state, which can influence the base drift.
      *
      * @return array{price: float, shock: float|null, next_volatility: float} The calculated next price, shock percentage, and updated volatility.
      */
@@ -65,19 +64,24 @@ class MarketEngine
         float $kappa = 6.0,
         float $volOfVol = 0.3,
         float $rho = -0.7,
-        ?EconomicCycle $economicCycle = null,
+        array $macroState = [],
+        ?float $fcfPerShare = null,
     ): array {
         
         // CAPM & Macro Drift
-        $riskFreeRate = $economicCycle ? match ($economicCycle) {
-            EconomicCycle::RECESSION => 0.000,
-            EconomicCycle::RECOVERY  => 0.010,
-            EconomicCycle::EXPANSION => 0.025,
-            EconomicCycle::PEAK      => 0.050,
-        } : 0.020;
+        // The Risk-Free Rate is exactly the Central Bank's smoothed Taylor Rule rate
+        $riskFreeRate = $macroState['policy_rate'] ?? 0.04;
 
-        $macroModifier = $economicCycle ? $economicCycle->getDriftModifier() : 0.0;
-        $totalMarketPremium = $drift + $macroModifier;
+        // If the Yield Curve is inverted (Slope is negative), it signals a recession.
+        // Apply a severe penalty to the market's expected premium.
+        $yieldCurveInversionPenalty = min(0.0, $macroState['ns_slope'] ?? 0.0) * 2.0;
+        
+        // If the Output Gap is deeply negative, the economy is slumping.
+        $outputGapModifier = ($macroState['output_gap'] ?? 0.0) * 0.5;
+
+        $totalMarketPremium = $drift + $yieldCurveInversionPenalty + $outputGapModifier;
+        
+        // Final Drift
         $finalDrift = $riskFreeRate + ($totalMarketPremium * $beta);
 
         // State Variables
@@ -94,10 +98,16 @@ class MarketEngine
             dt: $dt
         );
 
+        // Compensate for the expected variance added by SVJJ jumps to prevent a positive feedback loop
+        // E[VarJump] = (pUp * muV * 0.5) + (pDown * muV)
+        $expectedVarJump = (0.30 * 0.04 * 0.5) + (0.70 * 0.04);
+        $jumpVarianceDrag = ($lambda * $expectedVarJump) / $kappa;
+        $adjustedTheta = max(0.0001, $longTermVar - $jumpVarianceDrag);
+
         // Variance Process via Quadratic-Exponential (QE) Scheme
         $nextVar = $this->mathUtility->calculateQEVarianceStep(
             currentVar: $currentVar,
-            theta: $longTermVar,
+            theta: $adjustedTheta,
             kappa: $kappa,
             sigma: $volOfVol,
             dt: $dt
@@ -112,18 +122,31 @@ class MarketEngine
         // Hard bounds to prevent the stock from completely freezing unbounded explosions
         $nextVolatility = max(0.05, min(2.00, $nextVolatility));
 
-        // Correlated Price Diffusion
-        $z1 = $this->mathUtility->generateStandardNormal();
-        $w1 = $z1; 
+        // 2. Mean Reversion to Fundamental Value (Gravity Drift)
+        // Pull the price towards its fair value derived from Earnings and Sector Target P/E
+        $peFairValue = $earningsPerShare * $targetPE;
 
-        // Mean Reversion (Gravity)
-        $valuationEps = max($earningsPerShare, 0.01);
-        $fairValue = $valuationEps * $targetPE;
+        // If Free Cash Flow is available, blend the P/E valuation with a DCF valuation
+        if ($fcfPerShare !== null) {
+            $dcfFairValue = $this->calculateIntrinsicValueDCF(
+                fcfPerShare: $fcfPerShare,
+                policyRate: $riskFreeRate,
+                beta: $beta
+            );
+            $fairValue = max(0.01, ($peFairValue + $dcfFairValue) / 2.0);
+        } else {
+            $fairValue = max(0.01, $peFairValue);
+        }
+
         $gravityDrift = $this->mathUtility->calculateLogMeanReversion(
             currentValue: $currentPrice,
             targetValue: $fairValue,
             reversionSpeed: $reversionSpeed
         );
+
+        // Correlated Price Diffusion
+        $z1 = $this->mathUtility->generateStandardNormal();
+        $w1 = $z1; 
 
         // Calculate continuous price diffusion using the current variance
         $gbmPrice = $this->mathUtility->calculateCorrelatedGBM(
@@ -146,5 +169,30 @@ class MarketEngine
             'shock'           => $jumpData['shock_pct'],
             'next_volatility' => $nextVolatility
         ];
+    }
+
+    /**
+     * Calculates the Intrinsic Fair Value using a Discounted Cash Flow (DCF) Gordon Growth Model.
+     */
+    private function calculateIntrinsicValueDCF(
+        float $fcfPerShare, 
+        float $policyRate, 
+        float $beta
+    ): float {
+        $fcfPerShare = max($fcfPerShare, 0.01);
+
+        // Determine WACC
+        $equityRiskPremium = 0.05; 
+        $wacc = $policyRate + ($beta * $equityRiskPremium);
+
+        // Determine Terminal Growth Rate (g)
+        $terminalGrowthRate = 0.02;
+
+        // Failsafe: WACC must be strictly greater than growth, or value goes to infinity
+        if ($wacc <= $terminalGrowthRate) {
+            $wacc = $terminalGrowthRate + 0.01; 
+        }
+
+        return ($fcfPerShare * (1 + $terminalGrowthRate)) / ($wacc - $terminalGrowthRate);
     }
 }

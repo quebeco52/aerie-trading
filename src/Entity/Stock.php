@@ -61,6 +61,9 @@ class Stock
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 8, nullable: true, options: ['default' => '10.00000000'])]
     private ?string $earningsPerShare = '10.00000000';
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 8, nullable: true)]
+    private ?string $freeCashFlowPerShare = null;
+
     /**
      * @var string Baseline annual volatility (sigma) used in the stochastic pricing models.
      */
@@ -184,6 +187,18 @@ class Stock
         } else {
             $this->earningsPerShare = null;
         }
+
+        return $this;
+    }
+
+    public function getFreeCashFlowPerShare(): ?string
+    {
+        return $this->freeCashFlowPerShare;
+    }
+
+    public function setFreeCashFlowPerShare(?string $freeCashFlowPerShare): self
+    {
+        $this->freeCashFlowPerShare = $freeCashFlowPerShare;
 
         return $this;
     }
