@@ -87,7 +87,7 @@ class MarketSimulateCommand extends Command
             $isHistoryTick = ($tick % 30 === 0);
 
             // Pass the $stocks array in
-            $result = $this->stockTracker->updateStocks($stocks, $dt, $liveSectorPEs, $isHistoryTick, $macroState);
+            $result = $this->stockTracker->updateStocks($stocks, $dt, $liveSectorPEs, $isHistoryTick, $macroState, $tick, self::TICKS_PER_YEAR);
             $this->etfTracker->updateIndex($result['total_cap'], $isHistoryTick);
 
             // Batch flush every 1200 ticks to save RAM

@@ -82,7 +82,8 @@ class StockTracker
             // Determine Volatility
             $baselineVol = (float) $stock->getVolatility();
             $currentVol = (float) ($stock->getCurrentVolatility() ?? $baselineVol);
-            // Calculate new price
+            
+            // Calculate new price (GBM + SVJJ)
             $calculation = $this->marketEngine->calculateNextPrice(
                 currentPrice: (float) $stock->getPrice(),
                 currentVolatility: $currentVol,
@@ -91,8 +92,6 @@ class StockTracker
                 targetPE: $targetPE,
                 dt: $dt,
                 lambda: (float) $stock->getJumpIntensity(),
-                // jumpMean: (float) $stock->getJumpMean(),
-                // jumpVol: (float) $stock->getJumpVol(),
                 beta: (float) $stock->getBeta(),
                 marketZ: $marketZ,
                 marketVol: $marketVol,
@@ -103,38 +102,36 @@ class StockTracker
             $newPrice = $calculation['price'];
             $nextVolatility = $calculation['next_volatility'];
 
-            // Handle Market Shocks via Doctrine Entities
             if ($calculation['shock'] !== null) {
                 $events[] = $this->eventService->publish($stock, 'SHOCK', "Sudden market shock detected.", $calculation['shock']);
             }
+            $stock->setPrice((string) $newPrice);
+            $stock->setCurrentVolatility((string) $nextVolatility);
 
             // Earnings Engine
-            $earningsEvent = $this->earningsEngine->calculate($stock, $macroState, $tickCount, $ticksPerYear);
-            if ($earningsEvent) {
-                $events[] = $earningsEvent;
+            $generatedEvents = $this->earningsEngine->calculate($stock, $macroState, $liveSectorPEs, $tickCount, $ticksPerYear);
+            if (!empty($generatedEvents)) {
+                $events = array_merge($events, $generatedEvents);
             }
-
-
+            $currentPriceAfterEarnings = (float) $stock->getPrice();
             $newEps = (float) $stock->getEarningsPerShare();
             $sharesOutstanding = (int) $stock->getSharesOutstanding();
 
             // CORPORATE ACTIONS (SPLITS)
             $splitResult = $this->corporateActionEngine->processSplits(
                 $stock,
-                $newPrice,
+                $currentPriceAfterEarnings,
                 $newEps,
                 $sharesOutstanding
             );
 
-            // Unpack the results (they will be identical if no split occurred)
-            $newPrice = $splitResult['price'];
+            // Unpack the results
+            $finalPrice = $splitResult['price'];
             $newEps = $splitResult['eps'];
             $sharesOutstanding = $splitResult['shares'];
             $splitEvent = $splitResult['event'];
 
-            // UPDATE THE DOCTRINE ENTITY
-            $stock->setPrice((string) $newPrice);
-            $stock->setCurrentVolatility((string) $nextVolatility);
+            $stock->setPrice((string) $finalPrice);
 
             // Only update these if a split actually happened
             if ($splitEvent) {
@@ -144,15 +141,16 @@ class StockTracker
             }
 
             // Calculate Market Cap
-            $currentMarketCap = $newPrice * (float) $stock->getSharesOutstanding();
+            $currentMarketCap = $finalPrice * (float) $stock->getSharesOutstanding();
             $totalMarketCap += $currentMarketCap;
 
             $stockUpdates[] = [
                 'ticker' => $stock->getTicker(),
                 'sector' => $sectorName,
-                'price' => round($newPrice, 2),
+                'price' => round($finalPrice, 2),
                 'market_cap' => $currentMarketCap,
                 'current_volatility' => round($nextVolatility * 100, 2),
+                'current_roic' => (float) $stock->getCurrentRoic() != 0.0 ? (float) $stock->getCurrentRoic() : (float) $stock->getBaselineRoic(),
             ];
 
             if ($recordHistory) {

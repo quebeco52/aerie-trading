@@ -70,7 +70,7 @@ class MacroEngine
         $level = $naturalRate + (0.8 * $targetInflation) + (0.2 * $state['inflation']);
         
         // Slope: The difference between short rate and long rate.
-        // If Policy Rate > Level, Slope is negative (Inverted Yield Curve!)
+        // If Policy Rate > Level, Slope is negative
         $slope = $state['policy_rate'] - $level;
         
         // Curvature: Mid-term risk premium
@@ -100,39 +100,71 @@ class MacroEngine
     }
 
     /**
-     * Updates Sector P/E Multiples based on the 10-Year Yield (Cost of Capital).
+     * Retrieves the live Sector P/E multiples from Redis or defaults if not set.
+     *
+     * @return array<string, float>
+     */
+    public function getLiveSectors(): array
+    {
+        $rawSectors = $this->redis->get('macro_sectors_live');
+        if ($rawSectors) {
+            return json_decode($rawSectors, true);
+        }
+
+        return SectorPE::MACRO_SECTORS;
+    }
+
+    /**
+     * Updates Sector P/E Multiples based on the 10-Year Yield (Cost of Capital) and Output Gap (Sentiment).
      */
     public function updateSectorMultiples(float $dt, array $macroState): array
     {
         $liveSectors = $this->getLiveSectors();
         $updatedSectors = [];
 
-        // When the 10-Year Yield goes up, the cost of capital rises, compressing P/E multiples.
+        // The Yield Spread (Cost of Capital Shock)
         // Assume a baseline 10Y yield of 4% (0.04). 
-        $yieldSpread = $macroState['yield_10y'] - 0.04;
+        $yieldSpread = ($macroState['yield_10y'] ?? 0.04) - 0.04;
         
+        // The Output Gap (Economic Sentiment / Risk Premium)
+        $economicSentiment = $macroState['output_gap'] ?? 0.0;
+
         foreach ($liveSectors as $sectorName => $currentPE) {
-            $baselinePE = SectorPE::MACRO_SECTORS[$sectorName] ?? 20.0;
+            $baselinePE = \App\Data\SectorPE::MACRO_SECTORS[$sectorName] ?? 20.0;
             
-            // Apply the Discount Rate Shock (Higher yields = lower target PE)
-            // Tech stocks (high duration) get crushed harder by rate hikes than utilities
-            $durationRisk = ($sectorName === 'Information Technology') ? 25.0 : 15.0;
-            $targetPE = $baselinePE * exp(-$durationRisk * $yieldSpread);
+            // Equity Duration (Sensitivity to Interest Rates)
+            $durationRisk = match ($sectorName) {
+                'Information Technology', 'Communication Services' => 25.0, // High growth, heavily penalized by rate hikes
+                'Consumer Discretionary', 'Real Estate'            => 20.0, // Highly sensitive to consumer borrowing costs
+                'Industrials', 'Materials', 'Consumer Staples'     => 15.0, // Standard market duration
+                'Utilities', 'Energy'                              => 12.0, // Cash cows, lower duration
+                'Financials'                                       => 8.0,  // Banks BENEFIT from higher rates (NIM), lowest penalty
+                default                                            => 15.0,
+            };
+            
+            // Calculate the theoretical Fair Value P/E based on the Macro Environment
+            // Rate Shock: Higher Yields = Lower P/E.
+            $rateShock = exp(-$durationRisk * $yieldSpread);
+            
+            // Sentiment Premium: Positive Output Gap = Higher P/E (Multiplier applied to baseline).
+            $sentimentPremium = exp(2.0 * $economicSentiment); 
+            
+            $targetPE = $baselinePE * $rateShock * $sentimentPremium;
+            
+            // Failsafe bounds
+            $targetPE = max(5.0, min(60.0, $targetPE));
             
             // Mean Reversion in Log Space
             $logCurrent = log(max(0.01, $currentPE));
             $logPull = $this->mathUtility->calculateLogMeanReversion($currentPE, $targetPE, 2.0) * $dt;
-            $logDrift = 0.15 * sqrt($dt) * $this->mathUtility->generateStandardNormal();
+            
+            // Add a bit of random sector noise (0.10 volatility)
+            $logDrift = 0.10 * sqrt($dt) * $this->mathUtility->generateStandardNormal();
 
             $updatedSectors[$sectorName] = exp($logCurrent + $logPull + $logDrift);
         }
 
         $this->redis->set('macro_sectors_live', json_encode($updatedSectors));
         return $updatedSectors;
-    }
-    
-    public function getLiveSectors(): array {
-        $data = $this->redis->get('macro_sectors_live');
-        return $data ? json_decode($data, true) : SectorPE::MACRO_SECTORS;
     }
 }

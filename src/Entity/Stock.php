@@ -61,6 +61,9 @@ class Stock
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 8, nullable: true, options: ['default' => '10.00000000'])]
     private ?string $earningsPerShare = '10.00000000';
 
+    /**
+     * @var string|null Free cash flow per share, used for Discounted Cash Flow (DCF) valuation.
+     */
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 8, nullable: true)]
     private ?string $freeCashFlowPerShare = null;
 
@@ -100,11 +103,46 @@ class Stock
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, nullable: true, options: ['default' => '0.10'])]
     private ?string $jumpVol = '0.10';
 
+    /**
+     * @var string|null A brief description or narrative profile of the company.
+     */
     #[ORM\Column(type: Types::TEXT, nullable: true)]
     private ?string $description = null;
 
+    /**
+     * @var string The stock's systemic importance to the district economy (e.g., 'titan', 'systemic', 'base').
+     *             Used by the Market Operator to determine bailout thresholds.
+     */
     #[ORM\Column(length: 255)]
     private string $systemicImportance;
+
+    /**
+     * @var string The target percentage of earnings the company desires to pay out as dividends (e.g., '0.40' for 40%).
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.30'])]
+    private string $targetPayoutRatio = '0.30';
+
+    /**
+     * @var string The Lintner Speed of Adjustment (Alpha).
+     *             High (0.8) = volatile dividends. Low (0.1) = sticky, smooth dividends.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.20'])]
+    private string $dividendSpeed = '0.20';
+
+    /**
+     * @var string The actual dollar amount paid as a dividend in the previous quarter.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, options: ['default' => '0.00'])]
+    private string $lastDividend = '0.00';
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.10'])]
+    private string $baselineRoic = '0.10';
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.20'])]
+    private string $capexRatio = '0.20';
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, options: ['default' => '0.0000'])]
+    private string $currentRoic = '0.0000';
 
     public function getId(): ?int
     {
@@ -295,6 +333,80 @@ class Stock
     {
         $this->systemicImportance = $systemicImportance;
 
+        return $this;
+    }
+
+    public function getTargetPayoutRatio(): ?string
+    {
+        return $this->targetPayoutRatio;
+    }
+
+    public function setTargetPayoutRatio(string $targetPayoutRatio): static
+    {
+        $this->targetPayoutRatio = $targetPayoutRatio;
+
+        return $this;
+    }
+
+    public function getDividendSpeed(): ?string
+    {
+        return $this->dividendSpeed;
+    }
+
+    public function setDividendSpeed(string $dividendSpeed): static
+    {
+        $this->dividendSpeed = $dividendSpeed;
+
+        return $this;
+    }
+
+    public function getLastDividend(): ?string
+    {
+        return $this->lastDividend;
+    }
+
+    public function setLastDividend(string $lastDividend): static
+    {
+        $val = (float) $lastDividend;
+        
+        // Clamp to prevent SQL DECIMAL(10,4) out of range errors
+        $val = min(999999.9999, max(0.0, $val));
+        
+        $this->lastDividend = (string) $val;
+
+        return $this;
+    }
+
+    public function getBaselineRoic(): ?string
+    {
+        return $this->baselineRoic;
+    }
+
+    public function setBaselineRoic(string $baselineRoic): self
+    {
+        $this->baselineRoic = $baselineRoic;
+        return $this;
+    }
+
+    public function getCapexRatio(): ?string
+    {
+        return $this->capexRatio;
+    }
+
+    public function setCapexRatio(string $capexRatio): self
+    {
+        $this->capexRatio = $capexRatio;
+        return $this;
+    }
+
+    public function getCurrentRoic(): ?string
+    {
+        return $this->currentRoic;
+    }
+
+    public function setCurrentRoic(string $currentRoic): self
+    {
+        $this->currentRoic = $currentRoic;
         return $this;
     }
 }

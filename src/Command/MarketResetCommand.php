@@ -55,6 +55,8 @@ class MarketResetCommand extends Command
             // THE NEW EPS MATH
             $targetPE = SectorPE::MACRO_SECTORS[$stockData['sector']] ?? 20.0;
             $neutralEps = (float) $stockData['price'] / $targetPE;
+            $epsToSet = round($neutralEps, 2);
+
 
             $conn->executeStatement(
                 'UPDATE stocks SET 
@@ -67,11 +69,16 @@ class MarketResetCommand extends Command
                     jump_intensity = :jump_int,
                     jump_mean = :jump_mean, 
                     systemic_importance = :importance,
-                    jump_vol = :jump_vol
+                    jump_vol = :jump_vol,
+                    baseline_roic = :roic,
+                    current_roic = :roic,
+                    capex_ratio = :capex,
+                    target_payout_ratio = :payout,
+                    last_dividend = 0.00 
                 WHERE ticker = :ticker',
                 [
                     'price' => $stockData['price'],
-                    'eps' => round($neutralEps, 2),
+                    'eps' => $epsToSet,
                     'shares' => $stockData['shares_outstanding'],
                     'vol' => $stockData['volatility'],
                     'current_vol' => $stockData['volatility'],
@@ -80,6 +87,9 @@ class MarketResetCommand extends Command
                     'jump_mean' => $stockData['jump_mean'],
                     'jump_vol' => $stockData['jump_vol'],
                     'importance' => $stockData['systemic_importance'] ?? 'none',
+                    'roic' => $stockData['baseline_roic'] ?? 0.10,
+                    'capex' => $stockData['capex_ratio'] ?? 0.20,
+                    'payout' => $stockData['target_payout_ratio'] ?? 0.30,
                     'ticker' => $stockData['ticker']
                 ]
             );

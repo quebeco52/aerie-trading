@@ -8,6 +8,7 @@ use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractCrudController;
 use EasyCorp\Bundle\EasyAdminBundle\Field\ChoiceField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\FormField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\NumberField;
+use EasyCorp\Bundle\EasyAdminBundle\Field\PercentField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\TextareaField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\TextField;
 
@@ -60,13 +61,19 @@ class StockCrudController extends AbstractCrudController
                 ->setHelp('These values are actively managed by the simulation engine and cannot be edited manually.'),
             
             NumberField::new('price')
-                ->setDisabled(), // Greyed out, read-only
+                ->setDisabled(),
             
             NumberField::new('earningsPerShare', 'EPS')
-                ->setDisabled(), // Greyed out, read-only
+                ->setDisabled(),
             
             NumberField::new('currentVolatility', 'Current Vol.')
-                ->setDisabled()  // Greyed out, read-only
+                ->setDisabled()
+                ->hideOnIndex(),
+                
+            PercentField::new('currentRoic', 'Current ROIC')
+                ->setStoredAsFractional(true)
+                ->setNumDecimals(2)
+                ->setDisabled()
                 ->hideOnIndex(),
 
             // --- SECTION 3: PHYSICS CONSTANTS (EDITABLE) ---
@@ -77,6 +84,12 @@ class StockCrudController extends AbstractCrudController
                 ->hideOnIndex(),
             NumberField::new('beta'),
             NumberField::new('volatility', 'Baseline Volatility'),
+            PercentField::new('baselineRoic', 'Baseline ROIC')
+                ->setStoredAsFractional(true)
+                ->setNumDecimals(2)->hideOnIndex(),
+            PercentField::new('capexRatio', 'CapEx Ratio')
+                ->setStoredAsFractional(true)
+                ->setNumDecimals(2)->hideOnIndex(),
 
             // --- SECTION 4: SHOCK ENGINE (EDITABLE) ---
             FormField::addFieldset('Jump Engine (Shocks)')->setIcon('fas fa-bolt')

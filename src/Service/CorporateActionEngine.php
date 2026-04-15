@@ -118,4 +118,89 @@ class CorporateActionEngine
             'event' => $splitEvent
         ];
     }
+
+    /**
+     * Executes the Lintner Dividend Model and FCF Share Buybacks using a pure Cash Flow approach.
+     */
+    public function allocateCapital(
+        Stock $stock, 
+        float $actualAnnualEps, 
+        float $quarterlyFcfPerShare, 
+        float $currentPrice, 
+        int $sharesOutstanding,
+        float $liveTargetPE
+    ): array {
+        $events = [];
+        
+        $targetPayout = (float) $stock->getTargetPayoutRatio();
+        $speed = (float) $stock->getDividendSpeed();
+        $lastDividend = (float) $stock->getLastDividend();
+
+        // A company targets a dividend based on its QUARTERLY earnings
+        $quarterlyEps = $actualAnnualEps / 4.0;
+        $targetDividend = $quarterlyEps > 0 ? ($quarterlyEps * $targetPayout) : 0.0;
+
+        // The Lintner Formula: Smooths out the volatility of earnings
+        $newDividend = $lastDividend + ($speed * ($targetDividend - $lastDividend));
+        $newDividend = max(0.0, round($newDividend, 4));
+
+        // Strict Cash Flow Failsafe: A company cannot pay more cash than it generated this quarter.
+        $newDividend = min($newDividend, max(0.0, $quarterlyFcfPerShare));
+
+        if ($newDividend > 0.0) {
+            // PAY TO USERS
+            $this->entityManager->getConnection()->executeStatement(
+                'UPDATE users u
+                 INNER JOIN user_stocks us ON u.id = us.user_id
+                 SET u.cash_balance = u.cash_balance + (us.quantity * :dividend)
+                 WHERE us.stock_id = :stock_id',
+                ['dividend' => $newDividend, 'stock_id' => $stock->getId()]
+            );
+
+            $stock->setLastDividend((string) $newDividend);
+            
+            // Financial Standard: Yields are always reported Annualized!
+            $annualizedYield = (($newDividend * 4) / max($currentPrice, 0.01)) * 100;
+            $events[] = $this->marketEvent->publish($stock, 'DIVIDEND', "{$stock->getTicker()} distributed a quarterly dividend of $" . number_format($newDividend, 2) . "/share (Yield: " . number_format($annualizedYield, 2) . "%).", 0.0);
+        } else {
+            $stock->setLastDividend('0.00');
+        }
+
+        // SHARE BUYBACKS (EPS ACCRETION)
+        $remainingFcfPerShare = $quarterlyFcfPerShare - $newDividend;
+        $newAnnualEps = $actualAnnualEps;
+
+        // Calculate the company's current P/E ratio
+        $currentPE = $actualAnnualEps > 0 ? ($currentPrice / $actualAnnualEps) : 9999;
+        
+        if ($remainingFcfPerShare > 0.0 && $currentPE < ($liveTargetPE + 2.0)) {
+            $totalBuybackCash = $remainingFcfPerShare * $sharesOutstanding;
+            
+            $sharesRepurchased = (int) ($totalBuybackCash / max($currentPrice, 0.01));
+
+            $maxAllowableRepurchase = (int) ($sharesOutstanding * 0.015);
+            $sharesRepurchased = min($sharesRepurchased, $maxAllowableRepurchase);
+
+            if ($sharesRepurchased > 0) {
+                $sharesOutstanding -= $sharesRepurchased;
+
+                // Mathematical EPS Accretion
+                $annualNetIncome = $actualAnnualEps * ($sharesOutstanding + $sharesRepurchased);
+                $newAnnualEps = $annualNetIncome / max($sharesOutstanding, 1);
+
+                $pctRetired = ($sharesRepurchased / ($sharesOutstanding + $sharesRepurchased)) * 100;
+                
+                $events[] = $this->marketEvent->publish($stock, 'BUYBACK', "{$stock->getTicker()} executed a stock buyback, retiring " . number_format($sharesRepurchased) . " shares. EPS accreted to $" . number_format($newAnnualEps, 2) . ".", $pctRetired);
+            }
+        }
+
+        $this->entityManager->flush();
+
+        return [
+            'new_eps' => round($newAnnualEps, 2),
+            'new_shares' => $sharesOutstanding,
+            'dividend_paid' => $newDividend,
+            'events' => $events
+        ];
+    }
 }

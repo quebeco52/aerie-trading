@@ -18,29 +18,44 @@ class UpdateStockVolatilityHandler
 
     public function __invoke(UpdateStockVolatility $message): void
     {
-        // Fetch the last ~100 prices (e.g., last 100 days)
+        // Fetch data
         $conn = $this->entityManager->getConnection();
         $sql = "SELECT price FROM stock_history WHERE stock_id = :id ORDER BY recorded_at DESC LIMIT 100";
         $results = $conn->fetchAllAssociative($sql, ['id' => $message->getStockId()]);
         
         if (count($results) < 10) return;
 
-        // Reverse to chronological order
         $prices = array_reverse(array_column($results, 'price'));
         $floatPrices = array_map('floatval', $prices);
 
         // Run the GARCH(1,1) MLE estimation
-        $newBaselineVolatility = $this->garchCalculator->calculateLongTermVolatility(
+        $garchVol = $this->garchCalculator->calculateLongTermVolatility(
             $floatPrices, 
             $message->getTicksPerYear()
         );
 
-        // Fetch the stock only after we know we have enough data to process
         $stock = $this->entityManager->getRepository(Stock::class)->find($message->getStockId());
         if (!$stock) return;
 
-        // Persist the newly discovered underlying volatility back to the database
-        $stock->setVolatility((string) $newBaselineVolatility);
+        // Define the Fundamental Archetype
+        $ticker = $stock->getTicker();
+        $archetypeVol = 0.15;
+        
+        foreach (\App\Data\InitialMarket::STOCKS as $initialData) {
+            if ($initialData['ticker'] === $ticker) {
+                $archetypeVol = (float) $initialData['volatility'];
+                break;
+            }
+        }
+
+        // Bayesian Shrinkage
+        $blendedVolatility = ($garchVol * 0.50) + ($archetypeVol * 0.50);
+
+        // Cap and Floor just to be safe
+        $blendedVolatility = max(0.05, min(0.80, $blendedVolatility));
+
+        // Persist the anchored volatility back to the engine
+        $stock->setVolatility((string) $blendedVolatility);
         
         $this->entityManager->flush();
     }
