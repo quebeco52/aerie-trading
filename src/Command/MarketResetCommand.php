@@ -57,7 +57,6 @@ class MarketResetCommand extends Command
             $neutralEps = (float) $stockData['price'] / $targetPE;
             $epsToSet = round($neutralEps, 2);
 
-
             $conn->executeStatement(
                 'UPDATE stocks SET 
                     price = :price, 
@@ -74,6 +73,7 @@ class MarketResetCommand extends Command
                     current_roic = :roic,
                     capex_ratio = :capex,
                     target_payout_ratio = :payout,
+                    dividend_speed = :div_speed,
                     last_dividend = 0.00 
                 WHERE ticker = :ticker',
                 [
@@ -90,6 +90,7 @@ class MarketResetCommand extends Command
                     'roic' => $stockData['baseline_roic'] ?? 0.10,
                     'capex' => $stockData['capex_ratio'] ?? 0.20,
                     'payout' => $stockData['target_payout_ratio'] ?? 0.30,
+                    'div_speed' => $stockData['dividendSpeed'] ?? 0.20,
                     'ticker' => $stockData['ticker']
                 ]
             );

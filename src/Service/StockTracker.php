@@ -82,7 +82,7 @@ class StockTracker
             // Determine Volatility
             $baselineVol = (float) $stock->getVolatility();
             $currentVol = (float) ($stock->getCurrentVolatility() ?? $baselineVol);
-            
+
             // Calculate new price (GBM + SVJJ)
             $calculation = $this->marketEngine->calculateNextPrice(
                 currentPrice: (float) $stock->getPrice(),
@@ -157,7 +157,7 @@ class StockTracker
 
                 $historyData[] = [
                     'stock_id' => $stock->getId(),
-                    'price' => $newPrice
+                    'price' => $finalPrice
                 ];
             }
         }
