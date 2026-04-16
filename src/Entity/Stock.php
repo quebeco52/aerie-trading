@@ -7,26 +7,20 @@ use Doctrine\ORM\Mapping as ORM;
 
 /**
  * Represents a publicly traded stock on the Aerie Exchange.
- * 
- * This entity holds not only standard asset information (ticker, name, price)
- * but also the specific financial metrics and stochastic variables (volatility, beta, 
- * jump-diffusion parameters) required by the market simulation engine to calculate 
- * organic price movements.
+ * * Uses Absolute Values (Total Net Income, Total Equity) to maintain 
+ * mathematically flawless accounting during splits, buyouts, and buybacks.
  */
 #[ORM\Entity]
 #[ORM\Table(name: 'stocks')]
 class Stock
 {
-    /**
-     * @var int|null The unique internal database identifier.
-     */
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
     private ?int $id = null;
 
     /**
-     * @var string The unique stock ticker symbol (e.g., 'LAKE').
+     * @var string The unique trading symbol (e.g., 'LAKE').
      */
     #[ORM\Column(length: 10, unique: true)]
     private string $ticker;
@@ -38,111 +32,164 @@ class Stock
     private string $name;
 
     /**
-     * @var string The economic sector, used for macroeconomic P/E drift and sector rotation.
+     * @var string The macroeconomic sector this stock belongs to (e.g., 'Financials').
      */
     #[ORM\Column(length: 50, options: ['default' => 'General'])]
     private string $sector = 'General';
 
     /**
-     * @var string The current trading price of the stock.
+     * @var string The current share price of the stock.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 8, options: ['default' => '100.00000000'])]
     private string $price = '100.00000000';
 
     /**
-     * @var int|string The total number of shares, used to calculate total Market Capitalization.
+     * @var int|string The total number of shares issued by the corporation.
+     *                 Stored absolutely to maintain perfect math during splits/buybacks.
      */
     #[ORM\Column(type: Types::BIGINT, options: ['unsigned' => true, 'default' => 1000000])]
     private int|string $sharesOutstanding = '1000000';
 
-    /**
-     * @var string|null Earnings per share, used to calculate fundamental valuation (P/E ratio).
-     */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 8, nullable: true, options: ['default' => '10.00000000'])]
-    private ?string $earningsPerShare = '10.00000000';
+
+    // THE BALANCE SHEET
+
 
     /**
-     * @var string|null Free cash flow per share, used for Discounted Cash Flow (DCF) valuation.
+     * @var string Absolute cash and liquid reserves held by the corporation.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 8, nullable: true)]
-    private ?string $freeCashFlowPerShare = null;
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $corporateTreasury = '0.0000';
 
     /**
-     * @var string Baseline annual volatility (sigma) used in the stochastic pricing models.
+     * @var string The ratio of total debt to total equity.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, options: ['default' => '0.0000'])]
+    private string $debtToEquityRatio = '0.0000';
+
+    /**
+     * @var string The operating profit margin (e.g., 0.15 for 15%).
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, options: ['default' => '0.1500'])]
+    private string $operatingMargin = '0.1500';
+
+    /**
+     * @var string The percentage of shares available for public trading.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, options: ['default' => '1.0000'])]
+    private string $publicFloatPercentage = '1.0000';
+
+    /**
+     * @var string Absolute total net income. Used to mathematically derive EPS dynamically.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $totalNetIncome = '0.0000';
+
+    /**
+     * @var string|null Absolute total free cash flow (FCF). Used to mathematically derive FCF per share.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $totalFreeCashFlow = null;
+
+    /**
+     * @var string Absolute total equity (Book Value).
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $totalEquity = '0.0000';
+
+    /**
+     * @var string Accumulated retained earnings over the company's lifespan.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $retainedEarnings = '0.0000';
+
+
+    // CORPORATE POLICY & MARKET PHYSICS
+
+
+    /**
+     * @var string Baseline, long-term annualized volatility (Sigma).
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.02'])]
     private string $volatility = '0.02';
 
     /**
-     * @var string|null Dynamic current volatility, allowing the stock to experience periods of high/low turbulence.
+     * @var string|null The current, dynamic instantaneous volatility (used in Heston/GARCH models).
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $currentVolatility = null;
 
     /**
-     * @var string|null The stock's price sensitivity to broader market/sector movements.
+     * @var string|null The stock's sensitivity to broader market index movements.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 2, nullable: true, options: ['default' => '1.00'])]
     private ?string $beta = '1.00';
 
     /**
-     * @var string|null Average number of sudden price jumps per year (lambda in a Merton jump-diffusion model).
+     * @var string|null Jump intensity (Lambda) - expected number of market shocks per year (Merton Jump Diffusion).
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 2, nullable: true, options: ['default' => '2.00'])]
     private ?string $jumpIntensity = '2.00';
 
     /**
-     * @var string|null The average log-return size of a sudden jump (can be positive or negative).
+     * @var string The mean size of a market shock/jump.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, nullable: true, options: ['default' => '-0.01'])]
-    private ?string $jumpMean = '-0.01';
+    private string $jumpMean = '-0.01';
 
     /**
-     * @var string|null The standard deviation of the jump size, dictating how extreme jumps can be.
+     * @var string|null The standard deviation (volatility) of the jump size.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, nullable: true, options: ['default' => '0.10'])]
     private ?string $jumpVol = '0.10';
 
     /**
-     * @var string|null A brief description or narrative profile of the company.
+     * @var string|null Lore and background information for the stock.
      */
     #[ORM\Column(type: Types::TEXT, nullable: true)]
     private ?string $description = null;
 
     /**
-     * @var string The stock's systemic importance to the district economy (e.g., 'titan', 'systemic', 'base').
-     *             Used by the Market Operator to determine bailout thresholds.
+     * @var string Determines the bailout tier and market gravity strength (e.g., 'titan', 'systemic', 'none').
      */
     #[ORM\Column(length: 255)]
     private string $systemicImportance;
 
     /**
-     * @var string The target percentage of earnings the company desires to pay out as dividends (e.g., '0.40' for 40%).
+     * @var string The target percentage of net income paid out as dividends.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.30'])]
     private string $targetPayoutRatio = '0.30';
 
     /**
-     * @var string The Lintner Speed of Adjustment (Alpha).
-     *             High (0.8) = volatile dividends. Low (0.1) = sticky, smooth dividends.
+     * @var string How quickly the company adjusts its dividend towards the target payout ratio (Lintner model).
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.20'])]
     private string $dividendSpeed = '0.20';
 
     /**
-     * @var string The actual dollar amount paid as a dividend in the previous quarter.
+     * @var string The absolute value of the last paid dividend per share.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, options: ['default' => '0.00'])]
     private string $lastDividend = '0.00';
 
+    /**
+     * @var string The baseline Return on Invested Capital.
+     */
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.10'])]
     private string $baselineRoic = '0.10';
 
+    /**
+     * @var string The ratio of operating cash flow allocated to Capital Expenditures.
+     */
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.20'])]
     private string $capexRatio = '0.20';
 
+    /**
+     * @var string The dynamic, current Return on Invested Capital.
+     */
     #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, options: ['default' => '0.0000'])]
     private string $currentRoic = '0.0000';
+
 
     public function getId(): ?int
     {
@@ -153,11 +200,9 @@ class Stock
     {
         return $this->ticker;
     }
-
     public function setTicker(string $ticker): static
     {
         $this->ticker = $ticker;
-
         return $this;
     }
 
@@ -165,11 +210,9 @@ class Stock
     {
         return $this->name;
     }
-
     public function setName(string $name): static
     {
         $this->name = $name;
-
         return $this;
     }
 
@@ -177,11 +220,9 @@ class Stock
     {
         return $this->sector;
     }
-
     public function setSector(string $sector): static
     {
         $this->sector = $sector;
-
         return $this;
     }
 
@@ -189,11 +230,9 @@ class Stock
     {
         return $this->price;
     }
-
     public function setPrice(string $price): static
     {
         $this->price = $price;
-
         return $this;
     }
 
@@ -201,43 +240,91 @@ class Stock
     {
         return $this->sharesOutstanding;
     }
-
     public function setSharesOutstanding(int|string $sharesOutstanding): static
     {
         $this->sharesOutstanding = $sharesOutstanding;
-
         return $this;
     }
 
-    public function getEarningsPerShare(): ?string
+    public function getTotalNetIncome(): string
     {
-        return $this->earningsPerShare;
+        return $this->totalNetIncome;
     }
-
-    public function setEarningsPerShare(?string $earningsPerShare): static
+    public function setTotalNetIncome(string $totalNetIncome): static
     {
-        if ($earningsPerShare !== null) {
-            $val = (float) $earningsPerShare;
-            // Clamp to prevent SQL DECIMAL(20,8) out of range errors
-            // Max 12 digits before the decimal point
-            $val = max(-99999999999.0, min(99999999999.0, $val));
-            $this->earningsPerShare = (string) $val;
-        } else {
-            $this->earningsPerShare = null;
-        }
-
+        $this->totalNetIncome = $totalNetIncome;
         return $this;
     }
 
-    public function getFreeCashFlowPerShare(): ?string
+    public function getTotalEquity(): string
     {
-        return $this->freeCashFlowPerShare;
+        return $this->totalEquity;
+    }
+    public function setTotalEquity(string $totalEquity): static
+    {
+        $this->totalEquity = $totalEquity;
+        return $this;
     }
 
-    public function setFreeCashFlowPerShare(?string $freeCashFlowPerShare): self
+    public function getTotalFreeCashFlow(): ?string
     {
-        $this->freeCashFlowPerShare = $freeCashFlowPerShare;
+        return $this->totalFreeCashFlow;
+    }
+    public function setTotalFreeCashFlow(?string $totalFreeCashFlow): static
+    {
+        $this->totalFreeCashFlow = $totalFreeCashFlow;
+        return $this;
+    }
 
+    public function getRetainedEarnings(): string
+    {
+        return $this->retainedEarnings;
+    }
+    public function setRetainedEarnings(string $retainedEarnings): static
+    {
+        $this->retainedEarnings = $retainedEarnings;
+        return $this;
+    }
+
+    // --- STANDARD PROPERTIES ---
+
+    public function getCorporateTreasury(): ?string
+    {
+        return $this->corporateTreasury;
+    }
+    public function setCorporateTreasury(string $corporateTreasury): static
+    {
+        $this->corporateTreasury = $corporateTreasury;
+        return $this;
+    }
+
+    public function getDebtToEquityRatio(): ?string
+    {
+        return $this->debtToEquityRatio;
+    }
+    public function setDebtToEquityRatio(string $debtToEquityRatio): static
+    {
+        $this->debtToEquityRatio = $debtToEquityRatio;
+        return $this;
+    }
+
+    public function getOperatingMargin(): ?string
+    {
+        return $this->operatingMargin;
+    }
+    public function setOperatingMargin(string $operatingMargin): static
+    {
+        $this->operatingMargin = $operatingMargin;
+        return $this;
+    }
+
+    public function getPublicFloatPercentage(): ?string
+    {
+        return $this->publicFloatPercentage;
+    }
+    public function setPublicFloatPercentage(string $publicFloatPercentage): static
+    {
+        $this->publicFloatPercentage = $publicFloatPercentage;
         return $this;
     }
 
@@ -245,11 +332,9 @@ class Stock
     {
         return $this->volatility;
     }
-
     public function setVolatility(string $volatility): static
     {
         $this->volatility = $volatility;
-
         return $this;
     }
 
@@ -257,11 +342,9 @@ class Stock
     {
         return $this->currentVolatility;
     }
-
     public function setCurrentVolatility(?string $currentVolatility): static
     {
         $this->currentVolatility = $currentVolatility;
-
         return $this;
     }
 
@@ -269,11 +352,9 @@ class Stock
     {
         return $this->beta;
     }
-
     public function setBeta(?string $beta): static
     {
         $this->beta = $beta;
-
         return $this;
     }
 
@@ -281,11 +362,9 @@ class Stock
     {
         return $this->jumpIntensity;
     }
-
     public function setJumpIntensity(?string $jumpIntensity): static
     {
         $this->jumpIntensity = $jumpIntensity;
-
         return $this;
     }
 
@@ -293,11 +372,9 @@ class Stock
     {
         return $this->jumpMean;
     }
-
     public function setJumpMean(?string $jumpMean): static
     {
         $this->jumpMean = $jumpMean;
-
         return $this;
     }
 
@@ -305,11 +382,9 @@ class Stock
     {
         return $this->jumpVol;
     }
-
     public function setJumpVol(?string $jumpVol): static
     {
         $this->jumpVol = $jumpVol;
-
         return $this;
     }
 
@@ -317,7 +392,6 @@ class Stock
     {
         return $this->description;
     }
-
     public function setDescription(?string $description): static
     {
         $this->description = $description;
@@ -328,11 +402,9 @@ class Stock
     {
         return $this->systemicImportance;
     }
-
     public function setSystemicImportance(string $systemicImportance): static
     {
         $this->systemicImportance = $systemicImportance;
-
         return $this;
     }
 
@@ -340,11 +412,9 @@ class Stock
     {
         return $this->targetPayoutRatio;
     }
-
     public function setTargetPayoutRatio(string $targetPayoutRatio): static
     {
         $this->targetPayoutRatio = $targetPayoutRatio;
-
         return $this;
     }
 
@@ -352,11 +422,9 @@ class Stock
     {
         return $this->dividendSpeed;
     }
-
     public function setDividendSpeed(string $dividendSpeed): static
     {
         $this->dividendSpeed = $dividendSpeed;
-
         return $this;
     }
 
@@ -364,16 +432,10 @@ class Stock
     {
         return $this->lastDividend;
     }
-
     public function setLastDividend(string $lastDividend): static
     {
-        $val = (float) $lastDividend;
-        
-        // Clamp to prevent SQL DECIMAL(10,4) out of range errors
-        $val = min(999999.9999, max(0.0, $val));
-        
+        $val = min(999999.9999, max(0.0, (float) $lastDividend));
         $this->lastDividend = (string) $val;
-
         return $this;
     }
 
@@ -381,7 +443,6 @@ class Stock
     {
         return $this->baselineRoic;
     }
-
     public function setBaselineRoic(string $baselineRoic): self
     {
         $this->baselineRoic = $baselineRoic;
@@ -392,7 +453,6 @@ class Stock
     {
         return $this->capexRatio;
     }
-
     public function setCapexRatio(string $capexRatio): self
     {
         $this->capexRatio = $capexRatio;
@@ -403,10 +463,116 @@ class Stock
     {
         return $this->currentRoic;
     }
-
     public function setCurrentRoic(string $currentRoic): self
     {
         $this->currentRoic = $currentRoic;
         return $this;
+    }
+
+    // --- BRIDGE METHODS ---
+
+    /**
+     * Calculates Earnings Per Share (EPS) dynamically from Absolute Total Net Income.
+     * 
+     * @return string|null The calculated EPS.
+     */
+    public function getEarningsPerShare(): ?string
+    {
+        $shares = max(1.0, (float) $this->sharesOutstanding);
+        return (string) round((float) $this->totalNetIncome / $shares, 8);
+    }
+
+    /**
+     * Sets the Earnings Per Share (EPS) by calculating and updating the Absolute Total Net Income.
+     * 
+     * @param string|null $earningsPerShare The target EPS to reverse-engineer into Net Income.
+     */
+    public function setEarningsPerShare(?string $earningsPerShare): static
+    {
+        if ($earningsPerShare !== null) {
+            $shares = max(1.0, (float) $this->sharesOutstanding);
+            $totalNi = (float) $earningsPerShare * $shares;
+            $this->totalNetIncome = (string) max(-999999999999999.0, min(999999999999999.0, $totalNi));
+        } else {
+            $this->totalNetIncome = '0.0000';
+        }
+        return $this;
+    }
+
+    /**
+     * Calculates Free Cash Flow (FCF) Per Share dynamically from Absolute Total FCF.
+     * 
+     * @return string|null The calculated FCF per share.
+     */
+    public function getFreeCashFlowPerShare(): ?string
+    {
+        if ($this->totalFreeCashFlow === null) return null;
+        $shares = max(1.0, (float) $this->sharesOutstanding);
+        return (string) round((float) $this->totalFreeCashFlow / $shares, 8);
+    }
+
+    /**
+     * Sets the Free Cash Flow (FCF) Per Share by updating the Absolute Total FCF.
+     * 
+     * @param string|null $freeCashFlowPerShare The target FCF per share.
+     */
+    public function setFreeCashFlowPerShare(?string $freeCashFlowPerShare): self
+    {
+        if ($freeCashFlowPerShare !== null) {
+            $shares = max(1.0, (float) $this->sharesOutstanding);
+            $this->totalFreeCashFlow = (string) ((float) $freeCashFlowPerShare * $shares);
+        } else {
+            $this->totalFreeCashFlow = null;
+        }
+        return $this;
+    }
+
+    /**
+     * Calculates Book Value Per Share dynamically from Absolute Total Equity.
+     * 
+     * @return string The calculated Book Value Per Share.
+     */
+    public function getBookValuePerShare(): string
+    {
+        $shares = max(1.0, (float) $this->sharesOutstanding);
+        return (string) round((float) $this->totalEquity / $shares, 4);
+    }
+
+    /**
+     * Sets the Book Value Per Share by updating the Absolute Total Equity.
+     * 
+     * @param string $bookValuePerShare The target Book Value Per Share.
+     */
+    public function setBookValuePerShare(string $bookValuePerShare): static
+    {
+        $shares = max(1.0, (float) $this->sharesOutstanding);
+        $this->totalEquity = (string) ((float) $bookValuePerShare * $shares);
+        return $this;
+    }
+
+    /**
+     * Derives Absolute Total Revenue mathematically using Total Net Income and Operating Margin.
+     * 
+     * @return string The computed Total Revenue.
+     */
+    public function getTotalRevenue(): string 
+    {
+        $margin = (float) $this->operatingMargin;
+        if ($margin == 0.0) return '0.0000';
+        
+        $revenue = (float) $this->totalNetIncome / $margin;
+        return (string) round($revenue, 4); 
+    }
+
+    /**
+     * Calculates Revenue Per Share based on computed Total Revenue.
+     * 
+     * @return string The calculated Revenue Per Share.
+     */
+    public function getRevenuePerShare(): string
+    {
+        $shares = max(1, (int) $this->sharesOutstanding);
+        $totalRevenue = (float) $this->getTotalRevenue();
+        return (string) round($totalRevenue / $shares, 4);
     }
 }

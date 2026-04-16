@@ -2,8 +2,8 @@
 
 namespace App\MessageHandler;
 
-use App\Message\UpdateStockVolatility;
 use App\Entity\Stock;
+use App\Message\UpdateStockVolatility;
 use App\Service\GarchCalculator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
@@ -13,13 +13,15 @@ class UpdateStockVolatilityHandler
 {
     public function __construct(
         private EntityManagerInterface $entityManager,
-        private GarchCalculator $garchCalculator
+        private GarchCalculator $garchCalculator,
+        private \Redis $redis
     ) {}
 
     public function __invoke(UpdateStockVolatility $message): void
     {
-        // Fetch data
         $conn = $this->entityManager->getConnection();
+        
+        // 1. Fetch History (Read-only, no locks)
         $sql = "SELECT price FROM stock_history WHERE stock_id = :id ORDER BY recorded_at DESC LIMIT 100";
         $results = $conn->fetchAllAssociative($sql, ['id' => $message->getStockId()]);
         
@@ -28,35 +30,42 @@ class UpdateStockVolatilityHandler
         $prices = array_reverse(array_column($results, 'price'));
         $floatPrices = array_map('floatval', $prices);
 
-        // Run the GARCH(1,1) MLE estimation
+        // 2. Run GARCH(1,1)
         $garchVol = $this->garchCalculator->calculateLongTermVolatility(
             $floatPrices, 
             $message->getTicksPerYear()
         );
 
-        $stock = $this->entityManager->getRepository(Stock::class)->find($message->getStockId());
-        if (!$stock) return;
+        // 3. Fetch Ticker String directly (Read-only, no locks)
+        $tickerResult = $this->entityManager->createQueryBuilder()
+            ->select('s.ticker')
+            ->from(Stock::class, 's')
+            ->where('s.id = :id')
+            ->setParameter('id', $message->getStockId())
+            ->getQuery()
+            ->getSingleScalarResult();
+            
+        if (!$tickerResult) return;
 
-        // Define the Fundamental Archetype
-        $ticker = $stock->getTicker();
+        // 4. Blend with Archetype
         $archetypeVol = 0.15;
-        
         foreach (\App\Data\InitialMarket::STOCKS as $initialData) {
-            if ($initialData['ticker'] === $ticker) {
+            if ($initialData['ticker'] === $tickerResult) {
                 $archetypeVol = (float) $initialData['volatility'];
                 break;
             }
         }
 
-        // Bayesian Shrinkage
         $blendedVolatility = ($garchVol * 0.50) + ($archetypeVol * 0.50);
-
-        // Cap and Floor just to be safe
         $blendedVolatility = max(0.05, min(0.80, $blendedVolatility));
 
-        // Persist the anchored volatility back to the engine
-        $stock->setVolatility((string) $blendedVolatility);
-        
-        $this->entityManager->flush();
+        // ========================================================
+        // 5. CACHE-BACK (THE DEADLOCK KILLER)
+        // Dump the result into Redis for the Ticker to absorb.
+        // We DO NOT write to MySQL here!
+        // ========================================================
+        $cacheKey = "computed_vol_cache:{$message->getStockId()}";
+        $this->redis->set($cacheKey, (string) $blendedVolatility);
+        $this->redis->expire($cacheKey, 60); // Auto-cleanup
     }
 }

@@ -1,5 +1,13 @@
 const previousPrices = {};
 
+// Add the formatter at the top of the file
+function formatLarge(num) {
+    if (num >= 1000000000000) return (num / 1000000000000).toFixed(2) + 'T';
+    if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'B';
+    if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
+    return num.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     
     if (!window.WS_TICKET || window.WS_TICKET === "") {
@@ -44,10 +52,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Update Price Text
                 priceEl.innerText = '$' + newPrice.toFixed(2);
 
-                // Calculate & Update Market Cap (Shares * Live Price)
-                const shares = window.MARKET_SHARES[stock.ticker] || 0;
-                const newMcap = newPrice * shares;
-                mcapEl.innerText = '$' + (newMcap / 1000000000).toFixed(2) + 'B';
+                // Calculate & Update Market Cap (Using the new WebSocket payload if available, else fallback)
+                const newMcap = stock.market_cap !== undefined ? stock.market_cap : (newPrice * (window.MARKET_SHARES[stock.ticker] || 0));
+                
+                // USE THE FORMATTER HERE
+                mcapEl.innerText = '$' + formatLarge(newMcap);
                 
                 // Update the data attribute used for sorting
                 rowEl.setAttribute('data-mcap', newMcap);

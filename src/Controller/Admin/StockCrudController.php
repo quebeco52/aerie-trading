@@ -60,21 +60,28 @@ class StockCrudController extends AbstractCrudController
             FormField::addFieldset('Live Market Data (Protected)')->setIcon('fas fa-chart-line')
                 ->setHelp('These values are actively managed by the simulation engine and cannot be edited manually.'),
             
-            NumberField::new('price')
-                ->setDisabled(),
+            NumberField::new('price')->setDisabled(),
             
-            NumberField::new('earningsPerShare', 'EPS')
-                ->setDisabled(),
+            NumberField::new('totalNetIncome', 'Total Net Income ($)')
+                ->setNumDecimals(2)->setDisabled(),
+                
+            NumberField::new('totalEquity', 'Total Equity (Book Value)')
+                ->setNumDecimals(2)->setDisabled()->hideOnIndex(),
+                
+            NumberField::new('corporateTreasury', 'Treasury Cash ($)')
+                ->setNumDecimals(2)->setDisabled()->hideOnIndex(),
+                
+            NumberField::new('debtToEquityRatio', 'Debt/Equity Ratio')
+                ->setNumDecimals(2)->setDisabled(),
+
+            PercentField::new('operatingMargin', 'Op. Margin')
+                ->setStoredAsFractional(true)->setNumDecimals(2)->setDisabled()->hideOnIndex(),
             
             NumberField::new('currentVolatility', 'Current Vol.')
-                ->setDisabled()
-                ->hideOnIndex(),
+                ->setDisabled()->hideOnIndex(),
                 
             PercentField::new('currentRoic', 'Current ROIC')
-                ->setStoredAsFractional(true)
-                ->setNumDecimals(2)
-                ->setDisabled()
-                ->hideOnIndex(),
+                ->setStoredAsFractional(true)->setNumDecimals(2)->setDisabled()->hideOnIndex(),
 
             // --- SECTION 3: PHYSICS CONSTANTS (EDITABLE) ---
             FormField::addFieldset('Simulation Physics (Constants)')->setIcon('fas fa-cogs')

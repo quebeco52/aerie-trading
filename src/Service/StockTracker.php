@@ -38,6 +38,7 @@ class StockTracker
         private CorporateActionEngine $corporateActionEngine,
         private MarketEvent $eventService,
         private MathUtility $mathUtility,
+        private \Redis $redis,
     ) {}
 
     /**
@@ -76,6 +77,16 @@ class StockTracker
         $marketVol = $this->currentMarketVol;
 
         foreach ($stocks as $stock) {
+
+            $volCacheKey = "computed_vol_cache:{$stock->getId()}";
+            $cachedVol = $this->redis->get($volCacheKey);
+
+            if ($cachedVol !== false) {
+                // Instantly apply the background math to the entity
+                $stock->setCurrentVolatility((string) $cachedVol);
+                $this->redis->del($volCacheKey); // Clear it so we don't re-apply old data
+            }
+
             $sectorName = $stock->getSector();
             $targetPE = $liveSectorPEs[$sectorName] ?? 20.0;
 
@@ -114,34 +125,36 @@ class StockTracker
                 $events = array_merge($events, $generatedEvents);
             }
             $currentPriceAfterEarnings = (float) $stock->getPrice();
-            $newEps = (float) $stock->getEarningsPerShare();
-            $sharesOutstanding = (int) $stock->getSharesOutstanding();
+
+            $sharesOutstanding = (float) $stock->getSharesOutstanding();
 
             // CORPORATE ACTIONS (SPLITS)
             $splitResult = $this->corporateActionEngine->processSplits(
                 $stock,
                 $currentPriceAfterEarnings,
-                $newEps,
                 $sharesOutstanding
             );
 
             // Unpack the results
             $finalPrice = $splitResult['price'];
-            $newEps = $splitResult['eps'];
-            $sharesOutstanding = $splitResult['shares'];
-            $splitEvent = $splitResult['event'];
+            $newShares = $splitResult['shares'];
+            $splitEvent = $splitResult['event'] ?? null;
 
+            // Always update the price
             $stock->setPrice((string) $finalPrice);
 
-            // Only update these if a split actually happened
+            // Check if the math actually changed
+            if ($sharesOutstanding !== $newShares) {
+                $stock->setSharesOutstanding((string) $newShares);
+            }
+
+            // Only push the event to the array if one was actually generated
             if ($splitEvent) {
-                $stock->setEarningsPerShare((string) $newEps);
-                $stock->setSharesOutstanding((string) $sharesOutstanding);
                 $events[] = $splitEvent;
             }
 
             // Calculate Market Cap
-            $currentMarketCap = $finalPrice * (float) $stock->getSharesOutstanding();
+            $currentMarketCap = $finalPrice * $newShares;
             $totalMarketCap += $currentMarketCap;
 
             $stockUpdates[] = [
@@ -151,6 +164,10 @@ class StockTracker
                 'market_cap' => $currentMarketCap,
                 'current_volatility' => round($nextVolatility * 100, 2),
                 'current_roic' => (float) $stock->getCurrentRoic() != 0.0 ? (float) $stock->getCurrentRoic() : (float) $stock->getBaselineRoic(),
+                'shares' => $newShares,
+                'eps' => (float) $stock->getEarningsPerShare(),
+                'treasury' => (float) $stock->getCorporateTreasury(),
+                'equity' => (float) $stock->getTotalEquity()
             ];
 
             if ($recordHistory) {
@@ -191,16 +208,16 @@ class StockTracker
         }
 
         $longTermVol = 0.15 * $cycleVolModifier;
-        
+
         $currentVar = $this->currentMarketVol * $this->currentMarketVol;
         $longTermVar = $longTermVol * $longTermVol;
 
         // Calculate macro shocks using the new SVJJ Kou model
         // Macro panics are highly asymmetric: 10% chance of a sudden volatility crush, 90% chance of a volatility explosion
         $jumpData = $this->mathUtility->calculateSVJJJumps(
-            lambda: 0.80, 
-            pUp: 0.10,     
-            etaUp: 10.0, 
+            lambda: 0.80,
+            pUp: 0.10,
+            etaUp: 10.0,
             etaDown: 5.0,  // Very fat left tail for deep macroeconomic panics
             muV: 0.05,     // Base variance jump size
             dt: $dt

@@ -79,7 +79,7 @@ class EarningsEngine
         $oldEps = (float) $stock->getEarningsPerShare();
         $baselineVol = (float) $stock->getVolatility();
         $beta = (float) $stock->getBeta();
-        $sharesOutstanding = (int) $stock->getSharesOutstanding();
+        $sharesOutstanding = (float) $stock->getSharesOutstanding();
 
         // Floor the base so penny stocks/low EPS companies can still grow absolute cents
         $growthBase = max(abs($oldEps), 0.50);
@@ -133,7 +133,6 @@ class EarningsEngine
             $liveTargetPE
         );
 
-        $stock->setEarningsPerShare((string) $allocation['new_eps']);
         $stock->setSharesOutstanding((string) $allocation['new_shares']);
 
         // APPLY THE GAP
@@ -268,7 +267,7 @@ class EarningsEngine
             $currentRoic = $baselineRoic;
         }
 
-        $shares = (int) $stock->getSharesOutstanding();
+        $shares = (float) $stock->getSharesOutstanding();
         $price = (float) $stock->getPrice();
         $marketCap = $shares * $price;
 

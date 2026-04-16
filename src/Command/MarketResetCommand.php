@@ -3,7 +3,6 @@
 namespace App\Command;
 
 use App\Data\InitialMarket;
-use App\Data\SectorPE;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -31,7 +30,6 @@ class MarketResetCommand extends Command
 
         $io->title('Initiating Market Soft Reset');
 
-        // TRUNCATE HISTORY (Disable Foreign Keys safely)
         $io->text('1. Wiping historical charts and events...');
         $conn->executeStatement('SET FOREIGN_KEY_CHECKS = 0');
         $conn->executeStatement('TRUNCATE TABLE stock_history');
@@ -44,23 +42,15 @@ class MarketResetCommand extends Command
         $conn->executeStatement('UPDATE users SET cash_balance = 10000.00'); 
         $conn->executeStatement('SET FOREIGN_KEY_CHECKS = 1');
 
-        // FLUSH REDIS
         $io->text('2. Flushing Redis cache...');
         $this->redis->flushAll();
 
-        // RESET STOCK NUMBERS
-        $io->text('3. Resetting Stock Prices & Math based on InitialMarket...');
+        $io->text('3. Resetting Stock Prices & Absolute Values...');
         foreach (InitialMarket::STOCKS as $stockData) {
             
-            // THE NEW EPS MATH
-            $targetPE = SectorPE::MACRO_SECTORS[$stockData['sector']] ?? 20.0;
-            $neutralEps = (float) $stockData['price'] / $targetPE;
-            $epsToSet = round($neutralEps, 2);
-
             $conn->executeStatement(
                 'UPDATE stocks SET 
                     price = :price, 
-                    earnings_per_share = :eps, 
                     shares_outstanding = :shares,
                     volatility = :vol,
                     current_volatility = :current_vol,
@@ -74,11 +64,17 @@ class MarketResetCommand extends Command
                     capex_ratio = :capex,
                     target_payout_ratio = :payout,
                     dividend_speed = :div_speed,
+                    corporate_treasury = :treasury,
+                    debt_to_equity_ratio = :debt,
+                    operating_margin = :margin,
+                    public_float_percentage = :float_pct,
+                    total_net_income = :net_income,
+                    total_equity = :equity,
+                    retained_earnings = :retained,
                     last_dividend = 0.00 
                 WHERE ticker = :ticker',
                 [
                     'price' => $stockData['price'],
-                    'eps' => $epsToSet,
                     'shares' => $stockData['shares_outstanding'],
                     'vol' => $stockData['volatility'],
                     'current_vol' => $stockData['volatility'],
@@ -91,12 +87,18 @@ class MarketResetCommand extends Command
                     'capex' => $stockData['capex_ratio'] ?? 0.20,
                     'payout' => $stockData['target_payout_ratio'] ?? 0.30,
                     'div_speed' => $stockData['dividendSpeed'] ?? 0.20,
+                    'treasury' => $stockData['corporate_treasury'] ?? 1000000000.00,
+                    'debt' => $stockData['debt_to_equity'] ?? 0.50,
+                    'margin' => $stockData['operating_margin'] ?? 0.15,
+                    'float_pct' => $stockData['public_float'] ?? 0.90,
+                    'net_income' => $stockData['total_net_income'] ?? 0.00,
+                    'equity' => $stockData['total_equity'] ?? 0.00,
+                    'retained' => $stockData['retained_earnings'] ?? 0.00,
                     'ticker' => $stockData['ticker']
                 ]
             );
         }
 
-        // RESET ETF NUMBERS
         $io->text('4. Resetting ETF Prices...');
         foreach (InitialMarket::ETFS as $etfData) {
             $conn->executeStatement(
@@ -109,7 +111,6 @@ class MarketResetCommand extends Command
         }
 
         $io->success('Market Reset Complete! You can now start the ticker.');
-
         return Command::SUCCESS;
     }
 }

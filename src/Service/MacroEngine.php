@@ -158,8 +158,8 @@ class MacroEngine
             $logCurrent = log(max(0.01, $currentPE));
             $logPull = $this->mathUtility->calculateLogMeanReversion($currentPE, $targetPE, 2.0) * $dt;
             
-            // Add a bit of random sector noise (0.10 volatility)
-            $logDrift = 0.10 * sqrt($dt) * $this->mathUtility->generateStandardNormal();
+            // Add a bit of random sector noise (0.30 volatility)
+            $logDrift = 0.30 * sqrt($dt) * $this->mathUtility->generateStandardNormal();
 
             $updatedSectors[$sectorName] = exp($logCurrent + $logPull + $logDrift);
         }

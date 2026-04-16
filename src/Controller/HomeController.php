@@ -78,6 +78,13 @@ class HomeController extends AbstractController
         $etf = $entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
         $stocks = $entityManager->getRepository(Stock::class)->findAll();
 
+        // Helper function for the API
+        $formatLarge = function(float $val): string {
+            if ($val >= 1_000_000_000_000) return number_format($val / 1_000_000_000_000, 2) . 'T';
+            if ($val >= 1_000_000_000) return number_format($val / 1_000_000_000, 2) . 'B';
+            return number_format($val / 1_000_000, 2) . 'M';
+        };
+
         $marketData = [];
         foreach ($stocks as $stock) {
             $price = (float) $stock->getPrice();
@@ -90,12 +97,13 @@ class HomeController extends AbstractController
                 'sector' => $stock->getSector(),
                 'price' => number_format($price, 2),
                 'marketCapRaw' => $marketCap,
-                // Format the Billions in PHP so JS doesn't have to do the math!
-                'marketCap' => number_format($marketCap / 1000000000, 2) . 'B', 
+                
+                'marketCap' => $formatLarge($marketCap), 
+                'treasury' => $formatLarge((float) $stock->getCorporateTreasury()),
+                'equity' => $formatLarge((float) $stock->getTotalEquity()),
             ];
         }
 
-        // Sort descending
         usort($marketData, fn($a, $b) => $b['marketCapRaw'] <=> $a['marketCapRaw']);
 
         return $this->json([

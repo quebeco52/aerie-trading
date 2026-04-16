@@ -85,9 +85,6 @@ class MarketOperator
                 // Roll the dice: 50% chance for Swan (Hostile), 50% chance for Lakebird (Savior)
                 $isHostile = mt_rand(1, 100) > 50;
 
-                // FLUSH RAM TO DB BEFORE RAW SQL! (Prevents the vertical chart spike bug)
-                $this->entityManager->flush();
-
                 if ($isHostile) {
                     // BLACK SWAN CAPITAL (Hostile)
                     $this->logger->info("BANKRUPTCY DETECTED: {$stock->getTicker()} collapsed. Black Swan Capital initiating hostile liquidation.");
@@ -144,10 +141,10 @@ class MarketOperator
             // RULE : The Market Dominance Rubber Band (Law of Large Numbers)
             $dominanceRatio = $marketCap / $totalMarketCap;
 
-            // Soft cap: Gravity starts pulling at 10% of the total index
-            // Hard cap: Maximum gravity applied at 20% of the total index
-            $softCap = 0.10; 
-            $hardCap = 0.20;
+            // Soft cap: Gravity starts pulling at 15% of the total index
+            // Hard cap: Maximum gravity applied at 25% of the total index
+            $softCap = 0.15; 
+            $hardCap = 0.25;
 
             if ($dominanceRatio > $softCap) {
                 $excess = ($dominanceRatio - $softCap) / ($hardCap - $softCap);

@@ -14,7 +14,12 @@ const COLORS = {
 };
 
 
-
+function formatLarge(num) {
+    if (num >= 1000000000000) return (num / 1000000000000).toFixed(2) + 'T';
+    if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'B';
+    if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
+    return num.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     if (!window.WS_TICKET || window.WS_TICKET === "") {
@@ -103,7 +108,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 onClick: (e, el) => { if (el.length > 0) window.location.href = '/stock/' + etfPieChart.data.labels[el[0].index]; },
                 plugins: {
                     legend: { position: 'right', labels: { boxWidth: 8, usePointStyle: true, color: '#c2c6d6', font: { family: '"Courier Prime", monospace', size: 10 } } },
-                    tooltip: { backgroundColor: 'rgba(19, 27, 46, 0.9)', titleColor: '#dae2fd', bodyColor: '#c2c6d6', borderColor: '#424754', borderWidth: 1, padding: 12 }
+                    tooltip: { 
+                        backgroundColor: 'rgba(19, 27, 46, 0.9)', 
+                        titleColor: '#dae2fd', 
+                        bodyColor: '#c2c6d6', 
+                        borderColor: '#424754', 
+                        borderWidth: 1, 
+                        padding: 12,
+                        callbacks: {
+                            label: function(context) {
+                                const total = context.dataset.data.reduce((acc, val) => acc + val, 0);
+                                const value = context.raw;
+                                const percentage = ((value / total) * 100).toFixed(2);
+                                
+                                return ` ${context.label}: ${percentage}%`;
+                            }
+                        }
+                    }
                 }
             }
         });
@@ -173,10 +194,33 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (!IS_ETF) {
-            document.getElementById('stat-mkt-cap').innerText = '$' + ((newPrice * SHARES_OUTSTANDING) / 1000000000).toFixed(2) + 'B';
-            document.getElementById('stat-pe').innerText = EPS > 0 ? (newPrice / EPS).toFixed(2) : 0;
-            if (stockUpdate.current_volatility !== undefined) document.getElementById('stat-volatility').innerText = stockUpdate.current_volatility.toFixed(2) + '%';
-            if (sectors && sectors[stockUpdate.sector]) document.getElementById('live-target-pe').innerText = parseFloat(sectors[stockUpdate.sector]).toFixed(2);
+            // Use the live EPS from the WebSocket if available, otherwise fallback to the page load EPS
+            const currentEps = stockUpdate.eps !== undefined ? stockUpdate.eps : EPS;
+            
+            // Format the large numbers dynamically!
+            if (document.getElementById('stat-mkt-cap') && stockUpdate.market_cap !== undefined) {
+                document.getElementById('stat-mkt-cap').innerText = '$' + formatLarge(stockUpdate.market_cap);
+            }
+            if (document.getElementById('stat-treasury') && stockUpdate.treasury !== undefined) {
+                document.getElementById('stat-treasury').innerText = '$' + formatLarge(stockUpdate.treasury);
+            }
+            if (document.getElementById('stat-equity') && stockUpdate.equity !== undefined) {
+                document.getElementById('stat-equity').innerText = '$' + formatLarge(stockUpdate.equity);
+            }
+            if (document.getElementById('stat-pe')) {
+                document.getElementById('stat-pe').innerText = currentEps > 0 ? (newPrice / currentEps).toFixed(2) : '0.00';
+            }
+            
+            // Other live stats
+            if (stockUpdate.current_volatility !== undefined) {
+                document.getElementById('stat-volatility').innerText = stockUpdate.current_volatility.toFixed(2) + '%';
+            }
+            if (sectors && sectors[stockUpdate.sector]) {
+                document.getElementById('live-target-pe').innerText = parseFloat(sectors[stockUpdate.sector]).toFixed(2);
+            }
+            if (stockUpdate.shares !== undefined) {
+                 document.getElementById('stat-shares').innerText = stockUpdate.shares.toLocaleString('en-US');
+            }
         }
     }
 

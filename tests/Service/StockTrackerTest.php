@@ -83,7 +83,6 @@ class StockTrackerTest extends TestCase
 
         $this->corporateActionEngineMock->method('processSplits')->willReturn([
             'price' => 105.0,
-            'eps' => 5.0,
             'shares' => 1000,
             'event' => null // No split
         ]);
@@ -122,7 +121,6 @@ class StockTrackerTest extends TestCase
         
         $this->corporateActionEngineMock->method('processSplits')->willReturn([
             'price' => 90.0,
-            'eps' => 5.0,
             'shares' => 1000,
             'event' => null
         ]);
