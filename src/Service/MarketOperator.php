@@ -69,9 +69,16 @@ class MarketOperator
             if ($bailoutTier && $marketCap < $bailoutFloor) {
                 $stock->setPrice((string) ($price * $bailoutMultiplier));
 
-                // Gradually push EPS up to $0.40 if it falls below, otherwise buff by the multiplier
-                $newEps = $eps < 0.4 ? min(0.4, $eps + 0.20) : $eps * $bailoutMultiplier;
-                $stock->setEarningsPerShare((string) round($newEps, 2));
+                // Scale the bailout target to prevent hyper-inflation on split stocks
+                $splitRatio = max(1.0, $shares / 1_000_000_000.0);
+                $targetEps = 0.40 / $splitRatio;
+                $boostEps = 0.20 / $splitRatio;
+
+                // Gradually push EPS up to the scaled target if it falls below, otherwise buff by multiplier
+                $newEps = $eps < $targetEps ? min($targetEps, $eps + $boostEps) : $eps * $bailoutMultiplier;
+                
+                // Set without rounding to 2 decimals
+                $stock->setEarningsPerShare((string) $newEps);
 
                 $this->logger->info("{$bailoutTier}: {$stock->getTicker()} subsidized (Fell below dominance floor).");
             }
@@ -99,6 +106,11 @@ class MarketOperator
                     $stock->setPrice("50.00");
                     $stock->setSharesOutstanding("1000000000"); // 1B shares
                     $stock->setEarningsPerShare((string) (mt_rand(325, 433) / 100));
+                    
+                    // Inject the new capital structure
+                    $stock->setCorporateTreasury("5000000000.00"); // $5B fresh cash
+                    $stock->setTotalEquity("20000000000.00");      // $20B book value
+                    $stock->setRetainedEarnings("0.00");           // Wiped clean
 
 
                     $event1Desc = "{$name} ({$stock->getTicker()}) was liquidated in a hostile takeover by Black Swan Capital. Shareholder equity wiped to 0.";
@@ -117,6 +129,11 @@ class MarketOperator
                     $stock->setPrice("50.00");
                     $stock->setSharesOutstanding("1000000000"); // 1B shares
                     $stock->setEarningsPerShare((string) (mt_rand(325, 433) / 100));
+                    
+                    // Inject the bailout capital
+                    $stock->setCorporateTreasury("5000000000.00"); // $5B bailout cash
+                    $stock->setTotalEquity("20000000000.00");      // $20B book value
+                    $stock->setRetainedEarnings("0.00");           // Wiped clean
 
 
                     $event1Desc = "{$name} ({$stock->getTicker()}) secured a last-minute emergency bailout from Lakebird Bank. Retail shares diluted to secure funding.";
@@ -143,8 +160,8 @@ class MarketOperator
 
             // Soft cap: Gravity starts pulling at 15% of the total index
             // Hard cap: Maximum gravity applied at 25% of the total index
-            $softCap = 0.15; 
-            $hardCap = 0.25;
+            $softCap = 0.20; 
+            $hardCap = 0.30;
 
             if ($dominanceRatio > $softCap) {
                 $excess = ($dominanceRatio - $softCap) / ($hardCap - $softCap);

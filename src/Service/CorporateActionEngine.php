@@ -363,7 +363,7 @@ class CorporateActionEngine
         $currentTreasury = (float) $stock->getCorporateTreasury();
         $newTreasury = $currentTreasury + $netCashChange;
 
-        // THE DEBT TRAP
+        // THE DEBT TRAP (If they overspent cash they don't have)
         if ($newTreasury < 0.0) {
             $cashShortfall = abs($newTreasury);
             $marketCap = $currentPrice * max($newSharesOutstanding, 1);
@@ -375,14 +375,5 @@ class CorporateActionEngine
             $newTreasury = 0.0;
         }
         $stock->setCorporateTreasury((string) $newTreasury);
-
-        // MODIGLIANI-MILLER (Future Income Destruction)
-        if ($totalCashSpent > 0.0) {
-            $currentRoic = (float) $stock->getCurrentRoic() ?: (float) $stock->getBaselineRoic();
-            $lostNetIncome = $totalCashSpent * $currentRoic;
-            
-            $currentNetIncome = (float) $stock->getTotalNetIncome();
-            $stock->setTotalNetIncome((string) max(1000.0, $currentNetIncome - $lostNetIncome));
-        }
     }
 }

@@ -186,10 +186,57 @@
 							</div>
 						</div>
 
-						<div class="bg-gray-800 text-white p-4 rounded-lg flex items-center justify-between">
-							<div>
-								<span class="text-sm text-gray-400">Macroeconomic State:</span>
-								<span id="market-economic-cycle" class="ml-2 font-bold text-lg">
+						{# DISTRICT MACROECONOMICS DASHBOARD #}
+						<div class="bg-surface-container-lowest rounded-xl p-4 border border-outline-variant/10 mb-6">
+							<h4 class="text-[10px] font-bold uppercase tracking-widest text-primary mb-4 flex items-center gap-2">
+								<span class="material-symbols-outlined text-sm">monitoring</span>
+								Real-Time Macroeconomics
+							</h4>
+
+							<div
+								class="grid grid-cols-2 gap-4">
+								{# INFLATION #}
+								<div>
+									<p class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant">Inflation</p>
+									<p class="text-lg font-bold text-on-surface" id="macro-inflation">
+										{{ (macro.inflation * 100)|number_format(2) }}%
+									</p>
+								</div>
+
+								{# OUTPUT GAP #}
+								<div>
+									<p class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant">Output Gap</p>
+									<p class="text-lg font-bold text-on-surface" id="macro-output-gap">
+										{{ (macro.output_gap * 100)|number_format(2) }}%
+									</p>
+								</div>
+
+								{# POLICY RATE #}
+								<div>
+									<p class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant">Policy Rate</p>
+									<p class="text-lg font-bold text-on-surface" id="macro-policy-rate">
+										{{ (macro.policy_rate * 100)|number_format(2) }}%
+									</p>
+								</div>
+
+								{# YIELD CURVE #}
+                                <div>
+                                    <p class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant flex items-center gap-1">
+                                        10-Yr Yield
+                                        {% if macro.qe_active|default(false) %}
+                                            <span class="inline-flex w-2 h-2 rounded-full bg-secondary animate-pulse" title="Quantitative Easing Active"></span>
+                                        {% endif %}
+                                    </p>
+                                    <p class="text-lg font-bold {% if macro.qe_active|default(false) %}text-secondary{% else %}text-on-surface{% endif %}" id="macro-yield">
+                                        {{ (macro.yield_10y * 100)|number_format(2) }}%
+                                    </p>
+                                </div>
+							</div>
+
+							{# THE ECONOMIC STATUS BADGE #}
+							<div class="mt-4 pt-3 border-t border-outline-variant/10 flex justify-between items-center">
+								<span class="text-[10px] text-on-surface-variant">Current Cycle:</span>
+								<span id="market-economic-cycle" class="text-xs font-bold uppercase tracking-widest text-primary">
 									{{ economic_cycle }}
 								</span>
 							</div>

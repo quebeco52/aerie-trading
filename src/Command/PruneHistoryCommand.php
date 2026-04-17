@@ -23,7 +23,7 @@ class PruneHistoryCommand extends Command
 
     protected function configure(): void
     {
-        $this->addOption('days', 'd', InputOption::VALUE_OPTIONAL, 'Older than how many days should we downsample?', 7);
+        $this->addOption('days', 'd', InputOption::VALUE_OPTIONAL, 'Older than how many days should we downsample?', 30);
         $this->addOption('ratio', 'r', InputOption::VALUE_OPTIONAL, 'Keep 1 out of every X records?', 1000);
     }
 

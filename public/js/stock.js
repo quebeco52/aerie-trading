@@ -18,7 +18,7 @@ function formatLarge(num) {
     if (num >= 1000000000000) return (num / 1000000000000).toFixed(2) + 'T';
     if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'B';
     if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
-    return num.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -67,6 +67,36 @@ document.addEventListener('DOMContentLoaded', () => {
         if (payload.events && payload.events.length > 0) {
             renderEvents(payload.events);
         }
+
+        if (payload.macro) {
+            const infEl = document.getElementById('macro-inflation');
+            const gapEl = document.getElementById('macro-output-gap');
+            const rateEl = document.getElementById('macro-policy-rate');
+            const yieldEl = document.getElementById('macro-yield');
+
+            if (infEl) infEl.textContent = (payload.macro.inflation * 100).toFixed(2) + '%';
+            if (rateEl) rateEl.textContent = (payload.macro.policy_rate * 100).toFixed(2) + '%';
+            if (yieldEl) yieldEl.textContent = (payload.macro.yield_10y * 100).toFixed(2) + '%';
+
+            if (gapEl) {
+                const gapVal = payload.macro.output_gap * 100;
+                gapEl.textContent = gapVal.toFixed(2) + '%';
+
+                if (gapVal < -1.0) {
+                    gapEl.className = 'text-lg font-bold text-tertiary';
+                } else if (gapVal > 1.0) {
+                    gapEl.className = 'text-lg font-bold text-secondary';
+                } else {
+                    gapEl.className = 'text-lg font-bold text-on-surface';
+                }
+            }
+        }
+
+        // 2. Update the Current Cycle Badge
+        if (payload.economic_cycle) {
+            const cycleEl = document.getElementById('market-economic-cycle');
+            if (cycleEl) cycleEl.textContent = payload.economic_cycle;
+        }
     };
 
 
@@ -108,19 +138,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 onClick: (e, el) => { if (el.length > 0) window.location.href = '/stock/' + etfPieChart.data.labels[el[0].index]; },
                 plugins: {
                     legend: { position: 'right', labels: { boxWidth: 8, usePointStyle: true, color: '#c2c6d6', font: { family: '"Courier Prime", monospace', size: 10 } } },
-                    tooltip: { 
-                        backgroundColor: 'rgba(19, 27, 46, 0.9)', 
-                        titleColor: '#dae2fd', 
-                        bodyColor: '#c2c6d6', 
-                        borderColor: '#424754', 
-                        borderWidth: 1, 
+                    tooltip: {
+                        backgroundColor: 'rgba(19, 27, 46, 0.9)',
+                        titleColor: '#dae2fd',
+                        bodyColor: '#c2c6d6',
+                        borderColor: '#424754',
+                        borderWidth: 1,
                         padding: 12,
                         callbacks: {
-                            label: function(context) {
+                            label: function (context) {
                                 const total = context.dataset.data.reduce((acc, val) => acc + val, 0);
                                 const value = context.raw;
                                 const percentage = ((value / total) * 100).toFixed(2);
-                                
+
                                 return ` ${context.label}: ${percentage}%`;
                             }
                         }
@@ -151,9 +181,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const rangeSpans = { '1w': 604800, '1m': 2592000, '3m': 7776000, '6m': 15552000, '1y': 31536000, '3y': 94608000, '5y': 157680000, '10y': 315360000, 'max': 630720000 };
                 const anchorTime = Math.floor(Date.now() / 1000);
-                
+
                 currentStepSize = Math.max(1, Math.floor((rangeSpans[range] || 31536000) / data.length));
-                
+
                 const chartData = data.map((d, i) => {
                     const pointsFromEnd = (data.length - 1) - i;
                     return { time: anchorTime - (pointsFromEnd * currentStepSize), value: parseFloat(d.price) };
@@ -168,7 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .catch(console.error)
             .finally(() => { if (spinner) spinner.classList.add('hidden'); });
     }
-    
+
     function updateLiveChart(newPrice) {
         if (document.visibilityState !== 'visible' || isNaN(newPrice) || currentSimTime <= 0) return;
 
@@ -196,7 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!IS_ETF) {
             // Use the live EPS from the WebSocket if available, otherwise fallback to the page load EPS
             const currentEps = stockUpdate.eps !== undefined ? stockUpdate.eps : EPS;
-            
+
             // Format the large numbers dynamically!
             if (document.getElementById('stat-mkt-cap') && stockUpdate.market_cap !== undefined) {
                 document.getElementById('stat-mkt-cap').innerText = '$' + formatLarge(stockUpdate.market_cap);
@@ -210,7 +240,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (document.getElementById('stat-pe')) {
                 document.getElementById('stat-pe').innerText = currentEps > 0 ? (newPrice / currentEps).toFixed(2) : '0.00';
             }
-            
+
             // Other live stats
             if (stockUpdate.current_volatility !== undefined) {
                 document.getElementById('stat-volatility').innerText = stockUpdate.current_volatility.toFixed(2) + '%';
@@ -219,7 +249,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('live-target-pe').innerText = parseFloat(sectors[stockUpdate.sector]).toFixed(2);
             }
             if (stockUpdate.shares !== undefined) {
-                 document.getElementById('stat-shares').innerText = stockUpdate.shares.toLocaleString('en-US');
+                document.getElementById('stat-shares').innerText = stockUpdate.shares.toLocaleString('en-US');
+            }
+            if (stockUpdate.current_roic !== undefined && document.getElementById('stat-roic')) {
+                document.getElementById('stat-roic').innerText = (stockUpdate.current_roic * 100).toFixed(2) + '%';
             }
         }
     }
@@ -253,7 +286,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateEtfPie(payload) {
         if (!etfPieChart) return;
         let updated = false;
-        
+
         payload.stocks.forEach(stock => {
             let comp = etfComponents.find(c => c.ticker === stock.ticker);
             if (comp) {

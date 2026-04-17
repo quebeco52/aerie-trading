@@ -26,7 +26,7 @@ class Schedule implements ScheduleProviderInterface
                 // Run exactly at 3:00 AM every day
                 RecurringMessage::cron(
                     '0 3 * * *', 
-                    new RunCommandMessage('app:prune-history --days=7 --ratio=1000')
+                    new RunCommandMessage('app:prune-history --days=30 --ratio=1000')
                 )
             );
     }

@@ -48,7 +48,6 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private MarketOperator $marketOperator,
         private Portfolio $portfolio,
         private \Redis $redis,
-        private MessageBusInterface $messageBus,
 
         private int $tickIntervalUs,
         private int $ticksPerYear,
@@ -100,7 +99,6 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         $historyInterval = (int) max(1, $this->ticksPerYear / 2400); // 2400 points per year
         $operatorInterval = (int) max(1, $this->ticksPerYear / 24);  // Operator audits once a game "month"
         $snapshotInterval = (int) max(1, $this->ticksPerYear / 52);  // Snapshots once a game "week"
-        $garchInterval = (int) max(1, $this->ticksPerYear / 52);
         $historyPointsPerYear = (int) ($this->ticksPerYear / $historyInterval);
 
         $conn = $this->entityManager->getConnection();
@@ -176,16 +174,6 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
                 }
 
-                if ($tickCount % $garchInterval === 0) {
-                    foreach ($stocks as $stock) {
-                        // Dispatch asynchronously
-                        $this->messageBus->dispatch(
-                        new \App\Message\UpdateStockVolatility($stock->getId(), $historyPointsPerYear)
-                        );
-                    }
-                    $output->writeln("<info>Dispatched GARCH(1,1) volatility recalibration jobs.</info>");
-                }
-
                 $nowStr = (new \DateTime())->format('Y-m-d H:i:s');
                 $redisBufferSize = (int) ceil($this->ticksPerYear / 12);
 
@@ -213,6 +201,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     'market_vol' => $marketVol,
                     'economic_cycle' => ($macroState['output_gap'] ?? 0) > 0.02 ? 'Boom' : (($macroState['output_gap'] ?? 0) < -0.02 ? 'Bust' : 'Neutral'),
                     'council_rate' => $macroState['policy_rate'] ?? 0.04,
+                    'macro' => $macroState,
                 ]));
 
                 $this->redis->set('stocks_live_data', json_encode($stockUpdates));

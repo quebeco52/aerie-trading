@@ -51,6 +51,11 @@ class StockController extends AbstractController
             throw $this->createAccessDeniedException();
         }
 
+        $macroStateJson = $redis->get('macroeconomic_state');
+        $macroState = $macroStateJson ? json_decode($macroStateJson, true) : [
+            'inflation' => 0.02, 'output_gap' => 0.00, 'policy_rate' => 0.04, 'yield_10y' => 0.045
+        ];
+
 
         $user = $entityManager->getRepository(User::class)->find($currentUser->getId());
 
@@ -100,6 +105,7 @@ class StockController extends AbstractController
             'events' => $events,
             'ticksPerYear' => (int) ($_ENV['SIM_TICKS_PER_YEAR'] ?? 14400),
             'economic_cycle' => $economicCycle,
+            'macro' => $macroState,
             
         ]);
     }

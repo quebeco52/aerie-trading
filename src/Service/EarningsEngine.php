@@ -76,57 +76,61 @@ class EarningsEngine
             return null;
         }
 
-        $oldEps = (float) $stock->getEarningsPerShare();
+        $oldAnnualEps = (float) $stock->getEarningsPerShare();
         $baselineVol = (float) $stock->getVolatility();
-        $beta = (float) $stock->getBeta();
         $sharesOutstanding = (float) $stock->getSharesOutstanding();
 
-        // Floor the base so penny stocks/low EPS companies can still grow absolute cents
-        $growthBase = max(abs($oldEps), 0.50);
+        // Calculate the dynamically shifting ROIC
+        $dynamicRoic = $this->calculateDynamicRoic($stock, $macroState);
+        $stock->setCurrentRoic((string) $dynamicRoic);
 
-        // Analyst Consensus (Expected EPS Growth)
-        $expectedEpsGrowth = $this->calculateExpectedEpsGrowth($stock, $macroState);
+        // Fundamental Expected Earnings (Driven by Capital, not past EPS)
+        $bookValuePerShare = (float) $stock->getBookValuePerShare();
+        $safeBookValue = max($bookValuePerShare, 0.10); 
+        $expectedAnnualEps = $safeBookValue * $dynamicRoic;
 
-        // Round expected EPS to 2 decimals to prevent floating-point "ghost misses"
-        $expectedEps = round($oldEps + ($growthBase * $expectedEpsGrowth), 2);
+        // Add the Macroeconomic Beta Modifier (Tailwinds/Headwinds)
+        $beta = (float) $stock->getBeta();
+        // Modifier scaled correctly for Annual EPS
+        $macroCycleModifier = ($macroState['output_gap'] ?? 0.0) * $beta * $safeBookValue;
+        
+        // Smooth the transition from Old EPS to Expected EPS
+        $targetAnnualEps = $expectedAnnualEps + $macroCycleModifier;
+        $expectedAnnualEpsDrifted = round($oldAnnualEps + (($targetAnnualEps - $oldAnnualEps) * 0.25), 2);
 
-        // Model Revenue & Operating Leverage
-        $quarterlyVol = $baselineVol * 0.5;
+        // Model Revenue/Earnings Volatility (The Surprise)
         $revenueZ = $this->mathUtility->generateStandardNormal();
+        
+        // The shock is proportional to capital size. Dropped from 0.10 to 0.05 to prevent 150%+ surprises.
+        $epsShockAmountAnnual = $safeBookValue * $baselineVol * $revenueZ * 0.05; 
 
-        // Actual revenue shifts based on standard distribution
-        $actualEpsGrowth = $expectedEpsGrowth + ($quarterlyVol * $revenueZ);
+        // Calculate Actual ANNUAL EPS
+        $actualAnnualEps = round($expectedAnnualEpsDrifted + $epsShockAmountAnnual, 2);
 
-        // Calculate Actual EPS
-        $actualEps = round($oldEps + ($growthBase * $actualEpsGrowth), 2);
+        $expectedQuarterlyEps = $expectedAnnualEpsDrifted / 4.0;
+        $actualQuarterlyEps = $actualAnnualEps / 4.0;
+        
+        $surpriseAmountQuarterly = round($actualQuarterlyEps - $expectedQuarterlyEps, 2);
+        $surprisePct = $surpriseAmountQuarterly / max(0.05, abs($expectedQuarterlyEps));
 
-
-
-        // Calculate the SURPRISE
-        $surpriseAmount = round($actualEps - $expectedEps, 2);
-        $surprisePct = $surpriseAmount / max(0.10, abs($expectedEps));
-
-        // VOLATILITY SHOCK: Based strictly on the Z-Score (Statistical Rarity)
+        // VOLATILITY SHOCK
         $this->applyVolatilityShock($stock, $revenueZ, $baselineVol);
 
-        // Update the Stock Entity
-        $stock->setEarningsPerShare((string) $actualEps);
+        // Update the Stock Entity with the strict ANNUAL figure
+        $stock->setEarningsPerShare((string) $actualAnnualEps);
 
-        $annualFcfPerShare = $this->calculateFreeCashFlowPerShare($actualEps, $sharesOutstanding, $stock, $macroState);
+        $annualFcfPerShare = $this->calculateFreeCashFlowPerShare($actualAnnualEps, $sharesOutstanding, $stock, $macroState);
         $stock->setFreeCashFlowPerShare((string) $annualFcfPerShare);
 
         $priceGapPct = $this->calculatePriceGap($surprisePct);
         $currentPrice = (float) $stock->getPrice();
-
         $quarterlyFcfPerShare = $annualFcfPerShare / 4.0;
-
         $liveTargetPE = $liveSectorPEs[$stock->getSector()] ?? 20.0;
 
         // ALLOCATE CAPITAL
-
         $allocation = $this->corporateActionEngine->allocateCapital(
             $stock,
-            $actualEps,
+            $actualQuarterlyEps,
             $quarterlyFcfPerShare,
             $currentPrice,
             $sharesOutstanding,
@@ -137,20 +141,15 @@ class EarningsEngine
 
         // APPLY THE GAP
         $currentPrice = (float) $stock->getPrice();
-        $newPrice = $currentPrice * (1.0 + $priceGapPct);
-
-        $newPrice -= $allocation['dividend_paid'];
-
-        $newPrice = max(0.01, $newPrice);
-
+        $newPrice = max(0.01, ($currentPrice * (1.0 + $priceGapPct)) - $allocation['dividend_paid']);
         $stock->setPrice((string) round($newPrice, 2));
 
-        $formattedEps = $actualEps < 0 ? '-$' . number_format(abs($actualEps), 2) : '$' . number_format($actualEps, 2);
-        $formattedSurprise = '$' . number_format(abs($surpriseAmount), 2);
+        $formattedEps = $actualQuarterlyEps < 0 ? '-$' . number_format(abs($actualQuarterlyEps), 2) : '$' . number_format($actualQuarterlyEps, 2);
+        $formattedSurprise = '$' . number_format(abs($surpriseAmountQuarterly), 2);
 
-        if ($surpriseAmount > 0.0) {
+        if ($surpriseAmountQuarterly > 0.0) {
             $description = "Q-Earnings: {$formattedEps} (Beat expectations by {$formattedSurprise}).";
-        } elseif ($surpriseAmount < 0.0) {
+        } elseif ($surpriseAmountQuarterly < 0.0) {
             $description = "Q-Earnings: {$formattedEps} (Missed expectations by {$formattedSurprise}).";
         } else {
             $description = "Q-Earnings: {$formattedEps} (Met expectations exactly).";
@@ -203,29 +202,6 @@ class EarningsEngine
     }
 
     /**
-     * Calculates the expected quarter-over-quarter EPS growth rate based on the 
-     * macroeconomic cycle and the stock's sensitivity to it (beta).
-     */
-    private function calculateExpectedEpsGrowth(Stock $stock, array $macroState): float
-    {
-        $capExRatio = (float) $stock->getCapexRatio();
-        
-        // Calculate the dynamically shifting ROIC
-        $dynamicRoic = $this->calculateDynamicRoic($stock, $macroState);
-        
-        $stock->setCurrentRoic((string) $dynamicRoic);
-
-        //Fundamental Organic Growth Formula: Growth = Retention * ROIC
-        $organicQuarterlyGrowth = ($capExRatio * $dynamicRoic) / 4.0;
-
-        // Add the systemic Beta tailwind/headwind
-        $beta = (float) $stock->getBeta();
-        $macroCycleModifier = (($macroState['output_gap'] ?? 0.0) / 4.0) * $beta;
-
-        return $organicQuarterlyGrowth + $macroCycleModifier;
-    }
-
-    /**
      * Converts accrual EPS into Free Cash Flow per Share based on Sector CapEx requirements.
      */
     private function calculateFreeCashFlowPerShare(
@@ -237,19 +213,19 @@ class EarningsEngine
         if ($sharesOutstanding <= 0) return 0.0;
 
         $netIncome = $actualEps * $sharesOutstanding;
-        $operatingCashFlow = $netIncome * 1.20; // OCF proxy
-
         $capExRatio = (float) $stock->getCapexRatio();
 
         // If the Output Gap is positive, the economy is booming, CapEx increases.
         $outputGap = $macroState['output_gap'] ?? 0.0;
-        $cycleCapExModifier = 1.00 + ($outputGap * 5.0); 
 
-        // Floor the modifier so CapEx doesn't go negative in a deep depression
-        $cycleCapExModifier = max(0.50, $cycleCapExModifier);
+        $cycleCapExModifier = 1.00 + ($outputGap * 1.5); 
+        $cycleCapExModifier = max(0.85, min(1.15, $cycleCapExModifier));
 
-        $actualCapEx = $operatingCashFlow * ($capExRatio * $cycleCapExModifier);
-        $fcff = $operatingCashFlow - $actualCapEx;
+        // Prevent negative CapEx from generating phantom cash flow during a net loss
+        $baselineIncomeForCapEx = max($netIncome, (float) $stock->getTotalEquity() * 0.02);
+        $actualCapEx = $baselineIncomeForCapEx * ($capExRatio * $cycleCapExModifier);
+        
+        $fcff = $netIncome - $actualCapEx;
 
         return $fcff / $sharesOutstanding;
     }
@@ -262,39 +238,38 @@ class EarningsEngine
         $baselineRoic = (float) $stock->getBaselineRoic();
         $currentRoic = (float) $stock->getCurrentRoic();
         
-        // Failsafe for a freshly reset database
         if ($currentRoic === 0.0) {
             $currentRoic = $baselineRoic;
         }
 
-        $shares = (float) $stock->getSharesOutstanding();
-        $price = (float) $stock->getPrice();
-        $marketCap = $shares * $price;
+        // Fetch the fundamental size of the company, not the market hype!
+        $totalEquity = (float) $stock->getTotalEquity();
 
         // Macroeconomic Modifier
         $outputGap = $macroState['output_gap'] ?? 0.0;
         $macroModifier = $outputGap * 0.5;
 
-        // Corporate Saturation Penalty
-        $saturationThreshold = 1_000_000_000_000;
+        // Corporate Saturation Penalty (Now driven by Book Value)
+        $saturationThreshold = 500_000_000_000; // $500 Billion in Equity
         $saturationPenalty = 0.0;
-        if ($marketCap > $saturationThreshold) {
-            $excessSize = $marketCap / $saturationThreshold;
+        
+        if ($totalEquity > $saturationThreshold) {
+            $excessSize = $totalEquity / $saturationThreshold;
+            // The heavier the balance sheet, the harder it is to steer the ship
             $saturationPenalty = log($excessSize) * 0.015; 
         }
 
-        // Calculate where the ROIC "wants" to be based on the current economy
+        // Calculate where the ROIC "wants" to be
         $targetRoic = $baselineRoic + $macroModifier - $saturationPenalty;
 
-        // Mean Reversion: Smoothly drift the current ROIC toward the target (25% step per quarter)
+        // Mean Reversion: Smoothly drift the current ROIC toward the target
         $pull = ($targetRoic - $currentRoic) * 0.25;
 
         // Add standard deviation noise
         $fundamentalNoise = $this->mathUtility->generateStandardNormal() * 0.015;
 
-        // The new ROIC is the old ROIC + the drift + the noise
         $dynamicRoic = $currentRoic + $pull + $fundamentalNoise;
 
-        return max(-0.10, $dynamicRoic);
+        return max(-0.10, min(0.50, $dynamicRoic));
     }
 }

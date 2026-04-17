@@ -29,61 +29,98 @@ class MacroEngine
         // Load Current State or Set Defaults
         $rawState = $this->redis->get(self::REDIS_MACRO_STATE);
         $state = $rawState ? json_decode($rawState, true) : [
-            'inflation' => 0.02,    // 2%
-            'output_gap' => 0.00,   // 0% (Economy at potential)
-            'policy_rate' => 0.04,  // Current Fed Funds Rate 4%
+            'inflation' => 0.02,
+            'output_gap' => 0.00,
+            'policy_rate' => 0.04,
         ];
 
-        // Core Economic Constants
         $targetInflation = 0.02;
-        $naturalRate = 0.02; // r* (Real neutral rate)
+        $naturalRate = 0.02;
 
-        // Simulate Inflation (Mean-reverting to target, driven by output gap)
-        $infZ = $this->mathUtility->generateStandardNormal();
-        $inflationDrift = 1.0 * ($targetInflation - $state['inflation']) * $dt;
-        // Phillips Curve effect: Positive output gap (hot economy) drives inflation up
-        $phillipsEffect = 0.1 * $state['output_gap'] * $dt; 
-        $state['inflation'] += $inflationDrift + $phillipsEffect + (0.02 * sqrt($dt) * $infZ);
+        // DYNAMIC VOLATILITY (Heteroskedasticity)
+        $stressMultiplier = 1.0 + (abs($state['output_gap']) * 10.0);
 
-        // Simulate Output Gap (Mean-reverting to 0, suppressed by high interest rates)
-        $outZ = $this->mathUtility->generateStandardNormal();
-        $gapDrift = 1.5 * (0.0 - $state['output_gap']) * $dt;
-        // IS Curve effect: High real rates suppress economic output
-        $realRate = $state['policy_rate'] - $state['inflation'];
-        $rateDrag = 0.5 * ($realRate - $naturalRate) * $dt;
-        $state['output_gap'] += $gapDrift - $rateDrag + (0.03 * sqrt($dt) * $outZ);
 
-        // The Taylor Rule (Central Bank Target Rate)
-        $targetRate = $naturalRate + $state['inflation'] 
-            + 0.5 * ($state['inflation'] - $targetInflation) 
+        // THE CENTRAL BANK (Taylor Rule & Policy Rate)
+
+        $targetRate = $naturalRate + $state['inflation']
+            + 0.5 * ($state['inflation'] - $targetInflation)
             + 0.5 * ($state['output_gap']);
-            
-        // Zero Lower Bound (ZLB) - Rates generally don't go below 0
-        $targetRate = max(0.00, $targetRate);
 
-        // Rate Smoothing (Central banks hate sudden shocks)
-        $smoothing = 0.85; // High inertia
-        $state['policy_rate'] = ($smoothing * $state['policy_rate']) + ((1 - $smoothing) * $targetRate);
+        // Zero Lower Bound and Realistic Historical Ceiling (15%)
+        $targetRate = max(0.00, min(0.15, $targetRate)); 
 
-        // Nelson-Siegel Yield Curve Factors
-        // Level (Long-term rate): Anchored to long-term inflation expectations + natural rate
+        // Fixed Continuous Smoothing using $dt
+        $cbSpeed = 2.5;
+        $state['policy_rate'] += $cbSpeed * ($targetRate - $state['policy_rate']) * $dt;
+
+
+        // YIELD CURVE & QUANTITATIVE EASING (QE)
+
+        $qeYieldSuppression = 0.0;
+
+        // If we are at the ZLB and in a recession, the CB buys long-term bonds (QE)
+        if ($state['policy_rate'] <= 0.005 && $state['output_gap'] < -0.02) {
+            // QE suppresses long-term yields, maxing out at a 2% artificial discount
+            $qeYieldSuppression = min(0.02, abs($state['output_gap']) * 0.5);
+        }
+
         $level = $naturalRate + (0.8 * $targetInflation) + (0.2 * $state['inflation']);
-        
-        // Slope: The difference between short rate and long rate.
-        // If Policy Rate > Level, Slope is negative
         $slope = $state['policy_rate'] - $level;
-        
-        // Curvature: Mid-term risk premium
-        $curvature = 0.02; 
+        $curvature = 0.02;
 
-        // Calculate the critical 10-Year Yield using Nelson-Siegel formula (lambda = 0.5)
         $lambda = 0.5;
         $tau = 10.0;
         $term1 = (1 - exp(-$lambda * $tau)) / ($lambda * $tau);
         $term2 = $term1 - exp(-$lambda * $tau);
-        $yield10y = $level + ($slope * $term1) + ($curvature * $term2);
 
-        // Save State
+        // Calculate the 10y Yield and apply the QE suppression!
+        $yield10y = $level + ($slope * $term1) + ($curvature * $term2) - $qeYieldSuppression;
+        $yield10y = max(0.00, $yield10y); // Yields shouldn't go negative in this sim
+
+
+        // OUTPUT GAP (IS Curve)
+
+        $outZ = $this->mathUtility->generateStandardNormal();
+
+        $gapDiff = 0.0 - $state['output_gap'];
+        
+        // Strong, stable linear mean reversion (Kappa = 2.0 pulls it back safely)
+        $gapDrift = 2.0 * $gapDiff * $dt;
+
+        $borrowingCost = (0.3 * $state['policy_rate']) + (0.7 * $yield10y);
+        $realRate = $borrowingCost - $state['inflation'];
+
+        // Rate drag: High interest rates crush the economy
+        $rateDrag = 1.5 * ($realRate - $naturalRate) * $dt;
+
+        // Reduced the stochastic noise parameter from 0.07 to 0.02. 
+        // We don't need massive noise if we aren't fighting a cubic wall.
+        $state['output_gap'] += $gapDrift - $rateDrag + (0.02 * $stressMultiplier * sqrt($dt) * $outZ);
+
+        // Failsafe bounds
+        $state['output_gap'] = max(-0.07, min(0.07, $state['output_gap']));
+
+
+        // INFLATION Phillips Curve
+
+        $infZ = $this->mathUtility->generateStandardNormal();
+
+        $infDiff = $targetInflation - $state['inflation'];
+        
+        // Linear reversion to the 2% target (Kappa = 1.5)
+        $inflationDrift = 1.5 * $infDiff * $dt;
+
+        // The Phillips Effect: Positive output gap (boom) drives inflation up
+        $phillipsEffect = 0.5 * $state['output_gap'] * $dt;
+
+        // Reduced stochastic noise parameter from 0.04 to 0.015 for stability
+        $state['inflation'] += $inflationDrift + $phillipsEffect + (0.015 * $stressMultiplier * sqrt($dt) * $infZ);
+
+        // Failsafe bounds
+        $state['inflation'] = max(-0.05, min(0.15, $state['inflation']));
+
+
         $payload = [
             'inflation' => $state['inflation'],
             'output_gap' => $state['output_gap'],
@@ -92,9 +129,10 @@ class MacroEngine
             'ns_level' => $level,
             'ns_slope' => $slope,
             'ns_curvature' => $curvature,
-            'yield_10y' => $yield10y
+            'yield_10y' => $yield10y,
+            'qe_active' => $qeYieldSuppression > 0
         ];
-        
+
         $this->redis->set(self::REDIS_MACRO_STATE, json_encode($payload));
         return $payload;
     }
@@ -125,13 +163,13 @@ class MacroEngine
         // The Yield Spread (Cost of Capital Shock)
         // Assume a baseline 10Y yield of 4% (0.04). 
         $yieldSpread = ($macroState['yield_10y'] ?? 0.04) - 0.04;
-        
+
         // The Output Gap (Economic Sentiment / Risk Premium)
         $economicSentiment = $macroState['output_gap'] ?? 0.0;
 
         foreach ($liveSectors as $sectorName => $currentPE) {
             $baselinePE = \App\Data\SectorPE::MACRO_SECTORS[$sectorName] ?? 20.0;
-            
+
             // Equity Duration (Sensitivity to Interest Rates)
             $durationRisk = match ($sectorName) {
                 'Information Technology', 'Communication Services' => 25.0, // High growth, heavily penalized by rate hikes
@@ -141,23 +179,23 @@ class MacroEngine
                 'Financials'                                       => 8.0,  // Banks BENEFIT from higher rates (NIM), lowest penalty
                 default                                            => 15.0,
             };
-            
+
             // Calculate the theoretical Fair Value P/E based on the Macro Environment
             // Rate Shock: Higher Yields = Lower P/E.
             $rateShock = exp(-$durationRisk * $yieldSpread);
-            
+
             // Sentiment Premium: Positive Output Gap = Higher P/E (Multiplier applied to baseline).
-            $sentimentPremium = exp(2.0 * $economicSentiment); 
-            
+            $sentimentPremium = exp(2.0 * $economicSentiment);
+
             $targetPE = $baselinePE * $rateShock * $sentimentPremium;
-            
+
             // Failsafe bounds
             $targetPE = max(5.0, min(60.0, $targetPE));
-            
+
             // Mean Reversion in Log Space
             $logCurrent = log(max(0.01, $currentPE));
             $logPull = $this->mathUtility->calculateLogMeanReversion($currentPE, $targetPE, 2.0) * $dt;
-            
+
             // Add a bit of random sector noise (0.30 volatility)
             $logDrift = 0.30 * sqrt($dt) * $this->mathUtility->generateStandardNormal();
 

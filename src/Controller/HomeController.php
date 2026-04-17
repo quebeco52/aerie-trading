@@ -53,7 +53,8 @@ class HomeController extends AbstractController
                 'sector' => $stock->getSector(),
                 'price' => $price,
                 'shares' => $shares,
-                'marketCap' => $marketCap
+                'marketCap' => $marketCap,
+                'currentRoic' => (float) $stock->getCurrentRoic() ?: (float) $stock->getBaselineRoic()
             ];
         }
 
@@ -101,6 +102,7 @@ class HomeController extends AbstractController
                 'marketCap' => $formatLarge($marketCap), 
                 'treasury' => $formatLarge((float) $stock->getCorporateTreasury()),
                 'equity' => $formatLarge((float) $stock->getTotalEquity()),
+                'currentRoic' => (float) $stock->getCurrentRoic() ?: (float) $stock->getBaselineRoic(),
             ];
         }
 

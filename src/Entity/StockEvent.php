@@ -19,7 +19,7 @@ class StockEvent
     #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
     private Stock $stock;
 
-    #[ORM\Column(length: 20)]
+    #[ORM\Column(length: 50)]
     private string $eventType;
 
     #[ORM\Column(length: 255)]

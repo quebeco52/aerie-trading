@@ -36,6 +36,7 @@ class StockTracker
         private MarketEngine $marketEngine,
         private EarningsEngine $earningsEngine,
         private CorporateActionEngine $corporateActionEngine,
+        private MergerAndAcquisitionEngine $maEngine,
         private MarketEvent $eventService,
         private MathUtility $mathUtility,
         private \Redis $redis,
@@ -78,21 +79,33 @@ class StockTracker
 
         foreach ($stocks as $stock) {
 
-            $volCacheKey = "computed_vol_cache:{$stock->getId()}";
-            $cachedVol = $this->redis->get($volCacheKey);
-
-            if ($cachedVol !== false) {
-                // Instantly apply the background math to the entity
-                $stock->setCurrentVolatility((string) $cachedVol);
-                $this->redis->del($volCacheKey); // Clear it so we don't re-apply old data
-            }
-
             $sectorName = $stock->getSector();
             $targetPE = $liveSectorPEs[$sectorName] ?? 20.0;
 
             // Determine Volatility
             $baselineVol = (float) $stock->getVolatility();
             $currentVol = (float) ($stock->getCurrentVolatility() ?? $baselineVol);
+
+            // M&A
+            $maResult = $this->maEngine->evaluatePrivateAcquisition($stock, $macroState, $dt);
+            $maShock = 0.0;
+            if ($maResult) {
+                $events[] = $maResult['event'];
+                $maShock = $maResult['shock'];
+            }
+            
+            // DIVESTITURE (Spin-offs)
+            // A company won't acquire and divest in the exact same tick
+            if (!$maResult) {
+                $divestResult = $this->maEngine->evaluateCorporateDivestiture($stock, $macroState, $dt);
+                if ($divestResult) {
+                    $events[] = $divestResult['event'];
+                    $maShock = $divestResult['shock'];
+                }
+            }
+
+            $sharesOutstanding = (float) $stock->getSharesOutstanding();
+            $shares = max(1.0, $sharesOutstanding);
 
             // Calculate new price (GBM + SVJJ)
             $calculation = $this->marketEngine->calculateNextPrice(
@@ -108,6 +121,8 @@ class StockTracker
                 marketVol: $marketVol,
                 macroState: $macroState,
                 fcfPerShare: $stock->getFreeCashFlowPerShare() !== null ? (float) $stock->getFreeCashFlowPerShare() : null,
+                bookValuePerShare: (float) $stock->getBookValuePerShare(),
+                maShock: $maShock
             );
 
             $newPrice = $calculation['price'];
@@ -119,14 +134,14 @@ class StockTracker
             $stock->setPrice((string) $newPrice);
             $stock->setCurrentVolatility((string) $nextVolatility);
 
+            
+
             // Earnings Engine
             $generatedEvents = $this->earningsEngine->calculate($stock, $macroState, $liveSectorPEs, $tickCount, $ticksPerYear);
             if (!empty($generatedEvents)) {
                 $events = array_merge($events, $generatedEvents);
             }
             $currentPriceAfterEarnings = (float) $stock->getPrice();
-
-            $sharesOutstanding = (float) $stock->getSharesOutstanding();
 
             // CORPORATE ACTIONS (SPLITS)
             $splitResult = $this->corporateActionEngine->processSplits(

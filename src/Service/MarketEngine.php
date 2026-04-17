@@ -42,9 +42,8 @@ class MarketEngine
      * @param float $reversionSpeed     The speed at which the price reverts to fair value.
      * @param float $kappa              The rate at which volatility reverts to the long-run mean.
      * @param float $volOfVol           The volatility of volatility (how much volatility fluctuates).
-     * @param float $rho                The correlation between price and volatility.
-     * 
      * @param array $macroState         The current macroeconomic state, which can influence the base drift.
+     * @param float $bookValuePerShare  The physical equity value per share.
      *
      * @return array{price: float, shock: float|null, next_volatility: float} The calculated next price, shock percentage, and updated volatility.
      */
@@ -61,27 +60,35 @@ class MarketEngine
         float $marketVol = 0.15,
         float $drift = 0.08,
         float $reversionSpeed = 0.4,
-        float $kappa = 6.0,
+        float $kappa = 2.5,
         float $volOfVol = 0.3,
-        float $rho = -0.7,
         array $macroState = [],
         ?float $fcfPerShare = null,
+        float $bookValuePerShare = 0.0,
+        float $maShock = 0.0
     ): array {
         
-        // CAPM & Macro Drift
-        // The Risk-Free Rate is exactly the Central Bank's smoothed Taylor Rule rate
+        // =====================================================================
+        // CAPM & MACRO TRANSMISSION MECHANISM
+        // =====================================================================
         $riskFreeRate = $macroState['policy_rate'] ?? 0.04;
+        $outputGap = $macroState['output_gap'] ?? 0.0;
+        $inflation = $macroState['inflation'] ?? 0.02;
 
-        // If the Yield Curve is inverted (Slope is negative), it signals a recession.
-        // Apply a severe penalty to the market's expected premium.
-        $yieldCurveInversionPenalty = min(0.0, $macroState['ns_slope'] ?? 0.0) * 2.0;
-        
-        // If the Output Gap is deeply negative, the economy is slumping.
-        $outputGapModifier = ($macroState['output_gap'] ?? 0.0) * 0.5;
+        // 1. Asymmetric Sentiment (Fear > Greed)
+        // A boom (+5%) gives a gentle +2.5% tailwind. A recession (-5%) gives a brutal -10% headwind.
+        $outputGapModifier = $outputGap > 0 ? ($outputGap * 0.5) : ($outputGap * 2.0);
 
-        $totalMarketPremium = $drift + $yieldCurveInversionPenalty + $outputGapModifier;
-        
-        // Final Drift
+        // 2. The Stagflation Tax
+        // High inflation destroys the purchasing power of corporate earnings. 
+        // If inflation breaks above 4%, investors demand a massive risk premium, crushing stock prices.
+        $inflationPenalty = $inflation > 0.04 ? -($inflation - 0.04) * 1.5 : 0.0;
+
+        // 3. The Liquidity Drain (Yield Curve Inversion)
+        // An inverted yield curve suffocates bank lending and chokes off corporate liquidity.
+        $yieldCurveInversionPenalty = min(0.0, $macroState['ns_slope'] ?? 0.0) * 3.0;
+
+        $totalMarketPremium = $drift + $yieldCurveInversionPenalty + $outputGapModifier + $inflationPenalty;
         $finalDrift = $riskFreeRate + ($totalMarketPremium * $beta);
 
         // State Variables
@@ -99,10 +106,12 @@ class MarketEngine
         );
 
         // Compensate for the expected variance added by SVJJ jumps to prevent a positive feedback loop
-        // E[VarJump] = (pUp * muV * 0.5) + (pDown * muV)
         $expectedVarJump = (0.30 * 0.04 * 0.5) + (0.70 * 0.04);
         $jumpVarianceDrag = ($lambda * $expectedVarJump) / $kappa;
-        $adjustedTheta = max(0.0001, $longTermVar - $jumpVarianceDrag);
+        
+        // This stops the QE scheme from dragging the continuous volatility into a black hole.
+        $absoluteFloorVar = 0.05 * 0.05; 
+        $adjustedTheta = max($absoluteFloorVar, $longTermVar - $jumpVarianceDrag);
 
         // Variance Process via Quadratic-Exponential (QE) Scheme
         $nextVar = $this->mathUtility->calculateQEVarianceStep(
@@ -119,54 +128,72 @@ class MarketEngine
         // Convert back to volatility for the return payload
         $nextVolatility = sqrt($nextVar);
 
-        // Hard bounds to prevent the stock from completely freezing unbounded explosions
-        $nextVolatility = max(0.05, min(2.00, $nextVolatility));
+        // Remove the 2.00 hard cap! If a crash demands 300% volatility, let it happen.
+        // We only enforce a 5.0 (500%) ceiling to prevent integer overflows in the database.
+        $nextVolatility = min(5.00, $nextVolatility);
 
         // 2. Mean Reversion to Fundamental Value (Gravity Drift)
         // Pull the price towards its fair value derived from Earnings and Sector Target P/E
         $peFairValue = $earningsPerShare * $targetPE;
 
         // If Free Cash Flow is available, blend the P/E valuation with a DCF valuation
-        if ($fcfPerShare !== null) {
+        if ($fcfPerShare !== null && $fcfPerShare > 0.0) {
             $dcfFairValue = $this->calculateIntrinsicValueDCF(
                 fcfPerShare: $fcfPerShare,
                 policyRate: $riskFreeRate,
                 beta: $beta
             );
-            $fairValue = max(0.01, ($peFairValue + $dcfFairValue) / 2.0);
+            $earningsValue = ($peFairValue + $dcfFairValue) / 2.0;
         } else {
-            $fairValue = max(0.01, $peFairValue);
+            $earningsValue = $peFairValue;
         }
 
-        $gravityDrift = $this->mathUtility->calculateLogMeanReversion(
-            currentValue: $currentPrice,
-            targetValue: $fairValue,
-            reversionSpeed: $reversionSpeed
-        );
+        // Graham-style Value Investing Failsafe:
+        // Value investors will step in if the stock drops below 80% of its physical Book Value.
+        $fairValue = max($earningsValue, $bookValuePerShare * 0.80);
+        $fairValue = max(0.01, $fairValue);
 
-        // Correlated Price Diffusion
-        $z1 = $this->mathUtility->generateStandardNormal();
-        $w1 = $z1; 
+        // 4. Panic Gravity (Flight to Safety)
+        $macroStress = abs($outputGap) + abs($inflation - 0.02);
+        $dynamicReversion = $reversionSpeed + ($macroStress * 2.5);
 
-        // Calculate continuous price diffusion using the current variance
+        // 5. Pure Geometric Brownian Motion (GBM) Step
+        $idiosyncraticShock = $this->mathUtility->generateStandardNormal();
+
+        // Calculate pure continuous price diffusion WITHOUT the linear gravity drift
         $gbmPrice = $this->mathUtility->calculateCorrelatedGBM(
             currentPrice: $currentPrice,
             currentVolatility: $currentVolatility,
             drift: $finalDrift,
-            gravityDrift: $gravityDrift,
+            gravityDrift: 0.0, // <-- Set to zero, handled exactly below
             dt: $dt,
             beta: $beta,
             marketVol: $marketVol,
             marketZ: $marketZ,
-            w1: $w1
+            w1: $idiosyncraticShock
         );
 
-        // Apply Simultaneous Price Jump
-        $finalPrice = $gbmPrice * $jumpData['price_multiplier'];
+        // 6. Exact Ornstein-Uhlenbeck Mean Reversion in Log-Space
+        // This replaces calculateLogMeanReversion. 
+        // Using exp(-kappa * dt) mathematically guarantees the price never overshoots the fair value.
+        $reversionWeight = exp(-$dynamicReversion * $dt);
+        
+        // Geometrically blend the GBM price with the fundamental Fair Value
+        $diffusedPrice = exp(
+            $reversionWeight * log($gbmPrice) + 
+            (1.0 - $reversionWeight) * log($fairValue)
+        );
+
+        // THE FIX: Apply Simultaneous Price Jumps AND M&A Shocks outside the GBM exponent
+        $totalShockMultiplier = $jumpData['price_multiplier'] * (1.0 + $maShock);
+        $finalPrice = $diffusedPrice * $totalShockMultiplier;
+        
+        // Calculate the total shock percentage for the UI event payload
+        $totalShockPct = ($totalShockMultiplier - 1.0) * 100.0;
 
         return [
             'price'           => max(0.01, $finalPrice),
-            'shock'           => $jumpData['shock_pct'],
+            'shock'           => $totalShockMultiplier != 1.0 ? $totalShockPct : null,
             'next_volatility' => $nextVolatility
         ];
     }
@@ -179,20 +206,19 @@ class MarketEngine
         float $policyRate, 
         float $beta
     ): float {
-        $fcfPerShare = max($fcfPerShare, 0.01);
-
-        // Determine WACC
+        // Determine Cost of Equity (CAPM)
         $equityRiskPremium = 0.05; 
-        $wacc = $policyRate + ($beta * $equityRiskPremium);
-
-        // Determine Terminal Growth Rate (g)
+        $costOfEquity = $policyRate + ($beta * $equityRiskPremium);
         $terminalGrowthRate = 0.02;
 
-        // Failsafe: WACC must be strictly greater than growth, or value goes to infinity
-        if ($wacc <= $terminalGrowthRate) {
-            $wacc = $terminalGrowthRate + 0.01; 
-        }
+        $spread = $costOfEquity - $terminalGrowthRate;
 
-        return ($fcfPerShare * (1 + $terminalGrowthRate)) / ($wacc - $terminalGrowthRate);
+        // THE FIX: Cap the absolute multiplier at 33.3x, rather than altering the Cost of Equity
+        $multiplier = $spread > 0 ? (1 + $terminalGrowthRate) / $spread : 33.33;
+        $multiplier = min(33.33, $multiplier); 
+
+        $valuePerShare = $fcfPerShare * $multiplier;
+
+        return max(0.01, $valuePerShare);
     }
 }
