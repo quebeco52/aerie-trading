@@ -23,7 +23,7 @@ echo -e "\e[33m[3/7] Pulling latest code from GitHub...\e[0m"
 git pull origin main
 
 echo -e "\e[33m[4/7] Building Immutable Production Images...\e[0m"
-$DC build --no-cache aerie-php aerie-worker aerie-scheduler aerie-ticker aerie-websocket aerie-caddy
+$DC build --no-cache aerie-php aerie-scheduler aerie-ticker aerie-websocket aerie-caddy
 
 echo -e "\e[33m[5/7] Swapping to New Images & Running Migrations...\e[0m"
 $DC up -d
