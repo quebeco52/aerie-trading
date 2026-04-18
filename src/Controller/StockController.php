@@ -213,4 +213,32 @@ class StockController extends AbstractController
 
         return $this->json(array_reverse($results));
     }
+
+    /**
+     * API endpoint to retrieve sparse, quarterly fundamental data for overlays.
+     */
+    #[Route('/api/fundamentals', name: 'api_fundamentals')]
+    public function fundamentals(Request $request, EntityManagerInterface $entityManager): JsonResponse
+    {
+        $ticker = $request->query->get('ticker');
+        if (!$ticker) return $this->json([]);
+
+        $stock = $entityManager->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);
+        if (!$stock) return $this->json([]); // ETFs don't have corporate reports
+
+        $conn = $entityManager->getConnection();
+        
+        // Fetch all fundamental reports for this stock, oldest to newest (for charting)
+        $sql = '
+            SELECT net_income, equity, total_debt, treasury, roic, shares, recorded_at 
+            FROM corporate_report 
+            WHERE stock_id = :id 
+            ORDER BY recorded_at ASC
+        ';
+
+        $stmt = $conn->executeQuery($sql, ['id' => $stock->getId()]);
+        $results = $stmt->fetchAllAssociative();
+
+        return $this->json($results);
+    }
 }

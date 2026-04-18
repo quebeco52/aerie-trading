@@ -353,27 +353,53 @@ class CorporateActionEngine
         $newRetained = $currentRetained + $quarterlyNetIncome - $totalDividendsPaid;
         $stock->setRetainedEarnings((string) max(0.0, $newRetained));
 
-        // TOTAL EQUITY
+        // TOTAL EQUITY (Clean Surplus Accounting)
         $currentEquity = (float) $stock->getTotalEquity();
         $newEquity = $currentEquity + $quarterlyNetIncome - $totalCashSpent;
         $stock->setTotalEquity((string) max(1000.0, $newEquity));
 
-        //  Cash
+        // CASH UPDATES
         $netCashChange = $totalFcfGenerated - $totalCashSpent;
         $currentTreasury = (float) $stock->getCorporateTreasury();
         $newTreasury = $currentTreasury + $netCashChange;
 
-        // THE DEBT TRAP (If they overspent cash they don't have)
-        if ($newTreasury < 0.0) {
-            $cashShortfall = abs($newTreasury);
-            $marketCap = $currentPrice * max($newSharesOutstanding, 1);
+        $currentDebt = (float) $stock->getTotalDebt();
+
+        // THE CORPORATE TREASURY AI (Target Working Capital Zone)
+        
+        $minOperatingCash = $newEquity * 0.03; // The 3% Survival Floor
+        $targetOperatingCash = $newEquity * 0.05; // The 5% Comfort Ceiling
+
+        // THE DEBT TRAP (Liquidity Crisis)
+        if ($newTreasury < $minOperatingCash) {
+            // They must borrow enough to cover the deficit PLUS restore their 3% buffer.
+            // Example: If Treasury is -$1B, and min cash is $3B, they borrow $4B.
+            $cashShortfall = $minOperatingCash - $newTreasury;
             
-            $debtPenalty = $cashShortfall / max($marketCap, 1); 
-            $currentDebtRatio = (float) $stock->getDebtToEquityRatio();
-            $stock->setDebtToEquityRatio((string) ($currentDebtRatio + ($debtPenalty * 2.5)));
+            $stock->setTotalDebt((string) ($currentDebt + $cashShortfall));
             
-            $newTreasury = 0.0;
+            // Treasury is restored exactly to the minimum survival floor
+            $newTreasury = $minOperatingCash;
+        } 
+        // THE DELEVERAGING SWEEP (Excess Cash Management)
+        elseif ($currentDebt > 0.0 && $newTreasury > $targetOperatingCash) {
+            
+            $excessCash = $newTreasury - $targetOperatingCash;
+            $currentDebtRatio = $currentDebt / max(1.0, $newEquity);
+            
+            // Only actively pay down debt if they are moderately/highly leveraged (D/E > 1.50)
+            if ($currentDebtRatio > 1.50) {
+                // Calculate the exact dollar amount needed to drop the D/E ratio down to a healthy 0.40x
+                $targetDebt = $newEquity * 0.40;
+                $debtToPayOff = min($excessCash, $currentDebt - $targetDebt);
+                
+                if ($debtToPayOff > 0) {
+                    $stock->setTotalDebt((string) ($currentDebt - $debtToPayOff));
+                    $newTreasury -= $debtToPayOff;
+                }
+            }
         }
+        
         $stock->setCorporateTreasury((string) $newTreasury);
     }
 }

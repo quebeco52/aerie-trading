@@ -6,6 +6,14 @@ const EPS = window.AERIE_DATA.eps;
 const TICKS_PER_YEAR = window.AERIE_DATA.ticksPerYear || 54000;
 const SECONDS_PER_TICK = Math.round(31536000 / TICKS_PER_YEAR);
 
+let rawReports = [];
+let netIncomeChartInstance = null;
+let debtEquityChartInstance = null;
+
+Chart.defaults.color = '#c2c6d6'; // text-on-surface-variant
+Chart.defaults.scale.grid.color = 'rgba(45, 52, 73, 0.4)'; // subtle grid lines
+Chart.defaults.font.family = '"Courier Prime", monospace';
+
 const COLORS = {
     primary: '#adc6ff',
     positive: '#4edea3',
@@ -199,6 +207,17 @@ document.addEventListener('DOMContentLoaded', () => {
             .finally(() => { if (spinner) spinner.classList.add('hidden'); });
     }
 
+    // Fetch Fundamental Data (Skip if it's an ETF)
+    if (!IS_ETF) {
+        fetch(`/api/fundamentals?ticker=${CURRENT_TICKER}`)
+            .then(res => res.json())
+            .then(data => {
+                rawReports = data;
+                updateCharts('5Y'); // Default view
+            })
+            .catch(err => console.error("Failed to load fundamentals:", err));
+    }
+
     function updateLiveChart(newPrice) {
         if (document.visibilityState !== 'visible' || isNaN(newPrice) || currentSimTime <= 0) return;
 
@@ -239,6 +258,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (document.getElementById('stat-pe')) {
                 document.getElementById('stat-pe').innerText = currentEps > 0 ? (newPrice / currentEps).toFixed(2) : '0.00';
+            }
+            if (document.getElementById('stat-debt-ratio')){
+                document.getElementById('stat-debt-ratio').innerText = stockUpdate.debt_ratio.toFixed(2) + 'x';
             }
 
             // Other live stats
@@ -371,3 +393,134 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+// ==========================================
+// FUNDAMENTAL CHARTING LOGIC
+// ==========================================
+
+function updateCharts(timeframe) {
+    if (!rawReports || rawReports.length === 0) return;
+
+    // Update button styles to match your UI
+    const btn12Q = document.getElementById('btn-12Q');
+    const btn5Y = document.getElementById('btn-5Y');
+    
+    if (timeframe === '12Q') {
+        btn12Q.className = 'px-3 py-1 text-[10px] font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors uppercase tracking-widest';
+        btn5Y.className = 'px-3 py-1 text-[10px] font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors uppercase tracking-widest';
+    } else {
+        btn5Y.className = 'px-3 py-1 text-[10px] font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors uppercase tracking-widest';
+        btn12Q.className = 'px-3 py-1 text-[10px] font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors uppercase tracking-widest';
+    }
+
+    let labels = [];
+    let netIncomeData = [];
+    let debtData = [];
+    let equityData = [];
+
+    if (timeframe === '12Q') {
+        const sliced = rawReports.slice(-12);
+        sliced.forEach((report, index) => {
+            labels.push(`Q${(index % 4) + 1}`);
+            // Divide Annual TTM by 4 for quarterly representation
+            netIncomeData.push(parseFloat(report.net_income) / 4);
+            debtData.push(parseFloat(report.total_debt || 0));
+            equityData.push(parseFloat(report.equity));
+        });
+    } 
+    else if (timeframe === '5Y') {
+        const yearsToFetch = 5;
+        let yearCount = 1;
+        
+        // Step backward by 4 quarters to grab the annual end-of-year reports
+        for (let i = rawReports.length - 1; i >= 0 && yearCount <= yearsToFetch; i -= 4) {
+            let report = rawReports[i];
+            
+            if (yearCount === 1) {
+                labels.unshift("Now");
+            } else if (yearCount === 2) {
+                labels.unshift("-1 Yr");
+            } else {
+                labels.unshift(`-${yearCount - 1} Yrs`);
+            }
+            
+            netIncomeData.unshift(parseFloat(report.net_income));
+            debtData.unshift(parseFloat(report.total_debt || 0));
+            equityData.unshift(parseFloat(report.equity));
+            
+            yearCount++;
+        }
+    }
+
+    renderNetIncomeChart(labels, netIncomeData);
+    renderDebtEquityChart(labels, debtData, equityData);
+}
+
+function renderNetIncomeChart(labels, data) {
+    if (netIncomeChartInstance) netIncomeChartInstance.destroy();
+    
+    const ctx = document.getElementById('netIncomeChart').getContext('2d');
+    netIncomeChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Net Income',
+                data: data,
+                backgroundColor: COLORS.positive,
+                borderRadius: 4,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: (ctx) => formatLarge(ctx.raw) } }
+            },
+            scales: {
+                y: { ticks: { callback: (val) => formatLarge(val) } }
+            }
+        }
+    });
+}
+
+function renderDebtEquityChart(labels, debtData, equityData) {
+    if (debtEquityChartInstance) debtEquityChartInstance.destroy();
+    
+    const ctx = document.getElementById('debtEquityChart').getContext('2d');
+    debtEquityChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Total Debt',
+                    data: debtData,
+                    backgroundColor: COLORS.negative,
+                    borderRadius: 4,
+                },
+                {
+                    label: 'Book Value',
+                    data: equityData,
+                    backgroundColor: COLORS.primary,
+                    borderRadius: 4,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { 
+                    position: 'bottom',
+                    labels: { boxWidth: 8, usePointStyle: true }
+                },
+                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatLarge(ctx.raw)}` } }
+            },
+            scales: {
+                y: { ticks: { callback: (val) => formatLarge(val) } }
+            }
+        }
+    });
+}

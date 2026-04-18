@@ -61,12 +61,6 @@ class Stock
     private string $corporateTreasury = '0.0000';
 
     /**
-     * @var string The ratio of total debt to total equity.
-     */
-    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, options: ['default' => '0.0000'])]
-    private string $debtToEquityRatio = '0.0000';
-
-    /**
      * @var string The operating profit margin (e.g., 0.15 for 15%).
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, options: ['default' => '0.1500'])]
@@ -101,6 +95,30 @@ class Stock
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
     private string $retainedEarnings = '0.0000';
+
+    /**
+     * @var string Absolute total debt (Long-term + Short-term). Fits Clean Surplus accounting.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $totalDebt = '0.0000';
+
+    /**
+     * @var string The risk premium this company pays over the Central Bank policy rate.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.0200'])]
+    private string $creditSpread = '0.0200';
+
+    /**
+     * @var string The percentage of Total Debt that is subject to variable/floating interest rates.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.3000'])]
+    private string $floatingDebtRatio = '0.3000';
+
+    /**
+     * @var string Intangible assets and premiums paid during M&A (Goodwill).
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $goodwill = '0.0000';
 
 
     // CORPORATE POLICY & MARKET PHYSICS
@@ -185,10 +203,22 @@ class Stock
     private string $capexRatio = '0.20';
 
     /**
+     * @var string The annualized rate at which the company's physical equity (assets) depreciates.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.0500'])]
+    private string $depreciationRate = '0.0500';
+
+    /**
      * @var string The dynamic, current Return on Invested Capital.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, options: ['default' => '0.0000'])]
     private string $currentRoic = '0.0000';
+
+    /**
+     * @var string Absolute dollar amount remaining in the board-authorized buyback program.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $buybackAuthorization = '0.0000';
 
 
     public function getId(): ?int
@@ -295,16 +325,6 @@ class Stock
     public function setCorporateTreasury(string $corporateTreasury): static
     {
         $this->corporateTreasury = $corporateTreasury;
-        return $this;
-    }
-
-    public function getDebtToEquityRatio(): ?string
-    {
-        return $this->debtToEquityRatio;
-    }
-    public function setDebtToEquityRatio(string $debtToEquityRatio): static
-    {
-        $this->debtToEquityRatio = $debtToEquityRatio;
         return $this;
     }
 
@@ -469,6 +489,79 @@ class Stock
         return $this;
     }
 
+    public function getTotalDebt(): ?string
+    {
+        return $this->totalDebt;
+    }
+
+    public function setTotalDebt(string $totalDebt): static
+    {
+        $this->totalDebt = $totalDebt;
+
+        return $this;
+    }
+
+    public function getCreditSpread(): ?string
+    {
+        return $this->creditSpread;
+    }
+
+    public function setCreditSpread(string $creditSpread): static
+    {
+        $this->creditSpread = $creditSpread;
+
+        return $this;
+    }
+
+    public function getGoodwill(): ?string
+    {
+        return $this->goodwill;
+    }
+
+    public function setGoodwill(string $goodwill): static
+    {
+        $this->goodwill = $goodwill;
+
+        return $this;
+    }
+
+    public function getBuybackAuthorization(): ?string
+    {
+        return $this->buybackAuthorization;
+    }
+
+    public function setBuybackAuthorization(string $buybackAuthorization): static
+    {
+        $this->buybackAuthorization = $buybackAuthorization;
+
+        return $this;
+    }
+
+       public function getDepreciationRate(): ?string
+    {
+        return $this->depreciationRate;
+    }
+
+    public function setDepreciationRate(string $depreciationRate): static
+    {
+        $this->depreciationRate = $depreciationRate;
+
+        return $this;
+    }
+
+
+    public function getFloatingDebtRatio(): ?string
+    {
+        return $this->floatingDebtRatio;
+    }
+
+    public function setFloatingDebtRatio(string $floatingDebtRatio): static
+    {
+        $this->floatingDebtRatio = $floatingDebtRatio;
+
+        return $this;
+    }  
+
     // --- BRIDGE METHODS ---
 
     /**
@@ -575,4 +668,17 @@ class Stock
         $totalRevenue = (float) $this->getTotalRevenue();
         return (string) round($totalRevenue / $shares, 4);
     }
+
+    /**
+     * Calculates the Debt-to-Equity Ratio dynamically based on Absolute Debt and Equity.
+     * * @return string The calculated Debt-to-Equity Ratio.
+     */
+    public function getDebtToEquityRatio(): string
+    {
+        $equity = max(1.0, (float) $this->totalEquity);
+        $debt = (float) $this->totalDebt;
+        
+        return (string) round($debt / $equity, 4);
+    }
+
 }

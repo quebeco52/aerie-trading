@@ -182,7 +182,8 @@ class StockTracker
                 'shares' => $newShares,
                 'eps' => (float) $stock->getEarningsPerShare(),
                 'treasury' => (float) $stock->getCorporateTreasury(),
-                'equity' => (float) $stock->getTotalEquity()
+                'equity' => (float) $stock->getTotalEquity(),
+                'debt_ratio' => (float) $stock->getDebtToEquityRatio()
             ];
 
             if ($recordHistory) {

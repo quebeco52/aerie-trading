@@ -60,7 +60,7 @@ class MarketEngine
         float $marketVol = 0.15,
         float $drift = 0.08,
         float $reversionSpeed = 0.4,
-        float $kappa = 2.5,
+        float $kappa = 6.0,
         float $volOfVol = 0.3,
         array $macroState = [],
         ?float $fcfPerShare = null,
@@ -75,21 +75,7 @@ class MarketEngine
         $outputGap = $macroState['output_gap'] ?? 0.0;
         $inflation = $macroState['inflation'] ?? 0.02;
 
-        // 1. Asymmetric Sentiment (Fear > Greed)
-        // A boom (+5%) gives a gentle +2.5% tailwind. A recession (-5%) gives a brutal -10% headwind.
-        $outputGapModifier = $outputGap > 0 ? ($outputGap * 0.5) : ($outputGap * 2.0);
-
-        // 2. The Stagflation Tax
-        // High inflation destroys the purchasing power of corporate earnings. 
-        // If inflation breaks above 4%, investors demand a massive risk premium, crushing stock prices.
-        $inflationPenalty = $inflation > 0.04 ? -($inflation - 0.04) * 1.5 : 0.0;
-
-        // 3. The Liquidity Drain (Yield Curve Inversion)
-        // An inverted yield curve suffocates bank lending and chokes off corporate liquidity.
-        $yieldCurveInversionPenalty = min(0.0, $macroState['ns_slope'] ?? 0.0) * 3.0;
-
-        $totalMarketPremium = $drift + $yieldCurveInversionPenalty + $outputGapModifier + $inflationPenalty;
-        $finalDrift = $riskFreeRate + ($totalMarketPremium * $beta);
+        $finalDrift = $this->calculateMacroDrift($outputGap, $inflation, $macroState['ns_slope'] ?? 0.0, $drift, $beta, $riskFreeRate);
 
         // State Variables
         $currentVar = $currentVolatility * $currentVolatility;
@@ -101,17 +87,11 @@ class MarketEngine
             pUp: 0.30,     // Asymmetric tails: 30% chance of upside jump, 70% chance of downside crash
             etaUp: 10.0,   // ~10% avg up-jump
             etaDown: 8.0,  // ~12.5% avg down-jump (fatter left tail)
-            muV: 0.04,     // Base variance jump size
+            muV: 0.015,    // Base variance jump size (reduced to prevent excessive volatility drain)
             dt: $dt
         );
 
-        // Compensate for the expected variance added by SVJJ jumps to prevent a positive feedback loop
-        $expectedVarJump = (0.30 * 0.04 * 0.5) + (0.70 * 0.04);
-        $jumpVarianceDrag = ($lambda * $expectedVarJump) / $kappa;
-        
-        // This stops the QE scheme from dragging the continuous volatility into a black hole.
-        $absoluteFloorVar = 0.05 * 0.05; 
-        $adjustedTheta = max($absoluteFloorVar, $longTermVar - $jumpVarianceDrag);
+        $adjustedTheta = max(0.0001, $longTermVar);
 
         // Variance Process via Quadratic-Exponential (QE) Scheme
         $nextVar = $this->mathUtility->calculateQEVarianceStep(
@@ -128,36 +108,17 @@ class MarketEngine
         // Convert back to volatility for the return payload
         $nextVolatility = sqrt($nextVar);
 
-        // Remove the 2.00 hard cap! If a crash demands 300% volatility, let it happen.
-        // We only enforce a 5.0 (500%) ceiling to prevent integer overflows in the database.
+        // Only enforce a 5.0 (500%) ceiling to prevent integer overflows in the database.
         $nextVolatility = min(5.00, $nextVolatility);
 
-        // 2. Mean Reversion to Fundamental Value (Gravity Drift)
-        // Pull the price towards its fair value derived from Earnings and Sector Target P/E
-        $peFairValue = $earningsPerShare * $targetPE;
+        // Mean Reversion to Fundamental Value (Gravity Drift)
+        $fairValue = $this->calculateFundamentalFairValue($earningsPerShare, $targetPE, $fcfPerShare, $riskFreeRate, $beta, $bookValuePerShare);
 
-        // If Free Cash Flow is available, blend the P/E valuation with a DCF valuation
-        if ($fcfPerShare !== null && $fcfPerShare > 0.0) {
-            $dcfFairValue = $this->calculateIntrinsicValueDCF(
-                fcfPerShare: $fcfPerShare,
-                policyRate: $riskFreeRate,
-                beta: $beta
-            );
-            $earningsValue = ($peFairValue + $dcfFairValue) / 2.0;
-        } else {
-            $earningsValue = $peFairValue;
-        }
-
-        // Graham-style Value Investing Failsafe:
-        // Value investors will step in if the stock drops below 80% of its physical Book Value.
-        $fairValue = max($earningsValue, $bookValuePerShare * 0.80);
-        $fairValue = max(0.01, $fairValue);
-
-        // 4. Panic Gravity (Flight to Safety)
+        // Panic Gravity (Flight to Safety)
         $macroStress = abs($outputGap) + abs($inflation - 0.02);
         $dynamicReversion = $reversionSpeed + ($macroStress * 2.5);
 
-        // 5. Pure Geometric Brownian Motion (GBM) Step
+        // Pure Geometric Brownian Motion (GBM) Step
         $idiosyncraticShock = $this->mathUtility->generateStandardNormal();
 
         // Calculate pure continuous price diffusion WITHOUT the linear gravity drift
@@ -165,7 +126,7 @@ class MarketEngine
             currentPrice: $currentPrice,
             currentVolatility: $currentVolatility,
             drift: $finalDrift,
-            gravityDrift: 0.0, // <-- Set to zero, handled exactly below
+            gravityDrift: 0.0, // <-- Set to zero, handled below
             dt: $dt,
             beta: $beta,
             marketVol: $marketVol,
@@ -173,7 +134,7 @@ class MarketEngine
             w1: $idiosyncraticShock
         );
 
-        // 6. Exact Ornstein-Uhlenbeck Mean Reversion in Log-Space
+        // Exact Ornstein-Uhlenbeck Mean Reversion in Log-Space
         // This replaces calculateLogMeanReversion. 
         // Using exp(-kappa * dt) mathematically guarantees the price never overshoots the fair value.
         $reversionWeight = exp(-$dynamicReversion * $dt);
@@ -184,7 +145,7 @@ class MarketEngine
             (1.0 - $reversionWeight) * log($fairValue)
         );
 
-        // THE FIX: Apply Simultaneous Price Jumps AND M&A Shocks outside the GBM exponent
+        // Apply Simultaneous Price Jumps AND M&A Shocks outside the GBM exponent
         $totalShockMultiplier = $jumpData['price_multiplier'] * (1.0 + $maShock);
         $finalPrice = $diffusedPrice * $totalShockMultiplier;
         
@@ -220,5 +181,58 @@ class MarketEngine
         $valuePerShare = $fcfPerShare * $multiplier;
 
         return max(0.01, $valuePerShare);
+    }
+
+    /**
+     * Calculates the macro-adjusted drift utilizing CAPM and transmission mechanisms.
+     *
+     * Adjusts the baseline drift by factoring in asymmetric sentiment (fear vs greed),
+     * the stagflation tax (inflation penalty), and liquidity drains (yield curve inversion).
+     *
+     * @param float $outputGap    The current macroeconomic output gap.
+     * @param float $inflation    The current inflation rate.
+     * @param float $nsSlope      The slope of the yield curve (Nelson-Siegel).
+     * @param float $drift        The expected baseline return.
+     * @param float $beta         The stock's beta (market sensitivity).
+     * @param float $riskFreeRate The current central bank policy rate.
+     * @return float The final calculated drift rate.
+     */
+    private function calculateMacroDrift(float $outputGap, float $inflation, float $nsSlope, float $drift, float $beta, float $riskFreeRate): float
+    {
+        $outputGapModifier = $outputGap > 0 ? ($outputGap * 0.5) : ($outputGap * 2.0);
+        $inflationPenalty = $inflation > 0.04 ? -($inflation - 0.04) * 1.5 : 0.0;
+        $yieldCurveInversionPenalty = min(0.0, $nsSlope) * 3.0;
+
+        $totalMarketPremium = $drift + $yieldCurveInversionPenalty + $outputGapModifier + $inflationPenalty;
+        return $riskFreeRate + ($totalMarketPremium * $beta);
+    }
+
+    /**
+     * Calculates the intrinsic fair value of the stock using P/E and DCF.
+     *
+     * Blends standard Price-to-Earnings (P/E) valuation with a Discounted Cash Flow (DCF)
+     * model if free cash flow is available. Provides a Graham-style hard floor based on book value.
+     *
+     * @param float $earningsPerShare  The current earnings per share (EPS).
+     * @param float $targetPE          The sector's target P/E ratio.
+     * @param float|null $fcfPerShare  The free cash flow per share, if available.
+     * @param float $riskFreeRate      The risk-free rate used for DCF discounting.
+     * @param float $beta              The stock's beta used for Cost of Equity.
+     * @param float $bookValuePerShare The physical equity value per share.
+     * @return float The calculated intrinsic fair value per share.
+     */
+    private function calculateFundamentalFairValue(float $earningsPerShare, float $targetPE, ?float $fcfPerShare, float $riskFreeRate, float $beta, float $bookValuePerShare): float
+    {
+        $peFairValue = $earningsPerShare * $targetPE;
+
+        if ($fcfPerShare !== null && $fcfPerShare > 0.0) {
+            $dcfFairValue = $this->calculateIntrinsicValueDCF($fcfPerShare, $riskFreeRate, $beta);
+            $earningsValue = ($peFairValue + $dcfFairValue) / 2.0;
+        } else {
+            $earningsValue = $peFairValue;
+        }
+
+        $fairValue = max($earningsValue, $bookValuePerShare * 0.80);
+        return max(0.01, $fairValue);
     }
 }

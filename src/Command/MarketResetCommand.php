@@ -38,6 +38,7 @@ class MarketResetCommand extends Command
         $conn->executeStatement('TRUNCATE TABLE etf_events');
         $conn->executeStatement('TRUNCATE TABLE user_stocks');
         $conn->executeStatement('TRUNCATE TABLE portfolio_history'); 
+        $conn->executeStatement('TRUNCATE TABLE corporate_report');
         
         $conn->executeStatement('UPDATE users SET cash_balance = 10000.00'); 
         $conn->executeStatement('SET FOREIGN_KEY_CHECKS = 1');
@@ -65,7 +66,7 @@ class MarketResetCommand extends Command
                     target_payout_ratio = :payout,
                     dividend_speed = :div_speed,
                     corporate_treasury = :treasury,
-                    debt_to_equity_ratio = :debt,
+                    total_debt = :total_debt,
                     operating_margin = :margin,
                     public_float_percentage = :float_pct,
                     total_net_income = :net_income,
@@ -88,7 +89,7 @@ class MarketResetCommand extends Command
                     'payout' => $stockData['target_payout_ratio'] ?? 0.30,
                     'div_speed' => $stockData['dividendSpeed'] ?? 0.20,
                     'treasury' => $stockData['corporate_treasury'] ?? 1000000000.00,
-                    'debt' => $stockData['debt_to_equity'] ?? 0.50,
+                    'total_debt' => $stockData['total_debt'] ?? 0.00,
                     'margin' => $stockData['operating_margin'] ?? 0.15,
                     'float_pct' => $stockData['public_float'] ?? 0.90,
                     'net_income' => $stockData['total_net_income'] ?? 0.00,

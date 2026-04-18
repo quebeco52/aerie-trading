@@ -71,6 +71,35 @@
 						<p>{{ generalInfo|nl2br }}</p>
 					</div>
 				</div>
+
+				{# --- FUNDAMENTALS DASHBOARD --- #}
+				{% if not isEtf %}
+					<div class="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 mt-2">
+
+						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+							<div class="flex justify-between items-center mb-6">
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface">Net Income Trend</h3>
+								<div class="flex space-x-2 bg-surface-container-lowest p-1 rounded-lg">
+									<button onclick="updateCharts('12Q')" id="btn-12Q" class="px-3 py-1 text-[10px] font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors uppercase tracking-widest">12Q</button>
+									<button onclick="updateCharts('5Y')" id="btn-5Y" class="px-3 py-1 text-[10px] font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors uppercase tracking-widest">5Y</button>
+								</div>
+							</div>
+							<div class="relative h-48 w-full">
+								<canvas id="netIncomeChart"></canvas>
+							</div>
+						</div>
+
+						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+							<div class="flex justify-between items-center mb-6">
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface">Debt vs. Equity</h3>
+							</div>
+							<div class="relative h-48 w-full">
+								<canvas id="debtEquityChart"></canvas>
+							</div>
+						</div>
+
+					</div>
+				{% endif %}
 			</div>
 
 			<div class="lg:col-span-4 space-y-6 lg:space-y-8">
@@ -160,6 +189,10 @@
 								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Book Value</dt>
 								<dd class="text-sm font-semibold text-on-surface" id="stat-equity">${{ asset.totalEquity|format_large }}</dd>
 							</div>
+							<div class="py-3 flex justify-between items-center">
+								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">D/E</dt>
+								<dd class="text-sm font-semibold text-on-surface" id="stat-debt-ratio">{{ asset.debtToEquityRatio|number_format(2) }}x</dd>
+							</div>
 						</dl>
 					</div>
 
@@ -220,17 +253,17 @@
 								</div>
 
 								{# YIELD CURVE #}
-                                <div>
-                                    <p class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant flex items-center gap-1">
-                                        10-Yr Yield
-                                        {% if macro.qe_active|default(false) %}
-                                            <span class="inline-flex w-2 h-2 rounded-full bg-secondary animate-pulse" title="Quantitative Easing Active"></span>
-                                        {% endif %}
-                                    </p>
-                                    <p class="text-lg font-bold {% if macro.qe_active|default(false) %}text-secondary{% else %}text-on-surface{% endif %}" id="macro-yield">
-                                        {{ (macro.yield_10y * 100)|number_format(2) }}%
-                                    </p>
-                                </div>
+								<div>
+									<p class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant flex items-center gap-1">
+										10-Yr Yield
+										{% if macro.qe_active|default(false) %}
+											<span class="inline-flex w-2 h-2 rounded-full bg-secondary animate-pulse" title="Quantitative Easing Active"></span>
+										{% endif %}
+									</p>
+									<p class="text-lg font-bold {% if macro.qe_active|default(false) %}text-secondary{% else %}text-on-surface{% endif %}" id="macro-yield">
+										{{ (macro.yield_10y * 100)|number_format(2) }}%
+									</p>
+								</div>
 							</div>
 
 							{# THE ECONOMIC STATUS BADGE #}

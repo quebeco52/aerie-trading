@@ -258,7 +258,8 @@ class MathUtility
             + ($theta * $sigma * $sigma / (2 * $kappa)) * pow(1 - $expKappaDt, 2);
 
         // Psi determines whether to use Quadratic or Exponential approximation
-        $psi = $m > 0 ? $s2 / ($m * $m) : 2.0;
+        // Clamped to a minimum of 1e-8 to prevent DivisionByZeroError if variance drops to absolute zero
+        $psi = $m > 0 ? max($s2 / ($m * $m), 1e-8) : 2.0;
 
         $nextVar = 0.0;
 

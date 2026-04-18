@@ -43,6 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const priceEl = document.getElementById(`price-${stock.ticker}`);
             const mcapEl = document.getElementById(`mcap-${stock.ticker}`);
             const rowEl = document.getElementById(`row-${stock.ticker}`);
+            const debtRatioEl = document.getElementById(`debt-ratio-${stock.ticker}`);
 
             if (priceEl && mcapEl && rowEl) {
                 // Get the old price to check if it went up or down

@@ -209,6 +209,11 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                 // Save Portfolio Snapshots once a "Simulation Week"
                 if ($tickCount % $snapshotInterval === 0) {
+                    // Force a flush to the DB if we haven't already, so the raw SQL query 
+                    // used by recordBulkSnapshots calculates against the latest live prices.
+                    if (!$isHistoryTick) {
+                        $this->entityManager->flush();
+                    }
                     $this->portfolio->recordBulkSnapshots();
                 }
 

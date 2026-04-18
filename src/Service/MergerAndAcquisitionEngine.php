@@ -23,75 +23,43 @@ class MergerAndAcquisitionEngine
     public function evaluatePrivateAcquisition(Stock $acquirer, array $macroState, float $dt): ?array
     {
         $treasury = (float) $acquirer->getCorporateTreasury();
-        $ticker = $acquirer->getTicker();
-        $outputGap = $macroState['output_gap'] ?? 0.0;
-
         $price = (float) $acquirer->getPrice();
         $shares = (float) $acquirer->getSharesOutstanding();
-        $marketCap = $price * $shares;
+        $debtRatio = (float) $acquirer->getDebtToEquityRatio();
 
-        // Is the company a Mega-Hoarder? (Cash > 25% of Market Cap AND > $50B)
-        $isHoarder = $treasury > ($marketCap * 0.25);
-        $isMegaHoarder = $treasury > ($marketCap * 0.50);
+        
+        $equity = (float) $acquirer->getTotalEquity();
+        $currentDebt = (float) $acquirer->getTotalDebt();
 
-        // =========================================================================
-        // LORE-ACCURATE HUNTING LOGIC (With Randomized Synergy Ranges)
-        // =========================================================================
+        // A company can borrow up to a hard maximum of 1.50x Debt-to-Equity.
 
+        $maxAllowableDebt = $equity * 2.50;
+        $borrowingCapacity = max(0.0, $maxAllowableDebt - $currentDebt);
+        
+        $totalBuyingPower = $treasury + $borrowingCapacity;
+
+        // Is the company a Mega-Hoarder? (Cash > 25% or 50% of Equity)
+        $isHoarder = $treasury > ($equity * 0.30);
+        $isMegaHoarder = $treasury > ($equity * 0.60);
+
+        // LORE-ACCURATE HUNTING LOGIC
+        
         $config = match (true) {
             $isMegaHoarder => [
-                'prob' => 6.00,
-                'spend' => 0.50,
-                'syn_min' => 0.85,
-                'syn_max' => 1.15,
-                'type' => 'CONGLOMERATE EXPANSION'
+                'prob' => 8.00, 'spend' => 0.50, 'syn_min' => 0.90, 'syn_max' => 1.15, 'type' => 'CONGLOMERATE EXPANSION', 'use_leverage' => false
             ],
-
             $isHoarder => [
-                'prob' => 2.50,
-                'spend' => 0.50,
-                'syn_min' => 0.85,
-                'syn_max' => 1.15,
-                'type' => 'CONGLOMERATE EXPANSION'
+                'prob' => 2.00, 'spend' => 0.50, 'syn_min' => 0.90, 'syn_max' => 1.15, 'type' => 'CONGLOMERATE EXPANSION', 'use_leverage' => false
             ],
-
-            // Black Swan: Always hunting. Ruthless asset strippers.
-            $ticker === 'SWAN' && $treasury > ($marketCap * 0.05) => [
-                'prob' => 7.00,
-                'spend' => 0.40,
-                'syn_min' => 1.00,
-                'syn_max' => 1.20,
-                'type' => 'HOSTILE TAKEOVER'
+            // If a company has a lazy balance sheet (< 25% D/E), they take on cheap debt to acquire a competitor.
+            $debtRatio < 0.20 && $totalBuyingPower > 5_000_000_000.0 => [
+                'prob' => 0.80, 'spend' => 0.25, 'syn_min' => 0.95, 'syn_max' => 1.25, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => true
             ],
-
-            // Owl Capital: Only hunts in deep recessions.
-            $ticker === 'OWLS' && $treasury > 50_000_000_000.0 && $outputGap < -0.025 => [
-                'prob' => 2.00,
-                'spend' => 0.70,
-                'syn_min' => 1.15,
-                'syn_max' => 1.20,
-                'type' => 'DISTRESSED BUYOUT'
-            ],
-
-            // Kingfisher: Only hunts in massive booms. Uses heavy leverage.
-            $ticker === 'KING' && $treasury > 2_000_000_000.0 && $outputGap > 0.025 => [
-                'prob' => 1.00,
-                'spend' => 0.80,
-                'syn_min' => 0.90,
-                'syn_max' => 1.10,
-                'type' => 'LEVERAGED BUYOUT'
-            ],
-
-            // Standard Mega-Corps expanding their footprint
+            // Standard Mega-Corps expanding their footprint using cash
             $treasury > 15_000_000_000.0 => [
-                'prob' => 0.10,
-                'spend' => 0.20,
-                'syn_min' => 0.90,
-                'syn_max' => 1.20,
-                'type' => 'STRATEGIC ACQUISITION'
+                'prob' => 0.20, 'spend' => 0.20, 'syn_min' => 0.90, 'syn_max' => 1.20, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => false
             ],
 
-            // Nothing triggered
             default => null,
         };
 
@@ -105,54 +73,52 @@ class MergerAndAcquisitionEngine
 
         // EXECUTE THE M&A DEAL
 
+        $minOperatingCash = $equity * 0.03;
+        $usableTreasury = max(0.0, $treasury - $minOperatingCash);
 
-        $purchasePrice = $treasury * (mt_rand(50, 100) / 100.0) * $config['spend'];
-        if ($purchasePrice < 1_000_000_000.0) return null; // Ignore tiny deals
+        // Determine the Purchase Price based on their strategy (Cash vs Leverage)
+        $availableCapital = $config['use_leverage'] ? ($usableTreasury + $borrowingCapacity) : $usableTreasury;
+        $purchasePrice = $availableCapital * (mt_rand(50, 100) / 100.0) * $config['spend'];
+        
+        if ($purchasePrice < 1_000_000_000.0) return null; 
 
         $target = $this->generateProceduralTarget();
 
-        // DRAIN THE CASH
-        $newTreasury = $treasury - $purchasePrice;
-        $acquirer->setCorporateTreasury((string) $newTreasury);
+        // 1. FUND THE DEAL (Drain Cash and/or Issue Debt)
+        if ($purchasePrice <= $usableTreasury) {
+            // Funded entirely with cash on hand
+            $acquirer->setCorporateTreasury((string) ($treasury - $purchasePrice));
+            $debtIssued = 0.0;
+        } else {
+            // Leveraged Buyout: Drain the usable treasury, borrow the rest!
+            $debtIssued = $purchasePrice - $usableTreasury;
+            $acquirer->setCorporateTreasury((string) ($treasury - $usableTreasury)); // Leaves min operating cash
+            $acquirer->setTotalDebt((string) ($currentDebt + $debtIssued));
+        }
 
-        // THE RANDOMIZED SYNERGY ROLL
+        //THE RANDOMIZED SYNERGY ROLL
         $minInt = (int) ($config['syn_min'] * 100);
         $maxInt = (int) ($config['syn_max'] * 100);
-        $synergyMultiplier = mt_rand($minInt, $maxInt) / 100.0;
+        $synergyMultiplier = mt_rand(min($minInt, $maxInt), max($minInt, $maxInt)) / 100.0;
 
-        // GOODWILL & CLEAN SURPLUS ACCOUNTING
-        // Swapped Cash for Assets. Base Equity remains identical.
-        // HOWEVER, must adjust Equity by the Synergy Premium/Discount (Goodwill Impairment).
+        //GOODWILL & CLEAN SURPLUS ACCOUNTING
         $synergyValueCreation = $purchasePrice * ($synergyMultiplier - 1.0);
-
-        $currentEquity = (float) $acquirer->getTotalEquity();
-        $newEquity = $currentEquity + $synergyValueCreation;
+        $newEquity = $equity + $synergyValueCreation;
         $acquirer->setTotalEquity((string) max(10.0, $newEquity));
 
-        // BOOST OR DESTROY RETURN ON INVESTED CAPITAL (ROIC)
+        //BOOST OR DESTROY RETURN ON INVESTED CAPITAL (ROIC)
         $currentRoic = (float) $acquirer->getCurrentRoic() ?: (float) $acquirer->getBaselineRoic();
-        $roicBump = ($synergyMultiplier - 1.0) * 0.05;
+        $roicBump = ($synergyMultiplier - 1.0) * 0.05; 
         $acquirer->setCurrentRoic((string) max(-0.10, $currentRoic + $roicBump));
 
-        // GENERATE THE MARKET EVENT & PRICE SHOCK
+        //GENERATE THE MARKET EVENT & PRICE SHOCK
         $purchasePriceB = number_format($purchasePrice / 1_000_000_000, 1);
-        $desc = "";
+        $desc = "{$acquirer->getName()} executed a \${$purchasePriceB}B {$config['type']} of {$target['name']}.";
 
         if ($synergyMultiplier < 1.0) {
-            // Bad deal
-            $desc = "{$acquirer->getName()} executed a \${$purchasePriceB}B {$config['type']} of {$target['name']}.";
-            $shockValue = -1.0 * (mt_rand(200, 600) / 100.0); // 2% to 6% gap DOWN
+            $shockValue = -1.0 * (mt_rand(200, 600) / 100.0); 
         } else {
-            // A successful deal.
-            if ($config['type'] === 'HOSTILE TAKEOVER') {
-                $desc = "{$acquirer->getName()} executed a ruthless hostile takeover of {$target['name']} for \${$purchasePriceB}B, initiating immediate asset stripping.";
-            } elseif ($config['type'] === 'CONGLOMERATE EXPANSION') {
-                $desc = "Deploying its cash reserves, {$acquirer->getName()} went on an acquisition spree, buying {$target['name']} for \${$purchasePriceB}B.";
-            } elseif ($config['type'] === 'DISTRESSED BUYOUT') {
-                $desc = "Capitalizing on panic, {$acquirer->getName()} secured {$target['name']} in a highly lucrative distressed buyout for \${$purchasePriceB}B.";
-            } else {
-                $desc = "{$acquirer->getName()} announced the {$config['type']} of {$target['name']} for \${$purchasePriceB}B, unlocking massive synergies.";
-            }
+            $marketCap = $price * $shares;
             $calculatedShock = ($synergyValueCreation / max($marketCap, 1)) * 100;
             $shockValue = min(15.0, max(2.0, $calculatedShock));
         }
@@ -230,7 +196,6 @@ class MergerAndAcquisitionEngine
         $seller->setCorporateTreasury((string) ($currentTreasury + $salePrice));
 
         // SHED THE EARNINGS & THE PHYSICAL EQUITY BLOAT
-        // By removing the max(0) floor, shedding 50% of a -$1B loss naturally reduces it to a -$500M loss.
         $seller->setTotalNetIncome((string) ($netIncome - $lostNetIncome));
 
         $newEquity = $currentEquity - $lostEquity + $salePrice;
@@ -244,12 +209,11 @@ class MergerAndAcquisitionEngine
 
         // GENERATE THE MARKET EVENT
         $salePriceB = number_format($salePrice / 1_000_000_000, 1);
+        $desc = "{$seller->getName()} executed a \${$salePriceB}B DIVESTITURE.";
 
         if ($isDistressed) {
-            $desc = "Suffocating under corporate bloat and poor returns, {$seller->getName()} executed an emergency fire-sale of major divisions for \${$salePriceB}B to save the core business.";
             $shockValue = mt_rand(300, 600) / 100.0; // Market cheers the massive restructuring (3% to 6% gap up)
         } else {
-            $desc = "{$seller->getName()} has divested a non-core business unit for \${$salePriceB}B in cash, shedding dead weight to boost capital efficiency.";
             $shockValue = mt_rand(100, 300) / 100.0; // Standard 1% to 3% positive price gap
         }
 
