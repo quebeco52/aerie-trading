@@ -64,7 +64,7 @@ class Stock
      * @var string The operating profit margin (e.g., 0.15 for 15%).
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, options: ['default' => '0.1500'])]
-    private string $operatingMargin = '0.1500';
+    private string $operatingMargin = '0.2000';
 
     /**
      * @var string The percentage of shares available for public trading.
@@ -77,6 +77,12 @@ class Stock
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
     private string $totalNetIncome = '0.0000';
+
+    /**
+     * @var string Absolute total revenue.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $totalRevenue = '0.0000';
 
     /**
      * @var string|null Absolute total free cash flow (FCF). Used to mathematically derive FCF per share.
@@ -105,14 +111,17 @@ class Stock
     /**
      * @var string The risk premium this company pays over the Central Bank policy rate.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.0200'])]
-    private string $creditSpread = '0.0200';
+    #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.0100'])]
+    private string $creditSpread = '0.0100';
 
     /**
      * @var string The percentage of Total Debt that is subject to variable/floating interest rates.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.3000'])]
     private string $floatingDebtRatio = '0.3000';
+
+    #[ORM\Column(type: 'decimal', precision: 5, scale: 4, options: ['default' => '0.0200'])]
+    private string $historicalFixedRate = '0.0200';
 
     /**
      * @var string Intangible assets and premiums paid during M&A (Goodwill).
@@ -219,6 +228,9 @@ class Stock
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
     private string $buybackAuthorization = '0.0000';
+
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $fixedCostRatio = null;
 
 
     public function getId(): ?int
@@ -560,7 +572,32 @@ class Stock
         $this->floatingDebtRatio = $floatingDebtRatio;
 
         return $this;
-    }  
+    }
+
+    public function setFixedCostRatio(?float $fixedCostRatio): self
+    {
+        $this->fixedCostRatio = $fixedCostRatio;
+        return $this;
+    }
+
+    public function getFixedCostRatio(): float
+    {
+        // If we specifically set a ratio for this company in the DB, use it!
+        if ($this->fixedCostRatio !== null) {
+            return $this->fixedCostRatio;
+        }
+
+        // Otherwise, fall back to the macroeconomic reality of their Sector
+        return match ($this->getSector()) {
+            'Information Technology', 'Communication Services' => 0.75, // Heavy R&D, servers
+            'Utilities', 'Real Estate' => 0.65,                         // Heavy infrastructure
+            'Healthcare' => 0.55,                                       // Pharma R&D vs Pill manufacturing
+            'Financials' => 0.40,                                       // Moderate fixed overhead
+            'Industrials', 'Materials', 'Energy' => 0.30,               // Heavy variable material costs
+            'Consumer Discretionary', 'Consumer Staples' => 0.15,       // Buying and selling physical inventory
+            default => 0.35,
+        };
+    }
 
     // --- BRIDGE METHODS ---
 
@@ -650,11 +687,13 @@ class Stock
      */
     public function getTotalRevenue(): string 
     {
-        $margin = (float) $this->operatingMargin;
-        if ($margin == 0.0) return '0.0000';
-        
-        $revenue = (float) $this->totalNetIncome / $margin;
-        return (string) round($revenue, 4); 
+        return $this->totalRevenue;
+    }
+
+    public function setTotalRevenue(string $totalRevenue): static
+    {
+        $this->totalRevenue = $totalRevenue;
+        return $this;
     }
 
     /**
@@ -679,6 +718,18 @@ class Stock
         $debt = (float) $this->totalDebt;
         
         return (string) round($debt / $equity, 4);
+    }
+
+    public function getHistoricalFixedRate(): ?string
+    {
+        return $this->historicalFixedRate;
+    }
+
+    public function setHistoricalFixedRate(string $historicalFixedRate): static
+    {
+        $this->historicalFixedRate = $historicalFixedRate;
+
+        return $this;
     }
 
 }

@@ -40,6 +40,24 @@ class CorporateReport
     #[ORM\Column(type: Types::DATETIME_MUTABLE)]
     private \DateTimeInterface $recordedAt;
 
+    #[ORM\Column(type: 'decimal', precision: 20, scale: 4)]
+    private string $interestExpense = '0.0000';
+
+    #[ORM\Column(type: 'decimal', precision: 10, scale: 6)]
+    private string $blendedRate = '0.000000';
+
+    #[ORM\Column(type: 'decimal', precision: 10, scale: 6)]
+    private string $dynamicSpread = '0.000000';
+
+    #[ORM\Column(type: 'decimal', precision: 20, scale: 4)]
+    private string $revenue = '0.0000';
+
+    #[ORM\Column(type: 'decimal', precision: 20, scale: 4)]
+    private string $interestIncome = '0.0000';
+
+    #[ORM\Column(type: 'decimal', precision: 20, scale: 4)]
+    private string $capitalExpenditures = '0.0000';
+
     public function __construct()
     {
         $this->recordedAt = new \DateTime();
@@ -135,6 +153,78 @@ class CorporateReport
     public function setTotalDebt(?string $totalDebt): static
     {
         $this->totalDebt = $totalDebt;
+
+        return $this;
+    }
+
+    public function getInterestExpense(): ?string
+    {
+        return $this->interestExpense;
+    }
+
+    public function setInterestExpense(string $interestExpense): static
+    {
+        $this->interestExpense = $interestExpense;
+
+        return $this;
+    }
+
+    public function getBlendedRate(): ?string
+    {
+        return $this->blendedRate;
+    }
+
+    public function setBlendedRate(string $blendedRate): static
+    {
+        $this->blendedRate = $blendedRate;
+
+        return $this;
+    }
+
+    public function getDynamicSpread(): ?string
+    {
+        return $this->dynamicSpread;
+    }
+
+    public function setDynamicSpread(string $dynamicSpread): static
+    {
+        $this->dynamicSpread = $dynamicSpread;
+
+        return $this;
+    }
+
+    public function getRevenue(): ?string
+    {
+        return $this->revenue;
+    }
+
+    public function setRevenue(string $revenue): static
+    {
+        $this->revenue = $revenue;
+
+        return $this;
+    }
+
+    public function getInterestIncome(): ?string
+    {
+        return $this->interestIncome;
+    }
+
+    public function setInterestIncome(string $interestIncome): static
+    {
+        $this->interestIncome = $interestIncome;
+
+        return $this;
+    }
+
+    public function getCapitalExpenditures(): ?string
+    {
+        return $this->capitalExpenditures;
+    }
+
+    public function setCapitalExpenditures(string $capitalExpenditures): static
+    {
+        $this->capitalExpenditures = $capitalExpenditures;
 
         return $this;
     }

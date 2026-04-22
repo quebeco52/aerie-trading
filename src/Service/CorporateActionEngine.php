@@ -21,6 +21,7 @@ class CorporateActionEngine
     public function __construct(
         private EntityManagerInterface $entityManager,
         private MarketEvent $marketEvent,
+        private DebtEngine $debtEngine,
         private \Redis $redis
     ) {}
 
@@ -78,9 +79,12 @@ class CorporateActionEngine
         }
 
         $sharesOutstanding *= $splitFactor;
-        
+
         $stock->setSharesOutstanding((string) $sharesOutstanding);
         $stock->setPrice((string) $newPrice);
+
+        $oldDiv = (float) $stock->getLastDividend();
+        $stock->setLastDividend((string) ($oldDiv / $splitFactor));
 
         $desc = "{$stock->getName()} has executed a {$splitFactor}-for-1 stock split.";
         $splitEvent = $this->marketEvent->publish($stock, 'SPLIT', $desc, 0.00);
@@ -113,7 +117,7 @@ class CorporateActionEngine
     private function executeReverseSplit(Stock $stock, float $newPrice, float $sharesOutstanding): array
     {
         $reverseFactor = 1;
-        $preSplitPrice = $newPrice; 
+        $preSplitPrice = $newPrice;
 
         while ($newPrice < 2.0) {
             $newPrice = $newPrice * 10.0;
@@ -121,9 +125,12 @@ class CorporateActionEngine
         }
 
         $sharesOutstanding = max(1.0, $sharesOutstanding / $reverseFactor);
-        
+
         $stock->setSharesOutstanding((string) $sharesOutstanding);
         $stock->setPrice((string) $newPrice);
+
+        $oldDiv = (float) $stock->getLastDividend();
+        $stock->setLastDividend((string) ($oldDiv * $reverseFactor));
 
         $desc = "{$stock->getName()} executed a 1-for-{$reverseFactor} reverse split.";
         $splitEvent = $this->marketEvent->publish($stock, 'REVSPLIT', $desc, 0.00);
@@ -168,11 +175,11 @@ class CorporateActionEngine
     {
         $cacheKey = "chart_buffer:{$ticker}";
         $redisData = $this->redis->lRange($cacheKey, 0, -1);
-        
+
         if (empty($redisData)) return;
 
         $this->redis->del($cacheKey);
-        
+
         foreach (array_reverse($redisData) as $jsonStr) {
             $point = json_decode($jsonStr, true);
             if ($operation === 'divide') {
@@ -200,69 +207,106 @@ class CorporateActionEngine
      * @return array{new_shares: float, dividend_paid: float, events: array<mixed>} Data regarding the capital allocation.
      */
     public function allocateCapital(
-        Stock $stock, 
-        float $actualAnnualEps, 
-        float $quarterlyFcfPerShare, 
-        float $currentPrice, 
+        Stock $stock,
+        float $actualAnnualEps,
+        float $quarterlyFcfPerShare,
+        float $currentPrice,
         float $sharesOutstanding,
-        float $liveTargetPE
+        float $liveTargetPE,
+        array $macroState
     ): array {
         $events = [];
         $oldShares = $sharesOutstanding;
         $quarterlyEps = $actualAnnualEps / 4.0;
+        $currentTreasury = (float) $stock->getCorporateTreasury();
 
-        $divData = $this->executeDividends($stock, $quarterlyEps, $quarterlyFcfPerShare, $oldShares, $currentPrice);
+        $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState);
+
+        // CALCULATE BASELINE CASH CHANGES
+        // Add the FCF generated this quarter to the treasury immediately so we know what we can spend
+        $totalFcfGenerated = $quarterlyFcfPerShare * $oldShares;
+        $newTreasury = $currentTreasury + $totalFcfGenerated;
+
+        // EXECUTE DIVIDENDS
+        $equity = (float) $stock->getTotalEquity();
+        $divData = $this->executeDividends($stock, $quarterlyEps, $oldShares, $currentPrice, $newTreasury, $equity);
         if ($divData['event']) $events[] = $divData['event'];
 
+        // Subtract the dividend cash from our working treasury
+        $newTreasury -= $divData['total_paid'];
+
+        // CALCULATE EXCESS CASH (The War Chest)
+        $targetOperatingCash = $equity * 0.05; // 5% of Equity is the required buffer
+        $excessCash = max(0.0, $newTreasury - $targetOperatingCash);
+
+        $currentPE = $actualAnnualEps > 0 ? ($currentPrice / $actualAnnualEps) : 9999.0;
+
+
+        // THE TRADING DESK: EXECUTE BUYBACKS
         $buybackData = $this->executeBuybacks(
-            $stock, 
-            $quarterlyFcfPerShare, 
-            $divData['dividend_per_share'], 
-            $oldShares, 
-            $currentPrice, 
-            $actualAnnualEps, 
-            $liveTargetPE
+            $stock,
+            $excessCash,
+            $oldShares,
+            $currentPrice,
+            $currentPE,
+            $liveTargetPE,
+            $health
         );
         if ($buybackData['event']) $events[] = $buybackData['event'];
 
+        // Subtract the buyback cash from our working treasury
+        $newTreasury -= $buybackData['total_cash_spent'];
+
+        // UPDATE THE BALANCE SHEET
         $this->updateBalanceSheet(
             stock: $stock,
             quarterlyNetIncome: $quarterlyEps * $oldShares,
             totalDividendsPaid: $divData['total_paid'],
             totalBuybackCash: $buybackData['total_cash_spent'],
-            totalFcfGenerated: $quarterlyFcfPerShare * $oldShares,
-            currentPrice: $currentPrice,
-            newSharesOutstanding: $buybackData['new_shares']
+            newTreasury: $newTreasury,
+            macroState: $macroState,
+            health: $health
         );
 
         return [
             'new_shares' => $buybackData['new_shares'],
             'dividend_paid' => $divData['dividend_per_share'],
+            'total_paid' => $divData['total_paid'],
+            'total_cash_spent' => $buybackData['total_cash_spent'],
             'events' => $events
         ];
     }
 
-
-
     /**
-     * Calculates and distributes the quarterly dividend using a Lintner-style partial adjustment model.
+     * Calculates and distributes the quarterly dividend.
+     * Uses the Lintner model to smoothly adjust the dividend towards the target payout ratio,
+     * bounded by the actual Free Cash Flow generated.
      *
-     * @param Stock $stock The stock paying the dividend.
-     * @param float $quarterlyEps Quarterly earnings per share.
-     * @param float $quarterlyFcfPerShare Quarterly free cash flow per share.
-     * @param float $shares Total shares outstanding.
-     * @param float $currentPrice Current market price (used for yield calculation).
-     * @return array{dividend_per_share: float, total_paid: float, event: array|null}
+     * @param Stock $stock                The stock distributing the dividend.
+     * @param float $quarterlyEps         The quarterly earnings per share.
+     * @param float $shares               The number of outstanding shares.
+     * @param float $currentPrice         The current stock price.
+     * @param float $availableTreasury    The total cash currently available to the company.
+     * @param float $equity               The total equity of the company (used for safety buffers).
+     * @return array{dividend_per_share: float, total_paid: float, event: array|null} Data regarding the dividend execution.
      */
-    private function executeDividends(Stock $stock, float $quarterlyEps, float $quarterlyFcfPerShare, float $shares, float $currentPrice): array
+    private function executeDividends(Stock $stock, float $quarterlyEps, float $shares, float $currentPrice, float $availableTreasury, float $equity): array
     {
         $targetPayout = (float) $stock->getTargetPayoutRatio();
         $speed = (float) $stock->getDividendSpeed();
         $lastDividend = (float) $stock->getLastDividend();
 
+        // Target is based on EPS (Net Income)
         $targetDividend = $quarterlyEps > 0 ? ($quarterlyEps * $targetPayout) : 0.0;
         $newDividend = $lastDividend + ($speed * ($targetDividend - $lastDividend));
-        $newDividend = min(max(0.0, $newDividend), max(0.0, $quarterlyFcfPerShare));
+        $newDividend = max(0.0, $newDividend);
+
+        // Cap the dividend to what we can physically pay from cash on hand (minus a 3% operating safety buffer)
+        $minOperatingCash = $equity * 0.03;
+        $usableCash = max(0.0, $availableTreasury - $minOperatingCash);
+        $maxDividendPerShare = $shares > 0 ? ($usableCash / $shares) : 0.0;
+        
+        $newDividend = min($newDividend, $maxDividendPerShare);
 
         $totalPaid = $newDividend * $shares;
         $event = null;
@@ -287,64 +331,81 @@ class CorporateActionEngine
     }
 
     /**
-     * Executes a stock buyback program using remaining Free Cash Flow.
+     * Executes share repurchases
+     * Respects volume pacing limits and SEC-style regulations (max 2% of float per quarter)
+     * to realistically drain the authorized buyback pool.
      *
-     * @param Stock $stock            The stock entity.
-     * @param float $fcfPerShare      The quarterly Free Cash Flow per share.
-     * @param float $dividendPerShare The dividend already allocated per share.
-     * @param float $shares           The current shares outstanding.
-     * @param float $currentPrice     The current market price.
-     * @param float $annualEps        The actual annualized EPS.
-     * @param float $targetPE         The sector's target P/E ratio.
-     * @return array{new_shares: float, total_cash_spent: float, event: array|null} Buyback execution details.
+     * @param Stock $stock        The stock repurchasing shares.
+     * @param float $currentAuth  The currently authorized buyback dollar amount.
+     * @param float $excessCash   The excess cash available in the treasury.
+     * @param float $shares       The current number of outstanding shares.
+     * @param float $currentPrice The current stock price.
+     * @param float $currentPE    The current Price-to-Earnings ratio.
+     * @param float $targetPE     The target Price-to-Earnings ratio for the sector.
+     * @return array{new_shares: float, total_cash_spent: float, event: array|null} Data regarding the buyback execution.
      */
-    private function executeBuybacks(Stock $stock, float $fcfPerShare, float $dividendPerShare, float $shares, float $currentPrice, float $annualEps, float $targetPE): array
+    private function executeBuybacks(Stock $stock, float $excessCash, float $shares, float $currentPrice, float $currentPE, float $targetPE, array $health): array
     {
-        $remainingFcfPerShare = $fcfPerShare - $dividendPerShare;
-        $currentPE = $annualEps > 0 ? ($currentPrice / $annualEps) : 9999;
-        
         $totalCashSpent = 0.0;
         $event = null;
-        
-        if ($remainingFcfPerShare > 0.0 && $currentPE < ($targetPE + 2.0)) {
-            $maxCash = $remainingFcfPerShare * $shares;
-            $sharesRepurchased = (int) ($maxCash / max($currentPrice, 0.01));
-            $sharesRepurchased = min($sharesRepurchased, (int) ($shares * 0.015));
+
+        $earningsYield = $currentPE > 0 ? (1.0 / $currentPE) : 0.0;
+        $costOfDebt = $health['effective_cost'];
+
+        $isAccretive = $earningsYield > ($costOfDebt + 0.01);
+
+        // Only buy if the stock is relatively cheap, and we have significant excess cash
+        if ($isAccretive || $currentPE < ($targetPE + 5.0)) {
+
+            // The CFO's Cash Limit (Max 50% of Excess Cash)
+            $maxWillingSpend = $excessCash * 0.50;
+
+            // The SEC/Regulatory Limit (Max 2% of total float)
+            $maxSharesToRetire = $shares * 0.02;
+            $maxRegulatorySpend = $maxSharesToRetire * max($currentPrice, 0.01);
+
+            // The Absolute Maximum Plan
+            $absoluteMaxSpend = min($maxWillingSpend, $maxRegulatorySpend);
+
+            // THE TRADING DESK: Execute the buyback over the quarter.
+            $actualSpend = $absoluteMaxSpend * (mt_rand(25, 100) / 100.0);
+
+            $sharesRepurchased = (int) floor($actualSpend / max($currentPrice, 0.01));
 
             if ($sharesRepurchased > 0) {
+                $totalCashSpent = $sharesRepurchased * max($currentPrice, 0.01);
+
                 $shares -= $sharesRepurchased;
                 $stock->setSharesOutstanding((string) $shares);
-                
-                $totalCashSpent = $sharesRepurchased * max($currentPrice, 0.01);
+
                 $pctRetired = ($sharesRepurchased / ($shares + $sharesRepurchased)) * 100;
-                
-                $event = $this->marketEvent->publish($stock, 'BUYBACK', "{$stock->getTicker()} executed a stock buyback, retiring " . number_format($sharesRepurchased) . " shares.", $pctRetired);
+                $event = $this->marketEvent->publish($stock, 'BUYBACK', "{$stock->getTicker()} executed a stock buyback, retiring " . number_format($sharesRepurchased) . " shares.", $pctRetired * 0.5);
             }
         }
 
         return ['new_shares' => $shares, 'total_cash_spent' => $totalCashSpent, 'event' => $event];
     }
 
-
     /**
      * Updates the corporate balance sheet using Clean Surplus Accounting principles.
+     * Handles retained earnings, total equity, and dynamically manages debt levels
+     * (triggering emergency borrowing during liquidity crises or sweeping excess cash to pay down debt).
      *
-     * @param Stock $stock                The stock entity to update.
-     * @param float $quarterlyNetIncome   The absolute net income generated this quarter.
-     * @param float $totalDividendsPaid   The absolute total cash paid out as dividends.
-     * @param float $totalBuybackCash     The absolute total cash spent on buybacks.
-     * @param float $totalFcfGenerated    The absolute total Free Cash Flow generated.
-     * @param float $currentPrice         The current market price of the stock.
-     * @param float $newSharesOutstanding The new total shares outstanding after buybacks.
+     * @param Stock $stock              The stock whose balance sheet is being updated.
+     * @param float $quarterlyNetIncome The total net income generated this quarter.
+     * @param float $totalDividendsPaid The total cash distributed as dividends.
+     * @param float $totalBuybackCash   The total cash spent on share repurchases.
+     * @param float $newTreasury        The projected treasury balance before debt management.
+     * @param array $macroState         The current macroeconomic state (influences debt tolerance).
      */
     private function updateBalanceSheet(
-        Stock $stock, 
-        float $quarterlyNetIncome, 
-        float $totalDividendsPaid, 
-        float $totalBuybackCash, 
-        float $totalFcfGenerated,
-        float $currentPrice,
-        float $newSharesOutstanding
+        Stock $stock,
+        float $quarterlyNetIncome,
+        float $totalDividendsPaid,
+        float $totalBuybackCash,
+        float $newTreasury,
+        array $macroState,
+        array $health
     ): void {
         $totalCashSpent = $totalDividendsPaid + $totalBuybackCash;
 
@@ -355,51 +416,91 @@ class CorporateActionEngine
 
         // TOTAL EQUITY (Clean Surplus Accounting)
         $currentEquity = (float) $stock->getTotalEquity();
-        $newEquity = $currentEquity + $quarterlyNetIncome - $totalCashSpent;
-        $stock->setTotalEquity((string) max(1000.0, $newEquity));
+        $newEquity = max(1000.0, $currentEquity + $quarterlyNetIncome - $totalCashSpent);
+        $stock->setTotalEquity((string) $newEquity);
 
-        // CASH UPDATES
-        $netCashChange = $totalFcfGenerated - $totalCashSpent;
-        $currentTreasury = (float) $stock->getCorporateTreasury();
-        $newTreasury = $currentTreasury + $netCashChange;
-
+        // DEBT MANAGEMENT (MACRO TOLERANCE)
         $currentDebt = (float) $stock->getTotalDebt();
+        $targetOperatingCash = $newEquity * 0.05;
+        $minOperatingCash = $newEquity * 0.03;
 
-        // THE CORPORATE TREASURY AI (Target Working Capital Zone)
-        
-        $minOperatingCash = $newEquity * 0.03; // The 3% Survival Floor
-        $targetOperatingCash = $newEquity * 0.05; // The 5% Comfort Ceiling
+        $roic = (float) $stock->getCurrentRoic();
+        $costOfDebt = $health['effective_cost'];
+
+        if ($roic > ($costOfDebt + 0.04) && $health['can_issue_debt']) {
+            
+            // How much debt can they comfortably take on without triggering a downgrade?
+            $expansionCapacity = ($newEquity * $health['debt_tolerance']) - $currentDebt;
+            
+            if ($expansionCapacity > 0) {
+                // They take down up to 10% of their total borrowing capacity this quarter to fund expansion
+                $newDebtIssued = $expansionCapacity * 0.10;
+                
+                // Add the debt to the balance sheet
+                $currentDebt += $newDebtIssued;
+                $stock->setTotalDebt((string) $currentDebt);
+                
+            }
+        }
+
+        // If debt is severely expensive, pay it down!
+        if ($health['wants_to_paydown_debt'] && $currentDebt > 0 && $newTreasury > $targetOperatingCash) {
+            
+            $arbitragePaydown = ($newTreasury - $targetOperatingCash) * 0.50;
+            $actualPaydown = min($arbitragePaydown, $currentDebt);
+
+            $currentDebt -= $actualPaydown;
+            $stock->setTotalDebt((string) $currentDebt);
+            $newTreasury -= $actualPaydown;
+        }
 
         // THE DEBT TRAP (Liquidity Crisis)
         if ($newTreasury < $minOperatingCash) {
-            // They must borrow enough to cover the deficit PLUS restore their 3% buffer.
-            // Example: If Treasury is -$1B, and min cash is $3B, they borrow $4B.
             $cashShortfall = $minOperatingCash - $newTreasury;
+            $newTotalDebt = $currentDebt + $cashShortfall;
             
-            $stock->setTotalDebt((string) ($currentDebt + $cashShortfall));
-            
-            // Treasury is restored exactly to the minimum survival floor
+            // Re-price the interest rate for this emergency borrowing!
+            if ($newTotalDebt > 0) {
+                $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+                $dynamicSpread = $health['raw_metrics']['dynamic_spread'] ?? (float) $stock->getCreditSpread();
+                
+                // Emergency debt comes with a severe penalty (e.g., +200 bps)
+                $costOfEmergencyDebt = $policyRate + $dynamicSpread + 0.02;
+                
+                $oldHistoricalRate = (float) $stock->getHistoricalFixedRate();
+                $weightedRate = (($currentDebt * $oldHistoricalRate) + ($cashShortfall * $costOfEmergencyDebt)) / $newTotalDebt;
+                $stock->setHistoricalFixedRate((string) $weightedRate);
+            }
+
+            $currentDebt = $newTotalDebt;
+            $stock->setTotalDebt((string) $currentDebt);
             $newTreasury = $minOperatingCash;
-        } 
-        // THE DELEVERAGING SWEEP (Excess Cash Management)
+        }
+        // THE DELEVERAGING SWEEP (Macro-Driven Cash Management)
         elseif ($currentDebt > 0.0 && $newTreasury > $targetOperatingCash) {
-            
             $excessCash = $newTreasury - $targetOperatingCash;
             $currentDebtRatio = $currentDebt / max(1.0, $newEquity);
-            
-            // Only actively pay down debt if they are moderately/highly leveraged (D/E > 1.50)
-            if ($currentDebtRatio > 1.50) {
-                // Calculate the exact dollar amount needed to drop the D/E ratio down to a healthy 0.40x
-                $targetDebt = $newEquity * 0.40;
+
+            // TOLERANCE FROM THE CENTRALIZED BRAIN
+            $macroDebtTolerance = $health['debt_tolerance'];
+
+            // Detect if M&A or equity destruction pushed them into the penalty box
+            $isJunkBondStatus = $currentDebtRatio > 2.0;
+
+            if ($currentDebtRatio > $macroDebtTolerance || $isJunkBondStatus) {
+                $targetRatio = $isJunkBondStatus ? 1.80 : max(0.10, $macroDebtTolerance - 0.20);
+                $targetDebt = $newEquity * $targetRatio;
                 $debtToPayOff = min($excessCash, $currentDebt - $targetDebt);
-                
+
                 if ($debtToPayOff > 0) {
-                    $stock->setTotalDebt((string) ($currentDebt - $debtToPayOff));
+                    $currentDebt -= $debtToPayOff;
+                    $stock->setTotalDebt((string) $currentDebt);
                     $newTreasury -= $debtToPayOff;
                 }
             }
         }
-        
+
+        // SAVE FINAL TREASURY
         $stock->setCorporateTreasury((string) $newTreasury);
     }
 }

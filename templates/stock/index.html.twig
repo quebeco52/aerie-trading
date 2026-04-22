@@ -81,7 +81,7 @@
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface">Net Income Trend</h3>
 								<div class="flex space-x-2 bg-surface-container-lowest p-1 rounded-lg">
 									<button onclick="updateCharts('12Q')" id="btn-12Q" class="px-3 py-1 text-[10px] font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors uppercase tracking-widest">12Q</button>
-									<button onclick="updateCharts('5Y')" id="btn-5Y" class="px-3 py-1 text-[10px] font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors uppercase tracking-widest">5Y</button>
+									<button onclick="updateCharts('5Y')" id="btn-5Y" class="px-3 py-1 text-[10px] font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors uppercase tracking-widest">12Y</button>
 								</div>
 							</div>
 							<div class="relative h-48 w-full">
@@ -91,10 +91,19 @@
 
 						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
 							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface">Debt vs. Equity</h3>
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface">Debt vs Equity</h3>
 							</div>
 							<div class="relative h-48 w-full">
 								<canvas id="debtEquityChart"></canvas>
+							</div>
+						</div>
+
+						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+							<div class="flex justify-between items-center mb-6">
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface">Credit Health & Maturity Wall</h3>
+							</div>
+							<div class="relative h-48 w-full">
+								<canvas id="creditHealthChart"></canvas>
 							</div>
 						</div>
 

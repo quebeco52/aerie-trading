@@ -7,11 +7,12 @@ const TICKS_PER_YEAR = window.AERIE_DATA.ticksPerYear || 54000;
 const SECONDS_PER_TICK = Math.round(31536000 / TICKS_PER_YEAR);
 
 let rawReports = [];
-let netIncomeChartInstance = null;
+let profitEngineChartInstance = null;
 let debtEquityChartInstance = null;
+let creditHealthChartInstance = null;
 
-Chart.defaults.color = '#c2c6d6'; // text-on-surface-variant
-Chart.defaults.scale.grid.color = 'rgba(45, 52, 73, 0.4)'; // subtle grid lines
+Chart.defaults.color = '#c2c6d6';
+Chart.defaults.scale.grid.color = 'rgba(45, 52, 73, 0.4)';
 Chart.defaults.font.family = '"Courier Prime", monospace';
 
 const COLORS = {
@@ -23,10 +24,18 @@ const COLORS = {
 
 
 function formatLarge(num) {
-    if (num >= 1000000000000) return (num / 1000000000000).toFixed(2) + 'T';
-    if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'B';
-    if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
-    return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (num === null || num === undefined) return '0.00';
+
+    const isNegative = num < 0;
+    const absNum = Math.abs(num);
+
+    let formatted;
+    if (absNum >= 1000000000000) formatted = (absNum / 1000000000000).toFixed(2) + 'T';
+    else if (absNum >= 1000000000) formatted = (absNum / 1000000000).toFixed(2) + 'B';
+    else if (absNum >= 1000000) formatted = (absNum / 1000000).toFixed(2) + 'M';
+    else formatted = absNum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    return isNegative ? '-' + formatted : formatted;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -100,7 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // 2. Update the Current Cycle Badge
+        // Update the Current Cycle Badge
         if (payload.economic_cycle) {
             const cycleEl = document.getElementById('market-economic-cycle');
             if (cycleEl) cycleEl.textContent = payload.economic_cycle;
@@ -213,7 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(res => res.json())
             .then(data => {
                 rawReports = data;
-                updateCharts('5Y'); // Default view
+                updateCharts('5Y');
             })
             .catch(err => console.error("Failed to load fundamentals:", err));
     }
@@ -259,7 +268,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (document.getElementById('stat-pe')) {
                 document.getElementById('stat-pe').innerText = currentEps > 0 ? (newPrice / currentEps).toFixed(2) : '0.00';
             }
-            if (document.getElementById('stat-debt-ratio')){
+            if (document.getElementById('stat-debt-ratio')) {
                 document.getElementById('stat-debt-ratio').innerText = stockUpdate.debt_ratio.toFixed(2) + 'x';
             }
 
@@ -394,9 +403,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// ==========================================
 // FUNDAMENTAL CHARTING LOGIC
-// ==========================================
 
 function updateCharts(timeframe) {
     if (!rawReports || rawReports.length === 0) return;
@@ -404,7 +411,7 @@ function updateCharts(timeframe) {
     // Update button styles to match your UI
     const btn12Q = document.getElementById('btn-12Q');
     const btn5Y = document.getElementById('btn-5Y');
-    
+
     if (timeframe === '12Q') {
         btn12Q.className = 'px-3 py-1 text-[10px] font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors uppercase tracking-widest';
         btn5Y.className = 'px-3 py-1 text-[10px] font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors uppercase tracking-widest';
@@ -414,69 +421,115 @@ function updateCharts(timeframe) {
     }
 
     let labels = [];
+
+    // Profit Engine
+    let revenueData = [];
     let netIncomeData = [];
+    let capexData = [];
+
+    // Balance Sheet
     let debtData = [];
     let equityData = [];
+    let treasuryData = [];
+
+    // Credit Health
+    let spreadData = [];
+    let blendedRateData = [];
+    let expenseRatioData = [];
 
     if (timeframe === '12Q') {
         const sliced = rawReports.slice(-12);
         sliced.forEach((report, index) => {
             labels.push(`Q${(index % 4) + 1}`);
-            // Divide Annual TTM by 4 for quarterly representation
-            netIncomeData.push(parseFloat(report.net_income) / 4);
+            
+            let rev = parseFloat(report.revenue || 0) / 4;
+            let inc = parseFloat(report.net_income || 0) / 4;
+            let intExp = parseFloat(report.interest_expense || 0) / 4;
+            
+            revenueData.push(rev);
+            netIncomeData.push(inc);
+            capexData.push(-parseFloat(report.capital_expenditures || 0));
+
             debtData.push(parseFloat(report.total_debt || 0));
-            equityData.push(parseFloat(report.equity));
+            equityData.push(parseFloat(report.equity || 0));
+            treasuryData.push(parseFloat(report.treasury || 0));
+
+            spreadData.push(parseFloat(report.dynamic_spread || 0) * 100);
+            blendedRateData.push(parseFloat(report.blended_rate || 0) * 100);
+            expenseRatioData.push(rev > 0 ? (intExp / rev) * 100 : 0.0);
         });
-    } 
+    }
     else if (timeframe === '5Y') {
-        const yearsToFetch = 5;
+        const yearsToFetch = 12;
         let yearCount = 1;
-        
-        // Step backward by 4 quarters to grab the annual end-of-year reports
+
         for (let i = rawReports.length - 1; i >= 0 && yearCount <= yearsToFetch; i -= 4) {
             let report = rawReports[i];
-            
-            if (yearCount === 1) {
-                labels.unshift("Now");
-            } else if (yearCount === 2) {
-                labels.unshift("-1 Yr");
-            } else {
-                labels.unshift(`-${yearCount - 1} Yrs`);
-            }
-            
-            netIncomeData.unshift(parseFloat(report.net_income));
+
+            if (yearCount === 1) labels.unshift("Now");
+            else if (yearCount === 2) labels.unshift("-1 Yr");
+            else labels.unshift(`-${yearCount - 1} Yrs`);
+
+            let rev = parseFloat(report.revenue || 0);
+            let inc = parseFloat(report.net_income || 0);
+            let intExp = parseFloat(report.interest_expense || 0);
+
+            revenueData.unshift(rev);
+            netIncomeData.unshift(inc);
+            capexData.unshift(-(parseFloat(report.capital_expenditures || 0) * 4));
+
             debtData.unshift(parseFloat(report.total_debt || 0));
-            equityData.unshift(parseFloat(report.equity));
-            
+            equityData.unshift(parseFloat(report.equity || 0));
+            treasuryData.unshift(parseFloat(report.treasury || 0));
+
+            spreadData.unshift(parseFloat(report.dynamic_spread || 0) * 100);
+            blendedRateData.unshift(parseFloat(report.blended_rate || 0) * 100);
+            expenseRatioData.unshift(rev > 0 ? (intExp / rev) * 100 : 0.0);
+
             yearCount++;
         }
     }
 
-    renderNetIncomeChart(labels, netIncomeData);
-    renderDebtEquityChart(labels, debtData, equityData);
+    renderProfitEngineChart(labels, revenueData, netIncomeData, capexData);
+    renderDebtEquityChart(labels, debtData, equityData, treasuryData);
+    renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData);
 }
 
-function renderNetIncomeChart(labels, data) {
-    if (netIncomeChartInstance) netIncomeChartInstance.destroy();
-    
+function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData) {
+    if (profitEngineChartInstance) profitEngineChartInstance.destroy();
+
     const ctx = document.getElementById('netIncomeChart').getContext('2d');
-    netIncomeChartInstance = new Chart(ctx, {
+    profitEngineChartInstance = new Chart(ctx, {
         type: 'bar',
         data: {
             labels: labels,
-            datasets: [{
-                label: 'Net Income',
-                data: data,
-                backgroundColor: COLORS.positive,
-                borderRadius: 4,
-            }]
+            datasets: [
+                {
+                    label: 'Revenue',
+                    data: revenueData,
+                    backgroundColor: COLORS.primary,
+                    borderRadius: 4,
+                },
+                {
+                    label: 'Net Income',
+                    data: netIncomeData,
+                    backgroundColor: netIncomeData.map(val => val < 0 ? COLORS.negative : COLORS.positive),
+                    borderRadius: 4,
+                },
+                {
+                    label: 'CapEx',
+                    data: capexData,
+                    backgroundColor: '#fde047',
+                    borderRadius: 4,
+                }
+            ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { display: false },
-                tooltip: { callbacks: { label: (ctx) => formatLarge(ctx.raw) } }
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: $${formatLarge(ctx.raw)}` } }
             },
             scales: {
                 y: { ticks: { callback: (val) => formatLarge(val) } }
@@ -485,9 +538,9 @@ function renderNetIncomeChart(labels, data) {
     });
 }
 
-function renderDebtEquityChart(labels, debtData, equityData) {
+function renderDebtEquityChart(labels, debtData, equityData, treasuryData) {
     if (debtEquityChartInstance) debtEquityChartInstance.destroy();
-    
+
     const ctx = document.getElementById('debtEquityChart').getContext('2d');
     debtEquityChartInstance = new Chart(ctx, {
         type: 'bar',
@@ -505,6 +558,12 @@ function renderDebtEquityChart(labels, debtData, equityData) {
                     data: equityData,
                     backgroundColor: COLORS.primary,
                     borderRadius: 4,
+                },
+                {
+                    label: 'Total Cash',
+                    data: treasuryData,
+                    backgroundColor: COLORS.positive,
+                    borderRadius: 4,
                 }
             ]
         },
@@ -512,14 +571,74 @@ function renderDebtEquityChart(labels, debtData, equityData) {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { 
-                    position: 'bottom',
-                    labels: { boxWidth: 8, usePointStyle: true }
-                },
-                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatLarge(ctx.raw)}` } }
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: $${formatLarge(ctx.raw)}` } }
             },
             scales: {
                 y: { ticks: { callback: (val) => formatLarge(val) } }
+            }
+        }
+    });
+}
+
+function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData) {
+    const canvas = document.getElementById('creditHealthChart');
+    if (!canvas) return;
+    
+    if (creditHealthChartInstance) creditHealthChartInstance.destroy();
+
+    const ctx = canvas.getContext('2d');
+    creditHealthChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Dynamic Spread (Risk Premium)',
+                    data: spreadData,
+                    borderColor: COLORS.negative,
+                    backgroundColor: COLORS.negative,
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3
+                },
+                {
+                    label: 'Blended Interest Rate',
+                    data: blendedRateData,
+                    borderColor: '#fde047',
+                    backgroundColor: '#fde047',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3
+                },
+                {
+                    label: 'Interest Expense / Revenue',
+                    data: expenseRatioData,
+                    borderColor: '#7dd3fc',
+                    backgroundColor: '#7dd3fc',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    tension: 0.3,
+                    pointRadius: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
+            },
+            scales: {
+                y: { 
+                    ticks: { callback: (val) => val + '%' },
+                    beginAtZero: true
+                }
             }
         }
     });

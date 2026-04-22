@@ -31,6 +31,7 @@ class EarningsEngine
         private \Doctrine\ORM\EntityManagerInterface $entityManager,
         private MarketEvent $marketEvent,
         private CorporateActionEngine $corporateActionEngine,
+        private DebtEngine $debtEngine,
         private ?MathUtility $mathUtility = null
     ) {
         if ($this->mathUtility === null) {
@@ -81,86 +82,116 @@ class EarningsEngine
         $baselineVol = (float) $stock->getVolatility();
         $sharesOutstanding = (float) $stock->getSharesOutstanding();
 
-        // Calculate the dynamically shifting ROIC
-        $dynamicRoic = $this->calculateDynamicRoic($stock, $macroState);
-        $stock->setCurrentRoic((string) $dynamicRoic);
-
-        // Fundamental Expected Earnings (Driven by Capital, not past EPS)
-        $bookValuePerShare = (float) $stock->getBookValuePerShare();
-        $safeBookValue = max($bookValuePerShare, 0.10); 
-        
-        // 1. Calculate the True Size of the Business (Invested Capital)
+        // Calculate the True Size of the Business (Invested Capital)
         $equity = (float) $stock->getTotalEquity();
         $debt = (float) $stock->getTotalDebt();
         $cash = (float) $stock->getCorporateTreasury();
-        
-        // THE FIX 1: The Core Business Floor. 
+
+        // The Core Business Floor. 
         // Even if they hoard massive cash, we assume at least 50% of their equity is actively driving the core business.
         $baseCapital = $equity + $debt - $cash;
         $investedCapital = max($equity * 0.50, $baseCapital);
 
-        // 2. Calculate NOPAT (Net Operating Profit After Tax)
-        $dynamicRoic = $this->calculateDynamicRoic($stock, $macroState);
-        $stock->setCurrentRoic((string) $dynamicRoic);
-        
-        $nopat = $investedCapital * $dynamicRoic;
+        // Calculate NOPAT (Net Operating Profit After Tax)
+        $roicData = $this->calculateDynamicRoic($stock, $macroState);
+        $stock->setCurrentRoic((string) $roicData['core_roic']);
+        $dynamicRoic = $roicData['reported_roic'];
 
-        // 3. The Macro Transmission Mechanism (Interest Expense & Income)
-        $policyRate = $macroState['policy_rate'] ?? 0.04;
-        $creditSpread = (float) $stock->getCreditSpread();
-        $floatingRatio = (float) $stock->getFloatingDebtRatio();
-        
-        $fixedInterestRate = 0.03; 
-        $floatingInterestRate = $policyRate + $creditSpread;
-        
-        $interestExpense = ($debt * (1.0 - $floatingRatio) * $fixedInterestRate) + 
-                           ($debt * $floatingRatio * $floatingInterestRate);
+        // Calculate a STABLE Asset Turnover using baseline ROIC to prevent revenue collapse
+        $baselineRoic = max(0.01, (float) $stock->getBaselineRoic());
+        $assetTurnover = $baselineRoic / max(0.01, (float) $stock->getOperatingMargin());
 
-        // THE FIX 2: Interest Income. 
+        // Determine baseline Revenue and Cost Structure
+        $baselineRevenue = $investedCapital * $assetTurnover;
+        $fixedCostRatio = $stock->getFixedCostRatio(); // 0.80 for Tech, 0.20 for Retail
+
+        // Calculate Baseline Costs
+        $targetOperatingMargin = $dynamicRoic / $assetTurnover;
+        $baselineTotalCosts = $baselineRevenue * (1.0 - $targetOperatingMargin);
+        $fixedCosts = $baselineTotalCosts * $fixedCostRatio;
+        $variableCostMargin = ($baselineTotalCosts - $fixedCosts) / max(1.0, $baselineRevenue);
+
+        // APPLY THE Z-SCORE SHOCK TO REVENUE, NOT EPS
+        // Scale the shock based on the company's inherent baseline volatility (e.g. 0.20 * 0.15 = 3% StDev)
+        $revenueZ = $this->mathUtility->generateStandardNormal();
+        $revenueShock = $revenueZ * ($baselineVol * 0.15); 
+        $actualRevenue = $baselineRevenue * (1.0 + $revenueShock);
+        
+        // Update the Stock Entity BEFORE calling DebtEngine so the CFO has the right Top-Line
+        $stock->setTotalRevenue((string) $actualRevenue);
+
+        // The Operating Leverage Engine
+        $actualVariableCosts = $actualRevenue * $variableCostMargin;
+        $nopat = $actualRevenue - $fixedCosts - $actualVariableCosts;
+        $expectedNopat = $baselineRevenue - $fixedCosts - ($baselineRevenue * $variableCostMargin);
+
+        // Interest & Debt Physics
+        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        
+        $debtMetrics = $this->debtEngine->calculateInterestExpense($stock, $macroState, true);
+        $interestExpense = $debtMetrics['interest_expense'];
+
+        $stock->setHistoricalFixedRate((string) $debtMetrics['blended_rate']);
+
+
+        // Interest Income. 
         // Mega-hoarders generate massive risk-free yield on their cash piles!
         $workingCapital = $equity * 0.05;
         $excessCash = max(0.0, $cash - $workingCapital);
-        
+
         // Earning Policy Rate minus a 1% spread for standard money-market yields
-        $cashYield = max(0.0, $policyRate - 0.01); 
+        $cashYield = max(0.0, $policyRate - 0.01);
         $interestIncome = $excessCash * $cashYield;
 
-        // 4. Calculate True Fundamental Expected Net Income
-        $expectedTotalNetIncome = $nopat - $interestExpense + $interestIncome;
+        // CALCULATE PHYSICAL DEPRECIATION (The Rusting of Assets)
+        $sector = $stock->getSector();
+        $depreciationRate = match ($sector) {
+            'Information Technology' => 0.15,
+            'Communication Services' => 0.12,
+            'Healthcare' => 0.08,
+            'Consumer Discretionary', 'Consumer Staples' => 0.06,
+            'Industrials', 'Materials', 'Energy' => 0.04,
+            'Utilities', 'Real Estate' => 0.03,
+            'Financials' => 0.02,
+            default => (float) $stock->getDepreciationRate() ?: 0.05,
+        };
         
-        // 5. Convert to Expected EPS
-        $expectedAnnualEps = $expectedTotalNetIncome / max(1.0, $sharesOutstanding);
-        // Add the Macroeconomic Beta Modifier (Tailwinds/Headwinds)
-        $beta = (float) $stock->getBeta();
+        $absoluteDepreciation = $equity * $depreciationRate;
+
+        // Calculate True Fundamental Expected Net Income
+        $expectedTotalNetIncome = $expectedNopat - $absoluteDepreciation - $interestExpense + $interestIncome;
+        $actualTotalNetIncome = $nopat - $absoluteDepreciation - $interestExpense + $interestIncome;
+
         // Modifier scaled correctly for Annual EPS
-        $macroCycleModifier = ($macroState['output_gap'] ?? 0.0) * $beta * $safeBookValue;
-        
+        $expectedAnnualEps = $expectedTotalNetIncome / max(1.0, $sharesOutstanding);
+        $actualAnnualEpsRaw = $actualTotalNetIncome / max(1.0, $sharesOutstanding);
+
         // Smooth the transition from Old EPS to Expected EPS
-        $targetAnnualEps = $expectedAnnualEps + $macroCycleModifier;
-        $expectedAnnualEpsDrifted = round($oldAnnualEps + (($targetAnnualEps - $oldAnnualEps) * 0.25), 2);
+        $expectedAnnualEpsDrifted = $oldAnnualEps + (($expectedAnnualEps - $oldAnnualEps) * 0.50);
 
-        // Model Revenue/Earnings Volatility (The Surprise)
-        $revenueZ = $this->mathUtility->generateStandardNormal();
-        
-        // The shock is proportional to capital size. Dropped from 0.10 to 0.05 to prevent 150%+ surprises.
-        $epsShockAmountAnnual = $safeBookValue * $baselineVol * $revenueZ * 0.05; 
+        // Calculate Actual ANNUAL EPS (shifted by the exact same smoothed drift)
+        $epsDifference = $actualAnnualEpsRaw - $expectedAnnualEps;
+        $actualAnnualEps = $expectedAnnualEpsDrifted + $epsDifference;
 
-        // Calculate Actual ANNUAL EPS
-        $actualAnnualEps = round($expectedAnnualEpsDrifted + $epsShockAmountAnnual, 2);
-
-        $expectedQuarterlyEps = $expectedAnnualEpsDrifted / 4.0;
+        // Calculate Quarterly metrics for the UI and price gap logic
         $actualQuarterlyEps = $actualAnnualEps / 4.0;
+        $expectedQuarterlyEps = $expectedAnnualEpsDrifted / 4.0;
+        $surpriseAmountQuarterly = $actualQuarterlyEps - $expectedQuarterlyEps;
         
-        $surpriseAmountQuarterly = round($actualQuarterlyEps - $expectedQuarterlyEps, 2);
-        $surprisePct = $surpriseAmountQuarterly / max(0.05, abs($expectedQuarterlyEps));
+        $surprisePct = abs($expectedQuarterlyEps) > 0.01 
+            ? $surpriseAmountQuarterly / abs($expectedQuarterlyEps) 
+            : ($surpriseAmountQuarterly > 0 ? 0.10 : ($surpriseAmountQuarterly < 0 ? -0.10 : 0.0));
 
         // VOLATILITY SHOCK
         $this->applyVolatilityShock($stock, $revenueZ, $baselineVol);
 
-        // Update the Stock Entity with the strict ANNUAL figure
+        // Update the Stock Entity with the raw, unrounded ANNUAL figure to maintain perfect Clean Surplus Accounting.
+        // The Entity's setter will automatically update the Total Net Income mathematically.
         $stock->setEarningsPerShare((string) $actualAnnualEps);
 
-        $annualFcfPerShare = $this->calculateFreeCashFlowPerShare($actualAnnualEps, $sharesOutstanding, $stock, $macroState);
+        $fcfData = $this->calculateFreeCashFlowPerShare($actualAnnualEps, $sharesOutstanding, $stock, $macroState, $absoluteDepreciation);
+        $annualFcfPerShare = $fcfData['fcf_per_share'];
+        $actualAnnualCapEx = $fcfData['capex'];
         $stock->setFreeCashFlowPerShare((string) $annualFcfPerShare);
 
         $priceGapPct = $this->calculatePriceGap($surprisePct);
@@ -175,7 +206,8 @@ class EarningsEngine
             $quarterlyFcfPerShare,
             $currentPrice,
             $sharesOutstanding,
-            $liveTargetPE
+            $liveTargetPE,
+            $macroState
         );
 
         $stock->setSharesOutstanding((string) $allocation['new_shares']);
@@ -207,13 +239,27 @@ class EarningsEngine
 
         $report = new \App\Entity\CorporateReport();
         $report->setStock($stock);
-        $report->setNetIncome($stock->getTotalNetIncome());
+        
+        // The Holy Trinity of the Income Statement
+        $report->setRevenue((string) $actualRevenue);
+        $report->setNetIncome((string) $actualTotalNetIncome);
+        
+        // Debt & Treasury Data
+        $report->setInterestExpense((string) $debtMetrics['interest_expense']);
+        $report->setInterestIncome((string) $interestIncome);
+        $report->setBlendedRate((string) $debtMetrics['blended_rate']);
+        $report->setDynamicSpread((string) $debtMetrics['dynamic_spread']);
+        
+        // Cash Flow & Balance Sheet
+        $report->setCapitalExpenditures((string) $actualAnnualCapEx);
         $report->setEquity($stock->getTotalEquity());
         $report->setTotalDebt($stock->getTotalDebt());
         $report->setTreasury($stock->getCorporateTreasury());
-        $report->setRoic($stock->getCurrentRoic() ?: $stock->getBaselineRoic());
-        $report->setShares((string) $stock->getSharesOutstanding());
         
+        // Metrics
+        $report->setRoic((string) $dynamicRoic);
+        $report->setShares((string) $stock->getSharesOutstanding());
+
         $this->entityManager->persist($report);
 
         // Return the array of events
@@ -258,39 +304,41 @@ class EarningsEngine
      */
     private function calculateFreeCashFlowPerShare(
         float $actualEps,
-        int $sharesOutstanding,
+        float $sharesOutstanding,
         Stock $stock,
-        array $macroState
-    ): float {
-        if ($sharesOutstanding <= 0) return 0.0;
+        array $macroState,
+        float $absoluteDepreciation
+    ): array {
+        if ($sharesOutstanding <= 0) {
+            return ['fcf_per_share' => 0.0, 'capex' => 0.0];
+        }
 
         $netIncome = $actualEps * $sharesOutstanding;
         $capExRatio = (float) $stock->getCapexRatio();
-        
-        // Fetch the depreciation rate!
-        $depreciationRate = (float) $stock->getDepreciationRate();
 
         $outputGap = $macroState['output_gap'] ?? 0.0;
         $cycleCapExModifier = max(0.85, min(1.15, 1.00 + ($outputGap * 1.5)));
 
         $baselineIncomeForCapEx = max($netIncome, (float) $stock->getTotalEquity() * 0.02);
         $actualCapEx = $baselineIncomeForCapEx * ($capExRatio * $cycleCapExModifier);
-        
+
         // Add back absolute depreciation (non-cash expense) to find True FCF
-        $absoluteDepreciation = (float) $stock->getTotalEquity() * $depreciationRate;
-        
         $fcff = $netIncome + $absoluteDepreciation - $actualCapEx;
 
-        return $fcff / $sharesOutstanding;
+        return [
+            'fcf_per_share' => $fcff / $sharesOutstanding,
+            'capex' => $actualCapEx
+        ];
     }
 
     /**
      * Calculates the dynamically shifting ROIC based on Macro conditions and Corporate Saturation.
      */
-    private function calculateDynamicRoic(Stock $stock, array $macroState): float
+    private function calculateDynamicRoic(Stock $stock, array $macroState): array
     {
         $baselineRoic = (float) $stock->getBaselineRoic();
         $currentRoic = (float) $stock->getCurrentRoic();
+        $beta = (float) $stock->getBeta();
         
         if ($currentRoic === 0.0) {
             $currentRoic = $baselineRoic;
@@ -304,21 +352,32 @@ class EarningsEngine
         $investedCapital = max($equity * 0.50, ($equity + $debt - $cash));
 
         // Macroeconomic Modifier
-        $outputGap = $macroState['output_gap'] ?? 0.0;
-        $macroModifier = $outputGap * 0.5;
+        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
+        $macroModifier = $outputGap * $beta;
 
         // Corporate Saturation Penalty (Now driven by Book Value)
-        $saturationThreshold = 500_000_000_000; // $500 Billion in Equity
+        $saturationThreshold = 500_000_000_000; // $0.5 trillion in Equity
         $saturationPenalty = 0.0;
+
+        $systemic_importance = $stock->getSystemicImportance();
+
+        // The larger the systemic importance, the stronger the "moat" protecting their ROIC
+        $moat = match ($systemic_importance) {
+            'titan'    => 0.3, // Only takes 30% of the saturation penalty
+            'systemic' => 0.6, // Takes 60% of the penalty
+            'base'     => 0.8, // Takes 80% of the penalty
+            default    => 1.0, // Takes the full 100% saturation penalty
+        };
         
         if ($investedCapital > $saturationThreshold) {
             $excessSize = $investedCapital / $saturationThreshold;
             // The heavier the balance sheet, the harder it is to steer the ship
-            $saturationPenalty = log($excessSize) * 0.015; 
+            $MarketSaturationPenalty = log($excessSize) * 0.030;
+            $saturationPenalty = $MarketSaturationPenalty * $moat;
         }
 
-        // Calculate where the ROIC "wants" to be
-        $targetRoic = $baselineRoic + $macroModifier - $saturationPenalty;
+        // Calculate where the core business ROIC "wants" to be (Saturation Penalty is smoothed)
+        $targetRoic = $baselineRoic - $saturationPenalty;
 
         // Mean Reversion: Smoothly drift the current ROIC toward the target
         $pull = ($targetRoic - $currentRoic) * 0.25;
@@ -326,8 +385,15 @@ class EarningsEngine
         // Add standard deviation noise
         $fundamentalNoise = $this->mathUtility->generateStandardNormal() * 0.015;
 
-        $dynamicRoic = $currentRoic + $pull + $fundamentalNoise;
+        // The core ROIC (saved to DB so it doesn't infinitely compound macro shocks)
+        $newCoreRoic = $currentRoic + $pull + $fundamentalNoise;
+        
+        // The actual reported ROIC for this quarter (Core + Instant Macro Shock)
+        $reportedRoic = $newCoreRoic + $macroModifier;
 
-        return max(-0.10, min(0.50, $dynamicRoic));
+        return [
+            'core_roic'     => max(-0.10, min(0.50, $newCoreRoic)),
+            'reported_roic' => max(-0.10, min(0.50, $reportedRoic))
+        ];
     }
 }

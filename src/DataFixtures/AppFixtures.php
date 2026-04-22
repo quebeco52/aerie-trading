@@ -67,6 +67,7 @@ class AppFixtures extends Fixture
             $neutralEps = (float) $stockData['price'] / $targetPE;
             $stock->setEarningsPerShare((string) round($neutralEps, 2));
 
+            // Standard Metrics
             $stock->setSharesOutstanding((string) $stockData['shares_outstanding']);
             $stock->setVolatility((string) $stockData['volatility']);
             $stock->setCurrentVolatility((string) $stockData['volatility']);
@@ -74,6 +75,27 @@ class AppFixtures extends Fixture
             $stock->setJumpIntensity((string) $stockData['jump_intensity']);
             $stock->setJumpMean((string) $stockData['jump_mean']);
             $stock->setJumpVol((string) $stockData['jump_vol']);
+            $stock->setSystemicImportance($stockData['systemic_importance'] ?? 'none');
+
+            // THE FIX: Adding all the new Fundamental & Macro Metrics
+            $stock->setBaselineRoic((string) ($stockData['baseline_roic'] ?? 0.10));
+            $stock->setCurrentRoic((string) ($stockData['baseline_roic'] ?? 0.10));
+            $stock->setCapexRatio((string) ($stockData['capex_ratio'] ?? 0.20));
+            $stock->setTargetPayoutRatio((string) ($stockData['target_payout_ratio'] ?? 0.30));
+            $stock->setDividendSpeed((string) ($stockData['dividendSpeed'] ?? 0.20));
+            
+            // Fixed Cost Ratio (Fallback to 0.35 if missing)
+            $stock->setFixedCostRatio((float) ($stockData['fixed_cost_ratio'] ?? 0.35));
+            
+            // Balance Sheet Data
+            $stock->setCorporateTreasury((string) ($stockData['corporate_treasury'] ?? 1000000000.00));
+            $stock->setOperatingMargin((string) ($stockData['operating_margin'] ?? 0.15));
+            $stock->setPublicFloatPercentage((string) ($stockData['public_float'] ?? 0.90));
+            $stock->setTotalNetIncome((string) ($stockData['total_net_income'] ?? 0.00));
+            $stock->setTotalEquity((string) ($stockData['total_equity'] ?? 0.00));
+            $stock->setTotalDebt((string) ($stockData['total_debt'] ?? 0.00));
+            $stock->setRetainedEarnings((string) ($stockData['retained_earnings'] ?? 0.00));
+            $stock->setLastDividend('0.00');
 
             $stock->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$stockData['ticker']] ?? null);
 
@@ -83,6 +105,7 @@ class AppFixtures extends Fixture
         // Create a Test User
         $user = new User();
         $user->setEmail('test.test@test.se');
+        $user->setRoles(['ROLE_ADMIN']);
         $user->setCashBalance('10000.00');
 
         // Hash the password
@@ -93,6 +116,6 @@ class AppFixtures extends Fixture
 
         $manager->flush();
 
-        echo "Database successfully seeded with Neutral P/E balances\n";
+        echo "Database successfully seeded with full fundamental physics!\n";
     }
 }

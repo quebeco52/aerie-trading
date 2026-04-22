@@ -49,6 +49,10 @@ class MarketResetCommand extends Command
         $io->text('3. Resetting Stock Prices & Absolute Values...');
         foreach (InitialMarket::STOCKS as $stockData) {
             
+            $netIncome = $stockData['total_net_income'] ?? 0.00;
+            $margin = $stockData['operating_margin'] ?? 0.15;
+            $revenue = $margin > 0 ? $netIncome / $margin : 0.00;
+
             $conn->executeStatement(
                 'UPDATE stocks SET 
                     price = :price, 
@@ -65,6 +69,7 @@ class MarketResetCommand extends Command
                     capex_ratio = :capex,
                     target_payout_ratio = :payout,
                     dividend_speed = :div_speed,
+                    fixed_cost_ratio = :fixed_cost,
                     corporate_treasury = :treasury,
                     total_debt = :total_debt,
                     operating_margin = :margin,
@@ -72,6 +77,12 @@ class MarketResetCommand extends Command
                     total_net_income = :net_income,
                     total_equity = :equity,
                     retained_earnings = :retained,
+                    total_revenue = :revenue,
+                    total_free_cash_flow = NULL,
+                    goodwill = 0.00,
+                    historical_fixed_rate = :historical_rate,
+                    credit_spread = :credit_spread,
+                    buyback_authorization = 0.00,
                     last_dividend = 0.00 
                 WHERE ticker = :ticker',
                 [
@@ -88,6 +99,7 @@ class MarketResetCommand extends Command
                     'capex' => $stockData['capex_ratio'] ?? 0.20,
                     'payout' => $stockData['target_payout_ratio'] ?? 0.30,
                     'div_speed' => $stockData['dividendSpeed'] ?? 0.20,
+                    'fixed_cost' => $stockData['fixed_cost_ratio'] ?? 0.50,
                     'treasury' => $stockData['corporate_treasury'] ?? 1000000000.00,
                     'total_debt' => $stockData['total_debt'] ?? 0.00,
                     'margin' => $stockData['operating_margin'] ?? 0.15,
@@ -95,6 +107,9 @@ class MarketResetCommand extends Command
                     'net_income' => $stockData['total_net_income'] ?? 0.00,
                     'equity' => $stockData['total_equity'] ?? 0.00,
                     'retained' => $stockData['retained_earnings'] ?? 0.00,
+                    'revenue' => $revenue,
+                    'historical_rate' => 0.0200,
+                    'credit_spread' => $stockData['credit_spread'] ?? 0.0100,
                     'ticker' => $stockData['ticker']
                 ]
             );

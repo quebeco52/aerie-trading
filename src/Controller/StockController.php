@@ -230,7 +230,7 @@ class StockController extends AbstractController
         
         // Fetch all fundamental reports for this stock, oldest to newest (for charting)
         $sql = '
-            SELECT net_income, equity, total_debt, treasury, roic, shares, recorded_at 
+            SELECT net_income, equity, total_debt, treasury, roic, shares, recorded_at, interest_expense, blended_rate, dynamic_spread, revenue, interest_income, capital_expenditures
             FROM corporate_report 
             WHERE stock_id = :id 
             ORDER BY recorded_at ASC

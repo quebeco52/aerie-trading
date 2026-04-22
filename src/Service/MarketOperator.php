@@ -156,6 +156,7 @@ class MarketOperator
         $stock->setCorporateTreasury("5000000000.00");
         $stock->setTotalEquity("20000000000.00");
         $stock->setRetainedEarnings("0.00");
+        $stock->setTotalDebt("10000000000.00"); // Give the restructured company a healthy 0.5x D/E ratio
 
         $this->entityManager->getConnection()->executeStatement(
             'DELETE FROM stock_history WHERE stock_id = :id',

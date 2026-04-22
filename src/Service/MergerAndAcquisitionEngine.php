@@ -13,7 +13,8 @@ class MergerAndAcquisitionEngine
 {
     public function __construct(
         private EntityManagerInterface $entityManager,
-        private MarketEvent $marketEvent
+        private MarketEvent $marketEvent,
+        private DebtEngine $debtEngine
     ) {}
 
     /**
@@ -26,47 +27,69 @@ class MergerAndAcquisitionEngine
         $price = (float) $acquirer->getPrice();
         $shares = (float) $acquirer->getSharesOutstanding();
         $debtRatio = (float) $acquirer->getDebtToEquityRatio();
-
         
         $equity = (float) $acquirer->getTotalEquity();
         $currentDebt = (float) $acquirer->getTotalDebt();
+        $policyRate = $macroState['policy_rate'] ?? 0.04;
 
-        // A company can borrow up to a hard maximum of 1.50x Debt-to-Equity.
+        // THE NEGATIVE CARRY BLOCK (Syncing with the CFO)
+       // THE NEGATIVE CARRY BLOCK (Calling the Centralized Brain)
+        $health = $this->debtEngine->analyzeDebtHealth($acquirer, $macroState);
+        
+        // If the company is struggling with debt or bleeding money, the CFO forbids M&A!
+        if ($health['wants_to_paydown_debt']) {
+            return null; // Abort deal. Focus on paying down debt instead.
+        }
 
+        // PERSONAL BORROWING COST
+        $costOfNewBorrowing = $policyRate + (float) $acquirer->getCreditSpread();
+
+        // A company can borrow up to a hard maximum of 2.50x Debt-to-Equity. 
         $maxAllowableDebt = $equity * 2.50;
         $borrowingCapacity = max(0.0, $maxAllowableDebt - $currentDebt);
         
         $totalBuyingPower = $treasury + $borrowingCapacity;
 
         // Is the company a Mega-Hoarder? (Cash > 25% or 50% of Equity)
-        $isHoarder = $treasury > ($equity * 0.30);
-        $isMegaHoarder = $treasury > ($equity * 0.60);
-
-        // LORE-ACCURATE HUNTING LOGIC
+        $isHoarder = $treasury > ($equity * 0.25);
+        $isMegaHoarder = $treasury > ($equity * 0.50);
         
         $config = match (true) {
             $isMegaHoarder => [
-                'prob' => 8.00, 'spend' => 0.50, 'syn_min' => 0.90, 'syn_max' => 1.15, 'type' => 'CONGLOMERATE EXPANSION', 'use_leverage' => false
+                'prob' => 6.00, 'spend' => 0.60, 'syn_min' => 0.90, 'syn_max' => 1.15, 'type' => 'CONGLOMERATE EXPANSION', 'use_leverage' => false
             ],
             $isHoarder => [
-                'prob' => 2.00, 'spend' => 0.50, 'syn_min' => 0.90, 'syn_max' => 1.15, 'type' => 'CONGLOMERATE EXPANSION', 'use_leverage' => false
+                'prob' => 2.00, 'spend' => 0.40, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => 'CONGLOMERATE EXPANSION', 'use_leverage' => false
             ],
-            // If a company has a lazy balance sheet (< 25% D/E), they take on cheap debt to acquire a competitor.
-            $debtRatio < 0.20 && $totalBuyingPower > 5_000_000_000.0 => [
-                'prob' => 0.80, 'spend' => 0.25, 'syn_min' => 0.95, 'syn_max' => 1.25, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => true
+            $health['can_issue_debt'] && $debtRatio < 0.30 && $totalBuyingPower > 5_000_000_000.0 && $costOfNewBorrowing < 0.07 => [
+                'prob' => 0.50, 'spend' => 0.40, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => 'LEVERAGED BUYOUT', 'use_leverage' => true
             ],
-            // Standard Mega-Corps expanding their footprint using cash
-            $treasury > 15_000_000_000.0 => [
-                'prob' => 0.20, 'spend' => 0.20, 'syn_min' => 0.90, 'syn_max' => 1.20, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => false
+            // Secondary LBO tier: Allow up to 8% personal borrowing cost for moderate debt companies
+            $health['can_issue_debt'] && $debtRatio < 1.30 && $totalBuyingPower > 5_000_000_000.0 && $costOfNewBorrowing < 0.08 => [
+                'prob' => 0.10, 'spend' => 0.30, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => 'LEVERAGED BUYOUT', 'use_leverage' => true
             ],
 
             default => null,
         };
 
-        if (!$config) return null;
+        $dealExecuted = false;
 
-        // RNG Roll to see if a deal actually happens this tick
-        if ((mt_rand() / mt_getrandmax()) >= ($config['prob'] * $dt)) {
+        // Try the primary specialized strategy first
+        if ($config && (mt_rand() / mt_getrandmax()) < ($config['prob'] * $dt)) {
+            $dealExecuted = true;
+        }
+        
+        // If no primary deal happened, test the standard cash fallback
+        if (!$dealExecuted && $treasury > 15_000_000_000.0) {
+            $config = [
+                'prob' => 0.30, 'spend' => 0.20, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => false
+            ];
+            if ((mt_rand() / mt_getrandmax()) < ($config['prob'] * $dt)) {
+                $dealExecuted = true;
+            }
+        }
+
+        if (!$dealExecuted || !$config) {
             return null;
         }
 
@@ -80,11 +103,16 @@ class MergerAndAcquisitionEngine
         $availableCapital = $config['use_leverage'] ? ($usableTreasury + $borrowingCapacity) : $usableTreasury;
         $purchasePrice = $availableCapital * (mt_rand(50, 100) / 100.0) * $config['spend'];
         
+        // Private companies are rarely worth more than $150B - $250B. Cap the size of the target.
+        // This prevents mega-corps from swallowing the entire global economy in a single deal.
+        $maxPrivateCompanyValue = mt_rand(100_000_000_000, 500_000_000_000);
+        $purchasePrice = min($purchasePrice, (float) $maxPrivateCompanyValue);
+        
         if ($purchasePrice < 1_000_000_000.0) return null; 
 
         $target = $this->generateProceduralTarget();
 
-        // 1. FUND THE DEAL (Drain Cash and/or Issue Debt)
+        // FUND THE DEAL (Drain Cash and/or Issue Debt)
         if ($purchasePrice <= $usableTreasury) {
             // Funded entirely with cash on hand
             $acquirer->setCorporateTreasury((string) ($treasury - $purchasePrice));
@@ -93,7 +121,25 @@ class MergerAndAcquisitionEngine
             // Leveraged Buyout: Drain the usable treasury, borrow the rest!
             $debtIssued = $purchasePrice - $usableTreasury;
             $acquirer->setCorporateTreasury((string) ($treasury - $usableTreasury)); // Leaves min operating cash
-            $acquirer->setTotalDebt((string) ($currentDebt + $debtIssued));
+            
+            // Calculate the Weighted Average of the new debt vs old debt
+            $oldHistoricalRate = (float) $acquirer->getHistoricalFixedRate();
+            $newTotalDebt = $currentDebt + $debtIssued;
+            
+            // Figure out what the market is charging for this newly issued debt today
+            $newDebtRatio = $newTotalDebt / max(1.0, $equity);
+            $leveragePenalty = $newDebtRatio > 2.0 ? ($newDebtRatio - 2.0) * 0.05 : 0.0; // The Junk Bond Penalty
+            
+            // The cost of the new debt is the Central Bank Rate + Company's Credit Spread + Any Junk Penalty
+            $costOfNewDebt = $policyRate + (float) $acquirer->getCreditSpread() + $leveragePenalty;
+            
+            // Blend them together! ((Old Debt * Old Rate) + (New Debt * New Rate)) / Total Debt
+            if ($newTotalDebt > 0) {
+                $weightedRate = (($currentDebt * $oldHistoricalRate) + ($debtIssued * $costOfNewDebt)) / $newTotalDebt;
+                $acquirer->setHistoricalFixedRate((string) $weightedRate);
+            }
+            
+            $acquirer->setTotalDebt((string) $newTotalDebt);
         }
 
         //THE RANDOMIZED SYNERGY ROLL
@@ -107,9 +153,25 @@ class MergerAndAcquisitionEngine
         $acquirer->setTotalEquity((string) max(10.0, $newEquity));
 
         //BOOST OR DESTROY RETURN ON INVESTED CAPITAL (ROIC)
-        $currentRoic = (float) $acquirer->getCurrentRoic() ?: (float) $acquirer->getBaselineRoic();
-        $roicBump = ($synergyMultiplier - 1.0) * 0.05; 
-        $acquirer->setCurrentRoic((string) max(-0.10, $currentRoic + $roicBump));
+        $baselineRoic = (float) $acquirer->getBaselineRoic();
+        $currentRoic = (float) $acquirer->getCurrentRoic() ?: $baselineRoic;
+        $oldInvestedCapital = max($equity * 0.50, ($equity + $currentDebt - $treasury));
+        
+        // Private companies generally have average market returns (6% to 12%)
+        $targetRoic = mt_rand(60, 120) / 1000.0;
+        $effectiveTargetRoic = $targetRoic * $synergyMultiplier;
+        
+        // Calculate the heavily diluted blended ROIC using the BASELINE to prevent the Recursive Death Spiral
+        $blendedRoic = (($oldInvestedCapital * $baselineRoic) + ($purchasePrice * $effectiveTargetRoic)) / max(1.0, $oldInvestedCapital + $purchasePrice);
+        
+        // Shift the current ROIC by the exact same delta so we don't erase the current macro cycle
+        $roicShift = $blendedRoic - $baselineRoic;
+        $newCurrentRoic = $currentRoic + $roicShift;
+
+        $acquirer->setCurrentRoic((string) max(-0.10, $newCurrentRoic));
+        if (method_exists($acquirer, 'setBaselineRoic')) {
+            $acquirer->setBaselineRoic((string) max(-0.10, $blendedRoic));
+        }
 
         //GENERATE THE MARKET EVENT & PRICE SHOCK
         $purchasePriceB = number_format($purchasePrice / 1_000_000_000, 1);
@@ -206,6 +268,9 @@ class MergerAndAcquisitionEngine
         $currentRoic = $currentRoic ?: (float) $seller->getBaselineRoic();
         $roicBump = $divestedFraction * 0.20;
         $seller->setCurrentRoic((string) ($currentRoic + $roicBump));
+        if (method_exists($seller, 'setBaselineRoic')) {
+            $seller->setBaselineRoic((string) ($seller->getBaselineRoic() + ($roicBump * 0.5)));
+        }
 
         // GENERATE THE MARKET EVENT
         $salePriceB = number_format($salePrice / 1_000_000_000, 1);
