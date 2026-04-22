@@ -8,7 +8,7 @@ echo -e "\n\e[1;34m Starting Immutable Deployment for Aerie Exchange...\e[0m\n"
 # Load secure environment variables
 export $(grep -v '^#' .env.local | xargs)
 
-DC="docker compose -f docker-compose.prod.yml"
+DC="docker compose --env-file .env.local -f docker-compose.prod.yml"
 
 echo -e "\e[33m[1/7] Freezing the Market (Stopping Ticker)...\e[0m"
 $DC stop aerie-ticker
@@ -27,6 +27,9 @@ $DC build --no-cache aerie-php aerie-scheduler aerie-ticker aerie-websocket aeri
 
 echo -e "\e[33m[5/7] Swapping to New Images & Running Migrations...\e[0m"
 $DC up -d
+
+echo -e "\e[33m      -> Waiting for database to initialize...\e[0m"
+sleep 15
 
 $DC exec -T aerie-php php bin/console cache:clear
 $DC exec -T aerie-php php bin/console cache:warmup
