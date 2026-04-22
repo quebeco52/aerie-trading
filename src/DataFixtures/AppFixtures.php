@@ -49,7 +49,7 @@ class AppFixtures extends Fixture
             $etf->setName($etfData['name']);
             $etf->setPrice((string) $etfData['price']);
 
-            $etf->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$etfData['ticker']]);
+            $etf->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$etfData['ticker']] ?? null);
             
             $manager->persist($etf);
         }
@@ -96,6 +96,8 @@ class AppFixtures extends Fixture
             $stock->setTotalDebt((string) ($stockData['total_debt'] ?? 0.00));
             $stock->setRetainedEarnings((string) ($stockData['retained_earnings'] ?? 0.00));
             $stock->setLastDividend('0.00');
+            $stock->setCreditSpread((string) ($stockData['credit_spread'] ?? 0.02));
+            $stock->setHistoricalFixedRate((string) ($stockData['historical_fixed_rate'] ?? 0.05));
 
             $stock->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$stockData['ticker']] ?? null);
 
