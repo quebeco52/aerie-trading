@@ -2,6 +2,7 @@
 
 namespace App\Command;
 
+use App\Entity\User;
 use App\Data\InitialMarket;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -9,6 +10,7 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 #[AsCommand(
     name: 'app:market-reset',
@@ -18,7 +20,8 @@ class MarketResetCommand extends Command
 {
     public function __construct(
         private EntityManagerInterface $entityManager,
-        private \Redis $redis
+        private \Redis $redis,
+        private UserPasswordHasherInterface $passwordHasher
     ) {
         parent::__construct();
     }
@@ -40,6 +43,18 @@ class MarketResetCommand extends Command
         $conn->executeStatement('TRUNCATE TABLE portfolio_history'); 
         $conn->executeStatement('TRUNCATE TABLE corporate_report');
         
+        // Ensure the test user exists
+        $testUser = $this->entityManager->getRepository(User::class)->findOneBy(['email' => 'test.test@test.se']);
+        if (!$testUser) {
+            $testUser = new User();
+            $testUser->setEmail('test.test@test.se');
+            $testUser->setRoles(['ROLE_ADMIN']);
+            $testUser->setCashBalance('10000.00');
+            $testUser->setPassword($this->passwordHasher->hashPassword($testUser, 'test'));
+            $this->entityManager->persist($testUser);
+            $this->entityManager->flush();
+        }
+
         $conn->executeStatement('UPDATE users SET cash_balance = 10000.00'); 
         $conn->executeStatement('SET FOREIGN_KEY_CHECKS = 1');
 
@@ -83,7 +98,8 @@ class MarketResetCommand extends Command
                     historical_fixed_rate = :historical_rate,
                     credit_spread = :credit_spread,
                     buyback_authorization = 0.00,
-                    last_dividend = 0.00 
+                    last_dividend = 0.00,
+                    description = :description
                 WHERE ticker = :ticker',
                 [
                     'price' => $stockData['price'],
@@ -110,6 +126,7 @@ class MarketResetCommand extends Command
                     'revenue' => $revenue,
                     'historical_rate' => 0.0200,
                     'credit_spread' => $stockData['credit_spread'] ?? 0.0100,
+                    'description' => \App\Data\StockInfo::DESCRIPTIONS[$stockData['ticker']] ?? null,
                     'ticker' => $stockData['ticker']
                 ]
             );
@@ -118,9 +135,10 @@ class MarketResetCommand extends Command
         $io->text('4. Resetting ETF Prices...');
         foreach (InitialMarket::ETFS as $etfData) {
             $conn->executeStatement(
-                'UPDATE etfs SET price = :price WHERE ticker = :ticker',
+                'UPDATE etfs SET price = :price, description = :description WHERE ticker = :ticker',
                 [
                     'price' => $etfData['price'],
+                    'description' => \App\Data\StockInfo::DESCRIPTIONS[$etfData['ticker']] ?? null,
                     'ticker' => $etfData['ticker']
                 ]
             );
