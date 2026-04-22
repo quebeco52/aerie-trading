@@ -72,6 +72,8 @@ services:
   aerie-database:
     image: mariadb:11.8
     restart: always
+    env_file:
+      - .env.local
     command: 
       - --innodb-buffer-pool-size=1G
       - --innodb-log-file-size=512M
