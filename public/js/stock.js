@@ -58,6 +58,17 @@ document.addEventListener('DOMContentLoaded', () => {
     loadHistory('1y');
     setupEventListeners();
 
+    // Fetch Fundamental Data (Skip if it's an ETF)
+    if (!IS_ETF) {
+        fetch(`/api/fundamentals?ticker=${CURRENT_TICKER}`)
+            .then(res => res.json())
+            .then(data => {
+                rawReports = data;
+                updateCharts('5Y');
+            })
+            .catch(err => console.error("Failed to load fundamentals:", err));
+    }
+
     if (!window.WS_TICKET || window.WS_TICKET === "") {
         console.log("Guest mode: Live WebSocket updates disabled.");
         return; // Safe to exit here so we don't try to connect to the socket
@@ -223,17 +234,6 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .catch(console.error)
             .finally(() => { if (spinner) spinner.classList.add('hidden'); });
-    }
-
-    // Fetch Fundamental Data (Skip if it's an ETF)
-    if (!IS_ETF) {
-        fetch(`/api/fundamentals?ticker=${CURRENT_TICKER}`)
-            .then(res => res.json())
-            .then(data => {
-                rawReports = data;
-                updateCharts('5Y');
-            })
-            .catch(err => console.error("Failed to load fundamentals:", err));
     }
 
     function updateLiveChart(newPrice) {
