@@ -58,6 +58,12 @@ class CorporateReport
     #[ORM\Column(type: 'decimal', precision: 20, scale: 4)]
     private string $capitalExpenditures = '0.0000';
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $wacc = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 2, nullable: true)]
+    private ?string $eva = null;
+
     public function __construct()
     {
         $this->recordedAt = new \DateTime();
@@ -225,6 +231,30 @@ class CorporateReport
     public function setCapitalExpenditures(string $capitalExpenditures): static
     {
         $this->capitalExpenditures = $capitalExpenditures;
+
+        return $this;
+    }
+
+    public function getWacc(): ?string
+    {
+        return $this->wacc;
+    }
+
+    public function setWacc(string $wacc): static
+    {
+        $this->wacc = $wacc;
+
+        return $this;
+    }
+
+    public function getEva(): ?string
+    {
+        return $this->eva;
+    }
+
+    public function setEva(?string $eva): static
+    {
+        $this->eva = $eva;
 
         return $this;
     }

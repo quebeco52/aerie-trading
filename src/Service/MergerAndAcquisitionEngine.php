@@ -103,8 +103,7 @@ class MergerAndAcquisitionEngine
         $availableCapital = $config['use_leverage'] ? ($usableTreasury + $borrowingCapacity) : $usableTreasury;
         $purchasePrice = $availableCapital * (mt_rand(50, 100) / 100.0) * $config['spend'];
         
-        // Private companies are rarely worth more than $150B - $250B. Cap the size of the target.
-        // This prevents mega-corps from swallowing the entire global economy in a single deal.
+
         $maxPrivateCompanyValue = mt_rand(100_000_000_000, 500_000_000_000);
         $purchasePrice = min($purchasePrice, (float) $maxPrivateCompanyValue);
         
@@ -155,7 +154,7 @@ class MergerAndAcquisitionEngine
         //BOOST OR DESTROY RETURN ON INVESTED CAPITAL (ROIC)
         $baselineRoic = (float) $acquirer->getBaselineRoic();
         $currentRoic = (float) $acquirer->getCurrentRoic() ?: $baselineRoic;
-        $oldInvestedCapital = max($equity * 0.50, ($equity + $currentDebt - $treasury));
+        $oldInvestedCapital = $acquirer->getInvestedCapital();
         
         // Private companies generally have average market returns (6% to 12%)
         $targetRoic = mt_rand(60, 120) / 1000.0;
@@ -206,9 +205,15 @@ class MergerAndAcquisitionEngine
         $netIncome = (float) $seller->getTotalNetIncome();
         $currentRoic = (float) $seller->getCurrentRoic();
 
+        $health = $this->debtEngine->analyzeDebtHealth($seller, $macroState);
+        $wacc = $health['wacc'] ?? 0.08;
+
         // Is the company suffocating under its own weight?
-        $isDistressed = $currentRoic < 0.02;
-        $isDying = $currentRoic < -0.02;
+
+        $evaSpread = $currentRoic - $wacc;
+
+        $isDistressed = $evaSpread < -0.02;
+        $isDying = $currentRoic < 0.00 || $evaSpread < -0.05;
 
 
         // Only sell if highly valued OR deeply distressed
@@ -228,9 +233,10 @@ class MergerAndAcquisitionEngine
             $saleMultiple = mt_rand(6, 10);
             $annualProbability = 0.60;
         } else {
-            $annualProbability = 0.20;
+            // High P/E trimming (Taking advantage of an overvalued stock)
             $divestedFraction = mt_rand(5, 15) / 100.0;
             $saleMultiple = $currentPE;
+            $annualProbability = 0.20;
         }
 
 

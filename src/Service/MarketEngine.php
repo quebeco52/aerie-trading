@@ -44,6 +44,9 @@ class MarketEngine
      * @param float $volOfVol           The volatility of volatility (how much volatility fluctuates).
      * @param array $macroState         The current macroeconomic state, which can influence the base drift.
      * @param float $bookValuePerShare  The physical equity value per share.
+     * @param float $totalDebt          The total debt on the balance sheet.
+     * @param float $totalEquity        The total equity on the balance sheet.
+     * @param float $creditSpread       The company's baseline credit spread (borrowing premium).
      *
      * @return array{price: float, shock: float|null, next_volatility: float} The calculated next price, shock percentage, and updated volatility.
      */
@@ -65,7 +68,11 @@ class MarketEngine
         array $macroState = [],
         ?float $fcfPerShare = null,
         float $bookValuePerShare = 0.0,
-        float $maShock = 0.0
+        float $maShock = 0.0,
+        float $totalDebt = 0.0,
+        float $totalEquity = 0.0,
+        float $creditSpread = 0.01,
+        float $currentRoic = 0.10,
     ): array {
         
         // =====================================================================
@@ -74,6 +81,7 @@ class MarketEngine
         $riskFreeRate = $macroState['policy_rate'] ?? 0.04;
         $outputGap = $macroState['output_gap'] ?? 0.0;
         $inflation = $macroState['inflation'] ?? 0.02;
+        $corporateTaxRate = $macroState['corporate_tax_rate'] ?? 0.21;
 
         $finalDrift = $this->calculateMacroDrift($outputGap, $inflation, $macroState['ns_slope'] ?? 0.0, $drift, $beta, $riskFreeRate);
 
@@ -91,7 +99,18 @@ class MarketEngine
             dt: $dt
         );
 
-        $adjustedTheta = max(0.0001, $longTermVar);
+        $cycleVolModifier = 1.0;
+        if (!empty($macroState)) {
+            // Positive output gap (boom) reduces vol slightly, negative gap (bust) increases vol
+            $cycleVolModifier = 1.0 - ($macroState['output_gap'] ?? 0.0);
+        }
+
+        // Adjust theta downwards to account for the continuous positive variance jumps from the SVJJ model
+        // E[VarJump] = (pUp * muV * 0.5) + (pDown * muV)
+        $expectedVarJump = (0.30 * 0.015 * 0.5) + (0.70 * 0.015);
+        $jumpVarianceDrag = ($lambda * $expectedVarJump) / $kappa;
+        
+        $adjustedTheta = max(0.0001, ($longTermVar * $cycleVolModifier) - $jumpVarianceDrag);
 
         // Variance Process via Quadratic-Exponential (QE) Scheme
         $nextVar = $this->mathUtility->calculateQEVarianceStep(
@@ -108,12 +127,22 @@ class MarketEngine
         // Convert back to volatility for the return payload
         $nextVolatility = sqrt($nextVar);
 
-        // Only enforce a 5.0 (500%) ceiling to prevent integer overflows in the database.
-        $nextVolatility = min(5.00, $nextVolatility);
+        // Enforce bounds: Min 1% (0.01) to prevent flatlining in extreme bull markets, Max 500% (5.00) for DB safety
+        $nextVolatility = max(0.01, min(5.00, $nextVolatility));
 
         // Mean Reversion to Fundamental Value (Gravity Drift)
-        $fairValue = $this->calculateFundamentalFairValue($earningsPerShare, $targetPE, $fcfPerShare, $riskFreeRate, $beta, $bookValuePerShare);
-
+        $fairValue = $this->calculateFundamentalFairValue(
+            $earningsPerShare, 
+            $currentRoic,
+            $fcfPerShare, 
+            $riskFreeRate, 
+            $beta, 
+            $bookValuePerShare, 
+            $totalDebt, 
+            $totalEquity, 
+            $creditSpread,
+            $corporateTaxRate
+        );
         // Panic Gravity (Flight to Safety)
         $macroStress = abs($outputGap) + abs($inflation - 0.02);
         $dynamicReversion = $reversionSpeed + ($macroStress * 2.5);
@@ -160,30 +189,6 @@ class MarketEngine
     }
 
     /**
-     * Calculates the Intrinsic Fair Value using a Discounted Cash Flow (DCF) Gordon Growth Model.
-     */
-    private function calculateIntrinsicValueDCF(
-        float $fcfPerShare, 
-        float $policyRate, 
-        float $beta
-    ): float {
-        // Determine Cost of Equity (CAPM)
-        $equityRiskPremium = 0.05; 
-        $costOfEquity = $policyRate + ($beta * $equityRiskPremium);
-        $terminalGrowthRate = 0.02;
-
-        $spread = $costOfEquity - $terminalGrowthRate;
-
-        // THE FIX: Cap the absolute multiplier at 33.3x, rather than altering the Cost of Equity
-        $multiplier = $spread > 0 ? (1 + $terminalGrowthRate) / $spread : 33.33;
-        $multiplier = min(33.33, $multiplier); 
-
-        $valuePerShare = $fcfPerShare * $multiplier;
-
-        return max(0.01, $valuePerShare);
-    }
-
-    /**
      * Calculates the macro-adjusted drift utilizing CAPM and transmission mechanisms.
      *
      * Adjusts the baseline drift by factoring in asymmetric sentiment (fear vs greed),
@@ -208,31 +213,75 @@ class MarketEngine
     }
 
     /**
-     * Calculates the intrinsic fair value of the stock using P/E and DCF.
-     *
-     * Blends standard Price-to-Earnings (P/E) valuation with a Discounted Cash Flow (DCF)
-     * model if free cash flow is available. Provides a Graham-style hard floor based on book value.
-     *
-     * @param float $earningsPerShare  The current earnings per share (EPS).
-     * @param float $targetPE          The sector's target P/E ratio.
-     * @param float|null $fcfPerShare  The free cash flow per share, if available.
-     * @param float $riskFreeRate      The risk-free rate used for DCF discounting.
-     * @param float $beta              The stock's beta used for Cost of Equity.
-     * @param float $bookValuePerShare The physical equity value per share.
-     * @return float The calculated intrinsic fair value per share.
+     * Calculates the intrinsic fair value of the stock using dynamic EVA-adjusted P/E and DCF.
      */
-    private function calculateFundamentalFairValue(float $earningsPerShare, float $targetPE, ?float $fcfPerShare, float $riskFreeRate, float $beta, float $bookValuePerShare): float
-    {
-        $peFairValue = $earningsPerShare * $targetPE;
+    private function calculateFundamentalFairValue(
+        float $earningsPerShare, 
+        float $currentRoic, 
+        ?float $fcfPerShare, 
+        float $riskFreeRate, 
+        float $beta, 
+        float $bookValuePerShare, 
+        float $totalDebt, 
+        float $totalEquity, 
+        float $creditSpread,
+        float $corporateTaxRate
+    ): float {
+        // Calculate Live WACC
+        $wacc = $this->calculateWACC($riskFreeRate, $beta, $totalDebt, $totalEquity, $creditSpread, $corporateTaxRate);
 
+        // Dynamic P/E Re-Rating (The EVA Premium)
+        $marketBasePE = max(8.0, min(30.0, 1.0 / max(0.01, $riskFreeRate)));
+        $evaSpread = $currentRoic - $wacc;
+        
+        $qualityPremium = max(0.0, $evaSpread * 100) * 1.5;
+        $distressDiscount = min(0.0, $evaSpread * 100) * 2.0;
+
+        $fairValuePE = max(4.0, min(60.0, $marketBasePE + $qualityPremium + $distressDiscount));
+        $peFairValue = max(0.01, $earningsPerShare * $fairValuePE);
+
+        // Discounted Cash Flow (DCF) Value
         if ($fcfPerShare !== null && $fcfPerShare > 0.0) {
-            $dcfFairValue = $this->calculateIntrinsicValueDCF($fcfPerShare, $riskFreeRate, $beta);
+            $terminalGrowthRate = 0.02;
+            $spread = $wacc - $terminalGrowthRate;
+            $multiplier = $spread > 0 ? (1 + $terminalGrowthRate) / $spread : 33.33;
+            $multiplier = min(33.33, $multiplier); 
+            $dcfFairValue = max(0.01, $fcfPerShare * $multiplier);
+
+            // Blend the Earnings value and the Cash Flow value
             $earningsValue = ($peFairValue + $dcfFairValue) / 2.0;
         } else {
             $earningsValue = $peFairValue;
         }
 
+        // The Graham Floor (Stocks rarely trade below 80% of physical Book Value)
         $fairValue = max($earningsValue, $bookValuePerShare * 0.80);
+        
         return max(0.01, $fairValue);
+    }
+
+    /**
+     * Calculates the Weighted Average Cost of Capital (WACC) for live valuation.
+     */
+    private function calculateWACC(float $policyRate, float $beta, float $totalDebt, float $totalEquity, float $creditSpread, float $corporateTaxRate): float 
+    {
+        $valuationBeta = max(0.5, abs($beta)); // Use abs() to capture high inverse volatility, floored at 0.5 for baseline risk
+        $debtToEquity = $totalEquity > 0 ? ($totalDebt / $totalEquity) : 0.0;
+        
+        // Standard CAPM breaks down during insolvency. Cap D/E at 10.0 to prevent runaway WACC math.
+        $effectiveDebtToEquity = min(10.0, $debtToEquity);
+        $leveredBeta = $valuationBeta * (1.0 + ((1.0 - $corporateTaxRate) * $effectiveDebtToEquity));
+
+        $equityRiskPremium = 0.05; 
+        $costOfEquity = $policyRate + ($leveredBeta * $equityRiskPremium);
+        
+        $totalCapital = $totalEquity + $totalDebt;
+        $weightEquity = $totalCapital > 0 ? ($totalEquity / $totalCapital) : 1.0;
+        $weightDebt = $totalCapital > 0 ? ($totalDebt / $totalCapital) : 0.0;
+        
+        $costOfDebt = $policyRate + $creditSpread;
+        $effectiveCostOfDebt = $costOfDebt * (1.0 - $corporateTaxRate);
+        
+        return ($weightEquity * $costOfEquity) + ($weightDebt * $effectiveCostOfDebt);
     }
 }

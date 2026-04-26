@@ -10,6 +10,7 @@ let rawReports = [];
 let profitEngineChartInstance = null;
 let debtEquityChartInstance = null;
 let creditHealthChartInstance = null;
+let capitalEfficiencyChartInstance = null;
 
 Chart.defaults.color = '#c2c6d6';
 Chart.defaults.scale.grid.color = 'rgba(45, 52, 73, 0.4)';
@@ -90,6 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const gapEl = document.getElementById('macro-output-gap');
             const rateEl = document.getElementById('macro-policy-rate');
             const yieldEl = document.getElementById('macro-yield');
+            const gdpEl = document.getElementById('macro-gdp');
 
             if (infEl) infEl.textContent = (payload.macro.inflation * 100).toFixed(2) + '%';
             if (rateEl) rateEl.textContent = (payload.macro.policy_rate * 100).toFixed(2) + '%';
@@ -107,6 +109,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     gapEl.className = 'text-lg font-bold text-on-surface';
                 }
             }
+            
+            if (gdpEl && payload.macro.nominal_gdp_index !== undefined) {
+                const gdpValue = 20.00 * payload.macro.nominal_gdp_index;
+                gdpEl.textContent = '$' + gdpValue.toFixed(2) + 'T';
+            }
+
         }
 
         // Update the Current Cycle Badge
@@ -271,6 +279,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (document.getElementById('stat-debt-ratio')) {
                 document.getElementById('stat-debt-ratio').innerText = stockUpdate.debt_ratio.toFixed(2) + 'x';
             }
+            if (stockUpdate.market_share !== undefined && document.getElementById('stat-market-share')) {
+                document.getElementById('stat-market-share').innerText = stockUpdate.market_share.toFixed(2) + '%';
+            }
 
             // Other live stats
             if (stockUpdate.current_volatility !== undefined) {
@@ -285,6 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (stockUpdate.current_roic !== undefined && document.getElementById('stat-roic')) {
                 document.getElementById('stat-roic').innerText = (stockUpdate.current_roic * 100).toFixed(2) + '%';
             }
+
         }
     }
 
@@ -437,15 +449,20 @@ function updateCharts(timeframe) {
     let blendedRateData = [];
     let expenseRatioData = [];
 
+    // Capital Efficiency
+    let roicData = [];
+    let waccData = [];
+    let evaData = [];
+
     if (timeframe === '12Q') {
         const sliced = rawReports.slice(-12);
         sliced.forEach((report, index) => {
             labels.push(`Q${(index % 4) + 1}`);
-            
+
             let rev = parseFloat(report.revenue || 0) / 4;
             let inc = parseFloat(report.net_income || 0) / 4;
             let intExp = parseFloat(report.interest_expense || 0) / 4;
-            
+
             revenueData.push(rev);
             netIncomeData.push(inc);
             capexData.push(-parseFloat(report.capital_expenditures || 0));
@@ -457,6 +474,10 @@ function updateCharts(timeframe) {
             spreadData.push(parseFloat(report.dynamic_spread || 0) * 100);
             blendedRateData.push(parseFloat(report.blended_rate || 0) * 100);
             expenseRatioData.push(rev > 0 ? (intExp / rev) * 100 : 0.0);
+
+            roicData.push(parseFloat(report.roic || 0) * 100);
+            waccData.push(parseFloat(report.wacc || 0) * 100);
+            evaData.push(parseFloat(report.eva || 0));
         });
     }
     else if (timeframe === '5Y') {
@@ -486,6 +507,10 @@ function updateCharts(timeframe) {
             blendedRateData.unshift(parseFloat(report.blended_rate || 0) * 100);
             expenseRatioData.unshift(rev > 0 ? (intExp / rev) * 100 : 0.0);
 
+            roicData.unshift(parseFloat(report.roic || 0) * 100);
+            waccData.unshift(parseFloat(report.wacc || 0) * 100);
+            evaData.unshift(parseFloat(report.eva || 0));
+
             yearCount++;
         }
     }
@@ -493,6 +518,8 @@ function updateCharts(timeframe) {
     renderProfitEngineChart(labels, revenueData, netIncomeData, capexData);
     renderDebtEquityChart(labels, debtData, equityData, treasuryData);
     renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData);
+
+    renderCapitalEfficiencyChart(labels, roicData, waccData, evaData);
 }
 
 function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData) {
@@ -584,7 +611,7 @@ function renderDebtEquityChart(labels, debtData, equityData, treasuryData) {
 function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData) {
     const canvas = document.getElementById('creditHealthChart');
     if (!canvas) return;
-    
+
     if (creditHealthChartInstance) creditHealthChartInstance.destroy();
 
     const ctx = canvas.getContext('2d');
@@ -635,9 +662,91 @@ function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRat
                 tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
             },
             scales: {
-                y: { 
+                y: {
                     ticks: { callback: (val) => val + '%' },
                     beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+function renderCapitalEfficiencyChart(labels, roicData, waccData, evaData) {
+    const canvas = document.getElementById('capitalEfficiencyChart');
+    if (!canvas) return;
+
+    if (capitalEfficiencyChartInstance) capitalEfficiencyChartInstance.destroy();
+
+    const ctx = canvas.getContext('2d');
+    capitalEfficiencyChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'ROIC',
+                    data: roicData,
+                    borderColor: COLORS.positive,
+                    backgroundColor: COLORS.positive,
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'WACC',
+                    data: waccData,
+                    borderColor: COLORS.negative,
+                    backgroundColor: COLORS.negative,
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    tension: 0.3,
+                    pointRadius: 0,
+                    yAxisID: 'y'
+                },
+                {
+                    type: 'bar',
+                    label: 'EVA ($)',
+                    data: evaData,
+                    // Semi-transparent bars so they don't hide the lines
+                    backgroundColor: evaData.map(val => val < 0 ? 'rgba(255, 179, 173, 0.3)' : 'rgba(78, 222, 163, 0.3)'),
+                    borderRadius: 4,
+                    yAxisID: 'y1' // Binds to the right-side dollar axis
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => {
+                            if (ctx.dataset.label === 'EVA ($)') {
+                                return `EVA: $${formatLarge(ctx.raw)}`;
+                            }
+                            return `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    position: 'left',
+                    ticks: { callback: (val) => val + '%' },
+                    title: { display: true, text: 'Percentage' }
+                },
+                y1: {
+                    type: 'linear',
+                    position: 'right',
+                    grid: { drawOnChartArea: false }, // Hides overlapping grid lines
+                    ticks: { callback: (val) => formatLarge(val) },
                 }
             }
         }

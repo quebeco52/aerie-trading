@@ -40,6 +40,8 @@ class MacroEngine
             'policy_rate' => 0.04,
             'output_gap_ema' => 0.00,
             'policy_rate_ema' => 0.04,
+            'corporate_tax_rate' => 0.21,
+            'nominal_gdp_index' => 1.0,
         ];
 
         $targetInflation = 0.02;
@@ -61,6 +63,13 @@ class MacroEngine
         // Evaluate systemic crash risk
         $state = $this->applySystemicCrashRisk($state, $dt);
 
+        // Safely initialize if pulling from an older Redis cache payload
+        $state['nominal_gdp_index'] = $state['nominal_gdp_index'] ?? 1.0;
+
+        // Nominal Growth = Real Economic Output + Inflation
+        $nominalGrowth = ($naturalRate + $state['output_gap']) + $state['inflation'];
+        $state['nominal_gdp_index'] = max(0.10, $state['nominal_gdp_index'] * exp($nominalGrowth * $dt));
+
         // A quarter is 0.25 years.
         // tick data into a rolling 3-month average.
         $emaWeight = min(1.0, $dt / 0.25);
@@ -80,7 +89,9 @@ class MacroEngine
             'ns_slope' => $yieldData['slope'],
             'ns_curvature' => $yieldData['curvature'],
             'yield_10y' => $yield10y,
-            'qe_active' => $yieldData['qe_suppression'] > 0
+            'qe_active' => $yieldData['qe_suppression'] > 0,
+            'corporate_tax_rate' => $state['corporate_tax_rate'] ?? 0.21,
+            'nominal_gdp_index' => $state['nominal_gdp_index']
         ];
 
         //$this->logger->info('Macro Data', $payload);

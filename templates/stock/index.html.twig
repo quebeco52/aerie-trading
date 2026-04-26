@@ -107,6 +107,15 @@
 							</div>
 						</div>
 
+						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+                            <div class="flex justify-between items-center mb-6">
+                                <h3 class="text-xs font-bold uppercase tracking-widest text-on-surface">Capital Efficiency</h3>
+                            </div>
+                            <div class="relative h-48 w-full">
+                                <canvas id="capitalEfficiencyChart"></canvas>
+                            </div>
+                        </div>
+
 					</div>
 				{% endif %}
 			</div>
@@ -202,6 +211,10 @@
 								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">D/E</dt>
 								<dd class="text-sm font-semibold text-on-surface" id="stat-debt-ratio">{{ asset.debtToEquityRatio|number_format(2) }}x</dd>
 							</div>
+							<div class="py-3 flex justify-between items-center">
+								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Market Share</dt>
+								<dd class="text-sm font-semibold text-on-surface" id="stat-market-share">{{ (marketShare * 100)|number_format(2) }}%</dd>
+							</div>
 						</dl>
 					</div>
 
@@ -277,6 +290,13 @@
 
 							{# THE ECONOMIC STATUS BADGE #}
 							<div class="mt-4 pt-3 border-t border-outline-variant/10 flex justify-between items-center">
+								<span class="text-[10px] text-on-surface-variant">District GDP:</span>
+								<span id="macro-gdp" class="text-xs font-bold text-on-surface">
+									${{ (25.00 * macro.nominal_gdp_index|default(1.0))|number_format(2) }}T
+								</span>
+							</div>
+
+							<div class="mt-2 pt-2 flex justify-between items-center">
 								<span class="text-[10px] text-on-surface-variant">Current Cycle:</span>
 								<span id="market-economic-cycle" class="text-xs font-bold uppercase tracking-widest text-primary">
 									{{ economic_cycle }}

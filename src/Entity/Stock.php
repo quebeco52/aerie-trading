@@ -709,6 +709,19 @@ class Stock
     }
 
     /**
+     * Calculates the True Size of the Operating Business (Invested Capital).
+     * Core Business Floor: Assumes at least 50% of Equity is driving operations, even for mega-hoarders.
+     */
+    public function getInvestedCapital(): float
+    {
+        $equity = (float) $this->totalEquity;
+        $debt = (float) $this->totalDebt;
+        $cash = (float) $this->corporateTreasury;
+        
+        return max($equity * 0.50, ($equity + $debt - $cash));
+    }
+
+    /**
      * Calculates the Debt-to-Equity Ratio dynamically based on Absolute Debt and Equity.
      * * @return string The calculated Debt-to-Equity Ratio.
      */

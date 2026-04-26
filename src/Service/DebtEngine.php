@@ -10,7 +10,6 @@ class DebtEngine
     private const QUARTERLY_DEBT_TURNOVER = 0.05; // 5% of old debt expires every quarter (5-year average maturity)
 
     // Debt Analysis Constants
-    private const CORPORATE_TAX_RATE = 0.21;
     private const CASH_YIELD_SPREAD = 0.02;
     private const ARBITRAGE_HURDLE = 0.025;
     private const MIN_INTEREST_COVERAGE_RATIO = 2.0;
@@ -30,8 +29,7 @@ class DebtEngine
         
         // Failsafe: If the database is unseeded or hasn't caught up, fundamentally estimate revenue
         if ($revenue <= 0.0) {
-            $equity = max(1.0, (float) $stock->getTotalEquity());
-            $investedCapital = max($equity * 0.50, ($equity + $debt - $treasury));
+            $investedCapital = $stock->getInvestedCapital();
             $baselineRoic = max(0.01, (float) $stock->getBaselineRoic());
             $marginFallback = max(0.01, (float) $stock->getOperatingMargin());
             $assetTurnover = $baselineRoic / $marginFallback;
@@ -106,7 +104,9 @@ class DebtEngine
     public function analyzeDebtHealth(Stock $stock, array $macroState): array
     {
         $currentDebt = (float) $stock->getTotalDebt();
+        $equity = (float) $stock->getTotalEquity();
         $policyRate = $macroState['policy_rate_ema'] ?? $macroState['policy_rate'] ?? 0.04;
+        $corporateTaxRate = $macroState['corporate_tax_rate'] ?? 0.21;
 
         $debtMetrics = $this->calculateInterestExpense($stock, $macroState, false);
 
@@ -116,8 +116,27 @@ class DebtEngine
             : $debtMetrics['current_market_rate'];
             
         // Tax Shield (Interest payments reduce taxable income)
-        $effectiveCostOfDebt = $grossCostOfDebt * (1.0 - self::CORPORATE_TAX_RATE);
+        $effectiveCostOfDebt = $grossCostOfDebt * (1.0 - $corporateTaxRate);
             
+        // Levered Beta (The Penalty for Greed)
+        // Use abs() to capture high inverse volatility, floored at 0.5 for baseline risk
+        $baseBeta = max(0.5, abs((float) $stock->getBeta()));
+        $debtToEquity = $equity > 0 ? ($currentDebt / $equity) : 0.0;
+        
+        // Standard CAPM breaks down during insolvency. Cap D/E at 10.0 to prevent runaway WACC math.
+        $effectiveDebtToEquity = min(10.0, $debtToEquity);
+        $leveredBeta = $baseBeta * (1.0 + ((1.0 - $corporateTaxRate) * $effectiveDebtToEquity));
+
+        // Cost of Equity (CAPM)
+        $equityRiskPremium = 0.05;
+        $costOfEquity = $policyRate + ($leveredBeta * $equityRiskPremium);
+
+        // Weighted Average Cost of Capital (WACC)
+        $totalCapital = $currentDebt + $equity;
+        $weightEquity = $totalCapital > 0 ? ($equity / $totalCapital) : 1.0;
+        $weightDebt = $totalCapital > 0 ? ($currentDebt / $totalCapital) : 0.0;
+        $wacc = ($weightEquity * $costOfEquity) + ($weightDebt * $effectiveCostOfDebt);
+
         // Cash Yield & Arbitrage Hurdle (Money Market Funds)
         $yieldOnCash = max(0.0, $policyRate - self::CASH_YIELD_SPREAD);
         
@@ -149,6 +168,9 @@ class DebtEngine
             'wants_to_paydown_debt' => $wantsToPaydownDebt,
             'can_issue_debt' => $canIssueDebt,
             'debt_tolerance' => $macroDebtTolerance,
+            'wacc' => $wacc,
+            'cost_of_equity' => $costOfEquity,
+            'levered_beta' => $leveredBeta,
             'raw_metrics' => $debtMetrics
         ];
     }

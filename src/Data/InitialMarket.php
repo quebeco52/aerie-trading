@@ -10,7 +10,7 @@ class InitialMarket
             'price' => 2000.00, 'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.15, 'beta' => 1.10, 'jump_intensity' => 0.40, 'jump_mean' => -0.15, 'jump_vol' => 0.05,
             'baseline_roic' => 0.16, 'capex_ratio' => 0.10, 'target_payout_ratio' => 0.40, 'dividendSpeed' => 0.07,
-            'fixed_cost_ratio' => 0.50, 'operating_margin' => 0.40, 'public_float' => 0.50,
+            'fixed_cost_ratio' => 0.50, 'operating_margin' => 0.40, 'public_float' => 0.50, 'credit_spread' => 0.0015,
             'corporate_treasury' => 550_000_000_000.00,
             'total_net_income'  => 158_570_000_000.00,  
             'total_equity'      => 1_000_000_000_000.00, 

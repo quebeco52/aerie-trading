@@ -122,7 +122,10 @@ class StockTracker
                 macroState: $macroState,
                 fcfPerShare: $stock->getFreeCashFlowPerShare() !== null ? (float) $stock->getFreeCashFlowPerShare() : null,
                 bookValuePerShare: (float) $stock->getBookValuePerShare(),
-                maShock: $maShock
+                maShock: $maShock,
+                totalDebt: (float) $stock->getTotalDebt(),
+                totalEquity: (float) $stock->getTotalEquity(),
+                creditSpread: (float) $stock->getCreditSpread()
             );
 
             $newPrice = $calculation['price'];
@@ -172,7 +175,10 @@ class StockTracker
             $currentMarketCap = $finalPrice * $newShares;
             $totalMarketCap += $currentMarketCap;
 
-            $stockUpdates[] = [
+            // Determine if a fundamental corporate event occurred this tick
+            $isFundamentalTick = !empty($generatedEvents) || $maResult || (isset($divestResult) && $divestResult);
+
+            $stockUpdate = [
                 'ticker' => $stock->getTicker(),
                 'sector' => $sectorName,
                 'price' => round($finalPrice, 2),
@@ -185,6 +191,19 @@ class StockTracker
                 'equity' => (float) $stock->getTotalEquity(),
                 'debt_ratio' => (float) $stock->getDebtToEquityRatio()
             ];
+
+            // Only update Market Share on the UI when Corporate Fundamentals actually change
+            // This prevents the percentage from jittering constantly as the Nominal GDP index expands
+            if ($isFundamentalTick) {
+                $investedCapital = $stock->getInvestedCapital();
+                $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
+                $baselineSectorTam = SectorPE::getBaselineTam($sectorName);
+                $marketShare = min(0.9999, $investedCapital / ($baselineSectorTam * $nominalGdpIndex));
+                
+                $stockUpdate['market_share'] = round($marketShare * 100, 2);
+            }
+            
+            $stockUpdates[] = $stockUpdate;
 
             if ($recordHistory) {
 

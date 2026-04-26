@@ -142,4 +142,16 @@ class SectorPE
         'Utilities' => 16.0,              // Regulated safe havens (Water, Power)
         'Communication Services' => 17.0, // Telecom, Media, Entertainment
     ];
+
+    public static function getBaselineTam(string $sector): float
+    {
+        return match ($sector) {
+            'Information Technology', 'Financials' => 5_000_000_000_000,
+            'Health Care' => 2_000_000_000_000,
+            'Consumer Discretionary', 'Communication Services' => 2_000_000_000_000,
+            'Industrials', 'Energy', 'Consumer Staples' => 2_000_000_000_000,
+            'Utilities', 'Real Estate', 'Materials' => 2_000_000_000_000,
+            default => 2_000_000_000_000,
+        };
+    }
 }

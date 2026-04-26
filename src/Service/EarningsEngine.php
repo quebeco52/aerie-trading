@@ -83,16 +83,11 @@ class EarningsEngine
         $sharesOutstanding = (float) $stock->getSharesOutstanding();
 
         // Calculate the True Size of the Business (Invested Capital)
+        $investedCapital = $stock->getInvestedCapital();
         $equity = (float) $stock->getTotalEquity();
-        $debt = (float) $stock->getTotalDebt();
         $cash = (float) $stock->getCorporateTreasury();
 
-        // The Core Business Floor. 
-        // Even if they hoard massive cash, we assume at least 50% of their equity is actively driving the core business.
-        $baseCapital = $equity + $debt - $cash;
-        $investedCapital = max($equity * 0.50, $baseCapital);
-
-        // Calculate NOPAT (Net Operating Profit After Tax)
+        // Calculate EBIT (Earnings Before Interest and Taxes)
         $roicData = $this->calculateDynamicRoic($stock, $macroState);
         $stock->setCurrentRoic((string) $roicData['core_roic']);
         $dynamicRoic = $roicData['reported_roic'];
@@ -122,8 +117,8 @@ class EarningsEngine
 
         // The Operating Leverage Engine
         $actualVariableCosts = $actualRevenue * $variableCostMargin;
-        $nopat = $actualRevenue - $fixedCosts - $actualVariableCosts;
-        $expectedNopat = $baselineRevenue - $fixedCosts - ($baselineRevenue * $variableCostMargin);
+        $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
+        $expectedEbit = $baselineRevenue - $fixedCosts - ($baselineRevenue * $variableCostMargin);
 
         // Interest & Debt Physics
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
@@ -156,11 +151,17 @@ class EarningsEngine
             default => (float) $stock->getDepreciationRate() ?: 0.05,
         };
         
-        $absoluteDepreciation = $equity * $depreciationRate;
+        // Physical assets rust, not equity. Invested Capital perfectly isolates the physical operating base.
+        $absoluteDepreciation = $investedCapital * $depreciationRate;
 
-        // Calculate True Fundamental Expected Net Income
-        $expectedTotalNetIncome = $expectedNopat - $absoluteDepreciation - $interestExpense + $interestIncome;
-        $actualTotalNetIncome = $nopat - $absoluteDepreciation - $interestExpense + $interestIncome;
+        // Calculate Earnings Before Tax (EBT)
+        $expectedEbt = $expectedEbit - $absoluteDepreciation - $interestExpense + $interestIncome;
+        $actualEbt = $ebit - $absoluteDepreciation - $interestExpense + $interestIncome;
+
+        // Apply Corporate Taxes to find True Net Income
+        $corporateTaxRate = $macroState['corporate_tax_rate'] ?? 0.21;
+        $expectedTotalNetIncome = $expectedEbt * (1.0 - $corporateTaxRate);
+        $actualTotalNetIncome = $actualEbt * (1.0 - $corporateTaxRate);
 
         // Modifier scaled correctly for Annual EPS
         $expectedAnnualEps = $expectedTotalNetIncome / max(1.0, $sharesOutstanding);
@@ -220,12 +221,19 @@ class EarningsEngine
         $formattedEps = $actualQuarterlyEps < 0 ? '-$' . number_format(abs($actualQuarterlyEps), 2) : '$' . number_format($actualQuarterlyEps, 2);
         $formattedSurprise = '$' . number_format(abs($surpriseAmountQuarterly), 2);
 
+        // Calculate Economic Value Added (EVA)
+        $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState);
+        $wacc = $health['wacc'];
+        $economicProfit = $investedCapital * ($dynamicRoic - $wacc);
+        $formattedEva = '$' . number_format(abs($economicProfit / 1_000_000_000), 2) . 'B';
+        $evaString = $economicProfit >= 0 ? "+{$formattedEva} EVA" : "-{$formattedEva} EVA";
+
         if ($surpriseAmountQuarterly > 0.0) {
-            $description = "Q-Earnings: {$formattedEps} (Beat expectations by {$formattedSurprise}).";
+            $description = "Q-Earnings: {$formattedEps} (Beat expectations by {$formattedSurprise} | {$evaString}).";
         } elseif ($surpriseAmountQuarterly < 0.0) {
-            $description = "Q-Earnings: {$formattedEps} (Missed expectations by {$formattedSurprise}).";
+            $description = "Q-Earnings: {$formattedEps} (Missed expectations by {$formattedSurprise} | {$evaString}).";
         } else {
-            $description = "Q-Earnings: {$formattedEps} (Met expectations exactly).";
+            $description = "Q-Earnings: {$formattedEps} (Met expectations exactly | {$evaString}).";
         }
 
         // Create the main Earnings Event
@@ -239,6 +247,7 @@ class EarningsEngine
 
         $report = new \App\Entity\CorporateReport();
         $report->setStock($stock);
+        $report->setRecordedAt(new \DateTime());
         
         // The Holy Trinity of the Income Statement
         $report->setRevenue((string) $actualRevenue);
@@ -259,6 +268,8 @@ class EarningsEngine
         // Metrics
         $report->setRoic((string) $dynamicRoic);
         $report->setShares((string) $stock->getSharesOutstanding());
+        $report->setWacc((string) $wacc);
+        $report->setEva((string) $economicProfit);
 
         $this->entityManager->persist($report);
 
@@ -344,19 +355,20 @@ class EarningsEngine
             $currentRoic = $baselineRoic;
         }
 
-        // Fetch the fundamental size of the company, not the market hype!
-        $equity = (float) $stock->getTotalEquity();
-        $debt = (float) $stock->getTotalDebt();
-        $cash = (float) $stock->getCorporateTreasury();
-        
-        $investedCapital = max($equity * 0.50, ($equity + $debt - $cash));
+        $investedCapital = $stock->getInvestedCapital();
 
         // Macroeconomic Modifier
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
         $macroModifier = $outputGap * $beta;
 
-        // Corporate Saturation Penalty (Now driven by Book Value)
-        $saturationThreshold = 500_000_000_000; // $0.5 trillion in Equity
+        // DYNAMIC TAM LOGIC
+        $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
+
+        $baselineSectorTam = \App\Data\SectorPE::getBaselineTam($stock->getSector());
+        $dynamicTam = $baselineSectorTam * $nominalGdpIndex;
+        $marketShare = $investedCapital / $dynamicTam;
+
+        $saturationThreshold = 0.25; // 25% Market Share triggers bloat gravity
         $saturationPenalty = 0.0;
 
         $systemic_importance = $stock->getSystemicImportance();
@@ -369,11 +381,34 @@ class EarningsEngine
             default    => 1.0, // Takes the full 100% saturation penalty
         };
         
-        if ($investedCapital > $saturationThreshold) {
-            $excessSize = $investedCapital / $saturationThreshold;
-            // The heavier the balance sheet, the harder it is to steer the ship
-            $MarketSaturationPenalty = log($excessSize) * 0.030;
+        if ($marketShare > $saturationThreshold) {
+            $excessSize = $marketShare / $saturationThreshold;
+            
+            // Dynamic Margin Gravity
+            // We floor the bleed factor at 0.10 so normal companies still face gravity,
+            // but a company with a 30% ROIC will bleed 3x faster than a 10% company
+            $roicBleedFactor = max(0.10, $baselineRoic);
+            $gravityMultiplier = $roicBleedFactor * 0.30; 
+            
+            // The heavier the balance sheet and the higher the margins, the harder the fall
+            $MarketSaturationPenalty = log($excessSize) * $gravityMultiplier;
             $saturationPenalty = $MarketSaturationPenalty * $moat;
+
+            // Hyper-scale gravity triggers at 60% Monopoly Market Share
+            if ($marketShare > 0.60) {
+                $hyperScaleExcess = $marketShare / 0.60;
+                
+                // Bypasses the titan moat. Hyper-scale gravity also scales with their fat margins
+                $rawGravity = log($hyperScaleExcess) * $gravityMultiplier;
+                $saturationPenalty += $rawGravity; 
+            }
+            
+            // Terminal Monopoly gravity triggers at 85% Market Share
+            if ($marketShare > 0.85) {
+                // Bypasses the titan moat. sheer physical limits brutally crush margins.
+                $terminalExcess = $marketShare - 0.85;
+                $saturationPenalty += ($terminalExcess * 0.75);
+            }
         }
 
         // Calculate where the core business ROIC "wants" to be (Saturation Penalty is smoothed)

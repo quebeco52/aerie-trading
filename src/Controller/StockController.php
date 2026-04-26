@@ -53,7 +53,11 @@ class StockController extends AbstractController
 
         $macroStateJson = $redis->get('macroeconomic_state');
         $macroState = $macroStateJson ? json_decode($macroStateJson, true) : [
-            'inflation' => 0.02, 'output_gap' => 0.00, 'policy_rate' => 0.04, 'yield_10y' => 0.045
+            'inflation' => 0.02,
+            'output_gap' => 0.00,
+            'policy_rate' => 0.04,
+            'yield_10y' => 0.045,
+            'nominal_gdp_index' => 1.0
         ];
 
 
@@ -65,14 +69,21 @@ class StockController extends AbstractController
         $marketCap = 0;
         $peRatio = 0;
         $targetPE = 20.00;
+        $marketShare = 0;
+
 
         $liveSectorPEs = $macroEngine->getLiveSectors();
+
 
         if (!$isEtf) {
             $marketCap = (float) $asset->getPrice() * (float) $asset->getSharesOutstanding();
             $eps = (float) $asset->getEarningsPerShare();
             $peRatio = ($eps > 0) ? ((float) $asset->getPrice() / $eps) : 0;
             $targetPE = $liveSectorPEs[$asset->getSector()] ?? 20.00;
+
+            $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
+            $baselineSectorTam = \App\Data\SectorPE::getBaselineTam($asset->getSector());
+            $marketShare = min(0.9999, $asset->getInvestedCapital() / ($baselineSectorTam * $nominalGdpIndex));
         }
 
         $generalInfo = $asset->getDescription();
@@ -106,7 +117,8 @@ class StockController extends AbstractController
             'ticksPerYear' => (int) ($_ENV['SIM_TICKS_PER_YEAR'] ?? 14400),
             'economic_cycle' => $economicCycle,
             'macro' => $macroState,
-            
+            'marketShare' => $marketShare
+
         ]);
     }
 
@@ -227,10 +239,10 @@ class StockController extends AbstractController
         if (!$stock) return $this->json([]); // ETFs don't have corporate reports
 
         $conn = $entityManager->getConnection();
-        
+
         // Fetch all fundamental reports for this stock, oldest to newest (for charting)
         $sql = '
-            SELECT net_income, equity, total_debt, treasury, roic, shares, recorded_at, interest_expense, blended_rate, dynamic_spread, revenue, interest_income, capital_expenditures
+            SELECT net_income, equity, total_debt, treasury, roic, shares, recorded_at, interest_expense, blended_rate, dynamic_spread, revenue, interest_income, capital_expenditures, wacc, eva
             FROM corporate_report 
             WHERE stock_id = :id 
             ORDER BY recorded_at ASC
