@@ -2,8 +2,31 @@
 <html class="dark">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Aerie Exchange{% endblock %}</title>
     
+    {% block meta %}
+        <meta name="description" content="Aerie Exchange is a live, procedurally generated stock market simulation featuring real-time trading, clean surplus accounting, and dynamic macroeconomic cycles.">
+        <meta property="og:title" content="Aerie Exchange - Live Market Simulator">
+        <meta property="og:description" content="Trade live stocks and ETFs in a realistic, procedurally generated economic simulation.">
+        <meta property="og:type" content="website">
+        <meta name="twitter:card" content="summary_large_image">
+
+        <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@type": "WebSite",
+            "name": "Aerie Exchange",
+            "url": "{{ app.request.getSchemeAndHttpHost() }}/",
+            "description": "Live, procedurally generated stock market simulation featuring clean surplus accounting."
+        }
+        </script>
+    {% endblock %}
+
+    {% block favicon %}
+        <link rel="icon" href="{{ asset('favicon.ico') }}">
+    {% endblock %}
+
     <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
     <link rel="stylesheet" href="{{ asset('styles/app.css') }}">

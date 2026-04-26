@@ -1,8 +1,29 @@
 {% extends 'base.html.twig' %}
 
 {% block title %}
-	{{ asset.ticker }}
-	| Aerie Exchange
+	{{ asset.ticker }} Stock Price & Analysis | {{ asset.name }} - Aerie Exchange
+{% endblock %}
+
+{% block meta %}
+    <meta name="description" content="View live stock prices, market cap, and fundamental Clean Surplus accounting data for {{ asset.name }} ({{ asset.ticker }}). See the latest quarterly earnings reports and historical charts.">
+    <meta property="og:title" content="{{ asset.ticker }} Stock Price | Aerie Exchange">
+    <meta property="og:description" content="Live financial data and economic simulation for {{ asset.name }} ({{ asset.sector }}).">
+    <meta property="og:type" content="website">
+
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "{{ isEtf ? 'InvestmentFund' : 'Corporation' }}",
+        "name": "{{ asset.name }}",
+        "tickerSymbol": "{{ asset.ticker }}",
+        "description": "Live financial data and economic simulation for {{ asset.name }}.",
+        "url": "{{ app.request.uri }}"
+    }
+    </script>
+{% endblock %}
+
+{% block favicon %}
+    <link rel="icon" href="{{ asset('icons/' ~ asset.ticker ~ '.svg') }}" type="image/svg+xml">
 {% endblock %}
 
 {% block body %}
@@ -16,7 +37,7 @@
 					<div class="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-8">
 						<div>
 							<div class="flex items-center gap-3 mb-2">
-								<h2 class="text-3xl font-bold text-on-surface tracking-tight">{{ asset.name }}</h2>
+								<h1 class="text-3xl font-bold text-on-surface tracking-tight">{{ asset.name }}</h1>
 								<img class="w-14 h-14 rounded-full" src="{{ asset('icons/' ~ asset.ticker ~ '.svg') }}" onerror="this.onerror=null; this.src='{{ asset('icons/default.svg') }}';" alt="{{ asset.ticker }} icon">
 								<span class="inline-flex items-center rounded-md bg-surface-container-highest px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
 									{{ isEtf ? 'Market Index' : asset.sector }}
