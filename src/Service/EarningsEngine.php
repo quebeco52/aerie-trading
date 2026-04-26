@@ -101,7 +101,9 @@ class EarningsEngine
         $fixedCostRatio = $stock->getFixedCostRatio(); // 0.80 for Tech, 0.20 for Retail
 
         // Calculate Baseline Costs
-        $targetOperatingMargin = $dynamicRoic / $assetTurnover;
+        // Clamp the margin at 95% to prevent negative costs (Infinite Money Glitch) if ROIC violently outpaces Turnover
+        $targetOperatingMargin = min(0.95, $dynamicRoic / $assetTurnover);
+        
         $baselineTotalCosts = $baselineRevenue * (1.0 - $targetOperatingMargin);
         $fixedCosts = $baselineTotalCosts * $fixedCostRatio;
         $variableCostMargin = ($baselineTotalCosts - $fixedCosts) / max(1.0, $baselineRevenue);
@@ -112,9 +114,6 @@ class EarningsEngine
         $revenueShock = $revenueZ * ($baselineVol * 0.15); 
         $actualRevenue = $baselineRevenue * (1.0 + $revenueShock);
         
-        // Update the Stock Entity BEFORE calling DebtEngine so the CFO has the right Top-Line
-        $stock->setTotalRevenue((string) $actualRevenue);
-
         // The Operating Leverage Engine
         $actualVariableCosts = $actualRevenue * $variableCostMargin;
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
@@ -122,9 +121,25 @@ class EarningsEngine
 
         // Interest & Debt Physics
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        $stableMargin = (float) $stock->getOperatingMargin();
+        
+        // Calculate EXPECTED Interest Expense (Pre-Shock)
+        $stock->setTotalRevenue((string) $baselineRevenue);
+        $stock->setOperatingMargin((string) $targetOperatingMargin);
+        $expectedDebtMetrics = $this->debtEngine->calculateInterestExpense($stock, $macroState, false);
+        $expectedInterestExpense = $expectedDebtMetrics['interest_expense'];
+
+        // Calculate ACTUAL Interest Expense (Post-Shock, Advancing Maturity)
+        $stock->setTotalRevenue((string) $actualRevenue);
+        // Sync the true dynamic margin to the Stock Entity so DebtEngine calculates the precise Net Debt Leverage!
+        $trueOperatingMargin = $ebit / max(1.0, $actualRevenue);
+        $stock->setOperatingMargin((string) max(0.01, $trueOperatingMargin));
         
         $debtMetrics = $this->debtEngine->calculateInterestExpense($stock, $macroState, true);
-        $interestExpense = $debtMetrics['interest_expense'];
+        $actualInterestExpense = $debtMetrics['interest_expense'];
+
+        // Restore the structural margin so Asset Turnover math isn't corrupted next quarter
+        $stock->setOperatingMargin((string) $stableMargin);
 
         $stock->setHistoricalFixedRate((string) $debtMetrics['blended_rate']);
 
@@ -155,13 +170,14 @@ class EarningsEngine
         $absoluteDepreciation = $investedCapital * $depreciationRate;
 
         // Calculate Earnings Before Tax (EBT)
-        $expectedEbt = $expectedEbit - $absoluteDepreciation - $interestExpense + $interestIncome;
-        $actualEbt = $ebit - $absoluteDepreciation - $interestExpense + $interestIncome;
+        $expectedEbt = $expectedEbit - $absoluteDepreciation - $expectedInterestExpense + $interestIncome;
+        $actualEbt = $ebit - $absoluteDepreciation - $actualInterestExpense + $interestIncome;
 
         // Apply Corporate Taxes to find True Net Income
         $corporateTaxRate = $macroState['corporate_tax_rate'] ?? 0.21;
-        $expectedTotalNetIncome = $expectedEbt * (1.0 - $corporateTaxRate);
-        $actualTotalNetIncome = $actualEbt * (1.0 - $corporateTaxRate);
+        // Companies bleeding cash do not get a physical cash rebate from the government
+        $expectedTotalNetIncome = $expectedEbt > 0 ? $expectedEbt * (1.0 - $corporateTaxRate) : $expectedEbt;
+        $actualTotalNetIncome = $actualEbt > 0 ? $actualEbt * (1.0 - $corporateTaxRate) : $actualEbt;
 
         // Modifier scaled correctly for Annual EPS
         $expectedAnnualEps = $expectedTotalNetIncome / max(1.0, $sharesOutstanding);
@@ -270,6 +286,8 @@ class EarningsEngine
         $report->setShares((string) $stock->getSharesOutstanding());
         $report->setWacc((string) $wacc);
         $report->setEva((string) $economicProfit);
+        $report->setDividendPaid(sprintf('%.4F', $allocation['total_paid']));
+        $report->setStockBuybacks(sprintf('%.4F', $allocation['total_cash_spent']));
 
         $this->entityManager->persist($report);
 
@@ -407,7 +425,7 @@ class EarningsEngine
             if ($marketShare > 0.85) {
                 // Bypasses the titan moat. sheer physical limits brutally crush margins.
                 $terminalExcess = $marketShare - 0.85;
-                $saturationPenalty += ($terminalExcess * 0.75);
+                $saturationPenalty += ($terminalExcess * 2);
             }
         }
 

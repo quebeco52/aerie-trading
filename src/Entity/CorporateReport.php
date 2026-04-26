@@ -64,6 +64,12 @@ class CorporateReport
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 2, nullable: true)]
     private ?string $eva = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $dividendPaid = '0.0000';
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $stockBuybacks = '0.0000';
+
     public function __construct()
     {
         $this->recordedAt = new \DateTime();
@@ -255,6 +261,30 @@ class CorporateReport
     public function setEva(?string $eva): static
     {
         $this->eva = $eva;
+
+        return $this;
+    }
+
+    public function getDividendPaid(): string
+    {
+        return $this->dividendPaid;
+    }
+
+    public function setDividendPaid(string $dividendPaid): static
+    {
+        $this->dividendPaid = $dividendPaid;
+
+        return $this;
+    }
+
+    public function getStockBuybacks(): string
+    {
+        return $this->stockBuybacks;
+    }
+
+    public function setStockBuybacks(string $stockBuybacks): static
+    {
+        $this->stockBuybacks = $stockBuybacks;
 
         return $this;
     }

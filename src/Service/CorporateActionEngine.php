@@ -300,17 +300,44 @@ class CorporateActionEngine
         $speed = (float) $stock->getDividendSpeed();
         $lastDividend = (float) $stock->getLastDividend();
 
-        // Target is based on EPS (Net Income)
-        $targetDividend = $quarterlyEps > 0 ? ($quarterlyEps * $targetPayout) : 0.0;
+        // Calculate what the dividend *should* be based on current earnings
+        $calculatedTarget = $quarterlyEps > 0 ? ($quarterlyEps * $targetPayout) : 0.0;
+
+        // Asymmetric Smoothing:
+        // "Aristocrats" (speed <= 15%) fiercely defend their streak and maintain the old payout even if earnings dip.
+        // "Variable Payout" companies (speed > 15%) don't care about streaks and let the dividend float with earnings.
+        if ($speed > 0.15) {
+            $targetDividend = $calculatedTarget;
+        } else {
+            $targetDividend = max($calculatedTarget, $lastDividend);
+        }
 
         // Emergency Liquidity Preservation
         $roic = (float) $stock->getCurrentRoic();
         $wacc = $health['wacc'];
         $evaSpread = $roic - $wacc;
 
-        if ($evaSpread < -0.02) {
+        // Titans are much more stubborn about cutting dividends to save face
+        $isTitan = in_array($stock->getSystemicImportance(), ['titan', 'systemic']);
+        $distressMultiplier = $isTitan ? 1.2 : 1.0;
+
+        $hasCashBuffer = $availableTreasury > ($equity * 0.10); // 10% buffer gives them massive confidence
+        $isCriticalCash = $availableTreasury < ($equity * 0.05); // 5% means they are getting dangerously close to the 3% operating limit
+
+        // Deep distress requires a massive EVA collapse
+        $isDeepDistress = $evaSpread < (-0.08 * $distressMultiplier);
+        $isModerateDistressNoCash = ($evaSpread < (-0.04 * $distressMultiplier)) && !$hasCashBuffer;
+        $isLiquidityCrisis = $health['is_severe_negative_carry'];
+
+        if ($isDeepDistress || $isModerateDistressNoCash || $isLiquidityCrisis) {
             $targetDividend = 0.0;
-            $speed = 1.0; // Override the Lintner smoothing model. Cut it immediately!
+            $speed = $isLiquidityCrisis ? 1.0 : min(1.0, $speed + 0.25);
+        } elseif ($isCriticalCash && $quarterlyEps < $lastDividend) {
+            // If they are paying out more than they earn AND are critically low on cash
+            $targetDividend = $calculatedTarget;
+            if ($speed <= 0.15) {
+                $speed = $speed * 0.50; // Aristocrats are reluctant to cut and slowly bleed it down
+            }
         }
 
 
@@ -321,7 +348,7 @@ class CorporateActionEngine
         $minOperatingCash = $equity * 0.03;
         $usableCash = max(0.0, $availableTreasury - $minOperatingCash);
         $maxDividendPerShare = $shares > 0 ? ($usableCash / $shares) : 0.0;
-        
+
         $newDividend = min($newDividend, $maxDividendPerShare);
 
         $totalPaid = $newDividend * $shares;
@@ -338,7 +365,12 @@ class CorporateActionEngine
 
             $stock->setLastDividend((string) $newDividend);
             $yield = (($newDividend * 4) / max($currentPrice, 0.01)) * 100;
-            $event = $this->marketEvent->publish($stock, 'DIVIDEND', "{$stock->getTicker()} distributed a quarterly dividend of $" . number_format($newDividend, 2) . "/share (Yield: " . number_format($yield, 2) . "%).", 0.0);
+
+            $totalPaidStr = $totalPaid >= 1_000_000_000
+                ? number_format($totalPaid / 1_000_000_000, 2) . 'B'
+                : number_format($totalPaid / 1_000_000, 2) . 'M';
+
+            $event = $this->marketEvent->publish($stock, 'DIVIDEND', "{$stock->getTicker()} distributed a quarterly dividend of $" . number_format($newDividend, 2) . "/share (\${$totalPaidStr} total | Yield: " . number_format($yield, 2) . "%).", 0.0);
         } else {
             $stock->setLastDividend('0.00');
         }
@@ -370,7 +402,7 @@ class CorporateActionEngine
         $wacc = $health['wacc'];
         $economicSpread = $roic - $wacc;
         $equity = (float) $stock->getTotalEquity();
-        
+
         $isMegaHoarder = $excessCash > ($equity * 0.50);
 
         // Require positive EVA and fair valuation, OR force buybacks if sitting on a massive dead cash hoard.
@@ -438,7 +470,7 @@ class CorporateActionEngine
         $currentEquity = (float) $stock->getTotalEquity();
         $newEquity = max(1000.0, $currentEquity + $quarterlyNetIncome - $totalCashSpent);
         $stock->setTotalEquity((string) $newEquity);
-        
+
         $newDebtIssued = 0.0;
 
         // DEBT MANAGEMENT (MACRO TOLERANCE)
@@ -450,18 +482,18 @@ class CorporateActionEngine
         $wacc = $health['wacc'];
 
         if ($roic > $wacc && $health['can_issue_debt']) {
-            
+
             $ebit = $health['raw_metrics']['ebit'] ?? 0.0;
             $newBorrowingRate = $health['raw_metrics']['current_market_rate'] ?? 0.05;
 
             // Income Statement Constraint (ICR)
             $minimumIcr = 3.0; // Minimum 3x interest coverage
             $maxTolerableInterest = max(0.0, $ebit / $minimumIcr);
-            
+
             // Approximate future interest run-rate
-            $currentInterestExpense = $currentDebt * $newBorrowingRate; 
+            $currentInterestExpense = $currentDebt * $newBorrowingRate;
             $availableInterestCapacity = max(0.0, $maxTolerableInterest - $currentInterestExpense);
-            
+
             $incomeStatementCapacity = $newBorrowingRate > 0 ? ($availableInterestCapacity / $newBorrowingRate) : 0.0;
 
             // Balance Sheet Constraint (Macro Tolerance)
@@ -474,7 +506,7 @@ class CorporateActionEngine
             if ($trueExpansionCapacity > 0) {
                 $spreadMultiplier = min(1.0, max(0.0, ($roic - $wacc) * 10.0)); // 10% spread = 1.0 max aggressiveness
                 $aggressiveness = 0.02 + (0.13 * $spreadMultiplier);
-                
+
                 $newDebtIssued = $trueExpansionCapacity * $aggressiveness;
                 $newTotalDebt = $currentDebt + $newDebtIssued;
 
@@ -485,10 +517,10 @@ class CorporateActionEngine
 
                 $currentDebt = $newTotalDebt;
                 $stock->setTotalDebt((string) $currentDebt);
-                
+
                 // The new debt injects raw cash into the corporate treasury
                 $newTreasury += $newDebtIssued;
-                
+
                 if ($newDebtIssued > 500_000_000.0) {
                     $amtB = number_format($newDebtIssued / 1_000_000_000, 2);
                     $events[] = $this->marketEvent->publish($stock, 'DEBT ISSUANCE', "{$stock->getTicker()} issued \${$amtB}B in corporate bonds to fund strategic expansion.", 0.5);
@@ -500,23 +532,44 @@ class CorporateActionEngine
         // Reinvesting excess cash to grow core operations. This is a balance sheet asset swap 
         // (Cash decreases, Physical Assets/IP increase). Total Equity is unchanged, but Invested Capital grows!
 
-        $targetCashReservs = $newEquity * 0.08;
+        $targetCashReservs = $newEquity * 0.06;
 
-        if ($roic > $wacc && $newTreasury > $targetCashReservs && !$health['wants_to_paydown_debt']) {
+        // Scale investment opportunity probability with ROIC (Average 15% ROIC = ~50% chance)
+        $investmentProbability = min(0.95, max(0.10, 0.20 + ($roic * 2.0)));
+
+        if($newDebtIssued > 0.0) {
+            $investmentProbability = min(1.0, $investmentProbability + 0.30);
+        }
+
+
+        $fundInvestmentOpportunity = (mt_rand() / mt_getrandmax()) < $investmentProbability;
+
+        if ($roic > $wacc && $newTreasury > $targetCashReservs && !$health['wants_to_paydown_debt'] && $fundInvestmentOpportunity) {
             $spreadMultiplier = min(1.0, max(0.0, ($roic - $wacc) * 10.0));
-            
+
             // Deploy between 2% and 15% of organic excess treasury into growth this quarter
             $organicSpend = ($newTreasury - $targetCashReservs) * (0.02 + (0.13 * $spreadMultiplier));
-            
+
             // If we specifically issued debt for expansion, force the deployment of that cash immediately!
             $expansionSpend = max($organicSpend, $newDebtIssued * 0.75);
-            
+
             // Failsafe: Don't spend cash we physically do not have
             $expansionSpend = min($expansionSpend, max(0.0, $newTreasury - $targetCashReservs));
 
             if ($expansionSpend > 0) {
                 $newTreasury -= $expansionSpend;
-                
+
+                // Expanding the physical asset base mathematically dilutes immediate ROIC 
+                // (Invested Capital goes up, but new Earnings have not been realized yet).
+                $liveInvestedCapital = max($newEquity * 0.50, ($newEquity + $currentDebt - $newTreasury));
+                $expansionRatio = $expansionSpend / max(1.0, $liveInvestedCapital);
+                $roicDrag = $roic * $expansionRatio * 0.50;
+                $stock->setCurrentRoic((string) max(0.01, $roic - $roicDrag));
+
+                $baselineRoic = (float) $stock->getBaselineRoic();
+                $newBaseline = max(0.01, $baselineRoic - ($baselineRoic * $expansionRatio * 0.25)); // Lighter permanent baseline dilution
+                $stock->setBaselineRoic((string) $newBaseline);
+
                 if ($expansionSpend > 1_000_000_000.0) { // Only announce massive investments >$1B
                     $amtB = number_format($expansionSpend / 1_000_000_000, 2);
                     $events[] = $this->marketEvent->publish($stock, 'CAPEX EXPANSION', "{$stock->getTicker()} deployed \${$amtB}B of cash into organic business expansion.", 0.5);
@@ -526,14 +579,14 @@ class CorporateActionEngine
 
         // If debt is severely expensive, pay it down!
         if ($health['wants_to_paydown_debt'] && $currentDebt > 0 && $newTreasury > $targetOperatingCash) {
-            
+
             $arbitragePaydown = ($newTreasury - $targetOperatingCash) * 0.50;
             $actualPaydown = min($arbitragePaydown, $currentDebt);
 
             $currentDebt -= $actualPaydown;
             $stock->setTotalDebt((string) $currentDebt);
             $newTreasury -= $actualPaydown;
-            
+
             if ($actualPaydown > 500_000_000.0) {
                 $amtB = number_format($actualPaydown / 1_000_000_000, 2);
                 $events[] = $this->marketEvent->publish($stock, 'DEBT REDUCTION', "{$stock->getTicker()} paid down \${$amtB}B of expensive debt to escape negative carry.", 1.0);
@@ -544,15 +597,15 @@ class CorporateActionEngine
         if ($newTreasury < $minOperatingCash) {
             $cashShortfall = $minOperatingCash - $newTreasury;
             $newTotalDebt = $currentDebt + $cashShortfall;
-            
+
             // Re-price the interest rate for this emergency borrowing!
             if ($newTotalDebt > 0) {
                 $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
                 $dynamicSpread = $health['raw_metrics']['dynamic_spread'] ?? (float) $stock->getCreditSpread();
-                
+
                 // Emergency debt comes with a severe penalty (e.g., +200 bps)
                 $costOfEmergencyDebt = $policyRate + $dynamicSpread + 0.02;
-                
+
                 $oldHistoricalRate = (float) $stock->getHistoricalFixedRate();
                 $weightedRate = (($currentDebt * $oldHistoricalRate) + ($cashShortfall * $costOfEmergencyDebt)) / $newTotalDebt;
                 $stock->setHistoricalFixedRate((string) $weightedRate);
@@ -561,7 +614,7 @@ class CorporateActionEngine
             $currentDebt = $newTotalDebt;
             $stock->setTotalDebt((string) $currentDebt);
             $newTreasury = $minOperatingCash;
-            
+
             if ($cashShortfall > 10_000_000.0) {
                 $amtB = number_format($cashShortfall / 1_000_000_000, 2);
                 $events[] = $this->marketEvent->publish($stock, 'LIQUIDITY CRISIS', "{$stock->getTicker()} suffered a severe cash shortfall, forced to borrow \${$amtB}B at penalty rates.", -5.0);
@@ -570,24 +623,29 @@ class CorporateActionEngine
         // THE DELEVERAGING SWEEP (Macro-Driven Cash Management)
         elseif ($currentDebt > 0.0 && $newTreasury > $targetOperatingCash) {
             $excessCash = $newTreasury - $targetOperatingCash;
-            $currentDebtRatio = $currentDebt / max(1.0, $newEquity);
+            
+            // Calculate true leverage using Invested Capital instead of pure Equity
+            $liveInvestedCapital = max($newEquity * 0.50, ($newEquity + $currentDebt - $newTreasury));
+            $currentDebtRatio = $currentDebt / max(1.0, $liveInvestedCapital);
 
-            // TOLERANCE FROM THE CENTRALIZED BRAIN
-            $macroDebtTolerance = $health['debt_tolerance'];
+            // TOLERANCE FROM THE CENTRALIZED BRAIN (Provided as a D/E ratio, e.g., 0.50 to 4.0)
+            $macroDebtToleranceDE = $health['debt_tolerance'];
+            // Convert D/E tolerance to an Invested Capital tolerance (e.g., 4.0 D/E = 80% Debt)
+            $macroDebtTolerance = $macroDebtToleranceDE / ($macroDebtToleranceDE + 1.0);
 
-            // Detect if M&A or equity destruction pushed them into the penalty box
-            $isJunkBondStatus = $currentDebtRatio > 2.0;
+            // Junk Bond Status is now correctly defined as exceeding 85% debt-to-capital
+            $isJunkBondStatus = $currentDebtRatio > 0.85;
 
             if ($currentDebtRatio > $macroDebtTolerance || $isJunkBondStatus) {
-                $targetRatio = $isJunkBondStatus ? 1.80 : max(0.10, $macroDebtTolerance - 0.20);
-                $targetDebt = $newEquity * $targetRatio;
+                $targetRatio = $isJunkBondStatus ? 0.75 : max(0.10, $macroDebtTolerance - 0.05);
+                $targetDebt = $liveInvestedCapital * $targetRatio;
                 $debtToPayOff = min($excessCash, max(0.0, $currentDebt - $targetDebt));
 
                 if ($debtToPayOff > 0) {
                     $currentDebt -= $debtToPayOff;
                     $stock->setTotalDebt((string) $currentDebt);
                     $newTreasury -= $debtToPayOff;
-                    
+
                     if ($debtToPayOff > 500_000_000.0) {
                         $amtB = number_format($debtToPayOff / 1_000_000_000, 2);
                         $events[] = $this->marketEvent->publish($stock, 'DELEVERAGING', "{$stock->getTicker()} swept \${$amtB}B in excess cash to aggressively pay down debt.", 2.0);
@@ -598,7 +656,7 @@ class CorporateActionEngine
 
         // SAVE FINAL TREASURY
         $stock->setCorporateTreasury((string) $newTreasury);
-        
+
         return $events;
     }
 }

@@ -31,6 +31,10 @@ class RegistrationController extends AbstractController
         UserPasswordHasherInterface $userPasswordHasher, 
         EntityManagerInterface $entityManager
     ): Response {
+        // Registration is currently disabled
+        $this->addFlash('error', 'New account registration is currently disabled.');
+        return $this->redirectToRoute('app_login');
+
         // 1. Best Practice: If they are already logged in, redirect them to the dashboard
         if ($this->getUser()) {
             return $this->redirectToRoute('app_dashboard'); 

@@ -11,6 +11,7 @@ let profitEngineChartInstance = null;
 let debtEquityChartInstance = null;
 let creditHealthChartInstance = null;
 let capitalEfficiencyChartInstance = null;
+let capitalReturnChartInstance = null;
 
 Chart.defaults.color = '#c2c6d6';
 Chart.defaults.scale.grid.color = 'rgba(45, 52, 73, 0.4)';
@@ -453,6 +454,10 @@ function updateCharts(timeframe) {
     let roicData = [];
     let waccData = [];
     let evaData = [];
+    
+    // Capital Return (Shareholder Yield)
+    let dividendData = [];
+    let buybackData = [];
 
     if (timeframe === '12Q') {
         const sliced = rawReports.slice(-12);
@@ -478,6 +483,9 @@ function updateCharts(timeframe) {
             roicData.push(parseFloat(report.roic || 0) * 100);
             waccData.push(parseFloat(report.wacc || 0) * 100);
             evaData.push(parseFloat(report.eva || 0));
+            
+            dividendData.push(parseFloat(report.dividend_paid || 0));
+            buybackData.push(parseFloat(report.stock_buybacks || 0));
         });
     }
     else if (timeframe === '5Y') {
@@ -510,6 +518,18 @@ function updateCharts(timeframe) {
             roicData.unshift(parseFloat(report.roic || 0) * 100);
             waccData.unshift(parseFloat(report.wacc || 0) * 100);
             evaData.unshift(parseFloat(report.eva || 0));
+            
+            // Sum the last 4 quarters for a accurate annualized figure
+            let sumDiv = 0;
+            let sumBuy = 0;
+            for (let j = 0; j < 4; j++) {
+                if (i - j >= 0) {
+                    sumDiv += parseFloat(rawReports[i - j].dividend_paid || 0);
+                    sumBuy += parseFloat(rawReports[i - j].stock_buybacks || 0);
+                }
+            }
+            dividendData.unshift(sumDiv);
+            buybackData.unshift(sumBuy);
 
             yearCount++;
         }
@@ -518,8 +538,8 @@ function updateCharts(timeframe) {
     renderProfitEngineChart(labels, revenueData, netIncomeData, capexData);
     renderDebtEquityChart(labels, debtData, equityData, treasuryData);
     renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData);
-
     renderCapitalEfficiencyChart(labels, roicData, waccData, evaData);
+    renderCapitalReturnChart(labels, dividendData, buybackData);
 }
 
 function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData) {
@@ -747,6 +767,60 @@ function renderCapitalEfficiencyChart(labels, roicData, waccData, evaData) {
                     position: 'right',
                     grid: { drawOnChartArea: false }, // Hides overlapping grid lines
                     ticks: { callback: (val) => formatLarge(val) },
+                }
+            }
+        }
+    });
+}
+
+function renderCapitalReturnChart(labels, dividendData, buybackData) {
+    const canvas = document.getElementById('capitalReturnChart');
+    if (!canvas) return;
+
+    if (capitalReturnChartInstance) capitalReturnChartInstance.destroy();
+
+    const ctx = canvas.getContext('2d');
+    capitalReturnChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    type: 'bar',
+                    label: 'Dividends Paid',
+                    data: dividendData,
+                    backgroundColor: COLORS.primary,
+                    borderRadius: 4,
+                },
+                {
+                    type: 'bar',
+                    label: 'Stock Buybacks',
+                    data: buybackData,
+                    backgroundColor: COLORS.positive,
+                    borderRadius: 4,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: { 
+                    callbacks: { 
+                        label: (ctx) => `${ctx.dataset.label}: $${formatLarge(ctx.raw)}`
+                    } 
+                }
+            },
+            scales: {
+                x: { },
+                y: { 
+                    type: 'linear',
+                    position: 'left',
+                    ticks: { callback: (val) => formatLarge(val) }, 
+                    beginAtZero: true,
+                    suggestedMax: 100000000 
                 }
             }
         }

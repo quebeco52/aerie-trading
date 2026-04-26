@@ -104,7 +104,7 @@ class MergerAndAcquisitionEngine
         $purchasePrice = $availableCapital * (mt_rand(50, 100) / 100.0) * $config['spend'];
         
 
-        $maxPrivateCompanyValue = mt_rand(100_000_000_000, 500_000_000_000);
+        $maxPrivateCompanyValue = mt_rand(100, 500) * 1_000_000_000.0;
         $purchasePrice = min($purchasePrice, (float) $maxPrivateCompanyValue);
         
         if ($purchasePrice < 1_000_000_000.0) return null; 
@@ -275,7 +275,9 @@ class MergerAndAcquisitionEngine
         $roicBump = $divestedFraction * 0.20;
         $seller->setCurrentRoic((string) ($currentRoic + $roicBump));
         if (method_exists($seller, 'setBaselineRoic')) {
-            $seller->setBaselineRoic((string) ($seller->getBaselineRoic() + ($roicBump * 0.5)));
+            // Cap the baseline ratcheting so a company doesn't slowly mutate into an infinite-margin glitch over decades
+            $newBaseline = min(0.45, $seller->getBaselineRoic() + ($roicBump * 0.5));
+            $seller->setBaselineRoic((string) $newBaseline);
         }
 
         // GENERATE THE MARKET EVENT

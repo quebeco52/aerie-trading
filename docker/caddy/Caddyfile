@@ -1,9 +1,9 @@
 trade.lakebird.org {
 
-    basic_auth {
-        # Username   HashedPassword
-        admin        $2a$14$3B8xeYqw4kwh1DfjkNrTy.Je/g8FCsmkUejhkWwEqIBDsALbCy8dm
-    }
+    #basic_auth {
+        #Username   HashedPassword
+        #admin        $2a$14$3B8xeYqw4kwh1DfjkNrTy.Je/g8FCsmkUejhkWwEqIBDsALbCy8dm
+    #}
 
     root * /app/public
     encode gzip

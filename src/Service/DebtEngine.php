@@ -53,7 +53,12 @@ class DebtEngine
 
         // Markets care about NET debt (Debt minus cash on hand)
         $netDebt = max(0.0, $debt - $treasury);
-        $leverageRatio = $ebit > 0 ? ($netDebt / $ebit) : 999.0;
+        
+        if ($netDebt <= 0.0) {
+            $leverageRatio = 0.0;
+        } else {
+            $leverageRatio = $ebit > 0 ? min(999.0, $netDebt / $ebit) : 999.0;
+        }
 
         // SECTOR-SPECIFIC LEVERAGE TOLERANCE
         $leverageThreshold = $this->getSectorLeverageThreshold($stock->getSector());
