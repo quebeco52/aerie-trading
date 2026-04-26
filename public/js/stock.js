@@ -41,11 +41,6 @@ function formatLarge(num) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    if (!window.WS_TICKET || window.WS_TICKET === "") {
-        console.log("Guest mode: Live WebSocket updates disabled.");
-        return;
-    }
-
     // variables
     let previousPrice = null;
     let currentRange = '1y';
@@ -62,6 +57,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (IS_ETF) initEtfChart();
     loadHistory('1y');
     setupEventListeners();
+
+    if (!window.WS_TICKET || window.WS_TICKET === "") {
+        console.log("Guest mode: Live WebSocket updates disabled.");
+        return; // Safe to exit here so we don't try to connect to the socket
+    }
 
     // Websocket connection
     const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';

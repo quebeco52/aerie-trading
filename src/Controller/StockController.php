@@ -47,9 +47,6 @@ class StockController extends AbstractController
 
         /** @var User|null $currentUser */
         $currentUser = $this->getUser();
-        if (!$currentUser) {
-            throw $this->createAccessDeniedException();
-        }
 
         $macroStateJson = $redis->get('macroeconomic_state');
         $macroState = $macroStateJson ? json_decode($macroStateJson, true) : [
@@ -60,11 +57,12 @@ class StockController extends AbstractController
             'nominal_gdp_index' => 1.0
         ];
 
-
-        $user = $entityManager->getRepository(User::class)->find($currentUser->getId());
-
-        $userStock = $entityManager->getRepository(UserStock::class)->findOneBy(['user' => $user, 'stock' => $isEtf ? null : $asset]);
-        $userQuantity = $userStock ? $userStock->getQuantity() : 0;
+        $userQuantity = 0;
+        if ($currentUser) {
+            $user = $entityManager->getRepository(User::class)->find($currentUser->getId());
+            $userStock = $entityManager->getRepository(UserStock::class)->findOneBy(['user' => $user, 'stock' => $isEtf ? null : $asset]);
+            $userQuantity = $userStock ? $userStock->getQuantity() : 0;
+        }
 
         $marketCap = 0;
         $peRatio = 0;
