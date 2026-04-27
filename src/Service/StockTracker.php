@@ -125,7 +125,9 @@ class StockTracker
                 maShock: $maShock,
                 totalDebt: (float) $stock->getTotalDebt(),
                 totalEquity: (float) $stock->getTotalEquity(),
-                creditSpread: (float) $stock->getCreditSpread()
+                creditSpread: (float) $stock->getCreditSpread(),
+                currentRoic: (float) ($stock->getCurrentRoic() ?: $stock->getBaselineRoic()),
+                dividendPerShare: (float) $stock->getLastDividend()
             );
 
             $newPrice = $calculation['price'];

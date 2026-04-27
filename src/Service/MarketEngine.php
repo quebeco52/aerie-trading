@@ -47,6 +47,7 @@ class MarketEngine
      * @param float $totalDebt          The total debt on the balance sheet.
      * @param float $totalEquity        The total equity on the balance sheet.
      * @param float $creditSpread       The company's baseline credit spread (borrowing premium).
+     * @param float $dividendPerShare   The absolute quarterly dividend per share.
      *
      * @return array{price: float, shock: float|null, next_volatility: float} The calculated next price, shock percentage, and updated volatility.
      */
@@ -73,6 +74,7 @@ class MarketEngine
         float $totalEquity = 0.0,
         float $creditSpread = 0.01,
         float $currentRoic = 0.10,
+        float $dividendPerShare = 0.0,
     ): array {
         
         // =====================================================================
@@ -141,7 +143,8 @@ class MarketEngine
             $totalDebt, 
             $totalEquity, 
             $creditSpread,
-            $corporateTaxRate
+            $corporateTaxRate,
+            $dividendPerShare
         );
         // Panic Gravity (Flight to Safety)
         $macroStress = abs($outputGap) + abs($inflation - 0.02);
@@ -225,7 +228,8 @@ class MarketEngine
         float $totalDebt, 
         float $totalEquity, 
         float $creditSpread,
-        float $corporateTaxRate
+        float $corporateTaxRate,
+        float $dividendPerShare = 0.0
     ): float {
         // Calculate Live WACC
         $wacc = $this->calculateWACC($riskFreeRate, $beta, $totalDebt, $totalEquity, $creditSpread, $corporateTaxRate);
@@ -253,9 +257,19 @@ class MarketEngine
         } else {
             $earningsValue = $peFairValue;
         }
+        
+        // Dividend Yield Support (The Dividend Discount Model)
+        // High dividends create a hard psychological and mathematical price floor for investors
+        $dividendSupportValue = 0.0;
+        if ($dividendPerShare > 0.0) {
+            $annualDividend = $dividendPerShare * 4.0;
+            // Investors demand the Cost of Equity, minus an assumed 1% long-term growth rate
+            $requiredYield = max(0.02, $wacc - 0.01);
+            $dividendSupportValue = $annualDividend / $requiredYield;
+        }
 
-        // The Graham Floor (Stocks rarely trade below 80% of physical Book Value)
-        $fairValue = max($earningsValue, $bookValuePerShare * 0.80);
+        // The stock's fair value is the highest of its Earnings power, its Yield Support, or its physical Book Value
+        $fairValue = max($earningsValue, $dividendSupportValue, $bookValuePerShare * 0.80);
         
         return max(0.01, $fairValue);
     }

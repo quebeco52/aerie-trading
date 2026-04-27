@@ -7,7 +7,7 @@
 {% block meta %}
     <meta name="description" content="View live stock prices, market cap, and fundamental Clean Surplus accounting data for {{ asset.name }} ({{ asset.ticker }}). See the latest quarterly earnings reports and historical charts.">
     <meta property="og:title" content="{{ asset.ticker }} Stock Price | Aerie Exchange">
-    <meta property="og:description" content="Live financial data and economic simulation for {{ asset.name }} ({{ asset.sector }}).">
+    <meta property="og:description" content="Live financial data and economic simulation for {{ asset.name }} ({{ isEtf ? 'Market Index' : asset.sector }}).">
     <meta property="og:type" content="website">
 
     <script type="application/ld+json">
@@ -17,7 +17,17 @@
         "name": "{{ asset.name }}",
         "tickerSymbol": "{{ asset.ticker }}",
         "description": "Live financial data and economic simulation for {{ asset.name }}.",
-        "url": "{{ app.request.uri }}"
+        "url": "{{ app.request.uri }}"{% if isEtf and allAssets is defined %},
+        "hasPart": [
+            {% for a in allAssets %}
+            {
+                "@type": "Corporation",
+                "name": "{{ a.name }}",
+                "tickerSymbol": "{{ a.ticker }}"
+            }{{ not loop.last ? ',' : '' }}
+            {% endfor %}
+        ]
+        {% endif %}
     }
     </script>
 {% endblock %}

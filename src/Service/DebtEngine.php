@@ -82,9 +82,17 @@ class DebtEngine
         $historicalRate = (float) $stock->getHistoricalFixedRate();
         
         if ($advanceMaturity) {
-            // Companies refinance expiring debt at current market rates
-            $blendedFixedRate = ($historicalRate * (1.0 - self::QUARTERLY_DEBT_TURNOVER)) + 
-                                ($currentMarketFixedRate * self::QUARTERLY_DEBT_TURNOVER);
+            $turnover = self::QUARTERLY_DEBT_TURNOVER;
+            
+            // OPPORTUNISTIC REFINANCING
+            // If market rates are significantly cheaper (e.g., > 1.5% lower), CFOs aggressively call and refinance old debt
+            if ($currentMarketFixedRate < ($historicalRate - 0.015)) {
+                $turnover = 0.30; // Refinance 30% of the debt book this quarter instead of the passive 5%
+            }
+
+            // Companies refinance expiring or called debt at current market rates
+            $blendedFixedRate = ($historicalRate * (1.0 - $turnover)) + 
+                                ($currentMarketFixedRate * $turnover);
         } else {
             $blendedFixedRate = $historicalRate;
         }
@@ -112,6 +120,7 @@ class DebtEngine
         $equity = (float) $stock->getTotalEquity();
         $policyRate = $macroState['policy_rate_ema'] ?? $macroState['policy_rate'] ?? 0.04;
         $corporateTaxRate = $macroState['corporate_tax_rate'] ?? 0.21;
+        
 
         $debtMetrics = $this->calculateInterestExpense($stock, $macroState, false);
 
@@ -146,7 +155,8 @@ class DebtEngine
         $yieldOnCash = max(0.0, $policyRate - self::CASH_YIELD_SPREAD);
         
         // "Negative Carry" means it costs more to hold the debt than the cash is earning in the bank
-        $isSevereNegativeCarry = $effectiveCostOfDebt > ($yieldOnCash + self::ARBITRAGE_HURDLE);
+        // Compare Gross to Gross to avoid tax illusions (interest income on cash is also taxable)
+        $isSevereNegativeCarry = $grossCostOfDebt > ($yieldOnCash + self::ARBITRAGE_HURDLE);
 
         // Interest Coverage Ratio (ICR)
         $ebit = $debtMetrics['ebit'];

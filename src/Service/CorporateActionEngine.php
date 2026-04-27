@@ -327,16 +327,20 @@ class CorporateActionEngine
         // Deep distress requires a massive EVA collapse
         $isDeepDistress = $evaSpread < (-0.08 * $distressMultiplier);
         $isModerateDistressNoCash = ($evaSpread < (-0.04 * $distressMultiplier)) && !$hasCashBuffer;
-        $isLiquidityCrisis = $health['is_severe_negative_carry'];
+        
+        // A true liquidity crisis means operating income can't cover interest AND there's no cash to bridge the gap.
+        // An ICR below 1.0 is an active cash-burn emergency regardless of reserves.
+        $isLiquidityCrisis = $health['interest_coverage'] < 1.0 || ($health['interest_coverage'] < 1.5 && !$hasCashBuffer);
 
         if ($isDeepDistress || $isModerateDistressNoCash || $isLiquidityCrisis) {
             $targetDividend = 0.0;
             $speed = $isLiquidityCrisis ? 1.0 : min(1.0, $speed + 0.25);
-        } elseif ($isCriticalCash && $quarterlyEps < $lastDividend) {
-            // If they are paying out more than they earn AND are critically low on cash
+        } elseif ($isCriticalCash && $calculatedTarget < $lastDividend) {
+            // If they are forced to cut due to low cash, the Aristocrat streak is dead.
             $targetDividend = $calculatedTarget;
             if ($speed <= 0.15) {
-                $speed = $speed * 0.50; // Aristocrats are reluctant to cut and slowly bleed it down
+                // Rip the band-aid off: Once the streak is broken, cut heavily to protect the balance sheet.
+                $speed = 0.50; 
             }
         }
 
