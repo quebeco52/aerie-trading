@@ -57,7 +57,10 @@ class DebtEngine
         if ($netDebt <= 0.0) {
             $leverageRatio = 0.0;
         } else {
-            $leverageRatio = $ebit > 0 ? min(999.0, $netDebt / $ebit) : 999.0;
+            // Failsafe: Prevent the Junk Bond Death Spiral during a cyclical earnings miss.
+            // Bond markets will underwrite leverage based on a normalized worst-case margin (5% of revenue) rather than instantaneous negative EBIT.
+            $normalizedEbit = max($ebit, $revenue * 0.05);
+            $leverageRatio = $normalizedEbit > 0 ? min(999.0, $netDebt / $normalizedEbit) : 999.0;
         }
 
         // SECTOR-SPECIFIC LEVERAGE TOLERANCE

@@ -81,7 +81,14 @@ class MarketSeedCommand extends Command
                 $stock->setTotalEquity((string) ($stockData['total_equity'] ?? 0.00));
                 $stock->setTotalDebt((string) ($stockData['total_debt'] ?? 0.00));
                 $stock->setRetainedEarnings((string) ($stockData['retained_earnings'] ?? 0.00));
-                $stock->setLastDividend('0.00');
+                
+                $netIncome = $stockData['total_net_income'] ?? 0.00;
+                $shares = $stockData['shares_outstanding'] ?? 1_000_000_000;
+                $annualEps = $shares > 0 ? ($netIncome / $shares) : 0.0;
+                $targetPayout = $stockData['target_payout_ratio'] ?? 0.30;
+                $startingDividend = ($annualEps / 4.0) * ($targetPayout * 0.50);
+                $stock->setLastDividend((string) $startingDividend);
+
                 $stock->setCreditSpread((string) ($stockData['credit_spread'] ?? 0.0100));
                 $stock->setHistoricalFixedRate((string) ($stockData['historical_fixed_rate'] ?? 0.05));
                 $stock->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$stockData['ticker']] ?? null);

@@ -67,6 +67,11 @@ class MarketResetCommand extends Command
             $netIncome = $stockData['total_net_income'] ?? 0.00;
             $margin = $stockData['operating_margin'] ?? 0.15;
             $revenue = $margin > 0 ? $netIncome / $margin : 0.00;
+            
+            $shares = $stockData['shares_outstanding'] ?? 1_000_000_000;
+            $annualEps = $shares > 0 ? ($netIncome / $shares) : 0.0;
+            $targetPayout = $stockData['target_payout_ratio'] ?? 0.30;
+            $startingDividend = ($annualEps / 4.0) * ($targetPayout * 0.50);
 
             $conn->executeStatement(
                 'UPDATE stocks SET 
@@ -98,7 +103,7 @@ class MarketResetCommand extends Command
                     historical_fixed_rate = :historical_rate,
                     credit_spread = :credit_spread,
                     buyback_authorization = 0.00,
-                    last_dividend = 0.00,
+                    last_dividend = :last_dividend,
                     description = :description
                 WHERE ticker = :ticker',
                 [
@@ -126,6 +131,7 @@ class MarketResetCommand extends Command
                     'revenue' => $revenue,
                     'historical_rate' => 0.0200,
                     'credit_spread' => $stockData['credit_spread'] ?? 0.0100,
+                    'last_dividend' => $startingDividend,
                     'description' => \App\Data\StockInfo::DESCRIPTIONS[$stockData['ticker']] ?? null,
                     'ticker' => $stockData['ticker']
                 ]
