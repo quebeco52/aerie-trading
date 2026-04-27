@@ -304,9 +304,9 @@ class CorporateActionEngine
         $calculatedTarget = $quarterlyEps > 0 ? ($quarterlyEps * $targetPayout) : 0.0;
 
         // Asymmetric Smoothing:
-        // "Aristocrats" (speed <= 15%) fiercely defend their streak and maintain the old payout even if earnings dip.
-        // "Variable Payout" companies (speed > 15%) don't care about streaks and let the dividend float with earnings.
-        if ($speed > 0.15) {
+        // "Aristocrats" (speed <= 5%) fiercely defend their streak and maintain the old payout even if earnings dip.
+        // "Variable Payout" companies (speed > 5%) don't care about streaks and let the dividend float with earnings.
+        if ($speed > 0.05) {
             $targetDividend = $calculatedTarget;
         } else {
             $targetDividend = max($calculatedTarget, $lastDividend);
@@ -338,7 +338,7 @@ class CorporateActionEngine
         } elseif ($isCriticalCash && $calculatedTarget < $lastDividend) {
             // If they are forced to cut due to low cash, the Aristocrat streak is dead.
             $targetDividend = $calculatedTarget;
-            if ($speed <= 0.15) {
+            if ($speed <= 0.05) {
                 // Rip the band-aid off: Once the streak is broken, cut heavily to protect the balance sheet.
                 $speed = 0.50; 
             }
