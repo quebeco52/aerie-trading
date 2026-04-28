@@ -6,83 +6,30 @@
     <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-12 py-8 w-full">
 
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-x-6 lg:gap-x-8 items-end mb-6">
-            <div class="lg:col-span-8 flex flex-col space-y-1 px-2 lg:px-6">
+            <div class="lg:col-span-8 flex flex-col space-y-1">
                 <span class="text-on-surface-variant text-[10px] font-bold tracking-widest uppercase">My Portfolio Value</span>
                 <div class="flex items-baseline gap-4">
                     <h1 id="portfolio-value" class="text-5xl font-bold tracking-tighter text-on-surface transition-colors duration-300">${{ portfolioValue|default('0.00')|number_format(2) }}</h1>
                 </div>
             </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
             
-            <div class="lg:col-span-4 mt-6 lg:mt-0 px-2 lg:px-6">
-                <h2 class="text-sm font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
-                    <span class="material-symbols-outlined text-primary text-base">donut_large</span>
-                    Allocation & Stats
-                </h2>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 mb-12">
-            <div class="lg:col-span-8">
-                <div class="h-full min-h-[350px] w-full bg-surface-container-low border border-outline-variant/15 shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-6 relative overflow-hidden flex flex-col">
-                    <div class="flex justify-between items-start mb-4 relative z-10">
-                        <div class="flex gap-2 bg-surface-container-lowest p-1 rounded-lg">
-                            {# Removed 1D through 1Y. Locked to MAX. #}
-                            <button class="px-3 py-1 bg-primary text-[#001a42] text-xs font-bold rounded-md shadow-lg shadow-primary/20">MAX</button>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <span class="w-2 h-2 rounded-full bg-secondary"></span>
-                            <span class="text-[10px] text-on-surface-variant font-bold uppercase tracking-widest">Portfolio Performance</span>
-                        </div>
-                    </div>
-                    <div class="flex-grow w-full relative z-0">
-                        <canvas id="portfolioChart"></canvas>
-                    </div>
+            <!-- Left Column: Holdings Table -->
+            <div class="lg:col-span-8 space-y-4">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-sm font-bold uppercase tracking-widest text-on-surface">My Holdings</h2>
+                    <button class="text-[10px] font-bold uppercase tracking-widest text-primary hover:text-primary-container transition-colors">View All Assets</button>
                 </div>
-            </div>
-
-            <div class="lg:col-span-4">
-                <div class="h-full bg-surface-container-low border border-outline-variant/15 shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-6 relative overflow-hidden flex flex-col justify-center group">
-                    <div class="absolute -right-10 -top-10 w-32 h-32 bg-primary/5 rounded-full blur-2xl pointer-events-none"></div>
-                    
-                    <div class="space-y-6 relative z-10 w-full">
-                        <div class="flex justify-between items-center pb-4 border-b border-outline-variant/10">
-                            <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Available Cash</span>
-                            <span id="available-cash" class="text-sm font-bold text-on-surface">${{ user.cashBalance|default('0.00')|number_format(2) }}</span>
-                        </div>
-                        
-                        <div class="flex justify-between items-center">
-                            <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Total Invested</span>
-                            <span id="total-invested" class="text-sm font-bold text-on-surface transition-colors">${{ (portfolioValue - user.cashBalance|default(0))|number_format(2) }}</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-x-6 lg:gap-x-8 items-end mb-6">
-            <div class="lg:col-span-8 flex items-center justify-between px-2 lg:px-6">
-                <h2 class="text-sm font-bold uppercase tracking-widest text-on-surface">My Holdings</h2>
-                <button class="text-[10px] font-bold uppercase tracking-widest text-primary hover:text-primary-container transition-colors">View All Assets</button>
-            </div>
-            
-            <div class="lg:col-span-4 mt-6 lg:mt-0 px-2 lg:px-6">
-                <h2 class="text-sm font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
-                    <span class="material-symbols-outlined text-sm">newspaper</span>
-                    News
-                </h2>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
-            <div class="lg:col-span-8">
-                <div class="h-full bg-surface-container-low border border-outline-variant/15 rounded-2xl overflow-hidden shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)]">
+                
+                <div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl overflow-hidden shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)]">
                     <div class="overflow-x-auto">
                         <table class="w-full text-left border-collapse">
                             <thead>
                                 <tr class="bg-surface-container-highest/30 text-on-surface-variant text-[10px] uppercase tracking-widest border-b border-outline-variant/10">
                                     <th class="px-6 py-4 font-bold">Asset</th>
                                     <th class="px-6 py-4 font-bold text-right">Price</th>
-                                    <th class="px-6 py-4 font-bold text-center">Development</th>
                                     <th class="px-6 py-4 font-bold text-right">Current Value</th>
                                 </tr>
                             </thead>
@@ -103,17 +50,11 @@
                                         </td>
                                         <td class="px-6 py-5 font-bold text-on-surface text-right transition-colors" id="price-{{ holding.ticker }}">${{ holding.price|number_format(2) }}</td>
 
-                                        <td class="px-6 py-5">
-                                            <div class="w-full max-w-[100px] h-1.5 bg-surface-container-highest rounded-full overflow-hidden mx-auto">
-                                                <div class="bg-secondary h-full rounded-full" style="width: {{ random(40, 90) }}%;"></div>
-                                            </div>
-                                        </td>
-
                                         <td class="px-6 py-5 text-right font-bold text-on-surface transition-colors" id="value-{{ holding.ticker }}">${{ holding.totalValue|number_format(2) }}</td>
                                     </tr>
                                 {% else %}
                                     <tr>
-                                        <td colspan="4" class="px-6 py-12 text-center text-on-surface-variant text-sm font-serif">
+                                        <td colspan="3" class="px-6 py-12 text-center text-on-surface-variant text-sm font-serif">
                                             You don't own any assets yet.
                                             <a href="/" class="text-primary hover:underline font-bold">Explore the markets.</a>
                                         </td>
@@ -125,28 +66,59 @@
                 </div>
             </div>
 
-            <div class="lg:col-span-4">
-                <div class="h-full flex flex-col space-y-4">
-                    <div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl overflow-hidden group cursor-pointer hover:border-primary/30 transition-all shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)]">
-                        <div class="h-32 bg-surface-container-highest relative overflow-hidden flex items-center justify-center">
-                            <span class="material-symbols-outlined text-4xl text-outline-variant group-hover:scale-110 transition-transform duration-500">account_balance</span>
-                            <div class="absolute bottom-2 left-3">
-                                <span class="bg-primary/20 text-primary border border-primary/20 text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-widest">Macro Analysis</span>
+            <!-- Right Column: Stats & News -->
+            <div class="lg:col-span-4 flex flex-col space-y-8">
+                
+                <div class="space-y-4">
+                    <h2 class="text-sm font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary text-base">donut_large</span>
+                        Allocation & Stats
+                    </h2>
+                    <div class="bg-surface-container-low border border-outline-variant/15 shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-6 relative overflow-hidden flex flex-col justify-center group">
+                        <div class="absolute -right-10 -top-10 w-32 h-32 bg-primary/5 rounded-full blur-2xl pointer-events-none"></div>
+                        
+                        <div class="space-y-6 relative z-10 w-full">
+                            <div class="flex justify-between items-center pb-4 border-b border-outline-variant/10">
+                                <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Available Cash</span>
+                                <span id="available-cash" class="text-sm font-bold text-on-surface">${{ user.cashBalance|default('0.00')|number_format(2) }}</span>
+                            </div>
+                            
+                            <div class="flex justify-between items-center">
+                                <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Total Invested</span>
+                                <span id="total-invested" class="text-sm font-bold text-on-surface transition-colors">${{ (portfolioValue - user.cashBalance|default(0))|number_format(2) }}</span>
                             </div>
                         </div>
-                        <div class="p-5 space-y-3">
-                            <h3 class="font-bold text-on-surface leading-snug group-hover:text-primary transition-colors">Fed Signals Rate Pause, Markets Rally on News</h3>
-                            <p class="text-xs text-on-surface-variant line-clamp-2 font-serif">Market analysts suggest a massive shift in liquidity as traditional assets react to the recent 25bp adjustment in federal lending rates.</p>
-                        </div>
                     </div>
+                </div>
 
-                    <div class="bg-surface-container-low border border-outline-variant/15 rounded-xl p-4 flex gap-4 hover:bg-surface-container transition-colors cursor-pointer group">
-                        <div class="w-12 h-12 rounded-lg bg-surface-container-highest flex-shrink-0 flex items-center justify-center text-primary">
-                            <span class="material-symbols-outlined text-lg">memory</span>
+                <div class="space-y-4">
+                    <h2 class="text-sm font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+                        <span class="material-symbols-outlined text-sm">newspaper</span>
+                        News
+                    </h2>
+                    
+                    <div class="flex flex-col space-y-4">
+                        <div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl overflow-hidden group cursor-pointer hover:border-primary/30 transition-all shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)]">
+                            <div class="h-32 bg-surface-container-highest relative overflow-hidden flex items-center justify-center">
+                                <span class="material-symbols-outlined text-4xl text-outline-variant group-hover:scale-110 transition-transform duration-500">account_balance</span>
+                                <div class="absolute bottom-2 left-3">
+                                    <span class="bg-primary/20 text-primary border border-primary/20 text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-widest">Macro Analysis</span>
+                                </div>
+                            </div>
+                            <div class="p-5 space-y-3">
+                                <h3 class="font-bold text-on-surface leading-snug group-hover:text-primary transition-colors">Fed Signals Rate Pause, Markets Rally on News</h3>
+                                <p class="text-xs text-on-surface-variant line-clamp-2 font-serif">Market analysts suggest a massive shift in liquidity as traditional assets react to the recent 25bp adjustment in federal lending rates.</p>
+                            </div>
                         </div>
-                        <div class="space-y-1">
-                            <h3 class="text-xs font-bold text-on-surface group-hover:text-primary transition-colors">Tech Sector Leads Gains on Strong Earnings</h3>
-                            <p class="text-[10px] text-on-surface-variant font-serif line-clamp-1">Semiconductor manufacturers report record demand...</p>
+
+                        <div class="bg-surface-container-low border border-outline-variant/15 rounded-xl p-4 flex gap-4 hover:bg-surface-container transition-colors cursor-pointer group">
+                            <div class="w-12 h-12 rounded-lg bg-surface-container-highest flex-shrink-0 flex items-center justify-center text-primary">
+                                <span class="material-symbols-outlined text-lg">memory</span>
+                            </div>
+                            <div class="space-y-1">
+                                <h3 class="text-xs font-bold text-on-surface group-hover:text-primary transition-colors">Tech Sector Leads Gains on Strong Earnings</h3>
+                                <p class="text-[10px] text-on-surface-variant font-serif line-clamp-1">Semiconductor manufacturers report record demand...</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -174,16 +146,6 @@
             "{{ holding.ticker }}" : {{ holding.price }}{{ not loop.last ? ',' : '' }}
             {% endfor %}
         };
-        
-        window.PORTFOLIO_HISTORY = [
-            {% for record in history %}
-            {
-                time: "{{ record.recordedAt|date('H:i') }}",
-                value: {{ record.totalValue }}
-            }
-            {{ not loop.last ? ',' : '' }}
-            {% endfor %}
-        ];
     </script>
 
     <script src="{{ asset('js/dashboard.js') }}"></script>

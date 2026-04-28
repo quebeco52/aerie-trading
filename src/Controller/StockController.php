@@ -96,7 +96,7 @@ class StockController extends AbstractController
             $events = $entityManager->getRepository(StockEvent::class)->findBy(
                 ['stock' => $asset],
                 ['recordedAt' => 'DESC'], // Newest first
-                10 // Limit to 10
+                15 // Limit to 10
             );
         }
 

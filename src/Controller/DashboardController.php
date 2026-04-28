@@ -5,7 +5,6 @@ namespace App\Controller;
 
 use App\Entity\User;
 use App\Entity\UserStock;
-use App\Entity\PortfolioHistory;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
@@ -50,17 +49,10 @@ class DashboardController extends AbstractController
             ];
         }
 
-        // Fetch historical performance for the chart
-        $history = $entityManager->getRepository(PortfolioHistory::class)->findBy(
-            ['user' => $user],
-            ['recordedAt' => 'ASC']
-        );
-
         return $this->render('dashboard/index.html.twig', [
             'user' => $user,
             'holdings' => $stockData,
             'portfolioValue' => $portfolioValue,
-            'history' => $history,
         ]);
     }
 }

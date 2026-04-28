@@ -387,7 +387,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (list) {
                 list.prepend(li);
-                if (list.children.length > 10) list.removeChild(list.lastChild);
+                if (list.children.length > 15) list.removeChild(list.lastChild);
             }
         });
     }

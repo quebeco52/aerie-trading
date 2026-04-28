@@ -15,68 +15,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Connect to the Caddy reverse proxy endpoint
     const marketSocket = new WebSocket(`${protocol}${host}/ws/?ticket=${window.WS_TICKET}`);
 
-    // Initialize Portfolio Chart
-    const canvas = document.getElementById('portfolioChart');
-    let portfolioChart = null;
-
     const COLOR_SECONDARY = '#4edea3'; // Positive / Green
     const COLOR_TERTIARY = '#ffb3ad';  // Negative / Red
-    const COLOR_GRID = '#2d3449';
-
-    if (canvas && window.PORTFOLIO_HISTORY && window.PORTFOLIO_HISTORY.length > 0) {
-        const ctx = canvas.getContext('2d');
-
-        // Create a smooth gradient matching the style of the stock page
-        const gradient = ctx.createLinearGradient(0, 0, 0, 350);
-        gradient.addColorStop(0, 'rgba(78, 222, 163, 0.2)');
-        gradient.addColorStop(1, 'rgba(78, 222, 163, 0)');
-
-        portfolioChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: window.PORTFOLIO_HISTORY.map(h => h.time),
-                datasets: [{
-                    label: 'Portfolio Value',
-                    data: window.PORTFOLIO_HISTORY.map(h => h.value),
-                    borderColor: COLOR_SECONDARY,
-                    backgroundColor: gradient,
-                    borderWidth: 2,
-                    tension: 0.4,
-                    pointRadius: 0,
-                    fill: true,
-                    spanGaps: true
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: {
-                    mode: 'index',
-                    intersect: false
-                },
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: { display: false },
-                    y: {
-                        display: true,
-                        position: 'right',
-                        grid: {
-                            color: COLOR_GRID,
-                            borderDash: [5, 5]
-                        },
-                        ticks: {
-                            color: '#c2c6d6',
-                            font: { family: '"Courier Prime", monospace' },
-                            callback: value => '$' + value.toLocaleString()
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-
-    let tickCounter = 0;
 
     marketSocket.onmessage = function (event) {
         const payload = JSON.parse(event.data);
@@ -150,18 +90,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     previousPortfolioValue = totalPortfolioValue;
                     setTimeout(() => portfolioValEl.style.color = '', 500);
-                }
-
-                // Update the Portfolio Chart Line dynamically
-                if (portfolioChart && document.visibilityState === 'visible') {
-                    // Instead of adding new points every 3 ticks, we just update the 
-                    // VERY LAST historical point to reflect the live, to-the-second value.
-                    const lastIndex = portfolioChart.data.datasets[0].data.length - 1;
-                    
-                    if (lastIndex >= 0) {
-                        portfolioChart.data.datasets[0].data[lastIndex] = totalPortfolioValue;
-                        portfolioChart.update('none'); // Update without full animation redraw
-                    }
                 }
             }
         }
