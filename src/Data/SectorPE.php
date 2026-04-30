@@ -146,12 +146,12 @@ class SectorPE
     public static function getBaselineTam(string $sector): float
     {
         return match ($sector) {
-            'Information Technology', 'Financials' => 5_000_000_000_000,
-            'Health Care' => 2_000_000_000_000,
-            'Consumer Discretionary', 'Communication Services' => 2_000_000_000_000,
-            'Industrials', 'Energy', 'Consumer Staples' => 2_000_000_000_000,
-            'Utilities', 'Real Estate', 'Materials' => 2_000_000_000_000,
-            default => 2_000_000_000_000,
+            'Information Technology', 'Financials' => 1_000_000_000_000,
+            'Health Care' => 1_000_000_000_000,
+            'Consumer Discretionary', 'Communication Services' => 1_000_000_000_000,
+            'Industrials', 'Energy', 'Consumer Staples' => 1_000_000_000_000,
+            'Utilities', 'Real Estate', 'Materials' => 1_000_000_000_000,
+            default => 1_000_000_000_000,
         };
     }
 }

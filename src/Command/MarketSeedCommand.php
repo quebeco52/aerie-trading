@@ -81,6 +81,7 @@ class MarketSeedCommand extends Command
                 $stock->setTotalEquity((string) ($stockData['total_equity'] ?? 0.00));
                 $stock->setTotalDebt((string) ($stockData['total_debt'] ?? 0.00));
                 $stock->setRetainedEarnings((string) ($stockData['retained_earnings'] ?? 0.00));
+                $stock->setSamRatio((string) ($stockData['sam_ratio'] ?? 1.00));
                 
                 $netIncome = $stockData['total_net_income'] ?? 0.00;
                 $shares = $stockData['shares_outstanding'] ?? 1_000_000_000;

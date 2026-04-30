@@ -18,7 +18,7 @@ class Portfolio
 
     /**
      * Records a historical snapshot for EVERY user in the system simultaneously.
-     * Uses optimized raw SQL to prevent memory leaks during the God Engine loop.
+     * Uses optimized raw SQL to prevent memory leaks during the Engine loop.
      */
     public function recordBulkSnapshots(): void
     {
@@ -44,12 +44,17 @@ class Portfolio
      */
     public function recordUserSnapshot(User $user): void
     {
-        $portfolioValue = (float) $user->getCashBalance();
-        $holdings = $this->entityManager->getRepository(UserStock::class)->findBy(['user' => $user]);
-        
-        foreach ($holdings as $holding) {
-            $portfolioValue += ($holding->getQuantity() * (float) $holding->getStock()->getPrice());
-        }
+        $conn = $this->entityManager->getConnection();
+
+        $sql = "
+            SELECT COALESCE(SUM(us.quantity * s.price), 0)
+            FROM user_stocks us
+            INNER JOIN stocks s ON us.stock_id = s.id
+            WHERE us.user_id = :user_id
+        ";
+
+        $stockValue = (float) $conn->fetchOne($sql, ['user_id' => $user->getId()]);
+        $portfolioValue = (float) $user->getCashBalance() + $stockValue;
 
         $history = new PortfolioHistory();
         $history->setUser($user);

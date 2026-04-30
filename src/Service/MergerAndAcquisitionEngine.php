@@ -14,7 +14,8 @@ class MergerAndAcquisitionEngine
     public function __construct(
         private EntityManagerInterface $entityManager,
         private MarketEvent $marketEvent,
-        private DebtEngine $debtEngine
+        private DebtEngine $debtEngine,
+        private MathUtility $mathUtility
     ) {}
 
     /**
@@ -28,11 +29,11 @@ class MergerAndAcquisitionEngine
         $shares = (float) $acquirer->getSharesOutstanding();
         $debtRatio = (float) $acquirer->getDebtToEquityRatio();
         
+        $operatingBase = max((float) $acquirer->getTotalRevenue(), (float) $acquirer->getTotalEquity(), 10_000_000.0);
         $equity = (float) $acquirer->getTotalEquity();
         $currentDebt = (float) $acquirer->getTotalDebt();
         $policyRate = $macroState['policy_rate'] ?? 0.04;
 
-        // THE NEGATIVE CARRY BLOCK (Syncing with the CFO)
        // THE NEGATIVE CARRY BLOCK (Calling the Centralized Brain)
         $health = $this->debtEngine->analyzeDebtHealth($acquirer, $macroState);
         
@@ -50,9 +51,9 @@ class MergerAndAcquisitionEngine
         
         $totalBuyingPower = $treasury + $borrowingCapacity;
 
-        // Is the company a Mega-Hoarder? (Cash > 25% or 50% of Equity)
-        $isHoarder = $treasury > ($equity * 0.25);
-        $isMegaHoarder = $treasury > ($equity * 0.50);
+        // Is the company a Mega-Hoarder? (Cash > 25% or 50% of Operating Base)
+        $isHoarder = $treasury > ($operatingBase * 0.25);
+        $isMegaHoarder = $treasury > ($operatingBase * 0.50);
         
         $config = match (true) {
             $isMegaHoarder => [
@@ -75,7 +76,7 @@ class MergerAndAcquisitionEngine
         $dealExecuted = false;
 
         // Try the primary specialized strategy first
-        if ($config && (mt_rand() / mt_getrandmax()) < ($config['prob'] * $dt)) {
+        if ($config && $this->mathUtility->checkProbability($config['prob'] * $dt)) {
             $dealExecuted = true;
         }
         
@@ -84,7 +85,7 @@ class MergerAndAcquisitionEngine
             $config = [
                 'prob' => 0.30, 'spend' => 0.20, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => false
             ];
-            if ((mt_rand() / mt_getrandmax()) < ($config['prob'] * $dt)) {
+            if ($this->mathUtility->checkProbability($config['prob'] * $dt)) {
                 $dealExecuted = true;
             }
         }
@@ -96,7 +97,7 @@ class MergerAndAcquisitionEngine
 
         // EXECUTE THE M&A DEAL
 
-        $minOperatingCash = $equity * 0.03;
+        $minOperatingCash = $operatingBase * 0.03;
         $usableTreasury = max(0.0, $treasury - $minOperatingCash);
 
         // Determine the Purchase Price based on their strategy (Cash vs Leverage)
@@ -125,9 +126,10 @@ class MergerAndAcquisitionEngine
             $oldHistoricalRate = (float) $acquirer->getHistoricalFixedRate();
             $newTotalDebt = $currentDebt + $debtIssued;
             
-            // Figure out what the market is charging for this newly issued debt today
-            $newDebtRatio = $newTotalDebt / max(1.0, $equity);
-            $leveragePenalty = $newDebtRatio > 2.0 ? ($newDebtRatio - 2.0) * 0.05 : 0.0; // The Junk Bond Penalty
+            // Figure out what the market is charging for this newly issued debt today (Use operating base to prevent division by zero-equity)
+            $newDebtRatio = $newTotalDebt / max(1.0, $operatingBase);
+            $leveragePenalty = $newDebtRatio > 2.0 ? ($newDebtRatio - 2.0) * 0.05 : 0.0;
+            $leveragePenalty = min(0.25, $leveragePenalty); // Cap the Junk Bond Penalty at 25%
             
             // The cost of the new debt is the Central Bank Rate + Company's Credit Spread + Any Junk Penalty
             $costOfNewDebt = $policyRate + (float) $acquirer->getCreditSpread() + $leveragePenalty;
@@ -168,9 +170,6 @@ class MergerAndAcquisitionEngine
         $newCurrentRoic = $currentRoic + $roicShift;
 
         $acquirer->setCurrentRoic((string) max(-0.10, $newCurrentRoic));
-        if (method_exists($acquirer, 'setBaselineRoic')) {
-            $acquirer->setBaselineRoic((string) max(-0.10, $blendedRoic));
-        }
 
         //GENERATE THE MARKET EVENT & PRICE SHOCK
         $purchasePriceB = number_format($purchasePrice / 1_000_000_000, 1);
@@ -215,6 +214,15 @@ class MergerAndAcquisitionEngine
         $isDistressed = $evaSpread < -0.02;
         $isDying = $currentRoic < 0.00 || $evaSpread < -0.05;
 
+        $treasury = (float) $seller->getCorporateTreasury();
+        $operatingBase = max((float) $seller->getTotalRevenue(), (float) $seller->getTotalEquity(), 10_000_000.0);
+        $hasCashBuffer = $treasury > ($operatingBase * 0.10); // 10% buffer is a massive fortress
+
+        // If they have a massive cash fortress, they can easily weather the storm without a fire sale!
+        if ($hasCashBuffer) {
+            $isDistressed = false;
+            $isDying = false;
+        }
 
         // Only sell if highly valued OR deeply distressed
         if (!$isDistressed && ($currentPE < 30.0 || $netIncome < 5_000_000_000.0)) {
@@ -240,7 +248,7 @@ class MergerAndAcquisitionEngine
         }
 
 
-        if ((mt_rand() / mt_getrandmax()) >= ($annualProbability * $dt)) {
+        if (!$this->mathUtility->checkProbability($annualProbability * $dt)) {
             return null;
         }
 
@@ -248,6 +256,7 @@ class MergerAndAcquisitionEngine
 
         $lostNetIncome = $netIncome * $divestedFraction;
         $currentEquity = (float) $seller->getTotalEquity();
+        $investedCapital = $seller->getInvestedCapital();
         $lostEquity = $currentEquity * $divestedFraction;
 
         // If the company is losing money, buyers value the physical assets (Equity) 
@@ -256,7 +265,8 @@ class MergerAndAcquisitionEngine
             $salePrice = $lostNetIncome * $saleMultiple;
         } else {
             // Sell the toxic assets for 40 to 80 cents on the dollar
-            $salePrice = $lostEquity * (mt_rand(40, 80) / 100.0);
+            $baseDistressValue = max($currentEquity, $investedCapital * 0.25);
+            $salePrice = ($baseDistressValue * $divestedFraction) * (mt_rand(40, 80) / 100.0);
         }
 
         // INJECT THE CASH
@@ -274,11 +284,6 @@ class MergerAndAcquisitionEngine
         $currentRoic = $currentRoic ?: (float) $seller->getBaselineRoic();
         $roicBump = $divestedFraction * 0.20;
         $seller->setCurrentRoic((string) ($currentRoic + $roicBump));
-        if (method_exists($seller, 'setBaselineRoic')) {
-            // Cap the baseline ratcheting so a company doesn't slowly mutate into an infinite-margin glitch over decades
-            $newBaseline = min(0.45, $seller->getBaselineRoic() + ($roicBump * 0.5));
-            $seller->setBaselineRoic((string) $newBaseline);
-        }
 
         // GENERATE THE MARKET EVENT
         $salePriceB = number_format($salePrice / 1_000_000_000, 1);

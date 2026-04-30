@@ -9,12 +9,6 @@ class MacroEngine
 {
     private const REDIS_MACRO_STATE = 'macroeconomic_state';
 
-    private const CRASH_GAP_THRESHOLD = 0.07;    // Output gap danger zone
-    private const CRASH_RATE_THRESHOLD = 0.07;   // Interest rate danger zone
-    private const MAX_CRASH_PROBABILITY = 4.0;
-    private const POST_CRASH_GAP = -0.07;        // The severe recession gap it snaps to
-    private const POST_CRASH_DEFLATION = 0.04;   // How much inflation is instantly destroyed
-
     public function __construct(
         private MathUtility $mathUtility,
         private LoggerInterface $logger,
@@ -60,8 +54,6 @@ class MacroEngine
         $state['output_gap'] = $this->calculateOutputGap($state, $yield10y, $naturalRate, $stressMultiplier, $dt);
         $state['inflation'] = $this->calculateInflation($state, $targetInflation, $stressMultiplier, $dt);
 
-        // Evaluate systemic crash risk
-        $state = $this->applySystemicCrashRisk($state, $dt);
 
         // Safely initialize if pulling from an older Redis cache payload
         $state['nominal_gdp_index'] = $state['nominal_gdp_index'] ?? 1.0;
@@ -76,6 +68,12 @@ class MacroEngine
 
         $state['output_gap_ema'] += $emaWeight * ($state['output_gap'] - $state['output_gap_ema']);
         $state['policy_rate_ema'] += $emaWeight * ($state['policy_rate'] - $state['policy_rate_ema']);
+
+        // DYNAMIC FISCAL POLICY (Government Taxes)
+        // Base tax rate is 21%. If the economy overheats, the government hikes taxes to cool it down.
+        // If the economy enters a deep recession, they pass emergency tax cuts to stimulate corporate recovery.
+        $fiscalPolicyTarget = 0.21 + ($state['output_gap_ema'] * 1.0);
+        $state['corporate_tax_rate'] = max(0.12, min(0.30, $fiscalPolicyTarget));
 
 
         $payload = [
@@ -207,8 +205,13 @@ class MacroEngine
             $cbSpeed = 6.0; 
         }
 
+        // THE DEFLATION PANIC: "Cutting the elevator cables"
+        // If the economy enters actual deflation, the Central Bank slams rates to zero instantly.
+        if ($targetRate < $currentPolicyRate && $state['inflation'] < -0.5) {
+            $cbSpeed = 15.0;
+        } 
         // THE RECESSION PANIC: "Taking the elevator down"
-        if ($targetRate < $currentPolicyRate && $state['output_gap'] < -0.04) {
+        elseif ($targetRate < $currentPolicyRate && $state['output_gap'] < -0.04) {
             $cbSpeed = 15.0;
         } elseif ($targetRate < $currentPolicyRate && $state['output_gap'] < -0.02) {
             $cbSpeed = 6.0;
@@ -341,45 +344,7 @@ class MacroEngine
         $phillipsEffect = $phillipsSlope * $dt;
 
         $newInflation = $state['inflation'] + $inflationDrift + $phillipsEffect + (0.015 * $stressMultiplier * sqrt($dt) * $infZ);
-        return max(-0.01, min(0.25, $newInflation));
+        return max(-0.02, min(0.25, $newInflation));
     }
 
-
-    /**
-     * Evaluates the risk of a "Minsky Moment" (systemic credit crash).
-     * If the economy runs unsustainably hot while interest rates are punishingly high, 
-     * the system has a dynamic probability of snapping instantly into a severe recession.
-     *
-     * @param array $state The current macroeconomic state.
-     * @param float $dt    The time step (in years).
-     * @return array       The updated macroeconomic state.
-     */
-    private function applySystemicCrashRisk(array $state, float $dt): array
-    {
-        $isDangerZone = $state['output_gap'] > self::CRASH_GAP_THRESHOLD;
-        $isPunishingRates = $state['policy_rate'] > self::CRASH_RATE_THRESHOLD;
-
-        // If the economy is hot AND the Central Bank is choking the system...
-        if ($isDangerZone && $isPunishingRates) {
-            
-            // Calculate dynamic probability (scales up the hotter the economy gets)
-            $excessHeat = $state['output_gap'] - self::CRASH_GAP_THRESHOLD;
-            $heatRatio = min(1.0, $excessHeat / 0.02);
-            $crashProbability = $heatRatio * self::MAX_CRASH_PROBABILITY;
-
-            // RNG Roll to see if the credit markets freeze this tick
-            if ((mt_rand() / mt_getrandmax()) < ($crashProbability * $dt)) {
-                
-                // THE SNAP: Instant severe recession and demand destruction
-                $state['output_gap'] = self::POST_CRASH_GAP; 
-                $state['inflation'] = max(0.00, $state['inflation'] - self::POST_CRASH_DEFLATION); 
-                
-                $this->logger->alert("MINSKY MOMENT TRIGGERED! The credit system has collapsed.");
-                
-                // If you have $this->marketEvent injected, publish the global panic here!
-            }
-        }
-
-        return $state;
-    }
 }

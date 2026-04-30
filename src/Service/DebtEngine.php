@@ -11,7 +11,7 @@ class DebtEngine
 
     // Debt Analysis Constants
     private const CASH_YIELD_SPREAD = 0.02;
-    private const ARBITRAGE_HURDLE = 0.025;
+    private const ARBITRAGE_HURDLE = 0.030; // 300 bps spread is severe
     private const MIN_INTEREST_COVERAGE_RATIO = 2.0;
 
     public function calculateInterestExpense(Stock $stock, array $macroState, bool $advanceMaturity = false): array
@@ -36,7 +36,8 @@ class DebtEngine
             $revenue = $investedCapital * $assetTurnover;
         }
         
-        $margin = max(0.01, (float) $stock->getOperatingMargin());
+        // Do not clamp margin here! We need TRUE EBIT to accurately calculate Interest Coverage Ratio later.
+        $margin = (float) $stock->getOperatingMargin();
         $ebit = $revenue * $margin;
         
         // Failsafe for zero debt companies
@@ -44,6 +45,7 @@ class DebtEngine
             return [
                 'interest_expense' => 0.0, 
                 'blended_rate' => 0.0, 
+                'historical_fixed_rate' => (float) $stock->getHistoricalFixedRate(),
                 'dynamic_spread' => $baselineCreditSpread,
                 'current_market_rate' => $policyRate + $baselineCreditSpread,
                 'ebit' => $ebit,
@@ -58,9 +60,10 @@ class DebtEngine
             $leverageRatio = 0.0;
         } else {
             // Failsafe: Prevent the Junk Bond Death Spiral during a cyclical earnings miss.
-            // Bond markets will underwrite leverage based on a normalized worst-case margin (5% of revenue) rather than instantaneous negative EBIT.
-            $normalizedEbit = max($ebit, $revenue * 0.05);
-            $leverageRatio = $normalizedEbit > 0 ? min(999.0, $netDebt / $normalizedEbit) : 999.0;
+            // Bond markets will underwrite leverage based on a normalized worst-case margin (8% of revenue) rather than instantaneous negative EBIT.
+            $normalizedEbit = max($ebit, $revenue * 0.08);
+            // Cap the mathematically evaluated leverage ratio at 15.0 to prevent exp() blowouts.
+            $leverageRatio = $normalizedEbit > 0 ? min(15.0, $netDebt / $normalizedEbit) : 15.0;
         }
 
         // SECTOR-SPECIFIC LEVERAGE TOLERANCE
@@ -107,9 +110,12 @@ class DebtEngine
         $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) +
                            ($debt * $floatingRatio * $floatingInterestRate);
 
+        $trueBlendedRate = $debt > 0 ? ($interestExpense / $debt) : 0.0;
+
         return [
             'interest_expense' => $interestExpense,
-            'blended_rate' => $blendedFixedRate,
+            'blended_rate' => $trueBlendedRate,
+            'historical_fixed_rate' => $blendedFixedRate,
             'dynamic_spread' => $dynamicSpread,
             'current_market_rate' => $currentMarketFixedRate,
             'ebit' => $ebit,
@@ -138,7 +144,9 @@ class DebtEngine
         // Levered Beta (The Penalty for Greed)
         // Use abs() to capture high inverse volatility, floored at 0.5 for baseline risk
         $baseBeta = max(0.5, abs((float) $stock->getBeta()));
-        $debtToEquity = $equity > 0 ? ($currentDebt / $equity) : 0.0;
+        
+        // If equity is zero or negative, the company is technically insolvent. D/E should spike to max, not 0.0.
+        $debtToEquity = $equity > 0 ? ($currentDebt / $equity) : 10.0;
         
         // Standard CAPM breaks down during insolvency. Cap D/E at 10.0 to prevent runaway WACC math.
         $effectiveDebtToEquity = min(10.0, $debtToEquity);
@@ -149,8 +157,10 @@ class DebtEngine
         $costOfEquity = $policyRate + ($leveredBeta * $equityRiskPremium);
 
         // Weighted Average Cost of Capital (WACC)
-        $totalCapital = $currentDebt + $equity;
-        $weightEquity = $totalCapital > 0 ? ($equity / $totalCapital) : 1.0;
+        // Floor equity at 0 for capital weighting to prevent negative weights during insolvency
+        $positiveEquity = max(0.0, $equity);
+        $totalCapital = $currentDebt + $positiveEquity;
+        $weightEquity = $totalCapital > 0 ? ($positiveEquity / $totalCapital) : 1.0;
         $weightDebt = $totalCapital > 0 ? ($currentDebt / $totalCapital) : 0.0;
         $wacc = ($weightEquity * $costOfEquity) + ($weightDebt * $effectiveCostOfDebt);
 
@@ -158,8 +168,14 @@ class DebtEngine
         $yieldOnCash = max(0.0, $policyRate - self::CASH_YIELD_SPREAD);
         
         // "Negative Carry" means it costs more to hold the debt than the cash is earning in the bank
+        // Scale the negative carry panic threshold by the sector's structural leverage tolerance.
+        // A base 3.0 threshold = 1.0x multiplier (300 bps). Financials (6.0) = 2.0x multiplier (600 bps). Tech (2.0) = 0.66x (200 bps).
+        $leverageThreshold = $this->getSectorLeverageThreshold($stock->getSector());
+        $hurdleMultiplier = $leverageThreshold / 3.0;
+        $hurdle = self::ARBITRAGE_HURDLE * $hurdleMultiplier;
+        
         // Compare Gross to Gross to avoid tax illusions (interest income on cash is also taxable)
-        $isSevereNegativeCarry = $grossCostOfDebt > ($yieldOnCash + self::ARBITRAGE_HURDLE);
+        $isSevereNegativeCarry = $grossCostOfDebt > ($yieldOnCash + $hurdle);
 
         // Interest Coverage Ratio (ICR)
         $ebit = $debtMetrics['ebit'];
@@ -201,13 +217,13 @@ class DebtEngine
     {
         return match ($sector) {
             // Highly stable, regulated cash flows. Can easily carry massive debt.
-            'Utilities', 'Real Estate' => 5.0, 
+            'Utilities', 'Real Estate' => 6.5, 
             
             // Asset heavy, relatively stable cash flows
             'Industrials', 'Materials', 'Energy', 'Consumer Staples' => 3.5, 
             
             // Moderate cycle sensitivity
-            'Healthcare', 'Communication Services' => 3.0, 
+            'Health Care', 'Communication Services' => 3.0, 
 
             // Highly volatile, cyclical, or asset-light. Debt is dangerous here.
             'Consumer Discretionary', 'Information Technology' => 2.0, 

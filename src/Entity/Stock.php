@@ -232,6 +232,12 @@ class Stock
     #[ORM\Column(type: 'float', nullable: true)]
     private ?float $fixedCostRatio = null;
 
+    /**
+     * @var string|null The Serviceable Addressable Market (SAM) multiplier.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 2, nullable: true, options: ['default' => '1.00'])]
+    private ?string $samRatio = '1.00';
+
 
     public function getId(): ?int
     {
@@ -591,12 +597,23 @@ class Stock
         return match ($this->getSector()) {
             'Information Technology', 'Communication Services' => 0.75, // Heavy R&D, servers
             'Utilities', 'Real Estate' => 0.65,                         // Heavy infrastructure
-            'Healthcare' => 0.55,                                       // Pharma R&D vs Pill manufacturing
+            'Health Care' => 0.55,                                       // Pharma R&D vs Pill manufacturing
             'Financials' => 0.40,                                       // Moderate fixed overhead
             'Industrials', 'Materials', 'Energy' => 0.30,               // Heavy variable material costs
             'Consumer Discretionary', 'Consumer Staples' => 0.15,       // Buying and selling physical inventory
             default => 0.35,
         };
+    }
+
+    public function getSamRatio(): ?string
+    {
+        return $this->samRatio;
+    }
+
+    public function setSamRatio(?string $samRatio): static
+    {
+        $this->samRatio = $samRatio;
+        return $this;
     }
 
     // --- BRIDGE METHODS ---

@@ -50,8 +50,6 @@ class MarketOperator
                 continue;
             }
 
-            $this->applyDominanceRubberBandRule($stock, $totalMarketCap, $marketCap, $price, $eps);
-
             // RULE : Volatility Dampening
 
             $currentVol = (float) $stock->getCurrentVolatility();
@@ -146,13 +144,16 @@ class MarketOperator
         }
 
         $this->entityManager->getConnection()->executeStatement(
-            'UPDATE user_stocks SET quantity = 0, version = version + 1 WHERE stock_id = :id',
+            'DELETE FROM user_stocks WHERE stock_id = :id',
             ['id' => $stock->getId()]
         );
 
         $stock->setPrice("50.00");
         $stock->setSharesOutstanding("1000000000");
         $stock->setEarningsPerShare((string) (mt_rand(325, 433) / 100));
+        $stock->setFreeCashFlowPerShare("0.00");
+        $stock->setCurrentRoic($stock->getBaselineRoic());
+        $stock->setHistoricalFixedRate("0.05");
         $stock->setCorporateTreasury("5000000000.00");
         $stock->setTotalEquity("20000000000.00");
         $stock->setRetainedEarnings("0.00");
@@ -167,47 +168,5 @@ class MarketOperator
             $this->marketEvent->publish($stock, 'BANKRUPTCY', $event1Desc, -100.00),
             $this->marketEvent->publish($stock, 'BAILOUT', $event2Desc, 0.00)
         ];
-    }
-
-    /**
-     * Applies the Market Dominance Rubber Band (Law of Large Numbers) rule.
-     *
-     * Introduces a gravitational drag on companies that grow too large relative to the
-     * total market index, preventing runaway monopolies by compressing EPS or Price.
-     *
-     * @param Stock $stock          The stock to evaluate.
-     * @param float $totalMarketCap The total market capitalization of the entire district.
-     * @param float $marketCap      The current market capitalization of the stock.
-     * @param float $price          The current price of the stock.
-     * @param float $eps            The current earnings per share.
-     * @return void
-     */
-    private function applyDominanceRubberBandRule(Stock $stock, float $totalMarketCap, float $marketCap, float $price, float $eps): void
-    {
-        $dominanceRatio = $marketCap / $totalMarketCap;
-        $softCap = 0.20; 
-        $hardCap = 0.30;
-
-        if ($dominanceRatio > $softCap) {
-            $excess = ($dominanceRatio - $softCap) / ($hardCap - $softCap);
-            $excess = min(1.0, max(0.0, $excess));
-
-            $maxDrag = 0.025; 
-            $gravityPull = $excess * $maxDrag;
-
-            $peRatio = $eps > 0 ? $price / $eps : 999;
-            
-            if ($peRatio < 35.0 && $eps > 0) {
-                $stock->setEarningsPerShare((string) ($eps * (1.0 - $gravityPull)));
-                $stock->setPrice((string) ($price * (1.0 - ($gravityPull / 2.0))));
-                $dragType = "EPS";
-            } else {
-                $stock->setPrice((string) ($price * (1.0 - $gravityPull)));
-                $dragType = "Price";
-            }
-            
-            $pct = round($dominanceRatio * 100, 2);
-            $this->logger->info("GRAVITY WELL: {$stock->getTicker()} {$dragType} rubber-banded (Dominance: {$pct}%, PE: " . round($peRatio, 1) . ")");
-        }
     }
 }

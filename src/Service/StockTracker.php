@@ -152,7 +152,7 @@ class StockTracker
             $splitResult = $this->corporateActionEngine->processSplits(
                 $stock,
                 $currentPriceAfterEarnings,
-                $sharesOutstanding
+                (float) $stock->getSharesOutstanding()
             );
 
             // Unpack the results
@@ -200,7 +200,9 @@ class StockTracker
                 $investedCapital = $stock->getInvestedCapital();
                 $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
                 $baselineSectorTam = SectorPE::getBaselineTam($sectorName);
-                $marketShare = min(0.9999, $investedCapital / ($baselineSectorTam * $nominalGdpIndex));
+                $samRatio = (float) $stock->getSamRatio();
+                $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
+                $marketShare = min(0.9999, $investedCapital / max(1.0, $dynamicSam));
                 
                 $stockUpdate['market_share'] = round($marketShare * 100, 2);
             }

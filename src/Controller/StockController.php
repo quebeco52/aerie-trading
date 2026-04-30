@@ -81,7 +81,9 @@ class StockController extends AbstractController
 
             $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
             $baselineSectorTam = \App\Data\SectorPE::getBaselineTam($asset->getSector());
-            $marketShare = min(0.9999, $asset->getInvestedCapital() / ($baselineSectorTam * $nominalGdpIndex));
+            $samRatio = (float) $asset->getSamRatio();
+            $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
+            $marketShare = min(0.9999, $asset->getInvestedCapital() / max(1.0, $dynamicSam));
         }
 
         $generalInfo = $asset->getDescription();
