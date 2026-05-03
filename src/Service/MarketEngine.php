@@ -70,11 +70,9 @@ class MarketEngine
         ?float $fcfPerShare = null,
         float $bookValuePerShare = 0.0,
         float $maShock = 0.0,
-        float $totalDebt = 0.0,
-        float $totalEquity = 0.0,
-        float $creditSpread = 0.01,
         float $currentRoic = 0.10,
         float $dividendPerShare = 0.0,
+        float $liveWacc = 0.08
     ): array {
         
         // =====================================================================
@@ -140,11 +138,8 @@ class MarketEngine
             $riskFreeRate, 
             $beta, 
             $bookValuePerShare, 
-            $totalDebt, 
-            $totalEquity, 
-            $creditSpread,
-            $corporateTaxRate,
-            $dividendPerShare
+            $dividendPerShare,
+            $liveWacc
         );
         // Panic Gravity (Flight to Safety)
         $macroStress = abs($outputGap) + abs($inflation - 0.02);
@@ -225,14 +220,11 @@ class MarketEngine
         float $riskFreeRate, 
         float $beta, 
         float $bookValuePerShare, 
-        float $totalDebt, 
-        float $totalEquity, 
-        float $creditSpread,
-        float $corporateTaxRate,
-        float $dividendPerShare = 0.0
+        float $dividendPerShare,
+        float $liveWacc
     ): float {
-        // Calculate Live WACC
-        $wacc = $this->calculateWACC($riskFreeRate, $beta, $totalDebt, $totalEquity, $creditSpread, $corporateTaxRate);
+        // Use the live WACC passed down from the centralized DebtEngine
+        $wacc = $liveWacc;
 
         // Dynamic P/E Re-Rating (The EVA Premium)
         $marketBasePE = max(8.0, min(30.0, 1.0 / max(0.01, $riskFreeRate)));
@@ -272,30 +264,5 @@ class MarketEngine
         $fairValue = max($earningsValue, $dividendSupportValue, $bookValuePerShare * 0.80);
         
         return max(0.01, $fairValue);
-    }
-
-    /**
-     * Calculates the Weighted Average Cost of Capital (WACC) for live valuation.
-     */
-    private function calculateWACC(float $policyRate, float $beta, float $totalDebt, float $totalEquity, float $creditSpread, float $corporateTaxRate): float 
-    {
-        $valuationBeta = max(0.5, abs($beta)); // Use abs() to capture high inverse volatility, floored at 0.5 for baseline risk
-        $debtToEquity = $totalEquity > 0 ? ($totalDebt / $totalEquity) : 0.0;
-        
-        // Standard CAPM breaks down during insolvency. Cap D/E at 10.0 to prevent runaway WACC math.
-        $effectiveDebtToEquity = min(10.0, $debtToEquity);
-        $leveredBeta = $valuationBeta * (1.0 + ((1.0 - $corporateTaxRate) * $effectiveDebtToEquity));
-
-        $equityRiskPremium = 0.05; 
-        $costOfEquity = $policyRate + ($leveredBeta * $equityRiskPremium);
-        
-        $totalCapital = $totalEquity + $totalDebt;
-        $weightEquity = $totalCapital > 0 ? ($totalEquity / $totalCapital) : 1.0;
-        $weightDebt = $totalCapital > 0 ? ($totalDebt / $totalCapital) : 0.0;
-        
-        $costOfDebt = $policyRate + $creditSpread;
-        $effectiveCostOfDebt = $costOfDebt * (1.0 - $corporateTaxRate);
-        
-        return ($weightEquity * $costOfEquity) + ($weightDebt * $effectiveCostOfDebt);
     }
 }

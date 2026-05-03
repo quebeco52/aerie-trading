@@ -75,6 +75,12 @@ class MacroEngine
         $fiscalPolicyTarget = 0.21 + ($state['output_gap_ema'] * 1.0);
         $state['corporate_tax_rate'] = max(0.12, min(0.30, $fiscalPolicyTarget));
 
+        // DYNAMIC EQUITY RISK PREMIUM (ERP)
+        // Base ERP is 4.5%. During recessions, fearful investors demand a higher premium to hold risky stocks.
+        $erp = 0.045;
+        if ($state['output_gap_ema'] < 0.0) {
+            $erp += abs($state['output_gap_ema']) * 0.5; // e.g., -4% gap adds 2.0% to ERP (6.5% total)
+        }
 
         $payload = [
             'inflation' => $state['inflation'],
@@ -89,6 +95,7 @@ class MacroEngine
             'yield_10y' => $yield10y,
             'qe_active' => $yieldData['qe_suppression'] > 0,
             'corporate_tax_rate' => $state['corporate_tax_rate'] ?? 0.21,
+            'equity_risk_premium' => $erp,
             'nominal_gdp_index' => $state['nominal_gdp_index']
         ];
 
@@ -207,7 +214,7 @@ class MacroEngine
 
         // THE DEFLATION PANIC: "Cutting the elevator cables"
         // If the economy enters actual deflation, the Central Bank slams rates to zero instantly.
-        if ($targetRate < $currentPolicyRate && $state['inflation'] < -0.5) {
+        if ($targetRate < $currentPolicyRate && $state['inflation'] < 0.0) {
             $cbSpeed = 15.0;
         } 
         // THE RECESSION PANIC: "Taking the elevator down"
@@ -291,9 +298,9 @@ class MacroEngine
         $realRate = $borrowingCost - $state['inflation'];
 
         // THE KALDOR-KALECKI PARAMETERS
-        $alpha = 0.4;   // Momentum coefficient (Boom/Bust accelerator)
-        $beta = 350.0; // Cubic capacity constraint (The Rubber Band)
-        $gamma = 2.0;   // Sensitivity to Central Bank real rates
+        $alpha = 0.5;   // Momentum coefficient (Boom/Bust accelerator)
+        $beta = 300.0;  // Cubic capacity constraint (The Rubber Band)
+        $gamma = 6.5;   // Sensitivity to Central Bank real rates
 
         // Momentum (Linear Accelerator)
         $momentum = $alpha * $y;

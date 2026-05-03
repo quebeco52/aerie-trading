@@ -347,8 +347,16 @@ class CorporateActionEngine
         $evaSpread = $trueRoic - $wacc;
 
         // Titans are much more stubborn about cutting dividends to save face
-        $isTitan = in_array($stock->getSystemicImportance(), ['titan', 'systemic']);
-        $distressMultiplier = $isTitan ? 1.2 : 1.0;
+        $isTitan = in_array($stock->getSystemicImportance(), ['titan']);
+        $isAristocrat = $speed <= 0.05;
+        
+        $distressMultiplier = 1.0;
+        if ($isTitan) {
+            $distressMultiplier += 0.2;
+        }
+        if ($isAristocrat) {
+            $distressMultiplier += 0.2;
+        }
 
         $hasCashBuffer = $availableTreasury > ($operatingBase * 0.10); // 10% buffer gives them massive confidence
         $isCriticalCash = $availableTreasury < ($operatingBase * 0.05); // 5% means they are getting dangerously close to the 3% operating limit
@@ -452,11 +460,12 @@ class CorporateActionEngine
         // Require positive EVA and fair valuation, OR force buybacks if sitting on a massive dead cash hoard.
         if (($economicSpread > 0.02 && $currentPE < ($targetPE + 3.0)) || $isMegaHoarder) {
 
-            // The CFO's Cash Pacing Limit (Max 15% of Excess Cash per quarter to smooth out execution)
-            $maxWillingSpend = $excessCash * 0.15;
+            // The CFO's Cash Pacing Limit (Max 15% of Excess Cash per quarter to smooth out execution, 30% for hoarders)
+            $maxWillingSpend = $excessCash * ($isMegaHoarder ? 0.30 : 0.15);
 
-            // The SEC/Regulatory Market Volume Limit (Max 1% of total float per 90 days to avoid market manipulation)
-            $maxSharesToRetire = $shares * 0.01;
+            // The SEC/Regulatory Market Volume Limit (Max 1% of total float per 90 days to avoid market manipulation, 2.5% for extreme hoarders)
+            $maxSharesPct = $isMegaHoarder ? 0.025 : 0.01;
+            $maxSharesToRetire = $shares * $maxSharesPct;
             $maxRegulatorySpend = $maxSharesToRetire * max($currentPrice, 0.01);
 
             // The Absolute Maximum Plan
@@ -527,6 +536,7 @@ class CorporateActionEngine
 
         $newDebtIssued = 0.0;
         $totalOrganicCapex = 0.0;
+        $debtActionTaken = false;
 
         // DEBT MANAGEMENT (MACRO TOLERANCE)
         $currentDebt = (float) $stock->getTotalDebt();
@@ -558,19 +568,17 @@ class CorporateActionEngine
             // The True Capacity is the most conservative metric
             $trueExpansionCapacity = min($incomeStatementCapacity, $balanceSheetCapacity);
 
-            // The Bond Market Limit: The market will not absorb infinite corporate bonds in 90 days.
-            // Cap maximum quarterly issuance to 10% of the company's current physical size.
+            // The Bond Market Limit: Allow up to 25% of current physical size to facilitate aggressive leveraged recaps.
             $liveInvestedCapital = max($newEquity * 0.50, ($newEquity + $currentDebt - $newTreasury));
-            $trueExpansionCapacity = min($trueExpansionCapacity, $liveInvestedCapital * 0.10);
+            $trueExpansionCapacity = min($trueExpansionCapacity, $liveInvestedCapital * 0.25);
 
             // Only borrow if there is a safe, justifiable reason to do so
             if ($trueExpansionCapacity > 0) {
                 $spreadMultiplier = min(1.0, max(0.0, ($trueRoic - $wacc) * 10.0)); // 10% spread = 1.0 max aggressiveness
-                $aggressiveness = 0.02 + (0.13 * $spreadMultiplier);
+                $aggressiveness = 0.05 + (0.35 * $spreadMultiplier);
 
-                // Random check: CFOs don't borrow every single quarter.
-                // Probability scales with how profitable the spread is (30% to 70% chance per quarter).
-                $borrowProbability = 0.30 + ($spreadMultiplier * 0.40);
+                // Probability scales with how profitable the spread is (40% to 90% chance per quarter).
+                $borrowProbability = 0.40 + ($spreadMultiplier * 0.50);
 
                 if ((mt_rand() / mt_getrandmax()) < $borrowProbability) {
                     $newDebtIssued = $trueExpansionCapacity * $aggressiveness;
@@ -586,6 +594,7 @@ class CorporateActionEngine
 
                     // The new debt injects raw cash into the corporate treasury
                     $newTreasury += $newDebtIssued;
+                    $debtActionTaken = true;
 
                     if ($newDebtIssued > 500_000_000.0) {
                         $amtB = number_format($newDebtIssued / 1_000_000_000, 2);
@@ -605,10 +614,6 @@ class CorporateActionEngine
         // Scale investment opportunity probability with True ROIC
         $investmentProbability = min(0.95, max(0.10, 0.20 + ($trueRoic * 2.0)));
 
-        if($newDebtIssued > 0.0) {
-            $investmentProbability = min(1.0, $investmentProbability + 0.30);
-        }
-
         // Anti-Trust & Saturation Limits:
         // A company cannot infinitely expand if they already own the majority of their Total Addressable Market.
         $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
@@ -617,15 +622,15 @@ class CorporateActionEngine
         $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
         $marketShare = $liveInvestedCapital / max(1.0, $dynamicSam);
 
-        if ($marketShare > 0.70) {
+        if ($marketShare > 0.80) {
             $investmentProbability *= 0.2; // soft cap on organic physical expansion
-        } elseif ($marketShare > 0.40) {
+        } elseif ($marketShare > 0.60) {
             $investmentProbability *= 0.5; // slows them down
         }
 
         $fundInvestmentOpportunity = (mt_rand() / mt_getrandmax()) < $investmentProbability;
 
-        if ($trueRoic > $wacc && $newTreasury > $targetCashReservs && !$health['wants_to_paydown_debt'] && $fundInvestmentOpportunity) {
+        if (($trueRoic > $wacc && $newTreasury > $targetCashReservs && !$health['wants_to_paydown_debt'] && $fundInvestmentOpportunity) || $debtActionTaken) {
             $spreadMultiplier = min(1.0, max(0.0, ($trueRoic - $wacc) * 10.0));
 
             // Deploy between 2% and 15% of organic excess treasury into growth this quarter
@@ -662,8 +667,6 @@ class CorporateActionEngine
         }
 
         // THE DEBT TRAP (Liquidity Crisis)
-        $debtActionTaken = false;
-
         if ($newTreasury < $minOperatingCash) {
             $cashShortfall = $minOperatingCash - $newTreasury;
             $newTotalDebt = $currentDebt + $cashShortfall;

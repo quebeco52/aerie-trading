@@ -127,7 +127,9 @@ class DebtEngine
     {
         $currentDebt = (float) $stock->getTotalDebt();
         $equity = (float) $stock->getTotalEquity();
+        $marketCap = (float) $stock->getPrice() * max(1.0, (float) $stock->getSharesOutstanding());
         $policyRate = $macroState['policy_rate_ema'] ?? $macroState['policy_rate'] ?? 0.04;
+        $yield10y = $macroState['yield_10y'] ?? $policyRate; // Long-term risk-free rate for WACC
         $corporateTaxRate = $macroState['corporate_tax_rate'] ?? 0.21;
         
 
@@ -145,22 +147,23 @@ class DebtEngine
         // Use abs() to capture high inverse volatility, floored at 0.5 for baseline risk
         $baseBeta = max(0.5, abs((float) $stock->getBeta()));
         
-        // If equity is zero or negative, the company is technically insolvent. D/E should spike to max, not 0.0.
-        $debtToEquity = $equity > 0 ? ($currentDebt / $equity) : 10.0;
+        // For Beta Levering and WACC weights, we MUST use Market Value of Equity, not Book Value!
+        $debtToEquity = $marketCap > 0 ? ($currentDebt / $marketCap) : 2.5;
         
-        // Standard CAPM breaks down during insolvency. Cap D/E at 10.0 to prevent runaway WACC math.
-        $effectiveDebtToEquity = min(10.0, $debtToEquity);
-        $leveredBeta = $baseBeta * (1.0 + ((1.0 - $corporateTaxRate) * $effectiveDebtToEquity));
+        // Standard CAPM breaks down during insolvency. Cap D/E at 2.5 for beta math to prevent runaway WACC.
+        $effectiveDebtToEquity = min(2.5, $debtToEquity);
+        
+        // The $baseBeta from the DB already partially accounts for historical leverage. 
+        // Dampen the Hamada equation multiplier (* 0.25) so we don't double-count the debt risk!
+        $leveredBeta = $baseBeta * (1.0 + ((1.0 - $corporateTaxRate) * ($effectiveDebtToEquity * 0.25)));
 
-        // Cost of Equity (CAPM)
-        $equityRiskPremium = 0.05;
-        $costOfEquity = $policyRate + ($leveredBeta * $equityRiskPremium);
+        // Cost of Equity (CAPM) - Must use the 10-Year Yield as the Risk-Free Rate!
+        $equityRiskPremium = $macroState['equity_risk_premium'] ?? 0.045; 
+        $costOfEquity = $yield10y + ($leveredBeta * $equityRiskPremium);
 
         // Weighted Average Cost of Capital (WACC)
-        // Floor equity at 0 for capital weighting to prevent negative weights during insolvency
-        $positiveEquity = max(0.0, $equity);
-        $totalCapital = $currentDebt + $positiveEquity;
-        $weightEquity = $totalCapital > 0 ? ($positiveEquity / $totalCapital) : 1.0;
+        $totalCapital = $currentDebt + $marketCap;
+        $weightEquity = $totalCapital > 0 ? ($marketCap / $totalCapital) : 1.0;
         $weightDebt = $totalCapital > 0 ? ($currentDebt / $totalCapital) : 0.0;
         $wacc = ($weightEquity * $costOfEquity) + ($weightDebt * $effectiveCostOfDebt);
 
@@ -181,17 +184,21 @@ class DebtEngine
         $ebit = $debtMetrics['ebit'];
         $interestExpense = $debtMetrics['interest_expense'];
         
-        $interestCoverage = $interestExpense > 0 ? ($ebit / $interestExpense) : 999.0;
+        // If a company has zero debt, their ICR is excellent (999.0), UNLESS they are bleeding cash (EBIT < 0).
+        $interestCoverage = $interestExpense > 0 ? ($ebit / $interestExpense) : ($ebit > 0 ? 999.0 : -999.0);
 
         // Strategic Debt Flags for the CFO AI
         $wantsToPaydownDebt = ($currentDebt > 0) && ($isSevereNegativeCarry || $interestCoverage < self::MIN_INTEREST_COVERAGE_RATIO);
         
-        // M&A / Buyback Borrowing Capacity
-        $canIssueDebt = !$isSevereNegativeCarry && $interestCoverage >= (self::MIN_INTEREST_COVERAGE_RATIO + 1.5);
+        // M&A / CapEx Borrowing Capacity should purely be based on income statement health (ICR), not negative carry!
+        // A CFO will gladly accept negative carry on idle cash if they are borrowing to immediately fund a 20% ROIC expansion.
+        $canIssueDebt = $interestCoverage >= (self::MIN_INTEREST_COVERAGE_RATIO + 1.5);
 
         // Macro-Economic CFO Tolerance (How much debt are they comfortable holding?)
-        // Drops rapidly if interest rates are punishingly high
-        $macroDebtTolerance = min(4.0, max(0.50, 4.0 - ($effectiveCostOfDebt * 20.0)));
+        // Base tolerance is dictated by the sector's structural leverage capacity (e.g., Utilities ~3.25 D/E, Tech ~1.0 D/E)
+        $baseSectorToleranceDE = $leverageThreshold / 2.0;
+        // Tolerance drops if interest rates are punishingly high (Multiplier softened to 7.5 to prevent extreme deleveraging in normal rate environments)
+        $macroDebtTolerance = min($baseSectorToleranceDE, max(0.10, $baseSectorToleranceDE - ($effectiveCostOfDebt * 7.5)));
 
         return [
             'gross_cost' => $grossCostOfDebt,
@@ -217,13 +224,13 @@ class DebtEngine
     {
         return match ($sector) {
             // Highly stable, regulated cash flows. Can easily carry massive debt.
-            'Utilities', 'Real Estate' => 6.5, 
+            'Utilities', 'Real Estate' => 6.5,
             
             // Asset heavy, relatively stable cash flows
-            'Industrials', 'Materials', 'Energy', 'Consumer Staples' => 3.5, 
+            'Industrials', 'Materials', 'Energy', 'Consumer Staples' => 3.5,
             
             // Moderate cycle sensitivity
-            'Health Care', 'Communication Services' => 3.0, 
+            'Health Care', 'Communication Services' => 3.0,
 
             // Highly volatile, cyclical, or asset-light. Debt is dangerous here.
             'Consumer Discretionary', 'Information Technology' => 2.0, 

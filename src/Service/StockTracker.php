@@ -38,6 +38,7 @@ class StockTracker
         private CorporateActionEngine $corporateActionEngine,
         private MergerAndAcquisitionEngine $maEngine,
         private MarketEvent $eventService,
+        private DebtEngine $debtEngine,
         private MathUtility $mathUtility,
         private \Redis $redis,
     ) {}
@@ -104,6 +105,9 @@ class StockTracker
                 }
             }
 
+            // Fetch true, dynamic WACC from the DebtEngine
+            $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState);
+
             $sharesOutstanding = (float) $stock->getSharesOutstanding();
             $shares = max(1.0, $sharesOutstanding);
 
@@ -123,11 +127,9 @@ class StockTracker
                 fcfPerShare: $stock->getFreeCashFlowPerShare() !== null ? (float) $stock->getFreeCashFlowPerShare() : null,
                 bookValuePerShare: (float) $stock->getBookValuePerShare(),
                 maShock: $maShock,
-                totalDebt: (float) $stock->getTotalDebt(),
-                totalEquity: (float) $stock->getTotalEquity(),
-                creditSpread: (float) $stock->getCreditSpread(),
                 currentRoic: (float) ($stock->getCurrentRoic() ?: $stock->getBaselineRoic()),
-                dividendPerShare: (float) $stock->getLastDividend()
+                dividendPerShare: (float) $stock->getLastDividend(),
+                liveWacc: $health['wacc']
             );
 
             $newPrice = $calculation['price'];
