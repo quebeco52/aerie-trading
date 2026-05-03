@@ -8,7 +8,7 @@
 		class="max-w-[1600px] mx-auto space-y-8 mt-6 px-4 sm:px-6 lg:px-8 pb-12">
 
 		{# Hero Section #}
-		<div class="flex flex-col md:flex-row justify-between items-center bg-surface-container-low shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-8 lg:p-10 border border-outline-variant/15 relative overflow-hidden">
+		<div class="flex flex-col md:flex-row justify-between items-center bg-surface-container-low shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-6 md:p-8 lg:p-10 border border-outline-variant/15 relative overflow-hidden">
 			<div class="absolute -right-20 -top-20 w-64 h-64 bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
 
 			<div class="relative z-10 w-full">
@@ -23,19 +23,19 @@
 
 		{# The Market Index Highlight #}
 		{% if etf %}
-			<a href="/stock/{{ etf.ticker }}" class="block bg-surface-container-low shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-8 border border-outline-variant/15 hover:border-primary/30 transition-all cursor-pointer group relative overflow-hidden">
+			<a href="/stock/{{ etf.ticker }}" class="block bg-surface-container-low shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-6 md:p-8 border border-outline-variant/15 hover:border-primary/30 transition-all cursor-pointer group relative overflow-hidden">
 				<div class="absolute right-0 top-0 w-48 h-48 bg-primary/5 rounded-full -mr-16 -mt-16 blur-3xl group-hover:bg-primary/10 transition-colors pointer-events-none"></div>
 
 				<div class="flex flex-col md:flex-row justify-between md:items-center relative z-10 gap-4">
 					<div>
-						<h2 class="text-3xl font-bold text-on-surface group-hover:text-primary transition-colors tracking-tight">{{ etf.name }}</h2>
+						<h2 class="text-2xl md:text-3xl font-bold text-on-surface group-hover:text-primary transition-colors tracking-tight">{{ etf.name }}</h2>
 						<span class="inline-flex items-center rounded bg-primary/10 px-2 py-1 text-[10px] font-bold text-primary border border-primary/20 mt-3 uppercase tracking-widest">
 							Market Index ({{ etf.ticker }})
 						</span>
 					</div>
 					<div class="md:text-right">
 						<p class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">Live Valuation</p>
-						<p id="etf-price" class="text-5xl font-bold text-on-surface tracking-tighter">${{ etf.price|number_format(2) }}</p>
+						<p id="etf-price" class="text-4xl md:text-5xl font-bold text-on-surface tracking-tighter">${{ etf.price|number_format(2) }}</p>
 					</div>
 				</div>
 			</a>
@@ -53,32 +53,32 @@
 			<div class="overflow-x-auto">
 				<table class="w-full text-left border-collapse">
 					<thead>
-						<tr class="bg-surface-container-highest/30 text-on-surface-variant text-[12px] font-bold uppercase tracking-widest border-b border-outline-variant/10">
-							<th scope="col" class="px-8 py-5">Asset</th>
-							<th scope="col" class="px-6 py-5 hidden sm:table-cell">Sector</th>
-							<th scope="col" class="px-6 py-5 text-right">Price</th>
-							<th scope="col" class="px-8 py-5 text-right">Market Cap</th>
+						<tr class="bg-surface-container-highest/30 text-on-surface-variant text-[10px] md:text-[12px] font-bold uppercase tracking-widest border-b border-outline-variant/10">
+							<th scope="col" class="px-4 md:px-8 py-5">Asset</th>
+							<th scope="col" class="px-4 md:px-6 py-5 hidden sm:table-cell">Sector</th>
+							<th scope="col" class="px-4 md:px-6 py-5 text-right">Price</th>
+							<th scope="col" class="px-4 md:px-8 py-5 text-right">Market Cap</th>
 						</tr>
 					</thead>
 					<tbody id="market-table-body" class="divide-y divide-outline-variant/5 text-sm relative">
 						{% for stock in stocks|default([]) %}
 							{# ADD IDs and data-mcap #}
 							<tr id="row-{{ stock.ticker }}" data-mcap="{{ stock.marketCap }}" class="hover:bg-surface-container-high/40 transition-colors cursor-pointer group" onclick="window.location.href='/stock/{{ stock.ticker }}'">
-								<td class="px-8 py-5">
+								<td class="px-4 md:px-8 py-5">
 									<div class="flex flex-col">
 										<div class="font-bold text-on-surface text-base group-hover:text-primary transition-colors">{{ stock.name }}</div>
 										<div class="text-on-surface-variant text-[12px] uppercase tracking-widest mt-0.5">{{ stock.ticker }}</div>
 									</div>
 								</td>
-								<td class="px-6 py-5 hidden sm:table-cell text-on-surface-variant">
+								<td class="px-4 md:px-6 py-5 hidden sm:table-cell text-on-surface-variant">
 									{{ stock.sector }}
 								</td>
 								{# ADD price ID #}
-								<td id="price-{{ stock.ticker }}" class="px-6 py-5 text-right font-bold text-on-surface transition-colors duration-300">
+								<td id="price-{{ stock.ticker }}" class="px-4 md:px-6 py-5 text-right font-bold text-on-surface transition-colors duration-300">
 									${{ stock.price|number_format(2) }}
 								</td>
 								{# ADD mcap ID #}
-								<td id="mcap-{{ stock.ticker }}" class="px-8 py-5 text-right font-medium text-on-surface-variant transition-colors duration-300">
+								<td id="mcap-{{ stock.ticker }}" class="px-4 md:px-8 py-5 text-right font-medium text-on-surface-variant transition-colors duration-300">
 									${{ (stock.marketCap / 1000000000)|number_format(2) }}B
 								</td>
 							</tr>

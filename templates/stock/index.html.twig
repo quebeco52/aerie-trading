@@ -1,44 +1,49 @@
 {% extends 'base.html.twig' %}
 
 {% block title %}
-	{{ asset.ticker }} Stock Price & Analysis | {{ asset.name }} - Aerie Exchange
+	{{ asset.ticker }}
+	Stock Price & Analysis |
+	{{ asset.name }}
+	- Aerie Exchange
 {% endblock %}
 
 {% block meta %}
-    <meta name="description" content="View live stock prices, market cap, and fundamental Clean Surplus accounting data for {{ asset.name }} ({{ asset.ticker }}). See the latest quarterly earnings reports and historical charts.">
-    <meta property="og:title" content="{{ asset.ticker }} Stock Price | Aerie Exchange">
-    <meta property="og:description" content="Live financial data and economic simulation for {{ asset.name }} ({{ isEtf ? 'Market Index' : asset.sector }}).">
-    <meta property="og:type" content="website">
+	<meta name="description" content="View live stock prices, market cap, and fundamental Clean Surplus accounting data for {{ asset.name }} ({{ asset.ticker }}). See the latest quarterly earnings reports and historical charts.">
+	<meta property="og:title" content="{{ asset.ticker }} Stock Price | Aerie Exchange">
+	<meta property="og:description" content="Live financial data and economic simulation for {{ asset.name }} ({{ isEtf ? 'Market Index' : asset.sector }}).">
+	<meta property="og:type" content="website">
 
-    <script type="application/ld+json">
-    {
-        "@context": "https://schema.org",
-        "@type": "{{ isEtf ? 'InvestmentFund' : 'Corporation' }}",
-        "name": "{{ asset.name }}",
-        "tickerSymbol": "{{ asset.ticker }}",
-        "description": "Live financial data and economic simulation for {{ asset.name }}.",
-        "url": "{{ app.request.uri }}"{% if isEtf and allAssets is defined %},
-        "hasPart": [
-            {% for a in allAssets %}
-            {
-                "@type": "Corporation",
-                "name": "{{ a.name }}",
-                "tickerSymbol": "{{ a.ticker }}"
-            }{{ not loop.last ? ',' : '' }}
-            {% endfor %}
-        ]
-        {% endif %}
-    }
-    </script>
+	<script type="application/ld+json">
+		{
+		        "@context": "https://schema.org",
+		        "@type": "{{ isEtf ? 'InvestmentFund' : 'Corporation' }}",
+		        "name": "{{ asset.name }}",
+		        "tickerSymbol": "{{ asset.ticker }}",
+		        "description": "Live financial data and economic simulation for
+		{{ asset.name }}.",
+		        "url": "{{ app.request.uri }}"
+		{% if isEtf and allAssets is defined %},
+			        "hasPart": [
+			{% for a in allAssets %}
+				{
+				                "@type": "Corporation",
+				                "name": "{{ a.name }}",
+				                "tickerSymbol": "{{ a.ticker }}"
+				            }{{ not loop.last ? ',' : '' }}
+			{% endfor %}
+			]
+		{% endif %}
+		}
+	</script>
 {% endblock %}
 
 {% block favicon %}
-    <link rel="icon" href="{{ asset('icons/' ~ asset.ticker ~ '.svg') }}" type="image/svg+xml">
+	<link rel="icon" href="{{ asset('icons/' ~ asset.ticker ~ '.svg') }}" type="image/svg+xml">
 {% endblock %}
 
 {% block body %}
 
-	<div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+	<div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 lg:py-8 w-full">
 		<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
 
 			<div class="lg:col-span-8 space-y-6 lg:space-y-8">
@@ -63,25 +68,25 @@
 								<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
 								<span class="text-[10px] font-bold tracking-widest text-secondary uppercase" id="live-indicator">Live Market</span>
 							</div>
-							<span class="block text-5xl font-bold text-on-surface tracking-tighter transition-colors duration-300" id="big-price">
+							<span class="block text-4xl md:text-5xl font-bold text-on-surface tracking-tighter transition-colors duration-300" id="big-price">
 								${{ asset.price|number_format(2) }}
 							</span>
 						</div>
 					</div>
 
-					<div class="flex flex-wrap gap-2 mb-4 bg-surface-container-lowest p-1 rounded-lg inline-flex">
-						<button class="range-btn px-4 py-1.5 text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors" data-range="1w">1W</button>
-						<button class="range-btn px-4 py-1.5 text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors" data-range="1m">1M</button>
-						<button class="range-btn px-4 py-1.5 text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors" data-range="6m">6M</button>
-						<button class="range-btn px-4 py-1.5 text-xs font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors" data-range="1y">1Y</button>
-						<button class="range-btn px-4 py-1.5 text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors" data-range="3y">3Y</button>
-						<button class="range-btn px-4 py-1.5 text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors" data-range="5y">5Y</button>
-						<button class="range-btn px-4 py-1.5 text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors" data-range="10y">10Y</button>
-						<button class="range-btn px-4 py-1.5 text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors" data-range="max">MAX</button>
+					<div class="flex overflow-x-auto gap-1 sm:gap-2 mb-4 bg-surface-container-lowest p-1 rounded-lg w-full md:w-max [&::-webkit-scrollbar]:hidden" style="scrollbar-width: none; -ms-overflow-style: none;">
+						<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center" data-range="1w">1W</button>
+						<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center" data-range="1m">1M</button>
+						<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center" data-range="6m">6M</button>
+						<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-primary text-[#001a42] shadow-md shadow-primary/20 transition-colors text-center" data-range="1y">1Y</button>
+						<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center" data-range="3y">3Y</button>
+						<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center" data-range="5y">5Y</button>
+						<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center" data-range="10y">10Y</button>
+						<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center" data-range="max">MAX</button>
 					</div>
 
 					<div
-						class="w-full h-[450] relative rounded-xl overflow-hidden">
+						class="w-full h-[300px] md:h-[450px] relative rounded-xl overflow-hidden">
 
 						{#SPINNER#}
 						<div id="chart-spinner" class="hidden absolute inset-0 z-50 flex items-center justify-center bg-surface-container-low/60 backdrop-blur-sm transition-opacity duration-300">
@@ -139,22 +144,22 @@
 						</div>
 
 						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
-                            <div class="flex justify-between items-center mb-6">
-                                <h3 class="text-xs font-bold uppercase tracking-widest text-on-surface">Capital Efficiency</h3>
-                            </div>
-                            <div class="relative h-48 w-full">
-                                <canvas id="capitalEfficiencyChart"></canvas>
-                            </div>
-                        </div>
+							<div class="flex justify-between items-center mb-6">
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface">Capital Efficiency</h3>
+							</div>
+							<div class="relative h-48 w-full">
+								<canvas id="capitalEfficiencyChart"></canvas>
+							</div>
+						</div>
 
 						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
-                            <div class="flex justify-between items-center mb-6">
-                                <h3 class="text-xs font-bold uppercase tracking-widest text-on-surface">Shareholder Yield</h3>
-                            </div>
-                            <div class="relative h-48 w-full">
-                                <canvas id="capitalReturnChart"></canvas>
-                            </div>
-                        </div>
+							<div class="flex justify-between items-center mb-6">
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface">Shareholder Yield</h3>
+							</div>
+							<div class="relative h-48 w-full">
+								<canvas id="capitalReturnChart"></canvas>
+							</div>
+						</div>
 
 					</div>
 				{% endif %}
