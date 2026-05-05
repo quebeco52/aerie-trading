@@ -57,10 +57,10 @@ class MergerAndAcquisitionEngine
         
         $config = match (true) {
             $isMegaHoarder => [
-                'prob' => 6.00, 'spend' => 0.60, 'syn_min' => 0.90, 'syn_max' => 1.15, 'type' => 'CONGLOMERATE EXPANSION', 'use_leverage' => false
+                'prob' => 4.00, 'spend' => 0.60, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => 'CONGLOMERATE EXPANSION', 'use_leverage' => false
             ],
             $isHoarder => [
-                'prob' => 2.00, 'spend' => 0.40, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => 'CONGLOMERATE EXPANSION', 'use_leverage' => false
+                'prob' => 1.00, 'spend' => 0.40, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => 'CONGLOMERATE EXPANSION', 'use_leverage' => false
             ],
             $health['can_issue_debt'] && $debtRatio < 0.30 && $totalBuyingPower > 5_000_000_000.0 && $costOfNewBorrowing < 0.07 => [
                 'prob' => 0.50, 'spend' => 0.40, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => 'LEVERAGED BUYOUT', 'use_leverage' => true
@@ -153,6 +153,11 @@ class MergerAndAcquisitionEngine
         $newEquity = $equity + $synergyValueCreation;
         $acquirer->setTotalEquity((string) max(10.0, $newEquity));
 
+        // Clean Surplus Accounting: The synergy (premium/discount) must flow through Retained Earnings
+        // Represents a "Gain on Bargain Purchase" or an "Impairment/Goodwill Write-off"
+        $currentRetained = (float) $acquirer->getRetainedEarnings();
+        $acquirer->setRetainedEarnings((string) ($currentRetained + $synergyValueCreation));
+
         //BOOST OR DESTROY RETURN ON INVESTED CAPITAL (ROIC)
         $baselineRoic = (float) $acquirer->getBaselineRoic();
         $currentRoic = (float) $acquirer->getCurrentRoic() ?: $baselineRoic;
@@ -170,6 +175,12 @@ class MergerAndAcquisitionEngine
         $newCurrentRoic = $currentRoic + $roicShift;
 
         $acquirer->setCurrentRoic((string) max(-0.10, $newCurrentRoic));
+
+        // Immediately integrate the acquired company's earnings into the parent's baseline EPS
+        // so the Earnings Engine doesn't report an artificial massive "Beat" next quarter due to expectations dragging
+        $acquiredNetIncome = $purchasePrice * $effectiveTargetRoic;
+        $currentEps = (float) $acquirer->getEarningsPerShare();
+        $acquirer->setEarningsPerShare((string) ($currentEps + ($acquiredNetIncome / max(1.0, $shares))));
 
         //GENERATE THE MARKET EVENT & PRICE SHOCK
         $purchasePriceB = number_format($purchasePrice / 1_000_000_000, 1);
@@ -243,7 +254,10 @@ class MergerAndAcquisitionEngine
         } else {
             // High P/E trimming (Taking advantage of an overvalued stock)
             $divestedFraction = mt_rand(5, 15) / 100.0;
-            $saleMultiple = $currentPE;
+            // Blend the company's inflated P/E with the sector average, and cap it at a realistic 25x.
+            $sectorPE = \App\Data\SectorPE::MACRO_SECTORS[$seller->getSector()] ?? 20.0;
+            $blendedMultiple = ($currentPE + $sectorPE) / 2.0;
+            $saleMultiple = min(25.0, $blendedMultiple);
             $annualProbability = 0.20;
         }
 
@@ -273,11 +287,22 @@ class MergerAndAcquisitionEngine
         $currentTreasury = (float) $seller->getCorporateTreasury();
         $seller->setCorporateTreasury((string) ($currentTreasury + $salePrice));
 
-        // SHED THE EARNINGS & THE PHYSICAL EQUITY BLOAT
-        $seller->setTotalNetIncome((string) ($netIncome - $lostNetIncome));
+        // Restate forward guidance: Reduce EPS proportionally so the Earnings Engine doesn't report a massive miss next quarter
+        $currentEps = (float) $seller->getEarningsPerShare();
+        $seller->setEarningsPerShare((string) ($currentEps * (1.0 - $divestedFraction)));
+
+        // SHED THE DEBT (Liabilities associated with the sold unit)
+        $currentDebt = (float) $seller->getTotalDebt();
+        $lostDebt = $currentDebt * $divestedFraction;
+        $seller->setTotalDebt((string) max(0.0, $currentDebt - $lostDebt));
 
         $newEquity = $currentEquity - $lostEquity + $salePrice;
         $seller->setTotalEquity((string) max(10.0, $newEquity));
+        
+        // Clean Surplus Accounting: Record the Gain/Loss on Sale into Retained Earnings
+        $gainOnSale = $salePrice - $lostEquity;
+        $currentRetained = (float) $seller->getRetainedEarnings();
+        $seller->setRetainedEarnings((string) ($currentRetained + $gainOnSale));
 
         // BOOST THE RETURN ON INVESTED CAPITAL (ROIC)
         // Shedding assets makes the core business leaner. 
@@ -287,7 +312,9 @@ class MergerAndAcquisitionEngine
 
         // GENERATE THE MARKET EVENT
         $salePriceB = number_format($salePrice / 1_000_000_000, 1);
-        $desc = "{$seller->getName()} executed a \${$salePriceB}B DIVESTITURE.";
+        $gainOnSaleB = number_format($gainOnSale / 1_000_000_000, 1);
+        $target = $this->generateProceduralTarget();
+        $desc = "{$seller->getName()} sold its {$target['name']} division for \${$salePriceB}B in cash, generating a \${$gainOnSaleB}B gain on sale.";
 
         if ($isDistressed) {
             $shockValue = mt_rand(300, 600) / 100.0; // Market cheers the massive restructuring (3% to 6% gap up)

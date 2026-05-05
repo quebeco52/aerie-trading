@@ -15,38 +15,38 @@ Aerie Trading uses the tech stack:
 ## Requirements specification
 
 ### The application should:
-- [ ] Use session handling
-- [ ] Store user/stock data in mariadb
-- [ ] The site should be usable throw a mobile interface but will not be the optimal way to use the site
-- [ ] Should be hosted on the cloud, most likely a hetzer vps and should be open to the public
-- [ ] Should have a Admin role and a User role
-- [ ] everything relevant to users should be displayed in realtime via WebSocket/Redis
+- [x] Use session handling
+- [x] Store user/stock data in mariadb
+- [x] The site should be usable throw a mobile interface but will not be the optimal way to use the site
+- [x] Should be hosted on the cloud, most likely a hetzer vps and should be open to the public
+- [x] Should have a Admin role and a User role
+- [x] everything relevant to users should be displayed in realtime via WebSocket/Redis
 
 ### User should be able to:
-- [ ] Register and login
-- [ ] Browse stock data (fundamentals and stock history)
-- [ ] Buy and sell stocks
-- [ ] Keep track of there portfolio
+- [x] Register and login
+- [x] Browse stock data (fundamentals and stock history)
+- [x] Buy and sell stocks
+- [x] Keep track of there portfolio
 - [ ] compare stock throw a screener
 
 ### Admin should be able to:
 - [ ] Se register users and monitor there portfolios
-- [ ] Change the values/info of the stocks
-- [ ] Add new stocks
+- [x] Change the values/info of the stocks
+- [x] Add new stocks
 - [ ] Do all this without casing downtime for users
 - [ ] have a dashboard to see the health of the application (latency of market ticks, etc...)
 
 
 ### Market simulator should:
-- [ ] Simulate stock prices in a realistic way compared to a real world stock based on its fundamentals and microeconomic conditions
-- [ ] Handle earning reports and should integrate the reports into the price of the stock
-- [ ] Change Volatility dynamically for individual stocks and the market
-- [ ] Have a boom and bust cycle that alter the trajectory of the market
-- [ ] Have etfs that change its price based on the underlying stocks it made out of
-- [ ] Use mathematical proven and well tested formulas (Geometric Brownian Motion, Heston Stochastic Volatility Model, etc) so to keep the simulation realistic compared to the real world economy. (as little magic numbers as possible)
-- [ ] All formulas should be tested and pass in PHPUnit
-- [ ] Handle stock splits and reverse stocksplits
-- [ ] Handle stock dividend
+- [x] Simulate stock prices in a realistic way compared to a real world stock based on its fundamentals and microeconomic conditions
+- [x] Handle earning reports and should integrate the reports into the price of the stock
+- [x] Change Volatility dynamically for individual stocks and the market
+- [x] Have a boom and bust cycle that alter the trajectory of the market
+- [x] Have etfs that change its price based on the underlying stocks it made out of
+- [x] Use mathematical proven and well tested formulas (Geometric Brownian Motion, Heston Stochastic Volatility Model, etc) so to keep the simulation realistic compared to the real world economy. (as little magic numbers as possible)
+- [x] All formulas should be tested and pass in PHPUnit
+- [x] Handle stock splits and reverse stocksplits
+- [x] Handle stock dividend
 
 #### Market Stretch goal
 - [ ] Have a narrative engine that fires generated events

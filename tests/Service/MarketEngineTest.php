@@ -31,7 +31,6 @@ class MarketEngineTest extends TestCase
         $currentVolatility = 0.2;
         $longTermVolatility = 0.2;
         $earningsPerShare = 5.0;
-        $targetPE = 20.0; // Fair value = 100
         $dt = 1.0;
 
         // Using PHP 8 named arguments ensures changes to signature orders do not break tests
@@ -40,7 +39,6 @@ class MarketEngineTest extends TestCase
             currentVolatility: $currentVolatility,
             longTermVolatility: $longTermVolatility,
             earningsPerShare: $earningsPerShare,
-            targetPE: $targetPE,
             dt: $dt,
             lambda: 0.0, // lambda = 0 means NO jump
             drift: 0.1
@@ -76,7 +74,6 @@ class MarketEngineTest extends TestCase
             currentVolatility: 0.2,
             longTermVolatility: 0.2,
             earningsPerShare: 5.0,
-            targetPE: 20.0,
             dt: 1.0,
             lambda: 1000.0, // massive lambda guarantees mt_rand check triggers
             jumpMean: 0.05,
@@ -111,7 +108,6 @@ class MarketEngineTest extends TestCase
             currentVolatility: 0.2,
             longTermVolatility: 0.2,
             earningsPerShare: 5.0,
-            targetPE: 20.0,
             dt: 1.0,
             lambda: 0.0,
             drift: 0.0,

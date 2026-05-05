@@ -126,13 +126,12 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                 // Update the labels and the Sector P/E math
                 $macroState = $this->macroEngine->updateMacroState($dt);
-                $liveSectorPEs = $this->macroEngine->updateSectorMultiples($dt, $macroState);
 
                 // Check if it's time to record a database snapshot
                 $isHistoryTick = ($tickCount % $historyInterval === 0);
 
                 // Update the Stocks
-                $result = $this->stockTracker->updateStocks($stocks, $dt, $liveSectorPEs, $isHistoryTick, $macroState, $tickCount, $this->ticksPerYear);
+                $result = $this->stockTracker->updateStocks($stocks, $dt, $isHistoryTick, $macroState, $tickCount, $this->ticksPerYear);
                 $stockUpdates = $result['updates'];
                 $totalMarketCap = $result['total_cap'];
                 $events = $result['events'];
@@ -197,7 +196,6 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     'timestamp' => time(),
                     'stocks' => $allUpdates,
                     'events' => $events,
-                    'sectors' => $liveSectorPEs,
                     'market_vol' => $marketVol,
                     'economic_cycle' => ($macroState['output_gap'] ?? 0) > 0.02 ? 'Boom' : (($macroState['output_gap'] ?? 0) < -0.02 ? 'Bust' : 'Neutral'),
                     'council_rate' => $macroState['policy_rate'] ?? 0.04,

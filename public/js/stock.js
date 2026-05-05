@@ -90,7 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const stockUpdate = payload.stocks.find(s => s.ticker === CURRENT_TICKER);
         if (stockUpdate) {
             const newPrice = parseFloat(stockUpdate.price);
-            updatePriceUI(newPrice, stockUpdate, payload.sectors);
+            updatePriceUI(newPrice, stockUpdate);
             updateLiveChart(newPrice);
         }
 
@@ -247,7 +247,7 @@ document.addEventListener('DOMContentLoaded', () => {
         areaSeries.update({ time: lastChartPointTime, value: newPrice });
     }
 
-    function updatePriceUI(newPrice, stockUpdate, sectors) {
+    function updatePriceUI(newPrice, stockUpdate) {
         const el = document.getElementById('big-price');
         const oldPrice = previousPrice || newPrice;
 
@@ -288,14 +288,54 @@ document.addEventListener('DOMContentLoaded', () => {
             if (stockUpdate.current_volatility !== undefined) {
                 document.getElementById('stat-volatility').innerText = stockUpdate.current_volatility.toFixed(2) + '%';
             }
-            if (sectors && sectors[stockUpdate.sector]) {
-                document.getElementById('live-target-pe').innerText = parseFloat(sectors[stockUpdate.sector]).toFixed(2);
-            }
             if (stockUpdate.shares !== undefined) {
                 document.getElementById('stat-shares').innerText = stockUpdate.shares.toLocaleString('en-US');
             }
             if (stockUpdate.current_roic !== undefined && document.getElementById('stat-roic')) {
                 document.getElementById('stat-roic').innerText = (stockUpdate.current_roic * 100).toFixed(2) + '%';
+            }
+
+            // Update Analyst Consensus Targets
+            if (stockUpdate.analyst_targets) {
+                const growthEl = document.getElementById('target-growth');
+                const incomeEl = document.getElementById('target-income');
+                const valueEl  = document.getElementById('target-value');
+                const badgeEl  = document.getElementById('analyst-consensus-badge');
+                
+                const growthTarget = stockUpdate.analyst_targets.growth_analyst;
+                const incomeTarget = stockUpdate.analyst_targets.income_analyst;
+                const valueTarget = stockUpdate.analyst_targets.value_analyst;
+
+                // The backend engine uses the maximum of the three valuations for the gravity drift
+                const compositeTarget = Math.max(growthTarget, incomeTarget, valueTarget);
+                
+                // Determine Outperform vs Underperform with a 5% neutral margin
+                const isOutperform = compositeTarget > (newPrice * 1.05);
+                const isUnderperform = compositeTarget < (newPrice * 0.95);
+                
+                const consensusColor = isOutperform ? COLORS.positive : (isUnderperform ? COLORS.negative : '');
+                const consensusText = isOutperform ? 'Outperform' : (isUnderperform ? 'Underperform' : 'Neutral');
+                const badgeBg = isOutperform ? 'rgba(78, 222, 163, 0.1)' : (isUnderperform ? 'rgba(255, 179, 173, 0.1)' : 'rgba(194, 198, 214, 0.1)');
+
+                if (growthEl) {
+                    growthEl.innerText = '$' + growthTarget.toFixed(2);
+                    growthEl.style.color = consensusColor;
+                }
+                if (incomeEl) {
+                    incomeEl.innerText = '$' + incomeTarget.toFixed(2);
+                    incomeEl.style.color = consensusColor;
+                }
+                if (valueEl) {
+                    valueEl.innerText = '$' + valueTarget.toFixed(2);
+                    valueEl.style.color = consensusColor;
+                }
+
+                if (badgeEl) {
+                    badgeEl.innerText = consensusText;
+                    badgeEl.style.color = consensusColor;
+                    badgeEl.style.backgroundColor = badgeBg;
+                    badgeEl.classList.remove('hidden');
+                }
             }
 
         }
@@ -359,7 +399,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const isPos = parseFloat(evt.change_percent) >= 0;
             let icon = evt.type === 'SHOCK' ? 'bolt' : (evt.type === 'SPLIT' || evt.type === 'REVSPLIT' ? 'content_cut' : 'campaign');
             let rawDesc = evt.description || (evt.type === 'SHOCK' ? 'Sudden market shock detected.' : 'Earnings report released.');
-            let desc = String(rawDesc).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m])).replace(/\n/g, '<br>');
+            let desc = String(rawDesc).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m]));
 
             const now = new Date();
             const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
@@ -368,13 +408,13 @@ document.addEventListener('DOMContentLoaded', () => {
             li.className = 'py-3';
             li.innerHTML = `
                 <div class="flex items-start justify-between">
-                    <div class="flex items-start gap-3">
+                    <div class="flex items-start gap-3 flex-1 min-w-0">
                         <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${isPos ? 'bg-secondary/10 text-secondary' : 'bg-tertiary/10 text-tertiary'}">
                             <span class="material-symbols-outlined text-sm">${icon}</span>
                         </div>
-                        <div>
+                        <div class="flex-1 min-w-0">
                             <p class="text-xs font-bold text-on-surface">${evt.type}</p>
-                            <p class="text-[11px] text-on-surface-variant mt-1 leading-relaxed max-w-[200px]">${desc}</p>
+                            <p class="text-[11px] text-on-surface-variant mt-1 leading-relaxed whitespace-pre-line">${desc}</p>
                         </div>
                     </div>
                     <div class="text-right flex-shrink-0 ml-2"> 

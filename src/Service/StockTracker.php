@@ -4,7 +4,6 @@ namespace App\Service;
 
 use App\Entity\Stock;
 use App\Entity\StockHistory;
-use App\Data\SectorPE;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -55,13 +54,12 @@ class StockTracker
      *
      * @param Stock[] $stocks        Array of Stock entities to update.
      * @param float   $dt            The time step delta (e.g., in years).
-     * @param array<string, float>   $liveSectorPEs Associative array mapping sector names to their current live P/E ratios.
      * @param bool    $recordHistory Whether to persist the new prices to the stock history table.
      * @param array   $macroState    The current state of the macroeconomic cycle.
      * 
      * @return array{updates: array<mixed>, total_cap: float, events: array<mixed>, market_vol: float, history: array<mixed>}
      */
-    public function updateStocks(array $stocks, float $dt, array $liveSectorPEs, bool $recordHistory, array $macroState = [], int $tickCount = 0, int $ticksPerYear = 252): array
+    public function updateStocks(array $stocks, float $dt, bool $recordHistory, array $macroState = [], int $tickCount = 0, int $ticksPerYear = 252): array
     {
 
         $stockUpdates = [];
@@ -81,7 +79,6 @@ class StockTracker
         foreach ($stocks as $stock) {
 
             $sectorName = $stock->getSector();
-            $targetPE = $liveSectorPEs[$sectorName] ?? 20.0;
 
             // Determine Volatility
             $baselineVol = (float) $stock->getVolatility();
@@ -117,7 +114,6 @@ class StockTracker
                 currentVolatility: $currentVol,
                 longTermVolatility: $baselineVol,
                 earningsPerShare: (float) $stock->getEarningsPerShare(),
-                targetPE: $targetPE,
                 dt: $dt,
                 lambda: (float) $stock->getJumpIntensity(),
                 beta: (float) $stock->getBeta(),
@@ -144,7 +140,7 @@ class StockTracker
             
 
             // Earnings Engine
-            $generatedEvents = $this->earningsEngine->calculate($stock, $macroState, $liveSectorPEs, $tickCount, $ticksPerYear);
+            $generatedEvents = $this->earningsEngine->calculate($stock, $macroState, $tickCount, $ticksPerYear);
             if (!empty($generatedEvents)) {
                 $events = array_merge($events, $generatedEvents);
             }
@@ -193,7 +189,8 @@ class StockTracker
                 'eps' => (float) $stock->getEarningsPerShare(),
                 'treasury' => (float) $stock->getCorporateTreasury(),
                 'equity' => (float) $stock->getTotalEquity(),
-                'debt_ratio' => (float) $stock->getDebtToEquityRatio()
+                'debt_ratio' => (float) $stock->getDebtToEquityRatio(),
+                'analyst_targets' => $calculation['analyst_targets']
             ];
 
             // Only update Market Share on the UI when Corporate Fundamentals actually change
@@ -201,7 +198,7 @@ class StockTracker
             if ($isFundamentalTick) {
                 $investedCapital = $stock->getInvestedCapital();
                 $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
-                $baselineSectorTam = SectorPE::getBaselineTam($sectorName);
+                $baselineSectorTam = 1_000_000_000_000;
                 $samRatio = (float) $stock->getSamRatio();
                 $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
                 $marketShare = min(0.9999, $investedCapital / max(1.0, $dynamicSam));

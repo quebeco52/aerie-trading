@@ -22,7 +22,7 @@ class StockEvent
     #[ORM\Column(length: 50)]
     private string $eventType;
 
-    #[ORM\Column(length: 255)]
+    #[ORM\Column(type: Types::TEXT)]
     private string $description;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 2, nullable: true)]

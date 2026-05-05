@@ -260,17 +260,49 @@
 								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Market Share</dt>
 								<dd class="text-sm font-semibold text-on-surface" id="stat-market-share">{{ (marketShare * 100)|number_format(2) }}%</dd>
 							</div>
+							<div class="py-3 flex justify-between items-center">
+								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Jump Intensity</dt>
+								<dd class="text-sm font-semibold text-on-surface">{{ asset.jumpIntensity }}</dd>
+							</div>
 						</dl>
 					</div>
 
-					<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 flex justify-between items-center">
-						<div>
-							<p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Jump Intensity</p>
-							<p class="text-sm font-bold text-on-surface">{{ asset.jumpIntensity }}</p>
+					<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15">
+						<div class="flex justify-between items-center mb-6">
+							<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+								<span class="material-symbols-outlined text-sm">query_stats</span>
+								Analyst Consensus
+							</h3>
+							<span id="analyst-consensus-badge" class="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded hidden transition-colors"></span>
 						</div>
-						<div class="text-right">
-							<p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Sector Target P/E</p>
-							<p class="text-sm font-bold text-on-surface" id="live-target-pe">{{ targetPE|number_format(2) }}</p>
+						<div class="space-y-4">
+							<div class="flex justify-between items-center pb-4 border-b border-outline-variant/10">
+								<div>
+									<p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Growth Analyst</p>
+									<p class="text-xs text-on-surface-variant mt-0.5">DCF & Earnings</p>
+								</div>
+								<div class="text-right">
+									<p class="text-sm font-bold text-on-surface" id="target-growth">--</p>
+								</div>
+							</div>
+							<div class="flex justify-between items-center pb-4 border-b border-outline-variant/10">
+								<div>
+									<p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Income Analyst</p>
+									<p class="text-xs text-on-surface-variant mt-0.5">Dividend Yield</p>
+								</div>
+								<div class="text-right">
+									<p class="text-sm font-bold text-on-surface" id="target-income">--</p>
+								</div>
+							</div>
+							<div class="flex justify-between items-center">
+								<div>
+									<p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Value Analyst</p>
+									<p class="text-xs text-on-surface-variant mt-0.5">Liquidation Floor</p>
+								</div>
+								<div class="text-right">
+									<p class="text-sm font-bold text-on-surface" id="target-value">--</p>
+								</div>
+							</div>
 						</div>
 					</div>
 
@@ -367,13 +399,13 @@
 							{% set isPositive = event.changePercent >= 0 %}
 							<li class="py-3">
 								<div class="flex items-start justify-between">
-									<div class="flex items-start gap-3">
+									<div class="flex items-start gap-3 flex-1 min-w-0">
 										<div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 {{ isPositive ? 'bg-secondary/10 text-secondary' : 'bg-tertiary/10 text-tertiary' }}">
 											<span class="material-symbols-outlined text-sm">{{ event.eventType == 'SHOCK' ? 'bolt' : 'campaign' }}</span>
 										</div>
-										<div>
+										<div class="flex-1 min-w-0">
 											<p class="text-xs font-bold text-on-surface">{{ event.eventType }}</p>
-											<p class="text-[11px] text-on-surface-variant mt-1 leading-relaxed max-w-[200px]">
+											<p class="text-[11px] text-on-surface-variant mt-1 leading-relaxed whitespace-pre-line">
 												{{ event.description }}
 											</p>
 										</div>

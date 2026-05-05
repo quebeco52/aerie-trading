@@ -35,6 +35,7 @@ class RegistrationController extends AbstractController
         $this->addFlash('error', 'New account registration is currently disabled.');
         return $this->redirectToRoute('app_login');
 
+        /*
         // 1. Best Practice: If they are already logged in, redirect them to the dashboard
         if ($this->getUser()) {
             return $this->redirectToRoute('app_dashboard'); 
@@ -87,5 +88,6 @@ class RegistrationController extends AbstractController
 
         // Render the form for GET requests
         return $this->render('registration/register.html.twig');
+        */
     }
 }

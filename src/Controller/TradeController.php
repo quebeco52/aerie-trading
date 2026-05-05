@@ -39,8 +39,8 @@ class TradeController extends AbstractController
             return $this->redirect($request->headers->get('referer') ?? '/');
         }
 
-        if ($quantity <= 0) {
-            $this->addFlash('error', 'Invalid quantity. You must trade at least 1 share.');
+        if ($quantity <= 0 || $quantity > 1000000000) {
+            $this->addFlash('error', 'Invalid quantity. Order must be between 1 and 1,000,000,000 shares.');
             return $this->redirect($request->headers->get('referer') ?? '/');
         }
 

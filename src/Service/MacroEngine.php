@@ -51,16 +51,18 @@ class MacroEngine
         $yieldData = $this->calculateYieldCurveAndQE($state, $targetInflation, $naturalRate);
         $yield10y = $yieldData['yield_10y'];
 
+        $oldGap = $state['output_gap'];
         $state['output_gap'] = $this->calculateOutputGap($state, $yield10y, $naturalRate, $stressMultiplier, $dt);
         $state['inflation'] = $this->calculateInflation($state, $targetInflation, $stressMultiplier, $dt);
 
 
         // Safely initialize if pulling from an older Redis cache payload
         $state['nominal_gdp_index'] = $state['nominal_gdp_index'] ?? 1.0;
+        $gapChange = $state['output_gap'] - $oldGap;
 
-        // Nominal Growth = Real Economic Output + Inflation
-        $nominalGrowth = ($naturalRate + $state['output_gap']) + $state['inflation'];
-        $state['nominal_gdp_index'] = max(0.10, $state['nominal_gdp_index'] * exp($nominalGrowth * $dt));
+        // Nominal Growth = Natural Rate + Inflation
+        $nominalGrowth = $naturalRate + $state['inflation'];
+        $state['nominal_gdp_index'] = max(0.10, $state['nominal_gdp_index'] * exp(($nominalGrowth * $dt) + $gapChange));
 
         // A quarter is 0.25 years.
         // tick data into a rolling 3-month average.
@@ -103,71 +105,6 @@ class MacroEngine
 
         $this->redis->set(self::REDIS_MACRO_STATE, json_encode($payload));
         return $payload;
-    }
-
-    /**
-     * Retrieves the live Sector P/E multiples from Redis or defaults if not set.
-     *
-     * @return array<string, float>
-     */
-    public function getLiveSectors(): array
-    {
-        $rawSectors = $this->redis->get('macro_sectors_live');
-        return json_decode($rawSectors, true) ?: SectorPE::MACRO_SECTORS;
-    }
-
-    /**
-     * Updates Sector P/E Multiples based on the 10-Year Yield (Cost of Capital) and Output Gap (Sentiment).
-     */
-    public function updateSectorMultiples(float $dt, array $macroState): array
-    {
-        $liveSectors = $this->getLiveSectors();
-        $updatedSectors = [];
-
-        // The Yield Spread (Cost of Capital Shock)
-        // Assume a baseline 10Y yield of 4% (0.04). 
-        $yieldSpread = ($macroState['yield_10y'] ?? 0.04) - 0.04;
-
-        // The Output Gap (Economic Sentiment / Risk Premium)
-        $economicSentiment = $macroState['output_gap'] ?? 0.0;
-
-        foreach ($liveSectors as $sectorName => $currentPE) {
-            $baselinePE = \App\Data\SectorPE::MACRO_SECTORS[$sectorName] ?? 20.0;
-
-            // Equity Duration (Sensitivity to Interest Rates)
-            $durationRisk = match ($sectorName) {
-                'Information Technology', 'Communication Services' => 25.0, // High growth, heavily penalized by rate hikes
-                'Consumer Discretionary', 'Real Estate'            => 20.0, // Highly sensitive to consumer borrowing costs
-                'Industrials', 'Materials', 'Consumer Staples'     => 15.0, // Standard market duration
-                'Utilities', 'Energy'                              => 12.0, // Cash cows, lower duration
-                'Financials'                                       => 8.0,  // Banks BENEFIT from higher rates (NIM), lowest penalty
-                default                                            => 15.0,
-            };
-
-            // Calculate the theoretical Fair Value P/E based on the Macro Environment
-            // Rate Shock: Higher Yields = Lower P/E.
-            $rateShock = exp(-$durationRisk * $yieldSpread);
-
-            // Sentiment Premium: Positive Output Gap = Higher P/E (Multiplier applied to baseline).
-            $sentimentPremium = exp(1.2 * $economicSentiment);
-
-            $targetPE = $baselinePE * $rateShock * $sentimentPremium;
-
-            // Failsafe bounds
-            $targetPE = max(5.0, min(60.0, $targetPE));
-
-            // Mean Reversion in Log Space
-            $logCurrent = log(max(0.01, $currentPE));
-            $logPull = $this->mathUtility->calculateLogMeanReversion($currentPE, $targetPE, 2.0) * $dt;
-
-            // Add a bit of random sector noise (0.30 volatility)
-            $logDrift = 0.30 * sqrt($dt) * $this->mathUtility->generateStandardNormal();
-
-            $updatedSectors[$sectorName] = exp($logCurrent + $logPull + $logDrift);
-        }
-
-        $this->redis->set('macro_sectors_live', json_encode($updatedSectors));
-        return $updatedSectors;
     }
 
     /**

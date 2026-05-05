@@ -93,7 +93,7 @@ class StockTrackerTest extends TestCase
         // We passed false to $recordHistory and have no shocks, so persist should never be called
         $this->entityManagerMock->expects($this->never())->method('persist');
 
-        $result = $this->tracker->updateStocks([$stock], 1.0, ['Technology' => 20.0], false);
+        $result = $this->tracker->updateStocks([$stock], 1.0, false);
 
         $this->assertIsArray($result);
         $this->assertCount(1, $result['updates']);
@@ -140,7 +140,7 @@ class StockTrackerTest extends TestCase
             
         $this->entityManagerMock->expects($this->never())->method('flush');
 
-        $result = $this->tracker->updateStocks([$stock], 1.0, [], true);
+        $result = $this->tracker->updateStocks([$stock], 1.0, true);
 
         $this->assertCount(1, $result['events']);
         $this->assertEquals('SHOCK', $result['events'][0]['type']);

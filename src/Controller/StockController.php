@@ -65,22 +65,19 @@ class StockController extends AbstractController
         }
 
         $marketCap = 0;
-        $peRatio = 0;
+        $peRatio = null;
         $targetPE = 20.00;
         $marketShare = 0;
 
-
-        $liveSectorPEs = $macroEngine->getLiveSectors();
 
 
         if (!$isEtf) {
             $marketCap = (float) $asset->getPrice() * (float) $asset->getSharesOutstanding();
             $eps = (float) $asset->getEarningsPerShare();
-            $peRatio = ($eps > 0) ? ((float) $asset->getPrice() / $eps) : 0;
-            $targetPE = $liveSectorPEs[$asset->getSector()] ?? 20.00;
+            $peRatio = ($eps > 0) ? ((float) $asset->getPrice() / $eps) : null;
 
             $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
-            $baselineSectorTam = \App\Data\SectorPE::getBaselineTam($asset->getSector());
+            $baselineSectorTam = 1_000_000_000_000;
             $samRatio = (float) $asset->getSamRatio();
             $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
             $marketShare = min(0.9999, $asset->getInvestedCapital() / max(1.0, $dynamicSam));

@@ -215,7 +215,6 @@ class CorporateActionEngine
      * @param float $quarterlyFcfPerShare The generated Free Cash Flow per share for the quarter.
      * @param float $currentPrice      The current market price of the stock.
      * @param float $sharesOutstanding The total shares currently outstanding.
-     * @param float $liveTargetPE      The live target P/E ratio for the stock's sector.
      * @return array{new_shares: float, dividend_paid: float, events: array<mixed>} Data regarding the capital allocation.
      */
     public function allocateCapital(
@@ -224,7 +223,6 @@ class CorporateActionEngine
         float $quarterlyFcfPerShare,
         float $currentPrice,
         float $sharesOutstanding,
-        float $liveTargetPE,
         array $macroState,
         float $actualTotalNetIncome = 0.0
     ): array {
@@ -269,11 +267,11 @@ class CorporateActionEngine
             $oldShares,
             $currentPrice,
             $currentPE,
-            $liveTargetPE,
             $operatingBase,
             $investedCapital,
             $nopat,
-            $health
+            $health,
+            $macroState
         );
         if ($buybackData['event']) $events[] = $buybackData['event'];
 
@@ -381,6 +379,18 @@ class CorporateActionEngine
             }
         }
 
+        // The Aristocrats dividend catch up
+        // Smoothly accelerate Aristocrats so they don't get trapped with a micro-yield
+        if ($lastDividend > 0 && $speed <= 0.05) {
+            $catchUpRatio = $calculatedTarget / $lastDividend;
+            
+            // If the target is at least 30% higher, start smoothly scaling the speed up to a max of 15%
+            if ($catchUpRatio > 1.30) {
+                // For every 10% above 1.30, add 0.010, capped at 0.15
+                $speed = min(0.15, $speed + (($catchUpRatio - 1.30) * 0.10));
+            }
+        }
+
 
         $newDividend = $lastDividend + ($speed * ($targetDividend - $lastDividend));
         $newDividend = max(0.0, $newDividend);
@@ -411,7 +421,10 @@ class CorporateActionEngine
                 ? number_format($totalPaid / 1_000_000_000, 2) . 'B'
                 : number_format($totalPaid / 1_000_000, 2) . 'M';
 
-            $event = $this->marketEvent->publish($stock, 'DIVIDEND', "{$stock->getTicker()} distributed a quarterly dividend of $" . number_format($newDividend, 2) . "/share (\${$totalPaidStr} total | Yield: " . number_format($yield, 2) . "%).", 0.0);
+            $event = [
+                'description' => "Paid $" . number_format($newDividend, 2) . "/share div (\${$totalPaidStr} total, " . number_format($yield, 2) . "% yield).",
+                'shock' => 0.0
+            ];
         } else {
             $stock->setLastDividend('0.00');
         }
@@ -425,18 +438,18 @@ class CorporateActionEngine
      * to realistically drain the authorized buyback pool.
      *
      * @param Stock $stock        The stock repurchasing shares.
-     * @param float $currentAuth  The currently authorized buyback dollar amount.
      * @param float $excessCash   The excess cash available in the treasury.
      * @param float $shares       The current number of outstanding shares.
      * @param float $currentPrice The current stock price.
      * @param float $currentPE    The current Price-to-Earnings ratio.
-     * @param float $targetPE     The target Price-to-Earnings ratio for the sector.
      * @param float $operatingBase The operating base for hoard calculation.
      * @param float $investedCapital The physical capital invested in the firm.
      * @param float $nopat        Net Operating Profit After Tax.
+     * @param array $health       The current debt health metrics.
+     * @param array $macroState   The current macroeconomic state.
      * @return array{new_shares: float, total_cash_spent: float, event: array|null} Data regarding the buyback execution.
      */
-    private function executeBuybacks(Stock $stock, float $excessCash, float $shares, float $currentPrice, float $currentPE, float $targetPE, float $operatingBase, float $investedCapital, float $nopat, array $health): array
+    private function executeBuybacks(Stock $stock, float $excessCash, float $shares, float $currentPrice, float $currentPE, float $operatingBase, float $investedCapital, float $nopat, array $health, array $macroState): array
     {
         // If they want to pay down debt, normally they pause buybacks. 
         // BUT if they are sitting on a cash pile large enough to easily cover their entire debt, they can do both!
@@ -457,8 +470,15 @@ class CorporateActionEngine
         // Lower the hoarder threshold to 25% to align with M&A logic and prevent the CapEx/Equity ratio trap
         $isMegaHoarder = $excessCash > ($operatingBase * 0.25);
 
+        // Calculate intrinsic Fair Value P/E to benchmark buybacks
+        $riskFreeRate = $macroState['policy_rate'] ?? 0.04;
+        $marketBasePE = max(8.0, min(30.0, 1.0 / max(0.01, $riskFreeRate)));
+        $qualityPremium = max(0.0, $economicSpread * 100) * 1.5;
+        $distressDiscount = min(0.0, $economicSpread * 100) * 2.0;
+        $fairValuePE = max(4.0, min(60.0, $marketBasePE + $qualityPremium + $distressDiscount));
+
         // Require positive EVA and fair valuation, OR force buybacks if sitting on a massive dead cash hoard.
-        if (($economicSpread > 0.02 && $currentPE < ($targetPE + 3.0)) || $isMegaHoarder) {
+        if (($economicSpread > 0.02 && $currentPE < ($fairValuePE + 3.0)) || $isMegaHoarder) {
 
             // The CFO's Cash Pacing Limit (Max 15% of Excess Cash per quarter to smooth out execution, 30% for hoarders)
             $maxWillingSpend = $excessCash * ($isMegaHoarder ? 0.30 : 0.15);
@@ -472,8 +492,8 @@ class CorporateActionEngine
             $absoluteMaxSpend = min($maxWillingSpend, $maxRegulatorySpend);
 
             // THE TRADING DESK: Execute the buyback over the quarter.
-            // CFOs scale their aggression based on how "cheap" the stock is relative to the sector target
-            $valuationDiscount = max(0.0, ($targetPE - $currentPE) / max(1.0, $targetPE));
+            // CFOs scale their aggression based on how "cheap" the stock is relative to its intrinsic Fair P/E
+            $valuationDiscount = max(0.0, ($fairValuePE - $currentPE) / max(1.0, $fairValuePE));
             $aggression = min(1.0, 0.50 + $valuationDiscount); // Base 50% execution + up to 50% more if undervalued
             
             $actualSpend = $absoluteMaxSpend * $aggression * (mt_rand(80, 100) / 100.0);
@@ -487,7 +507,10 @@ class CorporateActionEngine
                 $stock->setSharesOutstanding((string) $shares);
 
                 $pctRetired = ($sharesRepurchased / ($shares + $sharesRepurchased)) * 100;
-                $event = $this->marketEvent->publish($stock, 'BUYBACK', "{$stock->getTicker()} executed a stock buyback, retiring " . number_format($sharesRepurchased) . " shares.", $pctRetired * 0.5);
+                $event = [
+                    'description' => "Bought back " . number_format($sharesRepurchased) . " shares.",
+                    'shock' => $pctRetired * 0.5
+                ];
             }
         }
 
@@ -598,7 +621,10 @@ class CorporateActionEngine
 
                     if ($newDebtIssued > 500_000_000.0) {
                         $amtB = number_format($newDebtIssued / 1_000_000_000, 2);
-                        $events[] = $this->marketEvent->publish($stock, 'DEBT ISSUANCE', "{$stock->getTicker()} issued \${$amtB}B in corporate bonds to fund strategic expansion.", 0.5);
+                        $events[] = [
+                            'description' => "Issued \${$amtB}B in bonds for expansion.",
+                            'shock' => 0.5
+                        ];
                     }
                 }
             }
@@ -617,7 +643,7 @@ class CorporateActionEngine
         // Anti-Trust & Saturation Limits:
         // A company cannot infinitely expand if they already own the majority of their Total Addressable Market.
         $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
-        $baselineSectorTam = \App\Data\SectorPE::getBaselineTam($stock->getSector());
+        $baselineSectorTam = 1_000_000_000_000;
         $samRatio = (float) $stock->getSamRatio();
         $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
         $marketShare = $liveInvestedCapital / max(1.0, $dynamicSam);
@@ -661,7 +687,10 @@ class CorporateActionEngine
 
                 if ($expansionSpend > 1_000_000_000.0) { // Only announce massive investments >$1B
                     $amtB = number_format($expansionSpend / 1_000_000_000, 2);
-                    $events[] = $this->marketEvent->publish($stock, 'CAPEX EXPANSION', "{$stock->getTicker()} deployed \${$amtB}B of cash into organic business expansion.", 0.5);
+                    $events[] = [
+                        'description' => "Deployed \${$amtB}B in organic expansion.",
+                        'shock' => 0.5
+                    ];
                 }
             }
         }
@@ -690,7 +719,10 @@ class CorporateActionEngine
 
             if ($cashShortfall > 10_000_000.0) {
                 $amtB = number_format($cashShortfall / 1_000_000_000, 2);
-                $events[] = $this->marketEvent->publish($stock, 'LIQUIDITY CRISIS', "{$stock->getTicker()} suffered a severe cash shortfall, forced to borrow \${$amtB}B at penalty rates.", -5.0);
+                $events[] = [
+                    'description' => "Forced to borrow \${$amtB}B at penalty rates due to cash shortfall.",
+                    'shock' => -5.0
+                ];
             }
 
             $debtActionTaken = true;
@@ -721,7 +753,10 @@ class CorporateActionEngine
                     if ($actualPaydown > 500_000_000.0) {
                         $amtB = number_format($actualPaydown / 1_000_000_000, 2);
                         $reason = $isLiquidityCrisis ? "survive a liquidity crisis" : "escape negative carry";
-                        $events[] = $this->marketEvent->publish($stock, 'DEBT REDUCTION', "{$stock->getTicker()} paid down \${$amtB}B of expensive debt to {$reason}.", 1.0);
+                        $events[] = [
+                            'description' => "Paid down \${$amtB}B of debt to {$reason}.",
+                            'shock' => 1.0
+                        ];
                     }
                 }
             }
@@ -757,7 +792,10 @@ class CorporateActionEngine
 
                     if ($debtToPayOff > 500_000_000.0) {
                         $amtB = number_format($debtToPayOff / 1_000_000_000, 2);
-                        $events[] = $this->marketEvent->publish($stock, 'DELEVERAGING', "{$stock->getTicker()} swept \${$amtB}B in excess cash to aggressively pay down debt.", 2.0);
+                        $events[] = [
+                            'description' => "Swept \${$amtB}B cash to aggressively deleverage.",
+                            'shock' => 2.0
+                        ];
                     }
                 }
             }

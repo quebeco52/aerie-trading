@@ -11,12 +11,9 @@ namespace App\Service;
 class MarketEngine
 {
     public function __construct(
-        private ?MathUtility $mathUtility = null
-    ) {
-        if ($this->mathUtility === null) {
-            $this->mathUtility = new MathUtility();
-        }
-    }
+        private MathUtility $mathUtility
+    ) {}
+
     /**
      * Calculates the next stock price using a hybrid model.
      *
@@ -30,7 +27,6 @@ class MarketEngine
      * @param float $currentVolatility  The current instantaneous volatility.
      * @param float $longTermVolatility The long-run mean volatility.
      * @param float $earningsPerShare   The current earnings per share (EPS).
-     * @param float $targetPE           The target P/E ratio for the stock's sector.
      * @param float $dt                 The time step for the simulation (in years).
      * @param float $drift              The expected return (drift) of the stock.
      * @param float $lambda             The jump intensity (average number of jumps per year).
@@ -49,14 +45,13 @@ class MarketEngine
      * @param float $creditSpread       The company's baseline credit spread (borrowing premium).
      * @param float $dividendPerShare   The absolute quarterly dividend per share.
      *
-     * @return array{price: float, shock: float|null, next_volatility: float} The calculated next price, shock percentage, and updated volatility.
+     * @return array{price: float, shock: float|null, next_volatility: float, analyst_targets: array} The calculated next price, shock percentage, updated volatility, and analyst targets.
      */
     public function calculateNextPrice(
         float $currentPrice,
         float $currentVolatility,
         float $longTermVolatility,
         float $earningsPerShare,
-        float $targetPE,
         float $dt,
         float $lambda = 2.0,
         float $beta = 1.0,
@@ -131,7 +126,7 @@ class MarketEngine
         $nextVolatility = max(0.01, min(5.00, $nextVolatility));
 
         // Mean Reversion to Fundamental Value (Gravity Drift)
-        $fairValue = $this->calculateFundamentalFairValue(
+        $valuations = $this->calculateFundamentalFairValue(
             $earningsPerShare, 
             $currentRoic,
             $fcfPerShare, 
@@ -141,6 +136,8 @@ class MarketEngine
             $dividendPerShare,
             $liveWacc
         );
+        $fairValue = $valuations['composite_fair_value'];
+
         // Panic Gravity (Flight to Safety)
         $macroStress = abs($outputGap) + abs($inflation - 0.02);
         $dynamicReversion = $reversionSpeed + ($macroStress * 2.5);
@@ -162,7 +159,6 @@ class MarketEngine
         );
 
         // Exact Ornstein-Uhlenbeck Mean Reversion in Log-Space
-        // This replaces calculateLogMeanReversion. 
         // Using exp(-kappa * dt) mathematically guarantees the price never overshoots the fair value.
         $reversionWeight = exp(-$dynamicReversion * $dt);
         
@@ -176,13 +172,16 @@ class MarketEngine
         $totalShockMultiplier = $jumpData['price_multiplier'] * (1.0 + $maShock);
         $finalPrice = $diffusedPrice * $totalShockMultiplier;
         
-        // Calculate the total shock percentage for the UI event payload
-        $totalShockPct = ($totalShockMultiplier - 1.0) * 100.0;
 
         return [
-            'price'           => max(0.01, $finalPrice),
-            'shock'           => $totalShockMultiplier != 1.0 ? $totalShockPct : null,
-            'next_volatility' => $nextVolatility
+            'price'             => max(0.01, $finalPrice),
+            'shock'             => $jumpData['shock_pct'],
+            'next_volatility'   => $nextVolatility,
+            'analyst_targets'   => [
+                'growth_analyst' => $valuations['earnings_target'],
+                'income_analyst' => $valuations['dividend_target'],
+                'value_analyst'  => $valuations['book_target']
+            ]
         ];
     }
 
@@ -222,7 +221,7 @@ class MarketEngine
         float $bookValuePerShare, 
         float $dividendPerShare,
         float $liveWacc
-    ): float {
+    ): array {
         // Use the live WACC passed down from the centralized DebtEngine
         $wacc = $liveWacc;
 
@@ -237,15 +236,20 @@ class MarketEngine
         $peFairValue = max(0.01, $earningsPerShare * $fairValuePE);
 
         // Discounted Cash Flow (DCF) Value
-        if ($fcfPerShare !== null && $fcfPerShare > 0.0) {
-            $terminalGrowthRate = 0.02;
-            $spread = $wacc - $terminalGrowthRate;
-            $multiplier = $spread > 0 ? (1 + $terminalGrowthRate) / $spread : 33.33;
-            $multiplier = min(33.33, $multiplier); 
-            $dcfFairValue = max(0.01, $fcfPerShare * $multiplier);
+        if ($fcfPerShare !== null) {
+            if ($fcfPerShare > 0.0) {
+                $terminalGrowthRate = 0.02;
+                $spread = $wacc - $terminalGrowthRate;
+                $multiplier = $spread > 0 ? (1 + $terminalGrowthRate) / $spread : 33.33;
+                $multiplier = min(33.33, $multiplier); 
+                $dcfFairValue = max(0.01, $fcfPerShare * $multiplier);
 
-            // Blend the Earnings value and the Cash Flow value
-            $earningsValue = ($peFairValue + $dcfFairValue) / 2.0;
+                // Blend the Earnings value and the Cash Flow value
+                $earningsValue = ($peFairValue + $dcfFairValue) / 2.0;
+            } else {
+                // Apply a 25% "Cash Burn" penalty to the P/E valuation
+                $earningsValue = $peFairValue * 0.75;
+            }
         } else {
             $earningsValue = $peFairValue;
         }
@@ -263,6 +267,11 @@ class MarketEngine
         // The stock's fair value is the highest of its Earnings power, its Yield Support, or its physical Book Value
         $fairValue = max($earningsValue, $dividendSupportValue, $bookValuePerShare * 0.80);
         
-        return max(0.01, $fairValue);
+        return [
+            'composite_fair_value' => max(0.01, $fairValue),
+            'earnings_target'      => max(0.01, $earningsValue),
+            'dividend_target'      => max(0.01, $dividendSupportValue),
+            'book_target'          => max(0.01, $bookValuePerShare * 0.80)
+        ];
     }
 }

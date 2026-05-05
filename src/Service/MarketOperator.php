@@ -15,7 +15,8 @@ class MarketOperator
     public function __construct(
         private EntityManagerInterface $entityManager,
         private LoggerInterface $logger,
-        private MarketEvent $marketEvent
+        private MarketEvent $marketEvent,
+        private DebtEngine $debtEngine
     ) {}
 
     /**
@@ -127,9 +128,16 @@ class MarketOperator
      */
     private function applyRestructuringRule(Stock $stock, float $marketCap, string $name): ?array
     {
-        if ($marketCap >= 1000000000) {
-            return null;
+        $revenue = (float) $stock->getTotalRevenue();
+        $margin = (float) $stock->getOperatingMargin();
+        $ebit = $revenue * $margin;
+
+        $zScoreData = $this->debtEngine->calculateAltmanZScore($stock, $ebit, $revenue, (float) $stock->getPrice());
+        if (!$zScoreData['is_bankrupt']) {
+            return null; // The company is surviving; abort the restructuring
         }
+
+
 
         $isHostile = mt_rand(1, 100) > 50;
 

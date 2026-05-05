@@ -25,19 +25,15 @@ class EarningsEngine
      * Constructor.
      *
      * @param MarketEvent $marketEvent Publisher for all market events, news headlines, and shocks.
-     * @param MathUtility|null $mathUtility Utility for advanced mathematical operations (e.g., generating standard normal distribution).
+     * @param MathUtility $mathUtility Utility for advanced mathematical operations (e.g., generating standard normal distribution).
      */
     public function __construct(
         private \Doctrine\ORM\EntityManagerInterface $entityManager,
         private MarketEvent $marketEvent,
         private CorporateActionEngine $corporateActionEngine,
         private DebtEngine $debtEngine,
-        private ?MathUtility $mathUtility = null
-    ) {
-        if ($this->mathUtility === null) {
-            $this->mathUtility = new MathUtility();
-        }
-    }
+        private MathUtility $mathUtility
+    ) {}
 
     /**
      * Calculates and processes a quarterly earnings report for a given stock.
@@ -54,7 +50,7 @@ class EarningsEngine
      * @param int $ticksPerYear The total number of ticks in a simulated year.
      * @return array<string, mixed>|null  Returns the generated market event array if an earnings report occurred, otherwise null.
      */
-    public function calculate(Stock $stock, array $macroState = [], array $liveSectorPEs = [], int $tickCount = 0, int $ticksPerYear = 252): ?array
+    public function calculate(Stock $stock, array $macroState = [], int $tickCount = 0, int $ticksPerYear = 252): ?array
     {
 
         $ticksPerQuarter = (int) ($ticksPerYear / 4);
@@ -113,16 +109,16 @@ class EarningsEngine
         // APPLY THE Z-SCORE SHOCK TO REVENUE, NOT EPS
         // Scale the shock based on the company's inherent baseline volatility (e.g. 0.20 * 0.15 = 3% StDev)
         $revenueZ = $this->mathUtility->generateStandardNormal();
-        $revenueShock = $revenueZ * ($baselineVol * 0.15); 
+        $revenueShock = $revenueZ * ($baselineVol * 0.15);
         $actualRevenue = $baselineRevenue * (1.0 + $revenueShock);
-        
+
         // The Operating Leverage Engine: Revenue volume swings, but Fixed Costs act as a heavy anchor!
         $actualVariableCosts = $actualRevenue * $variableCostMargin;
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
         // Interest & Debt Physics
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
-        
+
         // Calculate EXPECTED Interest Expense (Pre-Shock)
         $expectedOperatingMargin = $expectedEbit / max(1.0, $baselineRevenue);
         $stock->setTotalRevenue((string) $baselineRevenue);
@@ -135,7 +131,7 @@ class EarningsEngine
         // Sync the true dynamic margin to the Stock Entity so DebtEngine calculates the precise Net Debt Leverage!
         $trueOperatingMargin = $ebit / max(1.0, $actualRevenue);
         $stock->setOperatingMargin((string) $trueOperatingMargin);
-        
+
         $debtMetrics = $this->debtEngine->calculateInterestExpense($stock, $macroState, true);
         $actualInterestExpense = $debtMetrics['interest_expense'];
 
@@ -164,7 +160,7 @@ class EarningsEngine
             'Financials' => 0.02,
             default => (float) $stock->getDepreciationRate() ?: 0.05,
         };
-        
+
         // Physical assets rust, not equity. Invested Capital perfectly isolates the physical operating base.
         $absoluteDepreciation = $investedCapital * $depreciationRate;
 
@@ -195,9 +191,9 @@ class EarningsEngine
         $actualQuarterlyEps = $actualAnnualEps / 4.0;
         $expectedQuarterlyEps = $expectedAnnualEpsDrifted / 4.0;
         $surpriseAmountQuarterly = $actualQuarterlyEps - $expectedQuarterlyEps;
-        
-        $surprisePct = abs($expectedQuarterlyEps) > 0.01 
-            ? $surpriseAmountQuarterly / abs($expectedQuarterlyEps) 
+
+        $surprisePct = abs($expectedQuarterlyEps) > 0.01
+            ? $surpriseAmountQuarterly / abs($expectedQuarterlyEps)
             : ($surpriseAmountQuarterly > 0 ? 0.10 : ($surpriseAmountQuarterly < 0 ? -0.10 : 0.0));
 
         // VOLATILITY SHOCK
@@ -215,7 +211,6 @@ class EarningsEngine
         $priceGapPct = $this->calculatePriceGap($surprisePct);
         $currentPrice = (float) $stock->getPrice();
         $quarterlyFcfPerShare = $annualFcfPerShare / 4.0;
-        $liveTargetPE = $liveSectorPEs[$stock->getSector()] ?? 20.0;
 
         // ALLOCATE CAPITAL
         $allocation = $this->corporateActionEngine->allocateCapital(
@@ -224,22 +219,32 @@ class EarningsEngine
             $quarterlyFcfPerShare,
             $currentPrice,
             $sharesOutstanding,
-            $liveTargetPE,
             $macroState,
             $actualTotalNetIncome
         );
 
         $stock->setSharesOutstanding((string) $allocation['new_shares']);
 
+        // Aggregate total shock from earnings and corporate actions
+        $totalShockPct = $priceGapPct;
+        $corporateActionDescriptions = "";
+
+        if (!empty($allocation['events'])) {
+            foreach ($allocation['events'] as $subEvent) {
+                $corporateActionDescriptions .= "\n• " . $subEvent['description'];
+                $totalShockPct += ($subEvent['shock'] / 100.0);
+            }
+        }
+
         // APPLY THE GAP
         $currentPrice = (float) $stock->getPrice();
-        
+
         // The Circuit Breaker (Limit Up / Limit Down)
-        $priceGapPct = max(-0.40, min(0.40, $priceGapPct));
+        $totalShockPct = max(-0.40, min(0.40, $totalShockPct));
 
         // The Dividend Ex-Date Adjustment
-        $newPrice = max(0.00000001, ($currentPrice * (1.0 + $priceGapPct)) - $allocation['dividend_paid']);
-        
+        $newPrice = max(0.00000001, ($currentPrice * (1.0 + $totalShockPct)) - $allocation['dividend_paid']);
+
         // Precision Assignment
         $stock->setPrice(number_format($newPrice, 8, '.', ''));
 
@@ -250,7 +255,7 @@ class EarningsEngine
         // NOPAT = EBIT * (1 - Tax Rate)
         $nopat = $ebit > 0 ? $ebit * (1.0 - $corporateTaxRate) : $ebit;
         $truePostTaxRoic = $investedCapital > 0 ? ($nopat / $investedCapital) : 0.0;
-        
+
         $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState);
         $wacc = $health['wacc'];
         $annualEconomicProfit = $investedCapital * ($truePostTaxRoic - $wacc);
@@ -265,36 +270,34 @@ class EarningsEngine
             $description = "Q-Earnings: {$formattedEps} (Met expectations exactly | {$evaString}).";
         }
 
-        // Create the main Earnings Event
-        $earningsEvent = $this->marketEvent->publish($stock, 'EARNINGS', $description, $priceGapPct * 100);
+        $description .= $corporateActionDescriptions;
 
-        // Merge it with any Dividend or Buyback events generated by the CorporateActionEngine
+        // Create the main Earnings Event
+        $earningsEvent = $this->marketEvent->publish($stock, 'EARNINGS', $description, $totalShockPct * 100);
+
         $allEvents = [$earningsEvent];
-        if (!empty($allocation['events'])) {
-            $allEvents = array_merge($allEvents, $allocation['events']);
-        }
 
         $report = new \App\Entity\CorporateReport();
         $report->setStock($stock);
         $report->setRecordedAt(new \DateTime());
-        
+
         // The Holy Trinity of the Income Statement
         $report->setRevenue((string) $actualRevenue);
         $report->setNetIncome((string) $actualTotalNetIncome);
-        
+
         // Debt & Treasury Data
         $report->setInterestExpense((string) $debtMetrics['interest_expense']);
         $report->setInterestIncome((string) $interestIncome);
         $report->setBlendedRate((string) $debtMetrics['blended_rate']);
         $report->setDynamicSpread((string) $debtMetrics['dynamic_spread']);
-        
+
         // Cash Flow & Balance Sheet
         $totalReportedCapex = ($actualAnnualCapEx / 4.0) + ($allocation['organic_capex'] ?? 0.0);
         $report->setCapitalExpenditures((string) $totalReportedCapex);
         $report->setEquity($stock->getTotalEquity());
         $report->setTotalDebt($stock->getTotalDebt());
         $report->setTreasury($stock->getCorporateTreasury());
-        
+
         // Metrics
         $report->setRoic((string) $truePostTaxRoic);
         $report->setShares((string) $stock->getSharesOutstanding());
@@ -386,7 +389,7 @@ class EarningsEngine
         $baselineRoic = (float) $stock->getBaselineRoic();
         $currentRoic = (float) $stock->getCurrentRoic();
         $beta = (float) $stock->getBeta();
-        
+
         if ($currentRoic === 0.0) {
             $currentRoic = $baselineRoic;
         }
@@ -400,59 +403,43 @@ class EarningsEngine
         // DYNAMIC TAM LOGIC
         $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
 
-        $baselineSectorTam = \App\Data\SectorPE::getBaselineTam($stock->getSector());
+        $baselineSectorTam = 1_000_000_000_000;
         $samRatio = (float) $stock->getSamRatio();
         $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
         $marketShare = $investedCapital / max(1.0, $dynamicSam);
 
-        $saturationThreshold = 0.25; // 25% Market Share triggers bloat gravity
         $saturationPenalty = 0.0;
 
         $systemic_importance = $stock->getSystemicImportance();
 
         // The larger the systemic importance, the stronger the "moat" protecting their ROIC
         $moat = match ($systemic_importance) {
-            'titan'    => 0.3, // Only takes 30% of the saturation penalty
-            'systemic' => 0.6, // Takes 60% of the penalty
-            'base'     => 0.8, // Takes 80% of the penalty
+            'titan'    => 0.4, // Only takes 40% of the saturation penalty
+            'systemic' => 0.7, // Takes 70% of the penalty
+            'base'     => 0.9, // Takes 90% of the penalty
             default    => 1.0, // Takes the full 100% saturation penalty
         };
-        
-        if ($marketShare > $saturationThreshold) {
-            $excessSize = $marketShare / $saturationThreshold;
-            
-            // Dynamic Margin Gravity
-            // We floor the bleed factor at 0.10 so normal companies still face gravity,
-            // but a company with a 30% ROIC will bleed 3x faster than a 10% company
-            $roicBleedFactor = max(0.10, $baselineRoic);
-            $gravityMultiplier = $roicBleedFactor * 0.30; 
-            
-            // The heavier the balance sheet and the higher the margins, the harder the fall
-            $MarketSaturationPenalty = log($excessSize) * $gravityMultiplier;
-            $saturationPenalty = $MarketSaturationPenalty * $moat;
 
-            // Hyper-scale gravity triggers at 60% Monopoly Market Share
-            if ($marketShare > 0.60) {
-                $hyperScaleExcess = $marketShare / 0.60;
-                
-                // Bypasses the titan moat. Hyper-scale gravity also scales with their fat margins
-                $rawGravity = log($hyperScaleExcess) * $gravityMultiplier;
-                $saturationPenalty += $rawGravity; 
-            }
-        }
 
-        // Calculate where the core business ROIC "wants" to be (Saturation Penalty is smoothed)
+        // Dynamic Margin Gravity
+        // floor the bleed factor at 0.10 so normal companies still face gravity,
+        $roicBleedFactor = max(0.10, $baselineRoic);
+        $gravityMultiplier = $roicBleedFactor * 0.50;
+
+        $saturationPenalty = pow($marketShare, 4) * $gravityMultiplier * $moat;
+
         $targetRoic = $baselineRoic - $saturationPenalty;
 
         // Mean Reversion: Smoothly drift the current ROIC toward the target
         $pull = ($targetRoic - $currentRoic) * 0.25;
+
 
         // Add standard deviation noise
         $fundamentalNoise = $this->mathUtility->generateStandardNormal() * 0.015;
 
         // The core ROIC (saved to DB so it doesn't infinitely compound macro shocks)
         $newCoreRoic = $currentRoic + $pull + $fundamentalNoise;
-        
+
         // The actual reported ROIC for this quarter (Core + Instant Macro Shock)
         $reportedRoic = $newCoreRoic + $macroModifier;
 
