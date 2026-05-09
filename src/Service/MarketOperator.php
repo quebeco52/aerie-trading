@@ -39,12 +39,8 @@ class MarketOperator
             $price = (float) $stock->getPrice();
             $shares = (int) $stock->getSharesOutstanding();
             $marketCap = $price * $shares;
-            $eps = (float) $stock->getEarningsPerShare();
             $name = $stock->getName();
-            $systemicImportance = $stock->getSystemicImportance() ?? 'none';
 
-            $this->applyBailoutRule($stock, $totalMarketCap, $marketCap, $price, $shares, $eps, $systemicImportance);
-            
             $restructureEvents = $this->applyRestructuringRule($stock, $marketCap, $name);
             if ($restructureEvents !== null) {
                 $generatedEvents = array_merge($generatedEvents, $restructureEvents);
@@ -60,59 +56,6 @@ class MarketOperator
         }
 
         return $generatedEvents;
-    }
-
-    /**
-     * Applies the bailout rule to systemically important stocks.
-     *
-     * Prevents "Titan" and "Systemic" class stocks from falling below a certain
-     * percentage of the total market cap by subsidizing their price and EPS.
-     *
-     * @param Stock  $stock              The stock to evaluate.
-     * @param float  $totalMarketCap     The total market capitalization of the entire district.
-     * @param float  $marketCap          The current market capitalization of the stock.
-     * @param float  $price              The current price of the stock.
-     * @param int    $shares             The number of outstanding shares.
-     * @param float  $eps                The current earnings per share.
-     * @param string $systemicImportance The systemic importance tier of the stock.
-     * @return void
-     */
-    private function applyBailoutRule(Stock $stock, float $totalMarketCap, float $marketCap, float $price, int $shares, float $eps, string $systemicImportance): void
-    {
-        $bailoutFloor = 0.0;
-        $bailoutMultiplier = 1.0;
-        $bailoutTier = null;
-
-        switch ($systemicImportance) {
-            case 'titan':
-                $bailoutFloor = $totalMarketCap * 0.04;
-                $bailoutMultiplier = 1.03;
-                $bailoutTier = 'TITAN PROTECTION';
-                break;
-            case 'systemic':
-                $bailoutFloor = $totalMarketCap * 0.015;
-                $bailoutMultiplier = 1.02;
-                $bailoutTier = 'SYSTEMIC BAILOUT';
-                break;
-            case 'base':
-                $bailoutFloor = $totalMarketCap * 0.01;
-                $bailoutMultiplier = 1.02;
-                $bailoutTier = 'BASE CLASS BAILOUT';
-                break;
-        }
-
-        if ($bailoutTier && $marketCap < $bailoutFloor) {
-            $stock->setPrice((string) ($price * $bailoutMultiplier));
-
-            $splitRatio = max(1.0, $shares / 1_000_000_000.0);
-            $targetEps = 0.40 / $splitRatio;
-            $boostEps = 0.20 / $splitRatio;
-
-            $newEps = $eps < $targetEps ? min($targetEps, $eps + $boostEps) : $eps * $bailoutMultiplier;
-            $stock->setEarningsPerShare((string) $newEps);
-
-            $this->logger->info("{$bailoutTier}: {$stock->getTicker()} subsidized (Fell below dominance floor).");
-        }
     }
 
     /**

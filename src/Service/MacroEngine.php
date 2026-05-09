@@ -51,18 +51,15 @@ class MacroEngine
         $yieldData = $this->calculateYieldCurveAndQE($state, $targetInflation, $naturalRate);
         $yield10y = $yieldData['yield_10y'];
 
-        $oldGap = $state['output_gap'];
         $state['output_gap'] = $this->calculateOutputGap($state, $yield10y, $naturalRate, $stressMultiplier, $dt);
         $state['inflation'] = $this->calculateInflation($state, $targetInflation, $stressMultiplier, $dt);
 
-
         // Safely initialize if pulling from an older Redis cache payload
         $state['nominal_gdp_index'] = $state['nominal_gdp_index'] ?? 1.0;
-        $gapChange = $state['output_gap'] - $oldGap;
 
-        // Nominal Growth = Natural Rate + Inflation
-        $nominalGrowth = $naturalRate + $state['inflation'];
-        $state['nominal_gdp_index'] = max(0.10, $state['nominal_gdp_index'] * exp(($nominalGrowth * $dt) + $gapChange));
+        // Nominal Growth = Natural Rate
+        $realGrowth = $naturalRate;
+        $state['nominal_gdp_index'] = max(0.10, $state['nominal_gdp_index'] * exp($realGrowth * $dt));
 
         // A quarter is 0.25 years.
         // tick data into a rolling 3-month average.

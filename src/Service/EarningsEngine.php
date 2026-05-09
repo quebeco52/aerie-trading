@@ -414,8 +414,8 @@ class EarningsEngine
 
         // The larger the systemic importance, the stronger the "moat" protecting their ROIC
         $moat = match ($systemic_importance) {
-            'titan'    => 0.4, // Only takes 40% of the saturation penalty
-            'systemic' => 0.7, // Takes 70% of the penalty
+            'titan'    => 0.5, // Only takes 50% of the saturation penalty
+            'systemic' => 0.75, // Takes 75% of the penalty
             'base'     => 0.9, // Takes 90% of the penalty
             default    => 1.0, // Takes the full 100% saturation penalty
         };
