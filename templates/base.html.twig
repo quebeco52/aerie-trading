@@ -23,6 +23,9 @@
             "description": "Live, procedurally generated stock market simulation featuring clean surplus accounting."
         }
         </script>
+
+        {# Canonical URL to prevent duplicate content indexing #}
+        <link rel="canonical" href="{{ app.request.schemeAndHttpHost }}{{ app.request.pathInfo }}">
     {% endblock %}
 
     {% block favicon %}

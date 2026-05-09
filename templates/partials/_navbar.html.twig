@@ -31,6 +31,7 @@
                     <a href="/dashboard" class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-primary border border-outline-variant/20 hover:bg-surface-bright transition-colors" title="Logged in as {{ app.user.userIdentifier }}">
                         <span class="material-symbols-outlined text-sm">account_circle</span>
                     </a>
+                    <a href="{{ path('app_logout') }}" class="material-symbols-outlined text-on-surface-variant hover:text-on-surface transition-colors active:scale-95" title="Sign Out">logout</a>
                 {% else %}
                     <a href="{{ path('app_login') }}" class="material-symbols-outlined text-on-surface-variant hover:text-on-surface transition-colors active:scale-95" title="Sign In">account_circle</a>
                 {% endif %}

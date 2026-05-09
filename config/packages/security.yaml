@@ -20,6 +20,7 @@ security:
             lazy: true
             provider: app_user_provider
             login_throttling: true
+            user_checker: App\Security\UserChecker
 
             form_login:
                 login_path: app_login

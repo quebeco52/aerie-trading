@@ -60,6 +60,14 @@ class HomeController extends AbstractController
 
         usort($marketData, fn($a, $b) => $b['marketCap'] <=> $a['marketCap']);
 
+        // If the user is not logged in, render a dedicated landing page
+        if (!$this->getUser()) {
+            return $this->render('home/landing.html.twig', [
+                'etf' => $etf,
+                'top_stocks' => array_slice($marketData, 0, 6) // Show a preview of the top 6 stocks
+            ]);
+        }
+
         return $this->render('home/index.html.twig', [
             'etf' => $etf,
             'stocks' => $marketData
