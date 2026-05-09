@@ -40,6 +40,7 @@ class MarketResetCommand extends Command
         $conn->executeStatement('TRUNCATE TABLE stock_events');
         $conn->executeStatement('TRUNCATE TABLE etf_events');
         $conn->executeStatement('TRUNCATE TABLE user_stocks');
+        $conn->executeStatement('TRUNCATE TABLE user_etfs');
         $conn->executeStatement('TRUNCATE TABLE portfolio_history'); 
         $conn->executeStatement('TRUNCATE TABLE corporate_report');
         
@@ -52,8 +53,10 @@ class MarketResetCommand extends Command
             $testUser->setCashBalance('10000.00');
             $testUser->setPassword($this->passwordHasher->hashPassword($testUser, 'test'));
             $this->entityManager->persist($testUser);
-            $this->entityManager->flush();
         }
+
+        $testUser->setUsername('Test');
+        $this->entityManager->flush();
 
         $conn->executeStatement('UPDATE users SET cash_balance = 10000.00'); 
         $conn->executeStatement('SET FOREIGN_KEY_CHECKS = 1');

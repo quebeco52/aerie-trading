@@ -26,11 +26,22 @@ class Portfolio
         
         $snapshotSql = "
             INSERT INTO portfolio_history (user_id, total_value, recorded_at)
-            SELECT u.id, (u.cash_balance + COALESCE(SUM(us.quantity * s.price), 0)), :now
+            SELECT u.id, 
+                   (u.cash_balance + COALESCE(stock_totals.stock_val, 0) + COALESCE(etf_totals.etf_val, 0)), 
+                   :now
             FROM users u
-            LEFT JOIN user_stocks us ON u.id = us.user_id
-            LEFT JOIN stocks s ON us.stock_id = s.id
-            GROUP BY u.id
+            LEFT JOIN (
+                SELECT us.user_id, SUM(us.quantity * s.price) as stock_val
+                FROM user_stocks us 
+                JOIN stocks s ON us.stock_id = s.id
+                GROUP BY us.user_id
+            ) stock_totals ON stock_totals.user_id = u.id
+            LEFT JOIN (
+                SELECT ue.user_id, SUM(ue.quantity * e.price) as etf_val
+                FROM user_etfs ue 
+                JOIN etfs e ON ue.etf_id = e.id
+                GROUP BY ue.user_id
+            ) etf_totals ON etf_totals.user_id = u.id
         ";
 
         $conn->executeStatement($snapshotSql, [
@@ -47,10 +58,10 @@ class Portfolio
         $conn = $this->entityManager->getConnection();
 
         $sql = "
-            SELECT COALESCE(SUM(us.quantity * s.price), 0)
-            FROM user_stocks us
-            INNER JOIN stocks s ON us.stock_id = s.id
-            WHERE us.user_id = :user_id
+            SELECT (
+                COALESCE((SELECT SUM(us.quantity * s.price) FROM user_stocks us JOIN stocks s ON us.stock_id = s.id WHERE us.user_id = :user_id), 0) +
+                COALESCE((SELECT SUM(ue.quantity * e.price) FROM user_etfs ue JOIN etfs e ON ue.etf_id = e.id WHERE ue.user_id = :user_id), 0)
+            ) as total_val
         ";
 
         $stockValue = (float) $conn->fetchOne($sql, ['user_id' => $user->getId()]);

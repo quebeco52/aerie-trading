@@ -4,6 +4,8 @@ namespace App\Service;
 
 use App\Entity\Stock;
 use App\Entity\StockEvent;
+use App\Entity\Etf;
+use App\Entity\EtfEvent;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 
@@ -24,11 +26,16 @@ class MarketEvent
      *
      * @return array{type: string, ticker: string, description: string, change_percent: float}
      */
-    public function publish(Stock $stock, string $type, string $description, float $changePercent): array
+    public function publish(Stock|Etf $asset, string $type, string $description, float $changePercent): array
     {
         // Create the Doctrine Entity
-        $event = new StockEvent();
-        $event->setStock($stock);
+        if ($asset instanceof Stock) {
+            $event = new StockEvent();
+            $event->setStock($asset);
+        } else {
+            $event = new EtfEvent();
+            $event->setEtf($asset);
+        }
         $event->setEventType($type);
         $event->setDescription($description);
         $event->setChangePercent((string) round($changePercent, 2));
@@ -38,14 +45,14 @@ class MarketEvent
         // Log it beautifully for the terminal
         $color = $changePercent >= 0 ? "\033[32m" : "\033[31m";
         if ($type === 'SHOCK') {
-            echo " [!] {$color}MARKET SHOCK on {$stock->getTicker()}: " . number_format($changePercent, 2) . "% \033[0m\n";
+            echo " [!] {$color}MARKET SHOCK on {$asset->getTicker()}: " . number_format($changePercent, 2) . "% \033[0m\n";
         } else {
-            $this->logger->info("[{$type}] {$stock->getTicker()}: {$description}");
+            $this->logger->info("[{$type}] {$asset->getTicker()}: {$description}");
         }
 
         $eventData = [
             'type' => $type,
-            'ticker' => $stock->getTicker(),
+            'ticker' => $asset->getTicker(),
             'description' => $description,
             'change_percent' => round($changePercent, 2)
         ];

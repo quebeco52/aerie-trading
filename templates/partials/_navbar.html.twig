@@ -7,14 +7,23 @@
                     Aerie Exchange
                 </a>
                 <div class="hidden md:flex gap-6 mt-1">
-                    <a href="/" class="text-primary font-bold text-sm border-b-2 border-primary pb-1 transition-colors">Markets</a>
-                    <a href="/dashboard" class="text-on-surface-variant hover:text-on-surface font-bold text-sm transition-colors pb-1 border-b-2 border-transparent hover:border-outline-variant/30">Portfolio</a>
+                    {% set current_path = app.request.pathInfo %}
+                    
+                    <a href="/" class="text-sm font-bold pb-1 border-b-2 transition-colors {{ current_path == '/' ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">Markets</a>
+                    
+                    <a href="/dashboard" class="text-sm font-bold pb-1 border-b-2 transition-colors {{ current_path == '/dashboard' ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">Portfolio</a>
+                    
+                    <a href="/leaderboard" class="text-sm font-bold pb-1 border-b-2 transition-colors {{ current_path == '/leaderboard' ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">Leaderboard</a>
                 </div>
             </div>
             
             <div class="flex items-center gap-4">
                 <div class="relative hidden sm:block">
-                    <input type="text" placeholder="Search markets..." class="bg-surface-container-lowest border-none rounded-lg px-4 py-1.5 text-sm focus:ring-1 focus:ring-primary w-64 text-on-surface outline-none placeholder:text-outline-variant font-mono">
+                    <form action="/search" method="GET" id="search-form">
+                        <input id="market-search-input" name="q" type="text" placeholder="Search company or ticker..." class="bg-surface-container-lowest border-none rounded-lg px-4 py-1.5 text-sm focus:ring-1 focus:ring-primary w-64 text-on-surface outline-none placeholder:text-outline-variant font-mono" autocomplete="off">
+                        <div id="search-results-dropdown" class="absolute left-0 mt-1 w-full bg-surface-container-high border border-outline-variant/20 rounded-md shadow-lg hidden z-50 overflow-hidden">
+                        </div>
+                    </form>
                 </div>
                 <button class="material-symbols-outlined text-on-surface-variant hover:text-on-surface transition-colors active:scale-95">notifications</button>
                 
@@ -28,4 +37,78 @@
             </div>
         </div>
     </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const searchInput = document.getElementById('market-search-input');
+        const dropdown = document.getElementById('search-results-dropdown');
+        let debounceTimer;
+        let currentFocus = -1;
+
+        searchInput.addEventListener('input', function() {
+            clearTimeout(debounceTimer);
+            const query = this.value.trim();
+
+            if (query.length < 1) {
+                dropdown.classList.add('hidden');
+                return;
+            }
+
+            debounceTimer = setTimeout(() => {
+                fetch(`/search/autocomplete?q=${encodeURIComponent(query)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        dropdown.innerHTML = '';
+                        currentFocus = -1;
+                        if (data.length > 0) {
+                            data.forEach(item => {
+                                const a = document.createElement('a');
+                                a.href = `/stock/${item.ticker}`;
+                                a.className = 'block px-4 py-2 text-sm text-on-surface hover:bg-surface-bright transition-colors cursor-pointer';
+                                a.innerHTML = `<span class="font-bold text-primary">${item.ticker}</span> <span class="text-on-surface-variant text-xs ml-2">${item.name}</span>`;
+                                dropdown.appendChild(a);
+                            });
+                        } else {
+                            dropdown.innerHTML = '<div class="px-4 py-2 text-sm text-on-surface-variant">No results found</div>';
+                        }
+                        dropdown.classList.remove('hidden');
+                    });
+            }, 250); // 250ms debounce
+        });
+
+        searchInput.addEventListener('keydown', function(e) {
+            const items = dropdown.querySelectorAll('a');
+            if (!items || items.length === 0) return;
+
+            if (e.key === 'ArrowDown') {
+                currentFocus++;
+                addActive(items);
+            } else if (e.key === 'ArrowUp') {
+                currentFocus--;
+                addActive(items);
+            } else if (e.key === 'Enter') {
+                if (currentFocus > -1) {
+                    e.preventDefault();
+                    items[currentFocus].click();
+                }
+            }
+        });
+
+        function addActive(items) {
+            if (!items) return false;
+            for (let i = 0; i < items.length; i++) {
+                items[i].classList.remove('bg-surface-bright');
+            }
+            if (currentFocus >= items.length) currentFocus = 0;
+            if (currentFocus < 0) currentFocus = (items.length - 1);
+            items[currentFocus].classList.add('bg-surface-bright');
+        }
+
+        document.addEventListener('click', function(e) {
+            if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+                dropdown.classList.add('hidden');
+            }
+        });
+    });
+    </script>
 </nav>

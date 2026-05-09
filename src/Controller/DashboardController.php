@@ -5,6 +5,7 @@ namespace App\Controller;
 
 use App\Entity\User;
 use App\Entity\UserStock;
+use App\Entity\UserEtf;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
@@ -26,13 +27,14 @@ class DashboardController extends AbstractController
         /** @var User $user */
         $user = $this->getUser();
 
-        // Fetch user's specific stock holdings
-        $holdings = $entityManager->getRepository(UserStock::class)->findBy(['user' => $user]);
+        // Fetch user's specific stock and ETF holdings
+        $stockHoldings = $entityManager->getRepository(UserStock::class)->findBy(['user' => $user]);
+        $etfHoldings = $entityManager->getRepository(UserEtf::class)->findBy(['user' => $user]);
 
         $portfolioValue = (float) $user->getCashBalance();
-        $stockData = [];
+        $assetData = [];
 
-        foreach ($holdings as $holding) {
+        foreach ($stockHoldings as $holding) {
             $stock = $holding->getStock();
             $currentPrice = (float) $stock->getPrice();
             $quantity = $holding->getQuantity();
@@ -40,7 +42,7 @@ class DashboardController extends AbstractController
 
             $portfolioValue += $totalValue;
 
-            $stockData[] = [
+            $assetData[] = [
                 'ticker' => $stock->getTicker(),
                 'name' => $stock->getName(),
                 'quantity' => $quantity,
@@ -49,9 +51,26 @@ class DashboardController extends AbstractController
             ];
         }
 
+        foreach ($etfHoldings as $holding) {
+            $etf = $holding->getEtf();
+            $currentPrice = (float) $etf->getPrice();
+            $quantity = $holding->getQuantity();
+            $totalValue = $currentPrice * $quantity;
+
+            $portfolioValue += $totalValue;
+
+            $assetData[] = [
+                'ticker' => $etf->getTicker(),
+                'name' => $etf->getName(),
+                'quantity' => $quantity,
+                'price' => $currentPrice,
+                'totalValue' => $totalValue,
+            ];
+        }
+
         return $this->render('dashboard/index.html.twig', [
             'user' => $user,
-            'holdings' => $stockData,
+            'holdings' => $assetData,
             'portfolioValue' => $portfolioValue,
         ]);
     }

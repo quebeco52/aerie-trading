@@ -1,0 +1,47 @@
+<?php
+
+namespace App\Controller;
+
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Routing\Attribute\Route;
+
+class LeaderboardController extends AbstractController
+{
+    #[Route('/leaderboard', name: 'app_leaderboard')]
+    public function index(EntityManagerInterface $entityManager): Response
+    {
+        $conn = $entityManager->getConnection();
+
+        // Calculate the total net worth of all users.
+        $sql = "
+            SELECT COALESCE(u.username, 'Anonymous Trader') as username,
+                   u.cash_balance,
+                   COALESCE(stock_totals.stock_val, 0) as stock_value,
+                   COALESCE(etf_totals.etf_val, 0) as etf_value,
+                   (u.cash_balance + COALESCE(stock_totals.stock_val, 0) + COALESCE(etf_totals.etf_val, 0)) as total_value
+            FROM users u
+            LEFT JOIN (
+                SELECT us.user_id, SUM(us.quantity * s.price) as stock_val
+                FROM user_stocks us 
+                JOIN stocks s ON us.stock_id = s.id
+                GROUP BY us.user_id
+            ) stock_totals ON stock_totals.user_id = u.id
+            LEFT JOIN (
+                SELECT ue.user_id, SUM(ue.quantity * e.price) as etf_val
+                FROM user_etfs ue 
+                JOIN etfs e ON ue.etf_id = e.id
+                GROUP BY ue.user_id
+            ) etf_totals ON etf_totals.user_id = u.id
+            ORDER BY total_value DESC
+            LIMIT 100
+        ";
+
+        $leaders = $conn->fetchAllAssociative($sql);
+
+        return $this->render('leaderboard/index.html.twig', [
+            'leaders' => $leaders,
+        ]);
+    }
+}

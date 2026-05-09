@@ -2,8 +2,10 @@
 
 namespace App\Controller;
 
+use App\Entity\Etf;
 use App\Entity\Stock;
 use App\Entity\User;
+use App\Entity\UserEtf;
 use App\Entity\UserStock;
 use App\Service\Portfolio;
 use Doctrine\ORM\EntityManagerInterface;
@@ -51,20 +53,34 @@ class TradeController extends AbstractController
             // Lock the user record to prevent race conditions (double spending)
             $em->lock($user, \Doctrine\DBAL\LockMode::PESSIMISTIC_WRITE);
 
-            // Fetch the stock
+            // Fetch the asset
             $stock = $em->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);
+            $etf = null;
+            
             if (!$stock) {
+                $etf = $em->getRepository(Etf::class)->findOneBy(['ticker' => $ticker]);
+            }
+
+            if (!$stock && !$etf) {
                 throw new \Exception('Asset not found on the Aerie Exchange.');
             }
 
-            $livePrice = (float) $stock->getPrice();
+            $asset = $stock ?? $etf;
+            $livePrice = (float) $asset->getPrice();
             $totalValue = $livePrice * $quantity;
             $currentCash = (float) $user->getCashBalance();
 
-            $userStock = $em->getRepository(UserStock::class)->findOneBy([
-                'user' => $user,
-                'stock' => $stock
-            ]);
+            if ($stock) {
+                $userAsset = $em->getRepository(UserStock::class)->findOneBy([
+                    'user' => $user,
+                    'stock' => $stock
+                ]);
+            } else {
+                $userAsset = $em->getRepository(UserEtf::class)->findOneBy([
+                    'user' => $user,
+                    'etf' => $etf
+                ]);
+            }
 
             if ($action === 'BUY') {
                 if ($currentCash < $totalValue) {
@@ -73,28 +89,35 @@ class TradeController extends AbstractController
 
                 $user->setCashBalance((string)($currentCash - $totalValue));
 
-                if (!$userStock) {
-                    $userStock = new UserStock();
-                    $userStock->setUser($user);
-                    $userStock->setStock($stock);
-                    $userStock->setQuantity(0);
-                    $em->persist($userStock);
+                if (!$userAsset) {
+                    if ($stock) {
+                        $userAsset = new UserStock();
+                        $userAsset->setUser($user);
+                        $userAsset->setStock($stock);
+                        $userAsset->setQuantity(0);
+                    } else {
+                        $userAsset = new UserEtf();
+                        $userAsset->setUser($user);
+                        $userAsset->setEtf($etf);
+                        $userAsset->setQuantity(0);
+                    }
+                    $em->persist($userAsset);
                 }
 
-                $userStock->setQuantity($userStock->getQuantity() + $quantity);
+                $userAsset->setQuantity($userAsset->getQuantity() + $quantity);
                 $this->addFlash('success', "Successfully purchased {$quantity} shares of {$ticker}.");
 
             } elseif ($action === 'SELL') {
-                if (!$userStock || $userStock->getQuantity() < $quantity) {
+                if (!$userAsset || $userAsset->getQuantity() < $quantity) {
                     throw new \Exception('You do not own enough shares to execute this sale.');
                 }
 
                 $user->setCashBalance((string)($currentCash + $totalValue));
-                $newQuantity = $userStock->getQuantity() - $quantity;
-                $userStock->setQuantity($newQuantity);
+                $newQuantity = $userAsset->getQuantity() - $quantity;
+                $userAsset->setQuantity($newQuantity);
 
                 if ($newQuantity === 0) {
-                    $em->remove($userStock);
+                    $em->remove($userAsset);
                 }
                 
                 $this->addFlash('success', "Successfully sold {$quantity} shares of {$ticker}.");
@@ -116,7 +139,9 @@ class TradeController extends AbstractController
 
         } catch (\Exception $e) {
             // If the user tries to exploit a glitch, cancel the trade entirely
-            $em->getConnection()->rollBack();
+            if ($em->getConnection()->isTransactionActive()) {
+                $em->getConnection()->rollBack();
+            }
             $this->addFlash('error', $e->getMessage());
         }
 

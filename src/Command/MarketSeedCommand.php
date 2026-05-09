@@ -99,7 +99,8 @@ class MarketSeedCommand extends Command
         }
 
         // Test User
-        if (!$this->entityManager->getRepository(User::class)->findOneBy(['email' => 'test.test@test.se'])) {
+        $user = $this->entityManager->getRepository(User::class)->findOneBy(['email' => 'test.test@test.se']);
+        if (!$user) {
             $user = new User();
             $user->setEmail('test.test@test.se');
             $user->setRoles(['ROLE_ADMIN']);
@@ -107,6 +108,8 @@ class MarketSeedCommand extends Command
             $user->setPassword($this->passwordHasher->hashPassword($user, 'test'));
             $this->entityManager->persist($user);
         }
+        
+        $user->setUsername('Test');
 
         $this->entityManager->flush();
         $io->success('Database successfully seeded with full fundamental physics!');

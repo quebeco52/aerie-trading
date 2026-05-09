@@ -51,17 +51,19 @@ class RegistrationController extends AbstractController
             }
 
             $email = $request->request->get('email');
+            $username = $request->request->get('username');
             $plainPassword = $request->request->get('password');
 
             // Basic validation
-            if (empty($email) || empty($plainPassword)) {
-                $this->addFlash('error', 'Please provide an email and password.');
+            if (empty($email) || empty($username) || empty($plainPassword)) {
+                $this->addFlash('error', 'Please provide an email, username, and password.');
                 return $this->redirectToRoute('app_register');
             }
 
             // 3. Create the User
             $user = new User();
             $user->setEmail($email);
+            $user->setUsername($username);
             // Give them $10,000 in starting cash
             $user->setCashBalance('10000.00'); 
 
