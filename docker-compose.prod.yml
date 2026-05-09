@@ -14,6 +14,8 @@ services:
       - caddy_config:/config
     depends_on:
       - aerie-php
+    env_file:
+      - .env.local
 
   aerie-php:
     build:
@@ -24,6 +26,8 @@ services:
     depends_on:
       - aerie-database
       - aerie-redis
+    env_file:
+      - .env.local
 
   aerie-worker:
     build: 
@@ -35,6 +39,8 @@ services:
       - aerie-redis
     command: php bin/console messenger:consume async --memory-limit=128M --time-limit=3600
     restart: unless-stopped
+    env_file:
+      - .env.local
 
   aerie-scheduler:
     build:
@@ -46,6 +52,8 @@ services:
     depends_on:
       - aerie-database
       - aerie-redis
+    env_file:
+      - .env.local
   
   aerie-ticker:
     profiles: ["live"]
@@ -58,6 +66,8 @@ services:
     depends_on:
       - aerie-redis
       - aerie-database
+    env_file:
+      - .env.local
 
   aerie-websocket:
     build:
@@ -68,6 +78,8 @@ services:
     restart: always
     depends_on:
       - aerie-redis
+    env_file:
+      - .env.local
 
   aerie-database:
     image: mariadb:11.8
@@ -89,6 +101,8 @@ services:
   aerie-redis:
     image: redis:8.6-trixie
     restart: always
+    env_file:
+      - .env.local
 
 volumes:
   caddy_data:
