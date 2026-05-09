@@ -67,7 +67,7 @@ class RegistrationController extends AbstractController
                 );
 
                 $email = (new Email())
-                    ->from('noreply@yourtradingapp.com')
+                    ->from('noreply@trade.lakebird.org')
                     ->to($user->getEmail())
                     ->subject('Please Confirm your Email')
                     ->html('<p>Click this link to verify your email:</p><a href="'.$signatureComponents->getSignedUrl().'">Verify Email</a>');
