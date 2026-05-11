@@ -105,7 +105,7 @@ class EarningsEngine
         $cyclicalRevenue = $baselineRevenue * $macroVolumeModifier;
 
 
-        $fixedCostRatio = $stock->getFixedCostRatio(); // 0.80 for Tech, 0.20 for Retail
+        $fixedCostRatio = $stock->getFixedCostRatio();
 
         // Costs are strictly determined by the STRUCTURAL margin, meaning they never fluctuate with the macro cycle.
         $structuralTotalCosts = $baselineRevenue * (1.0 - $stableMargin);
