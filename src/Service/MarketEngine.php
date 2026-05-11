@@ -70,9 +70,8 @@ class MarketEngine
         float $liveWacc = 0.08
     ): array {
         
-        // =====================================================================
         // CAPM & MACRO TRANSMISSION MECHANISM
-        // =====================================================================
+
         $riskFreeRate = $macroState['policy_rate'] ?? 0.04;
         $outputGap = $macroState['output_gap'] ?? 0.0;
         $inflation = $macroState['inflation'] ?? 0.02;
@@ -160,7 +159,7 @@ class MarketEngine
             currentPrice: $currentPrice,
             currentVolatility: $currentVolatility,
             drift: $finalDrift,
-            gravityDrift: 0.0, // <-- Set to zero, handled below
+            gravityDrift: 0.0, // Set to zero, handled below
             dt: $dt,
             beta: $beta,
             marketVol: $marketVol,
@@ -232,7 +231,7 @@ class MarketEngine
         float $dividendPerShare,
         float $liveWacc
     ): array {
-        // Use the live WACC passed down from the centralized DebtEngine
+        // Use the live WACC
         $wacc = $liveWacc;
 
         // Dynamic P/E Re-Rating (The EVA Premium)
