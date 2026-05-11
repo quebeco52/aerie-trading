@@ -95,6 +95,16 @@ class EarningsEngine
 
         // Determine baseline Revenue and Cost Structure
         $baselineRevenue = $investedCapital * $assetTurnover;
+
+
+        // MACROECONOMIC VOLUME SHIFT
+        // During a boom (+gap), consumers buy more volume. In a recession (-gap), volume shrinks.
+        // We scale this by Beta so defensive stocks ignore the cycle, and cyclical stocks swing wildly.
+        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
+        $macroVolumeModifier = 1.0 + ($outputGap * (float) $stock->getBeta());
+        $cyclicalRevenue = $baselineRevenue * $macroVolumeModifier;
+
+
         $fixedCostRatio = $stock->getFixedCostRatio(); // 0.80 for Tech, 0.20 for Retail
 
         // Costs are strictly determined by the STRUCTURAL margin, meaning they never fluctuate with the macro cycle.
@@ -103,14 +113,14 @@ class EarningsEngine
 
         // The Macro Cycle (Dynamic ROIC) alters the Variable Margin (representing economy-wide pricing power and input costs).
         $expectedEbit = $investedCapital * $dynamicRoic;
-        $expectedVariableCosts = max(0.0, $baselineRevenue - $fixedCosts - $expectedEbit);
-        $variableCostMargin = $expectedVariableCosts / max(1.0, $baselineRevenue);
+        $expectedVariableCosts = max(0.0, $cyclicalRevenue - $fixedCosts - $expectedEbit);
+        $variableCostMargin = $expectedVariableCosts / max(1.0, $cyclicalRevenue);
 
         // APPLY THE Z-SCORE SHOCK TO REVENUE, NOT EPS
         // Scale the shock based on the company's inherent baseline volatility (e.g. 0.20 * 0.15 = 3% StDev)
         $revenueZ = $this->mathUtility->generateStandardNormal();
         $revenueShock = $revenueZ * ($baselineVol * 0.15);
-        $actualRevenue = $baselineRevenue * (1.0 + $revenueShock);
+        $actualRevenue = $cyclicalRevenue * (1.0 + $revenueShock);
 
         // The Operating Leverage Engine: Revenue volume swings, but Fixed Costs act as a heavy anchor!
         $actualVariableCosts = $actualRevenue * $variableCostMargin;

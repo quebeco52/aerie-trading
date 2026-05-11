@@ -50,12 +50,15 @@ class MarketResetCommand extends Command
             $testUser = new User();
             $testUser->setEmail('test.test@test.se');
             $testUser->setRoles(['ROLE_ADMIN']);
+            $testUser->setUsername('Test');
+            $testUser->setIsVerified(true);
             $testUser->setCashBalance('10000.00');
             $testUser->setPassword($this->passwordHasher->hashPassword($testUser, 'test'));
             $this->entityManager->persist($testUser);
         }
 
         $testUser->setUsername('Test');
+        $testUser->setIsVerified(true);
         $this->entityManager->flush();
 
         $conn->executeStatement('UPDATE users SET cash_balance = 10000.00'); 

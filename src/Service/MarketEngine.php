@@ -58,7 +58,7 @@ class MarketEngine
         float $marketZ = 0.0,
         float $marketVol = 0.15,
         float $drift = 0.08,
-        float $reversionSpeed = 0.4,
+        float $reversionSpeed = 0.20,
         float $kappa = 6.0,
         float $volOfVol = 0.3,
         array $macroState = [],
@@ -139,8 +139,13 @@ class MarketEngine
         $fairValue = $valuations['composite_fair_value'];
 
         // Panic Gravity (Flight to Safety)
-        $macroStress = abs($outputGap) + abs($inflation - 0.02);
-        $dynamicReversion = $reversionSpeed + ($macroStress * 2.5);
+        // A recession (negative output gap) creates fear, forcing prices back to safe fundamentals.
+        // A boom (positive output gap) creates greed, allowing speculative bubbles to float away from fundamentals.
+        $recessionStress = max(0.0, -$outputGap);
+        $inflationStress = abs($inflation - 0.02);
+        
+        $macroStress = $recessionStress + $inflationStress;
+        $dynamicReversion = $reversionSpeed + ($macroStress * 4);
 
         // Pure Geometric Brownian Motion (GBM) Step
         $idiosyncraticShock = $this->mathUtility->generateStandardNormal();

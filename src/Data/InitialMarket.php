@@ -394,7 +394,7 @@ class InitialMarket
             'price' => 110.00, 'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.16, 'beta' => 0.30, 'jump_intensity' => 0.75, 'jump_mean' => 0.01, 'jump_vol' => 0.05,
             'baseline_roic' => 0.25, 'capex_ratio' => 0.35, 'target_payout_ratio' => 0.50, 'dividendSpeed' => 0.04,
-            'fixed_cost_ratio' => 0.50, 'operating_margin' => 0.18, 'public_float' => 0.70, 'sam_ratio' => 1.00,
+            'fixed_cost_ratio' => 0.50, 'operating_margin' => 0.18, 'public_float' => 0.70, 'sam_ratio' => 0.50,
             'corporate_treasury' => 3_000_000_000.00,
             'total_net_income'  => 5_240_000_000.00,   
             'total_equity'      => 20_960_000_000.00,
@@ -417,20 +417,20 @@ class InitialMarket
             'ticker' => 'ROOK', 'name' => 'Rook Proprietary Trading', 'sector' => 'Financials', 'systemic_importance' => 'none',
             'price' => 80.00, 'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.50, 'beta' => 2.20, 'jump_intensity' => 1.50, 'jump_mean' => 0.00, 'jump_vol' => 0.25,
-            'baseline_roic' => 0.30, 'capex_ratio' => 0.20, 'target_payout_ratio' => 0.40, 'dividendSpeed' => 0.60,
-            'fixed_cost_ratio' => 0.65, 'operating_margin' => 0.38, 'public_float' => 0.80, 'sam_ratio' => 1.00,
+            'baseline_roic' => 0.25, 'capex_ratio' => 0.20, 'target_payout_ratio' => 0.40, 'dividendSpeed' => 0.60,
+            'fixed_cost_ratio' => 0.65, 'operating_margin' => 0.38, 'public_float' => 0.80, 'credit_spread' => 0.012, 'sam_ratio' => 0.50,
             'corporate_treasury' => 2_000_000_000.00,
             'total_net_income'  => 5_710_000_000.00,   
             'total_equity'      => 14_280_000_000.00,
-            'total_debt'        => 20_706_000_000.00, // Capped at 1.45x
+            'total_debt'        => 24_706_000_000.00,
             'retained_earnings' => 1_500_000_000.00
         ],
         [
             'ticker' => 'PLZA', 'name' => 'Plaza Civic River Trust', 'sector' => 'Real Estate', 'systemic_importance' => 'systemic',
             'price' => 620.00, 'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.10, 'beta' => 0.10, 'jump_intensity' => 0.20, 'jump_mean' => 0.01, 'jump_vol' => 0.02,
-            'baseline_roic' => 0.13, 'capex_ratio' => 0.05, 'target_payout_ratio' => 0.90, 'dividendSpeed' => 0.04,
-            'fixed_cost_ratio' => 0.90, 'operating_margin' => 0.55, 'public_float' => 0.15, 'credit_spread' => 0.004, 'sam_ratio' => 0.75,
+            'baseline_roic' => 0.13, 'capex_ratio' => 0.08, 'target_payout_ratio' => 0.90, 'dividendSpeed' => 0.04,
+            'fixed_cost_ratio' => 0.85, 'operating_margin' => 0.55, 'public_float' => 0.15, 'credit_spread' => 0.004, 'sam_ratio' => 1.00,
             'corporate_treasury' => 60_500_000_000.00,
             'total_net_income'  => 52_180_000_000.00,   
             'total_equity'      => 302_250_000_000.00,
@@ -592,6 +592,18 @@ class InitialMarket
             'total_equity'      => 67_110_000_000.00,
             'total_debt'        => 53_688_000_000.00,
             'retained_earnings' => 60_000_000_000.00
+        ],
+        [
+            'ticker' => 'KSTL', 'name' => 'Kestrel Civic Lines', 'sector' => 'Industrials', 'systemic_importance' => 'systemic',
+            'price' => 180.00, 'shares_outstanding' => 1_000_000_000,
+            'volatility' => 0.12, 'beta' => 0.20, 'jump_intensity' => 0.15, 'jump_mean' => -0.05, 'jump_vol' => 0.05,
+            'baseline_roic' => 0.13, 'capex_ratio' => 0.75, 'target_payout_ratio' => 0.80, 'dividendSpeed' => 0.04,
+            'fixed_cost_ratio' => 0.80, 'operating_margin' => 0.35, 'public_float' => 0.85, 'credit_spread' => 0.004, 'sam_ratio' => 0.65,
+            'corporate_treasury' => 10_000_000_000.00,
+            'total_net_income'  => 15_840_000_000.00,  
+            'total_equity'      => 120_000_000_000.00, 
+            'total_debt'        => 180_000_000_000.00,
+            'retained_earnings' => 45_000_000_000.00   
         ],
     ];
 

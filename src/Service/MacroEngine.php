@@ -233,7 +233,7 @@ class MacroEngine
 
         // THE KALDOR-KALECKI PARAMETERS
         $alpha = 0.5;   // Momentum coefficient (Boom/Bust accelerator)
-        $beta = 300.0;  // Cubic capacity constraint (The Rubber Band)
+        $beta = 350.0;  // Cubic capacity constraint (The Rubber Band)
         $gamma = 6.5;   // Sensitivity to Central Bank real rates
 
         // Momentum (Linear Accelerator)

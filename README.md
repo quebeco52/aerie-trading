@@ -56,7 +56,7 @@ Aerie Trading uses the tech stack:
 
 ### Stretch goal
 - [ ] Stock comment sections
-- [ ] User leaderboard
+- [x] User leaderboard
 - [ ] Options trading
 - [ ] Optimize the application to run on as little resources as possible
 - [ ] Should have a consistent narrative (world building)
