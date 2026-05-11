@@ -136,7 +136,7 @@ class MarketEngine
             $dividendPerShare,
             $liveWacc
         );
-        $fairValue = $valuations['composite_fair_value'];
+        $fundamentalFairValue = $valuations['composite_fair_value'];
 
         // Panic Gravity (Flight to Safety)
         // A recession (negative output gap) creates fear, forcing prices back to safe fundamentals.
@@ -145,7 +145,12 @@ class MarketEngine
         $inflationStress = abs($inflation - 0.02);
         
         $macroStress = $recessionStress + $inflationStress;
-        $dynamicReversion = $reversionSpeed + ($macroStress * 4);
+        $dynamicReversion = $reversionSpeed + ($macroStress * 6.0 * max(0.25, $beta));
+
+        // The fear haircut
+        // In a panic, investors ignore strong earnings and apply an instant discount to fundamentals.
+        $fearHaircut = 1.0 - min(0.60, $macroStress * 3.0 * max(0.25, $beta));
+        $perceivedFairValue = max(0.01, $fundamentalFairValue * $fearHaircut);
 
         // Pure Geometric Brownian Motion (GBM) Step
         $idiosyncraticShock = $this->mathUtility->generateStandardNormal();
@@ -170,7 +175,7 @@ class MarketEngine
         // Geometrically blend the GBM price with the fundamental Fair Value
         $diffusedPrice = exp(
             $reversionWeight * log($gbmPrice) + 
-            (1.0 - $reversionWeight) * log($fairValue)
+            (1.0 - $reversionWeight) * log($perceivedFairValue)
         );
 
         // Apply Simultaneous Price Jumps AND M&A Shocks outside the GBM exponent
