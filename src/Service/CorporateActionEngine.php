@@ -22,7 +22,8 @@ class CorporateActionEngine
         private EntityManagerInterface $entityManager,
         private MarketEvent $marketEvent,
         private DebtEngine $debtEngine,
-        private \Redis $redis
+        private \Redis $redis,
+        private MathUtility $mathUtility
     ) {}
 
 
@@ -47,7 +48,7 @@ class CorporateActionEngine
             $newPrice = $result['price'];
             $sharesOutstanding = $result['shares'];
             $splitEvent = $result['event'];
-        } elseif ($newPrice < 2.0) {
+        } elseif ($newPrice < 2.0 && $sharesOutstanding >= 10.0) {
             $result = $this->executeReverseSplit($stock, $newPrice, $sharesOutstanding);
             $newPrice = $result['price'];
             $sharesOutstanding = $result['shares'];
@@ -86,14 +87,14 @@ class CorporateActionEngine
         $oldDiv = (float) $stock->getLastDividend();
         $stock->setLastDividend((string) ($oldDiv / $splitFactor));
 
-        $desc = "{$stock->getName()} has executed a {$splitFactor}-for-1 stock split.";
-        $splitEvent = $this->marketEvent->publish($stock, 'SPLIT', $desc, 0.00);
-
         $oldEps = (float) $stock->getEarningsPerShare();
         $stock->setEarningsPerShare((string) ($oldEps / $splitFactor));
 
         $oldFcf = (float) $stock->getFreeCashFlowPerShare();
         $stock->setFreeCashFlowPerShare((string) ($oldFcf / $splitFactor));
+
+        $desc = "{$stock->getName()} has executed a {$splitFactor}-for-1 stock split.";
+        $splitEvent = $this->marketEvent->publish($stock, 'SPLIT', $desc, 0.00);
 
         $this->entityManager->getConnection()->executeStatement(
             'UPDATE user_stocks SET quantity = quantity * :factor, version = version + 1 WHERE stock_id = :stock_id',
@@ -126,11 +127,19 @@ class CorporateActionEngine
         $preSplitPrice = $newPrice;
 
         while ($newPrice < 2.0 && $reverseFactor <= 1000000 && $newPrice > 0.0) {
+            // Prevent reverse splitting if it drops shares below 1.0 (creates magical wealth and breaks per-share metrics)
+            if (($sharesOutstanding / ($reverseFactor * 10)) < 1.0) {
+                break;
+            }
             $newPrice = $newPrice * 10.0;
             $reverseFactor *= 10;
         }
 
-        $sharesOutstanding = max(1.0, $sharesOutstanding / $reverseFactor);
+        if ($reverseFactor === 1) {
+            return ['price' => $preSplitPrice, 'shares' => $sharesOutstanding, 'event' => null];
+        }
+
+        $sharesOutstanding = $sharesOutstanding / $reverseFactor;
 
         $stock->setSharesOutstanding((string) $sharesOutstanding);
         $stock->setPrice((string) $newPrice);
@@ -231,7 +240,7 @@ class CorporateActionEngine
         $quarterlyEps = $actualAnnualEps / 4.0;
         $quarterlyNetIncome = $actualTotalNetIncome != 0.0 ? ($actualTotalNetIncome / 4.0) : ($quarterlyEps * $oldShares);
         $currentTreasury = (float) $stock->getCorporateTreasury();
-        $operatingBase = max((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity(), 10_000_000.0);
+        $operatingBase = $this->mathUtility->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity());
         $investedCapital = $stock->getInvestedCapital();
 
         $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState);
@@ -400,7 +409,11 @@ class CorporateActionEngine
         $usableCash = max(0.0, $availableTreasury - $minOperatingCash);
         $maxDividendPerShare = $shares > 0 ? ($usableCash / $shares) : 0.0;
 
-        $newDividend = min($newDividend, $maxDividendPerShare);
+        // A company cannot authorize a regular dividend that obliterates its own market cap.
+        // Cap the quarterly dividend to 15% of the current stock price (A massive 60% annualized yield limit).
+        $maxMarketDividend = max(0.0, $currentPrice * 0.15);
+
+        $newDividend = min($newDividend, $maxDividendPerShare, $maxMarketDividend);
 
         $totalPaid = $newDividend * $shares;
         $event = null;
@@ -472,10 +485,7 @@ class CorporateActionEngine
 
         // Calculate intrinsic Fair Value P/E to benchmark buybacks
         $riskFreeRate = $macroState['policy_rate'] ?? 0.04;
-        $marketBasePE = max(8.0, min(30.0, 1.0 / max(0.01, $riskFreeRate)));
-        $qualityPremium = max(0.0, $economicSpread * 100) * 1.5;
-        $distressDiscount = min(0.0, $economicSpread * 100) * 2.0;
-        $fairValuePE = max(4.0, min(60.0, $marketBasePE + $qualityPremium + $distressDiscount));
+        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($riskFreeRate, $economicSpread);
 
         // Require positive EVA and fair valuation, OR force buybacks if sitting on a massive dead cash hoard.
         if (($economicSpread > 0.02 && $currentPE < ($fairValuePE + 3.0)) || $isMegaHoarder) {
@@ -566,7 +576,7 @@ class CorporateActionEngine
         $targetOperatingCash = $operatingBase * 0.05;
         $minOperatingCash = $operatingBase * 0.03;
 
-        $liveInvestedCapital = max($newEquity * 0.50, ($newEquity + $currentDebt - $newTreasury));
+        $liveInvestedCapital = $this->mathUtility->calculateLiveInvestedCapital($newEquity, $currentDebt, $newTreasury);
         $trueRoic = $liveInvestedCapital > 0 ? ($nopat / $liveInvestedCapital) : 0.0;
         $wacc = $health['wacc'];
 
@@ -576,7 +586,8 @@ class CorporateActionEngine
             $newBorrowingRate = $health['raw_metrics']['current_market_rate'] ?? 0.05;
 
             // Income Statement Constraint (ICR)
-            $minimumIcr = 3.0; // Minimum 3x interest coverage
+            // Financials operate on thin net interest margins, allowing them to safely run tighter ICRs
+            $minimumIcr = $stock->getSector() === 'Financials' ? 1.5 : 3.0; 
             $maxTolerableInterest = max(0.0, $ebit / $minimumIcr);
 
             // Approximate future interest run-rate
@@ -592,7 +603,7 @@ class CorporateActionEngine
             $trueExpansionCapacity = min($incomeStatementCapacity, $balanceSheetCapacity);
 
             // The Bond Market Limit: Allow up to 25% of current physical size to facilitate aggressive leveraged recaps.
-            $liveInvestedCapital = max($newEquity * 0.50, ($newEquity + $currentDebt - $newTreasury));
+            $liveInvestedCapital = $this->mathUtility->calculateLiveInvestedCapital($newEquity, $currentDebt, $newTreasury);
             $trueExpansionCapacity = min($trueExpansionCapacity, $liveInvestedCapital * 0.25);
 
             // Only borrow if there is a safe, justifiable reason to do so
@@ -635,7 +646,7 @@ class CorporateActionEngine
         // (Cash decreases, Physical Assets/IP increase). Total Equity is unchanged, but Invested Capital grows!
 
         $targetCashReservs = $operatingBase * 0.06;
-        $liveInvestedCapital = max($newEquity * 0.50, ($newEquity + $currentDebt - $newTreasury));
+        $liveInvestedCapital = $this->mathUtility->calculateLiveInvestedCapital($newEquity, $currentDebt, $newTreasury);
 
         // Scale investment opportunity probability with True ROIC
         $investmentProbability = min(0.95, max(0.10, 0.20 + ($trueRoic * 2.0)));
@@ -643,10 +654,8 @@ class CorporateActionEngine
         // Anti-Trust & Saturation Limits:
         // A company cannot infinitely expand if they already own the majority of their Total Addressable Market.
         $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
-        $baselineSectorTam = 1_000_000_000_000;
         $samRatio = (float) $stock->getSamRatio();
-        $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
-        $marketShare = $liveInvestedCapital / max(1.0, $dynamicSam);
+        $marketShare = $this->mathUtility->calculateMarketShare($liveInvestedCapital, $nominalGdpIndex, $samRatio);
 
         if ($marketShare > 0.80) {
             $investmentProbability *= 0.2; // soft cap on organic physical expansion
@@ -678,7 +687,7 @@ class CorporateActionEngine
 
                 // Expanding the physical asset base mathematically dilutes immediate ROIC 
                 // (Invested Capital goes up, but new Earnings have not been realized yet).
-                $liveInvestedCapital = max($newEquity * 0.50, ($newEquity + $currentDebt - $newTreasury));
+                $liveInvestedCapital = $this->mathUtility->calculateLiveInvestedCapital($newEquity, $currentDebt, $newTreasury);
                 $expansionRatio = $expansionSpend / max(1.0, $liveInvestedCapital);
                 
                 $roic = (float) $stock->getCurrentRoic();
@@ -766,7 +775,7 @@ class CorporateActionEngine
             $excessCash = $newTreasury - $targetOperatingCash;
             
             // Calculate true leverage using Invested Capital instead of pure Equity
-            $liveInvestedCapital = max($newEquity * 0.50, ($newEquity + $currentDebt - $newTreasury));
+            $liveInvestedCapital = $this->mathUtility->calculateLiveInvestedCapital($newEquity, $currentDebt, $newTreasury);
             $currentDebtRatio = $currentDebt / max(1.0, $liveInvestedCapital);
 
             // TOLERANCE FROM THE CENTRALIZED BRAIN (Provided as a D/E ratio, e.g., 0.50 to 4.0)

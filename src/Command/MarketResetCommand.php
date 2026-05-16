@@ -111,7 +111,8 @@ class MarketResetCommand extends Command
                     buyback_authorization = 0.00,
                     last_dividend = :last_dividend,
                     description = :description,
-                    sam_ratio = :sam_ratio
+                    sam_ratio = :sam_ratio,
+                    industry = :industry
                 WHERE ticker = :ticker',
                 [
                     'price' => $stockData['price'],
@@ -141,6 +142,7 @@ class MarketResetCommand extends Command
                     'last_dividend' => $startingDividend,
                     'description' => \App\Data\StockInfo::DESCRIPTIONS[$stockData['ticker']] ?? null,
                     'sam_ratio' => $stockData['sam_ratio'] ?? 1.00,
+                    'industry' => $stockData['industry'] ?? null,
                     'ticker' => $stockData['ticker']
                 ]
             );

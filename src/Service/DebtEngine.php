@@ -14,20 +14,22 @@ class DebtEngine
     private const ARBITRAGE_HURDLE = 0.030; // 300 bps spread is severe
     private const MIN_INTEREST_COVERAGE_RATIO = 2.0;
 
+    public function __construct(
+        private MathUtility $mathUtility
+    ) {}
+
     public function calculateInterestExpense(Stock $stock, array $macroState, bool $advanceMaturity = false): array
     {
         $debt = (float) $stock->getTotalDebt();
         $treasury = (float) $stock->getCorporateTreasury();
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
-        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
-
+        
         $baselineCreditSpread = (float) $stock->getCreditSpread();
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
+        $industry = $stock->getIndustry() ?: 'General';
 
-        // FUNDAMENTAL UNDERWRITING (Net Debt to EBIT)
         $revenue = (float) $stock->getTotalRevenue();
 
-        // Failsafe: If the database is unseeded or hasn't caught up, fundamentally estimate revenue
         if ($revenue <= 0.0) {
             $investedCapital = $stock->getInvestedCapital();
             $baselineRoic = max(0.01, (float) $stock->getBaselineRoic());
@@ -36,11 +38,14 @@ class DebtEngine
             $revenue = $investedCapital * $assetTurnover;
         }
 
-        // Do not clamp margin here! We need TRUE EBIT to accurately calculate Interest Coverage Ratio later.
         $margin = (float) $stock->getOperatingMargin();
         $ebit = $revenue * $margin;
 
-        // Failsafe for zero debt companies
+        // Calculate Depreciation to find true Cash Flow (EBITDA)
+        $depreciationRate = $this->mathUtility->getIndustryDepreciationRate($industry, (float) $stock->getDepreciationRate() ?: 0.05);
+        $depreciation = $stock->getInvestedCapital() * $depreciationRate;
+        $ebitda = $ebit + $depreciation;
+
         if ($debt <= 0.0) {
             return [
                 'interest_expense' => 0.0,
@@ -53,63 +58,54 @@ class DebtEngine
             ];
         }
 
-        // Markets care about NET debt (Debt minus cash on hand)
         $netDebt = max(0.0, $debt - $treasury);
+        $totalEquity = (float) $stock->getTotalEquity();
 
-        if ($netDebt <= 0.0) {
-            $leverageRatio = 0.0;
-        } else {
-            // Failsafe: Prevent the Junk Bond Death Spiral during a cyclical earnings miss.
-            // Bond markets will underwrite leverage based on a normalized worst-case margin (8% of revenue) rather than instantaneous negative EBIT.
-            $normalizedEbit = max($ebit, $revenue * 0.08);
-            // Cap the mathematically evaluated leverage ratio at 15.0 to prevent exp() blowouts.
-            $leverageRatio = $normalizedEbit > 0 ? min(15.0, $netDebt / $normalizedEbit) : 15.0;
-        }
+        // Normalize EBITDA to prevent mathematical blowouts during temporary losses
+        $normalizedEbitda = max($ebitda, $revenue * 0.08);
+        $debtToEbitda = $normalizedEbitda > 0 ? min(15.0, $netDebt / $normalizedEbitda) : 15.0;
+        $debtToEquity = $totalEquity > 0 ? min(15.0, $debt / $totalEquity) : 15.0;
 
-        // SECTOR-SPECIFIC LEVERAGE TOLERANCE
-        $leverageThreshold = $this->getSectorLeverageThreshold($stock->getSector());
+        // Fetch our Dual Constraints
+        $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industry] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
+        $ebitdaLimit = $metrics['ebitda_limit'];
+        $equityLimit = $metrics['equity_limit'];
 
         // THE JUNK BOND BLOWOUT (Convex Penalty)
         $leveragePenalty = 0.0;
-        if ($leverageRatio > $leverageThreshold) {
-            $excessLeverage = $leverageRatio - $leverageThreshold;
-
-            // Real-world credit risk is exponential. As you pass the threshold, 
-            $leveragePenalty = (exp($excessLeverage * 0.20) - 1.0) * 0.010;
-
-            // Cap the penalty so the math doesn't break the game engine during absolute collapse
-            $leveragePenalty = min(0.25, $leveragePenalty);
+        
+        if ($metrics['leveraged_industry']) {
+            // Leveraged industries (Banks, Insurance) evaluated solely on Debt/Equity
+            if ($debtToEquity > $equityLimit) {
+                $excessLeverage = $debtToEquity - $equityLimit;
+                $leveragePenalty = (exp($excessLeverage * 0.20) - 1.0) * 0.010;
+            }
+        } else {
+            // Everyone else evaluated on Debt/EBITDA
+            if ($debtToEbitda > $ebitdaLimit) {
+                $excessLeverage = $debtToEbitda - $ebitdaLimit;
+                $leveragePenalty = (exp($excessLeverage * 0.20) - 1.0) * 0.010;
+            }
         }
 
+        $leveragePenalty = min(0.25, $leveragePenalty);
         $dynamicSpread = $baselineCreditSpread + $leveragePenalty;
         $currentMarketFixedRate = $policyRate + $dynamicSpread;
 
-        // THE MATURITY WALL (Refinancing Old Debt)
         $historicalRate = (float) $stock->getHistoricalFixedRate();
 
         if ($advanceMaturity) {
             $turnover = self::QUARTERLY_DEBT_TURNOVER;
-
-            // OPPORTUNISTIC REFINANCING
-            // If market rates are significantly cheaper (e.g., > 1.5% lower), CFOs aggressively call and refinance old debt
             if ($currentMarketFixedRate < ($historicalRate - 0.015)) {
-                $turnover = 0.30; // Refinance 30% of the debt book this quarter instead of the passive 5%
+                $turnover = 0.30; 
             }
-
-            // Companies refinance expiring or called debt at current market rates
-            $blendedFixedRate = ($historicalRate * (1.0 - $turnover)) +
-                ($currentMarketFixedRate * $turnover);
+            $blendedFixedRate = ($historicalRate * (1.0 - $turnover)) + ($currentMarketFixedRate * $turnover);
         } else {
             $blendedFixedRate = $historicalRate;
         }
 
-        // FINAL INTEREST EXPENSE
-        // Floating rate debt resets immediately. Fixed rate debt is insulated.
         $floatingInterestRate = $policyRate + $dynamicSpread;
-
-        $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) +
-            ($debt * $floatingRatio * $floatingInterestRate);
-
+        $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingInterestRate);
         $trueBlendedRate = $debt > 0 ? ($interestExpense / $debt) : 0.0;
 
         return [
@@ -155,50 +151,47 @@ class DebtEngine
 
         // The $baseBeta from the DB already partially accounts for historical leverage. 
         // Dampen the Hamada equation multiplier (* 0.25) so we don't double-count the debt risk!
-        $leveredBeta = $baseBeta * (1.0 + ((1.0 - $corporateTaxRate) * ($effectiveDebtToEquity * 0.25)));
+        $leveredBeta = $this->mathUtility->calculateLeveredBeta($baseBeta, $corporateTaxRate, $effectiveDebtToEquity, 0.25);
 
-        // Cost of Equity (CAPM) - Must use the 10-Year Yield as the Risk-Free Rate!
+        // Cost of Equity (CAPM) - use the 10-Year Yield as the Risk-Free Rate!
         $equityRiskPremium = $macroState['equity_risk_premium'] ?? 0.045;
-        $costOfEquity = $yield10y + ($leveredBeta * $equityRiskPremium);
+        $costOfEquity = $this->mathUtility->calculateCAPM($yield10y, $leveredBeta, $equityRiskPremium);
 
         // Weighted Average Cost of Capital (WACC)
         $totalCapital = $currentDebt + $marketCap;
         $weightEquity = $totalCapital > 0 ? ($marketCap / $totalCapital) : 1.0;
         $weightDebt = $totalCapital > 0 ? ($currentDebt / $totalCapital) : 0.0;
-        $wacc = ($weightEquity * $costOfEquity) + ($weightDebt * $effectiveCostOfDebt);
+        $wacc = $this->mathUtility->calculateWACC($weightEquity, $costOfEquity, $weightDebt, $effectiveCostOfDebt);
 
         // Cash Yield & Arbitrage Hurdle (Money Market Funds)
         $yieldOnCash = max(0.0, $policyRate - self::CASH_YIELD_SPREAD);
 
-        // "Negative Carry" means it costs more to hold the debt than the cash is earning in the bank
-        // Scale the negative carry panic threshold by the sector's structural leverage tolerance.
-        // A base 3.0 threshold = 1.0x multiplier (300 bps). Financials (6.0) = 2.0x multiplier (600 bps). Tech (2.0) = 0.66x (200 bps).
-        $leverageThreshold = $this->getSectorLeverageThreshold($stock->getSector());
-        $hurdleMultiplier = $leverageThreshold / 3.0;
+        $industry = $stock->getIndustry() ?: 'General';
+        $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industry] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
+        // Fetch the CFO's target Debt-to-Equity limit
+        $equityLimit = $metrics['equity_limit'];
+
+        // Scale the negative carry panic threshold by the sector's structural equity leverage tolerance.
+        // A normal company (1.0) = 1.0x multiplier. Financials (9.0) = 9.0x multiplier (Banks do not care about negative carry!)
+        $hurdleMultiplier = max(1.0, $equityLimit / 1.0);
         $hurdle = self::ARBITRAGE_HURDLE * $hurdleMultiplier;
 
-        // Compare Gross to Gross to avoid tax illusions (interest income on cash is also taxable)
         $isSevereNegativeCarry = $grossCostOfDebt > ($yieldOnCash + $hurdle);
 
-        // Interest Coverage Ratio (ICR)
         $ebit = $debtMetrics['ebit'];
         $interestExpense = $debtMetrics['interest_expense'];
 
-        // If a company has zero debt, their ICR is excellent (999.0), UNLESS they are bleeding cash (EBIT < 0).
         $interestCoverage = $interestExpense > 0 ? ($ebit / $interestExpense) : ($ebit > 0 ? 999.0 : -999.0);
 
-        // Strategic Debt Flags for the CFO AI
-        $wantsToPaydownDebt = ($currentDebt > 0) && ($isSevereNegativeCarry || $interestCoverage < self::MIN_INTEREST_COVERAGE_RATIO);
+        // Leveraged industries inherently run lower interest coverage ratios as their core business is leverage
+        $minIcr = $metrics['leveraged_industry'] ? 1.25 : self::MIN_INTEREST_COVERAGE_RATIO;
 
-        // M&A / CapEx Borrowing Capacity should purely be based on income statement health (ICR), not negative carry!
-        // A CFO will gladly accept negative carry on idle cash if they are borrowing to immediately fund a 20% ROIC expansion.
-        $canIssueDebt = $interestCoverage >= (self::MIN_INTEREST_COVERAGE_RATIO + 1.5);
+        $wantsToPaydownDebt = ($currentDebt > 0) && ($isSevereNegativeCarry || $interestCoverage < $minIcr);
+        $canIssueDebt = $interestCoverage >= ($minIcr + 1.5);
 
-        // Macro-Economic CFO Tolerance (How much debt are they comfortable holding?)
-        // Base tolerance is dictated by the sector's structural leverage capacity (e.g., Utilities ~3.25 D/E, Tech ~1.0 D/E)
-        $baseSectorToleranceDE = $leverageThreshold / 2.0;
-        // Tolerance drops if interest rates are punishingly high (Multiplier softened to 7.5 to prevent extreme deleveraging in normal rate environments)
-        $macroDebtTolerance = min($baseSectorToleranceDE, max(0.10, $baseSectorToleranceDE - ($effectiveCostOfDebt * 7.5)));
+        // Macro-Economic CFO Tolerance
+        // Pass the pure D/E target limit to the CFO, shrinking it slightly if rates are painfully high
+        $macroDebtTolerance = min($equityLimit, max(0.10, $equityLimit - ($effectiveCostOfDebt * 7.5)));
 
         return [
             'gross_cost' => $grossCostOfDebt,
@@ -217,35 +210,46 @@ class DebtEngine
     }
 
     /**
-     * Determines how much leverage (Net Debt / EBIT) a company can safely hold 
-     * before bond markets panic, based on the stability of their sector.
+     * The Bond Market Constraint.
+     * Determines how much operating leverage (Net Debt / EBITDA) a non-financial company 
+     * can safely hold before credit rating agencies downgrade them and interest rates spike.
      */
-    private function getSectorLeverageThreshold(string $sector): float
+    private function getSectorEbitdaLimit(string $sector): float
     {
         return match ($sector) {
-            // Highly stable, regulated cash flows. Can easily carry massive debt.
             'Utilities', 'Real Estate' => 6.5,
-
-            // Asset heavy, relatively stable cash flows
-            'Industrials', 'Materials', 'Energy', 'Consumer Staples' => 3.5,
-
-            // Moderate cycle sensitivity
-            'Health Care', 'Communication Services' => 3.0,
-
-            // Highly volatile, cyclical, or asset-light. Debt is dangerous here.
+            'Consumer Staples' => 4.0,
+            'Industrials', 'Materials', 'Energy', 'Communication Services' => 3.5,
+            'Health Care' => 3.0,
             'Consumer Discretionary', 'Information Technology' => 2.0,
-
-            // Financials are a special case (they are naturally highly levered)
-            'Financials' => 6.0,
-
+            'Financials' => 999.0, // IGNORED. Bond markets do not evaluate banks on EBITDA.
             default => 3.0,
         };
     }
 
     /**
-     * Calculates the Altman Z-Score for corporate bankruptcy prediction.
-     * 
-     * @return array{z_score: float, zone: string, is_bankrupt: bool}
+     * The Balance Sheet Constraint.
+     * Determines the maximum safe Total Debt / Total Equity (D/E) ratio.
+     * This is the primary metric for Financials, and a secondary safety check for normal companies.
+     */
+    private function getSectorEquityLimit(string $sector): float
+    {
+        return match ($sector) {
+            // Banks literally use debt (deposits) as their inventory to create loans.
+            // A 9.0 D/E ratio implies ~10% Tier 1 Capital, perfectly aligning with Basel III regulations.
+            'Financials' => 9.0,
+
+            'Utilities', 'Real Estate' => 2.5,
+            'Industrials', 'Energy', 'Materials' => 1.5,
+            'Consumer Staples', 'Health Care', 'Communication Services' => 1.0,
+            'Consumer Discretionary', 'Information Technology' => 0.5, // Asset-light, should rely mostly on equity
+            default => 1.0,
+        };
+    }
+
+    /**
+     * Calculates the Altman Z''-Score (Double Prime) for modern, non-manufacturing corporate bankruptcy prediction.
+     * * @return array{z_score: float, zone: string, is_bankrupt: bool}
      */
     public function calculateAltmanZScore(Stock $stock, float $ebit, float $revenue, float $currentPrice): array
     {
@@ -255,36 +259,59 @@ class DebtEngine
         $retainedEarnings = (float) $stock->getRetainedEarnings();
         $shares = max(1.0, (float) $stock->getSharesOutstanding());
 
-        // Accounting Equation: Assets = Liabilities + Equity
+        // Accounting Proxy: Assets = Liabilities + Equity
         $totalAssets = max(1.0, $equity + $debt);
         $marketCap = $currentPrice * $shares;
 
-        // Estimate Working Capital (Treasury Cash minus an assumed 20% short-term current portion of debt)
+        // The Altman Z-Score explicitly excludes Financials because customer deposits (debt) skew their working capital.
+        // Instead, evaluate Financials using a simplified Tier 1 Capital Ratio proxy (Equity / Total Assets).
+        $industry = $stock->getIndustry() ?: 'General';
+        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leveraged_industry'] ?? false;
+
+        if ($isLeveraged) {
+            $capitalRatio = $equity / $totalAssets;
+            $zScore = $capitalRatio * 100.0; // Convert to percentage points (e.g., 8% capital = 8.0 score)
+
+            $zone = 'Safe';
+            if ($zScore < 4.0) {
+                $zone = 'Distress'; // Below 4% equity buffer triggers distress
+            } elseif ($zScore < 6.0) {
+                $zone = 'Grey'; // Between 4% and 6% is a warning zone
+            }
+
+            return [
+                'z_score' => $zScore,
+                'zone' => $zone,
+                'is_bankrupt' => $zScore < 2.0 // Below 2% triggers regulatory seizure / bankruptcy
+            ];
+        }
+
+        // Estimate Working Capital
         $currentLiabilities = $debt * 0.20;
         $workingCapital = $treasury - $currentLiabilities;
 
-        // The 5 Z-Score Ratios
+        // The 4 Z''-Score Ratios (X5 Revenue/Assets is removed for non-manufacturing)
         $x1 = $workingCapital / $totalAssets;
         $x2 = $retainedEarnings / $totalAssets;
         $x3 = $ebit / $totalAssets;
-        $x4 = $debt > 0 ? ($marketCap / $debt) : 10.0; // Cap at 10 to prevent infinity for zero-debt companies
-        $x5 = $revenue / $totalAssets;
+        $x4 = $debt > 0 ? ($marketCap / $debt) : 10.0; // Cap at 10
 
-        // The Z-Score Formula
-        $zScore = (1.2 * $x1) + (1.4 * $x2) + (3.3 * $x3) + (0.6 * $x4) + (1.0 * $x5);
+        // The Z''-Score Formula (Modern Service/Tech/Financial Weights)
+        $zScore = (6.56 * $x1) + (3.26 * $x2) + (6.72 * $x3) + (1.05 * $x4);
 
+        // Z'' has different threshold thresholds than the 1968 model
         $zone = 'Safe';
-        if ($zScore < 1.81) {
+        if ($zScore < 1.10) {
             $zone = 'Distress';
-        } elseif ($zScore < 2.99) {
+        } elseif ($zScore < 2.60) {
             $zone = 'Grey';
         }
 
         return [
             'z_score' => $zScore,
             'zone' => $zone,
-            // Trigger actual bankruptcy if it falls deep into the abyss (e.g., < 0.50)
-            'is_bankrupt' => $zScore < 0.50
+            // A negative Z'' score is a near-mathematical certainty of insolvency
+            'is_bankrupt' => $zScore < 0.00
         ];
     }
 }

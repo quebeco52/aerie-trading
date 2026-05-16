@@ -2,14 +2,11 @@
 
 namespace App\Controller;
 
-use App\Service\MacroEngine;
 use App\Entity\Stock;
 use App\Entity\Etf;
 use App\Entity\User;
 use App\Entity\UserStock;
 use App\Entity\StockEvent;
-use App\Data\SectorPE;
-use App\Data\StockInfo;
 use Doctrine\ORM\EntityManagerInterface;
 use Redis;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -28,12 +25,11 @@ class StockController extends AbstractController
      *
      * @param string                 $ticker      The ticker symbol of the asset.
      * @param EntityManagerInterface $entityManager The entity manager for database operations.
-     * @param MacroEngine            $macroEngine   The service for macro-economic data.
      *
      * @return Response Returns the rendered view with asset details.
      */
     #[Route('/stock/{ticker}', name: 'app_stock_view')]
-    public function view(string $ticker, EntityManagerInterface $entityManager, MacroEngine $macroEngine, \Redis $redis): Response
+    public function view(string $ticker, EntityManagerInterface $entityManager, \Redis $redis): Response
     {
         $isEtf = false;
         $asset = $entityManager->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);

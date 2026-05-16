@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadHistory('1y');
     setupEventListeners();
 
-    // Fetch Fundamental Data (Skip if it's an ETF)
+    // Fetch Fundamental Data Skip if ETF
     if (!IS_ETF) {
         fetch(`/api/fundamentals?ticker=${CURRENT_TICKER}`)
             .then(res => res.json())

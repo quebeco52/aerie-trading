@@ -150,7 +150,7 @@ class EarningsEngine
 
         // Interest Income. 
         // Mega-hoarders generate massive risk-free yield on their cash piles!
-        $operatingBase = max((float) $stock->getTotalRevenue(), $equity, 10_000_000.0);
+        $operatingBase = $this->mathUtility->calculateOperatingBase((float) $stock->getTotalRevenue(), $equity);
         $workingCapital = $operatingBase * 0.05;
         $excessCash = max(0.0, $cash - $workingCapital);
 
@@ -159,17 +159,8 @@ class EarningsEngine
         $interestIncome = $excessCash * $cashYield;
 
         // CALCULATE PHYSICAL DEPRECIATION (The Rusting of Assets)
-        $sector = $stock->getSector();
-        $depreciationRate = match ($sector) {
-            'Information Technology' => 0.15,
-            'Communication Services' => 0.12,
-            'Health Care' => 0.08,
-            'Consumer Discretionary', 'Consumer Staples' => 0.06,
-            'Industrials', 'Materials', 'Energy' => 0.04,
-            'Utilities', 'Real Estate' => 0.03,
-            'Financials' => 0.02,
-            default => (float) $stock->getDepreciationRate() ?: 0.05,
-        };
+        $industry = $stock->getIndustry() ?: 'General';
+        $depreciationRate = $this->mathUtility->getIndustryDepreciationRate($industry, (float) $stock->getDepreciationRate() ?: 0.05);
 
         // Physical assets rust, not equity. Invested Capital perfectly isolates the physical operating base.
         $absoluteDepreciation = $investedCapital * $depreciationRate;
@@ -209,8 +200,8 @@ class EarningsEngine
         // VOLATILITY SHOCK
         $this->applyVolatilityShock($stock, $revenueZ, $baselineVol);
 
-        // Update the Stock Entity with the raw, unrounded ANNUAL figure to maintain perfect Clean Surplus Accounting.
-        // The Entity's setter will automatically update the Total Net Income mathematically.
+        // Update the Stock Entity with the smoothed ANNUAL figure to prevent violent P/E multiple gaps.
+        // Clean Surplus Accounting is safely maintained because CorporateActionEngine receives the raw Physical Net Income.
         $stock->setEarningsPerShare((string) $actualAnnualEps);
 
         $fcfData = $this->calculateFreeCashFlowPerShare($actualAnnualEpsRaw, $sharesOutstanding, $stock, $macroState, $absoluteDepreciation);
@@ -253,7 +244,10 @@ class EarningsEngine
         $totalShockPct = max(-0.40, min(0.40, $totalShockPct));
 
         // The Dividend Ex-Date Adjustment
-        $newPrice = max(0.00000001, ($currentPrice * (1.0 + $totalShockPct)) - $allocation['dividend_paid']);
+        // A stock's price drops by the exact dividend amount, but market physics prevent it from going to absolute zero.
+        // We floor it at $0.01 to prevent fractional penny infinite reverse-split loops.
+        $exDivPrice = ($currentPrice * (1.0 + $totalShockPct)) - $allocation['dividend_paid'];
+        $newPrice = max(0.01, $exDivPrice);
 
         // Precision Assignment
         $stock->setPrice(number_format($newPrice, 8, '.', ''));
@@ -269,7 +263,12 @@ class EarningsEngine
         $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState);
         $wacc = $health['wacc'];
         $annualEconomicProfit = $investedCapital * ($truePostTaxRoic - $wacc);
-        $formattedEva = '$' . number_format(abs($annualEconomicProfit / 1_000_000_000), 2) . 'B';
+        
+        $evaAbs = abs($annualEconomicProfit);
+        $formattedEva = $evaAbs >= 1_000_000_000 
+            ? '$' . number_format($evaAbs / 1_000_000_000, 2) . 'B' 
+            : '$' . number_format($evaAbs / 1_000_000, 2) . 'M';
+            
         $evaString = $annualEconomicProfit >= 0 ? "+{$formattedEva} EVA" : "-{$formattedEva} EVA";
 
         if ($surpriseAmountQuarterly > 0.0) {
@@ -313,8 +312,8 @@ class EarningsEngine
         $report->setShares((string) $stock->getSharesOutstanding());
         $report->setWacc((string) $wacc);
         $report->setEva((string) $annualEconomicProfit);
-        $report->setDividendPaid(sprintf('%.4F', $allocation['total_paid']));
-        $report->setStockBuybacks(sprintf('%.4F', $allocation['total_cash_spent']));
+        $report->setDividendPaid((string) $allocation['total_paid']);
+        $report->setStockBuybacks((string) $allocation['total_cash_spent']);
 
         $this->entityManager->persist($report);
 
@@ -413,10 +412,8 @@ class EarningsEngine
         // DYNAMIC TAM LOGIC
         $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
 
-        $baselineSectorTam = 1_000_000_000_000;
         $samRatio = (float) $stock->getSamRatio();
-        $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
-        $marketShare = $investedCapital / max(1.0, $dynamicSam);
+        $marketShare = $this->mathUtility->calculateMarketShare($investedCapital, $nominalGdpIndex, $samRatio);
 
         $saturationPenalty = 0.0;
 
@@ -424,7 +421,7 @@ class EarningsEngine
 
         // The larger the systemic importance, the stronger the "moat" protecting their ROIC
         $moat = match ($systemic_importance) {
-            'titan'    => 0.5, // Only takes 50% of the saturation penalty
+            'titan'    => 0.3, // Only takes 30% of the saturation penalty
             'systemic' => 0.75, // Takes 75% of the penalty
             'base'     => 0.9, // Takes 90% of the penalty
             default    => 1.0, // Takes the full 100% saturation penalty
@@ -444,8 +441,11 @@ class EarningsEngine
         $pull = ($targetRoic - $currentRoic) * 0.25;
 
 
+        $baselineVol = (float) $stock->getVolatility();
+
+
         // Add standard deviation noise
-        $fundamentalNoise = $this->mathUtility->generateStandardNormal() * 0.015;
+        $fundamentalNoise = $this->mathUtility->generateStandardNormal() * ($baselineVol * 0.10);
 
         // The core ROIC (saved to DB so it doesn't infinitely compound macro shocks)
         $newCoreRoic = $currentRoic + $pull + $fundamentalNoise;

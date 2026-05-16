@@ -29,7 +29,7 @@ class MergerAndAcquisitionEngine
         $shares = (float) $acquirer->getSharesOutstanding();
         $debtRatio = (float) $acquirer->getDebtToEquityRatio();
         
-        $operatingBase = max((float) $acquirer->getTotalRevenue(), (float) $acquirer->getTotalEquity(), 10_000_000.0);
+        $operatingBase = $this->mathUtility->calculateOperatingBase((float) $acquirer->getTotalRevenue(), (float) $acquirer->getTotalEquity());
         $equity = (float) $acquirer->getTotalEquity();
         $currentDebt = (float) $acquirer->getTotalDebt();
         $policyRate = $macroState['policy_rate'] ?? 0.04;
@@ -222,15 +222,23 @@ class MergerAndAcquisitionEngine
 
         $evaSpread = $currentRoic - $wacc;
 
-        $isDistressed = $evaSpread < -0.02;
+        $isDistressed = $evaSpread < -0.02 || $currentRoic < 0.03;
         $isDying = $currentRoic < 0.00 || $evaSpread < -0.05;
 
         $treasury = (float) $seller->getCorporateTreasury();
-        $operatingBase = max((float) $seller->getTotalRevenue(), (float) $seller->getTotalEquity(), 10_000_000.0);
+        $operatingBase = $this->mathUtility->calculateOperatingBase((float) $seller->getTotalRevenue(), (float) $seller->getTotalEquity());
         $hasCashBuffer = $treasury > ($operatingBase * 0.10); // 10% buffer is a massive fortress
 
+        $investedCapital = $seller->getInvestedCapital();
+        
+        
+        $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
+        $samRatio = (float) $seller->getSamRatio();
+        $marketShare = $this->mathUtility->calculateMarketShare($investedCapital, $nominalGdpIndex, $samRatio);
+
+
         // If they have a massive cash fortress, they can easily weather the storm without a fire sale!
-        if ($hasCashBuffer) {
+        if ($hasCashBuffer && !($marketShare > 1.00)) {
             $isDistressed = false;
             $isDying = false;
         }
@@ -255,7 +263,7 @@ class MergerAndAcquisitionEngine
             // High P/E trimming (Taking advantage of an overvalued stock)
             $divestedFraction = mt_rand(5, 15) / 100.0;
             // Blend the company's inflated P/E with the sector average, and cap it at a realistic 25x.
-            $sectorPE = \App\Data\SectorPE::MACRO_SECTORS[$seller->getSector()] ?? 20.0;
+            $sectorPE = \App\Data\Sectors::MACRO_SECTORS[$seller->getSector()] ?? 20.0;
             $blendedMultiple = ($currentPE + $sectorPE) / 2.0;
             $saleMultiple = min(25.0, $blendedMultiple);
             $annualProbability = 0.20;

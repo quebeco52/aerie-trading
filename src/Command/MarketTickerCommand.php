@@ -2,12 +2,10 @@
 
 namespace App\Command;
 
-use App\Data\EconomicCycle;
 use App\Entity\Stock;
 use App\Service\StockTracker;
 use App\Service\EtfTracker;
 use App\Service\MacroEngine;
-use App\Service\MathUtility;
 use App\Service\MarketOperator;
 use App\Service\Portfolio;
 use Doctrine\ORM\EntityManagerInterface;
@@ -16,8 +14,6 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Command\SignalableCommandInterface;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
-use Symfony\Component\Messenger\MessageBusInterface;
 
 #[AsCommand(
     name: 'app:market-ticker',
@@ -99,7 +95,6 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         $historyInterval = (int) max(1, $this->ticksPerYear / 2400); // 2400 points per year
         $operatorInterval = (int) max(1, $this->ticksPerYear / 24);  // Operator audits once a game "month"
         $snapshotInterval = (int) max(1, $this->ticksPerYear / 52);  // Snapshots once a game "week"
-        $historyPointsPerYear = (int) ($this->ticksPerYear / $historyInterval);
 
         $conn = $this->entityManager->getConnection();
 
@@ -188,10 +183,10 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     $pipeline->lTrim($cacheKey, 0,  $redisBufferSize - 1);
                 }
 
-                // Execute all queued commands in one massive, instantaneous burst
+                // Execute all queued commands in one burst
                 $pipeline->exec();
 
-                // Publish your standard pub/sub updates
+                // Publish pub/sub updates
                 $this->redis->publish('market_updates', json_encode([
                     'timestamp' => time(),
                     'stocks' => $allUpdates,

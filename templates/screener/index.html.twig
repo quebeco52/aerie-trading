@@ -1,0 +1,130 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Stock Screener - Aerie Trading{% endblock %}
+
+{% block body %}
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold mb-6 text-gray-800 dark:text-gray-100">Stock Screener</h1>
+
+    <div class="overflow-x-auto bg-white dark:bg-gray-800 shadow-md rounded-lg border border-gray-200 dark:border-gray-700">
+        <table class="min-w-full text-sm text-left text-gray-500 dark:text-gray-400">
+            <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-900 dark:text-gray-300">
+                <tr>
+                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider">Ticker</th>
+                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider">Company Name</th>
+                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider">Sector</th>
+                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider text-right">Price</th>
+                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider text-right">Market Cap</th>
+                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider text-right">P/E Ratio</th>
+                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider text-right">EPS</th>
+                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider text-right">Div Yield</th>
+                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider text-right">ROIC</th>
+                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider text-right">Equity</th>
+                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider text-right">Debt</th>
+                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider text-right">D/E Ratio</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                {% for stock in stocks %}
+                    <tr class="bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
+                        <td class="px-4 py-4 font-bold text-gray-900 whitespace-nowrap dark:text-white" data-value="{{ stock.ticker }}">
+                            <a href="{{ path('app_stock_view', {ticker: stock.ticker}) }}" class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline">
+                                {{ stock.ticker }}
+                            </a>
+                        </td>
+                        <td class="px-4 py-4 max-w-[200px] truncate font-medium text-gray-800 dark:text-gray-200" data-value="{{ stock.name }}" title="{{ stock.name }}">{{ stock.name }}</td>
+                        <td class="px-4 py-4 whitespace-nowrap" data-value="{{ stock.sector }}"><span class="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs">{{ stock.sector }}</span></td>
+                        <td class="px-4 py-4 whitespace-nowrap text-right font-medium text-gray-900 dark:text-gray-100" data-value="{{ stock.price }}">${{ stock.price|number_format(2) }}</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-right" data-value="{{ stock.marketCap }}">
+                            {% if stock.marketCap >= 1000000000000 %}
+                                ${{ (stock.marketCap / 1000000000000)|number_format(2) }}T
+                            {% elseif stock.marketCap >= 1000000000 %}
+                                ${{ (stock.marketCap / 1000000000)|number_format(2) }}B
+                            {% else %}
+                                ${{ (stock.marketCap / 1000000)|number_format(2) }}M
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-4 whitespace-nowrap text-right" data-value="{{ stock.peRatio|default(0) }}">
+                            {{ stock.peRatio is not null ? stock.peRatio|number_format(2) ~ 'x' : '<span class="text-gray-400">-</span>'|raw }}
+                        </td>
+                        <td class="px-4 py-4 whitespace-nowrap text-right" data-value="{{ stock.eps }}">${{ stock.eps|number_format(2) }}</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-right" data-value="{{ stock.dividendYield }}">{{ stock.dividendYield|number_format(2) }}%</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-right {{ stock.currentRoic > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400' }}" data-value="{{ stock.currentRoic }}">
+                            {{ (stock.currentRoic * 100)|number_format(2) }}%
+                        </td>
+                        <td class="px-4 py-4 whitespace-nowrap text-right" data-value="{{ stock.equity }}">
+                            {% if stock.equity >= 1000000000000 %}
+                                ${{ (stock.equity / 1000000000000)|number_format(2) }}T
+                            {% elseif stock.equity >= 1000000000 %}
+                                ${{ (stock.equity / 1000000000)|number_format(2) }}B
+                            {% else %}
+                                ${{ (stock.equity / 1000000)|number_format(2) }}M
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-4 whitespace-nowrap text-right" data-value="{{ stock.debt }}">
+                            {% if stock.debt >= 1000000000000 %}
+                                ${{ (stock.debt / 1000000000000)|number_format(2) }}T
+                            {% elseif stock.debt >= 1000000000 %}
+                                ${{ (stock.debt / 1000000000)|number_format(2) }}B
+                            {% else %}
+                                ${{ (stock.debt / 1000000)|number_format(2) }}M
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-4 whitespace-nowrap text-right" data-value="{{ stock.debtToEquity|default(0) }}">
+                            {{ stock.debtToEquity is not null ? stock.debtToEquity|number_format(2) ~ 'x' : '<span class="text-gray-400">-</span>'|raw }}
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="12" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">No stocks available in the market.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const table = document.querySelector('table');
+    const headers = table.querySelectorAll('th');
+    const tbody = table.querySelector('tbody');
+    let currentSort = { column: null, direction: 'asc' };
+
+    headers.forEach((header, index) => {
+        header.classList.add('cursor-pointer', 'select-none', 'hover:bg-gray-200', 'dark:hover:bg-gray-700', 'relative', 'whitespace-nowrap');
+        header.addEventListener('click', () => {
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            if (rows.length === 0 || rows[0].children.length === 1) return;
+            
+            const direction = currentSort.column === index && currentSort.direction === 'asc' ? 'desc' : 'asc';
+            
+            headers.forEach(h => {
+                const icon = h.querySelector('.sort-icon');
+                if (icon) icon.remove();
+            });
+            
+            const icon = document.createElement('span');
+            icon.className = 'sort-icon absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-600 dark:text-gray-300';
+            icon.innerText = direction === 'asc' ? '↑' : '↓';
+            header.appendChild(icon);
+            
+            rows.sort((a, b) => {
+                const aVal = a.children[index].getAttribute('data-value');
+                const bVal = b.children[index].getAttribute('data-value');
+                const aNum = parseFloat(aVal);
+                const bNum = parseFloat(bVal);
+
+                if (!isNaN(aNum) && !isNaN(bNum)) {
+                    return direction === 'asc' ? aNum - bNum : bNum - aNum;
+                }
+                return direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+            });
+
+            tbody.append(...rows);
+            currentSort = { column: index, direction };
+        });
+    });
+});
+</script>
+{% endblock %}

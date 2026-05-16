@@ -3,7 +3,6 @@
 namespace App\Service;
 
 use App\Entity\Stock;
-use App\Entity\StockHistory;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -38,8 +37,7 @@ class StockTracker
         private MergerAndAcquisitionEngine $maEngine,
         private MarketEvent $eventService,
         private DebtEngine $debtEngine,
-        private MathUtility $mathUtility,
-        private \Redis $redis,
+        private MathUtility $mathUtility
     ) {}
 
     /**
@@ -181,6 +179,7 @@ class StockTracker
             $stockUpdate = [
                 'ticker' => $stock->getTicker(),
                 'sector' => $sectorName,
+                'industry' => $stock->getIndustry() ?: 'General',
                 'price' => round($finalPrice, 2),
                 'market_cap' => $currentMarketCap,
                 'current_volatility' => round($nextVolatility * 100, 2),
@@ -198,10 +197,8 @@ class StockTracker
             if ($isFundamentalTick) {
                 $investedCapital = $stock->getInvestedCapital();
                 $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
-                $baselineSectorTam = 1_000_000_000_000;
                 $samRatio = (float) $stock->getSamRatio();
-                $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
-                $marketShare = min(0.9999, $investedCapital / max(1.0, $dynamicSam));
+                $marketShare = min(0.9999, $this->mathUtility->calculateMarketShare($investedCapital, $nominalGdpIndex, $samRatio));
                 
                 $stockUpdate['market_share'] = round($marketShare * 100, 2);
             }

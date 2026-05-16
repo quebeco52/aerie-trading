@@ -6,7 +6,7 @@ use App\Entity\Etf;
 use App\Entity\Stock;
 use App\Entity\User;
 use App\Data\InitialMarket;
-use App\Data\SectorPE;
+use App\Data\Sectors;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -52,9 +52,10 @@ class MarketSeedCommand extends Command
                 $stock->setTicker($stockData['ticker']);
                 $stock->setName($stockData['name']);
                 $stock->setSector($stockData['sector']);
+                $stock->setIndustry($stockData['industry'] ?? null);
                 $stock->setPrice((string) $stockData['price']);
 
-                $targetPE = SectorPE::MACRO_SECTORS[$stockData['sector']] ?? 20.0;
+                $targetPE = Sectors::MACRO_SECTORS[$stockData['sector']] ?? 20.0;
                 $neutralEps = (float) $stockData['price'] / $targetPE;
                 $stock->setEarningsPerShare((string) round($neutralEps, 2));
 

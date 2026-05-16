@@ -238,6 +238,9 @@ class Stock
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 2, nullable: true, options: ['default' => '1.00'])]
     private ?string $samRatio = '1.00';
 
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $industry = null;
+
 
     public function getId(): ?int
     {
@@ -667,7 +670,9 @@ class Stock
     {
         if ($freeCashFlowPerShare !== null) {
             $shares = max(1.0, (float) $this->sharesOutstanding);
-            $this->totalFreeCashFlow = (string) ((float) $freeCashFlowPerShare * $shares);
+            $totalFcf = (float) $freeCashFlowPerShare * $shares;
+            // Add this clamp to prevent SQL 1264 out of range errors
+            $this->totalFreeCashFlow = (string) max(-999999999999999.0, min(999999999999999.0, $totalFcf));
         } else {
             $this->totalFreeCashFlow = null;
         }
@@ -758,6 +763,18 @@ class Stock
     public function setHistoricalFixedRate(string $historicalFixedRate): static
     {
         $this->historicalFixedRate = $historicalFixedRate;
+
+        return $this;
+    }
+
+    public function getIndustry(): ?string
+    {
+        return $this->industry;
+    }
+
+    public function setIndustry(?string $industry): static
+    {
+        $this->industry = $industry;
 
         return $this;
     }

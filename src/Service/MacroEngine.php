@@ -2,7 +2,6 @@
 
 namespace App\Service;
 
-use App\Data\SectorPE;
 use Psr\Log\LoggerInterface;
 
 class MacroEngine
@@ -114,7 +113,9 @@ class MacroEngine
      */
     private function calculateTargetRate(array $state, float $targetInflation, float $naturalRate): float
     {
-        $gapWeight = ($state['output_gap'] < 0.0) ? 1.0 : 0.5;
+        // Smoothly scale the gap weight. The Central Bank becomes more sensitive to the output gap 
+        // as the economy dips into recession, peaking at a weight of 1.0 when the gap hits -5%.
+        $gapWeight = 0.5 + min(0.5, max(0.0, -$state['output_gap']) * 10.0);
 
         $targetRate = $naturalRate + $state['inflation']
             // If inflation spikes, hike rates much faster than inflation is rising.
@@ -137,25 +138,21 @@ class MacroEngine
     {
         $currentPolicyRate = $state['policy_rate'];
         
-        // Default Speed: "Taking the stairs up"
+        // Default Speed: "Taking the stairs"
         $cbSpeed = 2.0; 
 
-        // THE INFLATION PANIC: "Taking the elevator up"
-        // If inflation breaches 5%, the Central Bank aggressively hikes rates
-        if ($state['inflation'] > 0.05 && $targetRate > $currentPolicyRate) {
-            $cbSpeed = 6.0; 
-        }
-
-        // THE DEFLATION PANIC: "Cutting the elevator cables"
-        // If the economy enters actual deflation, the Central Bank slams rates to zero instantly.
-        if ($targetRate < $currentPolicyRate && $state['inflation'] < 0.0) {
-            $cbSpeed = 15.0;
-        } 
-        // THE RECESSION PANIC: "Taking the elevator down"
-        elseif ($targetRate < $currentPolicyRate && $state['output_gap'] < -0.04) {
-            $cbSpeed = 15.0;
-        } elseif ($targetRate < $currentPolicyRate && $state['output_gap'] < -0.02) {
-            $cbSpeed = 6.0;
+        if ($targetRate > $currentPolicyRate) {
+            // THE INFLATION PANIC: "Taking the elevator up"
+            // Scales smoothly as inflation exceeds the 2% target, capping at a max speed of 10.0
+            $inflationExcess = max(0.0, $state['inflation'] - 0.02);
+            $cbSpeed += min(8.0, $inflationExcess * 100.0); 
+        } else {
+            // THE RECESSION/DEFLATION PANIC: "Taking the elevator down"
+            // Scales smoothly as the economy shrinks or enters deflation, capping at a max speed of 15.0
+            $deflationPanic = max(0.0, -$state['inflation']) * 300.0; 
+            $recessionPanic = max(0.0, -$state['output_gap']) * 250.0;
+            
+            $cbSpeed += min(13.0, $deflationPanic + $recessionPanic);
         }
 
 
@@ -182,11 +179,13 @@ class MacroEngine
     private function calculateYieldCurveAndQE(array $state, float $targetInflation, float $naturalRate): array
     {
         
-        $qeYieldSuppression = 0.0;
+        // QUANTITATIVE EASING (QE) YIELD SUPPRESSION
+        // Smoothly scale QE as rates approach the Zero Lower Bound (ZLB) 
+        // and the recession deepens.
+        $zlbProximity = max(0.0, (0.015 - $state['policy_rate']) / 0.015); // 1.0 at 0% rate, 0.0 at 1.5% rate
+        $recessionSeverity = max(0.0, -$state['output_gap']);
         
-        if ($state['policy_rate'] <= 0.005 && $state['output_gap'] < -0.02) {
-            $qeYieldSuppression = min(0.015, abs($state['output_gap']));
-        }
+        $qeYieldSuppression = min(0.02, $zlbProximity * $recessionSeverity * 0.5);
 
         // THE NELSON-SIEGEL CURVE
         $level = $naturalRate + (0.5 * $targetInflation) + (0.5 * $state['inflation']);
@@ -195,12 +194,7 @@ class MacroEngine
         // Let the curve naturally invert during recessions, but cap the extreme at -1%
         $curvature = max(-0.01, 0.02 + ($state['output_gap'] * 0.5));
 
-        $lambda = 0.5; 
-        $tau = 10.0;
-        $term1 = (1 - exp(-$lambda * $tau)) / ($lambda * $tau);
-        $term2 = $term1 - exp(-$lambda * $tau);
-
-        $yield10y = $level + ($slope * $term1) + ($curvature * $term2) - $qeYieldSuppression;
+        $yield10y = $this->mathUtility->calculateNelsonSiegelYield($level, $slope, $curvature, 10.0) - $qeYieldSuppression;
 
         return [
             'level' => $level,

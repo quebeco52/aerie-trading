@@ -74,54 +74,6 @@ class MathUtility
     }
 
     /**
-     * Calculates the next step in volatility using the Heston Stochastic Volatility Model.
-     * * This method handles the correlated random walk (Wiener process) internally. 
-     * It allows passing a pre-computed Z-score ($z1) if the volatility needs to be 
-     * correlated with a stock's underlying price movement.
-     *
-     * @param float $currentVolatility  Current instantaneous volatility.
-     * @param float $longTermVolatility Long-run mean volatility (Theta).
-     * @param float $kappa              Rate of mean reversion for volatility.
-     * @param float $volOfVol           Volatility of the volatility process (Xi).
-     * @param float $rho                Correlation coefficient between price and volatility [-1, 1].
-     * @param float $dt                 Time step in years.
-     * @param float|null $z1            Optional pre-computed standard normal (for price correlation).
-     * @param float|null $z2            Optional pre-computed standard normal.
-     * * @return float The next instantaneous volatility.
-     */
-    public function calculateHestonVolatility(
-        float $currentVolatility,
-        float $longTermVolatility,
-        float $kappa,
-        float $volOfVol,
-        float $rho,
-        float $dt,
-        ?float $z1 = null,
-        ?float $z2 = null
-    ): float {
-        // Generate standard normal variables if the caller didn't provide them
-        $z1 = $z1 ?? $this->generateStandardNormal();
-        $z2 = $z2 ?? $this->generateStandardNormal();
-
-        // Calculate the correlated Wiener process (w2) internally
-        // This ensures the volatility moves inversely to the stock price (Leverage Effect)
-        $w2 = ($rho * $z1) + (sqrt(1 - ($rho * $rho)) * $z2);
-
-        // The Heston Variance Process
-        $currentVariance = $currentVolatility * $currentVolatility;
-        $longTermVariance = $longTermVolatility * $longTermVolatility;
-
-        // Calculate the differential in variance
-        $dv = $kappa * ($longTermVariance - $currentVariance) * $dt
-            + $volOfVol * $currentVolatility * sqrt($dt) * $w2;
-
-        // Ensure variance never goes negative (Full Truncation method)
-        $nextVariance = max(0.000001, $currentVariance + $dv);
-        
-        return sqrt($nextVariance);
-    }
-
-    /**
      * Simulates the Merton Jump Diffusion process for sudden market shocks.
      * Returns the price multiplier and the raw components of the jump.
      *
@@ -160,27 +112,6 @@ class MathUtility
             'shock_pct'  => null,
             'exponent'   => null
         ];
-    }
-
-    /**
-     * Calculates the mean reversion drift (gravity) pulling a current value towards a target.
-     * Uses a log-normal Ornstein-Uhlenbeck process approach.
-     *
-     * @param float $currentValue   The current state of the variable.
-     * @param float $targetValue    The fundamental fair value or mean it is reverting to.
-     * @param float $reversionSpeed How aggressively the value is pulled towards the target.
-     * @return float The calculated gravity drift modifier.
-     */
-    public function calculateLogMeanReversion(
-        float $currentValue,
-        float $targetValue,
-        float $reversionSpeed
-    ): float {
-        // Floor values to prevent log(0) or negative logs in geometric models
-        $logTarget = log(max($targetValue, 0.000001));
-        $logCurrent = log(max($currentValue, 0.000001));
-        
-        return $reversionSpeed * ($logTarget - $logCurrent);
     }
 
     /**
@@ -315,8 +246,12 @@ class MathUtility
             
             if ($isUpJump) {
                 $jumpSize = $this->generateExponential($etaUp);
+                // Failsafe: Cap individual upside jumps to ~+300% (log(4.0) ≈ 1.38) to prevent runaway inflation
+                $jumpSize = min($jumpSize, 1.38);
             } else {
                 $jumpSize = -$this->generateExponential($etaDown);
+                // Failsafe: Cap individual downside crashes to ~-90% (log(0.10) ≈ -2.30) to prevent fractional penny wipeouts
+                $jumpSize = max($jumpSize, -2.30);
             }
 
             $priceMultiplier = exp($jumpSize);
@@ -326,6 +261,9 @@ class MathUtility
             // Market crashes usually spike volatility harder than market rallies
             $varianceJumpRate = $isUpJump ? (1.0 / ($muV * 0.5)) : (1.0 / $muV);
             $varJump = $this->generateExponential($varianceJumpRate);
+            
+            // Failsafe: Cap the variance jump to 10x the mean to prevent permanent volatility corruption
+            $varJump = min($varJump, $muV * 10.0);
 
             return [
                 'price_multiplier' => $priceMultiplier,
@@ -339,5 +277,108 @@ class MathUtility
             'var_jump'         => 0.0,
             'shock_pct'        => null
         ];
+    }
+
+    /**
+     * Calculates the Intrinsic Fair Value P/E ratio based on the risk-free rate and Economic Value Added (EVA) spread.
+     */
+    public function calculateIntrinsicFairValuePE(float $riskFreeRate, float $evaSpread): float
+    {
+        $marketBasePE = max(8.0, min(30.0, 1.0 / max(0.01, $riskFreeRate)));
+        $qualityPremium = max(0.0, $evaSpread * 100) * 1.5;
+        $distressDiscount = min(0.0, $evaSpread * 100) * 2.0;
+        
+        return max(4.0, min(60.0, $marketBasePE + $qualityPremium + $distressDiscount));
+    }
+
+    /**
+     * Calculates the terminal value multiplier for a Discounted Cash Flow (DCF) using the Gordon Growth Model.
+     */
+    public function calculateDcfMultiplier(float $wacc, float $terminalGrowthRate = 0.02): float
+    {
+        $spread = $wacc - $terminalGrowthRate;
+        $multiplier = $spread > 0 ? (1.0 + $terminalGrowthRate) / $spread : 33.33;
+        
+        return min(33.33, $multiplier);
+    }
+
+    /**
+     * Calculates Fair Value using the Dividend Discount Model (DDM).
+     */
+    public function calculateDividendDiscountModel(float $annualDividend, float $costOfEquity, float $growthRate = 0.01): float
+    {
+        if ($annualDividend <= 0.0) {
+            return 0.0;
+        }
+        $requiredYield = max(0.02, $costOfEquity - $growthRate);
+        return $annualDividend / $requiredYield;
+    }
+
+    /**
+     * Calculates the yield for a given maturity using the Nelson-Siegel curve model.
+     */
+    public function calculateNelsonSiegelYield(float $level, float $slope, float $curvature, float $tau, float $lambda = 0.5): float
+    {
+        $term1 = (1 - exp(-$lambda * $tau)) / ($lambda * $tau);
+        $term2 = $term1 - exp(-$lambda * $tau);
+
+        return $level + ($slope * $term1) + ($curvature * $term2);
+    }
+
+    /**
+     * Calculates the Weighted Average Cost of Capital (WACC).
+     */
+    public function calculateWACC(float $weightEquity, float $costOfEquity, float $weightDebt, float $costOfDebt): float
+    {
+        return ($weightEquity * $costOfEquity) + ($weightDebt * $costOfDebt);
+    }
+
+    /**
+     * Calculates the Cost of Equity using the Capital Asset Pricing Model (CAPM).
+     */
+    public function calculateCAPM(float $riskFreeRate, float $beta, float $equityRiskPremium): float
+    {
+        return $riskFreeRate + ($beta * $equityRiskPremium);
+    }
+
+    /**
+     * Levers a company's Beta using the Hamada equation.
+     */
+    public function calculateLeveredBeta(float $unleveredBeta, float $taxRate, float $debtToEquity, float $dampening = 1.0): float
+    {
+        return $unleveredBeta * (1.0 + ((1.0 - $taxRate) * ($debtToEquity * $dampening)));
+    }
+
+    /**
+     * Calculates the standard depreciation rate based on the industry.
+     */
+    public function getIndustryDepreciationRate(string $industry, float $fallbackRate = 0.05): float
+    {
+        return \App\Data\Sectors::INDUSTRY_METRICS[$industry]['depreciation'] ?? $fallbackRate;
+    }
+
+    /**
+     * Calculates the company's current Market Share based on its Invested Capital and Dynamic SAM.
+     */
+    public function calculateMarketShare(float $investedCapital, float $nominalGdpIndex, float $samRatio, float $baselineSectorTam = 1000000000000.0): float
+    {
+        $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
+        return $investedCapital / max(1.0, $dynamicSam);
+    }
+
+    /**
+     * Calculates the physical operating base of a company.
+     */
+    public function calculateOperatingBase(float $revenue, float $equity, float $floor = 10000000.0): float
+    {
+        return max($revenue, $equity, $floor);
+    }
+
+    /**
+     * Calculates the Live Invested Capital of a company.
+     */
+    public function calculateLiveInvestedCapital(float $equity, float $debt, float $treasury): float
+    {
+        return max($equity * 0.50, ($equity + $debt - $treasury));
     }
 }

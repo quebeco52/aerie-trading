@@ -58,7 +58,7 @@ class MarketEngine
         float $marketZ = 0.0,
         float $marketVol = 0.15,
         float $drift = 0.08,
-        float $reversionSpeed = 0.20,
+        float $reversionSpeed = 0.25,
         float $kappa = 6.0,
         float $volOfVol = 0.3,
         array $macroState = [],
@@ -69,7 +69,7 @@ class MarketEngine
         float $dividendPerShare = 0.0,
         float $liveWacc = 0.08
     ): array {
-        
+
         // CAPM & MACRO TRANSMISSION MECHANISM
 
         $riskFreeRate = $macroState['policy_rate'] ?? 0.04;
@@ -83,13 +83,20 @@ class MarketEngine
         $currentVar = $currentVolatility * $currentVolatility;
         $longTermVar = $longTermVolatility * $longTermVolatility;
 
+        $baseJumpSize = max(0.02, $currentVolatility * 0.50);
+
+        $dynamicEtaUp = 1.0 / $baseJumpSize;
+        $dynamicEtaDown = 1.0 / ($baseJumpSize * 1.25);
+
+        $dynamicMuV = ($currentVolatility * $currentVolatility) * 0.50;
+
         // The SVJJ Jump Process (Kou Distribution)
         $jumpData = $this->mathUtility->calculateSVJJJumps(
             lambda: $lambda,
-            pUp: 0.30,     // Asymmetric tails: 30% chance of upside jump, 70% chance of downside crash
-            etaUp: 10.0,   // ~10% avg up-jump
-            etaDown: 8.0,  // ~12.5% avg down-jump (fatter left tail)
-            muV: 0.015,    // Base variance jump size (reduced to prevent excessive volatility drain)
+            pUp: 0.30,             // Maintain the 30/70 behavioral skew
+            etaUp: $dynamicEtaUp,  // Calibrated upside jump
+            etaDown: $dynamicEtaDown, // Calibrated downside crash
+            muV: $dynamicMuV,      // Calibrated volatility explosion
             dt: $dt
         );
 
@@ -100,10 +107,10 @@ class MarketEngine
         }
 
         // Adjust theta downwards to account for the continuous positive variance jumps from the SVJJ model
-        // E[VarJump] = (pUp * muV * 0.5) + (pDown * muV)
-        $expectedVarJump = (0.30 * 0.015 * 0.5) + (0.70 * 0.015);
+        // E[VarJump] = (pUp * dynamicMuV * 0.5) + (pDown * dynamicMuV)
+        $expectedVarJump = (0.30 * $dynamicMuV * 0.5) + (0.70 * $dynamicMuV);
         $jumpVarianceDrag = ($lambda * $expectedVarJump) / $kappa;
-        
+
         $adjustedTheta = max(0.0001, ($longTermVar * $cycleVolModifier) - $jumpVarianceDrag);
 
         // Variance Process via Quadratic-Exponential (QE) Scheme
@@ -117,39 +124,34 @@ class MarketEngine
 
         // Add the contemporaneous volatility jump from the SVJJ model
         $nextVar += $jumpData['var_jump'];
-        
+
         // Convert back to volatility for the return payload
         $nextVolatility = sqrt($nextVar);
 
-        // Enforce bounds: Min 1% (0.01) to prevent flatlining in extreme bull markets, Max 500% (5.00) for DB safety
-        $nextVolatility = max(0.01, min(5.00, $nextVolatility));
+        // Enforce bounds: Min 1% (0.01) to prevent flatlining in extreme bull markets, Max 150% for market safety
+        $nextVolatility = max(0.01, min(1.50, $nextVolatility));
 
-        // Mean Reversion to Fundamental Value (Gravity Drift)
-        $valuations = $this->calculateFundamentalFairValue(
-            $earningsPerShare, 
+        $fundamentalState = $this->evaluateFundamentalState(
+            $currentPrice,
+            $outputGap,
+            $inflation,
+            $beta,
+            $liveWacc,
+            $reversionSpeed,
+            $earningsPerShare,
             $currentRoic,
-            $fcfPerShare, 
-            $riskFreeRate, 
-            $beta, 
-            $bookValuePerShare, 
-            $dividendPerShare,
-            $liveWacc
+            $fcfPerShare,
+            $riskFreeRate,
+            $bookValuePerShare,
+            $dividendPerShare
         );
-        $fundamentalFairValue = $valuations['composite_fair_value'];
 
-        // Panic Gravity (Flight to Safety)
-        // A recession (negative output gap) creates fear, forcing prices back to safe fundamentals.
-        // A boom (positive output gap) creates greed, allowing speculative bubbles to float away from fundamentals.
-        $recessionStress = max(0.0, -$outputGap);
-        $inflationStress = abs($inflation - 0.02);
-        
-        $macroStress = $recessionStress + $inflationStress;
-        $dynamicReversion = $reversionSpeed + ($macroStress * 6.0 * max(0.25, $beta));
+        $perceivedFairValue = $fundamentalState['perceived_fair_value'];
+        $dynamicReversion = $fundamentalState['dynamic_reversion'];
 
-        // The fear haircut
-        // In a panic, investors ignore strong earnings and apply an instant discount to fundamentals.
-        $fearHaircut = 1.0 - min(0.60, $macroStress * 3.0 * max(0.25, $beta));
-        $perceivedFairValue = max(0.01, $fundamentalFairValue * $fearHaircut);
+        // Exact Ornstein-Uhlenbeck Mean Reversion in Log-Space
+        // Using exp(-kappa * dt) mathematically guarantees the price never overshoots the fair value.
+        $reversionWeight = exp(-$dynamicReversion * $dt);
 
         // Pure Geometric Brownian Motion (GBM) Step
         $idiosyncraticShock = $this->mathUtility->generateStandardNormal();
@@ -167,30 +169,24 @@ class MarketEngine
             w1: $idiosyncraticShock
         );
 
-        // Exact Ornstein-Uhlenbeck Mean Reversion in Log-Space
-        // Using exp(-kappa * dt) mathematically guarantees the price never overshoots the fair value.
-        $reversionWeight = exp(-$dynamicReversion * $dt);
-        
+
+
         // Geometrically blend the GBM price with the fundamental Fair Value
         $diffusedPrice = exp(
-            $reversionWeight * log($gbmPrice) + 
-            (1.0 - $reversionWeight) * log($perceivedFairValue)
+            $reversionWeight * log($gbmPrice) +
+                (1.0 - $reversionWeight) * log($perceivedFairValue)
         );
 
         // Apply Simultaneous Price Jumps AND M&A Shocks outside the GBM exponent
         $totalShockMultiplier = $jumpData['price_multiplier'] * (1.0 + $maShock);
         $finalPrice = $diffusedPrice * $totalShockMultiplier;
-        
+
 
         return [
             'price'             => max(0.01, $finalPrice),
             'shock'             => $jumpData['shock_pct'],
             'next_volatility'   => $nextVolatility,
-            'analyst_targets'   => [
-                'growth_analyst' => $valuations['earnings_target'],
-                'income_analyst' => $valuations['dividend_target'],
-                'value_analyst'  => $valuations['book_target']
-            ]
+            'analyst_targets'   => $fundamentalState['analyst_targets']
         ];
     }
 
@@ -211,7 +207,7 @@ class MarketEngine
     private function calculateMacroDrift(float $outputGap, float $inflation, float $nsSlope, float $drift, float $beta, float $riskFreeRate): float
     {
         $outputGapModifier = $outputGap > 0 ? ($outputGap * 0.5) : ($outputGap * 2.0);
-        $inflationPenalty = $inflation > 0.04 ? -($inflation - 0.04) * 1.5 : 0.0;
+        $inflationPenalty = $inflation > 0.04 ? - ($inflation - 0.04) * 1.5 : 0.0;
         $yieldCurveInversionPenalty = min(0.0, $nsSlope) * 3.0;
 
         $totalMarketPremium = $drift + $yieldCurveInversionPenalty + $outputGapModifier + $inflationPenalty;
@@ -219,38 +215,45 @@ class MarketEngine
     }
 
     /**
-     * Calculates the intrinsic fair value of the stock using dynamic EVA-adjusted P/E and DCF.
+     * Evaluates the fundamental state of the stock under macroeconomic stress.
+     * Calculates the systemic stress index, dynamic WACC, flight-to-quality reversion speed,
+     * and the intrinsic fair value of the asset.
+     * 
+     * @return array{perceived_fair_value: float, dynamic_reversion: float, analyst_targets: array}
      */
-    private function calculateFundamentalFairValue(
-        float $earningsPerShare, 
-        float $currentRoic, 
-        ?float $fcfPerShare, 
-        float $riskFreeRate, 
-        float $beta, 
-        float $bookValuePerShare, 
-        float $dividendPerShare,
-        float $liveWacc
+    private function evaluateFundamentalState(
+        float $currentPrice,
+        float $outputGap,
+        float $inflation,
+        float $beta,
+        float $liveWacc,
+        float $reversionSpeed,
+        float $earningsPerShare,
+        float $currentRoic,
+        ?float $fcfPerShare,
+        float $riskFreeRate,
+        float $bookValuePerShare,
+        float $dividendPerShare
     ): array {
-        // Use the live WACC
-        $wacc = $liveWacc;
+        // MACROECONOMIC STRESS INDEX (MSI)
+        $recessionStress = max(0.0, -$outputGap); // Negative output gap = economic contraction
+        $inflationStress = abs($inflation - 0.02); // Deviation from price stability
+        $systemicStressIndex = $recessionStress + $inflationStress;
+
+        // FLIGHT-TO-QUALITY REVERSION (Liquidity Drain)
+        $dynamicReversion = $reversionSpeed * (1.0 + ($systemicStressIndex * 5.0));
+
+        // DYNAMIC FUNDAMENTAL VALUATION
 
         // Dynamic P/E Re-Rating (The EVA Premium)
-        $marketBasePE = max(8.0, min(30.0, 1.0 / max(0.01, $riskFreeRate)));
-        $evaSpread = $currentRoic - $wacc;
-        
-        $qualityPremium = max(0.0, $evaSpread * 100) * 1.5;
-        $distressDiscount = min(0.0, $evaSpread * 100) * 2.0;
-
-        $fairValuePE = max(4.0, min(60.0, $marketBasePE + $qualityPremium + $distressDiscount));
+        $evaSpread = $currentRoic - $liveWacc;
+        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($riskFreeRate, $evaSpread);
         $peFairValue = max(0.01, $earningsPerShare * $fairValuePE);
 
         // Discounted Cash Flow (DCF) Value
         if ($fcfPerShare !== null) {
             if ($fcfPerShare > 0.0) {
-                $terminalGrowthRate = 0.02;
-                $spread = $wacc - $terminalGrowthRate;
-                $multiplier = $spread > 0 ? (1 + $terminalGrowthRate) / $spread : 33.33;
-                $multiplier = min(33.33, $multiplier); 
+                $multiplier = $this->mathUtility->calculateDcfMultiplier($liveWacc, 0.02);
                 $dcfFairValue = max(0.01, $fcfPerShare * $multiplier);
 
                 // Blend the Earnings value and the Cash Flow value
@@ -262,25 +265,39 @@ class MarketEngine
         } else {
             $earningsValue = $peFairValue;
         }
-        
+
         // Dividend Yield Support (The Dividend Discount Model)
         // High dividends create a hard psychological and mathematical price floor for investors
-        $dividendSupportValue = 0.0;
-        if ($dividendPerShare > 0.0) {
-            $annualDividend = $dividendPerShare * 4.0;
-            // Investors demand the Cost of Equity, minus an assumed 1% long-term growth rate
-            $requiredYield = max(0.02, $wacc - 0.01);
-            $dividendSupportValue = $annualDividend / $requiredYield;
-        }
+        $dividendSupportValue = $this->mathUtility->calculateDividendDiscountModel(
+            $dividendPerShare * 4.0,
+            $liveWacc,
+            0.01
+        );
 
         // The stock's fair value is the highest of its Earnings power, its Yield Support, or its physical Book Value
         $fairValue = max($earningsValue, $dividendSupportValue, $bookValuePerShare * 0.80);
+        $perceivedFairValue = max(0.01, $fairValue);
+
+        $valuationRatio = $currentPrice / $perceivedFairValue;
+
+        $overvaluation = max(0.0, $valuationRatio - 1.0);
+        $gravityCurve = pow($overvaluation, 2.0); 
         
+        // Smoothly scale macro resistance based on the output gap instead of a hard cliff.
+        // Base resistance is 0.02. As the economy dips into recession, fear scales up linearly.
+        $macroResistance = 0.02 + (max(0.0, -$outputGap) * 6.0); 
+        $bubbleGravity = $gravityCurve * $macroResistance;
+        
+        $dynamicReversion += min(10.0, $bubbleGravity); // Cap max panic reversion
+
         return [
-            'composite_fair_value' => max(0.01, $fairValue),
-            'earnings_target'      => max(0.01, $earningsValue),
-            'dividend_target'      => max(0.01, $dividendSupportValue),
-            'book_target'          => max(0.01, $bookValuePerShare * 0.80)
+            'perceived_fair_value' => $perceivedFairValue,
+            'dynamic_reversion'    => $dynamicReversion,
+            'analyst_targets'      => [
+                'growth_analyst' => max(0.01, $earningsValue),
+                'income_analyst' => max(0.01, $dividendSupportValue),
+                'value_analyst'  => max(0.01, $bookValuePerShare * 0.80)
+            ]
         ];
     }
 }

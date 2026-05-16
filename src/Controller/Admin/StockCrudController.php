@@ -3,6 +3,7 @@
 namespace App\Controller\Admin;
 
 use App\Entity\Stock;
+use App\Data\Sectors;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Crud;
 use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractCrudController;
 use EasyCorp\Bundle\EasyAdminBundle\Field\ChoiceField;
@@ -47,6 +48,9 @@ class StockCrudController extends AbstractCrudController
                     'Utilities' => 'Utilities',
                     'Communication Services' => 'Communication Services',
                 ]),
+            
+            ChoiceField::new('industry')
+                ->setChoices(array_combine(array_keys(Sectors::INDUSTRY_METRICS), array_keys(Sectors::INDUSTRY_METRICS))),
             
                 ChoiceField::new('systemic_importance')
                 ->setChoices([
