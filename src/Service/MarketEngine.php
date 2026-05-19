@@ -10,6 +10,23 @@ namespace App\Service;
  */
 class MarketEngine
 {
+    // Volatility Bounds
+    private const MIN_VOLATILITY = 0.01; // 1% absolute floor
+    private const MAX_VOLATILITY = 1.50; // 150% absolute ceiling
+
+    // Jump Diffusion Constants
+    private const SVJJ_P_UP = 0.30;
+    private const SVJJ_P_DOWN = 0.70;
+
+    // Valuation Multiple Bounds
+    private const MIN_BASE_PE = 8.0;
+    private const MAX_BASE_PE = 80.0;
+    private const MIN_FAIR_VALUE_PE = 4.0;
+    private const MAX_FAIR_VALUE_PE = 150.0;
+
+    // Analyst Multipliers
+    private const VALUE_ANALYST_BOOK_MULT = 0.80;
+
     public function __construct(
         private MathUtility $mathUtility
     ) {}
@@ -45,7 +62,7 @@ class MarketEngine
      * @param float $creditSpread       The company's baseline credit spread (borrowing premium).
      * @param float $dividendPerShare   The absolute quarterly dividend per share.
      *
-     * @return array{price: float, shock: float|null, next_volatility: float, analyst_targets: array} The calculated next price, shock percentage, updated volatility, and analyst targets.
+     * @return array{price: float, shock: float|null, next_volatility: float, analyst_targets: array, perceived_fair_value: float} The calculated next price, shock percentage, updated volatility, and analyst targets.
      */
     public function calculateNextPrice(
         float $currentPrice,
@@ -67,7 +84,10 @@ class MarketEngine
         float $maShock = 0.0,
         float $currentRoic = 0.10,
         float $dividendPerShare = 0.0,
-        float $liveWacc = 0.08
+        float $liveWacc = 0.08,
+        float $baselineIndustryPE = 20.0,
+        float $revenuePerShare = 0.0,
+        bool $isLeveragedIndustry = false
     ): array {
 
         // CAPM & MACRO TRANSMISSION MECHANISM
@@ -93,7 +113,7 @@ class MarketEngine
         // The SVJJ Jump Process (Kou Distribution)
         $jumpData = $this->mathUtility->calculateSVJJJumps(
             lambda: $lambda,
-            pUp: 0.30,             // Maintain the 30/70 behavioral skew
+            pUp: self::SVJJ_P_UP,  // Maintain the 30/70 behavioral skew
             etaUp: $dynamicEtaUp,  // Calibrated upside jump
             etaDown: $dynamicEtaDown, // Calibrated downside crash
             muV: $dynamicMuV,      // Calibrated volatility explosion
@@ -108,7 +128,7 @@ class MarketEngine
 
         // Adjust theta downwards to account for the continuous positive variance jumps from the SVJJ model
         // E[VarJump] = (pUp * dynamicMuV * 0.5) + (pDown * dynamicMuV)
-        $expectedVarJump = (0.30 * $dynamicMuV * 0.5) + (0.70 * $dynamicMuV);
+        $expectedVarJump = (self::SVJJ_P_UP * $dynamicMuV * 0.5) + (self::SVJJ_P_DOWN * $dynamicMuV);
         $jumpVarianceDrag = ($lambda * $expectedVarJump) / $kappa;
 
         $adjustedTheta = max(0.0001, ($longTermVar * $cycleVolModifier) - $jumpVarianceDrag);
@@ -128,8 +148,8 @@ class MarketEngine
         // Convert back to volatility for the return payload
         $nextVolatility = sqrt($nextVar);
 
-        // Enforce bounds: Min 1% (0.01) to prevent flatlining in extreme bull markets, Max 150% for market safety
-        $nextVolatility = max(0.01, min(1.50, $nextVolatility));
+        // Enforce bounds to prevent flatlining in extreme bull markets and runaway chaos in crashes
+        $nextVolatility = max(self::MIN_VOLATILITY, min(self::MAX_VOLATILITY, $nextVolatility));
 
         $fundamentalState = $this->evaluateFundamentalState(
             $currentPrice,
@@ -143,7 +163,10 @@ class MarketEngine
             $fcfPerShare,
             $riskFreeRate,
             $bookValuePerShare,
-            $dividendPerShare
+            $dividendPerShare,
+            $baselineIndustryPE,
+            $revenuePerShare,
+            $isLeveragedIndustry
         );
 
         $perceivedFairValue = $fundamentalState['perceived_fair_value'];
@@ -186,7 +209,8 @@ class MarketEngine
             'price'             => max(0.01, $finalPrice),
             'shock'             => $jumpData['shock_pct'],
             'next_volatility'   => $nextVolatility,
-            'analyst_targets'   => $fundamentalState['analyst_targets']
+            'analyst_targets'   => $fundamentalState['analyst_targets'],
+            'perceived_fair_value' => $perceivedFairValue
         ];
     }
 
@@ -233,60 +257,107 @@ class MarketEngine
         ?float $fcfPerShare,
         float $riskFreeRate,
         float $bookValuePerShare,
-        float $dividendPerShare
+        float $dividendPerShare,
+        float $baselineIndustryPE = 20.0, 
+        float $revenuePerShare = 0.0,      
+        bool $isLeveragedIndustry = false
     ): array {
         // MACROECONOMIC STRESS INDEX (MSI)
         $recessionStress = max(0.0, -$outputGap); // Negative output gap = economic contraction
         $inflationStress = abs($inflation - 0.02); // Deviation from price stability
         $systemicStressIndex = $recessionStress + $inflationStress;
 
-        // FLIGHT-TO-QUALITY REVERSION (Liquidity Drain)
-        $dynamicReversion = $reversionSpeed * (1.0 + ($systemicStressIndex * 5.0));
+        
 
         // DYNAMIC FUNDAMENTAL VALUATION
 
-        // Dynamic P/E Re-Rating (The EVA Premium)
+        // 1. DYNAMIC P/E RE-RATING (Smoothed)
+        // Use pow(..., 0.5) to dampen extreme multiples during zero-interest-rate environments
+        $rateModifier = pow(0.04 / max(0.01, $riskFreeRate), 0.5);
+        $macroBasePE = max(self::MIN_BASE_PE, min(self::MAX_BASE_PE, $baselineIndustryPE * $rateModifier));
+
+        // The EVA Premium (Quality Spread)
         $evaSpread = $currentRoic - $liveWacc;
-        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($riskFreeRate, $evaSpread);
-        $peFairValue = max(0.01, $earningsPerShare * $fairValuePE);
+        $qualityPremium = max(0.0, $evaSpread * 100) * 1.5;
+        $distressDiscount = min(0.0, $evaSpread * 100) * 2.0;
 
-        // Discounted Cash Flow (DCF) Value
-        if ($fcfPerShare !== null) {
-            if ($fcfPerShare > 0.0) {
-                $multiplier = $this->mathUtility->calculateDcfMultiplier($liveWacc, 0.02);
-                $dcfFairValue = max(0.01, $fcfPerShare * $multiplier);
+        $fairValuePE = max(self::MIN_FAIR_VALUE_PE, min(self::MAX_FAIR_VALUE_PE, $macroBasePE + $qualityPremium + $distressDiscount));
 
-                // Blend the Earnings value and the Cash Flow value
-                $earningsValue = ($peFairValue + $dcfFairValue) / 2.0;
-            } else {
-                // Apply a 25% "Cash Burn" penalty to the P/E valuation
-                $earningsValue = $peFairValue * 0.75;
-            }
-        } else {
+        $structuralEps = $bookValuePerShare * $currentRoic;
+        $normalizedEps = ($earningsPerShare * 0.50) + ($structuralEps * 0.50);
+
+        $peFairValue = max(0.00, $normalizedEps * $fairValuePE);
+        
+        // 2. THE ZOMBIE FIX: Revenue Floor
+        $psMultiple = max(0.2, min(5.0, ($currentRoic + 0.10) * 10)); 
+        $revenueFloorValue = $revenuePerShare * $psMultiple;
+
+        // 3. THE BANKING DCF BYPASS
+        if ($isLeveragedIndustry) {
+            // Wall Street NEVER uses DCF for Banks. Cash is their inventory.
+            // Banks are valued strictly on Earnings (P/E) and Book Value (P/B).
             $earningsValue = $peFairValue;
+        } else {
+            // Discounted Cash Flow (DCF) Value for Normal Companies
+            if ($fcfPerShare !== null) {
+                if ($fcfPerShare > 0.0) {
+                    $multiplier = $this->mathUtility->calculateDcfMultiplier($liveWacc, 0.02);
+                    $dcfFairValue = max(0.01, $fcfPerShare * $multiplier);
+
+                    $earningsValue = ($peFairValue > 0) ? ($peFairValue + $dcfFairValue) / 2.0 : $dcfFairValue;
+                } else {
+                    $earningsValue = max($revenueFloorValue, $peFairValue) * 0.75;
+                }
+            } else {
+                $earningsValue = max($revenueFloorValue, $peFairValue);
+            }
         }
 
         // Dividend Yield Support (The Dividend Discount Model)
         // High dividends create a hard psychological and mathematical price floor for investors
-        $dividendSupportValue = $this->mathUtility->calculateDividendDiscountModel(
-            $dividendPerShare * 4.0,
-            $liveWacc,
-            0.01
-        );
+        $dividendSupportValue = 0.0;
+        if ($dividendPerShare > 0.0) {
+            // Cap the DDM valuation so it only prices in sustainable cash flows. 
+            // Banks don't use FCF, so we fallback to EPS for their sustainability check.
+            $cashFlowProxy = $isLeveragedIndustry ? $earningsPerShare : ($fcfPerShare ?? 0.0);
+            $sustainableDividend = min($dividendPerShare * 4.0, max(0.0, $cashFlowProxy));
+            
+            // SAFEGUARD: Prevent a Bank's ultra-low WACC from creating a 50x multiple.
+            // Demand at least a 4% yield from Financials, normal companies can float down to 2%.
+            $assumedGrowth = 0.01;
+            $requiredYield = $isLeveragedIndustry ? max(0.04, $liveWacc) : max(0.02, $liveWacc);
+            
+            // We pass 0.00 for growth to the MathUtility because we already handled it 
+            // safely in our custom requiredYield logic above.
+            $dividendSupportValue = $this->mathUtility->calculateDividendDiscountModel(
+                $sustainableDividend,
+                $requiredYield,
+                $assumedGrowth
+            );
+        }
 
-        // The stock's fair value is the highest of its Earnings power, its Yield Support, or its physical Book Value
-        $fairValue = max($earningsValue, $dividendSupportValue, $bookValuePerShare * 0.80);
+        // Weighted Consensus Model to prevent cherry-picked asset bubbles
+        if ($isLeveragedIndustry) {
+            // Banks/Financials rely heavily on Book Value and Earnings yield
+            $fairValue = ($earningsValue * 0.60) + ($dividendSupportValue * 0.10) + ($bookValuePerShare * 0.30);
+        } else {
+            // Standard Corporates: Blend of Earnings/DCF, Yield support, and a small Book Value floor
+            $fairValue = ($earningsValue * 0.70) + ($dividendSupportValue * 0.20) + ($bookValuePerShare * 0.10);
+        }
         $perceivedFairValue = max(0.01, $fairValue);
 
         $valuationRatio = $currentPrice / $perceivedFairValue;
 
         $overvaluation = max(0.0, $valuationRatio - 1.0);
-        $gravityCurve = pow($overvaluation, 2.0); 
+        $gravityCurve = ($overvaluation * 0.5) + pow($overvaluation, 2.0); 
         
         // Smoothly scale macro resistance based on the output gap instead of a hard cliff.
         // Base resistance is 0.02. As the economy dips into recession, fear scales up linearly.
-        $macroResistance = 0.02 + (max(0.0, -$outputGap) * 6.0); 
+        $macroResistance = 0.02 + (max(0.0, -$outputGap) * 10.0); 
         $bubbleGravity = $gravityCurve * $macroResistance;
+
+        // FLIGHT-TO-QUALITY REVERSION (Liquidity Drain)
+        $dynamicReversion = $reversionSpeed * (1.0 + ($systemicStressIndex * 10.0));
         
         $dynamicReversion += min(10.0, $bubbleGravity); // Cap max panic reversion
 
@@ -296,7 +367,7 @@ class MarketEngine
             'analyst_targets'      => [
                 'growth_analyst' => max(0.01, $earningsValue),
                 'income_analyst' => max(0.01, $dividendSupportValue),
-                'value_analyst'  => max(0.01, $bookValuePerShare * 0.80)
+                'value_analyst'  => max(0.01, $bookValuePerShare * self::VALUE_ANALYST_BOOK_MULT),
             ]
         ];
     }

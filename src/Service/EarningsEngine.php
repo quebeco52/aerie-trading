@@ -181,15 +181,13 @@ class EarningsEngine
         $expectedAnnualEps = $expectedTotalNetIncome / max(1.0, $sharesOutstanding);
         $actualAnnualEpsRaw = $actualTotalNetIncome / max(1.0, $sharesOutstanding);
 
-        // Smooth the transition from Old EPS to Expected EPS
+        // Calculate Market Expectations (Smoothed for the Surprise/Shock generation only)
         $expectedAnnualEpsDrifted = $oldAnnualEps + (($expectedAnnualEps - $oldAnnualEps) * 0.50);
-
-        // Calculate Actual ANNUAL EPS (shifted by the exact same smoothed drift)
         $epsDifference = $actualAnnualEpsRaw - $expectedAnnualEps;
-        $actualAnnualEps = $expectedAnnualEpsDrifted + $epsDifference;
+        $perceivedActualAnnualEps = $expectedAnnualEpsDrifted + $epsDifference;
 
         // Calculate Quarterly metrics for the UI and price gap logic
-        $actualQuarterlyEps = $actualAnnualEps / 4.0;
+        $actualQuarterlyEps = $perceivedActualAnnualEps / 4.0;
         $expectedQuarterlyEps = $expectedAnnualEpsDrifted / 4.0;
         $surpriseAmountQuarterly = $actualQuarterlyEps - $expectedQuarterlyEps;
 
@@ -200,14 +198,13 @@ class EarningsEngine
         // VOLATILITY SHOCK
         $this->applyVolatilityShock($stock, $revenueZ, $baselineVol);
 
-        // Update the Stock Entity with the smoothed ANNUAL figure to prevent violent P/E multiple gaps.
-        // Clean Surplus Accounting is safely maintained because CorporateActionEngine receives the raw Physical Net Income.
-        $stock->setEarningsPerShare((string) $actualAnnualEps);
+        // Overwriting EPS alters Total Net Income. We MUST save the raw 
+        // physical number to maintain a mathematically flawless Balance Sheet.
+        $stock->setEarningsPerShare((string) $actualAnnualEpsRaw);
 
         $fcfData = $this->calculateFreeCashFlowPerShare($actualAnnualEpsRaw, $sharesOutstanding, $stock, $macroState, $absoluteDepreciation);
         $annualFcfPerShare = $fcfData['fcf_per_share'];
         $actualAnnualCapEx = $fcfData['capex'];
-        $stock->setFreeCashFlowPerShare((string) $annualFcfPerShare);
 
         $priceGapPct = $this->calculatePriceGap($surprisePct);
         $currentPrice = (float) $stock->getPrice();
@@ -216,7 +213,7 @@ class EarningsEngine
         // ALLOCATE CAPITAL
         $allocation = $this->corporateActionEngine->allocateCapital(
             $stock,
-            $actualAnnualEps,
+            $actualAnnualEpsRaw,
             $quarterlyFcfPerShare,
             $currentPrice,
             $sharesOutstanding,
@@ -224,7 +221,19 @@ class EarningsEngine
             $actualTotalNetIncome
         );
 
+
         $stock->setSharesOutstanding((string) $allocation['new_shares']);
+
+        // Subtract the Growth CapEx (Organic CapEx) spent by the CEO to find True FCF
+        $organicCapex = $allocation['organic_capex'] ?? 0.0;
+        
+        // Convert quarterly organic CapEx to an annualized per-share impact
+        $annualizedOrganicCapex = $organicCapex * 4.0;
+        $organicCapexPerShare = $sharesOutstanding > 0 ? ($annualizedOrganicCapex / $sharesOutstanding) : 0.0;
+
+        // True FCF accounts for BOTH Maintenance CapEx and Growth CapEx
+        $trueAnnualFcfPerShare = $annualFcfPerShare - $organicCapexPerShare;
+        $stock->setFreeCashFlowPerShare((string) $trueAnnualFcfPerShare);
 
         // Aggregate total shock from earnings and corporate actions
         $totalShockPct = $priceGapPct;

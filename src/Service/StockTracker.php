@@ -106,6 +106,13 @@ class StockTracker
             $sharesOutstanding = (float) $stock->getSharesOutstanding();
             $shares = max(1.0, $sharesOutstanding);
 
+            // Fetch the industry limits and structural data
+            $industryKey = $stock->getIndustry() ?: 'General';
+            $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industryKey] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
+            $isLeveragedIndustry = $metrics['leveraged_industry'] ?? false;
+            $baselineIndustryPE = $metrics['pe'] ?? 20.0;
+            $revenuePerShare = (float) $stock->getTotalRevenue() / $shares;
+
             // Calculate new price (GBM + SVJJ)
             $calculation = $this->marketEngine->calculateNextPrice(
                 currentPrice: (float) $stock->getPrice(),
@@ -123,7 +130,10 @@ class StockTracker
                 maShock: $maShock,
                 currentRoic: (float) ($stock->getCurrentRoic() ?: $stock->getBaselineRoic()),
                 dividendPerShare: (float) $stock->getLastDividend(),
-                liveWacc: $health['wacc']
+                liveWacc: $health['wacc'],
+                baselineIndustryPE: $baselineIndustryPE,
+                revenuePerShare: $revenuePerShare,
+                isLeveragedIndustry: $isLeveragedIndustry
             );
 
             $newPrice = $calculation['price'];
@@ -189,7 +199,8 @@ class StockTracker
                 'treasury' => (float) $stock->getCorporateTreasury(),
                 'equity' => (float) $stock->getTotalEquity(),
                 'debt_ratio' => (float) $stock->getDebtToEquityRatio(),
-                'analyst_targets' => $calculation['analyst_targets']
+                'analyst_targets' => $calculation['analyst_targets'],
+                'perceived_fair_value' => $calculation['perceived_fair_value']
             ];
 
             // Only update Market Share on the UI when Corporate Fundamentals actually change

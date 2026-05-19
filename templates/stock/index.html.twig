@@ -15,21 +15,21 @@
 
 	<script type="application/ld+json">
 		{
-		        "@context": "https://schema.org",
-		        "@type": "{{ isEtf ? 'InvestmentFund' : 'Corporation' }}",
-		        "name": "{{ asset.name }}",
-		        "tickerSymbol": "{{ asset.ticker }}",
-		        "description": "Live financial data and economic simulation for
+						        "@context": "https://schema.org",
+						        "@type": "{{ isEtf ? 'InvestmentFund' : 'Corporation' }}",
+						        "name": "{{ asset.name }}",
+						        "tickerSymbol": "{{ asset.ticker }}",
+						        "description": "Live financial data and economic simulation for
 		{{ asset.name }}.",
-		        "url": "{{ app.request.uri }}"
+						        "url": "{{ app.request.uri }}"
 		{% if isEtf and allAssets is defined %},
-			        "hasPart": [
+									        "hasPart": [
 			{% for a in allAssets %}
 				{
-				                "@type": "Corporation",
-				                "name": "{{ a.name }}",
-				                "tickerSymbol": "{{ a.ticker }}"
-				            }{{ not loop.last ? ',' : '' }}
+												                "@type": "Corporation",
+												                "name": "{{ a.name }}",
+												                "tickerSymbol": "{{ a.ticker }}"
+												            }{{ not loop.last ? ',' : '' }}
 			{% endfor %}
 			]
 		{% endif %}
@@ -273,166 +273,181 @@
 								<span class="material-symbols-outlined text-sm">query_stats</span>
 								Analyst Consensus
 							</h3>
-							<span id="analyst-consensus-badge" class="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded hidden transition-colors"></span>
+							<span id="analyst-consensus-badge" class="hidden px-2 py-1 text-[10px] font-bold rounded-md uppercase tracking-widest"></span>
 						</div>
+
+						{# Add this new Blended Fair Value Box #}
+						<div class="flex justify-between items-center pb-4 mb-4 border-b border-outline-variant/20 bg-surface-container-highest p-4 rounded-xl">
+							<div>
+								<p class="text-xs font-bold uppercase tracking-widest text-primary">Consensus Fair Value</p>
+								<p class="text-[10px] text-on-surface-variant mt-1">Blended Target</p>
+							</div>
+							<div class="text-right">
+								<p class="text-xl font-bold text-on-surface" id="target-consensus">--</p>
+							</div>
+						</div>
+
 						<div class="space-y-4">
-							<div class="flex justify-between items-center pb-4 border-b border-outline-variant/10">
-								<div>
-									<p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Growth Analyst</p>
-									<p class="text-xs text-on-surface-variant mt-0.5">DCF & Earnings</p>
+
+							<div class="space-y-4">
+								<div class="flex justify-between items-center pb-4 border-b border-outline-variant/10">
+									<div>
+										<p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Growth Analyst</p>
+										<p class="text-xs text-on-surface-variant mt-0.5">DCF & Earnings</p>
+									</div>
+									<div class="text-right">
+										<p class="text-sm font-bold text-on-surface" id="target-growth">--</p>
+									</div>
 								</div>
-								<div class="text-right">
-									<p class="text-sm font-bold text-on-surface" id="target-growth">--</p>
+								<div class="flex justify-between items-center pb-4 border-b border-outline-variant/10">
+									<div>
+										<p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Income Analyst</p>
+										<p class="text-xs text-on-surface-variant mt-0.5">Dividend Yield</p>
+									</div>
+									<div class="text-right">
+										<p class="text-sm font-bold text-on-surface" id="target-income">--</p>
+									</div>
 								</div>
-							</div>
-							<div class="flex justify-between items-center pb-4 border-b border-outline-variant/10">
-								<div>
-									<p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Income Analyst</p>
-									<p class="text-xs text-on-surface-variant mt-0.5">Dividend Yield</p>
-								</div>
-								<div class="text-right">
-									<p class="text-sm font-bold text-on-surface" id="target-income">--</p>
-								</div>
-							</div>
-							<div class="flex justify-between items-center">
-								<div>
-									<p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Value Analyst</p>
-									<p class="text-xs text-on-surface-variant mt-0.5">Liquidation Floor</p>
-								</div>
-								<div class="text-right">
-									<p class="text-sm font-bold text-on-surface" id="target-value">--</p>
+								<div class="flex justify-between items-center">
+									<div>
+										<p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Value Analyst</p>
+										<p class="text-xs text-on-surface-variant mt-0.5">Liquidation Floor</p>
+									</div>
+									<div class="text-right">
+										<p class="text-sm font-bold text-on-surface" id="target-value">--</p>
+									</div>
 								</div>
 							</div>
 						</div>
 					</div>
 
-				{% else %}
-					<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15">
+					{% else %}
+						<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15">
 
-						<div class="flex justify-between items-center mb-6 pb-4 border-b border-outline-variant/10">
-							<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface">Index Composition</h3>
+							<div class="flex justify-between items-center mb-6 pb-4 border-b border-outline-variant/10">
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface">Index Composition</h3>
 
-							<div class="flex items-center gap-2">
-								<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">District Volatility (VIX):</span>
-								<span id="district-vix" class="text-sm font-bold text-on-surface transition-colors">15.00%</span>
-							</div>
-						</div>
-
-						{# DISTRICT MACROECONOMICS DASHBOARD #}
-						<div class="bg-surface-container-lowest rounded-xl p-4 border border-outline-variant/10 mb-6">
-							<h4 class="text-[10px] font-bold uppercase tracking-widest text-primary mb-4 flex items-center gap-2">
-								<span class="material-symbols-outlined text-sm">monitoring</span>
-								Real-Time Macroeconomics
-							</h4>
-
-							<div
-								class="grid grid-cols-2 gap-4">
-								{# INFLATION #}
-								<div>
-									<p class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant">Inflation</p>
-									<p class="text-lg font-bold text-on-surface" id="macro-inflation">
-										{{ (macro.inflation * 100)|number_format(2) }}%
-									</p>
-								</div>
-
-								{# OUTPUT GAP #}
-								<div>
-									<p class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant">Output Gap</p>
-									<p class="text-lg font-bold text-on-surface" id="macro-output-gap">
-										{{ (macro.output_gap * 100)|number_format(2) }}%
-									</p>
-								</div>
-
-								{# POLICY RATE #}
-								<div>
-									<p class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant">Policy Rate</p>
-									<p class="text-lg font-bold text-on-surface" id="macro-policy-rate">
-										{{ (macro.policy_rate * 100)|number_format(2) }}%
-									</p>
-								</div>
-
-								{# YIELD CURVE #}
-								<div>
-									<p class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant flex items-center gap-1">
-										10-Yr Yield
-										{% if macro.qe_active|default(false) %}
-											<span class="inline-flex w-2 h-2 rounded-full bg-secondary animate-pulse" title="Quantitative Easing Active"></span>
-										{% endif %}
-									</p>
-									<p class="text-lg font-bold {% if macro.qe_active|default(false) %}text-secondary{% else %}text-on-surface{% endif %}" id="macro-yield">
-										{{ (macro.yield_10y * 100)|number_format(2) }}%
-									</p>
+								<div class="flex items-center gap-2">
+									<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">District Volatility (VIX):</span>
+									<span id="district-vix" class="text-sm font-bold text-on-surface transition-colors">15.00%</span>
 								</div>
 							</div>
 
-							{# THE ECONOMIC STATUS BADGE #}
-							<div class="mt-4 pt-3 border-t border-outline-variant/10 flex justify-between items-center">
-								<span class="text-[10px] text-on-surface-variant">District GDP:</span>
-								<span id="macro-gdp" class="text-xs font-bold text-on-surface">
-									${{ (25.00 * macro.nominal_gdp_index|default(1.0))|number_format(2) }}T
-								</span>
-							</div>
+							{# DISTRICT MACROECONOMICS DASHBOARD #}
+							<div class="bg-surface-container-lowest rounded-xl p-4 border border-outline-variant/10 mb-6">
+								<h4 class="text-[10px] font-bold uppercase tracking-widest text-primary mb-4 flex items-center gap-2">
+									<span class="material-symbols-outlined text-sm">monitoring</span>
+									Real-Time Macroeconomics
+								</h4>
 
-							<div class="mt-2 pt-2 flex justify-between items-center">
-								<span class="text-[10px] text-on-surface-variant">Current Cycle:</span>
-								<span id="market-economic-cycle" class="text-xs font-bold uppercase tracking-widest text-primary">
-									{{ economic_cycle }}
-								</span>
-							</div>
-						</div>
-
-						<div class="relative h-72 w-full flex justify-center">
-							<canvas id="etfPieChart"></canvas>
-						</div>
-					</div>
-				{% endif %}
-
-				<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15">
-					<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface mb-6 flex items-center gap-2">
-						<span class="material-symbols-outlined text-sm">feed</span>
-						Live Events
-					</h3>
-
-					<p id="no-events-msg" class="text-xs text-on-surface-variant {{ events is not empty ? 'hidden' : '' }}">No recent news reported.</p>
-					<ul id="events-list" role="list" class="divide-y divide-outline-variant/10">
-						{% for event in events %}
-							{% set isPositive = event.changePercent >= 0 %}
-							<li class="py-3">
-								<div class="flex items-start justify-between">
-									<div class="flex items-start gap-3 flex-1 min-w-0">
-										<div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 {{ isPositive ? 'bg-secondary/10 text-secondary' : 'bg-tertiary/10 text-tertiary' }}">
-											<span class="material-symbols-outlined text-sm">{{ event.eventType == 'SHOCK' ? 'bolt' : 'campaign' }}</span>
-										</div>
-										<div class="flex-1 min-w-0">
-											<p class="text-xs font-bold text-on-surface">{{ event.eventType }}</p>
-											<p class="text-[11px] text-on-surface-variant mt-1 leading-relaxed whitespace-pre-line">
-												{{ event.description }}
-											</p>
-										</div>
+								<div
+									class="grid grid-cols-2 gap-4">
+									{# INFLATION #}
+									<div>
+										<p class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant">Inflation</p>
+										<p class="text-lg font-bold text-on-surface" id="macro-inflation">
+											{{ (macro.inflation * 100)|number_format(2) }}%
+										</p>
 									</div>
 
-									<div class="text-right flex-shrink-0 ml-2">
-										<span class="inline-flex items-center rounded bg-transparent px-1 py-0.5 text-xs font-bold {{ isPositive ? 'text-secondary' : 'text-tertiary' }}">
-											{{ isPositive ? '+' : '' }}{{ event.changePercent|number_format(2) }}%
-										</span>
-										<p class="text-[10px] text-on-surface-variant mt-1">
-											{{ event.recordedAt|date('H:i') }}
+									{# OUTPUT GAP #}
+									<div>
+										<p class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant">Output Gap</p>
+										<p class="text-lg font-bold text-on-surface" id="macro-output-gap">
+											{{ (macro.output_gap * 100)|number_format(2) }}%
+										</p>
+									</div>
+
+									{# POLICY RATE #}
+									<div>
+										<p class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant">Policy Rate</p>
+										<p class="text-lg font-bold text-on-surface" id="macro-policy-rate">
+											{{ (macro.policy_rate * 100)|number_format(2) }}%
+										</p>
+									</div>
+
+									{# YIELD CURVE #}
+									<div>
+										<p class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant flex items-center gap-1">
+											10-Yr Yield
+											{% if macro.qe_active|default(false) %}
+												<span class="inline-flex w-2 h-2 rounded-full bg-secondary animate-pulse" title="Quantitative Easing Active"></span>
+											{% endif %}
+										</p>
+										<p class="text-lg font-bold {% if macro.qe_active|default(false) %}text-secondary{% else %}text-on-surface{% endif %}" id="macro-yield">
+											{{ (macro.yield_10y * 100)|number_format(2) }}%
 										</p>
 									</div>
 								</div>
-							</li>
-						{% endfor %}
-					</ul>
+
+								{# THE ECONOMIC STATUS BADGE #}
+								<div class="mt-4 pt-3 border-t border-outline-variant/10 flex justify-between items-center">
+									<span class="text-[10px] text-on-surface-variant">District GDP:</span>
+									<span id="macro-gdp" class="text-xs font-bold text-on-surface">
+										${{ (25.00 * macro.nominal_gdp_index|default(1.0))|number_format(2) }}T
+									</span>
+								</div>
+
+								<div class="mt-2 pt-2 flex justify-between items-center">
+									<span class="text-[10px] text-on-surface-variant">Current Cycle:</span>
+									<span id="market-economic-cycle" class="text-xs font-bold uppercase tracking-widest text-primary">
+										{{ economic_cycle }}
+									</span>
+								</div>
+							</div>
+
+							<div class="relative h-72 w-full flex justify-center">
+								<canvas id="etfPieChart"></canvas>
+							</div>
+						</div>
+					{% endif %}
+
+					<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15">
+						<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface mb-6 flex items-center gap-2">
+							<span class="material-symbols-outlined text-sm">feed</span>
+							Live Events
+						</h3>
+
+						<p id="no-events-msg" class="text-xs text-on-surface-variant {{ events is not empty ? 'hidden' : '' }}">No recent news reported.</p>
+						<ul id="events-list" role="list" class="divide-y divide-outline-variant/10">
+							{% for event in events %}
+								{% set isPositive = event.changePercent >= 0 %}
+								<li class="py-3">
+									<div class="flex items-start justify-between">
+										<div class="flex items-start gap-3 flex-1 min-w-0">
+											<div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 {{ isPositive ? 'bg-secondary/10 text-secondary' : 'bg-tertiary/10 text-tertiary' }}">
+												<span class="material-symbols-outlined text-sm">{{ event.eventType == 'SHOCK' ? 'bolt' : 'campaign' }}</span>
+											</div>
+											<div class="flex-1 min-w-0">
+												<p class="text-xs font-bold text-on-surface">{{ event.eventType }}</p>
+												<p class="text-[11px] text-on-surface-variant mt-1 leading-relaxed whitespace-pre-line">
+													{{ event.description }}
+												</p>
+											</div>
+										</div>
+
+										<div class="text-right flex-shrink-0 ml-2">
+											<span class="inline-flex items-center rounded bg-transparent px-1 py-0.5 text-xs font-bold {{ isPositive ? 'text-secondary' : 'text-tertiary' }}">
+												{{ isPositive ? '+' : '' }}{{ event.changePercent|number_format(2) }}%
+											</span>
+											<p class="text-[10px] text-on-surface-variant mt-1">
+												{{ event.recordedAt|date('H:i') }}
+											</p>
+										</div>
+									</div>
+								</li>
+							{% endfor %}
+						</ul>
+					</div>
 				</div>
+
 			</div>
-
 		</div>
-	</div>
-{% endblock %}
+	{% endblock %}
 
-{% block javascripts %}
-	<script>
-		window.AERIE_DATA = {
+	{% block javascripts %}
+		<script>
+			window.AERIE_DATA = {
 ticker: "{{ asset.ticker }}",
 isEtf: {{ isEtf ? 'true' : 'false' }},
 sharesOutstanding: {{ isEtf ? 0 : asset.sharesOutstanding }},
@@ -450,8 +465,8 @@ sharesMap: {
 },
 ticksPerYear: {{ ticksPerYear }}
 };
-	</script>
+		</script>
 
-	<script src="{{ asset('js/colors.js') }}"></script>
-	<script src="{{ asset('js/stock.js') }}"></script>
-{% endblock %}
+		<script src="{{ asset('js/colors.js') }}"></script>
+		<script src="{{ asset('js/stock.js') }}"></script>
+	{% endblock %}

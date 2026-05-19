@@ -740,7 +740,9 @@ class Stock
         $debt = (float) $this->totalDebt;
         $cash = (float) $this->corporateTreasury;
         
-        return max($equity * 0.50, ($equity + $debt - $cash));
+        // 10% to prevent penalizing cash-rich "lean" tech companies,
+        // while still maintaining a minimum physical asset base (desks, servers) to avoid Division by Zero.
+        return max($equity * 0.10, ($equity + $debt - $cash));
     }
 
     /**

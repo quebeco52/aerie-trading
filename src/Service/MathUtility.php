@@ -297,7 +297,7 @@ class MathUtility
     public function calculateDcfMultiplier(float $wacc, float $terminalGrowthRate = 0.02): float
     {
         $spread = $wacc - $terminalGrowthRate;
-        $multiplier = $spread > 0 ? (1.0 + $terminalGrowthRate) / $spread : 33.33;
+        $multiplier = $spread > 0 ? (1.0 + $terminalGrowthRate) / $spread : 60.0;
         
         return min(33.33, $multiplier);
     }
@@ -305,13 +305,16 @@ class MathUtility
     /**
      * Calculates Fair Value using the Dividend Discount Model (DDM).
      */
-    public function calculateDividendDiscountModel(float $annualDividend, float $costOfEquity, float $growthRate = 0.01): float
+    public function calculateDividendDiscountModel(float $annualDividend, float $discountRate, float $growthRate = 0.01): float
     {
         if ($annualDividend <= 0.0) {
             return 0.0;
         }
-        $requiredYield = max(0.02, $costOfEquity - $growthRate);
-        return $annualDividend / $requiredYield;
+        
+        // Prevent Division by Zero. The denominator must be at least 1%
+        $denominator = max(0.01, $discountRate - $growthRate);
+        
+        return $annualDividend / $denominator;
     }
 
     /**
@@ -363,7 +366,7 @@ class MathUtility
     public function calculateMarketShare(float $investedCapital, float $nominalGdpIndex, float $samRatio, float $baselineSectorTam = 1000000000000.0): float
     {
         $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
-        return $investedCapital / max(1.0, $dynamicSam);
+        return min(1.5, $investedCapital / max(1.0, $dynamicSam));
     }
 
     /**

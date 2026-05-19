@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     gapEl.className = 'text-lg font-bold text-on-surface';
                 }
             }
-            
+
             if (gdpEl && payload.macro.nominal_gdp_index !== undefined) {
                 const gdpValue = 20.00 * payload.macro.nominal_gdp_index;
                 gdpEl.textContent = '$' + gdpValue.toFixed(2) + 'T';
@@ -299,38 +299,49 @@ document.addEventListener('DOMContentLoaded', () => {
             if (stockUpdate.analyst_targets) {
                 const growthEl = document.getElementById('target-growth');
                 const incomeEl = document.getElementById('target-income');
-                const valueEl  = document.getElementById('target-value');
-                const badgeEl  = document.getElementById('analyst-consensus-badge');
-                
+                const valueEl = document.getElementById('target-value');
+                const consensusEl = document.getElementById('target-consensus');
+                const badgeEl = document.getElementById('analyst-consensus-badge');
+
                 const growthTarget = stockUpdate.analyst_targets.growth_analyst;
                 const incomeTarget = stockUpdate.analyst_targets.income_analyst;
                 const valueTarget = stockUpdate.analyst_targets.value_analyst;
 
-                // The backend engine uses the maximum of the three valuations for the gravity drift
-                const compositeTarget = Math.max(growthTarget, incomeTarget, valueTarget);
-                
-                // Determine Outperform vs Underperform with a 5% neutral margin
-                const isOutperform = compositeTarget > (newPrice * 1.05);
-                const isUnderperform = compositeTarget < (newPrice * 0.95);
-                
-                const consensusColor = isOutperform ? COLORS.positive : (isUnderperform ? COLORS.negative : '');
-                const consensusText = isOutperform ? 'Outperform' : (isUnderperform ? 'Underperform' : 'Neutral');
-                const badgeBg = isOutperform ? 'rgba(78, 222, 163, 0.1)' : (isUnderperform ? 'rgba(255, 179, 173, 0.1)' : 'rgba(194, 198, 214, 0.1)');
+                // Use perceived fair value (the blended consensus) as the main target
+                const compositeTarget = stockUpdate.perceived_fair_value !== undefined 
+                    ? parseFloat(stockUpdate.perceived_fair_value) 
+                    : Math.max(growthTarget, incomeTarget, valueTarget);
+
+                // Helper to determine color based on 5% neutral margin
+                const getTargetColor = (target) => {
+                    if (target > (newPrice * 1.05)) return COLORS.positive;
+                    if (target < (newPrice * 0.95)) return COLORS.negative;
+                    return ''; // Neutral
+                };
+
+                // Apply to Consensus Blended Target
+                if (consensusEl) {
+                    consensusEl.innerText = '$' + compositeTarget.toFixed(2);
+                    consensusEl.style.color = getTargetColor(compositeTarget);
+                }
 
                 if (growthEl) {
                     growthEl.innerText = '$' + growthTarget.toFixed(2);
-                    growthEl.style.color = consensusColor;
                 }
                 if (incomeEl) {
                     incomeEl.innerText = '$' + incomeTarget.toFixed(2);
-                    incomeEl.style.color = consensusColor;
                 }
                 if (valueEl) {
                     valueEl.innerText = '$' + valueTarget.toFixed(2);
-                    valueEl.style.color = consensusColor;
                 }
 
                 if (badgeEl) {
+                    const isOutperform = compositeTarget > (newPrice * 1.05);
+                    const isUnderperform = compositeTarget < (newPrice * 0.95);
+                    const consensusColor = isOutperform ? COLORS.positive : (isUnderperform ? COLORS.negative : '');
+                    const consensusText = isOutperform ? 'Outperform' : (isUnderperform ? 'Underperform' : 'Neutral');
+                    const badgeBg = isOutperform ? 'rgba(78, 222, 163, 0.1)' : (isUnderperform ? 'rgba(255, 179, 173, 0.1)' : 'rgba(194, 198, 214, 0.1)');
+
                     badgeEl.innerText = consensusText;
                     badgeEl.style.color = consensusColor;
                     badgeEl.style.backgroundColor = badgeBg;
@@ -494,7 +505,7 @@ function updateCharts(timeframe) {
     let roicData = [];
     let waccData = [];
     let evaData = [];
-    
+
     // Capital Return (Shareholder Yield)
     let dividendData = [];
     let buybackData = [];
@@ -523,7 +534,7 @@ function updateCharts(timeframe) {
             roicData.push(parseFloat(report.roic || 0) * 100);
             waccData.push(parseFloat(report.wacc || 0) * 100);
             evaData.push(parseFloat(report.eva || 0));
-            
+
             dividendData.push(parseFloat(report.dividend_paid || 0));
             buybackData.push(parseFloat(report.stock_buybacks || 0));
         });
@@ -558,7 +569,7 @@ function updateCharts(timeframe) {
             roicData.unshift(parseFloat(report.roic || 0) * 100);
             waccData.unshift(parseFloat(report.wacc || 0) * 100);
             evaData.unshift(parseFloat(report.eva || 0));
-            
+
             // Sum the last 4 quarters for a accurate annualized figure
             let sumDiv = 0;
             let sumBuy = 0;
@@ -847,20 +858,20 @@ function renderCapitalReturnChart(labels, dividendData, buybackData) {
             interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
-                tooltip: { 
-                    callbacks: { 
+                tooltip: {
+                    callbacks: {
                         label: (ctx) => `${ctx.dataset.label}: $${formatLarge(ctx.raw)}`
-                    } 
+                    }
                 }
             },
             scales: {
-                x: { },
-                y: { 
+                x: {},
+                y: {
                     type: 'linear',
                     position: 'left',
-                    ticks: { callback: (val) => formatLarge(val) }, 
+                    ticks: { callback: (val) => formatLarge(val) },
                     beginAtZero: true,
-                    suggestedMax: 100000000 
+                    suggestedMax: 100000000
                 }
             }
         }

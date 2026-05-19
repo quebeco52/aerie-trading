@@ -19,127 +19,127 @@ class Sectors
     ];
 
     public const INDUSTRY_METRICS = [
-        'Advertising Agencies' => ['pe' => 19.73, 'depreciation' => 0.12, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'leveraged_industry' => false],
-        'Aerospace & Defense' => ['pe' => 40.06, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Agricultural Inputs' => ['pe' => 23.02, 'depreciation' => 0.06, 'ebitda_limit' => 4.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
-        'Airlines' => ['pe' => 27.58, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Aluminum' => ['pe' => 29.64, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Apparel Manufacturing' => ['pe' => 20.07, 'depreciation' => 0.06, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Apparel Retail' => ['pe' => 22.57, 'depreciation' => 0.06, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Asset Management' => ['pe' => 14.21, 'depreciation' => 0.02, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Auto Manufacturers' => ['pe' => 9.63, 'depreciation' => 0.06, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Auto Parts' => ['pe' => 21.12, 'depreciation' => 0.06, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Auto & Truck Dealerships' => ['pe' => 16.14, 'depreciation' => 0.06, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Banks - Diversified' => ['pe' => 14.32, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 9.0, 'leveraged_industry' => true],
-        'Banks - Regional' => ['pe' => 14.25, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 9.0, 'leveraged_industry' => true],
-        'Beverages - Non-Alcoholic' => ['pe' => 30.43, 'depreciation' => 0.06, 'ebitda_limit' => 4.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
-        'Biotechnology' => ['pe' => 16.22, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
-        'Building Materials' => ['pe' => 24.14, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Building Products & Equipment' => ['pe' => 24.18, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Business Equipment & Supplies' => ['pe' => 26.31, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Capital Markets' => ['pe' => 18.15, 'depreciation' => 0.02, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Chemicals' => ['pe' => 17.38, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Communication Equipment' => ['pe' => 29.63, 'depreciation' => 0.12, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'leveraged_industry' => false],
-        'Computer Hardware' => ['pe' => 22.28, 'depreciation' => 0.15, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Conglomerates' => ['pe' => 25.29, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Consulting Services' => ['pe' => 26.88, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Copper' => ['pe' => 36.01, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Credit Services' => ['pe' => 11.35, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 9.0, 'leveraged_industry' => true],
-        'Diagnostics & Research' => ['pe' => 26.72, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
-        'Discount Stores' => ['pe' => 32.58, 'depreciation' => 0.06, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Drug Manufacturers - General' => ['pe' => 22.37, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
-        'Drug Manufacturers - Specialty & Generic' => ['pe' => 21.32, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
-        'Education & Training Services' => ['pe' => 18.32, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Electrical Equipment & Parts' => ['pe' => 29.81, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Electronic Components' => ['pe' => 43.20, 'depreciation' => 0.15, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Electronic Gaming & Multimedia' => ['pe' => 24.90, 'depreciation' => 0.15, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Electronics & Computer Distribution' => ['pe' => 18.60, 'depreciation' => 0.15, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Engineering & Construction' => ['pe' => 36.81, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Entertainment' => ['pe' => 32.07, 'depreciation' => 0.12, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'leveraged_industry' => false],
-        'Farm & Heavy Construction Machinery' => ['pe' => 20.92, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Farm Products' => ['pe' => 17.81, 'depreciation' => 0.06, 'ebitda_limit' => 4.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
-        'Financial Data & Stock Exchanges' => ['pe' => 23.23, 'depreciation' => 0.02, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Food Distribution' => ['pe' => 31.39, 'depreciation' => 0.06, 'ebitda_limit' => 4.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
-        'Footwear & Accessories' => ['pe' => 23.84, 'depreciation' => 0.06, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Furnishings, Fixtures & Appliances' => ['pe' => 24.48, 'depreciation' => 0.06, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Gambling' => ['pe' => 19.71, 'depreciation' => 0.06, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Gold' => ['pe' => 32.84, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Grocery Stores' => ['pe' => 14.10, 'depreciation' => 0.06, 'ebitda_limit' => 4.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
-        'Healthcare Plans' => ['pe' => 21.69, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
-        'Health Information Services' => ['pe' => 29.66, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
-        'Home Improvement Retail' => ['pe' => 21.24, 'depreciation' => 0.06, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Household & Personal Products' => ['pe' => 23.29, 'depreciation' => 0.06, 'ebitda_limit' => 4.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
-        'Industrial Distribution' => ['pe' => 31.35, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Information Technology Services' => ['pe' => 22.50, 'depreciation' => 0.15, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Insurance Brokers' => ['pe' => 17.03, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 9.0, 'leveraged_industry' => true],
-        'Insurance - Diversified' => ['pe' => 11.99, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 9.0, 'leveraged_industry' => true],
-        'Insurance - Life' => ['pe' => 12.78, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 9.0, 'leveraged_industry' => true],
-        'Insurance - Property & Casualty' => ['pe' => 12.03, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 9.0, 'leveraged_industry' => true],
-        'Insurance - Reinsurance' => ['pe' => 12.35, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 9.0, 'leveraged_industry' => true],
-        'Insurance - Specialty' => ['pe' => 11.21, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 9.0, 'leveraged_industry' => true],
-        'Integrated Freight & Logistics' => ['pe' => 24.92, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Internet Content & Information' => ['pe' => 22.11, 'depreciation' => 0.15, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Internet Retail' => ['pe' => 26.62, 'depreciation' => 0.15, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Leisure' => ['pe' => 26.01, 'depreciation' => 0.06, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Lodging' => ['pe' => 29.81, 'depreciation' => 0.06, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Luxury Goods' => ['pe' => 35.68, 'depreciation' => 0.06, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Marine Shipping' => ['pe' => 14.74, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Medical Care Facilities' => ['pe' => 23.68, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
-        'Medical Devices' => ['pe' => 32.33, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
-        'Medical Distribution' => ['pe' => 31.50, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
-        'Medical Instruments & Supplies' => ['pe' => 29.05, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
-        'Metal Fabrication' => ['pe' => 30.00, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Mortgage Finance' => ['pe' => 11.99, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 9.0, 'leveraged_industry' => true],
-        'Oil & Gas E&P' => ['pe' => 17.42, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Oil & Gas Equipment & Services' => ['pe' => 24.77, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Oil & Gas Integrated' => ['pe' => 18.14, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Oil & Gas Midstream' => ['pe' => 16.80, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Oil & Gas Refining & Marketing' => ['pe' => 22.19, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Packaged Foods' => ['pe' => 17.07, 'depreciation' => 0.06, 'ebitda_limit' => 4.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
-        'Packaging & Containers' => ['pe' => 21.56, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Personal Services' => ['pe' => 18.93, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Pollution & Treatment Controls' => ['pe' => 37.47, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Publishing' => ['pe' => 15.63, 'depreciation' => 0.12, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'leveraged_industry' => false],
-        'Railroads' => ['pe' => 27.25, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Real Estate - Development' => ['pe' => 16.36, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false],
-        'Real Estate Services' => ['pe' => 28.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false],
-        'Recreational Vehicles' => ['pe' => 26.94, 'depreciation' => 0.06, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'REIT - Diversified' => ['pe' => 27.81, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false],
-        'REIT - Healthcare Facilities' => ['pe' => 31.58, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false],
-        'REIT - Hotel & Motel' => ['pe' => 25.16, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false],
-        'REIT - Industrial' => ['pe' => 31.50, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false],
-        'REIT - Mortgage' => ['pe' => 14.64, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 9.0, 'leveraged_industry' => true],
-        'REIT - Office' => ['pe' => 25.24, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false],
-        'REIT - Residential' => ['pe' => 24.75, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false],
-        'REIT - Retail' => ['pe' => 28.57, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false],
-        'REIT - Specialty' => ['pe' => 29.49, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false],
-        'Rental & Leasing Services' => ['pe' => 19.72, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Residential Construction' => ['pe' => 15.88, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Resorts & Casinos' => ['pe' => 19.77, 'depreciation' => 0.06, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Restaurants' => ['pe' => 22.21, 'depreciation' => 0.06, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Scientific & Technical Instruments' => ['pe' => 38.84, 'depreciation' => 0.15, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Security & Protection Services' => ['pe' => 22.86, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Semiconductor Equipment & Materials' => ['pe' => 44.10, 'depreciation' => 0.15, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Semiconductors' => ['pe' => 39.67, 'depreciation' => 0.15, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Software - Application' => ['pe' => 27.12, 'depreciation' => 0.15, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Software - Infrastructure' => ['pe' => 26.15, 'depreciation' => 0.15, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Solar' => ['pe' => 19.01, 'depreciation' => 0.15, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Specialty Business Services' => ['pe' => 24.88, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Specialty Chemicals' => ['pe' => 31.69, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Specialty Industrial Machinery' => ['pe' => 33.44, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Specialty Retail' => ['pe' => 25.37, 'depreciation' => 0.06, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Staffing & Employment Services' => ['pe' => 15.26, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Steel' => ['pe' => 23.79, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Telecom Services' => ['pe' => 15.25, 'depreciation' => 0.12, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'leveraged_industry' => false],
-        'Tobacco' => ['pe' => 19.92, 'depreciation' => 0.06, 'ebitda_limit' => 4.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
-        'Tools & Accessories' => ['pe' => 33.06, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Travel Services' => ['pe' => 20.39, 'depreciation' => 0.06, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
-        'Trucking' => ['pe' => 45.18, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'Utilities - Diversified' => ['pe' => 18.68, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false],
-        'Utilities - Regulated Electric' => ['pe' => 21.63, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false],
-        'Utilities - Regulated Gas' => ['pe' => 18.36, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false],
-        'Utilities - Regulated Water' => ['pe' => 21.77, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false],
-        'Waste Management' => ['pe' => 28.84, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
-        'General' => ['pe' => 20.00, 'depreciation' => 0.04, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
+        'Advertising Agencies' => ['pe' => 16.50, 'depreciation' => 0.05, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'leveraged_industry' => false],
+        'Aerospace & Defense' => ['pe' => 22.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
+        'Agricultural Inputs' => ['pe' => 15.00, 'depreciation' => 0.07, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Airlines' => ['pe' => 10.00, 'depreciation' => 0.07, 'ebitda_limit' => 3.5, 'equity_limit' => 2.0, 'leveraged_industry' => false],
+        'Aluminum' => ['pe' => 12.00, 'depreciation' => 0.05, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Apparel Manufacturing' => ['pe' => 16.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Apparel Retail' => ['pe' => 18.00, 'depreciation' => 0.10, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Asset Management' => ['pe' => 15.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
+        'Auto Manufacturers' => ['pe' => 8.50, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 2.0, 'leveraged_industry' => false],
+        'Auto Parts' => ['pe' => 14.00, 'depreciation' => 0.07, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Auto & Truck Dealerships' => ['pe' => 12.00, 'depreciation' => 0.05, 'ebitda_limit' => 4.0, 'equity_limit' => 2.0, 'leveraged_industry' => false], // Floorplan debt allows high limits
+        'Banks - Diversified' => ['pe' => 11.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 10.0, 'leveraged_industry' => true],
+        'Banks - Regional' => ['pe' => 10.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 9.0, 'leveraged_industry' => true],
+        'Beverages - Non-Alcoholic' => ['pe' => 24.00, 'depreciation' => 0.05, 'ebitda_limit' => 4.0, 'equity_limit' => 1.5, 'leveraged_industry' => false],
+        'Biotechnology' => ['pe' => 18.00, 'depreciation' => 0.10, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false], // Highly volatile, bond markets hate lending to biotech
+        'Building Materials' => ['pe' => 15.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Building Products & Equipment' => ['pe' => 16.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Business Equipment & Supplies' => ['pe' => 12.00, 'depreciation' => 0.06, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Capital Markets' => ['pe' => 14.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 8.0, 'leveraged_industry' => true], // These are investment banks (Goldman Sachs), must be 'true'!
+        'Chemicals' => ['pe' => 15.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'leveraged_industry' => false],
+        'Communication Equipment' => ['pe' => 18.00, 'depreciation' => 0.15, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'leveraged_industry' => false],
+        'Computer Hardware' => ['pe' => 15.00, 'depreciation' => 0.15, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false],
+        'Conglomerates' => ['pe' => 16.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
+        'Consulting Services' => ['pe' => 22.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'leveraged_industry' => false], // Almost entirely human capital
+        'Copper' => ['pe' => 12.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'leveraged_industry' => false], // Asset heavy, cyclical mining
+        'Credit Services' => ['pe' => 15.00, 'depreciation' => 0.05, 'ebitda_limit' => 999.0, 'equity_limit' => 7.0, 'leveraged_industry' => true], // Amex, Discover. Uncollateralized lending limits D/E to ~7x
+        'Diagnostics & Research' => ['pe' => 24.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
+        'Discount Stores' => ['pe' => 20.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false], // Very safe, steady cash flows
+        'Drug Manufacturers - General' => ['pe' => 16.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false], // Big Pharma
+        'Drug Manufacturers - Specialty & Generic' => ['pe' => 14.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Education & Training Services' => ['pe' => 18.00, 'depreciation' => 0.04, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'leveraged_industry' => false],
+        'Electrical Equipment & Parts' => ['pe' => 18.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Electronic Components' => ['pe' => 16.00, 'depreciation' => 0.15, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'leveraged_industry' => false], // Hardware gets obsolete fast
+        'Electronic Gaming & Multimedia' => ['pe' => 22.00, 'depreciation' => 0.10, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false], // Hit-driven, no debt allowed
+        'Electronics & Computer Distribution' => ['pe' => 14.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Engineering & Construction' => ['pe' => 14.00, 'depreciation' => 0.06, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'leveraged_industry' => false], // Highly cyclical
+        'Entertainment' => ['pe' => 20.00, 'depreciation' => 0.10, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false], // Media assets/parks support debt
+        'Farm & Heavy Construction Machinery' => ['pe' => 15.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
+        'Farm Products' => ['pe' => 16.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Financial Data & Stock Exchanges' => ['pe' => 26.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'leveraged_industry' => false], // Monopolies, high P/E
+        'Food Distribution' => ['pe' => 18.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Footwear & Accessories' => ['pe' => 18.00, 'depreciation' => 0.06, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'leveraged_industry' => false],
+        'Furnishings, Fixtures & Appliances' => ['pe' => 15.00, 'depreciation' => 0.06, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Gambling' => ['pe' => 18.00, 'depreciation' => 0.08, 'ebitda_limit' => 4.5, 'equity_limit' => 2.0, 'leveraged_industry' => false], // Collateralized by real estate
+        'Gold' => ['pe' => 15.00, 'depreciation' => 0.10, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'leveraged_industry' => false], // Mines deplete, highly cyclical
+        'Grocery Stores' => ['pe' => 15.00, 'depreciation' => 0.06, 'ebitda_limit' => 4.0, 'equity_limit' => 1.5, 'leveraged_industry' => false], // Very safe debt profile
+        'Healthcare Plans' => ['pe' => 16.00, 'depreciation' => 0.04, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'leveraged_industry' => false], // Managed care
+        'Health Information Services' => ['pe' => 24.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'leveraged_industry' => false],
+        'Home Improvement Retail' => ['pe' => 20.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Household & Personal Products' => ['pe' => 22.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'leveraged_industry' => false], // P&G, Colgate. Premium P/E.
+        'Industrial Distribution' => ['pe' => 16.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Information Technology Services' => ['pe' => 24.00, 'depreciation' => 0.04, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false], // Asset light
+        'Insurance Brokers' => ['pe' => 22.00, 'depreciation' => 0.02, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'leveraged_industry' => false], // FIX: Asset light fee business!
+        'Insurance - Diversified' => ['pe' => 12.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 7.0, 'leveraged_industry' => true],
+        'Insurance - Life' => ['pe' => 10.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 8.0, 'leveraged_industry' => true],
+        'Insurance - Property & Casualty' => ['pe' => 14.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 6.0, 'leveraged_industry' => true], // P&C is riskier, needs more equity buffer
+        'Insurance - Reinsurance' => ['pe' => 11.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 5.0, 'leveraged_industry' => true], // Taking the riskiest policies, highest capital requirements
+        'Insurance - Specialty' => ['pe' => 13.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 6.0, 'leveraged_industry' => true],
+        'Integrated Freight & Logistics' => ['pe' => 18.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false], // UPS, FedEx. Heavy CapEx.
+        'Internet Content & Information' => ['pe' => 25.00, 'depreciation' => 0.05, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'leveraged_industry' => false], // Alphabet, Meta. Asset light.
+        'Internet Retail' => ['pe' => 28.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false], // Amazon. Logistics heavy.
+        'Leisure' => ['pe' => 18.00, 'depreciation' => 0.08, 'ebitda_limit' => 4.0, 'equity_limit' => 2.0, 'leveraged_industry' => false], // Theme parks, cruises. Collateralized debt.
+        'Lodging' => ['pe' => 18.00, 'depreciation' => 0.06, 'ebitda_limit' => 4.0, 'equity_limit' => 2.0, 'leveraged_industry' => false], // Hotels. Real estate backed.
+        'Luxury Goods' => ['pe' => 24.00, 'depreciation' => 0.04, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'leveraged_industry' => false], // High margin, brand value.
+        'Marine Shipping' => ['pe' => 9.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'leveraged_industry' => false], // Extremely cyclical, rusts fast.
+        'Medical Care Facilities' => ['pe' => 15.00, 'depreciation' => 0.06, 'ebitda_limit' => 4.5, 'equity_limit' => 2.0, 'leveraged_industry' => false], // Hospitals. Stable cash flow, heavy assets.
+        'Medical Devices' => ['pe' => 25.00, 'depreciation' => 0.05, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Medical Distribution' => ['pe' => 14.00, 'depreciation' => 0.04, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false], // Razor thin margins, high volume.
+        'Medical Instruments & Supplies' => ['pe' => 22.00, 'depreciation' => 0.05, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Metal Fabrication' => ['pe' => 13.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'leveraged_industry' => false],
+        'Mortgage Finance' => ['pe' => 11.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 8.0, 'leveraged_industry' => true], // Shadow banks / Fannie Mae. Bank Rule.
+        'Oil & Gas E&P' => ['pe' => 11.00, 'depreciation' => 0.12, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'leveraged_industry' => false], // Exploration. Wells deplete incredibly fast.
+        'Oil & Gas Equipment & Services' => ['pe' => 14.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'leveraged_industry' => false], // Cyclical services.
+        'Oil & Gas Integrated' => ['pe' => 13.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'leveraged_industry' => false], // Exxon/Chevron. Safer than E&P.
+        'Oil & Gas Midstream' => ['pe' => 14.00, 'depreciation' => 0.06, 'ebitda_limit' => 4.5, 'equity_limit' => 2.0, 'leveraged_industry' => false], // Pipelines. "Toll roads", highly stable.
+        'Oil & Gas Refining & Marketing' => ['pe' => 11.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 1.5, 'leveraged_industry' => false], // Crack spreads are volatile.
+        'Packaged Foods' => ['pe' => 16.00, 'depreciation' => 0.04, 'ebitda_limit' => 4.0, 'equity_limit' => 1.5, 'leveraged_industry' => false], // Extremely defensive.
+        'Packaging & Containers' => ['pe' => 15.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false],
+        'Personal Services' => ['pe' => 18.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Pollution & Treatment Controls' => ['pe' => 22.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false], // ESG premium, stable.
+        'Publishing' => ['pe' => 12.00, 'depreciation' => 0.05, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'leveraged_industry' => false], // Secular decline.
+        'Railroads' => ['pe' => 19.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false], // Wide moat monopoly pricing.
+        'Real Estate - Development' => ['pe' => 13.00, 'depreciation' => 0.03, 'ebitda_limit' => 5.0, 'equity_limit' => 2.0, 'leveraged_industry' => false], // Boom and bust, heavily levered.
+        'Real Estate Services' => ['pe' => 18.00, 'depreciation' => 0.02, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'leveraged_industry' => false], // FIX: Asset light brokerages! No huge debt allowed.
+        'Recreational Vehicles' => ['pe' => 11.00, 'depreciation' => 0.05, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'leveraged_industry' => false], // Highly discretionary, first to drop in recession.
+        'REIT - Diversified' => ['pe' => 16.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false],
+        'REIT - Healthcare Facilities' => ['pe' => 15.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false], // Very stable
+        'REIT - Hotel & Motel' => ['pe' => 13.00, 'depreciation' => 0.04, 'ebitda_limit' => 5.5, 'equity_limit' => 2.0, 'leveraged_industry' => false], // Highly cyclical, less debt allowed
+        'REIT - Industrial' => ['pe' => 18.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false], // Warehouses (Amazon effect), premium P/E
+        'REIT - Mortgage' => ['pe' => 10.00, 'depreciation' => 0.01, 'ebitda_limit' => 999.0, 'equity_limit' => 8.0, 'leveraged_industry' => true], // Pure financial engineering (Bank Rule)
+        'REIT - Office' => ['pe' => 12.00, 'depreciation' => 0.04, 'ebitda_limit' => 6.0, 'equity_limit' => 2.0, 'leveraged_industry' => false], // Work-from-home headwinds
+        'REIT - Residential' => ['pe' => 17.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false], // Apartments, highly resilient
+        'REIT - Retail' => ['pe' => 14.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.0, 'equity_limit' => 2.0, 'leveraged_industry' => false], // Malls, e-commerce risk
+        'REIT - Specialty' => ['pe' => 16.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false], // Data centers, cell towers
+        'Rental & Leasing Services' => ['pe' => 15.00, 'depreciation' => 0.10, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false], // Rental cars depreciate fast
+        'Residential Construction' => ['pe' => 10.00, 'depreciation' => 0.02, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false], // Homebuilders. Highly cyclical.
+        'Resorts & Casinos' => ['pe' => 18.00, 'depreciation' => 0.06, 'ebitda_limit' => 4.5, 'equity_limit' => 2.0, 'leveraged_industry' => false], // Collateralized by prime real estate
+        'Restaurants' => ['pe' => 20.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'leveraged_industry' => false], // Franchise models support decent debt
+        'Scientific & Technical Instruments' => ['pe' => 26.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'leveraged_industry' => false], // High margin, IP heavy
+        'Security & Protection Services' => ['pe' => 18.00, 'depreciation' => 0.04, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Semiconductor Equipment & Materials' => ['pe' => 22.00, 'depreciation' => 0.12, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false], // ASML etc. Boom and bust.
+        'Semiconductors' => ['pe' => 24.00, 'depreciation' => 0.15, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false], // Fab plants age like milk
+        'Software - Application' => ['pe' => 28.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false], // Asset light, pure IP, high growth
+        'Software - Infrastructure' => ['pe' => 26.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false], // Sticky revenues (Microsoft, Oracle)
+        'Solar' => ['pe' => 18.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false], // Capital intensive manufacturing
+        'Specialty Business Services' => ['pe' => 18.00, 'depreciation' => 0.04, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Specialty Chemicals' => ['pe' => 16.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'leveraged_industry' => false],
+        'Specialty Industrial Machinery' => ['pe' => 18.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Specialty Retail' => ['pe' => 16.00, 'depreciation' => 0.06, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Staffing & Employment Services' => ['pe' => 14.00, 'depreciation' => 0.02, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'leveraged_industry' => false], // Pure human capital. No hard assets.
+        'Steel' => ['pe' => 10.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'leveraged_industry' => false], // Brutally cyclical commodity
+        'Telecom Services' => ['pe' => 14.00, 'depreciation' => 0.10, 'ebitda_limit' => 4.5, 'equity_limit' => 2.0, 'leveraged_industry' => false], // Massive CAPEX, but incredibly stable utility-like cash flows
+        'Tobacco' => ['pe' => 11.00, 'depreciation' => 0.04, 'ebitda_limit' => 4.0, 'equity_limit' => 1.5, 'leveraged_industry' => false], // Secular volume decline, massive cash flows, huge debt capacity
+        'Tools & Accessories' => ['pe' => 16.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
+        'Travel Services' => ['pe' => 18.00, 'depreciation' => 0.04, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'leveraged_industry' => false], // Expedia, Booking.com. Asset light.
+        'Trucking' => ['pe' => 14.00, 'depreciation' => 0.12, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'leveraged_industry' => false], // Fixed the 45 P/E error. Trucks rust.
+        'Utilities - Diversified' => ['pe' => 16.00, 'depreciation' => 0.04, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false], // Regulated monopolies
+        'Utilities - Regulated Electric' => ['pe' => 16.00, 'depreciation' => 0.04, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false],
+        'Utilities - Regulated Gas' => ['pe' => 15.00, 'depreciation' => 0.04, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false],
+        'Utilities - Regulated Water' => ['pe' => 18.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false], // Safest asset class on earth
+        'Waste Management' => ['pe' => 22.00, 'depreciation' => 0.05, 'ebitda_limit' => 4.0, 'equity_limit' => 1.5, 'leveraged_industry' => false], // Trash is cash. High P/E.
+        'General' => ['pe' => 18.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'leveraged_industry' => false],
     ];
 }

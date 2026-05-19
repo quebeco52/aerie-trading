@@ -11,6 +11,18 @@ use Doctrine\ORM\EntityManagerInterface;
  */
 class CorporateActionEngine
 {
+    // Split Physics Constants
+    private const FORWARD_SPLIT_THRESHOLD = 400.0;
+    private const FORWARD_SPLIT_FACTOR = 4.0;
+    private const REVERSE_SPLIT_THRESHOLD = 2.0;
+    private const REVERSE_SPLIT_FACTOR = 10.0;
+    private const MIN_SHARES_REVERSE_SPLIT = 10.0;
+    private const MAX_SPLIT_MULTIPLIER = 1_000_000;
+
+    // Corporate Cash & Liquidity Buffers
+    private const TARGET_OPERATING_CASH = 0.05; // 5% of physical operating base
+    private const MIN_OPERATING_CASH = 0.03;    // 3% absolute minimum before emergency borrowing
+
     /**
      * Constructor.
      *
@@ -43,12 +55,12 @@ class CorporateActionEngine
     {
         $splitEvent = null;
 
-        if ($newPrice >= 400.0) {
+        if ($newPrice >= self::FORWARD_SPLIT_THRESHOLD) {
             $result = $this->executeForwardSplit($stock, $newPrice, $sharesOutstanding);
             $newPrice = $result['price'];
             $sharesOutstanding = $result['shares'];
             $splitEvent = $result['event'];
-        } elseif ($newPrice < 2.0 && $sharesOutstanding >= 10.0) {
+        } elseif ($newPrice < self::REVERSE_SPLIT_THRESHOLD && $sharesOutstanding >= self::MIN_SHARES_REVERSE_SPLIT) {
             $result = $this->executeReverseSplit($stock, $newPrice, $sharesOutstanding);
             $newPrice = $result['price'];
             $sharesOutstanding = $result['shares'];
@@ -74,9 +86,9 @@ class CorporateActionEngine
     private function executeForwardSplit(Stock $stock, float $newPrice, float $sharesOutstanding): array
     {
         $splitFactor = 1;
-        while ($newPrice >= 400.0 && $splitFactor <= 1000000 && !is_infinite($newPrice)) {
-            $newPrice = $newPrice / 4.0;
-            $splitFactor *= 4;
+        while ($newPrice >= self::FORWARD_SPLIT_THRESHOLD && $splitFactor <= self::MAX_SPLIT_MULTIPLIER && !is_infinite($newPrice)) {
+            $newPrice = $newPrice / self::FORWARD_SPLIT_FACTOR;
+            $splitFactor *= self::FORWARD_SPLIT_FACTOR;
         }
 
         $sharesOutstanding *= $splitFactor;
@@ -96,15 +108,23 @@ class CorporateActionEngine
         $desc = "{$stock->getName()} has executed a {$splitFactor}-for-1 stock split.";
         $splitEvent = $this->marketEvent->publish($stock, 'SPLIT', $desc, 0.00);
 
-        $this->entityManager->getConnection()->executeStatement(
-            'UPDATE user_stocks SET quantity = quantity * :factor, version = version + 1 WHERE stock_id = :stock_id',
-            ['factor' => $splitFactor, 'stock_id' => $stock->getId()]
-        );
+        $conn = $this->entityManager->getConnection();
+        $conn->beginTransaction();
+        try {
+            $conn->executeStatement(
+                'UPDATE user_stocks SET quantity = quantity * :factor, version = version + 1 WHERE stock_id = :stock_id',
+                ['factor' => $splitFactor, 'stock_id' => $stock->getId()]
+            );
 
-        $this->entityManager->getConnection()->executeStatement(
-            'UPDATE stock_history SET price = GREATEST(price / :factor, 0.00000001) WHERE stock_id = :stock_id',
-            ['factor' => $splitFactor, 'stock_id' => $stock->getId()]
-        );
+            $conn->executeStatement(
+                'UPDATE stock_history SET price = GREATEST(price / :factor, 0.00000001) WHERE stock_id = :stock_id',
+                ['factor' => $splitFactor, 'stock_id' => $stock->getId()]
+            );
+            $conn->commit();
+        } catch (\Exception $e) {
+            $conn->rollBack();
+            throw $e;
+        }
 
         $this->adjustRedisBuffer($stock->getTicker(), $splitFactor, 'divide');
 
@@ -126,13 +146,13 @@ class CorporateActionEngine
         $reverseFactor = 1;
         $preSplitPrice = $newPrice;
 
-        while ($newPrice < 2.0 && $reverseFactor <= 1000000 && $newPrice > 0.0) {
+        while ($newPrice < self::REVERSE_SPLIT_THRESHOLD && $reverseFactor <= self::MAX_SPLIT_MULTIPLIER && $newPrice > 0.0) {
             // Prevent reverse splitting if it drops shares below 1.0 (creates magical wealth and breaks per-share metrics)
-            if (($sharesOutstanding / ($reverseFactor * 10)) < 1.0) {
+            if (($sharesOutstanding / ($reverseFactor * self::REVERSE_SPLIT_FACTOR)) < 1.0) {
                 break;
             }
-            $newPrice = $newPrice * 10.0;
-            $reverseFactor *= 10;
+            $newPrice = $newPrice * self::REVERSE_SPLIT_FACTOR;
+            $reverseFactor *= self::REVERSE_SPLIT_FACTOR;
         }
 
         if ($reverseFactor === 1) {
@@ -156,28 +176,36 @@ class CorporateActionEngine
         $desc = "{$stock->getName()} executed a 1-for-{$reverseFactor} reverse split.";
         $splitEvent = $this->marketEvent->publish($stock, 'REVSPLIT', $desc, 0.00);
 
-        $this->entityManager->getConnection()->executeStatement(
-            'UPDATE users u
-             INNER JOIN user_stocks us ON u.id = us.user_id
-             SET u.cash_balance = u.cash_balance + ((us.quantity % :factor) * :pre_split_price)
-             WHERE us.stock_id = :stock_id',
-            ['factor' => $reverseFactor, 'pre_split_price' => $preSplitPrice, 'stock_id' => $stock->getId()]
-        );
+        $conn = $this->entityManager->getConnection();
+        $conn->beginTransaction();
+        try {
+            $conn->executeStatement(
+                'UPDATE users u
+                 INNER JOIN user_stocks us ON u.id = us.user_id
+                 SET u.cash_balance = u.cash_balance + ((us.quantity % :factor) * :pre_split_price)
+                 WHERE us.stock_id = :stock_id',
+                ['factor' => $reverseFactor, 'pre_split_price' => $preSplitPrice, 'stock_id' => $stock->getId()]
+            );
 
-        $this->entityManager->getConnection()->executeStatement(
-            'UPDATE user_stocks SET quantity = FLOOR(quantity / :factor), version = version + 1 WHERE stock_id = :stock_id',
-            ['factor' => $reverseFactor, 'stock_id' => $stock->getId()]
-        );
+            $conn->executeStatement(
+                'UPDATE user_stocks SET quantity = FLOOR(quantity / :factor), version = version + 1 WHERE stock_id = :stock_id',
+                ['factor' => $reverseFactor, 'stock_id' => $stock->getId()]
+            );
 
-        $this->entityManager->getConnection()->executeStatement(
-            'DELETE FROM user_stocks WHERE stock_id = :stock_id AND quantity = 0',
-            ['stock_id' => $stock->getId()]
-        );
+            $conn->executeStatement(
+                'DELETE FROM user_stocks WHERE stock_id = :stock_id AND quantity = 0',
+                ['stock_id' => $stock->getId()]
+            );
 
-        $this->entityManager->getConnection()->executeStatement(
-            'UPDATE stock_history SET price = LEAST(price * :factor, 900000000000.0) WHERE stock_id = :stock_id',
-            ['factor' => $reverseFactor, 'stock_id' => $stock->getId()]
-        );
+            $conn->executeStatement(
+                'UPDATE stock_history SET price = LEAST(price * :factor, 900000000000.0) WHERE stock_id = :stock_id',
+                ['factor' => $reverseFactor, 'stock_id' => $stock->getId()]
+            );
+            $conn->commit();
+        } catch (\Exception $e) {
+            $conn->rollBack();
+            throw $e;
+        }
 
         $this->adjustRedisBuffer($stock->getTicker(), $reverseFactor, 'multiply');
 
@@ -263,7 +291,7 @@ class CorporateActionEngine
         $newTreasury -= $divData['total_paid'];
 
         // CALCULATE EXCESS CASH (The War Chest)
-        $targetOperatingCash = $operatingBase * 0.05; // 5% of operating base is the required buffer
+        $targetOperatingCash = $operatingBase * self::TARGET_OPERATING_CASH; // 5% of operating base is the required buffer
         $excessCash = max(0.0, $newTreasury - $targetOperatingCash);
 
         $currentPE = $actualAnnualEps > 0 ? ($currentPrice / $actualAnnualEps) : 9999.0;
@@ -294,7 +322,6 @@ class CorporateActionEngine
             totalDividendsPaid: $divData['total_paid'],
             totalBuybackCash: $buybackData['total_cash_spent'],
             operatingBase: $operatingBase,
-            investedCapital: $investedCapital,
             nopat: $nopat,
             newTreasury: $newTreasury,
             macroState: $macroState,
@@ -356,7 +383,7 @@ class CorporateActionEngine
         // Titans are much more stubborn about cutting dividends to save face
         $isTitan = in_array($stock->getSystemicImportance(), ['titan']);
         $isAristocrat = $speed <= 0.05;
-        
+
         $distressMultiplier = 1.0;
         if ($isTitan) {
             $distressMultiplier += 0.2;
@@ -371,7 +398,7 @@ class CorporateActionEngine
         // Deep distress requires a massive EVA collapse
         $isDeepDistress = $evaSpread < (-0.08 * $distressMultiplier);
         $isModerateDistressNoCash = ($evaSpread < (-0.04 * $distressMultiplier)) && !$hasCashBuffer;
-        
+
         // A true liquidity crisis means operating income can't cover interest AND there's no cash to bridge the gap.
         // An ICR below 1.0 is an active cash-burn emergency regardless of reserves.
         $isLiquidityCrisis = $health['interest_coverage'] < 1.0 || ($health['interest_coverage'] < 1.5 && !$hasCashBuffer);
@@ -384,7 +411,7 @@ class CorporateActionEngine
             $targetDividend = $calculatedTarget;
             if ($speed <= 0.05) {
                 // Rip the band-aid off: Once the streak is broken, cut heavily to protect the balance sheet.
-                $speed = 0.50; 
+                $speed = 0.50;
             }
         }
 
@@ -392,7 +419,7 @@ class CorporateActionEngine
         // Smoothly accelerate Aristocrats so they don't get trapped with a micro-yield
         if ($lastDividend > 0 && $speed <= 0.05) {
             $catchUpRatio = $calculatedTarget / $lastDividend;
-            
+
             // If the target is at least 30% higher, start smoothly scaling the speed up to a max of 15%
             if ($catchUpRatio > 1.30) {
                 // For every 10% above 1.30, add 0.010, capped at 0.15
@@ -405,7 +432,7 @@ class CorporateActionEngine
         $newDividend = max(0.0, $newDividend);
 
         // Cap the dividend to what we can physically pay from cash on hand (minus a 3% operating safety buffer)
-        $minOperatingCash = $operatingBase * 0.03;
+        $minOperatingCash = $operatingBase * self::MIN_OPERATING_CASH;
         $usableCash = max(0.0, $availableTreasury - $minOperatingCash);
         $maxDividendPerShare = $shares > 0 ? ($usableCash / $shares) : 0.0;
 
@@ -505,7 +532,7 @@ class CorporateActionEngine
             // CFOs scale their aggression based on how "cheap" the stock is relative to its intrinsic Fair P/E
             $valuationDiscount = max(0.0, ($fairValuePE - $currentPE) / max(1.0, $fairValuePE));
             $aggression = min(1.0, 0.50 + $valuationDiscount); // Base 50% execution + up to 50% more if undervalued
-            
+
             $actualSpend = $absoluteMaxSpend * $aggression * (mt_rand(80, 100) / 100.0);
 
             $sharesRepurchased = (int) floor($actualSpend / max($currentPrice, 0.01));
@@ -537,7 +564,6 @@ class CorporateActionEngine
      * @param float $totalDividendsPaid The total cash distributed as dividends.
      * @param float $totalBuybackCash   The total cash spent on share repurchases.
      * @param float $operatingBase      The stable physical size of the business.
-     * @param float $investedCapital    The physical capital invested in the firm.
      * @param float $nopat              Net Operating Profit After Tax.
      * @param float $newTreasury        The projected treasury balance before debt management.
      * @param array $macroState         The current macroeconomic state (influences debt tolerance).
@@ -548,7 +574,6 @@ class CorporateActionEngine
         float $totalDividendsPaid,
         float $totalBuybackCash,
         float $operatingBase,
-        float $investedCapital,
         float $nopat,
         float $newTreasury,
         array $macroState,
@@ -567,72 +592,105 @@ class CorporateActionEngine
         $newEquity = max(1000.0, $currentEquity + $quarterlyNetIncome - $totalCashSpent);
         $stock->setTotalEquity((string) $newEquity);
 
-        $newDebtIssued = 0.0;
-        $totalOrganicCapex = 0.0;
-        $debtActionTaken = false;
+        // STATE MANAGER FOR MUTATIONS
+        $state = [
+            'treasury' => $newTreasury,
+            'debt' => (float) $stock->getTotalDebt(),
+            'debtIssued' => 0.0,
+            'organicCapex' => 0.0,
+            'debtActionTaken' => false,
+            'events' => []
+        ];
 
         // DEBT MANAGEMENT (MACRO TOLERANCE)
-        $currentDebt = (float) $stock->getTotalDebt();
-        $targetOperatingCash = $operatingBase * 0.05;
-        $minOperatingCash = $operatingBase * 0.03;
+        $this->processDebtExpansion($stock, $newEquity, $nopat, $macroState, $health, $state);
 
-        $liveInvestedCapital = $this->mathUtility->calculateLiveInvestedCapital($newEquity, $currentDebt, $newTreasury);
+        //  ORGANIC BUSINESS EXPANSION (Internal CapEx)
+        $this->processOrganicCapex($stock, $newEquity, $nopat, $operatingBase, $macroState, $health, $state);
+
+        // THE DEBT TRAP (Liquidity Crisis)
+        $this->processEmergencyBorrowing($stock, $operatingBase, $macroState, $health, $state);
+
+        // ARBITRAGE PAYDOWN (Escape negative carry)
+        $this->processArbitragePaydown($stock, $operatingBase, $health, $state);
+
+        // THE DELEVERAGING SWEEP (Macro-Driven Cash Management)
+        $this->processDeleveragingSweep($stock, $newEquity, $operatingBase, $health, $state);
+
+        // SAVE FINAL TREASURY
+        $stock->setCorporateTreasury((string) $state['treasury']);
+
+        return ['events' => $state['events'], 'organic_capex' => $state['organicCapex']];
+    }
+
+    /**
+     * Evaluates and executes strategic debt issuance for corporate expansion.
+     *
+     * This method acts as the CFO determining if the company has the balance sheet
+     * capacity and the operating cash flow to safely issue new debt. It strictly
+     * checks that the True ROIC is higher than the WACC (positive EVA) before borrowing.
+     *
+     * @param Stock $stock      The stock entity.
+     * @param float $newEquity  The projected new equity (Book Value) for the quarter.
+     * @param float $nopat      Net Operating Profit After Tax.
+     * @param array $macroState The macroeconomic state influencing growth/debt tolerance.
+     * @param array $health     The debt health metrics from the DebtEngine.
+     * @param array &$state     The mutable state array holding treasury, debt, and events.
+     */
+    private function processDebtExpansion(Stock $stock, float $newEquity, float $nopat, array $macroState, array $health, array &$state): void
+    {
+        $liveInvestedCapital = $this->mathUtility->calculateLiveInvestedCapital($newEquity, $state['debt'], $state['treasury']);
         $trueRoic = $liveInvestedCapital > 0 ? ($nopat / $liveInvestedCapital) : 0.0;
         $wacc = $health['wacc'];
 
-        if ($trueRoic > $wacc && $health['can_issue_debt']) {
+        $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
+        $samRatio = (float) $stock->getSamRatio();
+        $marketShare = $this->mathUtility->calculateMarketShare($liveInvestedCapital, $nominalGdpIndex, $samRatio);
 
+        if ($trueRoic > $wacc && $health['can_issue_debt']) {
             $ebit = $health['raw_metrics']['ebit'] ?? 0.0;
             $newBorrowingRate = $health['raw_metrics']['current_market_rate'] ?? 0.05;
 
-            // Income Statement Constraint (ICR)
-            // Financials operate on thin net interest margins, allowing them to safely run tighter ICRs
-            $minimumIcr = $stock->getSector() === 'Financials' ? 1.5 : 3.0; 
+            $minimumIcr = $stock->getSector() === 'Financials' ? 1.5 : 3.0;
             $maxTolerableInterest = max(0.0, $ebit / $minimumIcr);
 
-            // Approximate future interest run-rate
-            $currentInterestExpense = $currentDebt * $newBorrowingRate;
+            $currentInterestExpense = $health['raw_metrics']['interest_expense'] ?? 0.0;
             $availableInterestCapacity = max(0.0, $maxTolerableInterest - $currentInterestExpense);
 
             $incomeStatementCapacity = $newBorrowingRate > 0 ? ($availableInterestCapacity / $newBorrowingRate) : 0.0;
+            $balanceSheetCapacity = max(0.0, ($newEquity * $health['debt_tolerance']) - $state['debt']);
 
-            // Balance Sheet Constraint (Macro Tolerance)
-            $balanceSheetCapacity = max(0.0, ($newEquity * $health['debt_tolerance']) - $currentDebt);
-
-            // The True Capacity is the most conservative metric
             $trueExpansionCapacity = min($incomeStatementCapacity, $balanceSheetCapacity);
-
-            // The Bond Market Limit: Allow up to 25% of current physical size to facilitate aggressive leveraged recaps.
-            $liveInvestedCapital = $this->mathUtility->calculateLiveInvestedCapital($newEquity, $currentDebt, $newTreasury);
             $trueExpansionCapacity = min($trueExpansionCapacity, $liveInvestedCapital * 0.25);
 
-            // Only borrow if there is a safe, justifiable reason to do so
             if ($trueExpansionCapacity > 0) {
-                $spreadMultiplier = min(1.0, max(0.0, ($trueRoic - $wacc) * 10.0)); // 10% spread = 1.0 max aggressiveness
+                $spreadMultiplier = min(1.0, max(0.0, ($trueRoic - $wacc) * 10.0));
                 $aggressiveness = 0.05 + (0.35 * $spreadMultiplier);
-
-                // Probability scales with how profitable the spread is (40% to 90% chance per quarter).
                 $borrowProbability = 0.40 + ($spreadMultiplier * 0.50);
+
+                if ($marketShare > 1.00) {
+                    $borrowProbability *= 0.3;
+                } elseif ($marketShare > 0.80) {
+                    $borrowProbability *= 0.6;
+                }
 
                 if ((mt_rand() / mt_getrandmax()) < $borrowProbability) {
                     $newDebtIssued = $trueExpansionCapacity * $aggressiveness;
-                    $newTotalDebt = $currentDebt + $newDebtIssued;
+                    $newTotalDebt = $state['debt'] + $newDebtIssued;
 
-                    // Blend the interest rate so they don't get free debt
                     $oldHistoricalRate = (float) $stock->getHistoricalFixedRate();
-                    $weightedRate = (($currentDebt * $oldHistoricalRate) + ($newDebtIssued * $newBorrowingRate)) / $newTotalDebt;
+                    $weightedRate = (($state['debt'] * $oldHistoricalRate) + ($newDebtIssued * $newBorrowingRate)) / $newTotalDebt;
                     $stock->setHistoricalFixedRate((string) $weightedRate);
 
-                    $currentDebt = $newTotalDebt;
-                    $stock->setTotalDebt((string) $currentDebt);
-
-                    // The new debt injects raw cash into the corporate treasury
-                    $newTreasury += $newDebtIssued;
-                    $debtActionTaken = true;
+                    $state['debt'] = $newTotalDebt;
+                    $stock->setTotalDebt((string) $state['debt']);
+                    $state['treasury'] += $newDebtIssued;
+                    $state['debtIssued'] = $newDebtIssued;
+                    $state['debtActionTaken'] = true;
 
                     if ($newDebtIssued > 500_000_000.0) {
                         $amtB = number_format($newDebtIssued / 1_000_000_000, 2);
-                        $events[] = [
+                        $state['events'][] = [
                             'description' => "Issued \${$amtB}B in bonds for expansion.",
                             'shock' => 0.5
                         ];
@@ -640,129 +698,160 @@ class CorporateActionEngine
                 }
             }
         }
+    }
 
-        // ORGANIC BUSINESS EXPANSION (Internal CapEx)
-        // Reinvesting excess cash to grow core operations. This is a balance sheet asset swap 
-        // (Cash decreases, Physical Assets/IP increase). Total Equity is unchanged, but Invested Capital grows!
-
+    /**
+     * Executes internal organic capital expenditure (reinvesting cash into physical growth).
+     *
+     * Scales physical expansion probability based on the spread between ROIC and WACC.
+     * Implements a soft ceiling as the company approaches its Total Addressable Market (TAM)
+     * limit to simulate monopolistic stagnation. Organic CapEx acts as an asset swap
+     * (cash for physical assets), diluting immediate ROIC until those assets generate earnings.
+     *
+     * @param Stock $stock         The stock entity.
+     * @param float $newEquity     The projected new equity (Book Value).
+     * @param float $nopat         Net Operating Profit After Tax.
+     * @param float $operatingBase The physical scale of the business.
+     * @param array $macroState    The macroeconomic state.
+     * @param array $health        The debt health metrics.
+     * @param array &$state        The mutable state array holding treasury, debt, and events.
+     */
+    private function processOrganicCapex(Stock $stock, float $newEquity, float $nopat, float $operatingBase, array $macroState, array $health, array &$state): void
+    {
         $targetCashReservs = $operatingBase * 0.06;
-        $liveInvestedCapital = $this->mathUtility->calculateLiveInvestedCapital($newEquity, $currentDebt, $newTreasury);
+        $liveInvestedCapital = $this->mathUtility->calculateLiveInvestedCapital($newEquity, $state['debt'], $state['treasury']);
+        $trueRoic = $liveInvestedCapital > 0 ? ($nopat / $liveInvestedCapital) : 0.0;
+        $wacc = $health['wacc'];
 
-        // Scale investment opportunity probability with True ROIC
-        $investmentProbability = min(0.95, max(0.10, 0.20 + ($trueRoic * 2.0)));
-
-        // Anti-Trust & Saturation Limits:
-        // A company cannot infinitely expand if they already own the majority of their Total Addressable Market.
         $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
         $samRatio = (float) $stock->getSamRatio();
         $marketShare = $this->mathUtility->calculateMarketShare($liveInvestedCapital, $nominalGdpIndex, $samRatio);
 
+        $investmentProbability = min(0.95, max(0.10, 0.20 + ($trueRoic * 2.0)));
+
         if ($marketShare > 0.80) {
-            $investmentProbability *= 0.2; // soft cap on organic physical expansion
+            $investmentProbability *= 0.2;
         } elseif ($marketShare > 0.60) {
-            $investmentProbability *= 0.5; // slows them down
+            $investmentProbability *= 0.5;
         }
 
         $fundInvestmentOpportunity = (mt_rand() / mt_getrandmax()) < $investmentProbability;
 
-        if (($trueRoic > $wacc && $newTreasury > $targetCashReservs && !$health['wants_to_paydown_debt'] && $fundInvestmentOpportunity) || $debtActionTaken) {
+        if (($trueRoic > $wacc && $state['treasury'] > $targetCashReservs && !$health['wants_to_paydown_debt'] && $fundInvestmentOpportunity) || $state['debtActionTaken']) {
             $spreadMultiplier = min(1.0, max(0.0, ($trueRoic - $wacc) * 10.0));
 
-            // Deploy between 2% and 15% of organic excess treasury into growth this quarter
-            $organicSpend = ($newTreasury - $targetCashReservs) * (0.02 + (0.13 * $spreadMultiplier));
-
-            // If we specifically issued debt for expansion, force the deployment of that cash immediately!
-            $expansionSpend = max($organicSpend, $newDebtIssued * 0.75);
-
-            // Failsafe: Don't spend cash we physically do not have
-            $expansionSpend = min($expansionSpend, max(0.0, $newTreasury - $targetCashReservs));
-
-            // The Physical Reality Limit: You cannot build Trillions in new factories overnight.
-            // Cap organic expansion to 5% of Invested Capital per quarter to represent organizational friction.
+            $organicSpend = ($state['treasury'] - $targetCashReservs) * (0.02 + (0.13 * $spreadMultiplier));
+            $expansionSpend = max($organicSpend, $state['debtIssued'] * 0.75);
+            $expansionSpend = min($expansionSpend, max(0.0, $state['treasury'] - $targetCashReservs));
             $expansionSpend = min($expansionSpend, $liveInvestedCapital * 0.05);
 
             if ($expansionSpend > 0) {
-                $totalOrganicCapex = $expansionSpend;
-                $newTreasury -= $expansionSpend;
+                $state['organicCapex'] = $expansionSpend;
+                $state['treasury'] -= $expansionSpend;
 
-                // Expanding the physical asset base mathematically dilutes immediate ROIC 
-                // (Invested Capital goes up, but new Earnings have not been realized yet).
-                $liveInvestedCapital = $this->mathUtility->calculateLiveInvestedCapital($newEquity, $currentDebt, $newTreasury);
+                $liveInvestedCapital = $this->mathUtility->calculateLiveInvestedCapital($newEquity, $state['debt'], $state['treasury']);
                 $expansionRatio = $expansionSpend / max(1.0, $liveInvestedCapital);
-                
+
                 $roic = (float) $stock->getCurrentRoic();
                 $roicDrag = $roic * $expansionRatio * 0.50;
                 $stock->setCurrentRoic((string) max(0.01, $roic - $roicDrag));
 
-                if ($expansionSpend > 1_000_000_000.0) { // Only announce massive investments >$1B
+                if ($expansionSpend > 1_000_000_000.0) {
                     $amtB = number_format($expansionSpend / 1_000_000_000, 2);
-                    $events[] = [
+                    $state['events'][] = [
                         'description' => "Deployed \${$amtB}B in organic expansion.",
                         'shock' => 0.5
                     ];
                 }
             }
         }
+    }
 
-        // THE DEBT TRAP (Liquidity Crisis)
-        if ($newTreasury < $minOperatingCash) {
-            $cashShortfall = $minOperatingCash - $newTreasury;
-            $newTotalDebt = $currentDebt + $cashShortfall;
+    /**
+     * The Debt Trap: Forces emergency penalty-rate borrowing if the company faces a liquidity crisis.
+     *
+     * If the corporate treasury falls below the absolute minimum operating requirement (3%),
+     * the company is forced to issue emergency debt at severe penalty rates to survive.
+     * This simulates bridging a cash shortfall during deep recessions or massive operational blunders.
+     *
+     * @param Stock $stock         The stock entity.
+     * @param float $operatingBase The physical scale of the business.
+     * @param array $macroState    The macroeconomic state.
+     * @param array $health        The debt health metrics.
+     * @param array &$state        The mutable state array holding treasury, debt, and events.
+     */
+    private function processEmergencyBorrowing(Stock $stock, float $operatingBase, array $macroState, array $health, array &$state): void
+    {
+        $minOperatingCash = $operatingBase * self::MIN_OPERATING_CASH;
 
-            // Re-price the interest rate for this emergency borrowing!
+        if ($state['treasury'] < $minOperatingCash) {
+            $cashShortfall = $minOperatingCash - $state['treasury'];
+            $newTotalDebt = $state['debt'] + $cashShortfall;
+
             if ($newTotalDebt > 0) {
                 $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
                 $dynamicSpread = $health['raw_metrics']['dynamic_spread'] ?? (float) $stock->getCreditSpread();
 
-                // Emergency debt comes with a severe penalty (e.g., +200 bps)
                 $costOfEmergencyDebt = $policyRate + $dynamicSpread + 0.02;
 
                 $oldHistoricalRate = (float) $stock->getHistoricalFixedRate();
-                $weightedRate = (($currentDebt * $oldHistoricalRate) + ($cashShortfall * $costOfEmergencyDebt)) / $newTotalDebt;
+                $weightedRate = (($state['debt'] * $oldHistoricalRate) + ($cashShortfall * $costOfEmergencyDebt)) / $newTotalDebt;
                 $stock->setHistoricalFixedRate((string) $weightedRate);
             }
 
-            $currentDebt = $newTotalDebt;
-            $stock->setTotalDebt((string) $currentDebt);
-            $newTreasury = $minOperatingCash;
+            $state['debt'] = $newTotalDebt;
+            $stock->setTotalDebt((string) $state['debt']);
+            $state['treasury'] = $minOperatingCash;
 
             if ($cashShortfall > 10_000_000.0) {
                 $amtB = number_format($cashShortfall / 1_000_000_000, 2);
-                $events[] = [
+                $state['events'][] = [
                     'description' => "Forced to borrow \${$amtB}B at penalty rates due to cash shortfall.",
                     'shock' => -5.0
                 ];
             }
 
-            $debtActionTaken = true;
+            $state['debtActionTaken'] = true;
         }
-        // If debt is severely expensive, pay it down! (Mutually exclusive from the general sweep)
-        if (!$debtActionTaken && $health['wants_to_paydown_debt'] && $currentDebt > 0 && $newTreasury > $targetOperatingCash) {
+    }
 
-            // CFOs don't retire debt every single quarter unless in a true liquidity crisis.
-            // If it's just a negative carry optimization, only act periodically to prevent spam.
+    /**
+     * Retires existing debt to escape negative carry or survive severe liquidity crises.
+     *
+     * If the gross cost of debt is significantly higher than the yield the company earns
+     * on its cash (Negative Carry), or if interest coverage is dangerously low, the CFO
+     * will sweep excess cash to retire bonds early.
+     *
+     * @param Stock $stock         The stock entity.
+     * @param float $operatingBase The physical scale of the business.
+     * @param array $health        The debt health metrics.
+     * @param array &$state        The mutable state array holding treasury, debt, and events.
+     */
+    private function processArbitragePaydown(Stock $stock, float $operatingBase, array $health, array &$state): void
+    {
+        $targetOperatingCash = $operatingBase * self::TARGET_OPERATING_CASH;
+
+        if (!$state['debtActionTaken'] && $health['wants_to_paydown_debt'] && $state['debt'] > 0 && $state['treasury'] > $targetOperatingCash) {
             $isLiquidityCrisis = $health['interest_coverage'] < 2.0;
             $paydownProbability = $isLiquidityCrisis ? 1.0 : 0.15;
 
             if ((mt_rand() / mt_getrandmax()) < $paydownProbability) {
-                // In a crisis, sweep 50% of excess cash. Otherwise, only sweep 10% to manage negative carry.
                 $sweepPercentage = $isLiquidityCrisis ? 0.50 : 0.10;
-                $arbitragePaydown = ($newTreasury - $targetOperatingCash) * $sweepPercentage;
-                
-                // Limit the maximum quarterly paydown to 5% of total debt to simulate realistic bond market tender offers
-                $maxRetireableDebt = $currentDebt * ($isLiquidityCrisis ? 0.15 : 0.05);
-                $actualPaydown = min($arbitragePaydown, $currentDebt, $maxRetireableDebt);
+                $arbitragePaydown = ($state['treasury'] - $targetOperatingCash) * $sweepPercentage;
+
+                $maxRetireableDebt = $state['debt'] * ($isLiquidityCrisis ? 0.15 : 0.05);
+                $actualPaydown = min($arbitragePaydown, $state['debt'], $maxRetireableDebt);
 
                 if ($actualPaydown > 0) {
-                    $currentDebt -= $actualPaydown;
-                    $stock->setTotalDebt((string) $currentDebt);
-                    $newTreasury -= $actualPaydown;
-                    $debtActionTaken = true;
+                    $state['debt'] -= $actualPaydown;
+                    $stock->setTotalDebt((string) $state['debt']);
+                    $state['treasury'] -= $actualPaydown;
+                    $state['debtActionTaken'] = true;
 
                     if ($actualPaydown > 500_000_000.0) {
                         $amtB = number_format($actualPaydown / 1_000_000_000, 2);
                         $reason = $isLiquidityCrisis ? "survive a liquidity crisis" : "escape negative carry";
-                        $events[] = [
+                        $state['events'][] = [
                             'description' => "Paid down \${$amtB}B of debt to {$reason}.",
                             'shock' => 1.0
                         ];
@@ -770,38 +859,48 @@ class CorporateActionEngine
                 }
             }
         }
-        // THE DELEVERAGING SWEEP (Macro-Driven Cash Management)
-        if (!$debtActionTaken && $currentDebt > 0.0 && $newTreasury > $targetOperatingCash) {
-            $excessCash = $newTreasury - $targetOperatingCash;
-            
-            // Calculate true leverage using Invested Capital instead of pure Equity
-            $liveInvestedCapital = $this->mathUtility->calculateLiveInvestedCapital($newEquity, $currentDebt, $newTreasury);
-            $currentDebtRatio = $currentDebt / max(1.0, $liveInvestedCapital);
+    }
 
-            // TOLERANCE FROM THE CENTRALIZED BRAIN (Provided as a D/E ratio, e.g., 0.50 to 4.0)
-            $macroDebtToleranceDE = $health['debt_tolerance'];
-            // Convert D/E tolerance to an Invested Capital tolerance (e.g., 4.0 D/E = 80% Debt)
-            $macroDebtTolerance = $macroDebtToleranceDE / ($macroDebtToleranceDE + 1.0);
+    /**
+     * Executes macro-driven deleveraging sweeps to appease the bond market.
+     *
+     * If the company exceeds the CFO's target Debt-to-Equity tolerance, or if the
+     * bond market imposes a Junk Bond penalty spread, the company will aggressively
+     * sweep excess cash to pay down debt and restore a healthy balance sheet ratio.
+     *
+     * @param Stock $stock         The stock entity.
+     * @param float $newEquity     The projected new equity (Book Value).
+     * @param float $operatingBase The physical scale of the business.
+     * @param array $health        The debt health metrics.
+     * @param array &$state        The mutable state array holding treasury, debt, and events.
+     */
+    private function processDeleveragingSweep(Stock $stock, float $newEquity, float $operatingBase, array $health, array &$state): void
+    {
+        $targetOperatingCash = $operatingBase * self::TARGET_OPERATING_CASH;
 
-            // True Junk Bond Status is defined by the Debt Engine actively applying a Convex Leverage Penalty
+        if (!$state['debtActionTaken'] && $state['debt'] > 0.0 && $state['treasury'] > $targetOperatingCash) {
+            $excessCash = $state['treasury'] - $targetOperatingCash;
+            $currentDebtRatio = $state['debt'] / max(1.0, $newEquity);
+            $macroDebtTolerance = $health['debt_tolerance'];
+
             $baselineSpread = (float) $stock->getCreditSpread();
             $dynamicSpread = $health['raw_metrics']['dynamic_spread'] ?? $baselineSpread;
-            $isJunkBondStatus = $dynamicSpread > ($baselineSpread + 0.001); // 10+ bps penalty active
+            $isJunkBondStatus = $dynamicSpread > ($baselineSpread + 0.0011);
 
             if ($currentDebtRatio > $macroDebtTolerance || $isJunkBondStatus) {
-                // If penalized by the bond market, the CFO aggressively targets a conservative 50% balance sheet ratio to escape it
-                $targetRatio = $isJunkBondStatus ? 0.50 : max(0.10, $macroDebtTolerance - 0.05);
-                $targetDebt = $liveInvestedCapital * $targetRatio;
-                $debtToPayOff = min($excessCash, max(0.0, $currentDebt - $targetDebt));
+                $targetRatio = $isJunkBondStatus ? max(0.10, $macroDebtTolerance * 0.75) : max(0.10, $macroDebtTolerance - 0.05);
+
+                $targetDebt = $newEquity * $targetRatio;
+                $debtToPayOff = min($excessCash, max(0.0, $state['debt'] - $targetDebt));
 
                 if ($debtToPayOff > 0) {
-                    $currentDebt -= $debtToPayOff;
-                    $stock->setTotalDebt((string) $currentDebt);
-                    $newTreasury -= $debtToPayOff;
+                    $state['debt'] -= $debtToPayOff;
+                    $stock->setTotalDebt((string) $state['debt']);
+                    $state['treasury'] -= $debtToPayOff;
 
                     if ($debtToPayOff > 500_000_000.0) {
                         $amtB = number_format($debtToPayOff / 1_000_000_000, 2);
-                        $events[] = [
+                        $state['events'][] = [
                             'description' => "Swept \${$amtB}B cash to aggressively deleverage.",
                             'shock' => 2.0
                         ];
@@ -809,10 +908,5 @@ class CorporateActionEngine
                 }
             }
         }
-
-        // SAVE FINAL TREASURY
-        $stock->setCorporateTreasury((string) $newTreasury);
-
-        return ['events' => $events, 'organic_capex' => $totalOrganicCapex];
     }
 }

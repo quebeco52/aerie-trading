@@ -14,6 +14,27 @@ class DebtEngine
     private const ARBITRAGE_HURDLE = 0.030; // 300 bps spread is severe
     private const MIN_INTEREST_COVERAGE_RATIO = 2.0;
 
+    // Macro Defaults
+    private const DEFAULT_CORPORATE_TAX_RATE = 0.21;
+    private const DEFAULT_EQUITY_RISK_PREMIUM = 0.045;
+
+    // Leverage Physics
+    private const MAX_LEVERAGE_RATIO = 15.0;     // Cap extreme D/E or D/EBITDA ratios
+    private const MAX_LEVERAGE_PENALTY = 0.25;   // 25% max Junk Bond penalty spread
+    private const LEVERAGE_PENALTY_RATE = 0.20;
+    private const LEVERAGE_PENALTY_BASE = 0.010;
+
+    // CAPM / Beta Limits
+    private const MAX_BETA_DEBT_TO_EQUITY = 2.5; // Prevent runaway WACC in standard CAPM
+    private const HAMADA_DAMPENING_FACTOR = 0.25; // Dampen double-counting of historical debt
+
+    // Refinancing Hurdles
+    private const RATE_REFINANCE_THRESHOLD = 0.015; // 150 bps drop triggers early refinancing
+    private const ACCELERATED_DEBT_TURNOVER = 0.30; // 30% of debt retired per quarter if refinancing
+
+    // ICR Bounds
+    private const LEVERAGED_INDUSTRY_MIN_ICR = 1.25;
+
     public function __construct(
         private MathUtility $mathUtility
     ) {}
@@ -63,8 +84,8 @@ class DebtEngine
 
         // Normalize EBITDA to prevent mathematical blowouts during temporary losses
         $normalizedEbitda = max($ebitda, $revenue * 0.08);
-        $debtToEbitda = $normalizedEbitda > 0 ? min(15.0, $netDebt / $normalizedEbitda) : 15.0;
-        $debtToEquity = $totalEquity > 0 ? min(15.0, $debt / $totalEquity) : 15.0;
+        $debtToEbitda = $normalizedEbitda > 0 ? min(self::MAX_LEVERAGE_RATIO, $netDebt / $normalizedEbitda) : self::MAX_LEVERAGE_RATIO;
+        $debtToEquity = $totalEquity > 0 ? min(self::MAX_LEVERAGE_RATIO, $debt / $totalEquity) : self::MAX_LEVERAGE_RATIO;
 
         // Fetch our Dual Constraints
         $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industry] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
@@ -78,26 +99,26 @@ class DebtEngine
             // Leveraged industries (Banks, Insurance) evaluated solely on Debt/Equity
             if ($debtToEquity > $equityLimit) {
                 $excessLeverage = $debtToEquity - $equityLimit;
-                $leveragePenalty = (exp($excessLeverage * 0.20) - 1.0) * 0.010;
+                $leveragePenalty = (exp($excessLeverage * self::LEVERAGE_PENALTY_RATE) - 1.0) * self::LEVERAGE_PENALTY_BASE;
             }
         } else {
             // Everyone else evaluated on Debt/EBITDA
             if ($debtToEbitda > $ebitdaLimit) {
                 $excessLeverage = $debtToEbitda - $ebitdaLimit;
-                $leveragePenalty = (exp($excessLeverage * 0.20) - 1.0) * 0.010;
+                $leveragePenalty = (exp($excessLeverage * self::LEVERAGE_PENALTY_RATE) - 1.0) * self::LEVERAGE_PENALTY_BASE;
             }
         }
 
-        $leveragePenalty = min(0.25, $leveragePenalty);
+        $leveragePenalty = min(self::MAX_LEVERAGE_PENALTY, $leveragePenalty);
         $dynamicSpread = $baselineCreditSpread + $leveragePenalty;
-        $currentMarketFixedRate = $policyRate + $dynamicSpread;
+            $currentMarketFixedRate = $policyRate + $dynamicSpread;
 
         $historicalRate = (float) $stock->getHistoricalFixedRate();
 
         if ($advanceMaturity) {
             $turnover = self::QUARTERLY_DEBT_TURNOVER;
-            if ($currentMarketFixedRate < ($historicalRate - 0.015)) {
-                $turnover = 0.30; 
+            if ($currentMarketFixedRate < ($historicalRate - self::RATE_REFINANCE_THRESHOLD)) {
+                $turnover = self::ACCELERATED_DEBT_TURNOVER; 
             }
             $blendedFixedRate = ($historicalRate * (1.0 - $turnover)) + ($currentMarketFixedRate * $turnover);
         } else {
@@ -126,7 +147,7 @@ class DebtEngine
         $marketCap = (float) $stock->getPrice() * max(1.0, (float) $stock->getSharesOutstanding());
         $policyRate = $macroState['policy_rate_ema'] ?? $macroState['policy_rate'] ?? 0.04;
         $yield10y = $macroState['yield_10y'] ?? $policyRate; // Long-term risk-free rate for WACC
-        $corporateTaxRate = $macroState['corporate_tax_rate'] ?? 0.21;
+        $corporateTaxRate = $macroState['corporate_tax_rate'] ?? self::DEFAULT_CORPORATE_TAX_RATE;
 
 
         $debtMetrics = $this->calculateInterestExpense($stock, $macroState, false);
@@ -144,24 +165,40 @@ class DebtEngine
         $baseBeta = max(0.5, abs((float) $stock->getBeta()));
 
         // For Beta Levering and WACC weights, we MUST use Market Value of Equity, not Book Value!
-        $debtToEquity = $marketCap > 0 ? ($currentDebt / $marketCap) : 2.5;
+        $debtToEquity = $marketCap > 0 ? ($currentDebt / $marketCap) : self::MAX_BETA_DEBT_TO_EQUITY;
 
-        // Standard CAPM breaks down during insolvency. Cap D/E at 2.5 for beta math to prevent runaway WACC.
-        $effectiveDebtToEquity = min(2.5, $debtToEquity);
+        // Standard CAPM breaks down during insolvency. Cap D/E to prevent runaway WACC.
+        $effectiveDebtToEquity = min(self::MAX_BETA_DEBT_TO_EQUITY, $debtToEquity);
 
         // The $baseBeta from the DB already partially accounts for historical leverage. 
         // Dampen the Hamada equation multiplier (* 0.25) so we don't double-count the debt risk!
-        $leveredBeta = $this->mathUtility->calculateLeveredBeta($baseBeta, $corporateTaxRate, $effectiveDebtToEquity, 0.25);
+        $leveredBeta = $this->mathUtility->calculateLeveredBeta($baseBeta, $corporateTaxRate, $effectiveDebtToEquity, self::HAMADA_DAMPENING_FACTOR);
 
         // Cost of Equity (CAPM) - use the 10-Year Yield as the Risk-Free Rate!
-        $equityRiskPremium = $macroState['equity_risk_premium'] ?? 0.045;
+        $equityRiskPremium = $macroState['equity_risk_premium'] ?? self::DEFAULT_EQUITY_RISK_PREMIUM;
         $costOfEquity = $this->mathUtility->calculateCAPM($yield10y, $leveredBeta, $equityRiskPremium);
 
         // Weighted Average Cost of Capital (WACC)
         $totalCapital = $currentDebt + $marketCap;
         $weightEquity = $totalCapital > 0 ? ($marketCap / $totalCapital) : 1.0;
         $weightDebt = $totalCapital > 0 ? ($currentDebt / $totalCapital) : 0.0;
-        $wacc = $this->mathUtility->calculateWACC($weightEquity, $costOfEquity, $weightDebt, $effectiveCostOfDebt);
+        $baseWacc = $this->mathUtility->calculateWACC($weightEquity, $costOfEquity, $weightDebt, $effectiveCostOfDebt);
+
+        // DISTRESS PENALTY: Prevent the "Anti-Gravity" WACC loop where crashing stocks get cheaper capital
+        $ebit = $debtMetrics['ebit'];
+        $interestExpense = $debtMetrics['interest_expense'];
+        $interestCoverageProxy = $interestExpense > 0 ? ($ebit / $interestExpense) : 999.0;
+        
+        $distressPremium = 0.0;
+        if ($interestCoverageProxy < 2.0 && $interestCoverageProxy >= 0) {
+            // Add up to a 10% penalty as coverage drops from 2.0 to 0
+            $distressPremium = (2.0 - $interestCoverageProxy) * 0.05; 
+        } elseif ($interestCoverageProxy < 0) {
+            // Flat 15% penalty for companies operating with negative EBIT
+            $distressPremium = 0.15; 
+        }
+
+        $wacc = $baseWacc + $distressPremium;
 
         // Cash Yield & Arbitrage Hurdle (Money Market Funds)
         $yieldOnCash = max(0.0, $policyRate - self::CASH_YIELD_SPREAD);
@@ -184,14 +221,14 @@ class DebtEngine
         $interestCoverage = $interestExpense > 0 ? ($ebit / $interestExpense) : ($ebit > 0 ? 999.0 : -999.0);
 
         // Leveraged industries inherently run lower interest coverage ratios as their core business is leverage
-        $minIcr = $metrics['leveraged_industry'] ? 1.25 : self::MIN_INTEREST_COVERAGE_RATIO;
+        $minIcr = $metrics['leveraged_industry'] ? self::LEVERAGED_INDUSTRY_MIN_ICR : self::MIN_INTEREST_COVERAGE_RATIO;
 
         $wantsToPaydownDebt = ($currentDebt > 0) && ($isSevereNegativeCarry || $interestCoverage < $minIcr);
         $canIssueDebt = $interestCoverage >= ($minIcr + 1.5);
 
         // Macro-Economic CFO Tolerance
-        // Pass the pure D/E target limit to the CFO, shrinking it slightly if rates are painfully high
-        $macroDebtTolerance = min($equityLimit, max(0.10, $equityLimit - ($effectiveCostOfDebt * 7.5)));
+        // Pass the pure D/E target limit to the CFO, shrinking it proportionally if rates are painfully high
+        $macroDebtTolerance = min($equityLimit, max(0.10, $equityLimit * (1.0 - ($effectiveCostOfDebt * 3.0))));
 
         return [
             'gross_cost' => $grossCostOfDebt,
@@ -207,44 +244,6 @@ class DebtEngine
             'levered_beta' => $leveredBeta,
             'raw_metrics' => $debtMetrics
         ];
-    }
-
-    /**
-     * The Bond Market Constraint.
-     * Determines how much operating leverage (Net Debt / EBITDA) a non-financial company 
-     * can safely hold before credit rating agencies downgrade them and interest rates spike.
-     */
-    private function getSectorEbitdaLimit(string $sector): float
-    {
-        return match ($sector) {
-            'Utilities', 'Real Estate' => 6.5,
-            'Consumer Staples' => 4.0,
-            'Industrials', 'Materials', 'Energy', 'Communication Services' => 3.5,
-            'Health Care' => 3.0,
-            'Consumer Discretionary', 'Information Technology' => 2.0,
-            'Financials' => 999.0, // IGNORED. Bond markets do not evaluate banks on EBITDA.
-            default => 3.0,
-        };
-    }
-
-    /**
-     * The Balance Sheet Constraint.
-     * Determines the maximum safe Total Debt / Total Equity (D/E) ratio.
-     * This is the primary metric for Financials, and a secondary safety check for normal companies.
-     */
-    private function getSectorEquityLimit(string $sector): float
-    {
-        return match ($sector) {
-            // Banks literally use debt (deposits) as their inventory to create loans.
-            // A 9.0 D/E ratio implies ~10% Tier 1 Capital, perfectly aligning with Basel III regulations.
-            'Financials' => 9.0,
-
-            'Utilities', 'Real Estate' => 2.5,
-            'Industrials', 'Energy', 'Materials' => 1.5,
-            'Consumer Staples', 'Health Care', 'Communication Services' => 1.0,
-            'Consumer Discretionary', 'Information Technology' => 0.5, // Asset-light, should rely mostly on equity
-            default => 1.0,
-        };
     }
 
     /**
