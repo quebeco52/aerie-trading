@@ -12,6 +12,7 @@ let debtEquityChartInstance = null;
 let creditHealthChartInstance = null;
 let capitalEfficiencyChartInstance = null;
 let capitalReturnChartInstance = null;
+let leveragedHealthChartInstance = null;
 
 Chart.defaults.color = '#c2c6d6';
 Chart.defaults.scale.grid.color = 'rgba(45, 52, 73, 0.4)';
@@ -294,6 +295,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (stockUpdate.current_roic !== undefined && document.getElementById('stat-roic')) {
                 document.getElementById('stat-roic').innerText = (stockUpdate.current_roic * 100).toFixed(2) + '%';
             }
+            
 
             // Update Analyst Consensus Targets
             if (stockUpdate.analyst_targets) {
@@ -509,6 +511,12 @@ function updateCharts(timeframe) {
     // Capital Return (Shareholder Yield)
     let dividendData = [];
     let buybackData = [];
+    
+    // Leveraged Metrics (Banking)
+    let roeData = [];
+    let coeData = [];
+    let capitalRatioData = [];
+    let customerDepositRatioData = [];
 
     if (timeframe === '12Q') {
         const sliced = rawReports.slice(-12);
@@ -537,6 +545,11 @@ function updateCharts(timeframe) {
 
             dividendData.push(parseFloat(report.dividend_paid || 0));
             buybackData.push(parseFloat(report.stock_buybacks || 0));
+
+            roeData.push(parseFloat(report.return_on_equity || 0) * 100);
+            coeData.push(parseFloat(report.cost_of_equity || 0) * 100);
+            capitalRatioData.push(parseFloat(report.capital_ratio || 0) * 100);
+            customerDepositRatioData.push(parseFloat(report.customer_deposit_ratio || 0) * 100);
         });
     }
     else if (timeframe === '5Y') {
@@ -581,6 +594,11 @@ function updateCharts(timeframe) {
             }
             dividendData.unshift(sumDiv);
             buybackData.unshift(sumBuy);
+            
+            roeData.unshift(parseFloat(report.return_on_equity || 0) * 100);
+            coeData.unshift(parseFloat(report.cost_of_equity || 0) * 100);
+            capitalRatioData.unshift(parseFloat(report.capital_ratio || 0) * 100);
+            customerDepositRatioData.unshift(parseFloat(report.customer_deposit_ratio || 0) * 100);
 
             yearCount++;
         }
@@ -591,6 +609,7 @@ function updateCharts(timeframe) {
     renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData);
     renderCapitalEfficiencyChart(labels, roicData, waccData, evaData);
     renderCapitalReturnChart(labels, dividendData, buybackData);
+    renderLeveragedHealthChart(labels, roeData, coeData, capitalRatioData, customerDepositRatioData);
 }
 
 function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData) {
@@ -631,6 +650,79 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData) 
             },
             scales: {
                 y: { ticks: { callback: (val) => formatLarge(val) } }
+            }
+        }
+    });
+}
+
+function renderLeveragedHealthChart(labels, roeData, coeData, capitalRatioData, customerDepositRatioData) {
+    const canvas = document.getElementById('leveragedHealthChart');
+    // If the canvas isn't on the page (e.g., standard industrial stocks), fail gracefully
+    if (!canvas) return;
+
+    if (leveragedHealthChartInstance) leveragedHealthChartInstance.destroy();
+
+    const ctx = canvas.getContext('2d');
+    leveragedHealthChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Return on Equity (ROE)',
+                    data: roeData,
+                    borderColor: COLORS.positive,
+                    backgroundColor: COLORS.positive,
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3
+                },
+                {
+                    label: 'Cost of Equity (Hurdle)',
+                    data: coeData,
+                    borderColor: COLORS.negative,
+                    backgroundColor: COLORS.negative,
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    tension: 0.3,
+                    pointRadius: 0
+                },
+                {
+                    label: 'Capital Ratio',
+                    data: capitalRatioData,
+                    borderColor: '#7dd3fc',
+                    backgroundColor: 'rgba(125, 211, 252, 0.2)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    fill: true,
+                }
+                ,
+                {
+                    label: 'Customer Deposit Ratio',
+                    data: customerDepositRatioData,
+                    borderColor: '#facc15',
+                    backgroundColor: 'rgba(250, 204, 21, 0.2)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    fill: true,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
+            },
+            scales: {
+                y: {
+                    ticks: { callback: (val) => val + '%' },
+                    beginAtZero: true
+                }
             }
         }
     });

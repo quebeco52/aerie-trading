@@ -1,5 +1,17 @@
 {% extends 'base.html.twig' %}
 
+{# --- TOOLTIP MACRO --- #}
+{% macro tooltip(text, position = 'left', width = 'w-48') %}
+	{% set arrowPosition = position == 'right' ? 'right-4' : (position == 'center' ? 'left-1/2 -translate-x-1/2' : 'left-4') %}
+	{% set alignClass = position == 'right' ? 'right-0' : (position == 'center' ? 'left-1/2 -translate-x-1/2' : 'left-0') %}
+
+	<span role="tooltip" class="block pointer-events-none absolute {{ alignClass }} bottom-full mb-2.5 {{ width }} p-2.5 bg-[#0f172a] text-white text-[11px] leading-relaxed rounded-lg shadow-2xl opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 group-focus:opacity-100 group-focus:translate-y-0 transition-all duration-200 z-[100] normal-case tracking-normal font-normal border border-slate-700">
+		{{ text }}
+		<span class="block absolute -bottom-[5px] {{ arrowPosition }} w-2.5 h-2.5 bg-[#0f172a] border-b border-r border-slate-700 transform rotate-45"></span>
+	</span>
+{% endmacro %}
+
+
 {% block title %}
 	{{ asset.ticker }}
 	Stock Price & Analysis |
@@ -15,21 +27,21 @@
 
 	<script type="application/ld+json">
 		{
-						        "@context": "https://schema.org",
-						        "@type": "{{ isEtf ? 'InvestmentFund' : 'Corporation' }}",
-						        "name": "{{ asset.name }}",
-						        "tickerSymbol": "{{ asset.ticker }}",
-						        "description": "Live financial data and economic simulation for
+		            "@context": "https://schema.org",
+		            "@type": "{{ isEtf ? 'InvestmentFund' : 'Corporation' }}",
+		            "name": "{{ asset.name }}",
+		            "tickerSymbol": "{{ asset.ticker }}",
+		            "description": "Live financial data and economic simulation for
 		{{ asset.name }}.",
-						        "url": "{{ app.request.uri }}"
+		            "url": "{{ app.request.uri }}"
 		{% if isEtf and allAssets is defined %},
-									        "hasPart": [
+			                "hasPart": [
 			{% for a in allAssets %}
 				{
-												                "@type": "Corporation",
-												                "name": "{{ a.name }}",
-												                "tickerSymbol": "{{ a.ticker }}"
-												            }{{ not loop.last ? ',' : '' }}
+				                            "@type": "Corporation",
+				                            "name": "{{ a.name }}",
+				                            "tickerSymbol": "{{ a.ticker }}"
+				                        }{{ not loop.last ? ',' : '' }}
 			{% endfor %}
 			]
 		{% endif %}
@@ -114,7 +126,10 @@
 
 						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
 							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface">Net Income Trend</h3>
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Net Income Trend</span>
+									{{ _self.tooltip('Tracks the total Revenue and Net Income generated each quarter.', 'left', 'w-64') }}
+								</h3>
 								<div class="flex space-x-2 bg-surface-container-lowest p-1 rounded-lg">
 									<button onclick="updateCharts('12Q')" id="btn-12Q" class="px-3 py-1 text-[10px] font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors uppercase tracking-widest">12Q</button>
 									<button onclick="updateCharts('5Y')" id="btn-5Y" class="px-3 py-1 text-[10px] font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors uppercase tracking-widest">12Y</button>
@@ -127,7 +142,10 @@
 
 						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
 							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface">Debt vs Equity</h3>
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Debt vs Equity</span>
+									{{ _self.tooltip("Visualizes the company's capital structure. Total Equity (Book Value) compared against Total Debt.", 'right', 'w-64') }}
+								</h3>
 							</div>
 							<div class="relative h-48 w-full">
 								<canvas id="debtEquityChart"></canvas>
@@ -136,7 +154,10 @@
 
 						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
 							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface">Credit Health & Maturity Wall</h3>
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Credit Health & Maturity Wall</span>
+									{{ _self.tooltip('Displays the Interest Coverage Ratio (ability to pay interest from operating profit) and the Blended Interest Rate on existing debt.', 'left', 'w-64') }}
+								</h3>
 							</div>
 							<div class="relative h-48 w-full">
 								<canvas id="creditHealthChart"></canvas>
@@ -145,7 +166,10 @@
 
 						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
 							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface">Capital Efficiency</h3>
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Capital Efficiency</span>
+									{{ _self.tooltip('Shows Economic Value Added (EVA) and Return on Invested Capital (ROIC). Positive EVA means the company is creating true wealth above its capital costs.', 'right', 'w-64') }}
+								</h3>
 							</div>
 							<div class="relative h-48 w-full">
 								<canvas id="capitalEfficiencyChart"></canvas>
@@ -154,10 +178,25 @@
 
 						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
 							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface">Shareholder Yield</h3>
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Shareholder Yield</span>
+									{{ _self.tooltip('Tracks capital returned to shareholders via Cash Dividends and Share Buybacks each quarter.', 'left', 'w-64') }}
+								</h3>
 							</div>
 							<div class="relative h-48 w-full">
 								<canvas id="capitalReturnChart"></canvas>
+							</div>
+						</div>
+
+						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+							<div class="flex justify-between items-center mb-6">
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Leveraged Metrics</span>
+									{{ _self.tooltip('Displays Return on Equity (ROE) and the Capital Ratio (Equity vs Total Assets). Critical health indicators for banks and financial institutions.', 'right', 'w-64') }}
+								</h3>
+							</div>
+							<div class="relative h-48 w-full">
+								<canvas id="leveragedHealthChart"></canvas>
 							</div>
 						</div>
 
@@ -215,56 +254,129 @@
 				{% if not isEtf %}
 					<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15">
 						<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface mb-6">Market Fundamentals</h3>
+
+
 						<dl class="divide-y divide-outline-variant/5">
 							<div class="py-3 flex justify-between items-center">
-								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Market Cap</dt>
+								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Market Cap</span>
+									{{ _self.tooltip("The total valuation of the company's outstanding equity. (Price × Shares)") }}
+								</dt>
 								<dd class="text-sm font-semibold text-on-surface" id="stat-mkt-cap">${{ marketCap|format_large }}</dd>
 							</div>
 							<div class="py-3 flex justify-between items-center">
-								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Shares Out</dt>
+								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Shares Out</span>
+									{{ _self.tooltip('The total number of shares currently issued and held by the market.') }}
+								</dt>
 								<dd class="text-sm font-semibold text-on-surface" id="stat-shares">{{ asset.sharesOutstanding|number_format }}</dd>
 							</div>
 							<div class="py-3 flex justify-between items-center">
-								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">P/E Ratio</dt>
+								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">P/E Ratio</span>
+									{{ _self.tooltip('Price-to-Earnings. Measures the share price relative to the per-share profits.') }}
+								</dt>
 								<dd class="text-sm font-semibold text-on-surface" id="stat-pe">{{ peRatio|number_format(2) }}</dd>
 							</div>
 							<div class="py-3 flex justify-between items-center">
-								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">EPS (TTM)</dt>
+								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">EPS (TTM)</span>
+									{{ _self.tooltip("Earnings Per Share (Trailing 12 Months). The company's total net income divided by its shares.") }}
+								</dt>
 								<dd class="text-sm font-semibold text-on-surface" id="stat-eps">${{ asset.earningsPerShare|number_format(2) }}</dd>
 							</div>
 							<div class="py-3 flex justify-between items-center">
-								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Volatility</dt>
+								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Volatility</span>
+									{{ _self.tooltip('A statistical measure of the dispersion of returns. Higher values indicate a riskier stock.') }}
+								</dt>
 								<dd class="text-sm font-semibold text-on-surface" id="stat-volatility">{{ ((asset.currentVolatility ?? asset.volatility) * 100)|number_format(2) }}%</dd>
 							</div>
 							<div class="py-3 flex justify-between items-center">
-								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Beta</dt>
+								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Beta</span>
+									{{ _self.tooltip('Measures volatility relative to the market (LBI). > 1.0 is more volatile, < 1.0 is defensive.') }}
+								</dt>
 								<dd class="text-sm font-semibold text-on-surface">{{ asset.beta|number_format(2) }}</dd>
 							</div>
 							<div class="py-3 flex justify-between items-center">
-								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">ROIC</dt>
+								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">ROIC</span>
+									{{ _self.tooltip('Return on Invested Capital. How efficiently the company utilizes capital to generate profit.') }}
+								</dt>
 								<dd class="text-sm font-semibold text-on-surface" id="stat-roic">{{ (asset.currentRoic|default(0) * 100)|number_format(2) }}%</dd>
 							</div>
 							<div class="py-3 flex justify-between items-center">
-								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Total Cash</dt>
+								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Total Cash</span>
+									{{ _self.tooltip('Corporate Treasury. The total cash and liquid reserves sitting on the balance sheet.') }}
+								</dt>
 								<dd class="text-sm font-semibold text-on-surface" id="stat-treasury">${{ asset.corporateTreasury|format_large }}</dd>
 							</div>
 							<div class="py-3 flex justify-between items-center">
-								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Book Value</dt>
+								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Book Value</span>
+									{{ _self.tooltip('Total Equity. The absolute net value of the company if all debts were paid and assets liquidated.') }}
+								</dt>
 								<dd class="text-sm font-semibold text-on-surface" id="stat-equity">${{ asset.totalEquity|format_large }}</dd>
 							</div>
 							<div class="py-3 flex justify-between items-center">
-								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">D/E</dt>
+								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">D/E</span>
+									{{ _self.tooltip('Debt-to-Equity Ratio. Measures financial leverage. A higher ratio indicates dangerous debt levels.') }}
+								</dt>
 								<dd class="text-sm font-semibold text-on-surface" id="stat-debt-ratio">{{ asset.debtToEquityRatio|number_format(2) }}x</dd>
 							</div>
 							<div class="py-3 flex justify-between items-center">
-								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Market Share</dt>
+								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Market Share</span>
+									{{ _self.tooltip("The company's dominance of its sector, measured against the broader District GDP (Evaluates Equity for Banks).") }}
+								</dt>
 								<dd class="text-sm font-semibold text-on-surface" id="stat-market-share">{{ (marketShare * 100)|number_format(2) }}%</dd>
 							</div>
 							<div class="py-3 flex justify-between items-center">
-								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Jump Intensity</dt>
+								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Jump Intensity</span>
+									{{ _self.tooltip('The frequency of sudden, massive price shocks caused by corporate events or systemic panics.') }}
+								</dt>
 								<dd class="text-sm font-semibold text-on-surface">{{ asset.jumpIntensity }}</dd>
 							</div>
 						</dl>
+
+						{% if isLeveraged|default(false) %}
+							{# DEDICATED ASSET BREAKDOWN VISUALIZATION FOR BANKS #}
+							<div class="mt-6 p-4 bg-surface-container-highest rounded-xl border border-outline-variant/20 shadow-inner">
+								<div class="flex justify-between items-center mb-3">
+									<h4 class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant flex items-center gap-1.5">
+										<span class="material-symbols-outlined text-[14px]">account_balance</span>
+										Asset Breakdown</h4>
+									<span class="text-[10px] font-bold text-on-surface-variant">Total Assets: $<span id="stat-total-assets">{{ (asset.corporateTreasury + investedCapital)|format_large }}</span>
+									</span>
+								</div>
+
+								{% set totalAssets = asset.corporateTreasury + investedCapital %}
+								{% set loanPct = totalAssets > 0 ? (investedCapital / totalAssets) * 100 : 0 %}
+								{% set cashPct = totalAssets > 0 ? (asset.corporateTreasury / totalAssets) * 100 : 0 %}
+
+								<div class="w-full h-2.5 flex rounded-full overflow-hidden mb-3 bg-surface-container-low border border-outline-variant/10">
+									<div id="bar-loan-book" class="bg-primary transition-all duration-500" style="width: {{ loanPct }}%;" title="Loan Book: {{ loanPct|number_format(1) }}%"></div>
+									<div id="bar-cash" class="bg-secondary transition-all duration-500" style="width: {{ cashPct }}%;" title="Vault Cash: {{ cashPct|number_format(1) }}%"></div>
+								</div>
+
+								<div class="flex justify-between items-start text-[10px] font-bold uppercase tracking-widest mt-2">
+									<div class="text-primary group relative cursor-help">
+										<span class="border-b border-dotted border-primary/50">Loan Book ({{ loanPct|number_format(1) }}%)</span>
+										<div class="text-sm font-bold text-on-surface mt-1">$<span id="stat-loan-book">{{ investedCapital|format_large }}</span></div>
+										{{ _self.tooltip('The total value of active loans and credit facilities generating interest income. This is the core engine', 'left', 'w-56') }}
+									</div>
+									<div class="text-secondary group relative cursor-help text-right">
+										<span class="border-b border-dotted border-secondary/50">Vault Cash ({{ cashPct|number_format(1) }}%)</span>
+										<div class="text-sm font-bold text-on-surface mt-1">$<span id="stat-vault-cash">{{ asset.corporateTreasury|format_large }}</span></div>
+										{{ _self.tooltip('Fractional reserve cash held at the Central Bank to safely cover customer deposit withdrawals.', 'right', 'w-56') }}
+									</div>
+								</div>
+							</div>
+						{% endif %}
 					</div>
 
 					<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15">
@@ -321,133 +433,152 @@
 						</div>
 					</div>
 
-					{% else %}
-						<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15">
+				{% else %}
+					<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15">
 
-							<div class="flex justify-between items-center mb-6 pb-4 border-b border-outline-variant/10">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface">Index Composition</h3>
+						<div class="flex justify-between items-center mb-6 pb-4 border-b border-outline-variant/10">
+							<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+								<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Index Composition</span>
+								{{ _self.tooltip('The percentage weight of each company in the index, based on their live Market Capitalization.', 'left', 'w-64') }}
+							</h3>
 
-								<div class="flex items-center gap-2">
-									<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">District Volatility (VIX):</span>
-									<span id="district-vix" class="text-sm font-bold text-on-surface transition-colors">15.00%</span>
-								</div>
-							</div>
-
-							{# DISTRICT MACROECONOMICS DASHBOARD #}
-							<div class="bg-surface-container-lowest rounded-xl p-4 border border-outline-variant/10 mb-6">
-								<h4 class="text-[10px] font-bold uppercase tracking-widest text-primary mb-4 flex items-center gap-2">
-									<span class="material-symbols-outlined text-sm">monitoring</span>
-									Real-Time Macroeconomics
-								</h4>
-
-								<div
-									class="grid grid-cols-2 gap-4">
-									{# INFLATION #}
-									<div>
-										<p class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant">Inflation</p>
-										<p class="text-lg font-bold text-on-surface" id="macro-inflation">
-											{{ (macro.inflation * 100)|number_format(2) }}%
-										</p>
-									</div>
-
-									{# OUTPUT GAP #}
-									<div>
-										<p class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant">Output Gap</p>
-										<p class="text-lg font-bold text-on-surface" id="macro-output-gap">
-											{{ (macro.output_gap * 100)|number_format(2) }}%
-										</p>
-									</div>
-
-									{# POLICY RATE #}
-									<div>
-										<p class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant">Policy Rate</p>
-										<p class="text-lg font-bold text-on-surface" id="macro-policy-rate">
-											{{ (macro.policy_rate * 100)|number_format(2) }}%
-										</p>
-									</div>
-
-									{# YIELD CURVE #}
-									<div>
-										<p class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant flex items-center gap-1">
-											10-Yr Yield
-											{% if macro.qe_active|default(false) %}
-												<span class="inline-flex w-2 h-2 rounded-full bg-secondary animate-pulse" title="Quantitative Easing Active"></span>
-											{% endif %}
-										</p>
-										<p class="text-lg font-bold {% if macro.qe_active|default(false) %}text-secondary{% else %}text-on-surface{% endif %}" id="macro-yield">
-											{{ (macro.yield_10y * 100)|number_format(2) }}%
-										</p>
-									</div>
-								</div>
-
-								{# THE ECONOMIC STATUS BADGE #}
-								<div class="mt-4 pt-3 border-t border-outline-variant/10 flex justify-between items-center">
-									<span class="text-[10px] text-on-surface-variant">District GDP:</span>
-									<span id="macro-gdp" class="text-xs font-bold text-on-surface">
-										${{ (25.00 * macro.nominal_gdp_index|default(1.0))|number_format(2) }}T
-									</span>
-								</div>
-
-								<div class="mt-2 pt-2 flex justify-between items-center">
-									<span class="text-[10px] text-on-surface-variant">Current Cycle:</span>
-									<span id="market-economic-cycle" class="text-xs font-bold uppercase tracking-widest text-primary">
-										{{ economic_cycle }}
-									</span>
-								</div>
-							</div>
-
-							<div class="relative h-72 w-full flex justify-center">
-								<canvas id="etfPieChart"></canvas>
+							<div class="flex items-center gap-2">
+								<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">District Volatility (VIX):</span>
+								<span id="district-vix" class="text-sm font-bold text-on-surface transition-colors">15.00%</span>
 							</div>
 						</div>
-					{% endif %}
 
-					<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15">
-						<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface mb-6 flex items-center gap-2">
-							<span class="material-symbols-outlined text-sm">feed</span>
-							Live Events
-						</h3>
+						{# DISTRICT MACROECONOMICS DASHBOARD #}
+						<div class="bg-surface-container-lowest rounded-xl p-4 border border-outline-variant/10 mb-6">
+							<h4 class="text-[10px] font-bold uppercase tracking-widest text-primary mb-4 flex items-center gap-2">
+								<span class="material-symbols-outlined text-sm">monitoring</span>
+								Real-Time Macroeconomics
+							</h4>
 
-						<p id="no-events-msg" class="text-xs text-on-surface-variant {{ events is not empty ? 'hidden' : '' }}">No recent news reported.</p>
-						<ul id="events-list" role="list" class="divide-y divide-outline-variant/10">
-							{% for event in events %}
-								{% set isPositive = event.changePercent >= 0 %}
-								<li class="py-3">
-									<div class="flex items-start justify-between">
-										<div class="flex items-start gap-3 flex-1 min-w-0">
-											<div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 {{ isPositive ? 'bg-secondary/10 text-secondary' : 'bg-tertiary/10 text-tertiary' }}">
-												<span class="material-symbols-outlined text-sm">{{ event.eventType == 'SHOCK' ? 'bolt' : 'campaign' }}</span>
-											</div>
-											<div class="flex-1 min-w-0">
-												<p class="text-xs font-bold text-on-surface">{{ event.eventType }}</p>
-												<p class="text-[11px] text-on-surface-variant mt-1 leading-relaxed whitespace-pre-line">
-													{{ event.description }}
-												</p>
-											</div>
+							<div
+								class="grid grid-cols-2 gap-4">
+								{# INFLATION #}
+								<div>
+									<div class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help inline-block focus-visible:outline-none" tabindex="0">
+										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Inflation</span>
+										{{ _self.tooltip('The rate at which the general level of prices for goods and services is rising in the District.') }}
+									</div>
+									<p class="text-lg font-bold text-on-surface" id="macro-inflation">
+										{{ (macro.inflation * 100)|number_format(2) }}%
+									</p>
+								</div>
+
+								{# OUTPUT GAP #}
+								<div>
+									<div class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help inline-block focus-visible:outline-none" tabindex="0">
+										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Output Gap</span>
+										{{ _self.tooltip('The difference between actual economic output and potential. Positive indicates an overheated boom.', 'right') }}
+									</div>
+									<p class="text-lg font-bold text-on-surface" id="macro-output-gap">
+										{{ (macro.output_gap * 100)|number_format(2) }}%
+									</p>
+								</div>
+
+								{# POLICY RATE #}
+								<div>
+									<div class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help inline-block focus-visible:outline-none" tabindex="0">
+										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Policy Rate</span>
+										{{ _self.tooltip('The baseline interest rate set by central authorities, dictating borrowing costs for the entire District.') }}
+									</div>
+									<p class="text-lg font-bold text-on-surface" id="macro-policy-rate">
+										{{ (macro.policy_rate * 100)|number_format(2) }}%
+									</p>
+								</div>
+
+								{# YIELD CURVE #}
+								<div>
+									<div class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help inline-flex items-center gap-1 focus-visible:outline-none" tabindex="0">
+										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">10-Yr Yield</span>
+										{% if macro.qe_active|default(false) %}
+											<span class="inline-flex w-2 h-2 rounded-full bg-secondary animate-pulse" title="Quantitative Easing Active"></span>
+										{% endif %}
+										{{ _self.tooltip("The interest rate on Safe Harbor's 10-year catastrophe bonds. The ultimate risk-free baseline.", 'right') }}
+									</div>
+									<p class="text-lg font-bold {% if macro.qe_active|default(false) %}text-secondary{% else %}text-on-surface{% endif %}" id="macro-yield">
+										{{ (macro.yield_10y * 100)|number_format(2) }}%
+									</p>
+								</div>
+							</div>
+
+							{# THE ECONOMIC STATUS BADGE #}
+							<div class="mt-4 pt-3 border-t border-outline-variant/10 flex justify-between items-center">
+								<span class="text-[10px] text-on-surface-variant group relative cursor-help inline-block focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">District GDP:</span>
+									{{ _self.tooltip('Gross Domestic Product. The total nominal value of all goods and services produced in the Aerie.') }}
+								</span>
+								<span id="macro-gdp" class="text-xs font-bold text-on-surface">
+									${{ (25.00 * macro.nominal_gdp_index|default(1.0))|number_format(2) }}T
+								</span>
+							</div>
+
+							<div class="mt-2 pt-2 flex justify-between items-center">
+								<span class="text-[10px] text-on-surface-variant group relative cursor-help inline-block focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Current Cycle:</span>
+									{{ _self.tooltip('The prevailing macroeconomic state of the District. Determines systemic trends and baseline inflation.') }}
+								</span>
+								<span id="market-economic-cycle" class="text-xs font-bold uppercase tracking-widest text-primary">
+									{{ economic_cycle }}
+								</span>
+							</div>
+						</div>
+
+						<div class="relative h-72 w-full flex justify-center">
+							<canvas id="etfPieChart"></canvas>
+						</div>
+					</div>
+				{% endif %}
+
+				<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15">
+					<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface mb-6 flex items-center gap-2">
+						<span class="material-symbols-outlined text-sm">feed</span>
+						Live Events
+					</h3>
+
+					<p id="no-events-msg" class="text-xs text-on-surface-variant {{ events is not empty ? 'hidden' : '' }}">No recent news reported.</p>
+					<ul id="events-list" role="list" class="divide-y divide-outline-variant/10">
+						{% for event in events %}
+							{% set isPositive = event.changePercent >= 0 %}
+							<li class="py-3">
+								<div class="flex items-start justify-between">
+									<div class="flex items-start gap-3 flex-1 min-w-0">
+										<div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 {{ isPositive ? 'bg-secondary/10 text-secondary' : 'bg-tertiary/10 text-tertiary' }}">
+											<span class="material-symbols-outlined text-sm">{{ event.eventType == 'SHOCK' ? 'bolt' : 'campaign' }}</span>
 										</div>
-
-										<div class="text-right flex-shrink-0 ml-2">
-											<span class="inline-flex items-center rounded bg-transparent px-1 py-0.5 text-xs font-bold {{ isPositive ? 'text-secondary' : 'text-tertiary' }}">
-												{{ isPositive ? '+' : '' }}{{ event.changePercent|number_format(2) }}%
-											</span>
-											<p class="text-[10px] text-on-surface-variant mt-1">
-												{{ event.recordedAt|date('H:i') }}
+										<div class="flex-1 min-w-0">
+											<p class="text-xs font-bold text-on-surface">{{ event.eventType }}</p>
+											<p class="text-[11px] text-on-surface-variant mt-1 leading-relaxed whitespace-pre-line">
+												{{ event.description }}
 											</p>
 										</div>
 									</div>
-								</li>
-							{% endfor %}
-						</ul>
-					</div>
+
+									<div class="text-right flex-shrink-0 ml-2">
+										<span class="inline-flex items-center rounded bg-transparent px-1 py-0.5 text-xs font-bold {{ isPositive ? 'text-secondary' : 'text-tertiary' }}">
+											{{ isPositive ? '+' : '' }}{{ event.changePercent|number_format(2) }}%
+										</span>
+										<p class="text-[10px] text-on-surface-variant mt-1">
+											{{ event.recordedAt|date('H:i') }}
+										</p>
+									</div>
+								</div>
+							</li>
+						{% endfor %}
+					</ul>
 				</div>
-
 			</div>
-		</div>
-	{% endblock %}
 
-	{% block javascripts %}
-		<script>
-			window.AERIE_DATA = {
+		</div>
+	</div>
+{% endblock %}
+
+{% block javascripts %}
+	<script>
+		window.AERIE_DATA = {
 ticker: "{{ asset.ticker }}",
 isEtf: {{ isEtf ? 'true' : 'false' }},
 sharesOutstanding: {{ isEtf ? 0 : asset.sharesOutstanding }},
@@ -458,15 +589,15 @@ pieLabels: [{% if isEtf and allAssets is defined %}{% for a in allAssets %}"{{ a
 pieData: [{% if isEtf and allAssets is defined %}{% for a in allAssets %}{{ a.price * a.sharesOutstanding }}{{ not loop.last ? ',' : '' }}{% endfor %}{% endif %}],
 sharesMap: {
 {% if isEtf and allAssets is defined %}
-{% for a in allAssets %}"{{ a.ticker }}" : {{ a.sharesOutstanding }}
-{{ not loop.last ? ',' : '' }}
-{% endfor %}
+{% for a in allAssets %}
+"{{ a.ticker }}" : {{ a.sharesOutstanding }}
+{{ not loop.last ? ',' : '' }}{% endfor %}
 {% endif %}
 },
 ticksPerYear: {{ ticksPerYear }}
 };
-		</script>
+	</script>
 
-		<script src="{{ asset('js/colors.js') }}"></script>
-		<script src="{{ asset('js/stock.js') }}"></script>
-	{% endblock %}
+	<script src="{{ asset('js/colors.js') }}"></script>
+	<script src="{{ asset('js/stock.js') }}"></script>
+{% endblock %}
