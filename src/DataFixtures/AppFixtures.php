@@ -93,7 +93,8 @@ class AppFixtures extends Fixture
             $stock->setPublicFloatPercentage((string) ($stockData['public_float'] ?? 0.90));
             $stock->setTotalNetIncome((string) ($stockData['total_net_income'] ?? 0.00));
             $stock->setTotalEquity((string) ($stockData['total_equity'] ?? 0.00));
-            $stock->setTotalDebt((string) ($stockData['total_debt'] ?? 0.00));
+            $stock->setWholesaleDebt((string) ($stockData['wholesale_debt'] ?? 0.00));
+            $stock->setCustomerDeposits((string) ($stockData['customer_deposits'] ?? 0.00));
             $stock->setRetainedEarnings((string) ($stockData['retained_earnings'] ?? 0.00));
             $stock->setLastDividend('0.00');
             $stock->setCreditSpread((string) ($stockData['credit_spread'] ?? 0.0100));

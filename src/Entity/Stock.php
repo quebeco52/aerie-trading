@@ -102,11 +102,8 @@ class Stock
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
     private string $retainedEarnings = '0.0000';
 
-    /**
-     * @var string Absolute total debt (Long-term + Short-term). Fits Clean Surplus accounting.
-     */
-    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
-    private ?string $totalDebt = '0.0000';
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $wholesaleDebt = '0.0000';
 
     /**
      * @var string The risk premium this company pays over the Central Bank policy rate.
@@ -240,6 +237,9 @@ class Stock
 
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $industry = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 2, nullable: true)]
+    private ?string $customerDeposits = '0.00';
 
 
     public function getId(): ?int
@@ -510,17 +510,6 @@ class Stock
         return $this;
     }
 
-    public function getTotalDebt(): ?string
-    {
-        return $this->totalDebt;
-    }
-
-    public function setTotalDebt(string $totalDebt): static
-    {
-        $this->totalDebt = $totalDebt;
-
-        return $this;
-    }
 
     public function getCreditSpread(): ?string
     {
@@ -737,7 +726,7 @@ class Stock
     public function getInvestedCapital(): float
     {
         $equity = (float) $this->totalEquity;
-        $debt = (float) $this->totalDebt;
+        $debt = (float) $this->getTotalDebt();
         $cash = (float) $this->corporateTreasury;
         
         // 10% to prevent penalizing cash-rich "lean" tech companies,
@@ -752,7 +741,7 @@ class Stock
     public function getDebtToEquityRatio(): string
     {
         $equity = max(1.0, (float) $this->totalEquity);
-        $debt = (float) $this->totalDebt;
+        $debt = (float) $this->getTotalDebt();
         
         return (string) round($debt / $equity, 4);
     }
@@ -779,6 +768,36 @@ class Stock
         $this->industry = $industry;
 
         return $this;
+    }
+
+    public function getWholesaleDebt(): string
+    {
+        return $this->wholesaleDebt;
+    }
+
+    public function setWholesaleDebt(string $wholesaleDebt): static
+    {
+        $this->wholesaleDebt = $wholesaleDebt;
+        return $this;
+    }
+
+    public function getCustomerDeposits(): ?string
+    {
+        return $this->customerDeposits;
+    }
+
+    public function setCustomerDeposits(?string $customerDeposits): static
+    {
+        $this->customerDeposits = $customerDeposits;
+        return $this;
+    }
+
+    public function getTotalDebt(): string
+    {
+        $wholesale = (float) $this->wholesaleDebt;
+        $deposits = (float) $this->customerDeposits;
+        
+        return (string) number_format($wholesale + $deposits, 4, '.', '');
     }
 
 }

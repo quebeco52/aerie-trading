@@ -70,6 +70,18 @@ class CorporateReport
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
     private string $stockBuybacks = '0.0000';
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $returnOnEquity = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $costOfEquity = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $capitalRatio = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $customerDepositRatio = null;
+
     public function __construct()
     {
         $this->recordedAt = new \DateTime();
@@ -286,6 +298,53 @@ class CorporateReport
     {
         $this->stockBuybacks = $stockBuybacks;
 
+        return $this;
+    }
+
+    public function getReturnOnEquity(): ?string
+    {
+        return $this->returnOnEquity;
+    }
+
+    public function setReturnOnEquity(?string $returnOnEquity): static
+    {
+        $this->returnOnEquity = $returnOnEquity;
+
+        return $this;
+    }
+
+    public function getCostOfEquity(): ?string
+    {
+        return $this->costOfEquity;
+    }
+
+    public function setCostOfEquity(?string $costOfEquity): static
+    {
+        $this->costOfEquity = $costOfEquity;
+
+        return $this;
+    }
+
+    public function getCapitalRatio(): ?string
+    {
+        return $this->capitalRatio;
+    }
+
+    public function setCapitalRatio(?string $capitalRatio): static
+    {
+        $this->capitalRatio = $capitalRatio;
+
+        return $this;
+    }
+
+    public function getCustomerDepositRatio(): ?string
+    {
+        return $this->customerDepositRatio;
+    }
+
+    public function setCustomerDepositRatio(?string $customerDepositRatio): static
+    {
+        $this->customerDepositRatio = $customerDepositRatio;
         return $this;
     }
 }

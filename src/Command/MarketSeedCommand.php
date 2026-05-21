@@ -76,11 +76,13 @@ class MarketSeedCommand extends Command
                 $stock->setFixedCostRatio((float) ($stockData['fixed_cost_ratio'] ?? 0.35));
                 
                 $stock->setCorporateTreasury((string) ($stockData['corporate_treasury'] ?? 1000000000.00));
+                $stock->setFloatingDebtRatio((string) ($stockData['floating_debt_ratio'] ?? 0.30));
                 $stock->setOperatingMargin((string) ($stockData['operating_margin'] ?? 0.15));
                 $stock->setPublicFloatPercentage((string) ($stockData['public_float'] ?? 0.90));
                 $stock->setTotalNetIncome((string) ($stockData['total_net_income'] ?? 0.00));
                 $stock->setTotalEquity((string) ($stockData['total_equity'] ?? 0.00));
-                $stock->setTotalDebt((string) ($stockData['total_debt'] ?? 0.00));
+                $stock->setWholesaleDebt((string) ($stockData['wholesale_debt'] ?? 0.00));
+                $stock->setCustomerDeposits((string) ($stockData['customer_deposits'] ?? 0.00));
                 $stock->setRetainedEarnings((string) ($stockData['retained_earnings'] ?? 0.00));
                 $stock->setSamRatio((string) ($stockData['sam_ratio'] ?? 1.00));
                 

@@ -27,43 +27,46 @@ $worker->count = 4;
 
 // THE BOUNCER
 
-$worker->onWebSocketConnect = function ($connection, $http_buffer) {
-    // Extract the ticket safely (fallback to raw HTTP buffer if $_GET is empty)
-    $ticket = $_GET['ticket'] ?? '';
-    if (empty($ticket) && preg_match('/ticket=([a-zA-Z0-9]+)/', $http_buffer, $matches)) {
-        $ticket = $matches[1];
-    }
+$worker->onConnect = function ($connection) {
+    // Workerman v5+ moves the WebSocket handshake intercept to the connection object
+    $connection->onWebSocketConnect = function ($connection, $http_buffer) {
+        // Extract the ticket safely (fallback to raw HTTP buffer if $_GET is empty)
+        $ticket = $_GET['ticket'] ?? '';
+        if (empty($ticket) && preg_match('/ticket=([a-zA-Z0-9]+)/', $http_buffer, $matches)) {
+            $ticket = $matches[1];
+        }
 
-    if (empty($ticket)) {
-        echo " [!] Rejected connection: No ticket provided.\n";
-        $connection->close();
-        return;
-    }
+        if (empty($ticket)) {
+            echo " [!] Rejected connection: No ticket provided.\n";
+            $connection->close();
+            return;
+        }
 
-    // Lazily initialize a synchronous Redis client per-worker
-    static $syncRedis = null;
-    if ($syncRedis === null) {
-        $syncRedis = new \Redis();
-        $redisUrl = parse_url($_ENV['REDIS_URL'] ?? 'redis://127.0.0.1:6379');
-        $syncRedis->connect($redisUrl['host'], $redisUrl['port'] ?? 6379);
-    }
+        // Lazily initialize a synchronous Redis client per-worker
+        static $syncRedis = null;
+        if ($syncRedis === null) {
+            $syncRedis = new \Redis();
+            $redisUrl = parse_url($_ENV['REDIS_URL'] ?? 'redis://127.0.0.1:6379');
+            $syncRedis->connect($redisUrl['host'], $redisUrl['port'] ?? 6379);
+        }
 
-    // Check if the ticket exists in Redis
-    $userId = $syncRedis->get("ws_ticket:{$ticket}");
+        // Check if the ticket exists in Redis
+        $userId = $syncRedis->get("ws_ticket:{$ticket}");
 
-    if (!$userId) {
-        echo " [!] Rejected connection: Invalid or expired ticket.\n";
-        $connection->close();
-        return;
-    }
+        if (!$userId) {
+            echo " [!] Rejected connection: Invalid or expired ticket.\n";
+            $connection->close();
+            return;
+        }
 
-    // Validated! Destroy the ticket so it can NEVER be reused by a replay attack
-    $syncRedis->del("ws_ticket:{$ticket}");
+        // Validated! Destroy the ticket so it can NEVER be reused by a replay attack
+        $syncRedis->del("ws_ticket:{$ticket}");
 
-    // Attach the User ID to this specific connection object for future reference
-    $connection->uid = $userId;
-    
-    echo " [+] Authenticated User ID {$userId} connected! (IP: {$connection->getRemoteIp()})\n";
+        // Attach the User ID to this specific connection object for future reference
+        $connection->uid = $userId;
+        
+        echo " [+] Authenticated User ID {$userId} connected! (IP: {$connection->getRemoteIp()})\n";
+    };
 };
 
 
@@ -91,9 +94,6 @@ $worker->onMessage = function ($connection, $data) {
     if ($data === 'ping') {
         $connection->send('pong');
     }
-};
-
-$worker->onConnect = function ($connection) {
 };
 
 $worker->onClose = function ($connection) {
