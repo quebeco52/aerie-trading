@@ -384,4 +384,27 @@ class MathUtility
     {
         return max($equity * 0.50, ($equity + $debt - $treasury));
     }
+
+    /**
+     * Calculates the target cash reserves required for normal operations.
+     * Leveraged companies (Banks) must maintain a fractional reserve of their massive debt (deposits).
+     */
+    public function calculateTargetOperatingCash(float $operatingBase, float $currentDeposits, float $wholesaleDebt, bool $isLeveraged): float
+    {
+        if ($isLeveraged) {
+            return max($operatingBase * 0.05, $currentDeposits * 0.08, $wholesaleDebt * 0.05);
+        }
+        return $operatingBase * 0.05;
+    }
+
+    /**
+     * Calculates the absolute minimum cash required before triggering a liquidity crisis.
+     */
+    public function calculateMinOperatingCash(float $operatingBase, float $currentDeposits, float $wholesaleDebt, bool $isLeveraged): float
+    {
+        if ($isLeveraged) {
+            return max($operatingBase * 0.03, $wholesaleDebt * 0.03, $currentDeposits * 0.05); // 5% Crisis Threshold
+        }
+        return $operatingBase * 0.03;
+    }
 }

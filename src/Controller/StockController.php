@@ -64,6 +64,8 @@ class StockController extends AbstractController
         $peRatio = null;
         $targetPE = 20.00;
         $marketShare = 0;
+        $isLeveraged = false;
+        $investedCapital = 0.0;
 
 
 
@@ -76,7 +78,12 @@ class StockController extends AbstractController
             $baselineSectorTam = 1_000_000_000_000;
             $samRatio = (float) $asset->getSamRatio();
             $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
-            $marketShare = min(0.9999, $asset->getInvestedCapital() / max(1.0, $dynamicSam));
+            
+            $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$asset->getIndustry() ?? 'General']['leveraged_industry'] ?? false;
+            $investedCapital = $asset->getInvestedCapital();
+            $evaluationCapital = $isLeveraged ? ((float) $asset->getTotalEquity() + (float) $asset->getWholesaleDebt()) : $asset->getInvestedCapital();
+            
+            $marketShare = min(0.9999, $evaluationCapital / max(1.0, $dynamicSam));
         }
 
         $generalInfo = $asset->getDescription();
@@ -100,6 +107,8 @@ class StockController extends AbstractController
         return $this->render('stock/index.html.twig', [
             'asset' => $asset,
             'isEtf' => $isEtf,
+            'isLeveraged' => $isLeveraged,
+            'investedCapital' => $investedCapital,
             'userQuantity' => $userQuantity,
             'marketCap' => $marketCap,
             'peRatio' => $peRatio,
@@ -235,7 +244,7 @@ class StockController extends AbstractController
 
         // Fetch all fundamental reports for this stock, oldest to newest (for charting)
         $sql = '
-            SELECT net_income, equity, total_debt, treasury, roic, shares, recorded_at, interest_expense, blended_rate, dynamic_spread, revenue, interest_income, capital_expenditures, wacc, eva, dividend_paid, stock_buybacks
+            SELECT net_income, equity, total_debt, treasury, roic, shares, recorded_at, interest_expense, blended_rate, dynamic_spread, revenue, interest_income, capital_expenditures, wacc, eva, dividend_paid, stock_buybacks, return_on_equity, cost_of_equity, capital_ratio, customer_deposit_ratio
             FROM corporate_report 
             WHERE stock_id = :id 
             ORDER BY recorded_at ASC

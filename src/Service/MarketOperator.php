@@ -80,6 +80,9 @@ class MarketOperator
             return null; // The company is surviving; abort the restructuring
         }
 
+        $industry = $stock->getIndustry() ?: 'General';
+        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leveraged_industry'] ?? false;
+
 
 
         $isHostile = mt_rand(1, 100) > 50;
@@ -108,7 +111,15 @@ class MarketOperator
         $stock->setCorporateTreasury("5000000000.00");
         $stock->setTotalEquity("20000000000.00");
         $stock->setRetainedEarnings("0.00");
-        $stock->setTotalDebt("10000000000.00"); // Give the restructured company a healthy 0.5x D/E ratio
+        $stock->setWholesaleDebt("10000000000.00"); // Give the restructured company a healthy 0.5x D/E ratio
+
+        if ($isLeveraged) {
+            // For a restructured bank, assume 85% of its new debt is stable customer deposits.
+            $stock->setCustomerDeposits("8500000000.00");
+            $stock->setWholesaleDebt("1500000000.00"); // The remaining 1.5B is Wholesale
+        } else {
+            $stock->setCustomerDeposits("0.00");
+        }
 
         $this->entityManager->getConnection()->executeStatement(
             'DELETE FROM stock_history WHERE stock_id = :id',

@@ -121,6 +121,7 @@ class StockTracker
                 earningsPerShare: (float) $stock->getEarningsPerShare(),
                 dt: $dt,
                 lambda: (float) $stock->getJumpIntensity(),
+                jump_vol: (float) $stock->getJumpVol(),
                 beta: (float) $stock->getBeta(),
                 marketZ: $marketZ,
                 marketVol: $marketVol,
@@ -133,7 +134,8 @@ class StockTracker
                 liveWacc: $health['wacc'],
                 baselineIndustryPE: $baselineIndustryPE,
                 revenuePerShare: $revenuePerShare,
-                isLeveragedIndustry: $isLeveragedIndustry
+                isLeveragedIndustry: $isLeveragedIndustry,
+                liveCostOfEquity: $health['cost_of_equity'] ?? 0.10
             );
 
             $newPrice = $calculation['price'];
@@ -186,6 +188,7 @@ class StockTracker
             // Determine if a fundamental corporate event occurred this tick
             $isFundamentalTick = !empty($generatedEvents) || $maResult || (isset($divestResult) && $divestResult);
 
+
             $stockUpdate = [
                 'ticker' => $stock->getTicker(),
                 'sector' => $sectorName,
@@ -198,18 +201,23 @@ class StockTracker
                 'eps' => (float) $stock->getEarningsPerShare(),
                 'treasury' => (float) $stock->getCorporateTreasury(),
                 'equity' => (float) $stock->getTotalEquity(),
+                'invested_capital' => $stock->getInvestedCapital(),
                 'debt_ratio' => (float) $stock->getDebtToEquityRatio(),
                 'analyst_targets' => $calculation['analyst_targets'],
-                'perceived_fair_value' => $calculation['perceived_fair_value']
+                'perceived_fair_value' => $calculation['perceived_fair_value'],
             ];
+
 
             // Only update Market Share on the UI when Corporate Fundamentals actually change
             // This prevents the percentage from jittering constantly as the Nominal GDP index expands
             if ($isFundamentalTick) {
                 $investedCapital = $stock->getInvestedCapital();
+                $equity = (float) $stock->getTotalEquity();
                 $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
                 $samRatio = (float) $stock->getSamRatio();
-                $marketShare = min(0.9999, $this->mathUtility->calculateMarketShare($investedCapital, $nominalGdpIndex, $samRatio));
+                
+                $evaluationCapital = $isLeveragedIndustry ? ($equity + (float) $stock->getWholesaleDebt()) : $investedCapital;
+                $marketShare = min(0.9999, $this->mathUtility->calculateMarketShare($evaluationCapital, $nominalGdpIndex, $samRatio));
                 
                 $stockUpdate['market_share'] = round($marketShare * 100, 2);
             }

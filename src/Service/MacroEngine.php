@@ -56,9 +56,9 @@ class MacroEngine
         // Safely initialize if pulling from an older Redis cache payload
         $state['nominal_gdp_index'] = $state['nominal_gdp_index'] ?? 1.0;
 
-        // Nominal Growth = Natural Rate
-        $realGrowth = $naturalRate;
-        $state['nominal_gdp_index'] = max(0.10, $state['nominal_gdp_index'] * exp($realGrowth * $dt));
+        // Nominal Growth include BOTH Real Growth AND Inflation
+        $nominalGrowthRate = $naturalRate + $state['inflation'];
+        $state['nominal_gdp_index'] = max(0.10, $state['nominal_gdp_index'] * exp($nominalGrowthRate * $dt));
 
         // A quarter is 0.25 years.
         // tick data into a rolling 3-month average.
@@ -66,6 +66,9 @@ class MacroEngine
 
         $state['output_gap_ema'] += $emaWeight * ($state['output_gap'] - $state['output_gap_ema']);
         $state['policy_rate_ema'] += $emaWeight * ($state['policy_rate'] - $state['policy_rate_ema']);
+        $state['inflation_ema'] += $emaWeight * ($state['inflation'] - $state['inflation_ema']);
+
+
 
         // DYNAMIC FISCAL POLICY (Government Taxes)
         // Base tax rate is 21%. If the economy overheats, the government hikes taxes to cool it down.
@@ -82,6 +85,7 @@ class MacroEngine
 
         $payload = [
             'inflation' => $state['inflation'],
+            'inflation_ema' => $state['inflation_ema'],
             'output_gap' => $state['output_gap'],
             'output_gap_ema' => $state['output_gap_ema'],
             'target_rate' => $targetRate,
