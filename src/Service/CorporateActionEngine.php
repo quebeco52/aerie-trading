@@ -459,8 +459,8 @@ class CorporateActionEngine
         $maxDividendPerShare = $shares > 0 ? ($usableCash / $shares) : 0.0;
 
         // A company cannot authorize a regular dividend that obliterates its own market cap.
-        // Cap the quarterly dividend to 15% of the current stock price (A massive 60% annualized yield limit).
-        $maxMarketDividend = max(0.0, $currentPrice * 0.15);
+        // Cap the quarterly dividend to 10% of the current stock price (A massive 40% annualized yield limit).
+        $maxMarketDividend = max(0.0, $currentPrice * 0.10);
 
         $newDividend = min($newDividend, $maxDividendPerShare, $maxMarketDividend);
 
@@ -788,8 +788,11 @@ class CorporateActionEngine
                     $newTotalDebt = $totalDebt + $newDebtIssued;
 
                     $oldHistoricalRate = (float) $stock->getHistoricalFixedRate();
-                    $weightedRate = (($totalDebt * $oldHistoricalRate) + ($newDebtIssued * $newBorrowingRate)) / $newTotalDebt;
-                    $stock->setHistoricalFixedRate((string) $weightedRate);
+                    $newWholesaleDebt = $state['wholesaleDebt'] + $newDebtIssued;
+                    if ($newWholesaleDebt > 0) {
+                        $weightedRate = (($state['wholesaleDebt'] * $oldHistoricalRate) + ($newDebtIssued * $newBorrowingRate)) / $newWholesaleDebt;
+                        $stock->setHistoricalFixedRate((string) $weightedRate);
+                    }
 
                     $state['wholesaleDebt'] += $newDebtIssued;
                     $stock->setWholesaleDebt((string) $state['wholesaleDebt']);
@@ -1088,28 +1091,85 @@ class CorporateActionEngine
         $currentDeposits = $state['customerDeposits'];
         if ($currentDeposits <= 0) return; // Need a baseline to grow from
 
-        // Calculate Systemic Macro Growth (Quarterly)
         $inflation = $macroState['inflation_ema'] ?? 0.02;
-        $realGdpGrowth = 0.02;
+        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
+        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
         
+        // BASELINE M2 GROWTH
         // Banks naturally capture nominal GDP growth (Inflation + Real Growth)
+        // Booms accelerate money creation gently, but busts destroy it aggressively (credit contraction)
+        $realGdpGrowth = 0.02 + ($outputGap > 0.0 ? $outputGap * 0.5 : $outputGap * 2.0); 
         $systemicGrowthAnnual = $inflation + $realGdpGrowth; 
+        
+        // YIELD SEEKING & QUANTITATIVE TIGHTENING (QT)
+        // When central bank rates are high, consumers move cash from 0% bank deposits into high-yield Money Market Funds.
+        // A policy rate above 4% starts draining systemic deposits.
+        $yieldFlightPenalty = max(0.0, ($policyRate - 0.04) * 1.5); 
+        $systemicGrowthAnnual -= $yieldFlightPenalty;
+
         $systemicGrowthQuarterly = $systemicGrowthAnnual / 4.0;
 
+        // COMPANY SPECIFIC SENSITIVITY (Beta)
+        // High-beta (aggressive/cyclical) banks have highly volatile deposit bases that swing wildly with the macro cycle.
+        // Low-beta (defensive/titan) banks have "sticky", loyal customer bases that ignore the noise.
+        $beta = abs((float) $stock->getBeta());
+        $betaSensitivity = max(0.5, min(2.0, $beta)); // Floor at 0.5 to maintain baseline stickiness, cap at 2.0
 
-        // Add a slight idiosyncratic variance (0.8x to 1.2x of expected systemic growth)
-        $variance = 0.80 + (mt_rand(0, 40) / 100.0);
-        $trueDepositGrowthRate = max(0.0, $systemicGrowthQuarterly * $variance);
+        $trueDepositGrowthRate = $systemicGrowthQuarterly * $betaSensitivity;
 
-        $newOrganicDeposits = $currentDeposits * $trueDepositGrowthRate;
+        // CAPACITY FOR DEPOSITS (Leverage Utilization)
+        // Banks with massive excess equity capital (low leverage) will aggressively market for new deposits (e.g., higher APYs).
+        // Banks approaching their regulatory leverage limits will intentionally lower rates and choke off deposit growth.
+        $equity = (float) $stock->getTotalEquity();
+        $totalDebt = $state['wholesaleDebt'] + $currentDeposits;
+        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['equity_limit'] ?? 10.0;
+        
+        $utilization = $totalDebt / max(1.0, $equity * $equityLimit);
+        $capacityModifier = max(0.1, 2.5 - ($utilization * 2)); // E.g., 0.5 utilization = 1.50x growth. 1.0 utilization = 0.5x growth.
+        if ($utilization > 0.95) {
+            $capacityModifier *= 0.75;
+        }
+        
+        if ($trueDepositGrowthRate > 0) {
+            $trueDepositGrowthRate *= $capacityModifier;
+        } else {
+            // If deposits are draining, overleveraged banks bleed faster, while high-equity fortresses bleed slower.
+            $trueDepositGrowthRate /= $capacityModifier;
+        }
 
-        if ($newOrganicDeposits > 0) {
+        // Generate a normally distributed multiplier centered at 1.0 with a standard deviation of 0.20 (20%)
+        $varianceMultiplier = 1.0 + ($this->mathUtility->generateStandardNormal() * 0.20);
+        $trueDepositGrowthRate *= max(0.0, $varianceMultiplier); // Prevent the multiplier itself from flipping negative
+
+        // Cap the max deposit growth or bleed to prevent mathematical explosions (Max 15% change per quarter)
+        $trueDepositGrowthRate = max(-0.15, min(0.15, $trueDepositGrowthRate));
+
+        $depositChange = $currentDeposits * $trueDepositGrowthRate;
+
+        if (abs($depositChange) > 0) {
             // Accounting: Deposits add Cash to the Vault (Treasury) and Deposits to the Liabilities
-            $state['treasury'] += $newOrganicDeposits;
-            $state['customerDeposits'] += $newOrganicDeposits;
+            // If depositChange is negative (systemic contraction), it actively drains cash from the treasury
+            $state['treasury'] += $depositChange;
+            $state['customerDeposits'] += $depositChange;
             
-            $stock->setCustomerDeposits((string) $state['customerDeposits']);
+            $stock->setCustomerDeposits((string) max(0.0, $state['customerDeposits']));
+
+            // Generate Market Events for extreme deposit movements
+            $percentageChange = $depositChange / $currentDeposits;
             
+            if ($percentageChange < -0.01) {
+                $amtB = number_format(abs($depositChange) / 1_000_000_000, 2);
+                $state['events'][] = [
+                    'description' => "Suffered a \${$amtB}B quarterly deposit outflow due to systemic liquidity drain.",
+                    'shock' => -1.0
+                ];
+            } elseif ($percentageChange > 0.02) {
+                $amtB = number_format($depositChange / 1_000_000_000, 2);
+                $state['events'][] = [
+                    'description' => "Absorbed \${$amtB}B in new customer deposits.",
+                    'shock' => 0.5
+                ];
+            }
         }
     }
 }

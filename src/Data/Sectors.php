@@ -109,7 +109,7 @@ class Sectors
         'REIT - Hotel & Motel' => ['pe' => 13.00, 'depreciation' => 0.04, 'ebitda_limit' => 5.5, 'equity_limit' => 2.0, 'leveraged_industry' => false], // Highly cyclical, less debt allowed
         'REIT - Industrial' => ['pe' => 18.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false], // Warehouses (Amazon effect), premium P/E
         'REIT - Mortgage' => ['pe' => 10.00, 'depreciation' => 0.01, 'ebitda_limit' => 999.0, 'equity_limit' => 8.0, 'leveraged_industry' => true], // Pure financial engineering (Bank Rule)
-        'REIT - Office' => ['pe' => 12.00, 'depreciation' => 0.04, 'ebitda_limit' => 6.0, 'equity_limit' => 2.0, 'leveraged_industry' => false], // Work-from-home headwinds
+        'REIT - Office' => ['pe' => 12.00, 'depreciation' => 0.04, 'ebitda_limit' => 6.0, 'equity_limit' => 2.5, 'leveraged_industry' => false], // Work-from-home headwinds
         'REIT - Residential' => ['pe' => 17.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false], // Apartments, highly resilient
         'REIT - Retail' => ['pe' => 14.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.0, 'equity_limit' => 2.0, 'leveraged_industry' => false], // Malls, e-commerce risk
         'REIT - Specialty' => ['pe' => 16.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'leveraged_industry' => false], // Data centers, cell towers

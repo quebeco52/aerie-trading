@@ -94,7 +94,7 @@ class MarketSeedCommand extends Command
                 $stock->setLastDividend((string) $startingDividend);
 
                 $stock->setCreditSpread((string) ($stockData['credit_spread'] ?? 0.0100));
-                $stock->setHistoricalFixedRate((string) ($stockData['historical_fixed_rate'] ?? 0.05));
+                $stock->setHistoricalFixedRate((string) ($stockData['historical_fixed_rate'] ?? 0.04));
                 $stock->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$stockData['ticker']] ?? null);
 
                 $this->entityManager->persist($stock);

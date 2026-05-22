@@ -45,7 +45,27 @@ class DebtEngine
         $treasury = (float) $stock->getCorporateTreasury();
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
 
-        $baselineCreditSpread = (float) $stock->getCreditSpread();
+        $rawCreditSpread = (float) $stock->getCreditSpread();
+        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
+        $volatility = (float) $stock->getCurrentVolatility() ?: (float) $stock->getVolatility();
+        
+        $rawBeta = (float) $stock->getBeta();
+
+        // THE MACROECONOMIC CREDIT CYCLE
+        // Spreads widen during recessions (negative gap) as lenders panic, and tighten during booms.
+        // High-beta (cyclical) stocks see their spreads widen much faster than low-beta (defensive) stocks.
+        $betaSensitivity = $rawBeta >= 0.0 ? max(0.5, $rawBeta) : min(-0.5, $rawBeta);
+        $macroCreditAdjustment = -$outputGap * 0.10 * $betaSensitivity;
+        
+        // THE VOLATILITY RISK PREMIUM
+        // Bondholders hate uncertainty. Companies with high stock volatility pay a risk premium.
+        // Volatility above 20% starts adding to the spread (e.g., 40% vol adds 40 bps).
+        $volatilityPremium = max(0.0, ($volatility - 0.20) * 0.02);
+        
+        // Calculate the Dynamic Baseline Spread
+        // Floored at 15 bps (0.0015) so ultra-safe Titans don't get negative spreads during massive economic booms.
+        $baselineCreditSpread = max(0.0015, $rawCreditSpread + $macroCreditAdjustment + $volatilityPremium);
+
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $industry = $stock->getIndustry() ?: 'General';
 
@@ -134,7 +154,7 @@ class DebtEngine
         // CUSTOMER DEPOSIT PHYSICS
         if ($metrics['leveraged_industry']) {
             $customerDeposits = (float) $stock->getCustomerDeposits();
-            $wholesaleDebt = $stock->getWholesaleDebt();
+            $wholesaleDebt = (float) $stock->getWholesaleDebt();
             
             // Wholesale bonds pay standard market rates
             $wholesaleInterest = ($wholesaleDebt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($wholesaleDebt * $floatingRatio * $floatingInterestRate);
@@ -231,7 +251,6 @@ class DebtEngine
         // Weighted Average Cost of Capital (WACC)
         $totalCapital = $netDebtCapital + $marketCap;
 
-        $totalCapital = $netDebtCapital + $marketCap;
         $weightEquity = $totalCapital > 0 ? ($marketCap / $totalCapital) : 1.0;
         $weightDebt = $totalCapital > 0 ? ($netDebtCapital / $totalCapital) : 0.0;
         $baseWacc = $this->mathUtility->calculateWACC($weightEquity, $costOfEquity, $weightDebt, $effectiveCostOfDebt);

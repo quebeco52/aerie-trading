@@ -141,7 +141,7 @@ class MarketResetCommand extends Command
                     'equity' => $stockData['total_equity'] ?? 0.00,
                     'retained' => $stockData['retained_earnings'] ?? 0.00,
                     'revenue' => $revenue,
-                    'historical_rate' => 0.0200,
+                    'historical_rate' => $stockData['historical_fixed_rate'] ?? 0.0400,
                     'credit_spread' => $stockData['credit_spread'] ?? 0.0100,
                     'last_dividend' => $startingDividend,
                     'description' => \App\Data\StockInfo::DESCRIPTIONS[$stockData['ticker']] ?? null,

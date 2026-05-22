@@ -98,7 +98,7 @@ class AppFixtures extends Fixture
             $stock->setRetainedEarnings((string) ($stockData['retained_earnings'] ?? 0.00));
             $stock->setLastDividend('0.00');
             $stock->setCreditSpread((string) ($stockData['credit_spread'] ?? 0.0100));
-            $stock->setHistoricalFixedRate((string) ($stockData['historical_fixed_rate'] ?? 0.05));
+            $stock->setHistoricalFixedRate((string) ($stockData['historical_fixed_rate'] ?? 0.04));
 
             $stock->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$stockData['ticker']] ?? null);
 
