@@ -49,14 +49,14 @@ To run Aerie Trading locally, you will need to have [Docker](https://www.docker.
 - [x] Browse stock data (fundamentals and stock history)
 - [x] Buy and sell stocks
 - [x] Keep track of there portfolio
-- [ ] compare stock throw a screener
+- [x] compare stock throw a screener
 
 ### Admin should be able to:
-- [ ] Se register users and monitor there portfolios
+- [x] Se register users and monitor there portfolios
 - [x] Change the values/info of the stocks
 - [x] Add new stocks
-- [ ] Do all this without casing downtime for users
-- [ ] have a dashboard to see the health of the application (latency of market ticks, etc...)
+- [x] Do all this without casing downtime for users
+
 
 
 ### Market simulator should:
@@ -84,6 +84,7 @@ To run Aerie Trading locally, you will need to have [Docker](https://www.docker.
 - [ ] Should have a consistent narrative (world building)
 - [ ] Transaction Fees
 - [ ] Code and infrastructure hardening (immutable logs, encrypt all data in transit and at rest, etc)
+- [ ] have a dashboard to see the health of the application (latency of market ticks, etc...)
 
 
 

@@ -369,20 +369,33 @@ class MarketEngine
 
         $perceivedFairValue = max(0.01, $fairValue, $dividendSupportValue);
 
-        $valuationRatio = $currentPrice / $perceivedFairValue;
-
-        $overvaluation = max(0.0, $valuationRatio - 1.0) * 0.5;
-        $gravityCurve = ($overvaluation) + pow($overvaluation, 2.0); 
         
+
+        // OVERVALUATION (The Bubble Gravity)
+        $valuationRatio = $currentPrice / $perceivedFairValue;
+        $overvaluation = max(0.0, $valuationRatio - 1.0) * 0.5;
+        $gravityCurve = ($overvaluation) + pow($overvaluation, 2.0);
+        
+        // UNDERVALUATION (Value Spring)
+        $inverseRatio = $perceivedFairValue / max(0.01, $currentPrice);
+        $undervaluation = max(0.0, $inverseRatio - 1.0) * 0.5;
+        $springCurve = ($undervaluation) + pow($undervaluation, 2.0);
+
         // Smoothly scale macro resistance based on the output gap instead of a hard cliff.
         // Base resistance is 0.02. As the economy dips into recession, fear scales up linearly.
         $macroResistance = 0.02 + (max(0.0, -$outputGap) * 10.0); 
         $bubbleGravity = $gravityCurve * $macroResistance;
 
+        // Enthusiasm scales up in a booming economy, accelerating the spring
+        $macroEnthusiasm = 0.02 + (max(0.0, $outputGap) * 10.0);
+        $valueSpring = $springCurve * $macroEnthusiasm;
+
+
         // FLIGHT-TO-QUALITY REVERSION (Liquidity Drain)
         $dynamicReversion = $reversionSpeed * (1.0 + ($systemicStressIndex * 5.0));
         
-        $dynamicReversion += min(10.0, $bubbleGravity); // Cap max panic reversion
+        $dynamicReversion += min(15.0, $bubbleGravity); // Cap max panic reversion
+        $dynamicReversion += min(15.0, $valueSpring);
 
         return [
             'perceived_fair_value' => $perceivedFairValue,

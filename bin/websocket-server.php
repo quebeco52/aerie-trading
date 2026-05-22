@@ -59,8 +59,9 @@ $worker->onConnect = function ($connection) {
             return;
         }
 
-        // Validated! Destroy the ticket so it can NEVER be reused by a replay attack
-        $syncRedis->del("ws_ticket:{$ticket}");
+        // Validated!
+        // give it a 15-second grace period. This allows multiple client scripts to connect simultaneously.
+        $syncRedis->expire("ws_ticket:{$ticket}", 15);
 
         // Attach the User ID to this specific connection object for future reference
         $connection->uid = $userId;
