@@ -195,8 +195,9 @@ class MergerAndAcquisitionEngine
         $targetRoic = mt_rand(60, 120) / 1000.0;
         $effectiveTargetRoic = $targetRoic * $synergyMultiplier;
         
-        // Assume the target has a slightly worse operating margin than a public Titan
-        $targetMargin = max(0.05, $oldOperatingMargin * (mt_rand(70, 95) / 100.0));
+        // Assume the target has a slightly worse operating margin, but protect structural floors
+        $marginFloor = $isLeveraged ? 0.20 : 0.10;
+        $targetMargin = max($marginFloor, $oldOperatingMargin * (mt_rand(70, 95) / 100.0));
         
         $totalNewCapital = max(1.0, $oldCapitalBase + $purchasePrice);
         
@@ -208,7 +209,7 @@ class MergerAndAcquisitionEngine
         
         // Blend the Structural Operating Margin
         $blendedMargin = (($oldCapitalBase * $oldOperatingMargin) + ($purchasePrice * $targetMargin)) / $totalNewCapital;
-        $acquirer->setOperatingMargin((string) max(0.01, $blendedMargin));
+        $acquirer->setOperatingMargin((string) max($marginFloor, $blendedMargin));
         
         // We no longer manually shift CurrentRoic. The EarningsEngine will naturally calculate 
         // the diluted, bottom-up ROIC next quarter using this new blended DNA!

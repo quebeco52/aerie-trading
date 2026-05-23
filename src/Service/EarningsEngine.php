@@ -109,11 +109,18 @@ class EarningsEngine
             $cashYield = max(0.0, $policyRate - 0.01);
             $expectedInterestIncome = $excessCash * $cashYield;
             
+            // For Banks, the true "Invested Capital" is their entire funding base.
+            // We floor it at $equity to prevent artificial ROA spikes when they hoard cash.
+            $financialCapitalBase = max($equity, $equity + $debt - $cash); 
+            
             // Operating EBIT only needs to cover the shortfall!
-            $requiredEbit = max(0.01 * $investedCapital, $targetEbt + $expectedInterest - $expectedInterestIncome);
+            $requiredEbit = max(0.01 * $financialCapitalBase, $targetEbt + $expectedInterest - $expectedInterestIncome);
             
             // Overwrite the Baseline ROIC with the implied ROA for the standard operating leverage math
-            $baselineRoic = $investedCapital > 0 ? ($requiredEbit / $investedCapital) : 0.01;
+            $baselineRoic = $financialCapitalBase > 0 ? ($requiredEbit / $financialCapitalBase) : 0.01;
+            
+            // Overwrite $investedCapital for the rest of the method so Revenue math uses the correct base!
+            $investedCapital = $financialCapitalBase;
         }
         
         // Asset Turnover acts as a proxy for physical capacity (Sales / Capital)
