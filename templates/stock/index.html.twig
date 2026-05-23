@@ -168,7 +168,11 @@
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Capital Efficiency</span>
-									{{ _self.tooltip('Shows Economic Value Added (EVA) and Return on Invested Capital (ROIC). Positive EVA means the company is creating true wealth above its capital costs.', 'right', 'w-64') }}
+									{% if isLeveraged|default(false) %}
+										{{ _self.tooltip('Shows Economic Value Added (EVA) and Return on Equity (ROE). Positive EVA means the company is creating true wealth above its capital costs.', 'right', 'w-64') }}
+									{% else %}
+										{{ _self.tooltip('Shows Economic Value Added (EVA) and Return on Invested Capital (ROIC). Positive EVA means the company is creating true wealth above its capital costs.', 'right', 'w-64') }}
+									{% endif %}
 								</h3>
 							</div>
 							<div class="relative h-48 w-full">
@@ -187,18 +191,19 @@
 								<canvas id="capitalReturnChart"></canvas>
 							</div>
 						</div>
-
+						{% if isLeveraged|default(false) %}
 						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Leveraged Metrics</span>
-									{{ _self.tooltip('Displays Return on Equity (ROE) and the Capital Ratio (Equity vs Total Assets). Critical health indicators for banks and financial institutions.', 'right', 'w-64') }}
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Regulatory Ratios</span>
+									{{ _self.tooltip('Displays the Capital Ratio (Equity vs Total Assets) and Customer Deposit Ratio. Critical balance sheet health indicators for banks and financial institutions.', 'right', 'w-64') }}
 								</h3>
 							</div>
 							<div class="relative h-48 w-full">
-								<canvas id="leveragedHealthChart"></canvas>
+								<canvas id="regulatoryRatiosChart"></canvas>
 							</div>
 						</div>
+						{% endif %}
 
 					</div>
 				{% endif %}
@@ -301,10 +306,21 @@
 							</div>
 							<div class="py-3 flex justify-between items-center">
 								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">ROIC</span>
-									{{ _self.tooltip('Return on Invested Capital. How efficiently the company utilizes capital to generate profit.') }}
+									{% if isLeveraged|default(false) %}
+										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">ROE</span>
+										{{ _self.tooltip('Return on Equity. Measures how effectively the company utilizes shareholders\' equity to generate profit.') }}
+									{% else %}
+										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">ROIC</span>
+										{{ _self.tooltip('Return on Invested Capital. How efficiently the company utilizes capital to generate profit.') }}
+									{% endif %}
 								</dt>
-								<dd class="text-sm font-semibold text-on-surface" id="stat-roic">{{ (asset.currentRoic|default(0) * 100)|number_format(2) }}%</dd>
+								<dd class="text-sm font-semibold text-on-surface" id="stat-roic">
+									{% if isLeveraged|default(false) %}
+										{{ ((asset.currentRoe != 0 ? asset.currentRoe : asset.baselineRoe) * 100)|number_format(2) }}%
+									{% else %}
+										{{ ((asset.currentRoic != 0 ? asset.currentRoic : asset.baselineRoic) * 100)|number_format(2) }}%
+									{% endif %}
+								</dd>
 							</div>
 							<div class="py-3 flex justify-between items-center">
 								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
@@ -497,7 +513,7 @@
 										{% if macro.qe_active|default(false) %}
 											<span class="inline-flex w-2 h-2 rounded-full bg-secondary animate-pulse" title="Quantitative Easing Active"></span>
 										{% endif %}
-										{{ _self.tooltip("The interest rate on Safe Harbor's 10-year catastrophe bonds. The ultimate risk-free baseline.", 'right') }}
+										{{ _self.tooltip("The interest rate on the District's 10-year bond. It serves as the benchmark for long-term corporate borrowing costs and heavily influences the broader business cycle.", 'right', 'w-64') }}
 									</div>
 									<p class="text-lg font-bold {% if macro.qe_active|default(false) %}text-secondary{% else %}text-on-surface{% endif %}" id="macro-yield">
 										{{ (macro.yield_10y * 100)|number_format(2) }}%
@@ -581,6 +597,7 @@
 		window.AERIE_DATA = {
 ticker: "{{ asset.ticker }}",
 isEtf: {{ isEtf ? 'true' : 'false' }},
+isLeveraged: {{ isLeveraged|default(false) ? 'true' : 'false' }},
 sharesOutstanding: {{ isEtf ? 0 : asset.sharesOutstanding }},
 userQuantity: {{ userQuantity|default(0) }},
 eps: {{ isEtf ? 0 : asset.earningsPerShare|default(0) }},

@@ -205,6 +205,10 @@ class MergerAndAcquisitionEngine
         if (!$isLeveraged) {
             $blendedBaselineRoic = (($oldCapitalBase * $oldBaselineRoic) + ($purchasePrice * $effectiveTargetRoic)) / $totalNewCapital;
             $acquirer->setBaselineRoic((string) max(0.01, $blendedBaselineRoic));
+        } else {
+            $oldBaselineRoe = (float) $acquirer->getBaselineRoe();
+            $blendedBaselineRoe = (($oldCapitalBase * $oldBaselineRoe) + ($purchasePrice * $effectiveTargetRoic)) / $totalNewCapital;
+            $acquirer->setBaselineRoe((string) max(0.01, $blendedBaselineRoe));
         }
         
         // Blend the Structural Operating Margin
@@ -260,7 +264,6 @@ class MergerAndAcquisitionEngine
         $price = (float) $seller->getPrice();
         $currentPE = $eps > 0 ? $price / $eps : 0.0;
         $netIncome = (float) $seller->getTotalNetIncome();
-        $currentRoic = (float) $seller->getCurrentRoic();
 
         $health = $this->debtEngine->analyzeDebtHealth($seller, $macroState);
         $wacc = $health['wacc'] ?? 0.08;
@@ -269,12 +272,13 @@ class MergerAndAcquisitionEngine
 
         $industry = $seller->getIndustry() ?: 'General';
         $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leveraged_industry'] ?? false;
+        $currentReturn = $isLeveraged ? (float) $seller->getCurrentRoe() : (float) $seller->getCurrentRoic();
         $hurdleRate = $isLeveraged ? ($health['cost_of_equity'] ?? 0.10) : $wacc;
 
-        $evaSpread = $currentRoic - $hurdleRate;
+        $evaSpread = $currentReturn - $hurdleRate;
 
-        $isDistressed = $evaSpread < -0.02 || $currentRoic < 0.03;
-        $isDying = $currentRoic < 0.00 || $evaSpread < -0.05;
+        $isDistressed = $evaSpread < -0.02 || $currentReturn < 0.03;
+        $isDying = $currentReturn < 0.00 || $evaSpread < -0.05;
 
         $treasury = (float) $seller->getCorporateTreasury();
         $operatingBase = $this->mathUtility->calculateOperatingBase((float) $seller->getTotalRevenue(), (float) $seller->getTotalEquity());
@@ -365,13 +369,19 @@ class MergerAndAcquisitionEngine
 
         // BOOST STRUCTURAL EFFICIENCY
         // Shedding bloat permanently improves the company's core DNA (Baseline ROIC and Margin)
-        $baselineRoic = (float) $seller->getBaselineRoic();
+        if ($isLeveraged) {
+            $baselineRoe = (float) $seller->getBaselineRoe();
+            $roeBump = $baselineRoe * ($divestedFraction * 0.50);
+            $seller->setBaselineRoe((string) ($baselineRoe + $roeBump));
+        } else {
+            $baselineRoic = (float) $seller->getBaselineRoic();
+            $roicBump = $baselineRoic * ($divestedFraction * 0.50); // Up to a 25% relative improvement
+            $seller->setBaselineRoic((string) ($baselineRoic + $roicBump));
+        }
         $operatingMargin = (float) $seller->getOperatingMargin();
         
-        $roicBump = $baselineRoic * ($divestedFraction * 0.50); // Up to a 25% relative improvement
         $marginBump = $operatingMargin * ($divestedFraction * 0.30); 
         
-        $seller->setBaselineRoic((string) ($baselineRoic + $roicBump));
         $seller->setOperatingMargin((string) ($operatingMargin + $marginBump));
         
         // EarningsEngine will automatically calculate a higher CurrentRoic next quarter

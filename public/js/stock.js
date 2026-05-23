@@ -1,5 +1,6 @@
 const CURRENT_TICKER = window.AERIE_DATA.ticker;
 const IS_ETF = window.AERIE_DATA.isEtf;
+const IS_LEVERAGED = window.AERIE_DATA.isLeveraged || false;
 const SHARES_OUTSTANDING = window.AERIE_DATA.sharesOutstanding;
 const USER_QUANTITY = window.AERIE_DATA.userQuantity;
 const EPS = window.AERIE_DATA.eps;
@@ -12,7 +13,7 @@ let debtEquityChartInstance = null;
 let creditHealthChartInstance = null;
 let capitalEfficiencyChartInstance = null;
 let capitalReturnChartInstance = null;
-let leveragedHealthChartInstance = null;
+let regulatoryRatiosChartInstance = null;
 
 Chart.defaults.color = '#c2c6d6';
 Chart.defaults.scale.grid.color = 'rgba(45, 52, 73, 0.4)';
@@ -607,9 +608,14 @@ function updateCharts(timeframe) {
     renderProfitEngineChart(labels, revenueData, netIncomeData, capexData);
     renderDebtEquityChart(labels, debtData, equityData, treasuryData);
     renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData);
-    renderCapitalEfficiencyChart(labels, roicData, waccData, evaData);
     renderCapitalReturnChart(labels, dividendData, buybackData);
-    renderLeveragedHealthChart(labels, roeData, coeData, capitalRatioData, customerDepositRatioData);
+    
+    if (IS_LEVERAGED) {
+        renderCapitalEfficiencyChart(labels, roeData, coeData, evaData, 'ROE', 'Cost of Equity');
+        renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData);
+    } else {
+        renderCapitalEfficiencyChart(labels, roicData, waccData, evaData, 'ROIC', 'WACC');
+    }
 }
 
 function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData) {
@@ -655,38 +661,18 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData) 
     });
 }
 
-function renderLeveragedHealthChart(labels, roeData, coeData, capitalRatioData, customerDepositRatioData) {
-    const canvas = document.getElementById('leveragedHealthChart');
-    // If the canvas isn't on the page (e.g., standard industrial stocks), fail gracefully
+function renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData) {
+    const canvas = document.getElementById('regulatoryRatiosChart');
     if (!canvas) return;
 
-    if (leveragedHealthChartInstance) leveragedHealthChartInstance.destroy();
+    if (regulatoryRatiosChartInstance) regulatoryRatiosChartInstance.destroy();
 
     const ctx = canvas.getContext('2d');
-    leveragedHealthChartInstance = new Chart(ctx, {
+    regulatoryRatiosChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
             datasets: [
-                {
-                    label: 'Return on Equity (ROE)',
-                    data: roeData,
-                    borderColor: COLORS.positive,
-                    backgroundColor: COLORS.positive,
-                    borderWidth: 2,
-                    tension: 0.3,
-                    pointRadius: 3
-                },
-                {
-                    label: 'Cost of Equity (Hurdle)',
-                    data: coeData,
-                    borderColor: COLORS.negative,
-                    backgroundColor: COLORS.negative,
-                    borderWidth: 2,
-                    borderDash: [5, 5],
-                    tension: 0.3,
-                    pointRadius: 0
-                },
                 {
                     label: 'Capital Ratio',
                     data: capitalRatioData,
@@ -834,7 +820,7 @@ function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRat
     });
 }
 
-function renderCapitalEfficiencyChart(labels, roicData, waccData, evaData) {
+function renderCapitalEfficiencyChart(labels, returnData, hurdleData, evaData, returnLabel, hurdleLabel) {
     const canvas = document.getElementById('capitalEfficiencyChart');
     if (!canvas) return;
 
@@ -847,8 +833,8 @@ function renderCapitalEfficiencyChart(labels, roicData, waccData, evaData) {
             labels: labels,
             datasets: [
                 {
-                    label: 'ROIC',
-                    data: roicData,
+                    label: returnLabel,
+                    data: returnData,
                     borderColor: COLORS.positive,
                     backgroundColor: COLORS.positive,
                     borderWidth: 2,
@@ -857,8 +843,8 @@ function renderCapitalEfficiencyChart(labels, roicData, waccData, evaData) {
                     yAxisID: 'y'
                 },
                 {
-                    label: 'WACC',
-                    data: waccData,
+                    label: hurdleLabel,
+                    data: hurdleData,
                     borderColor: COLORS.negative,
                     backgroundColor: COLORS.negative,
                     borderWidth: 2,

@@ -274,7 +274,7 @@ class CorporateActionEngine
         $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState);
 
         $ebit = $health['raw_metrics']['ebit'] ?? 0.0;
-        $corporateTaxRate = $macroState['corporate_tax_rate'] ?? 0.21;
+        $corporateTaxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
         $nopat = $ebit > 0 ? $ebit * (1.0 - $corporateTaxRate) : $ebit;
 
         // CALCULATE BASELINE CASH CHANGES
@@ -529,9 +529,17 @@ class CorporateActionEngine
             }
         }
         
+        // For normal companies, cash > 33% of operating base is hoarding.
+        // For banks, cash > 20% of their total debt (deposits + wholesale) is excessive hoarding.
+        $totalDebt = (float) $stock->getTotalDebt();
+        $isMegaHoarder = $isLeveraged 
+            ? ($excessCash > ($totalDebt * 0.25)) 
+            : ($excessCash > ($operatingBase * 0.33));
+
         $minBuybackIcr = $isLeveraged ? 1.35 : 2.0;
 
-        if (($health['wants_to_paydown_debt'] && !$canEasilyCoverDebt) || $health['interest_coverage'] < $minBuybackIcr) {
+        // If they are a Mega Hoarder, bypass the debt paydown block! The cash must be deployed.
+        if (!$isMegaHoarder && (($health['wants_to_paydown_debt'] && !$canEasilyCoverDebt) || $health['interest_coverage'] < $minBuybackIcr)) {
             return ['new_shares' => $shares, 'total_cash_spent' => 0.0, 'event' => null];
         }
 
@@ -548,12 +556,6 @@ class CorporateActionEngine
         }
         $economicSpread = $trueReturn - $hurdleRate;
 
-        // For normal companies, cash > 33% of operating base is hoarding.
-        // For banks, cash > 20% of their total debt (deposits + wholesale) is excessive hoarding.
-        $totalDebt = (float) $stock->getTotalDebt();
-        $isMegaHoarder = $isLeveraged 
-            ? ($excessCash > ($totalDebt * 0.20)) 
-            : ($excessCash > ($operatingBase * 0.33));
 
         // Calculate intrinsic Fair Value P/E to benchmark buybacks
         $riskFreeRate = $macroState['policy_rate'] ?? 0.04;
@@ -574,7 +576,7 @@ class CorporateActionEngine
 
             /// The SEC/Regulatory Market Volume Limit (Max 1.0% of total Market Cap per 90 days to avoid market manipulation)
             $marketCap = $shares * max($currentPrice, 0.01);
-            $maxCapPct = $isMegaHoarder ? 0.03 : 0.010;
+            $maxCapPct = $isMegaHoarder ? 0.03 : 0.01;
             $maxRegulatorySpend = $marketCap * $maxCapPct;
 
             // The Absolute Maximum Plan
@@ -707,7 +709,7 @@ class CorporateActionEngine
             $interest = $health['raw_metrics']['interest_expense'] ?? 0.0;
             $preTaxIncome = max(0.0, $ebit - $interest);
             
-            $corporateTaxRate = $macroState['corporate_tax_rate'] ?? 0.21;
+            $corporateTaxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
             $netIncomeProxy = $preTaxIncome * (1.0 - $corporateTaxRate);
             
             $trueReturn = $newEquity > 0 ? ($netIncomeProxy / $newEquity) : 0.0;
@@ -842,7 +844,7 @@ class CorporateActionEngine
             $interest = $health['raw_metrics']['interest_expense'] ?? 0.0;
             $preTaxIncome = max(0.0, $ebit - $interest);
             
-            $corporateTaxRate = $macroState['corporate_tax_rate'] ?? 0.21;
+            $corporateTaxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
             $netIncomeProxy = $preTaxIncome * (1.0 - $corporateTaxRate);
             $trueReturn = $newEquity > 0 ? ($netIncomeProxy / $newEquity) : 0.0;
             $hurdleRate = $health['cost_of_equity'] ?? 0.10;
@@ -907,6 +909,10 @@ class CorporateActionEngine
                     $baselineRoic = (float) $stock->getBaselineRoic();
                     $roicDrag = $baselineRoic * $expansionRatio * 0.02; 
                     $stock->setBaselineRoic((string) max(0.03, $baselineRoic - $roicDrag));
+                } else {
+                    $baselineRoe = (float) $stock->getBaselineRoe();
+                    $roeDrag = $baselineRoe * $expansionRatio * 0.02;
+                    $stock->setBaselineRoe((string) max(0.03, $baselineRoe - $roeDrag));
                 }
 
                 if ($expansionSpend > 1_000_000_000.0) {

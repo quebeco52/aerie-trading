@@ -97,7 +97,7 @@ class MarketEngine
         $riskFreeRate = $macroState['policy_rate'] ?? 0.04;
         $outputGap = $macroState['output_gap'] ?? 0.0;
         $inflation = $macroState['inflation'] ?? 0.02;
-        $corporateTaxRate = $macroState['corporate_tax_rate'] ?? 0.21;
+        $corporateTaxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
 
         $finalDrift = $this->calculateMacroDrift($outputGap, $inflation, $macroState['ns_slope'] ?? 0.0, $drift, $beta, $riskFreeRate);
 

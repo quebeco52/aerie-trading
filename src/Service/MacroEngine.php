@@ -8,6 +8,11 @@ class MacroEngine
 {
     private const REDIS_MACRO_STATE = 'macroeconomic_state';
 
+    public const TARGET_INFLATION = 0.02;
+    public const NATURAL_RATE = 0.02;
+    public const BASE_CORPORATE_TAX_RATE = 0.21;
+    public const BASE_EQUITY_RISK_PREMIUM = 0.045;
+
     public function __construct(
         private MathUtility $mathUtility,
         private LoggerInterface $logger,
@@ -28,17 +33,18 @@ class MacroEngine
         // Load Current State or Set Defaults
         $rawState = $this->redis->get(self::REDIS_MACRO_STATE);
         $state = $rawState ? json_decode($rawState, true) : [
-            'inflation' => 0.02,
+            'inflation' => self::TARGET_INFLATION,
             'output_gap' => 0.00,
             'policy_rate' => 0.04,
+            'inflation_ema' => self::TARGET_INFLATION,
             'output_gap_ema' => 0.00,
             'policy_rate_ema' => 0.04,
-            'corporate_tax_rate' => 0.21,
+            'corporate_tax_rate' => self::BASE_CORPORATE_TAX_RATE,
             'nominal_gdp_index' => 1.0,
         ];
 
-        $targetInflation = 0.02;
-        $naturalRate = 0.02;
+        $targetInflation = self::TARGET_INFLATION;
+        $naturalRate = self::NATURAL_RATE;
 
         // DYNAMIC VOLATILITY (Heteroskedasticity)
         $stressMultiplier = 1.0 + (abs($state['output_gap']) * 10.0);
@@ -55,6 +61,9 @@ class MacroEngine
 
         // Safely initialize if pulling from an older Redis cache payload
         $state['nominal_gdp_index'] = $state['nominal_gdp_index'] ?? 1.0;
+        $state['inflation_ema'] = $state['inflation_ema'] ?? $state['inflation'];
+        $state['output_gap_ema'] = $state['output_gap_ema'] ?? $state['output_gap'];
+        $state['policy_rate_ema'] = $state['policy_rate_ema'] ?? $state['policy_rate'];
 
         // Nominal Growth include BOTH Real Growth AND Inflation
         $nominalGrowthRate = $naturalRate + $state['inflation'];
@@ -73,12 +82,12 @@ class MacroEngine
         // DYNAMIC FISCAL POLICY (Government Taxes)
         // Base tax rate is 21%. If the economy overheats, the government hikes taxes to cool it down.
         // If the economy enters a deep recession, they pass emergency tax cuts to stimulate corporate recovery.
-        $fiscalPolicyTarget = 0.21 + ($state['output_gap_ema'] * 1.0);
+        $fiscalPolicyTarget = self::BASE_CORPORATE_TAX_RATE + ($state['output_gap_ema'] * 1.0);
         $state['corporate_tax_rate'] = max(0.12, min(0.30, $fiscalPolicyTarget));
 
         // DYNAMIC EQUITY RISK PREMIUM (ERP)
-        // Base ERP is 4.5%. During recessions, fearful investors demand a higher premium to hold risky stocks.
-        $erp = 0.045;
+        // During recessions, fearful investors demand a higher premium to hold risky stocks.
+        $erp = self::BASE_EQUITY_RISK_PREMIUM;
         if ($state['output_gap_ema'] < 0.0) {
             $erp += abs($state['output_gap_ema']) * 0.5; // e.g., -4% gap adds 2.0% to ERP (6.5% total)
         }
@@ -96,7 +105,7 @@ class MacroEngine
             'ns_curvature' => $yieldData['curvature'],
             'yield_10y' => $yield10y,
             'qe_active' => $yieldData['qe_suppression'] > 0,
-            'corporate_tax_rate' => $state['corporate_tax_rate'] ?? 0.21,
+            'corporate_tax_rate' => $state['corporate_tax_rate'] ?? self::BASE_CORPORATE_TAX_RATE,
             'equity_risk_premium' => $erp,
             'nominal_gdp_index' => $state['nominal_gdp_index']
         ];

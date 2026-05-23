@@ -14,10 +14,6 @@ class DebtEngine
     private const ARBITRAGE_HURDLE = 0.030; // 300 bps spread is severe
     private const MIN_INTEREST_COVERAGE_RATIO = 2.0;
 
-    // Macro Defaults
-    private const DEFAULT_CORPORATE_TAX_RATE = 0.21;
-    private const DEFAULT_EQUITY_RISK_PREMIUM = 0.045;
-
     // Leverage Physics
     private const MAX_LEVERAGE_RATIO = 15.0;     // Cap extreme D/E or D/EBITDA ratios
     private const MAX_LEVERAGE_PENALTY = 0.25;   // 25% max Junk Bond penalty spread
@@ -68,12 +64,13 @@ class DebtEngine
 
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $industry = $stock->getIndustry() ?: 'General';
+        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leveraged_industry'] ?? false;
 
         $revenue = (float) $stock->getTotalRevenue();
 
         if ($revenue <= 0.0) {
             $investedCapital = $stock->getInvestedCapital();
-            $baselineRoic = max(0.01, (float) $stock->getBaselineRoic());
+            $baselineRoic = max(0.01, (float) ($isLeveraged ? $stock->getBaselineRoe() : $stock->getBaselineRoic()));
             $marginFallback = max(0.01, (float) $stock->getOperatingMargin());
             $assetTurnover = $baselineRoic / $marginFallback;
             $revenue = $investedCapital * $assetTurnover;
@@ -85,7 +82,6 @@ class DebtEngine
         // Calculate Depreciation to find true Cash Flow (EBITDA)
         $depreciationRate = $this->mathUtility->getIndustryDepreciationRate($industry, (float) $stock->getDepreciationRate() ?: 0.05);
         
-        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leveraged_industry'] ?? false;
         $physicalCapital = $isLeveraged ? (float) $stock->getTotalEquity() : $stock->getInvestedCapital();
         $depreciation = $physicalCapital * $depreciationRate;
         $ebitda = $ebit + $depreciation;
@@ -192,8 +188,7 @@ class DebtEngine
         $equity = (float) $stock->getTotalEquity();
         $marketCap = (float) $stock->getPrice() * max(1.0, (float) $stock->getSharesOutstanding());
         $policyRate = $macroState['policy_rate_ema'] ?? $macroState['policy_rate'] ?? 0.04;
-        $yield10y = $macroState['yield_10y'] ?? $policyRate; // Long-term risk-free rate for WACC
-        $corporateTaxRate = $macroState['corporate_tax_rate'] ?? self::DEFAULT_CORPORATE_TAX_RATE;
+        $corporateTaxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
 
         $industry = $stock->getIndustry() ?: 'General';
         $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industry] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
@@ -240,13 +235,13 @@ class DebtEngine
             $effectiveDebtToEquity = min(self::MAX_BETA_DEBT_TO_EQUITY, $debtToEquity);
 
             // The $baseBeta from the DB already partially accounts for historical leverage. 
-            // Dampen the Hamada equation multiplier (* 0.25) so we don't double-count the debt risk!
+            // Dampen the Hamada equation multiplier (* 0.25) so to not double-count the debt risk
             $leveredBeta = $this->mathUtility->calculateLeveredBeta($baseBeta, $corporateTaxRate, $effectiveDebtToEquity, self::HAMADA_DAMPENING_FACTOR);
         }
 
-        // Cost of Equity (CAPM) - use the 10-Year Yield as the Risk-Free Rate!
-        $equityRiskPremium = $macroState['equity_risk_premium'] ?? self::DEFAULT_EQUITY_RISK_PREMIUM;
-        $costOfEquity = $this->mathUtility->calculateCAPM($yield10y, $leveredBeta, $equityRiskPremium);
+        // Cost of Equity (CAPM) - Unified to Policy Rate to perfectly match MarketEngine valuation physics
+        $equityRiskPremium = $macroState['equity_risk_premium'] ?? MacroEngine::BASE_EQUITY_RISK_PREMIUM;
+        $costOfEquity = $this->mathUtility->calculateCAPM($policyRate, $leveredBeta, $equityRiskPremium);
 
         // Weighted Average Cost of Capital (WACC)
         $totalCapital = $netDebtCapital + $marketCap;

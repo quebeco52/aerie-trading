@@ -93,34 +93,42 @@ class EarningsEngine
         $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leveraged_industry'] ?? false;
 
         if ($isLeveraged) {
-            // FINANCIALS NET INTEREST MARGIN (NIM) BYPASS
-            // For Banks, the "Baseline ROIC" is actually their target Return on Equity (ROE).
-            $preliminaryDebtMetrics = $this->debtEngine->calculateInterestExpense($stock, $macroState, false);
-            $expectedInterest = $preliminaryDebtMetrics['interest_expense'];
+            // For Banks, the true "Invested Capital" is their entire funding base.
+            $financialCapitalBase = max($equity, $equity + $debt - $cash); 
+            $investedCapital = $financialCapitalBase;
             
-            $targetNetIncome = $equity * $baselineRoic;
-            $targetEbt = $targetNetIncome / (1.0 - ($macroState['corporate_tax_rate'] ?? 0.21));
+            // If a bank takes on highly toxic junk debt, it cannot magically pass those costs to its customers.
+            $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+            $structuralSpread = (float) $stock->getCreditSpread();
+            
+            // Banks pay full market rates on wholesale bonds, but only a fraction on customer deposits.
+            $wholesaleDebt = (float) $stock->getWholesaleDebt();
+            $customerDeposits = (float) $stock->getCustomerDeposits();
+            $wholesaleRate = $policyRate + $structuralSpread;
+            $depositRate = max(0.001, $policyRate * 0.20);
+            
+            $structuralInterestExpense = ($wholesaleDebt * $wholesaleRate) + ($customerDeposits * $depositRate);
+            
+            // Target Net Income is derived from the Baseline ROE for banks
+            $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
+            $targetNetIncome = $equity * $baselineRoe;
+            $targetEbt = $targetNetIncome / (1.0 - ($macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE));
             
             // Expected Interest Income from the Vault
-            $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
             $operatingBase = $this->mathUtility->calculateOperatingBase((float) $stock->getTotalRevenue(), $equity);
             $workingCapital = $operatingBase * 0.05;
             $excessCash = max(0.0, $cash - $workingCapital);
             $cashYield = max(0.0, $policyRate - 0.01);
             $expectedInterestIncome = $excessCash * $cashYield;
             
-            // For Banks, the true "Invested Capital" is their entire funding base.
-            // We floor it at $equity to prevent artificial ROA spikes when they hoard cash.
-            $financialCapitalBase = max($equity, $equity + $debt - $cash); 
-            
-            // Operating EBIT only needs to cover the shortfall!
-            $requiredEbit = max(0.01 * $financialCapitalBase, $targetEbt + $expectedInterest - $expectedInterestIncome);
+            // Operating EBIT must cover the STRUCTURAL interest shortfall to achieve the target ROE.
+            $requiredEbit = max(0.01 * $financialCapitalBase, $targetEbt + $structuralInterestExpense - $expectedInterestIncome);
             
             // Overwrite the Baseline ROIC with the implied ROA for the standard operating leverage math
             $baselineRoic = $financialCapitalBase > 0 ? ($requiredEbit / $financialCapitalBase) : 0.01;
             
-            // Overwrite $investedCapital for the rest of the method so Revenue math uses the correct base!
-            $investedCapital = $financialCapitalBase;
+            // Cap the ROA to prevent hyperinflation if debt completely breaks
+            $baselineRoic = max(0.01, min(0.25, $baselineRoic));
         }
         
         // Asset Turnover acts as a proxy for physical capacity (Sales / Capital)
@@ -224,22 +232,25 @@ class EarningsEngine
         $actualEbt = $ebit - $actualInterestExpense + $interestIncome;
 
         // Apply Corporate Taxes to find True Net Income
-        $corporateTaxRate = $macroState['corporate_tax_rate'] ?? 0.21;
+        $corporateTaxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
         $expectedTotalNetIncome = $expectedEbt > 0 ? $expectedEbt * (1.0 - $corporateTaxRate) : $expectedEbt;
         $actualTotalNetIncome = $actualEbt > 0 ? $actualEbt * (1.0 - $corporateTaxRate) : $actualEbt;
 
         // UPDATE DYNAMIC ROIC AS AN OUTCOME (Moved down to access Net Income) ---
         if ($isLeveraged) {
-            // For Banks, "ROIC" is actually Return on Equity (ROE)
-            $truePostTaxRoic = $equity > 0 ? ($actualTotalNetIncome / $equity) : 0.0;
+            $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) : 0.0;
+            
+            $oldRoe = (float) $stock->getCurrentRoe();
+            $smoothedRoe = $oldRoe === 0.0 ? $truePostTaxReturn : $oldRoe + (($truePostTaxReturn - $oldRoe) * 0.50);
+            $stock->setCurrentRoe((string) max(-0.50, min(1.0, $smoothedRoe)));
         } else {
             $nopatProxy = $ebit > 0 ? $ebit * (1.0 - $corporateTaxRate) : $ebit;
-            $truePostTaxRoic = $investedCapital > 0 ? ($nopatProxy / $investedCapital) : 0.0;
+            $truePostTaxReturn = $investedCapital > 0 ? ($nopatProxy / $investedCapital) : 0.0;
+            
+            $oldRoic = (float) $stock->getCurrentRoic();
+            $smoothedRoic = $oldRoic === 0.0 ? $truePostTaxReturn : $oldRoic + (($truePostTaxReturn - $oldRoic) * 0.50);
+            $stock->setCurrentRoic((string) max(-0.50, min(1.0, $smoothedRoic)));
         }
-        
-        $oldRoic = (float) $stock->getCurrentRoic();
-        $smoothedRoic = $oldRoic === 0.0 ? $truePostTaxRoic : $oldRoic + (($truePostTaxRoic - $oldRoic) * 0.50);
-        $stock->setCurrentRoic((string) max(-0.50, min(1.0, $smoothedRoic)));
 
 
         // Modifier scaled correctly for Annual EPS
@@ -338,12 +349,12 @@ class EarningsEngine
         if ($isLeveraged) {
             // Banks create EVA when Return on Equity > Cost of Equity
             $costOfEquity = $health['cost_of_equity'] ?? 0.10;
-            $annualEconomicProfit = $equity * ($truePostTaxRoic - $costOfEquity);
+            $annualEconomicProfit = $equity * ($truePostTaxReturn - $costOfEquity);
             $wacc = $costOfEquity; // For reporting purposes
         } else {
             // Normal companies create EVA when ROIC > WACC
             $wacc = $health['wacc'];
-            $annualEconomicProfit = $investedCapital * ($truePostTaxRoic - $wacc);
+            $annualEconomicProfit = $investedCapital * ($truePostTaxReturn - $wacc);
         }
         
         $evaAbs = abs($annualEconomicProfit);
@@ -390,7 +401,7 @@ class EarningsEngine
         $report->setTreasury($stock->getCorporateTreasury());
 
         // Metrics
-        $report->setRoic((string) $truePostTaxRoic);
+        $report->setRoic((string) $truePostTaxReturn);
         $report->setShares((string) $stock->getSharesOutstanding());
         $report->setWacc((string) $wacc);
         $report->setEva((string) $annualEconomicProfit);
@@ -507,9 +518,13 @@ class EarningsEngine
             default    => 1.0,  // Takes the full 100% saturation penalty
         };
 
+        $industry = $stock->getIndustry() ?: 'General';
+        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leveraged_industry'] ?? false;
+
         // Floor the bleed factor at 0.10 so normal companies still face gravity
-        $baselineRoic = max(0.10, (float) $stock->getBaselineRoic());
-        $gravityMultiplier = $baselineRoic * 0.50;
+        $baselineReturn = $isLeveraged ? (float) $stock->getBaselineRoe() : (float) $stock->getBaselineRoic();
+        $effectiveReturn = max(0.10, $baselineReturn);
+        $gravityMultiplier = $effectiveReturn * 0.50;
 
         $saturationPenalty = pow($marketShare, 4) * $gravityMultiplier * $moat;
 

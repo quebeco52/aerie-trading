@@ -203,6 +203,12 @@ class Stock
     private string $baselineRoic = '0.10';
 
     /**
+     * @var string The baseline Return on Equity (used for Leveraged Industries like Banks).
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.10'])]
+    private string $baselineRoe = '0.10';
+
+    /**
      * @var string The ratio of operating cash flow allocated to Capital Expenditures.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.20'])]
@@ -219,6 +225,12 @@ class Stock
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, options: ['default' => '0.0000'])]
     private string $currentRoic = '0.0000';
+
+    /**
+     * @var string The dynamic, current Return on Equity.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, options: ['default' => '0.0000'])]
+    private string $currentRoe = '0.0000';
 
     /**
      * @var string Absolute dollar amount remaining in the board-authorized buyback program.
@@ -510,6 +522,27 @@ class Stock
         return $this;
     }
 
+    public function getBaselineRoe(): ?string
+    {
+        return $this->baselineRoe;
+    }
+    
+    public function setBaselineRoe(string $baselineRoe): self
+    {
+        $this->baselineRoe = $baselineRoe;
+        return $this;
+    }
+
+    public function getCurrentRoe(): ?string
+    {
+        return $this->currentRoe;
+    }
+    
+    public function setCurrentRoe(string $currentRoe): self
+    {
+        $this->currentRoe = $currentRoe;
+        return $this;
+    }
 
     public function getCreditSpread(): ?string
     {

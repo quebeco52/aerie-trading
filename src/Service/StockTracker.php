@@ -113,6 +113,10 @@ class StockTracker
             $baselineIndustryPE = $metrics['pe'] ?? 20.0;
             $revenuePerShare = (float) $stock->getTotalRevenue() / $shares;
 
+            $effectiveRoic = $isLeveragedIndustry 
+                ? (float) ($stock->getCurrentRoe() ?: $stock->getBaselineRoe()) 
+                : (float) ($stock->getCurrentRoic() ?: $stock->getBaselineRoic());
+
             // Calculate new price (GBM + SVJJ)
             $calculation = $this->marketEngine->calculateNextPrice(
                 currentPrice: (float) $stock->getPrice(),
@@ -129,7 +133,7 @@ class StockTracker
                 fcfPerShare: $stock->getFreeCashFlowPerShare() !== null ? (float) $stock->getFreeCashFlowPerShare() : null,
                 bookValuePerShare: (float) $stock->getBookValuePerShare(),
                 maShock: $maShock,
-                currentRoic: (float) ($stock->getCurrentRoic() ?: $stock->getBaselineRoic()),
+                currentRoic: $effectiveRoic,
                 dividendPerShare: (float) $stock->getLastDividend(),
                 liveWacc: $health['wacc'],
                 baselineIndustryPE: $baselineIndustryPE,
@@ -196,7 +200,8 @@ class StockTracker
                 'price' => round($finalPrice, 2),
                 'market_cap' => $currentMarketCap,
                 'current_volatility' => round($nextVolatility * 100, 2),
-                'current_roic' => (float) $stock->getCurrentRoic() != 0.0 ? (float) $stock->getCurrentRoic() : (float) $stock->getBaselineRoic(),
+                'current_roic' => $effectiveRoic, // Backwards compatible fix so frontend JS updates the UI with ROE for banks
+                'current_roe' => (float) $stock->getCurrentRoe() != 0.0 ? (float) $stock->getCurrentRoe() : (float) $stock->getBaselineRoe(),
                 'shares' => $newShares,
                 'eps' => (float) $stock->getEarningsPerShare(),
                 'treasury' => (float) $stock->getCorporateTreasury(),
