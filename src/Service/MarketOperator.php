@@ -21,6 +21,9 @@ class MarketOperator
 
     /**
      * Wakes up periodically to enforce the laws of game-design physics.
+     *
+     * @param array<Stock> $stocks An array of stock entities to review.
+     * @return array<mixed> Generated market events resulting from restructuring actions.
      */
     public function enforceMarketStability(array $stocks): array
     {

@@ -20,7 +20,11 @@ class MergerAndAcquisitionEngine
 
     /**
      * Evaluates if a stock is in a position to acquire a private company.
-     * @return array|null Returns an array with the M&A event details, or null if no deal occurred.
+     * 
+     * @param Stock $acquirer   The potential acquiring stock.
+     * @param array $macroState The macroeconomic state.
+     * @param float $dt         The time step (in years).
+     * @return array{event: array<string, mixed>, shock: float, spent: float}|null Returns an array with the M&A event details, or null if no deal occurred.
      */
     public function evaluatePrivateAcquisition(Stock $acquirer, array $macroState, float $dt): ?array
     {
@@ -257,6 +261,11 @@ class MergerAndAcquisitionEngine
     /**
      * Evaluates if a stock should divest (sell off) a business unit.
      * Triggers either to raise cash at a premium (High P/E) or to shed bloat to survive (Negative ROIC).
+     *
+     * @param Stock $seller     The potential selling stock.
+     * @param array $macroState The macroeconomic state.
+     * @param float $dt         The time step (in years).
+     * @return array{event: array<string, mixed>, shock: float}|null Returns an array with the divestiture event details, or null if no deal occurred.
      */
     public function evaluateCorporateDivestiture(Stock $seller, array $macroState, float $dt): ?array
     {
@@ -405,6 +414,8 @@ class MergerAndAcquisitionEngine
 
     /**
      * Procedurally generates a realistic sounding private company.
+     *
+     * @return array{name: string} An array containing the generated company name.
      */
     private function generateProceduralTarget(): array
     {

@@ -32,6 +32,11 @@ class ScreenerController extends AbstractController
             $equity = (float) $stock->getTotalEquity();
             $debtToEquity = $equity > 0 ? ((float) $stock->getTotalDebt() / $equity) : null;
 
+            $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['leveraged_industry'] ?? false;
+            $effectiveRoic = $isLeveraged 
+                ? ((float) $stock->getCurrentRoe() ?: (float) $stock->getBaselineRoe()) 
+                : ((float) $stock->getCurrentRoic() ?: (float) $stock->getBaselineRoic());
+
             $screenerData[] = [
                 'ticker'       => $stock->getTicker(),
                 'name'         => $stock->getName(),
@@ -41,7 +46,7 @@ class ScreenerController extends AbstractController
                 'peRatio'      => $peRatio,
                 'eps'          => $eps,
                 'dividendYield'=> $dividendYield,
-                'currentRoic'  => (float) $stock->getCurrentRoic() ?: (float) $stock->getBaselineRoic(),
+                'currentRoic'  => $effectiveRoic,
                 'equity'       => $equity,
                 'debt'         => (float) $stock->getTotalDebt(),
                 'debtToEquity' => $debtToEquity,

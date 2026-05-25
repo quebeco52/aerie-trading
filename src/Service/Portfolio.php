@@ -52,6 +52,8 @@ class Portfolio
     /**
      * Calculates and records an immediate snapshot for a single user.
      * Best used immediately after a user executes a trade.
+     *
+     * @param User $user The user entity whose portfolio snapshot should be recorded.
      */
     public function recordUserSnapshot(User $user): void
     {

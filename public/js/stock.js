@@ -493,6 +493,7 @@ function updateCharts(timeframe) {
     let revenueData = [];
     let netIncomeData = [];
     let capexData = [];
+    let operatingMarginData = [];
 
     // Balance Sheet
     let debtData = [];
@@ -531,6 +532,7 @@ function updateCharts(timeframe) {
             revenueData.push(rev);
             netIncomeData.push(inc);
             capexData.push(-parseFloat(report.capital_expenditures || 0));
+            operatingMarginData.push(parseFloat(report.operating_margin || 0) * 100);
 
             debtData.push(parseFloat(report.total_debt || 0));
             equityData.push(parseFloat(report.equity || 0));
@@ -571,6 +573,7 @@ function updateCharts(timeframe) {
             revenueData.unshift(rev);
             netIncomeData.unshift(inc);
             capexData.unshift(-(parseFloat(report.capital_expenditures || 0) * 4));
+            operatingMarginData.unshift(parseFloat(report.operating_margin || 0) * 100);
 
             debtData.unshift(parseFloat(report.total_debt || 0));
             equityData.unshift(parseFloat(report.equity || 0));
@@ -605,7 +608,7 @@ function updateCharts(timeframe) {
         }
     }
 
-    renderProfitEngineChart(labels, revenueData, netIncomeData, capexData);
+    renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, operatingMarginData);
     renderDebtEquityChart(labels, debtData, equityData, treasuryData);
     renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData);
     renderCapitalReturnChart(labels, dividendData, buybackData);
@@ -618,7 +621,7 @@ function updateCharts(timeframe) {
     }
 }
 
-function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData) {
+function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, operatingMarginData) {
     if (profitEngineChartInstance) profitEngineChartInstance.destroy();
 
     const ctx = document.getElementById('netIncomeChart').getContext('2d');
@@ -628,22 +631,47 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData) 
             labels: labels,
             datasets: [
                 {
+                    type: 'bar',
                     label: 'Revenue',
                     data: revenueData,
                     backgroundColor: COLORS.primary,
                     borderRadius: 4,
+                    yAxisID: 'y',
+                    order: 1
                 },
                 {
+                    type: 'bar',
                     label: 'Net Income',
                     data: netIncomeData,
                     backgroundColor: netIncomeData.map(val => val < 0 ? COLORS.negative : COLORS.positive),
                     borderRadius: 4,
+                    yAxisID: 'y',
+                    order: 1
                 },
                 {
+                    type: 'bar',
                     label: 'CapEx',
                     data: capexData,
                     backgroundColor: '#fde047',
                     borderRadius: 4,
+                    yAxisID: 'y',
+                    order: 1
+                },
+                {
+                    type: 'line',
+                    label: 'Operating Margin',
+                    data: operatingMarginData,
+                    borderColor: '#facc15',
+                    backgroundColor: '#facc15',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#131b2e',
+                    pointBorderColor: '#facc15',
+                    pointBorderWidth: 2,
+                    pointHoverRadius: 6,
+                    yAxisID: 'y1',
+                    order: 0
                 }
             ]
         },
@@ -652,10 +680,29 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData) 
             maintainAspectRatio: false,
             plugins: {
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
-                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: $${formatLarge(ctx.raw)}` } }
+                tooltip: { 
+                    callbacks: { 
+                        label: (ctx) => {
+                            if (ctx.dataset.label === 'Operating Margin') {
+                                return `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`;
+                            }
+                            return `${ctx.dataset.label}: $${formatLarge(ctx.raw)}`;
+                        }
+                    } 
+                }
             },
             scales: {
-                y: { ticks: { callback: (val) => formatLarge(val) } }
+                y: { 
+                    type: 'linear',
+                    position: 'left',
+                    ticks: { callback: (val) => formatLarge(val) } 
+                },
+                y1: {
+                    type: 'linear',
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    ticks: { callback: (val) => val.toFixed(0) + '%' }
+                }
             }
         }
     });

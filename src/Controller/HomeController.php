@@ -47,6 +47,11 @@ class HomeController extends AbstractController
             $shares = (float) $stock->getSharesOutstanding();
             $marketCap = $price * $shares;
 
+            $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['leveraged_industry'] ?? false;
+            $effectiveRoic = $isLeveraged 
+                ? ((float) $stock->getCurrentRoe() ?: (float) $stock->getBaselineRoe()) 
+                : ((float) $stock->getCurrentRoic() ?: (float) $stock->getBaselineRoic());
+
             $marketData[] = [
                 'ticker' => $stock->getTicker(),
                 'name' => $stock->getName(),
@@ -54,7 +59,7 @@ class HomeController extends AbstractController
                 'price' => $price,
                 'shares' => $shares,
                 'marketCap' => $marketCap,
-                'currentRoic' => (float) $stock->getCurrentRoic() ?: (float) $stock->getBaselineRoic()
+                'currentRoic' => $effectiveRoic
             ];
         }
 
@@ -99,6 +104,11 @@ class HomeController extends AbstractController
             $price = (float) $stock->getPrice();
             $shares = (float) $stock->getSharesOutstanding();
             $marketCap = $price * $shares;
+
+            $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['leveraged_industry'] ?? false;
+            $effectiveRoic = $isLeveraged 
+                ? ((float) $stock->getCurrentRoe() ?: (float) $stock->getBaselineRoe()) 
+                : ((float) $stock->getCurrentRoic() ?: (float) $stock->getBaselineRoic());
             
             $marketData[] = [
                 'ticker' => $stock->getTicker(),
@@ -110,7 +120,7 @@ class HomeController extends AbstractController
                 'marketCap' => $formatLarge($marketCap), 
                 'treasury' => $formatLarge((float) $stock->getCorporateTreasury()),
                 'equity' => $formatLarge((float) $stock->getTotalEquity()),
-                'currentRoic' => (float) $stock->getCurrentRoic() ?: (float) $stock->getBaselineRoic(),
+                'currentRoic' => $effectiveRoic,
             ];
         }
 

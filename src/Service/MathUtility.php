@@ -14,6 +14,10 @@ class MathUtility
     private float $randMaxInverse;
     private float $twoPi;
 
+    /**
+     * Constructor for MathUtility.
+     * Pre-calculates constants for random number generation.
+     */
     public function __construct()
     {
         $this->randMaxInverse = 1.0 / mt_getrandmax();
@@ -23,7 +27,7 @@ class MathUtility
     /**
      * Generates a random float between 0 and 1 from a uniform distribution.
      *
-     * @return float
+     * @return float A random float in the interval [0, 1].
      */
     public function generateUniform(): float
     {
@@ -155,6 +159,9 @@ class MathUtility
 
     /**
      * Generates a random number from an Exponential distribution.
+     *
+     * @param float $rate The rate parameter (lambda) of the distribution.
+     * @return float A random number drawn from the exponential distribution.
      */
     public function generateExponential(float $rate = 1.0): float
     {
@@ -281,6 +288,10 @@ class MathUtility
 
     /**
      * Calculates the Intrinsic Fair Value P/E ratio based on the risk-free rate and Economic Value Added (EVA) spread.
+     *
+     * @param float $riskFreeRate The current central bank policy rate.
+     * @param float $evaSpread    The spread between the company's Return on Capital and its Cost of Capital.
+     * @return float The intrinsic fair value P/E multiple.
      */
     public function calculateIntrinsicFairValuePE(float $riskFreeRate, float $evaSpread): float
     {
@@ -293,6 +304,10 @@ class MathUtility
 
     /**
      * Calculates the terminal value multiplier for a Discounted Cash Flow (DCF) using the Gordon Growth Model.
+     *
+     * @param float $wacc               The Weighted Average Cost of Capital.
+     * @param float $terminalGrowthRate The expected perpetual growth rate (defaults to 2%).
+     * @return float The DCF terminal multiplier.
      */
     public function calculateDcfMultiplier(float $wacc, float $terminalGrowthRate = 0.02): float
     {
@@ -304,6 +319,11 @@ class MathUtility
 
     /**
      * Calculates Fair Value using the Dividend Discount Model (DDM).
+     *
+     * @param float $annualDividend The total dividend paid over the last 12 months.
+     * @param float $discountRate   The required rate of return (Cost of Equity).
+     * @param float $growthRate     The expected perpetual dividend growth rate.
+     * @return float The intrinsic value of the stock based purely on its dividend stream.
      */
     public function calculateDividendDiscountModel(float $annualDividend, float $discountRate, float $growthRate = 0.01): float
     {
@@ -319,6 +339,13 @@ class MathUtility
 
     /**
      * Calculates the yield for a given maturity using the Nelson-Siegel curve model.
+     *
+     * @param float $level     The long-term yield level.
+     * @param float $slope     The short-term yield component.
+     * @param float $curvature The medium-term hump component.
+     * @param float $tau       The maturity in years (e.g., 10.0 for the 10-year yield).
+     * @param float $lambda    The decay factor.
+     * @return float The calculated yield for the specified maturity.
      */
     public function calculateNelsonSiegelYield(float $level, float $slope, float $curvature, float $tau, float $lambda = 0.5): float
     {
@@ -330,6 +357,12 @@ class MathUtility
 
     /**
      * Calculates the Weighted Average Cost of Capital (WACC).
+     *
+     * @param float $weightEquity The proportion of equity in the capital structure.
+     * @param float $costOfEquity The required return on equity (CAPM).
+     * @param float $weightDebt   The proportion of debt in the capital structure.
+     * @param float $costOfDebt   The effective, post-tax cost of debt.
+     * @return float The weighted average cost of capital.
      */
     public function calculateWACC(float $weightEquity, float $costOfEquity, float $weightDebt, float $costOfDebt): float
     {
@@ -338,6 +371,11 @@ class MathUtility
 
     /**
      * Calculates the Cost of Equity using the Capital Asset Pricing Model (CAPM).
+     *
+     * @param float $riskFreeRate      The baseline risk-free rate.
+     * @param float $beta              The stock's levered beta.
+     * @param float $equityRiskPremium The market equity risk premium.
+     * @return float The expected return on equity.
      */
     public function calculateCAPM(float $riskFreeRate, float $beta, float $equityRiskPremium): float
     {
@@ -346,6 +384,12 @@ class MathUtility
 
     /**
      * Levers a company's Beta using the Hamada equation.
+     *
+     * @param float $unleveredBeta The baseline asset beta.
+     * @param float $taxRate       The corporate tax rate.
+     * @param float $debtToEquity  The debt-to-equity ratio of the company.
+     * @param float $dampening     A modifier to reduce double-counting if the baseline beta is already partially levered.
+     * @return float The levered equity beta.
      */
     public function calculateLeveredBeta(float $unleveredBeta, float $taxRate, float $debtToEquity, float $dampening = 1.0): float
     {
@@ -354,23 +398,37 @@ class MathUtility
 
     /**
      * Calculates the standard depreciation rate based on the industry.
+     *
+     * @param string $industry The industry classification of the stock.
+     * @return float The baseline annual depreciation rate.
      */
-    public function getIndustryDepreciationRate(string $industry, float $fallbackRate = 0.05): float
+    public function getIndustryDepreciationRate(string $industry): float
     {
-        return \App\Data\Sectors::INDUSTRY_METRICS[$industry]['depreciation'] ?? $fallbackRate;
+        return \App\Data\Sectors::INDUSTRY_METRICS[$industry]['depreciation'] ?? 0.05;
     }
 
     /**
      * Calculates the company's current Market Share based on its Invested Capital and Dynamic SAM.
+     *
+     * @param float $investedCapital   The total physical capital invested in the business.
+     * @param float $nominalGdpIndex   The macroeconomic nominal GDP multiplier.
+     * @param float $samRatio          The Serviceable Addressable Market ratio for the company.
+     * @param float $baselineSectorTam The absolute baseline TAM for the sector.
+     * @return float The current market share as a decimal [0.0, 1.0+].
      */
     public function calculateMarketShare(float $investedCapital, float $nominalGdpIndex, float $samRatio, float $baselineSectorTam = 1000000000000.0): float
     {
         $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
-        return min(1.5, $investedCapital / max(1.0, $dynamicSam));
+        return min(3, $investedCapital / max(1.0, $dynamicSam));
     }
 
     /**
      * Calculates the physical operating base of a company.
+     *
+     * @param float $revenue The total trailing 12-month revenue.
+     * @param float $equity  The total book value of equity.
+     * @param float $floor   The absolute minimum operating base to prevent division by zero.
+     * @return float The proxy size of the operating business.
      */
     public function calculateOperatingBase(float $revenue, float $equity, float $floor = 10000000.0): float
     {
@@ -379,6 +437,11 @@ class MathUtility
 
     /**
      * Calculates the Live Invested Capital of a company.
+     *
+     * @param float $equity   The total book value of equity.
+     * @param float $debt     The total outstanding debt.
+     * @param float $treasury The total cash reserves (corporate treasury).
+     * @return float The net physical capital actively invested in operations.
      */
     public function calculateLiveInvestedCapital(float $equity, float $debt, float $treasury): float
     {
@@ -388,6 +451,12 @@ class MathUtility
     /**
      * Calculates the target cash reserves required for normal operations.
      * Leveraged companies (Banks) must maintain a fractional reserve of their massive debt (deposits).
+     *
+     * @param float $operatingBase    The proxy size of the operating business.
+     * @param float $currentDeposits  The total customer deposits held (for banks).
+     * @param float $wholesaleDebt    The total wholesale market debt.
+     * @param bool  $isLeveraged      True if the company is a bank or financial institution.
+     * @return float The target optimal cash reserve.
      */
     public function calculateTargetOperatingCash(float $operatingBase, float $currentDeposits, float $wholesaleDebt, bool $isLeveraged): float
     {
@@ -399,6 +468,12 @@ class MathUtility
 
     /**
      * Calculates the absolute minimum cash required before triggering a liquidity crisis.
+     *
+     * @param float $operatingBase    The proxy size of the operating business.
+     * @param float $currentDeposits  The total customer deposits held (for banks).
+     * @param float $wholesaleDebt    The total wholesale market debt.
+     * @param bool  $isLeveraged      True if the company is a bank or financial institution.
+     * @return float The absolute minimum survival cash reserve.
      */
     public function calculateMinOperatingCash(float $operatingBase, float $currentDeposits, float $wholesaleDebt, bool $isLeveraged): float
     {
@@ -406,5 +481,42 @@ class MathUtility
             return max($operatingBase * 0.03, $wholesaleDebt * 0.03, $currentDeposits * 0.05); // 5% Crisis Threshold
         }
         return $operatingBase * 0.03;
+    }
+
+    /**
+     * Calculates the penalty based on Corporate Saturation (TAM).
+     *
+     * @param \App\Entity\Stock $stock           The stock entity being analyzed.
+     * @param float             $investedCapital The live invested capital (or equity for banks).
+     * @param array             $macroState      The current macroeconomic state.
+     * @return float The saturation penalty percentage to apply against growth/capex.
+     */
+    public function calculateMarketSaturationPenalty(\App\Entity\Stock $stock, float $investedCapital, array $macroState): float
+    {
+        $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
+        $samRatio = (float) $stock->getSamRatio();
+        $marketShare = $this->calculateMarketShare($investedCapital, $nominalGdpIndex, $samRatio);
+
+        $systemic_importance = $stock->getSystemicImportance();
+
+        // The larger the systemic importance, the stronger the "moat" protecting their volume from saturation
+        $moat = match ($systemic_importance) {
+            'titan'    => 0.30,  // Deflects 70% of the saturation penalty
+            'systemic' => 0.75,  // Deflects 25% of the penalty
+            'base'     => 0.90,  // Deflects 10% of the penalty
+            default    => 1.00,  // Takes full damage from market saturation
+        };
+
+        $industry = $stock->getIndustry() ?: 'General';
+        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leveraged_industry'] ?? false;
+
+        // Floor the bleed factor at 0.10 so normal companies still face gravity
+        $baselineReturn = $isLeveraged ? (float) $stock->getBaselineRoe() : (float) $stock->getBaselineRoic();
+        $effectiveReturn = max(0.10, $baselineReturn);
+        $gravityMultiplier = $effectiveReturn * 0.50;
+
+        $saturationPenalty = pow($marketShare, 4.0) * $gravityMultiplier * $moat;
+
+        return min(0.50, $saturationPenalty); // Cap penalty at 50% volume drag
     }
 }

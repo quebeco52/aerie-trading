@@ -10,7 +10,6 @@ class DebtEngine
     private const QUARTERLY_DEBT_TURNOVER = 0.05; // 5% of old debt expires every quarter (5-year average maturity)
 
     // Debt Analysis Constants
-    private const CASH_YIELD_SPREAD = 0.02;
     private const ARBITRAGE_HURDLE = 0.030; // 300 bps spread is severe
     private const MIN_INTEREST_COVERAGE_RATIO = 2.0;
 
@@ -35,6 +34,26 @@ class DebtEngine
         private MathUtility $mathUtility
     ) {}
 
+    /**
+     * Calculates the gross and blended interest expenses for a company's debt structure.
+     *
+     * Applies the macro credit cycle, volatility risk premiums, and industry-specific
+     * leverage penalties (Junk Bond blowouts) to determine the true cost of debt.
+     *
+     * @param Stock $stock           The stock entity being analyzed.
+     * @param array $macroState      The current macroeconomic state.
+     * @param bool  $advanceMaturity Whether to advance the maturity wall and lock in new blended rates.
+     * @return array{
+     *     interest_expense: float,
+     *     blended_rate: float,
+     *     historical_fixed_rate: float,
+     *     dynamic_spread: float,
+     *     current_market_rate: float,
+     *     wholesale_rate: float,
+     *     ebit: float,
+     *     revenue: float
+     * }
+     */
     public function calculateInterestExpense(Stock $stock, array $macroState, bool $advanceMaturity = false): array
     {
         $debt = (float) $stock->getTotalDebt();
@@ -69,8 +88,17 @@ class DebtEngine
         $revenue = (float) $stock->getTotalRevenue();
 
         if ($revenue <= 0.0) {
-            $investedCapital = $stock->getInvestedCapital();
-            $baselineRoic = max(0.01, (float) ($isLeveraged ? $stock->getBaselineRoe() : $stock->getBaselineRoic()));
+            $investedCapital = $isLeveraged ? (float) $stock->getTotalEquity() : $stock->getInvestedCapital();
+            
+            if ($isLeveraged) {
+                $equity = (float) $stock->getTotalEquity();
+                $targetNetIncome = $equity * max(0.01, (float) $stock->getBaselineRoe());
+                $baselineRoic = $equity > 0 ? ($targetNetIncome / $equity) : 0.01;
+            } else {
+                $baselineRoic = (float) $stock->getBaselineRoic();
+            }
+            
+            $baselineRoic = max(0.01, $baselineRoic);
             $marginFallback = max(0.01, (float) $stock->getOperatingMargin());
             $assetTurnover = $baselineRoic / $marginFallback;
             $revenue = $investedCapital * $assetTurnover;
@@ -80,7 +108,8 @@ class DebtEngine
         $ebit = $revenue * $margin;
 
         // Calculate Depreciation to find true Cash Flow (EBITDA)
-        $depreciationRate = $this->mathUtility->getIndustryDepreciationRate($industry, (float) $stock->getDepreciationRate() ?: 0.05);
+        $customDepreciation = (float) $stock->getDepreciationRate();
+        $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : $this->mathUtility->getIndustryDepreciationRate($industry);
         
         $physicalCapital = $isLeveraged ? (float) $stock->getTotalEquity() : $stock->getInvestedCapital();
         $depreciation = $physicalCapital * $depreciationRate;
@@ -181,6 +210,30 @@ class DebtEngine
         ];
     }
 
+    /**
+     * Analyzes the overarching debt health and capital structure of the company.
+     *
+     * Determines the Weighted Average Cost of Capital (WACC), Cost of Equity (CAPM),
+     * Levered Beta (Hamada Equation), and evaluates if the company is in a liquidity
+     * crisis or suffering from negative carry.
+     *
+     * @param Stock $stock      The stock entity being analyzed.
+     * @param array $macroState The current macroeconomic state.
+     * @return array{
+     *     gross_cost: float,
+     *     effective_cost: float,
+     *     cash_yield: float,
+     *     is_severe_negative_carry: bool,
+     *     interest_coverage: float,
+     *     wants_to_paydown_debt: bool,
+     *     can_issue_debt: bool,
+     *     debt_tolerance: float,
+     *     wacc: float,
+     *     cost_of_equity: float,
+     *     levered_beta: float,
+     *     raw_metrics: array
+     * }
+     */
     public function analyzeDebtHealth(Stock $stock, array $macroState): array
     {
         $currentDebt = (float) $stock->getTotalDebt();
@@ -270,7 +323,7 @@ class DebtEngine
         $wacc = $baseWacc + $distressPremium;
 
         // Cash Yield & Arbitrage Hurdle (Money Market Funds)
-        $yieldOnCash = max(0.0, $policyRate - self::CASH_YIELD_SPREAD);
+        $yieldOnCash = max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
 
 
         // Fetch the CFO's target Debt-to-Equity limit
@@ -317,7 +370,15 @@ class DebtEngine
 
     /**
      * Calculates the Altman Z''-Score (Double Prime) for modern, non-manufacturing corporate bankruptcy prediction.
-     * * @return array{z_score: float, zone: string, is_bankrupt: bool}
+     * 
+     * Evaluates working capital, retained earnings, operating income, and equity to 
+     * determine if the company is at imminent risk of insolvency.
+     * 
+     * @param Stock $stock        The stock entity being evaluated.
+     * @param float $ebit         Earnings Before Interest and Taxes.
+     * @param float $revenue      Total Revenue.
+     * @param float $currentPrice Current share price.
+     * @return array{z_score: float, zone: string, is_bankrupt: bool}
      */
     public function calculateAltmanZScore(Stock $stock, float $ebit, float $revenue, float $currentPrice): array
     {

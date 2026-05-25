@@ -30,6 +30,9 @@ class EtfTracker
     /**
      * Updates the price of the market index ETF based on total market capitalization.
      *
+     * @param float  $totalMarketCap The total market capitalization of all tracked stocks.
+     * @param bool   $recordHistory  Whether to persist the new price to the history table.
+     * @param string $ticker         The ETF ticker symbol to update (defaults to 'LBI').
      * @return array{ticker: string, price: float, name: string, is_etf: bool}
      */
     public function updateIndex(float $totalMarketCap, bool $recordHistory = false, string $ticker = 'LBI'): array
@@ -102,6 +105,11 @@ class EtfTracker
     /**
      * Executes the backend database adjustments for an ETF split.
      * Ensures users are compensated for fractional shares during reverse splits.
+     *
+     * @param Etf    $etf           The ETF entity.
+     * @param float  $factor        The split multiplier or divisor.
+     * @param string $direction     The direction of the split ('forward' or 'reverse').
+     * @param float  $preSplitPrice The price of the ETF before the split occurred.
      */
     private function executeEtfSplit(Etf $etf, float $factor, string $direction, float $preSplitPrice): void
     {
@@ -174,6 +182,10 @@ class EtfTracker
 
     /**
      * Mutates the live Redis chart buffer to prevent massive visual vertical spikes on the UI during a split.
+     *
+     * @param string $ticker    The ETF ticker symbol.
+     * @param float  $factor    The split factor.
+     * @param string $operation The operation to apply ('divide' or 'multiply').
      */
     private function adjustRedisBuffer(string $ticker, float $factor, string $operation): void
     {

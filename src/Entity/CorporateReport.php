@@ -82,6 +82,9 @@ class CorporateReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $customerDepositRatio = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $operatingMargin = null;
+
     public function __construct()
     {
         $this->recordedAt = new \DateTime();
@@ -345,6 +348,18 @@ class CorporateReport
     public function setCustomerDepositRatio(?string $customerDepositRatio): static
     {
         $this->customerDepositRatio = $customerDepositRatio;
+        return $this;
+    }
+
+    public function getOperatingMargin(): ?string
+    {
+        return $this->operatingMargin;
+    }
+
+    public function setOperatingMargin(?string $operatingMargin): static
+    {
+        $this->operatingMargin = $operatingMargin;
+
         return $this;
     }
 }

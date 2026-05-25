@@ -569,14 +569,18 @@ class CorporateActionEngine
                 // Mega-hoarders are explicitly trying to drain accumulated dead cash
                 $maxWillingSpend = $excessCash * 0.30;
             } else {
-                // STRICT RULE: Normal companies can ONLY use cash generated this quarter (minus dividends paid)
-                // This permanently prevents debt-funded or old-hoard-draining buybacks for healthy companies!
-                $maxWillingSpend = min($excessCash * 0.10, $retainedEarningsThisQuarter);
+                if ($isLeveraged) {
+                    // STRICT RULE: Leveraged companies can ONLY use cash generated this quarter (minus dividends paid)
+                    // This permanently prevents debt-funded or old-hoard-draining buybacks for healthy banks!
+                    $maxWillingSpend = min($excessCash * 0.10, $retainedEarningsThisQuarter);
+                } else {
+                    $maxWillingSpend = $excessCash * 0.10;
+                }
             }
 
-            /// The SEC/Regulatory Market Volume Limit (Max 1.0% of total Market Cap per 90 days to avoid market manipulation)
+            /// The SEC/Regulatory Market Volume Limit (Max 1.5% of total Market Cap per 90 days to avoid market manipulation)
             $marketCap = $shares * max($currentPrice, 0.01);
-            $maxCapPct = $isMegaHoarder ? 0.03 : 0.01;
+            $maxCapPct = $isMegaHoarder ? 0.03 : 0.015;
             $maxRegulatorySpend = $marketCap * $maxCapPct;
 
             // The Absolute Maximum Plan
@@ -720,10 +724,7 @@ class CorporateActionEngine
             $hurdleRate = $health['wacc'];
         }
 
-        $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
-        $samRatio = (float) $stock->getSamRatio();
         $evaluationCapital = $isLeveraged ? ($newEquity + $state['wholesaleDebt']) : $liveInvestedCapital;
-        $marketShare = $this->mathUtility->calculateMarketShare($evaluationCapital, $nominalGdpIndex, $samRatio);
 
         if ($trueReturn > $hurdleRate && $health['can_issue_debt']) {
             $newBorrowingRate = $health['raw_metrics']['current_market_rate'] ?? 0.05;
@@ -778,11 +779,8 @@ class CorporateActionEngine
 
                 // Banks don't pause inventory (debt) acquisition due to market share.
                 if (!$isLeveraged) {
-                    if ($marketShare > 1.00) {
-                        $borrowProbability *= 0.3;
-                    } elseif ($marketShare > 0.80) {
-                        $borrowProbability *= 0.6;
-                    }
+                    $saturationPenalty = $this->mathUtility->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
+                    $borrowProbability *= max(0.10, 1.0 - $saturationPenalty);
                 }
 
                 if ((mt_rand() / mt_getrandmax()) < $borrowProbability) {
@@ -853,25 +851,14 @@ class CorporateActionEngine
             $hurdleRate = $health['wacc'];
         }
 
-        $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
-        $samRatio = (float) $stock->getSamRatio();
         $evaluationCapital = $isLeveraged ? ($newEquity + $state['wholesaleDebt']) : $liveInvestedCapital;
-        $marketShare = $this->mathUtility->calculateMarketShare($evaluationCapital, $nominalGdpIndex, $samRatio);
 
         $investmentProbability = min(0.95, max(0.10, 0.20 + ($trueReturn * 2.0)));
 
-        // Titans and Systemic companies have massive moats and can push further into saturation
-        $moat = match ($stock->getSystemicImportance()) {
-            'titan'    => 1.50,
-            'systemic' => 1.25,
-            default    => 1.00,
-        };
-
-        if ($marketShare > 0.90) {
-            $investmentProbability *= min(1.0, ($isLeveraged ? 0.4 : 0.2) * $moat);
-        } elseif ($marketShare > 0.70) {
-            $investmentProbability *= min(1.0, ($isLeveraged ? 0.8 : 0.5) * $moat);
-        }
+        // TAM SATURATION GRAVITY (Diminishing Marginal Returns)
+        // As a company consumes its Total Addressable Market, the marginal return on new physical capital collapses.
+        $saturationPenalty = $this->mathUtility->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
+        $investmentProbability *= max(0.10, 1.0 - $saturationPenalty);
 
         $fundInvestmentOpportunity = (mt_rand() / mt_getrandmax()) < $investmentProbability;
 
@@ -1088,6 +1075,10 @@ class CorporateActionEngine
      * PASSIVE DEPOSIT GROWTH (The M2 Money Supply)
      * Banks naturally accumulate deposits over time simply by existing in an expanding economy.
      * This simulates direct deposits, payroll processing, and systemic inflation inflating the deposit base.
+     *
+     * @param Stock $stock      The stock entity being processed.
+     * @param array $macroState The current macroeconomic state.
+     * @param array &$state     The mutable state array holding treasury, debt, and events.
      */
     private function processOrganicDepositGrowth(Stock $stock, array $macroState, array &$state): void
     {

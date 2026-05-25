@@ -15,8 +15,8 @@ class MarketEngine
     private const MAX_VOLATILITY = 1.50; // 150% absolute ceiling
 
     // Jump Diffusion Constants
-    private const SVJJ_P_UP = 0.30;
-    private const SVJJ_P_DOWN = 0.70;
+    private const SVJJ_P_UP = 0.40;
+    private const SVJJ_P_DOWN = 0.60;
 
     // Valuation Multiple Bounds
     private const MIN_BASE_PE = 8.0;
@@ -245,6 +245,22 @@ class MarketEngine
      * Calculates the systemic stress index, dynamic WACC, flight-to-quality reversion speed,
      * and the intrinsic fair value of the asset.
      * 
+     * @param float $currentPrice        The current market price of the stock.
+     * @param float $outputGap           The macroeconomic output gap (boom vs bust).
+     * @param float $inflation           The current inflation rate.
+     * @param float $beta                The stock's sensitivity to systemic market moves.
+     * @param float $liveWacc            The true dynamic Weighted Average Cost of Capital.
+     * @param float $reversionSpeed      The baseline speed at which the stock reverts to fair value.
+     * @param float $earningsPerShare    The current EPS (Earnings Per Share).
+     * @param float $currentRoic         The current Return on Invested Capital (or ROE for banks).
+     * @param float|null $fcfPerShare    The Free Cash Flow per share (null for banks).
+     * @param float $riskFreeRate        The central bank's policy rate.
+     * @param float $bookValuePerShare   The equity value per share.
+     * @param float $dividendPerShare    The absolute quarterly dividend per share.
+     * @param float $baselineIndustryPE  The standard P/E multiple for this industry.
+     * @param float $revenuePerShare     The total revenue per share.
+     * @param bool  $isLeveragedIndustry True if the company is a bank or financial institution.
+     * @param float $liveCostOfEquity    The Cost of Equity (CAPM) for financial institutions.
      * @return array{perceived_fair_value: float, dynamic_reversion: float, analyst_targets: array}
      */
     private function evaluateFundamentalState(
@@ -356,15 +372,9 @@ class MarketEngine
 
         // Weighted Consensus Model to prevent cherry-picked asset bubbles
         if ($isLeveragedIndustry) {
-            $fairValue = ($earningsValue * 0.60) + ($dividendSupportValue * 0.10) + ($pbFairValue * 0.30);
+            $fairValue = ($earningsValue * 0.60) + ($pbFairValue * 0.40);
         } else {
-            // If the company pays no dividend (Growth Stock), investors shift 100% of their focus to Earnings Power
-            if ($dividendPerShare <= 0.0) {
-                $fairValue = ($earningsValue * 0.90) + ($pbFairValue * 0.10);
-            } else {
-                // Standard Corporates
-                $fairValue = ($earningsValue * 0.70) + ($dividendSupportValue * 0.20) + ($pbFairValue * 0.10);
-            }
+            $fairValue = ($earningsValue * 0.90) + ($pbFairValue * 0.10);
         }
 
         $perceivedFairValue = max(0.01, $fairValue, $dividendSupportValue);

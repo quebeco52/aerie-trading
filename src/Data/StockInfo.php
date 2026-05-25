@@ -109,6 +109,59 @@ public const DESCRIPTIONS = [
         'KSTL' => "Kestrel Civic Lines functions as the inescapable mechanical circulatory system of the Aerie Autonomous District, operating a sprawling, multi-tiered web of automated rail, subterranean transit, and high-capacity municipal bus networks. To the casual citizen, Kestrel is the ultimate civic convenience with flawlessly punctual, hyper-efficient utility that keeps the sprawling metropolis moving. However, on Glasswater Row, institutional investors revere the company not as a transit provider, but as a master engineer of infrastructural capture.\n\nKestrel operates on a ruthless corporate doctrine of preemptive expansion. Long before a new suburban sector or industrial zone has been designated, Kestrel is already there, laying thousands of miles of gleaming track into the undeveloped area. They do not wait for commuter demand to dictate their routes; they create the demand. By building transit lines into the undeveloped areas of the District, Kestrel forces the massive real estate developers to follow their lead, effectively acting as the silent kingmaker of the district's property markets. Wherever Kestrel lays a station, a localized economic boom inevitably follows, guaranteeing a captive, built-in commuter base for decades to come.\n\nHowever, the true predatory genius of Kestrel lies in its monetization architecture. The company intentionally prices single-use boarding passes at staggering, blatantly punitive rates. This is not a mistake; it is a mathematically engineered penalty designed to herd the entire commuting population into their 'Kestrel Link' subscription tiers. Anyone who needs to travel more than twice a year is financially forced to enroll in these auto-renewing monthly programs. In doing so, Kestrel has successfully extracted a highly reliable, inescapable baseline tax directly from the checking accounts of millions of citizens.\n\nFor investors, Kestrel Civic Lines is the ultimate defensive infrastructure play. While the company carries a high Capital Expenditure (CapEx) burden to continually lay new steel and maintain its automated fleets, its revenue is built on an unbreakable foundation of recurring subscriptions. Trading with a low beta and low volatility, the stock ignores the frantic hype cycles of the broader market. It acts as an incredibly stable, slow-moving dividend engine, safely compounding wealth as long as the workforce continues to wake up and commute.",
     ];
 
+    public const QUOTES = [
+        'LAKE' => "We don't compete for capital. We are the capital.",
+        'SWAN' => "A bloated balance sheet isn't a legacy, it's prey.",
+        'HUMM' => "Attention is the ultimate currency, and we mint it daily.",
+        'OWLS' => "Let them build the bubbles. We will buy the ashes.",
+        'KING' => "A market bubble isn't a systemic risk. It's a fee structure.",
+        'PERE' => "Bulls and bears bleed exactly the same. We simply own the slaughterhouse.",
+        'RIVR' => "Steady currents carve the deepest canyons of wealth.",
+        'SAFE' => "We don't fear the apocalypse. We underwrite it.",
+        'DOVE' => "Tragedy is unpredictable. The premiums are not.",
+        'SHRK' => "We don't predict the future, we grade it.",
+        'BIRD' => "Powering the district, ten reactors at a time.",
+        'WATCH' => "Vigilance is our product. Security is our guarantee.",
+        'WING' => "We forge the district’s skeleton. The rust is someone else’s problem.",
+        'PENG' => "The district runs on friction. We sell the ice.",
+        'SHOR' => "We don't build homes. We build collateral.",
+        'RIVE' => "Precision machinery for an imprecise world.",
+        'GRIP' => "Superiority through overwhelming engineering.",
+        'LOON' => "Connecting the isolated, silently and profitably.",
+        'PHIL' => "Happiness is cyclical. Chemical dependency is an inelastic demand.",
+        'TRIV' => "Diversification is the ultimate defense mechanism.",
+        'IBHI' => "We don't build structures. We build monoliths.",
+        'TICK' => "Every microsecond is a micro-monopoly.",
+        'SINK' => "The ocean floor isn't a habitat. It's a balance sheet.",
+        'CASC' => "Refining the lifeblood of the economy.",
+        'GULL' => "Fortune favors the bold, and we favor the house.",
+        'WADE' => "Water is a human right. The delivery is a bidding war.",
+        'CORM' => "Your waste is our endless wealth.",
+        'CRAN' => "Extending life, expanding margins.",
+        'TALN' => "Credit is a weapon. We supply the armory.",
+        'CANV' => "Moving the world, one optimized route at a time.",
+        'SGRB' => "Sugar can be quite bitter if you make the wrong trade",
+        'STRK' => "Delivering purchasing power to your doorstep.",
+        'BREW' => "Fueling the district's endless, caffeinated grind.",
+        'CLAW' => "The law isn't blind. It just has an expensive entry fee.",
+        'ROOK' => "We don't follow the trend. We front-run it.",
+        'PLZA' => "Owning the skyline, cornering the market.",
+        'LYRE' => "We don't report the news. We synthesize reality.",
+        'STAR' => "Knowledge is power, and we hold the keys.",
+        'WEAV' => "Tying the threads of commerce together.",
+        'CROP' => "Feeding the machine, from farm to table.",
+        'BRKW' => "Anchoring wealth against the tides of chaos.",
+        'ELDE' => "Golden years require golden, reliable yields.",
+        'SWFT' => "Speed, service, and insatiable growth.",
+        'VULT' => "Distress isn't a tragedy. It's an acquisition target.",
+        'FALC' => "Engineering velocity, driving the future.",
+        'OSPR' => "Protecting assets, projecting absolute power.",
+        'CROW' => "Where others see ruin, we see ROI.",
+        'CNDR' => "Mining the depths, soaring the heights of profitability.",
+        'SILC' => "Etching the future of humanity in silicon.",
+        'KSTL' => "The unbreakable arteries of global industry.",
+    ];
+
     /**
      * Retrieves the description for a given stock or ETF.
      * 
@@ -125,5 +178,13 @@ public const DESCRIPTIONS = [
 
         // Append dynamic stats for regular stocks
         return $base;
+    }
+
+    /**
+     * Retrieves the CEO quote for a given stock ticker.
+     */
+    public static function getQuote(string $ticker): ?string
+    {
+        return self::QUOTES[$ticker] ?? null;
     }
 }

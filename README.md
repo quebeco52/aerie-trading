@@ -24,6 +24,19 @@ To run Aerie Trading locally, you will need to have [Docker](https://www.docker.
 - `make reset` - Soft reset the market timelines while keeping configurations.
 - `make tailwind-watch` - Watch and compile Tailwind CSS changes automatically during frontend development.
 
+## Alternative: manual
+
+If you do not have `make` installed, you can use these commands manually:
+
+```bash
+docker compose --env-file .env.dev -f docker-compose.dev.yml up -d
+docker compose --env-file .env.dev -f docker-compose.dev.yml exec aerie-php composer install
+docker compose --env-file .env.dev -f docker-compose.dev.yml exec aerie-php php bin/console doctrine:migrations:migrate --no-interaction
+docker compose --env-file .env.dev -f docker-compose.dev.yml exec aerie-php php bin/console tailwind:build
+docker compose --env-file .env.dev -f docker-compose.dev.yml exec aerie-php php bin/console app:market-seed
+docker compose --env-file .env.dev -f docker-compose.dev.yml --profile live  up
+```
+
 ## Aerie Trading uses the tech stack:
 
 - PHP/Symfony

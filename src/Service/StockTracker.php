@@ -221,7 +221,7 @@ class StockTracker
                 $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
                 $samRatio = (float) $stock->getSamRatio();
                 
-                $evaluationCapital = $isLeveragedIndustry ? ($equity + (float) $stock->getWholesaleDebt()) : $investedCapital;
+                $evaluationCapital = $isLeveragedIndustry ? $equity : $investedCapital;
                 $marketShare = min(0.9999, $this->mathUtility->calculateMarketShare($evaluationCapital, $nominalGdpIndex, $samRatio));
                 
                 $stockUpdate['market_share'] = round($marketShare * 100, 2);

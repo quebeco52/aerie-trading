@@ -81,12 +81,13 @@ class StockController extends AbstractController
             
             $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$asset->getIndustry() ?? 'General']['leveraged_industry'] ?? false;
             $investedCapital = $asset->getInvestedCapital();
-            $evaluationCapital = $isLeveraged ? ((float) $asset->getTotalEquity() + (float) $asset->getWholesaleDebt()) : $asset->getInvestedCapital();
+            $evaluationCapital = $isLeveraged ? (float) $asset->getTotalEquity() : $asset->getInvestedCapital();
             
             $marketShare = min(0.9999, $evaluationCapital / max(1.0, $dynamicSam));
         }
 
         $generalInfo = $asset->getDescription();
+        $quote = \App\Data\StockInfo::getQuote($ticker);
 
         $allAssets = [];
         if ($isEtf) {
@@ -119,8 +120,8 @@ class StockController extends AbstractController
             'ticksPerYear' => (int) ($_ENV['SIM_TICKS_PER_YEAR'] ?? 14400),
             'economic_cycle' => $economicCycle,
             'macro' => $macroState,
-            'marketShare' => $marketShare
-
+            'marketShare' => $marketShare,
+            'quote' => $quote
         ]);
     }
 
@@ -244,7 +245,7 @@ class StockController extends AbstractController
 
         // Fetch all fundamental reports for this stock, oldest to newest (for charting)
         $sql = '
-            SELECT net_income, equity, total_debt, treasury, roic, shares, recorded_at, interest_expense, blended_rate, dynamic_spread, revenue, interest_income, capital_expenditures, wacc, eva, dividend_paid, stock_buybacks, return_on_equity, cost_of_equity, capital_ratio, customer_deposit_ratio
+            SELECT net_income, equity, total_debt, treasury, roic, shares, recorded_at, interest_expense, blended_rate, dynamic_spread, revenue, interest_income, capital_expenditures, wacc, eva, dividend_paid, stock_buybacks, return_on_equity, cost_of_equity, capital_ratio, customer_deposit_ratio, operating_margin
             FROM corporate_report 
             WHERE stock_id = :id 
             ORDER BY recorded_at ASC

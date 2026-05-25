@@ -12,6 +12,7 @@ class MacroEngine
     public const NATURAL_RATE = 0.02;
     public const BASE_CORPORATE_TAX_RATE = 0.21;
     public const BASE_EQUITY_RISK_PREMIUM = 0.045;
+    public const CASH_YIELD_SPREAD = 0.01;
 
     public function __construct(
         private MathUtility $mathUtility,
@@ -90,7 +91,12 @@ class MacroEngine
         $erp = self::BASE_EQUITY_RISK_PREMIUM;
         if ($state['output_gap_ema'] < 0.0) {
             $erp += abs($state['output_gap_ema']) * 0.5; // e.g., -4% gap adds 2.0% to ERP (6.5% total)
+        } else {
+            // Complacency: During booms, greedy investors accept lower risk premiums.
+            $erp -= $state['output_gap_ema'] * 0.10;
         }
+        
+        $erp = max(0.02, $erp); // Floor at 2% to prevent WACC from collapsing completely
 
         $payload = [
             'inflation' => $state['inflation'],

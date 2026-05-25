@@ -84,6 +84,7 @@ class MarketSeedCommand extends Command
                 $stock->setTargetPayoutRatio((string) ($stockData['target_payout_ratio'] ?? 0.30));
                 $stock->setDividendSpeed((string) ($stockData['dividendSpeed'] ?? 0.20));
                 $stock->setFixedCostRatio((float) ($stockData['fixed_cost_ratio'] ?? 0.35));
+                $stock->setDepreciationRate((string) ($stockData['depreciation_rate'] ?? \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['depreciation'] ?? 0.05));
                 
                 $stock->setCorporateTreasury((string) ($stockData['corporate_treasury'] ?? 1000000000.00));
                 $stock->setFloatingDebtRatio((string) ($stockData['floating_debt_ratio'] ?? 0.30));
