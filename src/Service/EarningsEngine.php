@@ -112,7 +112,12 @@ class EarningsEngine
             $wholesaleDebt = (float) $stock->getWholesaleDebt();
             $customerDeposits = (float) $stock->getCustomerDeposits();
             $wholesaleRate = $policyRate + $structuralSpread;
-            $depositRate = max(0.001, $policyRate * 0.20);
+            
+            $totalDebt = $wholesaleDebt + $customerDeposits;
+            $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 10.0;
+            $depositBeta = $this->mathUtility->calculateDepositBeta($totalDebt, $equity, $equityLimit, $customerDeposits);
+            
+            $depositRate = max(0.001, $policyRate * $depositBeta);
             
             $structuralInterestExpense = ($wholesaleDebt * $wholesaleRate) + ($customerDeposits * $depositRate);
             
@@ -414,6 +419,8 @@ class EarningsEngine
             $report->setEva((string) $annualEconomicProfit);
             $report->setDividendPaid((string) $allocation['total_paid']);
             $report->setStockBuybacks((string) $allocation['total_cash_spent']);
+            $report->setCashYield((string) $health['cash_yield']);
+            $report->setDepositApy(isset($allocation['bank_apy']) ? (string) $allocation['bank_apy'] : null);
 
             // Leveraged/Banking specific metrics
             $roe = $equity > 0 ? ($actualTotalNetIncome / $equity) : 0.0;

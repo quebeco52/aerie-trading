@@ -93,16 +93,15 @@ class CorporateActionEngine
 
         $sharesOutstanding *= $splitFactor;
 
+        $oldDiv = (float) $stock->getLastDividend();
+        $oldEps = (float) $stock->getEarningsPerShare();
+        $oldFcf = (float) $stock->getFreeCashFlowPerShare();
+
         $stock->setSharesOutstanding((string) $sharesOutstanding);
         $stock->setPrice((string) $newPrice);
 
-        $oldDiv = (float) $stock->getLastDividend();
         $stock->setLastDividend((string) ($oldDiv / $splitFactor));
-
-        $oldEps = (float) $stock->getEarningsPerShare();
         $stock->setEarningsPerShare((string) ($oldEps / $splitFactor));
-
-        $oldFcf = (float) $stock->getFreeCashFlowPerShare();
         $stock->setFreeCashFlowPerShare((string) ($oldFcf / $splitFactor));
 
         $desc = "{$stock->getName()} has executed a {$splitFactor}-for-1 stock split.";
@@ -161,16 +160,15 @@ class CorporateActionEngine
 
         $sharesOutstanding = $sharesOutstanding / $reverseFactor;
 
+        $oldDiv = (float) $stock->getLastDividend();
+        $oldEps = (float) $stock->getEarningsPerShare();
+        $oldFcf = (float) $stock->getFreeCashFlowPerShare();
+
         $stock->setSharesOutstanding((string) $sharesOutstanding);
         $stock->setPrice((string) $newPrice);
 
-        $oldDiv = (float) $stock->getLastDividend();
         $stock->setLastDividend((string) ($oldDiv * $reverseFactor));
-
-        $oldEps = (float) $stock->getEarningsPerShare();
         $stock->setEarningsPerShare((string) ($oldEps * $reverseFactor));
-
-        $oldFcf = (float) $stock->getFreeCashFlowPerShare();
         $stock->setFreeCashFlowPerShare((string) ($oldFcf * $reverseFactor));
 
         $desc = "{$stock->getName()} executed a 1-for-{$reverseFactor} reverse split.";
@@ -342,6 +340,7 @@ class CorporateActionEngine
             'dividend_paid' => $divData['dividend_per_share'],
             'total_paid' => $divData['total_paid'],
             'total_cash_spent' => $buybackData['total_cash_spent'],
+            'bank_apy' => $bsEvents['bank_apy'] ?? null,
             'organic_capex' => $bsEvents['organic_capex'] ?? 0.0,
             'events' => $events
         ];
@@ -530,7 +529,7 @@ class CorporateActionEngine
         }
         
         // For normal companies, cash > 33% of operating base is hoarding.
-        // For banks, cash > 20% of their total debt (deposits + wholesale) is excessive hoarding.
+        // For banks, cash > 25% of their total debt (deposits + wholesale) is excessive hoarding.
         $totalDebt = (float) $stock->getTotalDebt();
         $isMegaHoarder = $isLeveraged 
             ? ($excessCash > ($totalDebt * 0.25)) 
@@ -659,6 +658,7 @@ class CorporateActionEngine
             'debtIssued' => 0.0,
             'organicCapex' => 0.0,
             'debtActionTaken' => false,
+            'bank_apy' => null,
             'events' => []
         ];
 
@@ -683,7 +683,11 @@ class CorporateActionEngine
         // SAVE FINAL TREASURY
         $stock->setCorporateTreasury((string) $state['treasury']);
 
-        return ['events' => $state['events'], 'organic_capex' => $state['organicCapex']];
+        return [
+            'events' => $state['events'], 
+            'organic_capex' => $state['organicCapex'],
+            'bank_apy' => $state['bank_apy']
+        ];
     }
 
     /**
@@ -757,8 +761,8 @@ class CorporateActionEngine
             // Take the stricter of the two limits
             $trueExpansionCapacity = min($incomeStatementCapacity, $balanceSheetCapacity);
             
-            // Safety Valve: No company can physically grow its entire capital base by more than 25% in a single 90-day quarter
-            $trueExpansionCapacity = min($trueExpansionCapacity, $liveInvestedCapital * 0.25);
+            // Safety Valve: No company can physically grow its entire capital base by more than 15% in a single 90-day quarter
+            $trueExpansionCapacity = min($trueExpansionCapacity, $liveInvestedCapital * 0.15);
 
             if ($trueExpansionCapacity > 0) {
                 $spreadMultiplier = min(1.0, max(0.0, ($trueReturn - $hurdleRate) * 10.0));
@@ -1092,56 +1096,48 @@ class CorporateActionEngine
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
         
-        // BASELINE M2 GROWTH
-        // Banks naturally capture nominal GDP growth (Inflation + Real Growth)
-        // Booms accelerate money creation gently, but busts destroy it aggressively (credit contraction)
-        $realGdpGrowth = 0.02 + ($outputGap > 0.0 ? $outputGap * 0.5 : $outputGap * 2.0); 
-        $systemicGrowthAnnual = $inflation + $realGdpGrowth; 
-        
-        // YIELD SEEKING & QUANTITATIVE TIGHTENING (QT)
-        // When central bank rates are high, consumers move cash from 0% bank deposits into high-yield Money Market Funds.
-        // A policy rate above 4% starts draining systemic deposits.
-        $yieldFlightPenalty = max(0.0, ($policyRate - 0.04) * 1.5); 
-        $systemicGrowthAnnual -= $yieldFlightPenalty;
-
-        $systemicGrowthQuarterly = $systemicGrowthAnnual / 4.0;
-
-        // COMPANY SPECIFIC SENSITIVITY (Beta)
-        // High-beta (aggressive/cyclical) banks have highly volatile deposit bases that swing wildly with the macro cycle.
-        // Low-beta (defensive/titan) banks have "sticky", loyal customer bases that ignore the noise.
-        $beta = abs((float) $stock->getBeta());
-        $betaSensitivity = max(0.5, min(2.0, $beta)); // Floor at 0.5 to maintain baseline stickiness, cap at 2.0
-
-        $trueDepositGrowthRate = $systemicGrowthQuarterly * $betaSensitivity;
-
-        // CAPACITY FOR DEPOSITS (Leverage Utilization)
-        // Banks with massive excess equity capital (low leverage) will aggressively market for new deposits (e.g., higher APYs).
-        // Banks approaching their regulatory leverage limits will intentionally lower rates and choke off deposit growth.
         $equity = (float) $stock->getTotalEquity();
         $totalDebt = $state['wholesaleDebt'] + $currentDeposits;
         $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['equity_limit'] ?? 10.0;
         
-        $utilization = $totalDebt / max(1.0, $equity * $equityLimit);
-        $capacityModifier = max(0.1, 2.5 - ($utilization * 2)); // E.g., 0.5 utilization = 1.50x growth. 1.0 utilization = 0.5x growth.
-        if ($utilization > 0.95) {
-            $capacityModifier *= 0.75;
-        }
+        // Calculate the APY the bank is offering its customers (Dynamic Beta & Thirst)
+        $depositApyBeta = $this->mathUtility->calculateDepositBeta($totalDebt, $equity, $equityLimit, $currentDeposits);
         
-        if ($trueDepositGrowthRate > 0) {
-            $trueDepositGrowthRate *= $capacityModifier;
+        $bankApy = max(0.001, $policyRate * $depositApyBeta);
+        $state['bank_apy'] = $bankApy;
+        
+        // YIELD SEEKING FLIGHT
+        // Compare the Bank APY to the risk-free Money Market Yield
+        $moneyMarketYield = max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+        $yieldSpread = max(0.0, $moneyMarketYield - $bankApy);
+        $yieldFlightPenalty = $yieldSpread * 0.50; // Customers slowly bleed out if the bank's rates are uncompetitive
+        
+        // BASELINE M2 GROWTH
+        $realGdpGrowth = 0.02 + ($outputGap > 0.0 ? $outputGap * 0.5 : $outputGap * 2.0); 
+        $systemicGrowthAnnual = $inflation + $realGdpGrowth - $yieldFlightPenalty; 
+        $systemicGrowthQuarterly = $systemicGrowthAnnual / 4.0;
+
+        // COMPETITIVE CAPTURE
+        $betaSensitivity = max(0.75, min(1.25, abs((float) $stock->getBeta())));
+        $competitiveAdvantage = $depositApyBeta / 0.20; // 0.20 is the neutral baseline
+        
+        if ($systemicGrowthQuarterly > 0) {
+            $baseDepositGrowth = $systemicGrowthQuarterly * $betaSensitivity * $competitiveAdvantage;
         } else {
-            // If deposits are draining, overleveraged banks bleed faster, while high-equity fortresses bleed slower.
-            $trueDepositGrowthRate /= $capacityModifier;
+            // If M2 is shrinking, bloated banks with terrible APYs bleed much faster
+            $baseDepositGrowth = $systemicGrowthQuarterly * $betaSensitivity / max(0.1, $competitiveAdvantage);
         }
 
-        // Generate a normally distributed multiplier centered at 1.0 with a standard deviation of 0.20 (20%)
-        $varianceMultiplier = 1.0 + ($this->mathUtility->generateStandardNormal() * 0.20);
-        $trueDepositGrowthRate *= max(0.0, $varianceMultiplier); // Prevent the multiplier itself from flipping negative
+        // ADDITIVE VARIANCE
+        // Allow deposits to swing naturally by +/- 0.5% a quarter regardless of the macroeconomic state
+        $randomSwing = $this->mathUtility->generateStandardNormal() * 0.005;
+        
+        $finalGrowthRate = $baseDepositGrowth + $randomSwing;
+        
+        // Cap the max deposit growth or bleed to prevent mathematical explosions
+        $finalGrowthRate = max(-0.15, min(0.15, $finalGrowthRate));
 
-        // Cap the max deposit growth or bleed to prevent mathematical explosions (Max 15% change per quarter)
-        $trueDepositGrowthRate = max(-0.15, min(0.15, $trueDepositGrowthRate));
-
-        $depositChange = $currentDeposits * $trueDepositGrowthRate;
+        $depositChange = $currentDeposits * $finalGrowthRate;
 
         if (abs($depositChange) > 0) {
             // Accounting: Deposits add Cash to the Vault (Treasury) and Deposits to the Liabilities
@@ -1154,16 +1150,16 @@ class CorporateActionEngine
             // Generate Market Events for extreme deposit movements
             $percentageChange = $depositChange / $currentDeposits;
             
-            if ($percentageChange < -0.01) {
+            if ($percentageChange < -0.005) { // Threshold raised to 5% drop
                 $amtB = number_format(abs($depositChange) / 1_000_000_000, 2);
                 $state['events'][] = [
-                    'description' => "Suffered a \${$amtB}B quarterly deposit outflow due to systemic liquidity drain.",
-                    'shock' => -1.0
+                    'description' => "Suffered a \${$amtB}B customer deposit flight.",
+                    'shock' => -2.0
                 ];
-            } elseif ($percentageChange > 0.02) {
+            } elseif ($percentageChange > 0.005) { // Threshold raised to 5% gain
                 $amtB = number_format($depositChange / 1_000_000_000, 2);
                 $state['events'][] = [
-                    'description' => "Absorbed \${$amtB}B in new customer deposits.",
+                    'description' => "Captured \${$amtB}B in new customer deposits.",
                     'shock' => 0.5
                 ];
             }

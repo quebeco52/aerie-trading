@@ -504,6 +504,8 @@ function updateCharts(timeframe) {
     let spreadData = [];
     let blendedRateData = [];
     let expenseRatioData = [];
+    let cashYieldData = [];
+    let depositApyData = [];
 
     // Capital Efficiency
     let roicData = [];
@@ -541,6 +543,8 @@ function updateCharts(timeframe) {
             spreadData.push(parseFloat(report.dynamic_spread || 0) * 100);
             blendedRateData.push(parseFloat(report.blended_rate || 0) * 100);
             expenseRatioData.push(rev > 0 ? (intExp / rev) * 100 : 0.0);
+            cashYieldData.push(parseFloat(report.cash_yield || report.cashYield || 0) * 100);
+            depositApyData.push(parseFloat(report.deposit_apy || report.depositApy || 0) * 100);
 
             roicData.push(parseFloat(report.roic || 0) * 100);
             waccData.push(parseFloat(report.wacc || 0) * 100);
@@ -582,6 +586,8 @@ function updateCharts(timeframe) {
             spreadData.unshift(parseFloat(report.dynamic_spread || 0) * 100);
             blendedRateData.unshift(parseFloat(report.blended_rate || 0) * 100);
             expenseRatioData.unshift(rev > 0 ? (intExp / rev) * 100 : 0.0);
+            cashYieldData.unshift(parseFloat(report.cash_yield || report.cashYield || 0) * 100);
+            depositApyData.unshift(parseFloat(report.deposit_apy || report.depositApy || 0) * 100);
 
             roicData.unshift(parseFloat(report.roic || 0) * 100);
             waccData.unshift(parseFloat(report.wacc || 0) * 100);
@@ -610,7 +616,7 @@ function updateCharts(timeframe) {
 
     renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, operatingMarginData);
     renderDebtEquityChart(labels, debtData, equityData, treasuryData);
-    renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData);
+    renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData, cashYieldData, depositApyData);
     renderCapitalReturnChart(labels, dividendData, buybackData);
     
     if (IS_LEVERAGED) {
@@ -804,14 +810,14 @@ function renderDebtEquityChart(labels, debtData, equityData, treasuryData) {
     });
 }
 
-function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData) {
+function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData, cashYieldData, depositApyData) {
     const canvas = document.getElementById('creditHealthChart');
     if (!canvas) return;
 
     if (creditHealthChartInstance) creditHealthChartInstance.destroy();
 
     const ctx = canvas.getContext('2d');
-    creditHealthChartInstance = new Chart(ctx, {
+    const config = {
         type: 'line',
         data: {
             labels: labels,
@@ -843,6 +849,15 @@ function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRat
                     borderDash: [5, 5],
                     tension: 0.3,
                     pointRadius: 0
+                },
+                {
+                    label: 'Cash Yield',
+                    data: cashYieldData,
+                    borderColor: COLORS.positive,
+                    backgroundColor: COLORS.positive,
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3
                 }
             ]
         },
@@ -864,8 +879,25 @@ function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRat
                 }
             }
         }
-    });
+     };
+
+    // Add Deposit APY only for leveraged institutions (Banks)
+    if (IS_LEVERAGED) {
+        config.data.datasets.push({
+            label: 'Deposit APY',
+            data: depositApyData,
+            borderColor: '#c084fc', // Distinct purple color
+            backgroundColor: '#c084fc',
+            borderWidth: 2,
+            borderDash: [4, 4],
+            tension: 0.3,
+            pointRadius: 3
+        });
+    }
+
+    creditHealthChartInstance = new Chart(ctx, config);
 }
+
 
 function renderCapitalEfficiencyChart(labels, returnData, hurdleData, evaData, returnLabel, hurdleLabel) {
     const canvas = document.getElementById('capitalEfficiencyChart');

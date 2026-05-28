@@ -185,8 +185,11 @@ class DebtEngine
             $wholesaleInterest = ($wholesaleDebt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($wholesaleDebt * $floatingRatio * $floatingInterestRate);
             $wholesaleRate = $wholesaleDebt > 0 ? ($wholesaleInterest / $wholesaleDebt) : $currentMarketFixedRate;
             
-            // DEPOSIT BETA: Banks pass on only ~20% of the central bank policy rate to checking accounts
-            $depositRate = max(0.001, $policyRate * 0.20);
+            // DYNAMIC DEPOSIT BETA & THIRST
+            $depositBeta = $this->mathUtility->calculateDepositBeta($debt, $totalEquity, $equityLimit, $customerDeposits);
+            
+            // Calculate the final APY offered to customers
+            $depositRate = max(0.001, $policyRate * $depositBeta);
             $depositInterest = $customerDeposits * $depositRate;
             
             $interestExpense = $wholesaleInterest + $depositInterest;

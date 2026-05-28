@@ -12,7 +12,7 @@ class MacroEngine
     public const NATURAL_RATE = 0.02;
     public const BASE_CORPORATE_TAX_RATE = 0.21;
     public const BASE_EQUITY_RISK_PREMIUM = 0.045;
-    public const CASH_YIELD_SPREAD = 0.01;
+    public const CASH_YIELD_SPREAD = 0.0025;
 
     public function __construct(
         private MathUtility $mathUtility,

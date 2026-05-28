@@ -519,4 +519,37 @@ class MathUtility
 
         return min(0.50, $saturationPenalty); // Cap penalty at 50% volume drag
     }
+
+    /**
+     * Calculates the dynamic APY Beta offered by a bank based on its leverage utilization
+     * and its "thirst" for cheap customer deposits.
+     *
+     * @param float $totalDebt      Total debt (wholesale + deposits).
+     * @param float $equity         Total equity.
+     * @param float $equityLimit    The structural debt-to-equity limit.
+     * @param float $customerDeposits The amount of current customer deposits.
+     * @return float
+     */
+    public function calculateDepositBeta(float $totalDebt, float $equity, float $equityLimit, float $customerDeposits): float
+    {
+        $utilization = $equity > 0.0 ? ($totalDebt / ($equity * $equityLimit)) : 1.0;
+        $depositRatio = $totalDebt > 0 ? ($customerDeposits / $totalDebt) : 0.0;
+        
+        // DYNAMIC DECAY (The Smooth Thirst Mechanic)
+        // High deposits = fast decay (stingy). Low deposits = slow decay (aggressive).
+        $decayRate = 0.50 + (1.50 * $depositRatio);
+        
+        // DYNAMIC APY BETA CURVE:
+        // Example with a healthy Deposit Ratio (e.g., 80% deposits -> fast decay of 1.70):
+        // - 0.0 utilization = 0.70 (70% APY beta)
+        // - 0.7 utilization ≈ 0.21 (21% APY beta)
+        // - 1.0 utilization ≈ 0.13 (13% APY beta)
+        //
+        // Example with a "thirsty" Deposit Ratio (e.g., 0% deposits -> slow decay of 0.50):
+        // - 0.7 utilization ≈ 0.49 (49% APY beta)
+        // - 1.0 utilization ≈ 0.42 (42% APY beta - kept high to swap wholesale debt for deposits)
+        $depositBeta = max(0.10, 0.70 * exp(-$decayRate * $utilization));
+        
+        return min(0.70, $depositBeta); // Hard cap so they don't bankrupt themselves
+    }
 }
