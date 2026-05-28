@@ -8,6 +8,8 @@ use App\Service\MarketEvent;
 use App\Entity\Stock;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\DBAL\Connection;
+use App\Service\DebtEngine;
+use App\Service\MathUtility;
 
 class CorporateActionEngineTest extends TestCase
 {
@@ -16,16 +18,19 @@ class CorporateActionEngineTest extends TestCase
     protected function setUp(): void
     {
         // 1. Mock the Database Connection so we don't actually write to MariaDB during tests!
-        $mockConnection = $this->createMock(Connection::class);
+        $mockConnection = $this->createStub(Connection::class);
         $mockConnection->method('executeStatement')->willReturn(1);
 
-        $mockEntityManager = $this->createMock(EntityManagerInterface::class);
+        $mockEntityManager = $this->createStub(EntityManagerInterface::class);
         $mockEntityManager->method('getConnection')->willReturn($mockConnection);
 
-        $mockMarketEvent = $this->createMock(MarketEvent::class);
+        $mockMarketEvent = $this->createStub(MarketEvent::class);
+        $mockDebtEngine = $this->createStub(DebtEngine::class);
+        $mockRedis = $this->createStub(\Redis::class);
+        $mockMathUtility = $this->createStub(MathUtility::class);
 
         // 2. Instantiate the Engine with our fake database
-        $this->engine = new CorporateActionEngine($mockEntityManager, $mockMarketEvent);
+        $this->engine = new CorporateActionEngine($mockEntityManager, $mockMarketEvent, $mockDebtEngine, $mockRedis, $mockMathUtility);
     }
 
     public function testRecursiveForwardSplitProtectsNetWorth()

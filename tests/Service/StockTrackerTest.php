@@ -5,9 +5,11 @@ namespace App\Tests\Service;
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\MockObject\MockObject;
 use App\Service\StockTracker;
+use App\Service\MergerAndAcquisitionEngine;
 use App\Service\MarketEngine;
 use App\Service\EarningsEngine;
 use App\Service\CorporateActionEngine;
+use App\Service\DebtEngine;
 use App\Service\MarketEvent;
 use App\Service\MathUtility;
 use Doctrine\ORM\EntityManagerInterface;
@@ -21,7 +23,9 @@ class StockTrackerTest extends TestCase
     private MarketEngine|MockObject $marketEngineMock;
     private EarningsEngine|MockObject $earningsEngineMock;
     private CorporateActionEngine|MockObject $corporateActionEngineMock;
+    private MergerAndAcquisitionEngine|MockObject $maEngineMock;
     private MarketEvent|MockObject $marketEventMock;
+    private DebtEngine|MockObject $debtEngineMock;
     private MathUtility|MockObject $mathUtilityMock;
     private StockTracker $tracker;
 
@@ -31,13 +35,20 @@ class StockTrackerTest extends TestCase
         $this->marketEngineMock = $this->createMock(MarketEngine::class);
         $this->earningsEngineMock = $this->createMock(EarningsEngine::class);
         $this->corporateActionEngineMock = $this->createMock(CorporateActionEngine::class);
+        $this->maEngineMock = $this->createMock(MergerAndAcquisitionEngine::class);
         $this->marketEventMock = $this->createMock(MarketEvent::class);
+        $this->debtEngineMock = $this->createMock(DebtEngine::class);
         $this->mathUtilityMock = $this->createMock(MathUtility::class);
         
-        $this->mathUtilityMock->method('calculateJumpDiffusion')->willReturn([
-            'multiplier' => 1.0,
-            'shock_pct' => null,
-            'exponent' => null
+        $this->mathUtilityMock->method('calculateSVJJJumps')->willReturn([
+            'price_multiplier' => 1.0,
+            'var_jump' => 0.0,
+            'shock_pct' => null
+        ]);
+        
+        $this->debtEngineMock->method('analyzeDebtHealth')->willReturn([
+            'wacc' => 0.08,
+            'cost_of_equity' => 0.10
         ]);
         
         $this->tracker = new StockTracker(
@@ -45,7 +56,9 @@ class StockTrackerTest extends TestCase
             $this->marketEngineMock,
             $this->earningsEngineMock,
             $this->corporateActionEngineMock,
+            $this->maEngineMock,
             $this->marketEventMock,
+            $this->debtEngineMock,
             $this->mathUtilityMock
         );
     }
@@ -61,9 +74,8 @@ class StockTrackerTest extends TestCase
         $stock->setVolatility('0.20');
         $stock->setCurrentVolatility('0.20');
         $stock->setBeta('1.0');
-        $stock->setJumpIntensity('2.0');
-        $stock->setJumpMean('0.01');
-        $stock->setJumpVol('0.10');
+        $stock->setJumpIntensity('2.0'); // Corresponds to lambda
+        $stock->setJumpVol('0.10'); // Corresponds to jump_vol
         
         return $stock;
     }
@@ -76,7 +88,9 @@ class StockTrackerTest extends TestCase
         $this->marketEngineMock->method('calculateNextPrice')->willReturn([
             'price' => 105.0,
             'shock' => null, // No market shock
-            'next_volatility' => 0.21
+            'next_volatility' => 0.21,
+            'analyst_targets' => [],
+            'perceived_fair_value' => 100.0
         ]);
 
         $this->earningsEngineMock->method('calculate')->willReturn(null); // No earnings report
@@ -114,7 +128,9 @@ class StockTrackerTest extends TestCase
         $this->marketEngineMock->method('calculateNextPrice')->willReturn([
             'price' => 90.0,
             'shock' => -10.0, // Simulate a 10% drop shock
-            'next_volatility' => 0.50
+            'next_volatility' => 0.50,
+            'analyst_targets' => [],
+            'perceived_fair_value' => 100.0
         ]);
 
         $this->earningsEngineMock->method('calculate')->willReturn(null);
@@ -132,17 +148,16 @@ class StockTrackerTest extends TestCase
             'change_percent' => -10.0
         ]);
 
-        // Persist should be called exactly ONCE:
-        // 1. To save the StockHistory tick
-        $this->entityManagerMock->expects($this->once())
-            ->method('persist')
-            ->with($this->isInstanceOf(StockHistory::class));
-            
+        $this->entityManagerMock->expects($this->never())->method('persist');
         $this->entityManagerMock->expects($this->never())->method('flush');
 
         $result = $this->tracker->updateStocks([$stock], 1.0, true);
 
         $this->assertCount(1, $result['events']);
         $this->assertEquals('SHOCK', $result['events'][0]['type']);
+        
+        $this->assertIsArray($result['history']);
+        $this->assertCount(1, $result['history']);
+        $this->assertEquals(90.0, $result['history'][0]['price']);
     }
 }
