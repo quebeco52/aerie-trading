@@ -99,12 +99,6 @@ class CorporateActionEngine
         $oldDiv = (float) $stock->getLastDividend();
         $stock->setLastDividend((string) ($oldDiv / $splitFactor));
 
-        $oldEps = (float) $stock->getEarningsPerShare();
-        $stock->setEarningsPerShare((string) ($oldEps / $splitFactor));
-
-        $oldFcf = (float) $stock->getFreeCashFlowPerShare();
-        $stock->setFreeCashFlowPerShare((string) ($oldFcf / $splitFactor));
-
         $desc = "{$stock->getName()} has executed a {$splitFactor}-for-1 stock split.";
         $splitEvent = $this->marketEvent->publish($stock, 'SPLIT', $desc, 0.00);
 
@@ -166,12 +160,6 @@ class CorporateActionEngine
 
         $oldDiv = (float) $stock->getLastDividend();
         $stock->setLastDividend((string) ($oldDiv * $reverseFactor));
-
-        $oldEps = (float) $stock->getEarningsPerShare();
-        $stock->setEarningsPerShare((string) ($oldEps * $reverseFactor));
-
-        $oldFcf = (float) $stock->getFreeCashFlowPerShare();
-        $stock->setFreeCashFlowPerShare((string) ($oldFcf * $reverseFactor));
 
         $desc = "{$stock->getName()} executed a 1-for-{$reverseFactor} reverse split.";
         $splitEvent = $this->marketEvent->publish($stock, 'REVSPLIT', $desc, 0.00);
