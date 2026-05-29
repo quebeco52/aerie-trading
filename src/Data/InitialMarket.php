@@ -29,7 +29,7 @@ class InitialMarket
             'corporate_treasury' => 85_000_000_000.00,
             'total_net_income'  => 112_000_000_000.00,  
             'total_equity'      => 708_750_000_000.00, 
-            'customer_deposits' => 2_500_000_000_000.00,
+            'customer_deposits' => 0.00,
             'wholesale_debt'    => 1_000_000_000_000.00,
             'retained_earnings' => 250_000_000_000.00
         ],
@@ -71,7 +71,7 @@ class InitialMarket
             'corporate_treasury' => 15_000_000_000.00,
             'total_net_income'  => 34_140_000_000.00,
             'total_equity'      => 146_090_000_000.00,
-            'customer_deposits' => 200_000_000_000.00,
+            'customer_deposits' => 0.00,
             'wholesale_debt'    => 90_526_000_000.00,
             'retained_earnings' => 50_000_000_000.00
         ],
@@ -85,7 +85,7 @@ class InitialMarket
             'corporate_treasury' => 40_000_000_000.00,
             'total_net_income'  => 50_430_000_000.00,
             'total_equity'      => 132_660_000_000.00,
-            'customer_deposits' => 340_000_000_000.00,
+            'customer_deposits' => 0.00,
             'wholesale_debt'    => 50_926_000_000.00,
             'retained_earnings' => 30_000_000_000.00
         ],
@@ -110,7 +110,7 @@ class InitialMarket
             'baseline_roe' => 0.14, 'capex_ratio' => 0.02, 'target_payout_ratio' => 0.60, 'dividendSpeed' => 0.04,
             'fixed_cost_ratio' => 0.20, 'operating_margin' => 0.28, 'public_float' => 0.70, 'sam_ratio' => 1.00,
             'floating_debt_ratio' => 0.05, 'historical_fixed_rate' => 0.025, 'credit_spread' => 0.0030, 'depreciation_rate' => 0.02,
-            'corporate_treasury' => 45_000_000_000.00,
+            'corporate_treasury' => 2_500_000_000_000.00,
             'total_net_income'  => 63_500_000_000.00,  
             'total_equity'      => 753_570_000_000.00, 
             'customer_deposits' => 2_000_000_000_000.00,
@@ -124,7 +124,7 @@ class InitialMarket
             'baseline_roe' => 0.12, 'capex_ratio' => 0.05, 'target_payout_ratio' => 0.50, 'dividendSpeed' => 0.03,
             'fixed_cost_ratio' => 0.35, 'operating_margin' => 0.18, 'public_float' => 0.90, 'sam_ratio' => 0.50,
             'floating_debt_ratio' => 0.10, 'historical_fixed_rate' => 0.030, 'credit_spread' => 0.0080, 'depreciation_rate' => 0.02,
-            'corporate_treasury' => 4_000_000_000.00,
+            'corporate_treasury' => 600_000_000_000.00,
             'total_net_income'  => 11_430_000_000.00,  
             'total_equity'      => 195_250_000_000.00,
             'customer_deposits' => 500_000_000_000.00,
@@ -491,7 +491,7 @@ class InitialMarket
             'corporate_treasury' => 2_000_000_000.00,
             'total_net_income'  => 5_710_000_000.00,   
             'total_equity'      => 14_280_000_000.00,
-            'customer_deposits' => 10_000_000_000.00,
+            'customer_deposits' => 0.00,
             'wholesale_debt'    => 14_706_000_000.00,
             'retained_earnings' => 1_500_000_000.00
         ],

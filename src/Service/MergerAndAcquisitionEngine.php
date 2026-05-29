@@ -52,7 +52,8 @@ class MergerAndAcquisitionEngine
         // Leveraged industries have much higher natural limits.
         $industry = $acquirer->getIndustry() ?: 'General';
         $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 1.0;
-        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leveraged_industry'] ?? false;
+        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
+        $isLeveraged = $leverageType !== 'none';
         
         // Allow up to their maximum structural equity limit + a 20% M&A over-leverage buffer
         $maxAllowableDebt = $equity * $equityLimit;
@@ -61,16 +62,12 @@ class MergerAndAcquisitionEngine
         $totalBuyingPower = $treasury + $borrowingCapacity;
 
         // Calculate actual excess cash above target operating requirements
-        $targetCash = $this->mathUtility->calculateTargetOperatingCash($operatingBase, (float) $acquirer->getCustomerDeposits(), (float) $acquirer->getWholesaleDebt(), $isLeveraged);
+        $targetCash = $this->mathUtility->calculateTargetOperatingCash($operatingBase, (float) $acquirer->getCustomerDeposits(), (float) $acquirer->getWholesaleDebt(), $leverageType);
         $excessCash = max(0.0, $treasury - $targetCash);
         
-        $isHoarder = $isLeveraged 
-            ? ($excessCash > ($currentDebt * 0.15)) 
-            : ($excessCash > ($operatingBase * 0.25));
-            
-        $isMegaHoarder = $isLeveraged 
-            ? ($excessCash > ($currentDebt * 0.25)) 
-            : ($excessCash > ($operatingBase * 0.50));
+        $hoardStatus = $this->mathUtility->evaluateHoardingStatus($excessCash, $operatingBase, $currentDebt, $leverageType);
+        $isHoarder = $hoardStatus['is_hoarder'];
+        $isMegaHoarder = $hoardStatus['is_mega_hoarder'];
         
         // Normalize the debt ratio against the sector's limit (1.0 = at max leverage, 0.5 = half levered)
         $normalizedDebtUtilization = $debtRatio / max(0.1, $equityLimit);
@@ -117,7 +114,7 @@ class MergerAndAcquisitionEngine
 
         // EXECUTE THE M&A DEAL
 
-        $minOperatingCash = $this->mathUtility->calculateMinOperatingCash($operatingBase, (float) $acquirer->getCustomerDeposits(), (float) $acquirer->getWholesaleDebt(), $isLeveraged);
+        $minOperatingCash = $this->mathUtility->calculateMinOperatingCash($operatingBase, (float) $acquirer->getCustomerDeposits(), (float) $acquirer->getWholesaleDebt(), $leverageType);
         $usableTreasury = max(0.0, $treasury - $minOperatingCash);
 
         // Determine the Purchase Price based on their strategy (Cash vs Leverage)
@@ -280,7 +277,8 @@ class MergerAndAcquisitionEngine
         // Is the company suffocating under its own weight?
 
         $industry = $seller->getIndustry() ?: 'General';
-        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leveraged_industry'] ?? false;
+        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
+        $isLeveraged = $leverageType !== 'none';
         $currentReturn = $isLeveraged ? (float) $seller->getCurrentRoe() : (float) $seller->getCurrentRoic();
         $hurdleRate = $isLeveraged ? ($health['cost_of_equity'] ?? 0.10) : $wacc;
 

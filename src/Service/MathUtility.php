@@ -450,37 +450,99 @@ class MathUtility
 
     /**
      * Calculates the target cash reserves required for normal operations.
-     * Leveraged companies (Banks) must maintain a fractional reserve of their massive debt (deposits).
      *
-     * @param float $operatingBase    The proxy size of the operating business.
-     * @param float $currentDeposits  The total customer deposits held (for banks).
-     * @param float $wholesaleDebt    The total wholesale market debt.
-     * @param bool  $isLeveraged      True if the company is a bank or financial institution.
+     * @param float  $operatingBase    The proxy size of the operating business.
+     * @param float  $currentLiability The total customer deposits (Banks) or Float (Insurance).
+     * @param float  $wholesaleDebt    The total wholesale market debt.
+     * @param string $leverageType     The specific financial physics type of the company.
      * @return float The target optimal cash reserve.
      */
-    public function calculateTargetOperatingCash(float $operatingBase, float $currentDeposits, float $wholesaleDebt, bool $isLeveraged): float
+    public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt, string $leverageType): float
     {
-        if ($isLeveraged) {
-            return max($operatingBase * 0.05, $currentDeposits * 0.08, $wholesaleDebt * 0.05);
+        if ($leverageType === 'commercial_bank') {
+            // Banks are fractional. They only need to hold ~10% of deposits in the vault.
+            return max($operatingBase * 0.05, $currentLiability * 0.10, $wholesaleDebt * 0.05);
+        } elseif ($leverageType === 'insurance') {
+            // Insurance companies MUST protect their float. Target cash = 100% of Float + Operating buffer.
+            // If they don't do this, the CFO will accidentally spend claim money on stock buybacks!
+            return max($operatingBase * 0.05, $currentLiability * 1.0);
+        } elseif ($leverageType === 'brokerage') {
+            // Brokerages are asset-light fee collectors, but need regulatory capital buffers
+            return max($operatingBase * 0.10, $wholesaleDebt * 0.05);
         }
+        
+        // Normal companies
         return $operatingBase * 0.05;
     }
 
     /**
      * Calculates the absolute minimum cash required before triggering a liquidity crisis.
      *
-     * @param float $operatingBase    The proxy size of the operating business.
-     * @param float $currentDeposits  The total customer deposits held (for banks).
-     * @param float $wholesaleDebt    The total wholesale market debt.
-     * @param bool  $isLeveraged      True if the company is a bank or financial institution.
+     * @param float  $operatingBase    The proxy size of the operating business.
+     * @param float  $currentLiability The total customer deposits (Banks) or Float (Insurance).
+     * @param float  $wholesaleDebt    The total wholesale market debt.
+     * @param string $leverageType     The specific financial physics type of the company.
      * @return float The absolute minimum survival cash reserve.
      */
-    public function calculateMinOperatingCash(float $operatingBase, float $currentDeposits, float $wholesaleDebt, bool $isLeveraged): float
+    public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt, string $leverageType): float
     {
-        if ($isLeveraged) {
-            return max($operatingBase * 0.03, $wholesaleDebt * 0.03, $currentDeposits * 0.05); // 5% Crisis Threshold
+        if ($leverageType === 'commercial_bank') {
+            // If a bank's vault drops below 5% of deposits, they are actively in a Bank Run.
+            return max($operatingBase * 0.03, $currentLiability * 0.05, $wholesaleDebt * 0.03); 
+        } elseif ($leverageType === 'insurance') {
+            // If an insurance company's reserves drop below 85% of their total owed float, 
+            // they are facing an insolvency crisis and must issue emergency corporate bonds.
+            return max($operatingBase * 0.03, $currentLiability * 0.85);
+        } elseif ($leverageType === 'brokerage') {
+            return $operatingBase * 0.05;
         }
+
+        // Normal companies
         return $operatingBase * 0.03;
+    }
+
+    /**
+     * Evaluates if a company is hoarding excessive cash beyond its structural needs.
+     *
+     * @param float  $excessCash    The amount of cash held above minimum operating requirements.
+     * @param float  $operatingBase The physical scale of the business (For financials, this is Equity).
+     * @param float  $totalDebt     The total debt (wholesale + deposits) for leverage evaluation.
+     * @param string $leverageType  The specific financial physics type of the company.
+     * @return array{is_hoarder: bool, is_mega_hoarder: bool}
+     */
+    public function evaluateHoardingStatus(float $excessCash, float $operatingBase, float $totalDebt, string $leverageType): array
+    {
+        if ($leverageType === 'commercial_bank') {
+            // Banks are spread businesses. Sitting on un-lent cash destroys their ROE.
+            // Their tolerance for dead cash is relatively low compared to their massive balance sheets.
+            return [
+                'is_hoarder'      => $excessCash > ($totalDebt * 0.10),
+                'is_mega_hoarder' => $excessCash > ($totalDebt * 0.20),
+            ];
+            
+        } elseif ($leverageType === 'insurance') {
+            // THE WAR CHEST: Insurance companies must survive extreme tail-risk catastrophes.
+            // They will happily sit on mountains of surplus cash (like Berkshire Hathaway).
+            // We force buybacks ONLY if their free cash eclipses their entire equity base.
+            return [
+                'is_hoarder'      => $excessCash > ($operatingBase * 0.50), // 50% of Equity
+                'is_mega_hoarder' => $excessCash > ($operatingBase * 1.00), // 100% of Equity!
+            ];
+            
+        } elseif ($leverageType === 'brokerage') {
+            // Brokerages are asset-light fee collectors. If they have massive cash piles, 
+            // it is purely dead weight because they don't face catastrophe risks or run loan books.
+            return [
+                'is_hoarder'      => $excessCash > ($operatingBase * 0.30),
+                'is_mega_hoarder' => $excessCash > ($operatingBase * 0.50),
+            ];
+        }
+        
+        // Normal companies (Physical assets, supply chains, standard operations)
+        return [
+            'is_hoarder'      => $excessCash > ($operatingBase * 0.25),
+            'is_mega_hoarder' => $excessCash > ($operatingBase * 0.40),
+        ];
     }
 
     /**
@@ -508,7 +570,8 @@ class MathUtility
         };
 
         $industry = $stock->getIndustry() ?: 'General';
-        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leveraged_industry'] ?? false;
+        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
+        $isLeveraged = $leverageType !== 'none';
 
         // Floor the bleed factor at 0.10 so normal companies still face gravity
         $baselineReturn = $isLeveraged ? (float) $stock->getBaselineRoe() : (float) $stock->getBaselineRoic();

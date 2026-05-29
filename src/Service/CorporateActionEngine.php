@@ -289,8 +289,10 @@ class CorporateActionEngine
         $newTreasury -= $divData['total_paid'];
 
         // CALCULATE EXCESS CASH (The War Chest)
-        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['leveraged_industry'] ?? false;
-        $targetOperatingCash = $this->mathUtility->calculateTargetOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt(), $isLeveraged);
+        $industry = $stock->getIndustry() ?: 'General';
+        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
+        $isLeveraged = $leverageType !== 'none';
+        $targetOperatingCash = $this->mathUtility->calculateTargetOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt(), $leverageType);
         $excessCash = max(0.0, $newTreasury - $targetOperatingCash);
 
         $currentPE = $actualAnnualEps > 0 ? ($currentPrice / $actualAnnualEps) : 9999.0;
@@ -380,7 +382,9 @@ class CorporateActionEngine
         }
 
         // Emergency Liquidity Preservation
-        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['leveraged_industry'] ?? false;
+        $industry = $stock->getIndustry() ?: 'General';
+        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
+        $isLeveraged = $leverageType !== 'none';
         
         $isRegulatoryDividendHalt = false;
         if ($isLeveraged) {
@@ -452,8 +456,7 @@ class CorporateActionEngine
         $newDividend = max(0.0, $newDividend);
 
         // Cap the dividend to what we can physically pay from cash on hand (minus a 3% operating safety buffer)
-        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['leveraged_industry'] ?? false;
-        $minOperatingCash = $this->mathUtility->calculateMinOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt(), $isLeveraged);
+        $minOperatingCash = $this->mathUtility->calculateMinOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt(), $leverageType);
         $usableCash = max(0.0, $availableTreasury - $minOperatingCash);
         $maxDividendPerShare = $shares > 0 ? ($usableCash / $shares) : 0.0;
 
@@ -516,7 +519,9 @@ class CorporateActionEngine
         // BUT if they are sitting on a cash pile large enough to easily cover their entire debt, they can do both!
         $canEasilyCoverDebt = $excessCash > ((float) $stock->getTotalDebt() * 2.0);
 
-        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['leveraged_industry'] ?? false;
+        $industry = $stock->getIndustry() ?: 'General';
+        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
+        $isLeveraged = $leverageType !== 'none';
         
         if ($isLeveraged) {
             $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['equity_limit'] ?? 10.0;
@@ -528,12 +533,10 @@ class CorporateActionEngine
             }
         }
         
-        // For normal companies, cash > 33% of operating base is hoarding.
-        // For banks, cash > 25% of their total debt (deposits + wholesale) is excessive hoarding.
         $totalDebt = (float) $stock->getTotalDebt();
-        $isMegaHoarder = $isLeveraged 
-            ? ($excessCash > ($totalDebt * 0.25)) 
-            : ($excessCash > ($operatingBase * 0.33));
+        
+        $hoardStatus = $this->mathUtility->evaluateHoardingStatus($excessCash, $operatingBase, $totalDebt, $leverageType);
+        $isMegaHoarder = $hoardStatus['is_mega_hoarder'];
 
         $minBuybackIcr = $isLeveraged ? 1.35 : 2.0;
 
@@ -663,7 +666,7 @@ class CorporateActionEngine
         ];
 
         // SYSTEMIC M2 MONEY SUPPLY GROWTH
-        $this->processOrganicDepositGrowth($stock, $macroState, $state);
+        $this->processPassiveLiabilityGrowth($stock, $macroState, $state);
 
         // DEBT MANAGEMENT (MACRO TOLERANCE)
         $this->processDebtExpansion($stock, $newEquity, $nopat, $macroState, $health, $state);
@@ -709,7 +712,9 @@ class CorporateActionEngine
         $totalDebt = $state['wholesaleDebt'] + $state['customerDeposits'];
         $liveInvestedCapital = $this->mathUtility->calculateLiveInvestedCapital($newEquity, $totalDebt, $state['treasury']);
 
-        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['leveraged_industry'] ?? false;
+        $industry = $stock->getIndustry() ?: 'General';
+        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
+        $isLeveraged = $leverageType !== 'none';
 
         if ($isLeveraged) {
             // For Banks, Cash is inventory. Return on Equity (ROE) is the true metric of expansion.
@@ -775,6 +780,19 @@ class CorporateActionEngine
                     // Banks issue wholesale bonds to match loan demand, but prudently.
                     $borrowProbability = 0.85 + ($bankSpreadMultiplier * 0.15); // 85% to 100% chance
                     $aggressiveness = 0.05 + (0.15 * $bankSpreadMultiplier); // Deploy up to 20% of capital capacity
+
+                    if ($leverageType === 'commercial_bank') {
+                        // DYNAMIC DEPOSIT CONSTRAINT
+                        // If a bank is funding its loan book predominantly with expensive wholesale debt,
+                        // the CFO will hit the brakes on expansion until the deposit base catches up.
+                        $depositRatio = $totalDebt > 0 ? ($state['customerDeposits'] / $totalDebt) : 0.0;
+                        if ($depositRatio < 0.70) {
+                            // Smoothly throttle growth: 100% speed at 70% deposits, 0% speed at 40% deposits.
+                            $depositConstraint = max(0.0, ($depositRatio - 0.40) / 0.30);
+                            $borrowProbability *= $depositConstraint;
+                            $aggressiveness *= $depositConstraint;
+                        }
+                    }
                 } else {
                     // NORMAL COMPANIES: Chunky bond issuances based on standard EVA spreads
                     $aggressiveness = 0.05 + (0.35 * $spreadMultiplier);
@@ -835,8 +853,10 @@ class CorporateActionEngine
     private function processOrganicCapex(Stock $stock, float $newEquity, float $nopat, float $operatingBase, array $macroState, array $health, array &$state): void
     {
         $totalDebt = $state['wholesaleDebt'] + $state['customerDeposits'];
-        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['leveraged_industry'] ?? false;
-        $targetCashReservs = $this->mathUtility->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt'], $isLeveraged) * 1.20;
+        $industry = $stock->getIndustry() ?: 'General';
+        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
+        $isLeveraged = $leverageType !== 'none';
+        $targetCashReservs = $this->mathUtility->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt'], $leverageType) * 1.20;
         $liveInvestedCapital = $this->mathUtility->calculateLiveInvestedCapital($newEquity, $totalDebt, $state['treasury']);
         
 
@@ -934,8 +954,10 @@ class CorporateActionEngine
     private function processEmergencyBorrowing(Stock $stock, float $operatingBase, array $macroState, array $health, array &$state): void
     {
         $totalDebt = $state['wholesaleDebt'] + $state['customerDeposits'];
-        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['leveraged_industry'] ?? false;
-        $minOperatingCash = $this->mathUtility->calculateMinOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt'], $isLeveraged);
+        $industry = $stock->getIndustry() ?: 'General';
+        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
+        $isLeveraged = $leverageType !== 'none';
+        $minOperatingCash = $this->mathUtility->calculateMinOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt'], $leverageType);
 
         if ($state['treasury'] < $minOperatingCash) {
             $cashShortfall = $minOperatingCash - $state['treasury'];
@@ -983,11 +1005,12 @@ class CorporateActionEngine
     private function processArbitragePaydown(Stock $stock, float $operatingBase, array $health, array &$state): void
     {
         $totalDebt = $state['wholesaleDebt'] + $state['customerDeposits'];
-        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['leveraged_industry'] ?? false;
-        $targetOperatingCash = $this->mathUtility->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt'], $isLeveraged);
+        $industry = $stock->getIndustry() ?: 'General';
+        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
+        $isLeveraged = $leverageType !== 'none';
+        $targetOperatingCash = $this->mathUtility->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt'], $leverageType);
 
         if (!$state['debtActionTaken'] && $health['wants_to_paydown_debt'] && $state['wholesaleDebt'] > 0 && $state['treasury'] > $targetOperatingCash) {
-            $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['leveraged_industry'] ?? false;
             $liquidityCrisisThreshold = $isLeveraged ? 1.15 : 2.0;
             
             $isLiquidityCrisis = $health['interest_coverage'] < $liquidityCrisisThreshold;
@@ -1034,8 +1057,10 @@ class CorporateActionEngine
     private function processDeleveragingSweep(Stock $stock, float $newEquity, float $operatingBase, array $health, array &$state): void
     {
         $totalDebt = $state['wholesaleDebt'] + $state['customerDeposits'];
-        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['leveraged_industry'] ?? false;
-        $targetOperatingCash = $this->mathUtility->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt'], $isLeveraged);
+        $industry = $stock->getIndustry() ?: 'General';
+        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
+        $isLeveraged = $leverageType !== 'none';
+        $targetOperatingCash = $this->mathUtility->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt'], $leverageType);
 
         if (!$state['debtActionTaken'] && $state['wholesaleDebt'] > 0.0 && $state['treasury'] > $targetOperatingCash) {
             $excessCash = $state['treasury'] - $targetOperatingCash;
@@ -1076,92 +1101,115 @@ class CorporateActionEngine
     }
 
     /**
-     * PASSIVE DEPOSIT GROWTH (The M2 Money Supply)
-     * Banks naturally accumulate deposits over time simply by existing in an expanding economy.
-     * This simulates direct deposits, payroll processing, and systemic inflation inflating the deposit base.
-     *
-     * @param Stock $stock      The stock entity being processed.
-     * @param array $macroState The current macroeconomic state.
-     * @param array &$state     The mutable state array holding treasury, debt, and events.
+     * PASSIVE LIABILITY GROWTH (M2 Money Supply & Systemic Growth)
+     * - Banks: Grow deposits via APY competition and yield flight.
+     * - Insurance: Grow "The Float" via nominal GDP, inflation, and policy sales.
      */
-    private function processOrganicDepositGrowth(Stock $stock, array $macroState, array &$state): void
+    private function processPassiveLiabilityGrowth(Stock $stock, array $macroState, array &$state): void
     {
-        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['leveraged_industry'] ?? false;
-        if (!$isLeveraged) return;
+        $industry = $stock->getIndustry() ?: 'General';
+        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
 
-        $currentDeposits = $state['customerDeposits'];
-        if ($currentDeposits <= 0) return; // Need a baseline to grow from
+        if ($leverageType !== 'commercial_bank' && $leverageType !== 'insurance') {
+            return;
+        }
+
+        $currentLiabilities = $state['customerDeposits']; // Serves as Deposits OR Float
+        if ($currentLiabilities <= 0) return;
 
         $inflation = $macroState['inflation_ema'] ?? 0.02;
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
         
         $equity = (float) $stock->getTotalEquity();
-        $totalDebt = $state['wholesaleDebt'] + $currentDeposits;
-        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['equity_limit'] ?? 10.0;
+        $totalDebt = $state['wholesaleDebt'] + $currentLiabilities;
+        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 10.0;
         
-        // Calculate the APY the bank is offering its customers (Dynamic Beta & Thirst)
-        $depositApyBeta = $this->mathUtility->calculateDepositBeta($totalDebt, $equity, $equityLimit, $currentDeposits);
-        
-        $bankApy = max(0.001, $policyRate * $depositApyBeta);
-        $state['bank_apy'] = $bankApy;
-        
-        // YIELD SEEKING FLIGHT
-        // Compare the Bank APY to the risk-free Money Market Yield
-        $moneyMarketYield = max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
-        $yieldSpread = max(0.0, $moneyMarketYield - $bankApy);
-        $yieldFlightPenalty = $yieldSpread * 0.50; // Customers slowly bleed out if the bank's rates are uncompetitive
-        
-        // BASELINE M2 GROWTH
         $realGdpGrowth = 0.02 + ($outputGap > 0.0 ? $outputGap * 0.5 : $outputGap * 2.0); 
-        $systemicGrowthAnnual = $inflation + $realGdpGrowth - $yieldFlightPenalty; 
-        $systemicGrowthQuarterly = $systemicGrowthAnnual / 4.0;
 
-        // COMPETITIVE CAPTURE
-        $betaSensitivity = max(0.75, min(1.25, abs((float) $stock->getBeta())));
-        $competitiveAdvantage = $depositApyBeta / 0.20; // 0.20 is the neutral baseline
-        
-        if ($systemicGrowthQuarterly > 0) {
-            $baseDepositGrowth = $systemicGrowthQuarterly * $betaSensitivity * $competitiveAdvantage;
+        // ---------------------------------------------------------
+        // 1. COMMERCIAL BANK PHYSICS (APY & Yield Flight)
+        // ---------------------------------------------------------
+        if ($leverageType === 'commercial_bank') {
+            $depositApyBeta = $this->mathUtility->calculateDepositBeta($totalDebt, $equity, $equityLimit, $currentLiabilities);
+            $bankApy = max(0.001, $policyRate * $depositApyBeta);
+            $state['bank_apy'] = $bankApy; // Saved for the frontend
+            
+            $moneyMarketYield = max(0.0, $policyRate - 0.01);
+            $yieldSpread = max(0.0, $moneyMarketYield - $bankApy);
+            $yieldFlightPenalty = $yieldSpread * 1.0; 
+            
+            $systemicGrowthAnnual = $inflation + $realGdpGrowth - $yieldFlightPenalty; 
+            $systemicGrowthQuarterly = $systemicGrowthAnnual / 4.0;
+
+            $betaSensitivity = max(0.8, min(1.2, abs((float) $stock->getBeta())));
+            $competitiveAdvantage = $depositApyBeta / 0.20; 
+            
+            if ($systemicGrowthQuarterly > 0) {
+                $baseGrowth = $systemicGrowthQuarterly * $betaSensitivity * $competitiveAdvantage;
+            } else {
+                $baseGrowth = $systemicGrowthQuarterly * $betaSensitivity / max(0.1, $competitiveAdvantage);
+            }
+            
+            $randomSwing = $this->mathUtility->generateStandardNormal() * 0.005;
+            $finalGrowthRate = max(-0.15, min(0.15, $baseGrowth + $randomSwing));
+            $liabilityChange = $currentLiabilities * $finalGrowthRate;
+
+            $eventLoreOut = "customer deposit flight";
+            $eventLoreIn  = "new customer deposits";
+
+        // ---------------------------------------------------------
+        // 2. INSURANCE PHYSICS (Nominal GDP & Underwriting Cycles)
+        // ---------------------------------------------------------
         } else {
-            // If M2 is shrinking, bloated banks with terrible APYs bleed much faster
-            $baseDepositGrowth = $systemicGrowthQuarterly * $betaSensitivity / max(0.1, $competitiveAdvantage);
+            // Float grows purely with M2/Nominal GDP. No APY, no Yield Flight.
+            $systemicGrowthAnnual = $inflation + $realGdpGrowth;
+            $systemicGrowthQuarterly = $systemicGrowthAnnual / 4.0;
+            
+            // Insurance is highly cyclical. Beta controls how much they capture.
+            $betaSensitivity = max(0.5, min(1.5, abs((float) $stock->getBeta())));
+            $baseGrowth = $systemicGrowthQuarterly * $betaSensitivity;
+            
+            // Variance: Insurance sees lumpier quarters than banks due to catastrophes vs clean underwriting
+            $randomSwing = $this->mathUtility->generateStandardNormal() * 0.015; 
+            
+            $finalGrowthRate = max(-0.15, min(0.15, $baseGrowth + $randomSwing));
+            $liabilityChange = $currentLiabilities * $finalGrowthRate;
+
+            $eventLoreOut = "net claim payouts";
+            $eventLoreIn  = "new premium Float";
         }
 
-        // ADDITIVE VARIANCE
-        // Allow deposits to swing naturally by +/- 0.5% a quarter regardless of the macroeconomic state
-        $randomSwing = $this->mathUtility->generateStandardNormal() * 0.005;
-        
-        $finalGrowthRate = $baseDepositGrowth + $randomSwing;
-        
-        // Cap the max deposit growth or bleed to prevent mathematical explosions
-        $finalGrowthRate = max(-0.15, min(0.15, $finalGrowthRate));
-
-        $depositChange = $currentDeposits * $finalGrowthRate;
-
-        if (abs($depositChange) > 0) {
-            // Accounting: Deposits add Cash to the Vault (Treasury) and Deposits to the Liabilities
-            // If depositChange is negative (systemic contraction), it actively drains cash from the treasury
-            $state['treasury'] += $depositChange;
-            $state['customerDeposits'] += $depositChange;
+        // ---------------------------------------------------------
+        // ACCOUNTING & EVENT PUBLISHING (Shared Physics)
+        // ---------------------------------------------------------
+        if (abs($liabilityChange) > 0) {
+            $state['treasury'] += $liabilityChange;
+            $state['customerDeposits'] += $liabilityChange;
             
+            // LIQUIDITY CRISIS (Bank Run OR Catastrophe)
+            if ($state['treasury'] < 0.0) {
+                $liquidityShortfall = abs($state['treasury']);
+                $state['treasury'] = 0.0;
+                $state['wholesaleDebt'] += $liquidityShortfall; // Emergency borrowing
+
+                $amtB = number_format($liquidityShortfall / 1_000_000_000, 2);
+                $lore = $leverageType === 'commercial_bank' 
+                    ? "Suffered a bank run. Forced to borrow \${$amtB}B to cover deposit flight."
+                    : "Catastrophe claim payouts exceeded cash reserves. Forced to borrow \${$amtB}B.";
+
+                $state['events'][] = ['description' => $lore, 'shock' => -5.0];
+            }
+
             $stock->setCustomerDeposits((string) max(0.0, $state['customerDeposits']));
 
-            // Generate Market Events for extreme deposit movements
-            $percentageChange = $depositChange / $currentDeposits;
-            
-            if ($percentageChange < -0.005) { // Threshold raised to 5% drop
-                $amtB = number_format(abs($depositChange) / 1_000_000_000, 2);
-                $state['events'][] = [
-                    'description' => "Suffered a \${$amtB}B customer deposit flight.",
-                    'shock' => -2.0
-                ];
-            } elseif ($percentageChange > 0.005) { // Threshold raised to 5% gain
-                $amtB = number_format($depositChange / 1_000_000_000, 2);
-                $state['events'][] = [
-                    'description' => "Captured \${$amtB}B in new customer deposits.",
-                    'shock' => 0.5
-                ];
+            $percentageChange = $liabilityChange / $currentLiabilities;
+            if ($percentageChange < -0.005) { 
+                $amtB = number_format(abs($liabilityChange) / 1_000_000_000, 2);
+                $state['events'][] = ['description' => "Suffered \${$amtB}B in {$eventLoreOut}.", 'shock' => -2.0];
+            } elseif ($percentageChange > 0.005) { 
+                $amtB = number_format($liabilityChange / 1_000_000_000, 2);
+                $state['events'][] = ['description' => "Captured \${$amtB}B in {$eventLoreIn}.", 'shock' => 0.5];
             }
         }
     }

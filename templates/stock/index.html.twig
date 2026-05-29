@@ -598,6 +598,7 @@
 ticker: "{{ asset.ticker }}",
 isEtf: {{ isEtf ? 'true' : 'false' }},
 isLeveraged: {{ isLeveraged|default(false) ? 'true' : 'false' }},
+leverageType: "{{ leverageType|default('none') }}",
 sharesOutstanding: {{ isEtf ? 0 : asset.sharesOutstanding }},
 userQuantity: {{ userQuantity|default(0) }},
 eps: {{ isEtf ? 0 : asset.earningsPerShare|default(0) }},

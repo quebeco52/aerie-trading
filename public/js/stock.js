@@ -1,6 +1,7 @@
 const CURRENT_TICKER = window.AERIE_DATA.ticker;
 const IS_ETF = window.AERIE_DATA.isEtf;
-const IS_LEVERAGED = window.AERIE_DATA.isLeveraged || false;
+const LEVERAGE_TYPE = window.AERIE_DATA.leverageType || 'none';
+const IS_FINANCIAL = LEVERAGE_TYPE !== 'none';
 const SHARES_OUTSTANDING = window.AERIE_DATA.sharesOutstanding;
 const USER_QUANTITY = window.AERIE_DATA.userQuantity;
 const EPS = window.AERIE_DATA.eps;
@@ -619,10 +620,21 @@ function updateCharts(timeframe) {
     renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData, cashYieldData, depositApyData);
     renderCapitalReturnChart(labels, dividendData, buybackData);
     
-    if (IS_LEVERAGED) {
+    // THE NEW FINANCIAL SPLIT LOGIC
+    if (IS_FINANCIAL) {
+        // ALL financial companies are evaluated on Return on Equity (ROE)
         renderCapitalEfficiencyChart(labels, roeData, coeData, evaData, 'ROE', 'Cost of Equity');
-        renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData);
+        
+        if (LEVERAGE_TYPE === 'commercial_bank') {
+            renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData, 'Customer Deposit Ratio');
+        } else if (LEVERAGE_TYPE === 'insurance') {
+            renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData, 'Float Ratio (0% Interest)');
+        } else if (LEVERAGE_TYPE === 'brokerage') {
+            // Brokerages don't use deposits/float, so we only pass the Capital Ratio
+            renderRegulatoryRatiosChart(labels, capitalRatioData, null, null);
+        }
     } else {
+        // Normal companies use ROIC
         renderCapitalEfficiencyChart(labels, roicData, waccData, evaData, 'ROIC', 'WACC');
     }
 }
@@ -714,40 +726,45 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
     });
 }
 
-function renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData) {
+function renderRegulatoryRatiosChart(labels, capitalRatioData, secondaryData, secondaryLabel) {
     const canvas = document.getElementById('regulatoryRatiosChart');
     if (!canvas) return;
 
     if (regulatoryRatiosChartInstance) regulatoryRatiosChartInstance.destroy();
+
+    const datasets = [
+        {
+            label: 'Capital Ratio',
+            data: capitalRatioData,
+            borderColor: '#7dd3fc',
+            backgroundColor: 'rgba(125, 211, 252, 0.2)',
+            borderWidth: 2,
+            tension: 0.3,
+            pointRadius: 3,
+            fill: true,
+        }
+    ];
+
+    // Only add the second line if the data was passed (Banks and Insurance)
+    if (secondaryData) {
+        datasets.push({
+            label: secondaryLabel,
+            data: secondaryData,
+            borderColor: '#facc15',
+            backgroundColor: 'rgba(250, 204, 21, 0.2)',
+            borderWidth: 2,
+            tension: 0.3,
+            pointRadius: 3,
+            fill: true,
+        });
+    }
 
     const ctx = canvas.getContext('2d');
     regulatoryRatiosChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
-            datasets: [
-                {
-                    label: 'Capital Ratio',
-                    data: capitalRatioData,
-                    borderColor: '#7dd3fc',
-                    backgroundColor: 'rgba(125, 211, 252, 0.2)',
-                    borderWidth: 2,
-                    tension: 0.3,
-                    pointRadius: 3,
-                    fill: true,
-                }
-                ,
-                {
-                    label: 'Customer Deposit Ratio',
-                    data: customerDepositRatioData,
-                    borderColor: '#facc15',
-                    backgroundColor: 'rgba(250, 204, 21, 0.2)',
-                    borderWidth: 2,
-                    tension: 0.3,
-                    pointRadius: 3,
-                    fill: true,
-                }
-            ]
+            datasets: datasets
         },
         options: {
             responsive: true,
@@ -881,8 +898,8 @@ function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRat
         }
      };
 
-    // Add Deposit APY only for leveraged institutions (Banks)
-    if (IS_LEVERAGED) {
+    // ONLY Banks pay Deposit APY. Insurance Float is 0%, Brokerages have no deposits.
+    if (LEVERAGE_TYPE === 'commercial_bank') {
         config.data.datasets.push({
             label: 'Deposit APY',
             data: depositApyData,

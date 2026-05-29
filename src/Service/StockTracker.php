@@ -109,7 +109,7 @@ class StockTracker
             // Fetch the industry limits and structural data
             $industryKey = $stock->getIndustry() ?: 'General';
             $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industryKey] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
-            $isLeveragedIndustry = $metrics['leveraged_industry'] ?? false;
+            $isLeveragedIndustry = ($metrics['leverage_type'] ?? 'none') !== 'none';
             $baselineIndustryPE = $metrics['pe'] ?? 20.0;
             $revenuePerShare = (float) $stock->getTotalRevenue() / $shares;
 
@@ -138,7 +138,7 @@ class StockTracker
                 liveWacc: $health['wacc'],
                 baselineIndustryPE: $baselineIndustryPE,
                 revenuePerShare: $revenuePerShare,
-                isLeveragedIndustry: $isLeveragedIndustry,
+                leverageType: $metrics['leverage_type'] ?? 'none',
                 liveCostOfEquity: $health['cost_of_equity'] ?? 0.10
             );
 

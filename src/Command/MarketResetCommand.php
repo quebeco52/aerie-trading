@@ -79,7 +79,8 @@ class MarketResetCommand extends Command
             $targetPayout = $stockData['target_payout_ratio'] ?? 0.30;
             $startingDividend = ($annualEps / 4.0) * ($targetPayout * 0.50);
 
-            $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['leveraged_industry'] ?? false;
+            $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['leverage_type'] ?? 'none';
+            $isLeveraged = $leverageType !== 'none';
 
             $conn->executeStatement(
                 'UPDATE stocks SET 

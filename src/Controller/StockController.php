@@ -65,6 +65,7 @@ class StockController extends AbstractController
         $targetPE = 20.00;
         $marketShare = 0;
         $isLeveraged = false;
+        $leverageType = 'none';
         $investedCapital = 0.0;
 
 
@@ -79,7 +80,8 @@ class StockController extends AbstractController
             $samRatio = (float) $asset->getSamRatio();
             $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
             
-            $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$asset->getIndustry() ?? 'General']['leveraged_industry'] ?? false;
+            $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$asset->getIndustry() ?? 'General']['leverage_type'] ?? 'none';
+            $isLeveraged = $leverageType !== 'none';
             $investedCapital = $asset->getInvestedCapital();
             $evaluationCapital = $isLeveraged ? (float) $asset->getTotalEquity() : $asset->getInvestedCapital();
             
@@ -109,6 +111,7 @@ class StockController extends AbstractController
             'asset' => $asset,
             'isEtf' => $isEtf,
             'isLeveraged' => $isLeveraged,
+            'leverageType' => $leverageType,
             'investedCapital' => $investedCapital,
             'userQuantity' => $userQuantity,
             'marketCap' => $marketCap,

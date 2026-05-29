@@ -83,7 +83,8 @@ class DebtEngine
 
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $industry = $stock->getIndustry() ?: 'General';
-        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leveraged_industry'] ?? false;
+        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
+        $isLeveraged = $leverageType !== 'none';
 
         $revenue = (float) $stock->getTotalRevenue();
 
@@ -144,8 +145,8 @@ class DebtEngine
         // THE JUNK BOND BLOWOUT (Convex Penalty)
         $leveragePenalty = 0.0;
 
-        if ($metrics['leveraged_industry']) {
-            // Leveraged industries (Banks, Insurance) evaluated solely on Debt/Equity
+        if ($isLeveraged) {
+            // Leveraged industries (Banks, Insurance, Brokerages) evaluated solely on Debt/Equity
             if ($debtToEquity > $equityLimit) {
                 $excessLeverage = $debtToEquity - $equityLimit;
                 $leveragePenalty = (exp($excessLeverage * self::LEVERAGE_PENALTY_RATE) - 1.0) * self::LEVERAGE_PENALTY_BASE;
@@ -176,25 +177,31 @@ class DebtEngine
 
         $floatingInterestRate = $policyRate + $dynamicSpread;
         
-        // CUSTOMER DEPOSIT PHYSICS
-        if ($metrics['leveraged_industry']) {
+        // CUSTOMER DEPOSIT & LEVERAGE PHYSICS
+        if ($leverageType === 'commercial_bank') {
             $customerDeposits = (float) $stock->getCustomerDeposits();
             $wholesaleDebt = (float) $stock->getWholesaleDebt();
             
-            // Wholesale bonds pay standard market rates
             $wholesaleInterest = ($wholesaleDebt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($wholesaleDebt * $floatingRatio * $floatingInterestRate);
             $wholesaleRate = $wholesaleDebt > 0 ? ($wholesaleInterest / $wholesaleDebt) : $currentMarketFixedRate;
             
-            // DYNAMIC DEPOSIT BETA & THIRST
+            // Banks must pay APY
             $depositBeta = $this->mathUtility->calculateDepositBeta($debt, $totalEquity, $equityLimit, $customerDeposits);
-            
-            // Calculate the final APY offered to customers
             $depositRate = max(0.001, $policyRate * $depositBeta);
             $depositInterest = $customerDeposits * $depositRate;
             
             $interestExpense = $wholesaleInterest + $depositInterest;
+
+        } elseif ($leverageType === 'insurance') {
+            $floatDebt = (float) $stock->getCustomerDeposits(); 
+            $corporateDebt = (float) $stock->getWholesaleDebt();
+
+            // The Float is a true 0% interest loan. They only pay interest on Corporate Debt.
+            $interestExpense = ($corporateDebt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($corporateDebt * $floatingRatio * $floatingInterestRate);
+            $wholesaleRate = $corporateDebt > 0 ? ($interestExpense / $corporateDebt) : $currentMarketFixedRate;
+
         } else {
-            // Normal companies pay standard market rates on all debt
+            // Normal companies & Brokerages pay standard market rates on all debt
             $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingInterestRate);
             $wholesaleRate = $debt > 0 ? ($interestExpense / $debt) : $currentMarketFixedRate;
         }
@@ -246,13 +253,15 @@ class DebtEngine
         $policyRate = $macroState['policy_rate_ema'] ?? $macroState['policy_rate'] ?? 0.04;
         $corporateTaxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
 
+        
         $industry = $stock->getIndustry() ?: 'General';
         $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industry] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
-
+        $leverageType = $metrics['leverage_type'] ?? 'none';
 
         $debtMetrics = $this->calculateInterestExpense($stock, $macroState, false);
 
-        $isFinancial = $metrics['leveraged_industry'] ?? false;
+        $isFinancial = $leverageType !== 'none';
+
 
         // Gross Cost
         if ($isFinancial) {
@@ -312,7 +321,12 @@ class DebtEngine
         // DISTRESS PENALTY: Prevent the "Anti-Gravity" WACC loop where crashing stocks get cheaper capital
         $ebit = $debtMetrics['ebit'];
         $interestExpense = $debtMetrics['interest_expense'];
-        $interestCoverageProxy = $interestExpense > 0 ? ($ebit / $interestExpense) : 999.0;
+        
+        if ($isFinancial) {
+            $interestCoverageProxy = 999.0;
+        } else {
+            $interestCoverageProxy = $interestExpense > 0 ? ($ebit / $interestExpense) : 999.0;
+        }
 
         $distressPremium = 0.0;
         if ($interestCoverageProxy < $minIcr && $interestCoverageProxy >= 0) {
@@ -344,11 +358,16 @@ class DebtEngine
         $ebit = $debtMetrics['ebit'];
         $interestExpense = $debtMetrics['interest_expense'];
 
-        $interestCoverage = $interestExpense > 0 ? ($ebit / $interestExpense) : ($ebit > 0 ? 999.0 : -999.0);
+        if ($isFinancial) {
+            // Financial institutions pay interest using Yield/Float, not underwriting EBIT.
+            $interestCoverage = 999.0;
+        } else {
+            $interestCoverage = $interestExpense > 0 ? ($ebit / $interestExpense) : ($ebit > 0 ? 999.0 : -999.0);
+        }
 
         $wantsToPaydownDebt = ($wholesaleDebt > 0) && ($isSevereNegativeCarry || $interestCoverage < $minIcr);
         
-        $icrBuffer = $metrics['leveraged_industry'] ? 0.05 : 1.5;
+        $icrBuffer = $isFinancial ? 0.05 : 1.5;
         $canIssueDebt = $interestCoverage >= ($minIcr + $icrBuffer);
 
         // Macro-Economic CFO Tolerance
@@ -398,7 +417,8 @@ class DebtEngine
         // The Altman Z-Score explicitly excludes Financials because customer deposits (debt) skew their working capital.
         // Instead, evaluate Financials using a simplified Tier 1 Capital Ratio proxy (Equity / Total Assets).
         $industry = $stock->getIndustry() ?: 'General';
-        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leveraged_industry'] ?? false;
+        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
+        $isLeveraged = $leverageType !== 'none';
 
         if ($isLeveraged) {
             $capitalRatio = $equity / $totalAssets;
