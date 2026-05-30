@@ -40,8 +40,10 @@ class MacroEngine
             'inflation_ema' => self::TARGET_INFLATION,
             'output_gap_ema' => 0.00,
             'policy_rate_ema' => 0.04,
+            'ns_slope_ema' => 0.00,
             'corporate_tax_rate' => self::BASE_CORPORATE_TAX_RATE,
             'nominal_gdp_index' => 1.0,
+            'market_volatility' => 0.15,
         ];
 
         $targetInflation = self::TARGET_INFLATION;
@@ -56,6 +58,9 @@ class MacroEngine
 
         $yieldData = $this->calculateYieldCurveAndQE($state, $targetInflation, $naturalRate);
         $yield10y = $yieldData['yield_10y'];
+        $currentNsSlope = $yield10y - $state['policy_rate'];
+        
+        $marketZ = $this->mathUtility->generateStandardNormal();
 
         $state['output_gap'] = $this->calculateOutputGap($state, $yield10y, $naturalRate, $stressMultiplier, $dt);
         $state['inflation'] = $this->calculateInflation($state, $targetInflation, $stressMultiplier, $dt);
@@ -65,6 +70,8 @@ class MacroEngine
         $state['inflation_ema'] = $state['inflation_ema'] ?? $state['inflation'];
         $state['output_gap_ema'] = $state['output_gap_ema'] ?? $state['output_gap'];
         $state['policy_rate_ema'] = $state['policy_rate_ema'] ?? $state['policy_rate'];
+        $state['ns_slope_ema'] = $state['ns_slope_ema'] ?? $currentNsSlope;
+        $state['market_volatility'] = $this->calculateMarketVolatility($state, $dt);
 
         // Nominal Growth include BOTH Real Growth AND Inflation
         $nominalGrowthRate = $naturalRate + $state['inflation'];
@@ -77,6 +84,7 @@ class MacroEngine
         $state['output_gap_ema'] += $emaWeight * ($state['output_gap'] - $state['output_gap_ema']);
         $state['policy_rate_ema'] += $emaWeight * ($state['policy_rate'] - $state['policy_rate_ema']);
         $state['inflation_ema'] += $emaWeight * ($state['inflation'] - $state['inflation_ema']);
+        $state['ns_slope_ema'] += $emaWeight * ($currentNsSlope - $state['ns_slope_ema']);
 
 
 
@@ -107,13 +115,17 @@ class MacroEngine
             'policy_rate' => $state['policy_rate'],
             'policy_rate_ema' => $state['policy_rate_ema'],
             'ns_level' => $yieldData['level'],
-            'ns_slope' => $yieldData['slope'],
+            // Export the traditional Wall Street definition: Long Rate minus Short Rate. (Negative = Inversion)
+            'ns_slope' => $currentNsSlope, 
+            'ns_slope_ema' => $state['ns_slope_ema'],
             'ns_curvature' => $yieldData['curvature'],
             'yield_10y' => $yield10y,
             'qe_active' => $yieldData['qe_suppression'] > 0,
             'corporate_tax_rate' => $state['corporate_tax_rate'] ?? self::BASE_CORPORATE_TAX_RATE,
             'equity_risk_premium' => $erp,
-            'nominal_gdp_index' => $state['nominal_gdp_index']
+            'nominal_gdp_index' => $state['nominal_gdp_index'],
+            'market_volatility' => $state['market_volatility'],
+            'market_z' => $marketZ
         ];
 
         //$this->logger->info('Macro Data', $payload);
@@ -193,7 +205,7 @@ class MacroEngine
      * @param array $state            The current macroeconomic state.
      * @param float $targetInflation  The inflation target.
      * @param float $naturalRate      The natural rate of interest.
-     * @return array{level: float, slope: float, curvature: float, qe_suppression: float, yield_10y: float}
+     * @return array{level: float, curvature: float, qe_suppression: float, yield_10y: float}
      */
     private function calculateYieldCurveAndQE(array $state, float $targetInflation, float $naturalRate): array
     {
@@ -201,24 +213,27 @@ class MacroEngine
         // QUANTITATIVE EASING (QE) YIELD SUPPRESSION
         // Smoothly scale QE as rates approach the Zero Lower Bound (ZLB) 
         // and the recession deepens.
-        $zlbProximity = max(0.0, (0.015 - $state['policy_rate']) / 0.015); // 1.0 at 0% rate, 0.0 at 1.5% rate
+        $zlbProximity = min(1.0, max(0.0, (0.015 - $state['policy_rate']) / 0.015)); // 1.0 at <=0% rate, 0.0 at >=1.5% rate
         $recessionSeverity = max(0.0, -$state['output_gap']);
         
         $qeYieldSuppression = min(0.02, $zlbProximity * $recessionSeverity * 0.5);
 
         // THE NELSON-SIEGEL CURVE
-        $level = $naturalRate + (0.5 * $targetInflation) + (0.5 * $state['inflation']);
-        $slope = $state['policy_rate'] - $level;
+        // Long-term yields are anchored to natural rates + expected long-term inflation.
+        $expectedInflation = $state['inflation_ema'] ?? $state['inflation'];
+        $level = $naturalRate + (0.5 * $targetInflation) + (0.5 * $expectedInflation);
         
-        // Let the curve naturally invert during recessions, but cap the extreme at -1%
-        $curvature = max(-0.01, 0.02 + ($state['output_gap'] * 0.5));
+        // Beta 1 (The short-end modifier). Mathematically in Nelson-Siegel, Short Rate = Level + Slope.
+        $nsBeta1 = $state['policy_rate'] - $level;
+        
+        // Beta 2 (The medium-term curvature/hump). Cap the extreme flattening at -1%
+        $nsBeta2 = max(-0.01, 0.02 + ($state['output_gap'] * 0.5));
 
-        $yield10y = $this->mathUtility->calculateNelsonSiegelYield($level, $slope, $curvature, 10.0) - $qeYieldSuppression;
+        $yield10y = $this->mathUtility->calculateNelsonSiegelYield($level, $nsBeta1, $nsBeta2, 10.0) - $qeYieldSuppression;
 
         return [
             'level' => $level,
-            'slope' => $slope,
-            'curvature' => $curvature,
+            'curvature' => $nsBeta2,
             'qe_suppression' => $qeYieldSuppression,
             'yield_10y' => max(0.00, $yield10y)
         ];
@@ -299,6 +314,51 @@ class MacroEngine
 
         $newInflation = $state['inflation'] + $inflationDrift + $phillipsEffect + (0.015 * $stressMultiplier * sqrt($dt) * $infZ);
         return max(-0.02, min(0.25, $newInflation));
+    }
+
+    /**
+     * Updates the overarching market volatility (The District VIX).
+     *
+     * Applies the advanced Quadratic-Exponential (QE) scheme for the variance process,
+     * along with the SVJJ Kou double-exponential jump mechanism to simulate 
+     * mathematically rigorous market-wide panics.
+     *
+     * @param array $state The current macro state (inflation, output gap, etc).
+     * @param float $dt    The time step delta.
+     * @return float The updated market volatility.
+     */
+    private function calculateMarketVolatility(array $state, float $dt): float
+    {
+        $currentMarketVol = $state['market_volatility'] ?? 0.15;
+        
+        $cycleVolModifier = 1.0;
+        if (!empty($state)) {
+            // Positive output gap (boom) reduces vol slightly, negative gap (bust) increases vol
+            $cycleVolModifier = 1.0 - ($state['output_gap'] ?? 0.0);
+        }
+
+        $longTermVol = 0.15 * $cycleVolModifier;
+
+        $currentVar = $currentMarketVol * $currentMarketVol;
+        $longTermVar = $longTermVol * $longTermVol;
+
+        $jumpData = $this->mathUtility->calculateSVJJJumps(
+            lambda: 0.80,
+            pUp: 0.10,
+            etaUp: 10.0,
+            etaDown: 5.0,  // Very fat left tail for deep macroeconomic panics
+            muV: 0.05,     // Base variance jump size
+            dt: $dt
+        );
+
+        $expectedVarJump = (0.10 * 0.05 * 0.5) + (0.90 * 0.05);
+        $jumpVarianceDrag = (0.80 * $expectedVarJump) / 6.0;
+        $adjustedTheta = max(0.0001, $longTermVar - $jumpVarianceDrag);
+
+        $nextVar = $this->mathUtility->calculateQEVarianceStep($currentVar, $adjustedTheta, 6.0, 0.30, $dt);
+        $nextVar += $jumpData['var_jump'];
+
+        return max(0.08, min(0.80, sqrt($nextVar)));
     }
 
 }

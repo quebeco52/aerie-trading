@@ -28,11 +28,6 @@ class EarningsEngine
     /** @var float Caps the maximum immediate price gap from a single earnings report. */
     private const MAX_PRICE_GAP = 0.25;
 
-    // Financial Sector Asset Turnover Proxies
-    private const BANK_BASE_SPREAD = 0.06;
-    private const INSURANCE_PREMIUM_TO_EQUITY = 0.65;
-    private const BROKERAGE_FEE_TO_EQUITY = 0.40;
-
     /**
      * Constructor.
      *
@@ -90,197 +85,62 @@ class EarningsEngine
         $baselineVol = (float) $stock->getVolatility();
         $sharesOutstanding = (float) $stock->getSharesOutstanding();
 
-        // Calculate the True Size of the Business (Invested Capital)
-        $investedCapital = $stock->getInvestedCapital();
-        $equity = (float) $stock->getTotalEquity();
-        $cash = (float) $stock->getCorporateTreasury();
-        $debt = (float) $stock->getTotalDebt();
-
+        $industry = $stock->getIndustry() ?: 'General';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        
+        /** @var \App\Service\EarningsStrategy\EarningsStrategyInterface $strategy */
+        $strategy = match ($businessModel) {
+            'commercial_bank' => new \App\Service\EarningsStrategy\CommercialBankEarningsStrategy(),
+            'insurance' => new \App\Service\EarningsStrategy\InsuranceEarningsStrategy(),
+            'brokerage' => new \App\Service\EarningsStrategy\BrokerageEarningsStrategy(),
+            'asset_manager' => new \App\Service\EarningsStrategy\AssetManagementEarningsStrategy(),
+            'reit' => new \App\Service\EarningsStrategy\ReitEarningsStrategy(),
+            default => new \App\Service\EarningsStrategy\StandardCorporateEarningsStrategy(),
+        };
 
         // STRUCTURAL COST BASE (Sticky)
-        $baselineRoic = max(0.01, (float) $stock->getBaselineRoic());
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
         
-        $industry = $stock->getIndustry() ?: 'General';
-        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        $targetMetrics = $strategy->getTargetMetrics($stock, $macroState, $this->mathUtility);
+        $investedCapital = $targetMetrics['invested_capital'];
+        $baselineRoic = $targetMetrics['baseline_roic'];
 
-        if ($leverageType === 'commercial_bank') {
-            // 1. COMMERCIAL BANKS (Net Interest Margin)
-            $investedCapital = $equity; 
-            
-            $structuralSpread = (float) $stock->getCreditSpread();
-            $wholesaleDebt = (float) $stock->getWholesaleDebt();
-            $customerDeposits = (float) $stock->getCustomerDeposits();
-            
-            $wholesaleRate = $policyRate + $structuralSpread;
-            $totalDebt = $wholesaleDebt + $customerDeposits;
-            
-            // Apply Deposit APY Beta
-            $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 10.0;
-            $depositBeta = $this->mathUtility->calculateDepositBeta($totalDebt, $equity, $equityLimit, $customerDeposits);
-            $depositRate = max(0.001, $policyRate * $depositBeta);
-            
-            $structuralInterestExpense = ($wholesaleDebt * $wholesaleRate) + ($customerDeposits * $depositRate);
-            
-            // Apply NIM Modifier (Yield Curve)
-            $yieldCurveSlope = $macroState['ns_slope'] ?? 0.0;
-            $nimModifier = max(0.1, 1.0 + ($yieldCurveSlope * 10.0));
-            
-            $baselineRoe = max(0.01, (float) $stock->getBaselineRoe()) * $nimModifier;
-            $targetNetIncome = $equity * $baselineRoe;
-            $targetEbt = $targetNetIncome / (1.0 - ($macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE));
-            
-            $cashYield = max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
-            $expectedInterestIncome = $cash * $cashYield; // Simplified for brevity
-            
-            $requiredEbit = max(0.01 * $equity, $targetEbt + $structuralInterestExpense - $expectedInterestIncome);
-            $baselineRoic = $equity > 0 ? ($requiredEbit / $equity) : 0.01;
-
-        } elseif ($leverageType === 'insurance') {
-            // 2. INSURANCE COMPANIES (The Float)
-            $investedCapital = $equity; // Evaluated on Equity
-            
-            // Insurance companies hold massive cash/bond reserves ("The Float").
-            // High interest rates are wildly profitable for them.
-            $floatYield = max(0.01, $policyRate + 0.01); // Earning Policy + 100bps
-            $expectedInvestmentIncome = $cash * $floatYield;
-            
-            // Target Net income is driven by underwriting profit + float yield
-            $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
-            $targetNetIncome = $equity * $baselineRoe;
-            $targetEbt = $targetNetIncome / (1.0 - ($macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE));
-            
-            // Operating EBIT only needs to cover the gap left by investment income
-            $requiredEbit = max(0.01 * $equity, $targetEbt - $expectedInvestmentIncome);
-            $baselineRoic = $equity > 0 ? ($requiredEbit / $equity) : 0.01;
-
-        } elseif ($leverageType === 'brokerage') {
-            // 3. ASSET MANAGERS & BROKERAGES (AUM Fees)
-            $investedCapital = $equity; 
-            
-            // Asset light, high margin business. They don't use deposits or float.
-            $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
-            $targetNetIncome = $equity * $baselineRoe;
-            $targetEbt = $targetNetIncome / (1.0 - ($macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE));
-            
-            // Add their wholesale interest expense so EBIT scales to cover it!
-            $wholesaleDebt = (float) $stock->getWholesaleDebt();
-            $expectedInterestExpense = $wholesaleDebt * ($policyRate + (float) $stock->getCreditSpread());
-            
-            $requiredEbit = max(0.01 * $equity, $targetEbt + $expectedInterestExpense);
-            $baselineRoic = $equity > 0 ? ($requiredEbit / $equity) : 0.01;
-        }
-        
         // REVENUE GENERATION PHYSICS
-        if ($leverageType === 'commercial_bank') {
-            // Banks have massive balance sheets but relatively low nominal revenue (Net Interest Income proxy)
-            $baseSpread = self::BANK_BASE_SPREAD; 
-            $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
-            
-            $assetTurnover = $baseSpread + $policyRate; 
-            $baselineRevenue = $debt * $assetTurnover;
-        } elseif ($leverageType === 'insurance') {
-            // Insurance premiums scale strictly with their Equity capacity (Underwriting Limits)
-            $assetTurnover = self::INSURANCE_PREMIUM_TO_EQUITY; 
-            $baselineRevenue = $equity * $assetTurnover;
-        } elseif ($leverageType === 'brokerage') {
-            // Asset-light fee collectors scale revenue off AUM and Equity
-            $assetTurnover = self::BROKERAGE_FEE_TO_EQUITY;
-            $baselineRevenue = $equity * $assetTurnover;
-        } else {
-            // Normal physical companies use the backing-out margin math
-            $assetTurnover = $baselineRoic / $stableMargin;
-            $baselineRevenue = $investedCapital * $assetTurnover;
-        }
+        $assetTurnover = $baselineRoic / $stableMargin;
+        $baselineRevenue = $investedCapital * $assetTurnover;
 
         $fixedCostRatio = $stock->getFixedCostRatio();
         $structuralTotalCosts = $baselineRevenue * (1.0 - $stableMargin);
         $fixedCosts = $structuralTotalCosts * $fixedCostRatio;
         $baselineVariableCosts = $structuralTotalCosts * (1.0 - $fixedCostRatio);
         
-        // The core operational reality: how much does it cost to produce one unit of revenue?
         $structuralVariableMargin = $baselineVariableCosts / max(1.0, $baselineRevenue);
 
         // MACROECONOMIC SHIFTS (Volume & Pricing Power)
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
-        $inflation = $macroState['inflation_ema'] ?? 0.02;
         $beta = (float) $stock->getBeta();
         
-        // Volume swings with the economy, scaled by beta. Defensive stocks (low beta) ignore the cycle.
         $macroVolumeModifier = 1.0 + ($outputGap * $beta);
-        
-        // Corporate Saturation: As a company captures its Addressable Market, its growth stalls.
         $saturationPenalty = $this->mathUtility->calculateMarketSaturationPenalty($stock, $investedCapital, $macroState);
         $macroVolumeModifier *= (1.0 - $saturationPenalty);
 
         $expectedRevenue = $baselineRevenue * $macroVolumeModifier;
 
-        // Pricing Power: In a boom, companies raise prices. In inflation, margins are crushed.
-        if ($leverageType === 'commercial_bank') {
-            // Banks don't buy physical goods, so inflation doesn't crush their supply chain.
-            $pricingPowerModifier = ($outputGap * $beta * 0.25);
-            
-        } elseif ($leverageType === 'insurance') {
-            // Insurance pricing is highly regulated but sticky. Inflation hurts them 
-            // slightly (cost of repairs/claims goes up), but they raise premiums to match.
-            $inflationPenalty = $inflation > 0.04 ? ($inflation - 0.04) * 0.5 : 0;
-            $pricingPowerModifier = ($outputGap * $beta * 0.20) - $inflationPenalty;
-            
-        } elseif ($leverageType === 'brokerage') {
-            // Brokerage revenues (AUM fees) are directly tied to the stock market's performance.
-            // If the market is booming (+ gap), their margins explode upward.
-            $pricingPowerModifier = ($outputGap * $beta * 1.5);
-            
-        } else {
-            // Normal physical companies (Supply chain inflation kills them)
-            $pricingPowerModifier = ($outputGap * $beta * 0.5) - ($inflation > 0.03 ? ($inflation - 0.03) * $beta * 1.5 : 0);
-        }
+        // Pricing Power
+        $pricingPowerModifier = $strategy->calculatePricingPowerModifier($stock, $macroState);
         
-        // Variable margin shifts inversely to pricing power (higher prices = lower relative cost margin)
         $realizedVariableMargin = max(0.01, min(0.99, $structuralVariableMargin - $pricingPowerModifier));
 
         // Expected EBIT (Pre-Shock)
         $expectedVariableCosts = $expectedRevenue * $realizedVariableMargin;
         $expectedEbit = $expectedRevenue - $fixedCosts - $expectedVariableCosts;
 
-        // APPLY THE IDIOSYNCRATIC Z-SCORE SHOCK (The "Earnings Surprise")
-        // Shock the volume/revenue, NOT the EPS directly.
-        $revenueZ = $this->mathUtility->generateStandardNormal();
-        
-        if ($leverageType === 'insurance') {
-            // Insurance Premium Revenue is highly sticky and predictable. 
-            $revenueShock = $revenueZ * ($baselineVol * 0.05); // Very low top-line variance
-            $actualRevenue = $expectedRevenue * (1.0 + $revenueShock);
-            
-            // CATASTROPHE PHYSICS (The Combined Ratio Shock)
-            // Insurance variance comes from massive, unpredictable claim payouts.
-            $claimZ = $this->mathUtility->generateStandardNormal();
-            $underwritingShock = 0.0;
-            
-            if ($claimZ < -1.5) {
-                // A 1.5+ sigma catastrophe event (Hurricanes, Mass Torts) spikes claim costs!
-                $underwritingShock = abs($claimZ) * 0.15; // Adds ~22%+ to their cost margin
-            } elseif ($claimZ > 1.0) {
-                // A quiet quarter (no major natural disasters) means higher underwriting profits
-                $underwritingShock = -0.05; 
-            }
-            
-            $actualVariableCosts = $actualRevenue * min(1.50, ($realizedVariableMargin + $underwritingShock));
-            $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
-            
-        } else {
-            // Normal Companies, Banks, and Brokerages take the shock directly to sales volume
-            $revenueShock = $revenueZ * ($baselineVol * 0.15);
-            $actualRevenue = $expectedRevenue * (1.0 + $revenueShock);
-            
-            $actualVariableCosts = $actualRevenue * $realizedVariableMargin;
-            $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
-        }
-
-
-        // Interest & Debt Physics
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        // APPLY THE IDIOSYNCRATIC Z-SCORE SHOCK
+        $shockData = $strategy->generateIdiosyncraticShock($stock, $expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol, $this->mathUtility);
+        $actualRevenue = $shockData['actual_revenue'];
+        $actualVariableCosts = $shockData['actual_variable_costs'];
+        $ebit = $shockData['ebit'];
+        $primaryShockZ = $shockData['primary_shock_z'];
 
         // Calculate EXPECTED Interest Expense (Pre-Shock)
         $expectedOperatingMargin = $expectedEbit / max(1.0, $expectedRevenue);
@@ -301,60 +161,25 @@ class EarningsEngine
 
             $stock->setHistoricalFixedRate((string) $debtMetrics['historical_fixed_rate']);
 
-            // Interest Income. 
-            // Mega-hoarders generate massive risk-free yield on their cash piles!
-            $operatingBase = $this->mathUtility->calculateOperatingBase((float) $stock->getTotalRevenue(), $equity);
-            $workingCapital = $operatingBase * 0.05;
-            $excessCash = max(0.0, $cash - $workingCapital);
+            // Interest Income
+            $interestIncome = $strategy->calculateInterestIncome($stock, $macroState, $this->mathUtility);
 
-            if ($leverageType === 'insurance') {
-                // Insurance companies invest their massive Float in long-duration bonds.
-                // They earn a premium yield on virtually ALL their cash, not just the "excess".
-                $floatYield = max(0.01, $policyRate + 0.01); 
-                $interestIncome = $cash * $floatYield; 
-            } else {
-                // Normal companies and Banks earn standard money-market yields only on excess liquidity
-                $cashYield = max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
-                $interestIncome = $excessCash * $cashYield;
-            }
-
-            // CALCULATE PHYSICAL DEPRECIATION (The Rusting of Assets)
+            // CALCULATE PHYSICAL DEPRECIATION
             $customDepreciation = (float) $stock->getDepreciationRate();
             $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : $this->mathUtility->getIndustryDepreciationRate($industry);
-
-            // Physical assets rust, not equity. Invested Capital perfectly isolates the physical operating base.
             $absoluteDepreciation = $investedCapital * $depreciationRate;
 
-            // Calculate Earnings Before Tax (EBT)
-            // DEPRECIATION IS AN OPERATING EXPENSE ALREADY ACCOUNTED FOR IN EBIT.
             $expectedEbt = $expectedEbit - $expectedInterestExpense + $interestIncome;
             $actualEbt = $ebit - $actualInterestExpense + $interestIncome;
 
-            // Apply Corporate Taxes to find True Net Income
-            $corporateTaxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
+            $corporateTaxRate = ($businessModel === 'reit') ? 0.0 : ($macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE);
+
             $expectedTotalNetIncome = $expectedEbt > 0 ? $expectedEbt * (1.0 - $corporateTaxRate) : $expectedEbt;
             $actualTotalNetIncome = $actualEbt > 0 ? $actualEbt * (1.0 - $corporateTaxRate) : $actualEbt;
 
-            // UPDATE DYNAMIC ROIC AS AN OUTCOME (Moved down to access Net Income) ---
-            $truePostTaxReturn = 0.0;
-            if ($leverageType !== 'none') {
-                // ALL financial companies (Banks, Insurance, Brokerages) are evaluated on Equity
-                $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) : 0.0;
-                
-                $oldRoe = (float) $stock->getCurrentRoe();
-                $smoothedRoe = $oldRoe === 0.0 ? $truePostTaxReturn : $oldRoe + (($truePostTaxReturn - $oldRoe) * 0.50);
-                $stock->setCurrentRoe((string) max(-0.50, min(1.0, $smoothedRoe)));
-            } else {
-                // Normal companies evaluated on Invested Capital
-                $nopatProxy = $ebit > 0 ? $ebit * (1.0 - $corporateTaxRate) : $ebit;
-                $truePostTaxReturn = $investedCapital > 0 ? ($nopatProxy / $investedCapital) : 0.0;
-                
-                $oldRoic = (float) $stock->getCurrentRoic();
-                $smoothedRoic = $oldRoic === 0.0 ? $truePostTaxReturn : $oldRoic + (($truePostTaxReturn - $oldRoic) * 0.50);
-                $stock->setCurrentRoic((string) max(-0.50, min(1.0, $smoothedRoic)));
-            }
+            // UPDATE DYNAMIC ROIC AS AN OUTCOME
+            $truePostTaxReturn = $strategy->updateDynamicRoic($stock, $actualTotalNetIncome, $investedCapital, $ebit, $corporateTaxRate);
 
-            // Modifier scaled correctly for Annual EPS
             $expectedAnnualEps = $expectedTotalNetIncome / max(1.0, $sharesOutstanding);
             $actualAnnualEpsRaw = $actualTotalNetIncome / max(1.0, $sharesOutstanding);
 
@@ -373,14 +198,14 @@ class EarningsEngine
                 : ($surpriseAmountQuarterly > 0 ? 0.10 : ($surpriseAmountQuarterly < 0 ? -0.10 : 0.0));
 
             // VOLATILITY SHOCK
-            $this->applyVolatilityShock($stock, $revenueZ, $baselineVol);
+            $this->applyVolatilityShock($stock, $primaryShockZ, $baselineVol);
 
             // Overwriting EPS alters Total Net Income. We MUST save the raw 
             // physical number to maintain a mathematically flawless Balance Sheet.
             $stock->setEarningsPerShare((string) $actualAnnualEpsRaw);
 
-            $isLeveraged = $leverageType !== 'none';
-            $fcfData = $this->calculateFreeCashFlowPerShare($actualTotalNetIncome, $sharesOutstanding, $stock, $macroState, $absoluteDepreciation, $isLeveraged);
+            $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+            $fcfData = $this->calculateFreeCashFlowPerShare($actualTotalNetIncome, $sharesOutstanding, $stock, $macroState, $absoluteDepreciation, $isFinancial);
             $annualFcfPerShare = $fcfData['fcf_per_share'];
             $actualAnnualCapEx = $fcfData['capex'];
 
@@ -405,7 +230,7 @@ class EarningsEngine
             $organicCapex = $allocation['organic_capex'] ?? 0.0;
             
             // For banks, loan book expansion is a balance sheet transaction (Cash -> Loans), not physical CapEx
-            $reportedOrganicCapex = $leverageType == 'commercial_bank' ? 0.0 : $organicCapex;
+            $reportedOrganicCapex = $businessModel == 'commercial_bank' ? 0.0 : $organicCapex;
 
             // Convert quarterly organic CapEx to an annualized per-share impact
             $annualizedOrganicCapex = $reportedOrganicCapex * 4.0;
@@ -446,8 +271,9 @@ class EarningsEngine
 
             // Calculate Economic Value Added (EVA)
             $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState);
+            $equity = (float) $stock->getTotalEquity();
             
-            if ($leverageType !== 'none') {
+            if ($isFinancial) {
                 // Financials create EVA when Return on Equity > Cost of Equity
                 $costOfEquity = $health['cost_of_equity'] ?? 0.10;
                 $annualEconomicProfit = $equity * ($truePostTaxReturn - $costOfEquity);
@@ -522,7 +348,7 @@ class EarningsEngine
             $capitalRatio = ($finalEquity + $finalTotalDebt) > 0 ? ($finalEquity / ($finalEquity + $finalTotalDebt)) : 1.0;
             $report->setCapitalRatio((string) $capitalRatio);
 
-            if ($leverageType == 'commercial_bank') {
+            if ($businessModel === 'commercial_bank' || $businessModel === 'insurance') {
                 $customerDeposits = (float) $stock->getCustomerDeposits();
                 $depositRatio = $finalTotalDebt > 0 ? ($customerDeposits / $finalTotalDebt) : 0.0;
                 $report->setCustomerDepositRatio((string) $depositRatio);

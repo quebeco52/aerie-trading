@@ -84,8 +84,7 @@ class MarketOperator
         }
 
         $industry = $stock->getIndustry() ?: 'General';
-        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
-        $isLeveraged = $leverageType !== 'none';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
 
         $isHostile = mt_rand(1, 100) > 50;
 
@@ -115,7 +114,7 @@ class MarketOperator
         $stock->setRetainedEarnings("0.00");
         $stock->setWholesaleDebt("10000000000.00"); // Give the restructured company a healthy 0.5x D/E ratio
 
-        if ($leverageType === 'commercial_bank' || $leverageType === 'insurance') {
+        if ($businessModel === 'commercial_bank' || $businessModel === 'insurance') {
             // For a restructured bank or insurance company, assume 85% of its new debt is deposits/float.
             $stock->setCustomerDeposits("8500000000.00");
             $stock->setWholesaleDebt("1500000000.00"); // The remaining 1.5B is Wholesale

@@ -268,6 +268,9 @@ class CorporateActionEngine
         $currentTreasury = (float) $stock->getCorporateTreasury();
         $operatingBase = $this->mathUtility->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity());
         $investedCapital = $stock->getInvestedCapital();
+        
+        $industry = $stock->getIndustry() ?: 'General';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
 
         $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState);
 
@@ -279,6 +282,13 @@ class CorporateActionEngine
         // Add the FCF generated this quarter to the treasury immediately so we know what we can spend
         $totalFcfGenerated = $quarterlyFcfPerShare * $oldShares;
         $newTreasury = $currentTreasury + $totalFcfGenerated;
+        
+        // REITs mandate distributions based on Funds From Operations (FFO), not standard GAAP Net Income
+        if ($businessModel === 'reit') {
+            $depreciationRate = (float) $stock->getDepreciationRate() ?: (\App\Data\Sectors::INDUSTRY_METRICS[$industry]['depreciation'] ?? 0.05);
+            $annualDepreciation = $investedCapital * $depreciationRate;
+            $quarterlyEps = ($actualTotalNetIncome + $annualDepreciation) / max(1.0, $sharesOutstanding) / 4.0;
+        }
 
         // EXECUTE DIVIDENDS
         $equity = (float) $stock->getTotalEquity();
@@ -289,10 +299,8 @@ class CorporateActionEngine
         $newTreasury -= $divData['total_paid'];
 
         // CALCULATE EXCESS CASH (The War Chest)
-        $industry = $stock->getIndustry() ?: 'General';
-        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
-        $isLeveraged = $leverageType !== 'none';
-        $targetOperatingCash = $this->mathUtility->calculateTargetOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt(), $leverageType);
+        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+        $targetOperatingCash = $this->mathUtility->calculateTargetOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt(), $businessModel);
         $excessCash = max(0.0, $newTreasury - $targetOperatingCash);
 
         $currentPE = $actualAnnualEps > 0 ? ($currentPrice / $actualAnnualEps) : 9999.0;
@@ -301,20 +309,24 @@ class CorporateActionEngine
         $retainedEarningsThisQuarter = max(0.0, $quarterlyNetIncome - $divData['total_paid']);
 
         // THE TRADING DESK: EXECUTE BUYBACKS
-        $buybackData = $this->executeBuybacks(
-            $stock,
-            $excessCash,
-            $oldShares,
-            $currentPrice,
-            $currentPE,
-            $operatingBase,
-            $investedCapital,
-            $nopat,
-            $health,
-            $macroState,
-            $actualTotalNetIncome,
-            $retainedEarningsThisQuarter
-        );
+        if ($businessModel === 'reit') {
+            $buybackData = ['new_shares' => $oldShares, 'total_cash_spent' => 0.0, 'event' => null];
+        } else {
+            $buybackData = $this->executeBuybacks(
+                $stock,
+                $excessCash,
+                $oldShares,
+                $currentPrice,
+                $currentPE,
+                $operatingBase,
+                $investedCapital,
+                $nopat,
+                $health,
+                $macroState,
+                $actualTotalNetIncome,
+                $retainedEarningsThisQuarter
+            );
+        }
         if ($buybackData['event']) $events[] = $buybackData['event'];
 
         // Subtract the buyback cash from our working treasury
@@ -383,11 +395,11 @@ class CorporateActionEngine
 
         // Emergency Liquidity Preservation
         $industry = $stock->getIndustry() ?: 'General';
-        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
-        $isLeveraged = $leverageType !== 'none';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
         
         $isRegulatoryDividendHalt = false;
-        if ($isLeveraged) {
+        if ($isFinancial) {
             $trueReturn = (float)$stock->getTotalEquity() > 0 ? ($actualTotalNetIncome / (float)$stock->getTotalEquity()) : 0.0;
             $hurdleRate = $health['cost_of_equity'] ?? 0.10;
             
@@ -456,7 +468,7 @@ class CorporateActionEngine
         $newDividend = max(0.0, $newDividend);
 
         // Cap the dividend to what we can physically pay from cash on hand (minus a 3% operating safety buffer)
-        $minOperatingCash = $this->mathUtility->calculateMinOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt(), $leverageType);
+        $minOperatingCash = $this->mathUtility->calculateMinOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt(), $businessModel);
         $usableCash = max(0.0, $availableTreasury - $minOperatingCash);
         $maxDividendPerShare = $shares > 0 ? ($usableCash / $shares) : 0.0;
 
@@ -520,14 +532,15 @@ class CorporateActionEngine
         $canEasilyCoverDebt = $excessCash > ((float) $stock->getTotalDebt() * 2.0);
 
         $industry = $stock->getIndustry() ?: 'General';
-        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
-        $isLeveraged = $leverageType !== 'none';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
         
-        if ($isLeveraged) {
+        if ($isFinancial) {
             $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['equity_limit'] ?? 10.0;
             $currentDebtToEquity = (float)$stock->getDebtToEquityRatio();
             
-            // Tier 1 Capital Constraint: Stop buybacks if Debt/Equity hits 85% of the regulatory max limit
+            // Tier 1 Capital & Solvency Constraint: Stop buybacks if Debt/Equity hits 85% of the regulatory max limit
+            // For Banks, this protects Tier 1 Capital. For Insurance, it protects Float solvency.
             if ($currentDebtToEquity > ($equityLimit * 0.85)) {
                 return ['new_shares' => $shares, 'total_cash_spent' => 0.0, 'event' => null];
             }
@@ -535,10 +548,10 @@ class CorporateActionEngine
         
         $totalDebt = (float) $stock->getTotalDebt();
         
-        $hoardStatus = $this->mathUtility->evaluateHoardingStatus($excessCash, $operatingBase, $totalDebt, $leverageType);
+        $hoardStatus = $this->mathUtility->evaluateHoardingStatus($excessCash, $operatingBase, $totalDebt, $businessModel);
         $isMegaHoarder = $hoardStatus['is_mega_hoarder'];
 
-        $minBuybackIcr = $isLeveraged ? 1.35 : 2.0;
+        $minBuybackIcr = $isFinancial ? 1.35 : 2.0;
 
         // If they are a Mega Hoarder, bypass the debt paydown block! The cash must be deployed.
         if (!$isMegaHoarder && (($health['wants_to_paydown_debt'] && !$canEasilyCoverDebt) || $health['interest_coverage'] < $minBuybackIcr)) {
@@ -549,7 +562,7 @@ class CorporateActionEngine
         $event = null;
 
         // Use EVA (Economic Value Added) spread instead of the EPS accretion mirage
-        if ($isLeveraged) {
+        if ($isFinancial) {
             $trueReturn = (float)$stock->getTotalEquity() > 0 ? ($actualTotalNetIncome / (float)$stock->getTotalEquity()) : 0.0;
             $hurdleRate = $health['cost_of_equity'] ?? 0.10;
         } else {
@@ -571,11 +584,15 @@ class CorporateActionEngine
                 // Mega-hoarders are explicitly trying to drain accumulated dead cash
                 $maxWillingSpend = $excessCash * 0.30;
             } else {
-                if ($isLeveraged) {
-                    // STRICT RULE: Leveraged companies can ONLY use cash generated this quarter (minus dividends paid)
+                if ($businessModel === 'commercial_bank') {
+                    // STRICT RULE: Banks can ONLY use cash generated this quarter (minus dividends paid)
                     // This permanently prevents debt-funded or old-hoard-draining buybacks for healthy banks!
                     $maxWillingSpend = min($excessCash * 0.10, $retainedEarningsThisQuarter);
+                } elseif ($businessModel === 'insurance') {
+                    // Insurance companies don't run fractional reserves. They can safely deploy a bit more of their surplus.
+                    $maxWillingSpend = min($excessCash * 0.15, $retainedEarningsThisQuarter * 1.5);
                 } else {
+                    // Brokerages, Asset Managers, and normal physical companies
                     $maxWillingSpend = $excessCash * 0.10;
                 }
             }
@@ -713,34 +730,27 @@ class CorporateActionEngine
         $liveInvestedCapital = $this->mathUtility->calculateLiveInvestedCapital($newEquity, $totalDebt, $state['treasury']);
 
         $industry = $stock->getIndustry() ?: 'General';
-        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
-        $isLeveraged = $leverageType !== 'none';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
 
-        if ($isLeveraged) {
-            // For Banks, Cash is inventory. Return on Equity (ROE) is the true metric of expansion.
-            $ebit = $health['raw_metrics']['ebit'] ?? 0.0;
-            $interest = $health['raw_metrics']['interest_expense'] ?? 0.0;
-            $preTaxIncome = max(0.0, $ebit - $interest);
-            
-            $corporateTaxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
-            $netIncomeProxy = $preTaxIncome * (1.0 - $corporateTaxRate);
-            
-            $trueReturn = $newEquity > 0 ? ($netIncomeProxy / $newEquity) : 0.0;
+        if ($isFinancial) {
+            // Financials use true Return on Equity (ROE) computed by the EarningsEngine
+            $trueReturn = (float) $stock->getCurrentRoe();
             $hurdleRate = $health['cost_of_equity'] ?? 0.10;
         } else {
             // Normal companies use ROIC vs WACC
-            $trueReturn = $liveInvestedCapital > 0 ? ($nopat / $liveInvestedCapital) : 0.0;
+            $trueReturn = (float) $stock->getCurrentRoic();
             $hurdleRate = $health['wacc'];
         }
 
-        $evaluationCapital = $isLeveraged ? ($newEquity + $state['wholesaleDebt']) : $liveInvestedCapital;
+        $evaluationCapital = $isFinancial ? $newEquity : $liveInvestedCapital;
 
         if ($trueReturn > $hurdleRate && $health['can_issue_debt']) {
             $newBorrowingRate = $health['raw_metrics']['current_market_rate'] ?? 0.05;
 
-            if ($isLeveraged) {
+            if ($isFinancial) {
                 $evalDebt = $state['wholesaleDebt'];
-                $evalTolerance = 2.0; // Max 2x Equity in pure wholesale bonds for Banks
+                $evalTolerance = $businessModel === 'commercial_bank' ? 2.0 : ($businessModel === 'asset_manager' ? 0.5 : 1.0);
             } else {
                 $evalDebt = $totalDebt;
                 $evalTolerance = $health['debt_tolerance'];
@@ -748,7 +758,7 @@ class CorporateActionEngine
             
             $balanceSheetCapacity = max(0.0, ($newEquity * $evalTolerance) - $evalDebt);
 
-            if ($isLeveraged) {
+            if ($isFinancial) {
                 // Banks scale based on Regulatory Capital (Balance Sheet), not Interest Coverage.
                 // Their interest expense scales symmetrically with interest income, so ICR is a false bottleneck for growth.
                 $incomeStatementCapacity = $balanceSheetCapacity; 
@@ -772,16 +782,26 @@ class CorporateActionEngine
             if ($trueExpansionCapacity > 0) {
                 $spreadMultiplier = min(1.0, max(0.0, ($trueReturn - $hurdleRate) * 10.0));
 
-                if ($isLeveraged) {
-                    // BANKS: Leverage is their core product. A 5% EVA spread is massive for a bank.
+                if ($isFinancial) {
+                    // FINANCIALS: Leverage is their core product. A 5% EVA spread is massive.
                     // We multiply by 20.0 so a 5% spread achieves maximum growth aggression.
                     $bankSpreadMultiplier = min(1.0, max(0.0, ($trueReturn - $hurdleRate) * 20.0));
                     
-                    // Banks issue wholesale bonds to match loan demand, but prudently.
-                    $borrowProbability = 0.85 + ($bankSpreadMultiplier * 0.15); // 85% to 100% chance
-                    $aggressiveness = 0.05 + (0.15 * $bankSpreadMultiplier); // Deploy up to 20% of capital capacity
+                    if ($businessModel === 'commercial_bank') {
+                        // Banks issue wholesale bonds to match loan demand aggressively.
+                        $borrowProbability = 0.85 + ($bankSpreadMultiplier * 0.15); // 85% to 100% chance
+                        $aggressiveness = 0.05 + (0.15 * $bankSpreadMultiplier); // Deploy up to 20% of capital capacity
+                    } elseif ($businessModel === 'insurance') {
+                        // Insurance issues wholesale debt for Tier 2 capital, not loan book scaling
+                        $borrowProbability = 0.40 + ($bankSpreadMultiplier * 0.30);
+                        $aggressiveness = 0.02 + (0.08 * $bankSpreadMultiplier); // Much smaller bond issuances
+                    } else {
+                        // Brokerages & Asset Managers
+                        $borrowProbability = 0.50 + ($bankSpreadMultiplier * 0.30);
+                        $aggressiveness = 0.05 + (0.10 * $bankSpreadMultiplier);
+                    }
 
-                    if ($leverageType === 'commercial_bank') {
+                    if ($businessModel === 'commercial_bank') {
                         // DYNAMIC DEPOSIT CONSTRAINT
                         // If a bank is funding its loan book predominantly with expensive wholesale debt,
                         // the CFO will hit the brakes on expansion until the deposit base catches up.
@@ -799,8 +819,8 @@ class CorporateActionEngine
                     $borrowProbability = 0.40 + ($spreadMultiplier * 0.50); // 40% to 90% chance
                 }
 
-                // Banks don't pause inventory (debt) acquisition due to market share.
-                if (!$isLeveraged) {
+                // Financials don't pause inventory (debt) acquisition due to market share. Physical companies and REITs do.
+                if (!$isFinancial) {
                     $saturationPenalty = $this->mathUtility->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
                     $borrowProbability *= max(0.10, 1.0 - $saturationPenalty);
                 }
@@ -854,28 +874,21 @@ class CorporateActionEngine
     {
         $totalDebt = $state['wholesaleDebt'] + $state['customerDeposits'];
         $industry = $stock->getIndustry() ?: 'General';
-        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
-        $isLeveraged = $leverageType !== 'none';
-        $targetCashReservs = $this->mathUtility->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt'], $leverageType) * 1.20;
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+        $targetCashReservs = $this->mathUtility->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt'], $businessModel) * 1.20;
         $liveInvestedCapital = $this->mathUtility->calculateLiveInvestedCapital($newEquity, $totalDebt, $state['treasury']);
         
 
-        if ($isLeveraged) {
-            // For Banks, Cash is inventory. Return on Equity (ROE) is the true metric.
-            $ebit = $health['raw_metrics']['ebit'] ?? 0.0;
-            $interest = $health['raw_metrics']['interest_expense'] ?? 0.0;
-            $preTaxIncome = max(0.0, $ebit - $interest);
-            
-            $corporateTaxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
-            $netIncomeProxy = $preTaxIncome * (1.0 - $corporateTaxRate);
-            $trueReturn = $newEquity > 0 ? ($netIncomeProxy / $newEquity) : 0.0;
+        if ($isFinancial) {
+            $trueReturn = (float) $stock->getCurrentRoe();
             $hurdleRate = $health['cost_of_equity'] ?? 0.10;
         } else {
-            $trueReturn = $liveInvestedCapital > 0 ? ($nopat / $liveInvestedCapital) : 0.0;
+            $trueReturn = (float) $stock->getCurrentRoic();
             $hurdleRate = $health['wacc'];
         }
 
-        $evaluationCapital = $isLeveraged ? ($newEquity + $state['wholesaleDebt']) : $liveInvestedCapital;
+        $evaluationCapital = $isFinancial ? $newEquity : $liveInvestedCapital;
 
         $investmentProbability = min(0.95, max(0.10, 0.20 + ($trueReturn * 2.0)));
 
@@ -891,19 +904,25 @@ class CorporateActionEngine
 
             $organicSpend = ($state['treasury'] - $targetCashReservs) * (0.02 + (0.13 * $spreadMultiplier));
             
-            if ($isLeveraged) {
-                // For a Bank, "CapEx" is actually the act of expanding their Loan Book.
-                // They take the cash from the vault (Treasury) and lend it out to the economy.
-                // Draining the Treasury mathematically shifts the value into Invested Capital (Equity + Debt - Treasury).
-                $expansionSpend = max($organicSpend, $state['debtIssued'] * 0.95);
+            if ($isFinancial) {
+                if ($businessModel === 'commercial_bank') {
+                    // For a Bank, "CapEx" is actually the act of expanding their Loan Book.
+                    // They take the cash from the vault (Treasury) and lend it out to the economy.
+                    // Draining the Treasury mathematically shifts the value into Invested Capital.
+                    $expansionSpend = max($organicSpend, $state['debtIssued'] * 0.95);
+                } else {
+                    // Insurance, Brokerages, and Asset Managers do NOT burn newly issued wholesale debt on physical CapEx.
+                    // They hold the debt proceeds as capital reserves to generate investment yield!
+                    $expansionSpend = $organicSpend;
+                }
             } else {
                 // Normal companies burn newly issued debt on physical infrastructure (factories, warehouses)
                 $expansionSpend = max($organicSpend, $state['debtIssued'] * 0.75);
             }
             
             $expansionSpend = min($expansionSpend, max(0.0, $state['treasury'] - $targetCashReservs));
-            $maxGrowthSpeed = $isLeveraged ? 0.08 : 0.05; // Banks are capped at 8% loan book growth per quarter
-            $expansionCapBasis = $isLeveraged ? ($newEquity + $totalDebt) : $liveInvestedCapital;
+            $maxGrowthSpeed = $isFinancial ? 0.08 : 0.05; // Banks are capped at 8% loan book growth per quarter
+            $expansionCapBasis = $isFinancial ? ($newEquity + $totalDebt) : $liveInvestedCapital;
             $expansionSpend = min($expansionSpend, $expansionCapBasis * $maxGrowthSpeed);
 
             if ($expansionSpend > 0) {
@@ -916,7 +935,7 @@ class CorporateActionEngine
                 // LAW OF DIMINISHING RETURNS
                 // Expanding physical infrastructure makes the core business slightly less efficient to operate over time.
                 // We drag the structural baseline down, creating a natural gravity that prevents infinite exponential ROIC.
-                if (!$isLeveraged) {
+                if (!$isFinancial) {
                     $baselineRoic = (float) $stock->getBaselineRoic();
                     $roicDrag = $baselineRoic * $expansionRatio * 0.02; 
                     $stock->setBaselineRoic((string) max(0.03, $baselineRoic - $roicDrag));
@@ -928,7 +947,13 @@ class CorporateActionEngine
 
                 if ($expansionSpend > 1_000_000_000.0) {
                     $amtB = number_format($expansionSpend / 1_000_000_000, 2);
-                    $actionText = $isLeveraged ? "loan book expansion" : "organic expansion";
+                    $actionText = match($businessModel) {
+                        'commercial_bank' => 'loan book expansion',
+                        'insurance' => 'underwriting infrastructure',
+                        'brokerage' => 'platform expansion',
+                        'asset_manager' => 'fund seeding and platform expansion',
+                        default => 'organic expansion'
+                    };
                     $state['events'][] = [
                         'description' => "Deployed \${$amtB}B in {$actionText}.",
                         'shock' => 0.5
@@ -955,9 +980,9 @@ class CorporateActionEngine
     {
         $totalDebt = $state['wholesaleDebt'] + $state['customerDeposits'];
         $industry = $stock->getIndustry() ?: 'General';
-        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
-        $isLeveraged = $leverageType !== 'none';
-        $minOperatingCash = $this->mathUtility->calculateMinOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt'], $leverageType);
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+        $minOperatingCash = $this->mathUtility->calculateMinOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt'], $businessModel);
 
         if ($state['treasury'] < $minOperatingCash) {
             $cashShortfall = $minOperatingCash - $state['treasury'];
@@ -1006,12 +1031,12 @@ class CorporateActionEngine
     {
         $totalDebt = $state['wholesaleDebt'] + $state['customerDeposits'];
         $industry = $stock->getIndustry() ?: 'General';
-        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
-        $isLeveraged = $leverageType !== 'none';
-        $targetOperatingCash = $this->mathUtility->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt'], $leverageType);
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+        $targetOperatingCash = $this->mathUtility->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt'], $businessModel);
 
         if (!$state['debtActionTaken'] && $health['wants_to_paydown_debt'] && $state['wholesaleDebt'] > 0 && $state['treasury'] > $targetOperatingCash) {
-            $liquidityCrisisThreshold = $isLeveraged ? 1.15 : 2.0;
+            $liquidityCrisisThreshold = $isFinancial ? 1.15 : 2.0;
             
             $isLiquidityCrisis = $health['interest_coverage'] < $liquidityCrisisThreshold;
             $paydownProbability = $isLiquidityCrisis ? 1.0 : 0.15;
@@ -1058,17 +1083,17 @@ class CorporateActionEngine
     {
         $totalDebt = $state['wholesaleDebt'] + $state['customerDeposits'];
         $industry = $stock->getIndustry() ?: 'General';
-        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
-        $isLeveraged = $leverageType !== 'none';
-        $targetOperatingCash = $this->mathUtility->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt'], $leverageType);
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+        $targetOperatingCash = $this->mathUtility->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt'], $businessModel);
 
         if (!$state['debtActionTaken'] && $state['wholesaleDebt'] > 0.0 && $state['treasury'] > $targetOperatingCash) {
             $excessCash = $state['treasury'] - $targetOperatingCash;
             $macroDebtTolerance = $health['debt_tolerance'];
             
             // Banks evaluate leverage sweeps strictly on Wholesale Debt (not Deposits)
-            $evalDebt = $isLeveraged ? $state['wholesaleDebt'] : $totalDebt;
-            $evalLimit = $isLeveraged ? 2.0 : $macroDebtTolerance;
+            $evalDebt = $isFinancial ? $state['wholesaleDebt'] : $totalDebt;
+            $evalLimit = $isFinancial ? 2.0 : $macroDebtTolerance;
 
             $currentDebtRatio = $evalDebt / max(1.0, $newEquity);
 
@@ -1108,9 +1133,9 @@ class CorporateActionEngine
     private function processPassiveLiabilityGrowth(Stock $stock, array $macroState, array &$state): void
     {
         $industry = $stock->getIndustry() ?: 'General';
-        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
 
-        if ($leverageType !== 'commercial_bank' && $leverageType !== 'insurance') {
+        if ($businessModel !== 'commercial_bank' && $businessModel !== 'insurance') {
             return;
         }
 
@@ -1130,7 +1155,7 @@ class CorporateActionEngine
         // ---------------------------------------------------------
         // 1. COMMERCIAL BANK PHYSICS (APY & Yield Flight)
         // ---------------------------------------------------------
-        if ($leverageType === 'commercial_bank') {
+        if ($businessModel === 'commercial_bank') {
             $depositApyBeta = $this->mathUtility->calculateDepositBeta($totalDebt, $equity, $equityLimit, $currentLiabilities);
             $bankApy = max(0.001, $policyRate * $depositApyBeta);
             $state['bank_apy'] = $bankApy; // Saved for the frontend
@@ -1166,12 +1191,26 @@ class CorporateActionEngine
             $systemicGrowthAnnual = $inflation + $realGdpGrowth;
             $systemicGrowthQuarterly = $systemicGrowthAnnual / 4.0;
             
-            // Insurance is highly cyclical. Beta controls how much they capture.
-            $betaSensitivity = max(0.5, min(1.5, abs((float) $stock->getBeta())));
-            $baseGrowth = $systemicGrowthQuarterly * $betaSensitivity;
+            // CAPACITY CONSTRAINT (Premium-to-Surplus Ratio/ Kenney Rule)
+            // Regulators prevent insurance companies from writing new policies (growing Float)
+            // if their total liabilities exceed their structural Equity Limit (Surplus Capital).
+            $capacityModifier = $this->mathUtility->calculateCapacityModifier($totalDebt, $equity, $equityLimit, $currentLiabilities);
             
-            // Variance: Insurance sees lumpier quarters than banks due to catastrophes vs clean underwriting
-            $randomSwing = $this->mathUtility->generateStandardNormal() * 0.015; 
+            // Insurance is highly cyclical. Beta controls how much they capture.
+            $betaSensitivity = max(0.75, min(1.25, abs((float) $stock->getBeta())));
+            $baseGrowth = $systemicGrowthQuarterly * $betaSensitivity * $capacityModifier;
+            
+            // Asymmetric Variance (The Catastrophe Skew)
+            // Insurance premiums flow in steadily, but claims spike violently during disasters.
+            $claimZ = $this->mathUtility->generateStandardNormal();
+            
+            if ($claimZ < -1.5) {
+                // Major Catastrophe (e.g., Hurricane): Massive claim payouts rip capital out of the Float
+                $randomSwing = $claimZ * 0.04; 
+            } else {
+                // Normal Quarter: Minor fluctuations in claim volume
+                $randomSwing = $claimZ * 0.005;
+            }
             
             $finalGrowthRate = max(-0.15, min(0.15, $baseGrowth + $randomSwing));
             $liabilityChange = $currentLiabilities * $finalGrowthRate;
@@ -1194,7 +1233,7 @@ class CorporateActionEngine
                 $state['wholesaleDebt'] += $liquidityShortfall; // Emergency borrowing
 
                 $amtB = number_format($liquidityShortfall / 1_000_000_000, 2);
-                $lore = $leverageType === 'commercial_bank' 
+                $lore = $businessModel === 'commercial_bank' 
                     ? "Suffered a bank run. Forced to borrow \${$amtB}B to cover deposit flight."
                     : "Catastrophe claim payouts exceeded cash reserves. Forced to borrow \${$amtB}B.";
 

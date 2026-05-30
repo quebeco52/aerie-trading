@@ -88,7 +88,7 @@ class MarketEngine
         float $liveWacc = 0.08,
         float $baselineIndustryPE = 20.0,
         float $revenuePerShare = 0.0,
-        string $leverageType = 'none',
+        string $businessModel = 'none',
         float $liveCostOfEquity = 0.10,
     ): array {
 
@@ -167,7 +167,7 @@ class MarketEngine
             $dividendPerShare,
             $baselineIndustryPE,
             $revenuePerShare,
-            $leverageType,
+            $businessModel,
             $liveCostOfEquity
         );
 
@@ -278,11 +278,11 @@ class MarketEngine
         float $dividendPerShare,
         float $baselineIndustryPE = 20.0, 
         float $revenuePerShare = 0.0,      
-        string $leverageType = 'none', // CHANGED THIS
+        string $businessModel = 'none',
         float $liveCostOfEquity = 0.10
     ): array {
         
-        $isFinancial = $leverageType !== 'none'; // Unified flag for all financials
+        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
         
         // MACROECONOMIC STRESS INDEX (MSI)
         $recessionStress = max(0.0, -$outputGap); 
@@ -361,11 +361,11 @@ class MarketEngine
         $pbFairValue = $bookValuePerShare * $pbMultiple;
 
         // PERFECTED WEIGHTED CONSENSUS MODEL
-        if ($leverageType === 'commercial_bank' || $leverageType === 'insurance') {
+        if ($businessModel === 'commercial_bank' || $businessModel === 'insurance') {
             // Balance Sheet Heavy: Banks and Insurance trade heavily on their Book Value.
             $fairValue = ($earningsValue * 0.60) + ($pbFairValue * 0.40);
         } else {
-            // Asset Light: Brokerages and Normal Companies trade on pure earnings power!
+            // Asset Light: Brokerages, Asset Managers, and Normal Companies trade on pure earnings power!
             $fairValue = ($earningsValue * 0.90) + ($pbFairValue * 0.10);
         }
 

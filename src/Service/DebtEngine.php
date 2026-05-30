@@ -63,6 +63,7 @@ class DebtEngine
         $rawCreditSpread = (float) $stock->getCreditSpread();
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
         $volatility = (float) $stock->getCurrentVolatility() ?: (float) $stock->getVolatility();
+        $vix = $macroState['market_volatility'] ?? 0.15;
         
         $rawBeta = (float) $stock->getBeta();
 
@@ -72,34 +73,39 @@ class DebtEngine
         $betaSensitivity = $rawBeta >= 0.0 ? max(0.5, $rawBeta) : min(-0.5, $rawBeta);
         $macroCreditAdjustment = -$outputGap * 0.10 * $betaSensitivity;
         
-        // THE VOLATILITY RISK PREMIUM
-        // Bondholders hate uncertainty. Companies with high stock volatility pay a risk premium.
-        // Volatility above 20% starts adding to the spread (e.g., 40% vol adds 40 bps).
+        // IDIOSYNCRATIC VOLATILITY PREMIUM
+        // Bondholders hate individual uncertainty. High stock volatility pays a risk premium.
         $volatilityPremium = max(0.0, ($volatility - 0.20) * 0.02);
+        
+        // SYSTEMIC VIX PANIC PREMIUM (Credit Market Freeze)
+        // When the global VIX spikes, credit markets seize up and spreads blow out across the board.
+        // High-beta stocks face massive credit downgrades during a market panic.
+        $vixPanicPremium = max(0.0, ($vix - 0.20) * 0.05 * abs($betaSensitivity));
         
         // Calculate the Dynamic Baseline Spread
         // Floored at 15 bps (0.0015) so ultra-safe Titans don't get negative spreads during massive economic booms.
-        $baselineCreditSpread = max(0.0015, $rawCreditSpread + $macroCreditAdjustment + $volatilityPremium);
+        $baselineCreditSpread = max(0.0015, $rawCreditSpread + $macroCreditAdjustment + $volatilityPremium + $vixPanicPremium);
 
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $industry = $stock->getIndustry() ?: 'General';
-        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
-        $isLeveraged = $leverageType !== 'none';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
 
         $revenue = (float) $stock->getTotalRevenue();
 
         if ($revenue <= 0.0) {
-            $investedCapital = $isLeveraged ? (float) $stock->getTotalEquity() : $stock->getInvestedCapital();
-            
-            if ($isLeveraged) {
-                $equity = (float) $stock->getTotalEquity();
-                $targetNetIncome = $equity * max(0.01, (float) $stock->getBaselineRoe());
-                $baselineRoic = $equity > 0 ? ($targetNetIncome / $equity) : 0.01;
-            } else {
-                $baselineRoic = (float) $stock->getBaselineRoic();
-            }
-            
-            $baselineRoic = max(0.01, $baselineRoic);
+            $strategy = match ($businessModel) {
+                'commercial_bank' => new \App\Service\EarningsStrategy\CommercialBankEarningsStrategy(),
+                'insurance' => new \App\Service\EarningsStrategy\InsuranceEarningsStrategy(),
+                'brokerage' => new \App\Service\EarningsStrategy\BrokerageEarningsStrategy(),
+                'asset_manager' => new \App\Service\EarningsStrategy\AssetManagementEarningsStrategy(),
+                'reit' => new \App\Service\EarningsStrategy\ReitEarningsStrategy(),
+                default => new \App\Service\EarningsStrategy\StandardCorporateEarningsStrategy(),
+            };
+
+            $targetMetrics = $strategy->getTargetMetrics($stock, $macroState, $this->mathUtility);
+            $investedCapital = $targetMetrics['invested_capital'];
+            $baselineRoic = max(0.01, (float) $targetMetrics['baseline_roic']);
             $marginFallback = max(0.01, (float) $stock->getOperatingMargin());
             $assetTurnover = $baselineRoic / $marginFallback;
             $revenue = $investedCapital * $assetTurnover;
@@ -112,7 +118,7 @@ class DebtEngine
         $customDepreciation = (float) $stock->getDepreciationRate();
         $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : $this->mathUtility->getIndustryDepreciationRate($industry);
         
-        $physicalCapital = $isLeveraged ? (float) $stock->getTotalEquity() : $stock->getInvestedCapital();
+        $physicalCapital = $isFinancial ? (float) $stock->getTotalEquity() : $stock->getInvestedCapital();
         $depreciation = $physicalCapital * $depreciationRate;
         $ebitda = $ebit + $depreciation;
 
@@ -145,8 +151,8 @@ class DebtEngine
         // THE JUNK BOND BLOWOUT (Convex Penalty)
         $leveragePenalty = 0.0;
 
-        if ($isLeveraged) {
-            // Leveraged industries (Banks, Insurance, Brokerages) evaluated solely on Debt/Equity
+        if ($isFinancial) {
+            // Financial companies (Banks, Insurance, Brokerages, Asset Managers) evaluated solely on Debt/Equity
             if ($debtToEquity > $equityLimit) {
                 $excessLeverage = $debtToEquity - $equityLimit;
                 $leveragePenalty = (exp($excessLeverage * self::LEVERAGE_PENALTY_RATE) - 1.0) * self::LEVERAGE_PENALTY_BASE;
@@ -178,7 +184,7 @@ class DebtEngine
         $floatingInterestRate = $policyRate + $dynamicSpread;
         
         // CUSTOMER DEPOSIT & LEVERAGE PHYSICS
-        if ($leverageType === 'commercial_bank') {
+        if ($businessModel === 'commercial_bank') {
             $customerDeposits = (float) $stock->getCustomerDeposits();
             $wholesaleDebt = (float) $stock->getWholesaleDebt();
             
@@ -192,8 +198,7 @@ class DebtEngine
             
             $interestExpense = $wholesaleInterest + $depositInterest;
 
-        } elseif ($leverageType === 'insurance') {
-            $floatDebt = (float) $stock->getCustomerDeposits(); 
+        } elseif ($businessModel === 'insurance') {
             $corporateDebt = (float) $stock->getWholesaleDebt();
 
             // The Float is a true 0% interest loan. They only pay interest on Corporate Debt.
@@ -201,7 +206,7 @@ class DebtEngine
             $wholesaleRate = $corporateDebt > 0 ? ($interestExpense / $corporateDebt) : $currentMarketFixedRate;
 
         } else {
-            // Normal companies & Brokerages pay standard market rates on all debt
+            // Normal companies, Brokerages, & Asset Managers pay standard market rates on all debt
             $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingInterestRate);
             $wholesaleRate = $debt > 0 ? ($interestExpense / $debt) : $currentMarketFixedRate;
         }
@@ -256,11 +261,11 @@ class DebtEngine
         
         $industry = $stock->getIndustry() ?: 'General';
         $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industry] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
-        $leverageType = $metrics['leverage_type'] ?? 'none';
+        $businessModel = $metrics['business_model'] ?? 'none';
 
         $debtMetrics = $this->calculateInterestExpense($stock, $macroState, false);
 
-        $isFinancial = $leverageType !== 'none';
+        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
 
 
         // Gross Cost
@@ -417,10 +422,10 @@ class DebtEngine
         // The Altman Z-Score explicitly excludes Financials because customer deposits (debt) skew their working capital.
         // Instead, evaluate Financials using a simplified Tier 1 Capital Ratio proxy (Equity / Total Assets).
         $industry = $stock->getIndustry() ?: 'General';
-        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
-        $isLeveraged = $leverageType !== 'none';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
 
-        if ($isLeveraged) {
+        if ($isFinancial) {
             $capitalRatio = $equity / $totalAssets;
             $zScore = $capitalRatio * 100.0; // Convert to percentage points (e.g., 8% capital = 8.0 score)
 

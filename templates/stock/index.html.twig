@@ -168,7 +168,7 @@
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Capital Efficiency</span>
-									{% if isLeveraged|default(false) %}
+									{% if isFinancial|default(false) %}
 										{{ _self.tooltip('Shows Economic Value Added (EVA) and Return on Equity (ROE). Positive EVA means the company is creating true wealth above its capital costs.', 'right', 'w-64') }}
 									{% else %}
 										{{ _self.tooltip('Shows Economic Value Added (EVA) and Return on Invested Capital (ROIC). Positive EVA means the company is creating true wealth above its capital costs.', 'right', 'w-64') }}
@@ -191,7 +191,7 @@
 								<canvas id="capitalReturnChart"></canvas>
 							</div>
 						</div>
-						{% if isLeveraged|default(false) %}
+						{% if isFinancial|default(false) %}
 						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
@@ -306,16 +306,19 @@
 							</div>
 							<div class="py-3 flex justify-between items-center">
 								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
-									{% if isLeveraged|default(false) %}
+									{% if isFinancial|default(false) %}
 										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">ROE</span>
 										{{ _self.tooltip('Return on Equity. Measures how effectively the company utilizes shareholders\' equity to generate profit.') }}
+									{% elseif businessModel|default('none') == 'reit' %}
+										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Cap Rate</span>
+										{{ _self.tooltip('Capitalization Rate (NOI / Property Value). Evaluates true real estate yield before debt service.') }}
 									{% else %}
 										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">ROIC</span>
 										{{ _self.tooltip('Return on Invested Capital. How efficiently the company utilizes capital to generate profit.') }}
 									{% endif %}
 								</dt>
 								<dd class="text-sm font-semibold text-on-surface" id="stat-roic">
-									{% if isLeveraged|default(false) %}
+									{% if isFinancial|default(false) %}
 										{{ ((asset.currentRoe != 0 ? asset.currentRoe : asset.baselineRoe) * 100)|number_format(2) }}%
 									{% else %}
 										{{ ((asset.currentRoic != 0 ? asset.currentRoic : asset.baselineRoic) * 100)|number_format(2) }}%
@@ -359,7 +362,7 @@
 							</div>
 						</dl>
 
-						{% if isLeveraged|default(false) %}
+						{% if isFinancial|default(false) %}
 							{# DEDICATED ASSET BREAKDOWN VISUALIZATION FOR BANKS #}
 							<div class="mt-6 p-4 bg-surface-container-highest rounded-xl border border-outline-variant/20 shadow-inner">
 								<div class="flex justify-between items-center mb-3">
@@ -597,8 +600,8 @@
 		window.AERIE_DATA = {
 ticker: "{{ asset.ticker }}",
 isEtf: {{ isEtf ? 'true' : 'false' }},
-isLeveraged: {{ isLeveraged|default(false) ? 'true' : 'false' }},
-leverageType: "{{ leverageType|default('none') }}",
+isFinancial: {{ isFinancial|default(false) ? 'true' : 'false' }},
+businessModel: "{{ businessModel|default('none') }}",
 sharesOutstanding: {{ isEtf ? 0 : asset.sharesOutstanding }},
 userQuantity: {{ userQuantity|default(0) }},
 eps: {{ isEtf ? 0 : asset.earningsPerShare|default(0) }},

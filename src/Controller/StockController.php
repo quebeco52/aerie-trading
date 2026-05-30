@@ -64,8 +64,8 @@ class StockController extends AbstractController
         $peRatio = null;
         $targetPE = 20.00;
         $marketShare = 0;
-        $isLeveraged = false;
-        $leverageType = 'none';
+        $isFinancial = false;
+        $businessModel = 'none';
         $investedCapital = 0.0;
 
 
@@ -80,10 +80,10 @@ class StockController extends AbstractController
             $samRatio = (float) $asset->getSamRatio();
             $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
             
-            $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$asset->getIndustry() ?? 'General']['leverage_type'] ?? 'none';
-            $isLeveraged = $leverageType !== 'none';
+            $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$asset->getIndustry() ?? 'General']['business_model'] ?? 'none';
+            $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
             $investedCapital = $asset->getInvestedCapital();
-            $evaluationCapital = $isLeveraged ? (float) $asset->getTotalEquity() : $asset->getInvestedCapital();
+            $evaluationCapital = $isFinancial ? (float) $asset->getTotalEquity() : $asset->getInvestedCapital();
             
             $marketShare = min(0.9999, $evaluationCapital / max(1.0, $dynamicSam));
         }
@@ -110,8 +110,8 @@ class StockController extends AbstractController
         return $this->render('stock/index.html.twig', [
             'asset' => $asset,
             'isEtf' => $isEtf,
-            'isLeveraged' => $isLeveraged,
-            'leverageType' => $leverageType,
+            'isFinancial' => $isFinancial,
+            'businessModel' => $businessModel,
             'investedCapital' => $investedCapital,
             'userQuantity' => $userQuantity,
             'marketCap' => $marketCap,

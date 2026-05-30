@@ -1,7 +1,7 @@
 const CURRENT_TICKER = window.AERIE_DATA.ticker;
 const IS_ETF = window.AERIE_DATA.isEtf;
-const LEVERAGE_TYPE = window.AERIE_DATA.leverageType || 'none';
-const IS_FINANCIAL = LEVERAGE_TYPE !== 'none';
+const BUSINESS_MODEL = window.AERIE_DATA.businessModel || 'none';
+const IS_FINANCIAL = window.AERIE_DATA.isFinancial || false;
 const SHARES_OUTSTANDING = window.AERIE_DATA.sharesOutstanding;
 const USER_QUANTITY = window.AERIE_DATA.userQuantity;
 const EPS = window.AERIE_DATA.eps;
@@ -625,11 +625,11 @@ function updateCharts(timeframe) {
         // ALL financial companies are evaluated on Return on Equity (ROE)
         renderCapitalEfficiencyChart(labels, roeData, coeData, evaData, 'ROE', 'Cost of Equity');
         
-        if (LEVERAGE_TYPE === 'commercial_bank') {
+        if (BUSINESS_MODEL === 'commercial_bank') {
             renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData, 'Customer Deposit Ratio');
-        } else if (LEVERAGE_TYPE === 'insurance') {
+        } else if (BUSINESS_MODEL === 'insurance') {
             renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData, 'Float Ratio (0% Interest)');
-        } else if (LEVERAGE_TYPE === 'brokerage') {
+        } else if (BUSINESS_MODEL === 'brokerage') {
             // Brokerages don't use deposits/float, so we only pass the Capital Ratio
             renderRegulatoryRatiosChart(labels, capitalRatioData, null, null);
         }
@@ -899,7 +899,7 @@ function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRat
      };
 
     // ONLY Banks pay Deposit APY. Insurance Float is 0%, Brokerages have no deposits.
-    if (LEVERAGE_TYPE === 'commercial_bank') {
+    if (BUSINESS_MODEL === 'commercial_bank') {
         config.data.datasets.push({
             label: 'Deposit APY',
             data: depositApyData,

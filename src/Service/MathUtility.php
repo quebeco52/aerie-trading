@@ -454,20 +454,20 @@ class MathUtility
      * @param float  $operatingBase    The proxy size of the operating business.
      * @param float  $currentLiability The total customer deposits (Banks) or Float (Insurance).
      * @param float  $wholesaleDebt    The total wholesale market debt.
-     * @param string $leverageType     The specific financial physics type of the company.
+     * @param string $businessModel    The specific financial physics type of the company.
      * @return float The target optimal cash reserve.
      */
-    public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt, string $leverageType): float
+    public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt, string $businessModel): float
     {
-        if ($leverageType === 'commercial_bank') {
+        if ($businessModel === 'commercial_bank') {
             // Banks are fractional. They only need to hold ~10% of deposits in the vault.
             return max($operatingBase * 0.05, $currentLiability * 0.10, $wholesaleDebt * 0.05);
-        } elseif ($leverageType === 'insurance') {
+        } elseif ($businessModel === 'insurance') {
             // Insurance companies MUST protect their float. Target cash = 100% of Float + Operating buffer.
             // If they don't do this, the CFO will accidentally spend claim money on stock buybacks!
             return max($operatingBase * 0.05, $currentLiability * 1.0);
-        } elseif ($leverageType === 'brokerage') {
-            // Brokerages are asset-light fee collectors, but need regulatory capital buffers
+        } elseif ($businessModel === 'brokerage' || $businessModel === 'asset_manager') {
+            // Brokerages and Asset Managers are asset-light fee collectors, but need regulatory capital buffers
             return max($operatingBase * 0.10, $wholesaleDebt * 0.05);
         }
         
@@ -481,19 +481,19 @@ class MathUtility
      * @param float  $operatingBase    The proxy size of the operating business.
      * @param float  $currentLiability The total customer deposits (Banks) or Float (Insurance).
      * @param float  $wholesaleDebt    The total wholesale market debt.
-     * @param string $leverageType     The specific financial physics type of the company.
+     * @param string $businessModel    The specific financial physics type of the company.
      * @return float The absolute minimum survival cash reserve.
      */
-    public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt, string $leverageType): float
+    public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt, string $businessModel): float
     {
-        if ($leverageType === 'commercial_bank') {
+        if ($businessModel === 'commercial_bank') {
             // If a bank's vault drops below 5% of deposits, they are actively in a Bank Run.
             return max($operatingBase * 0.03, $currentLiability * 0.05, $wholesaleDebt * 0.03); 
-        } elseif ($leverageType === 'insurance') {
+        } elseif ($businessModel === 'insurance') {
             // If an insurance company's reserves drop below 85% of their total owed float, 
             // they are facing an insolvency crisis and must issue emergency corporate bonds.
             return max($operatingBase * 0.03, $currentLiability * 0.85);
-        } elseif ($leverageType === 'brokerage') {
+        } elseif ($businessModel === 'brokerage' || $businessModel === 'asset_manager') {
             return $operatingBase * 0.05;
         }
 
@@ -507,12 +507,12 @@ class MathUtility
      * @param float  $excessCash    The amount of cash held above minimum operating requirements.
      * @param float  $operatingBase The physical scale of the business (For financials, this is Equity).
      * @param float  $totalDebt     The total debt (wholesale + deposits) for leverage evaluation.
-     * @param string $leverageType  The specific financial physics type of the company.
+     * @param string $businessModel The specific financial physics type of the company.
      * @return array{is_hoarder: bool, is_mega_hoarder: bool}
      */
-    public function evaluateHoardingStatus(float $excessCash, float $operatingBase, float $totalDebt, string $leverageType): array
+    public function evaluateHoardingStatus(float $excessCash, float $operatingBase, float $totalDebt, string $businessModel): array
     {
-        if ($leverageType === 'commercial_bank') {
+        if ($businessModel === 'commercial_bank') {
             // Banks are spread businesses. Sitting on un-lent cash destroys their ROE.
             // Their tolerance for dead cash is relatively low compared to their massive balance sheets.
             return [
@@ -520,7 +520,7 @@ class MathUtility
                 'is_mega_hoarder' => $excessCash > ($totalDebt * 0.20),
             ];
             
-        } elseif ($leverageType === 'insurance') {
+        } elseif ($businessModel === 'insurance') {
             // THE WAR CHEST: Insurance companies must survive extreme tail-risk catastrophes.
             // They will happily sit on mountains of surplus cash (like Berkshire Hathaway).
             // We force buybacks ONLY if their free cash eclipses their entire equity base.
@@ -529,8 +529,8 @@ class MathUtility
                 'is_mega_hoarder' => $excessCash > ($operatingBase * 1.00), // 100% of Equity!
             ];
             
-        } elseif ($leverageType === 'brokerage') {
-            // Brokerages are asset-light fee collectors. If they have massive cash piles, 
+        } elseif ($businessModel === 'brokerage' || $businessModel === 'asset_manager') {
+            // Brokerages and Asset Managers are asset-light fee collectors. If they have massive cash piles, 
             // it is purely dead weight because they don't face catastrophe risks or run loan books.
             return [
                 'is_hoarder'      => $excessCash > ($operatingBase * 0.30),
@@ -570,8 +570,8 @@ class MathUtility
         };
 
         $industry = $stock->getIndustry() ?: 'General';
-        $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leverage_type'] ?? 'none';
-        $isLeveraged = $leverageType !== 'none';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $isLeveraged = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
 
         // Floor the bleed factor at 0.10 so normal companies still face gravity
         $baselineReturn = $isLeveraged ? (float) $stock->getBaselineRoe() : (float) $stock->getBaselineRoic();
@@ -614,5 +614,41 @@ class MathUtility
         $depositBeta = max(0.10, 0.70 * exp(-$decayRate * $utilization));
         
         return min(0.70, $depositBeta); // Hard cap so they don't bankrupt themselves
+    }
+
+    /**
+     * Calculates a regulatory capacity modifier (throttle) based on structural leverage utilization.
+     *
+     * @param float $totalDebt   Total debt liabilities.
+     * @param float $equity      Total equity (surplus capital).
+     * @param float $equityLimit The structural limit.
+     * @param float|null $coreLiabilities Optional. The amount of core operating liabilities (Float/Deposits).
+     * @return float A multiplier (approaching 0.0 to 1.5) that throttles growth as the limit is approached.
+     */
+    public function calculateCapacityModifier(float $totalDebt, float $equity, float $equityLimit, ?float $coreLiabilities = null): float
+    {
+        $utilization = $equity > 0.0 ? ($totalDebt / ($equity * $equityLimit)) : 1.0;
+        $floatRatio = $totalDebt > 0 ? ($coreLiabilities / $totalDebt) : 0.0;
+        
+        // DYNAMIC DECAY (The Thirst Mechanic)
+        // High float = strict decay (e.g. 2.0). Low float = lenient decay (e.g. 0.5).
+        $decayRate = 0.50 + (1.50 * $floatRatio);
+        
+        // DYNAMIC CAPACITY CURVE:
+        // Example with a healthy Float Ratio (e.g., 100% float -> strict decay of 2.0):
+        // - 0.0 utilization = 1.50 (150% capacity)
+        // - 0.7 utilization ≈ 0.93 (93% capacity - virtually unhindered growth)
+        // - 1.0 utilization ≈ 0.20 (20% capacity - significant drag, but still moving)
+        //
+        // Example with a "thirsty" Float Ratio (e.g., 0% float -> lenient decay of 0.5):
+        // - 0.0 utilization = 1.50 (150% capacity)
+        // - 0.7 utilization ≈ 1.33 (133% capacity - heavily encouraged to capture float)
+        // - 1.0 utilization ≈ 0.91 (91% capacity - lenient lifeline to swap debt for float)
+        
+        // Smooth, single-formula continuous curve (peaks at 1.50, decays exponentially)
+        // Using ^4 keeps capacity high and flat initially, then drops off a cliff right at the 1.0 limit.
+        $capacityModifier = 1.50 * exp(-$decayRate * pow($utilization, 4.0));
+        
+        return max(0.01, min(1.50, $capacityModifier));
     }
 }

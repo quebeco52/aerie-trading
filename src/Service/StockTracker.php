@@ -15,11 +15,6 @@ use Doctrine\ORM\EntityManagerInterface;
 class StockTracker
 {
     /**
-     * @var float The current systemic market volatility (VIX equivalent).
-     */
-    private float $currentMarketVol = 0.15;
-
-    /**
      * Constructor.
      *
      * @param EntityManagerInterface $entityManager The Doctrine entity manager.
@@ -66,13 +61,9 @@ class StockTracker
         $historyData = [];
 
 
-        // Generate the systemic shock for this tick
-        $marketZ = $this->mathUtility->generateStandardNormal();
-
-        // THE DISTRICT VIX (Dynamic Market Volatility)
-        $this->updateDistrictVariance($dt, $marketZ, $macroState);
-
-        $marketVol = $this->currentMarketVol;
+        // Pull systemic variables from the Macro Engine
+        $marketZ = $macroState['market_z'] ?? $this->mathUtility->generateStandardNormal();
+        $marketVol = $macroState['market_volatility'] ?? 0.15;
 
         foreach ($stocks as $stock) {
 
@@ -109,11 +100,12 @@ class StockTracker
             // Fetch the industry limits and structural data
             $industryKey = $stock->getIndustry() ?: 'General';
             $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industryKey] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
-            $isLeveragedIndustry = ($metrics['leverage_type'] ?? 'none') !== 'none';
+            $businessModel = $metrics['business_model'] ?? 'none';
+            $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
             $baselineIndustryPE = $metrics['pe'] ?? 20.0;
             $revenuePerShare = (float) $stock->getTotalRevenue() / $shares;
 
-            $effectiveRoic = $isLeveragedIndustry 
+            $effectiveRoic = $isFinancial 
                 ? (float) ($stock->getCurrentRoe() ?: $stock->getBaselineRoe()) 
                 : (float) ($stock->getCurrentRoic() ?: $stock->getBaselineRoic());
 
@@ -138,7 +130,7 @@ class StockTracker
                 liveWacc: $health['wacc'],
                 baselineIndustryPE: $baselineIndustryPE,
                 revenuePerShare: $revenuePerShare,
-                leverageType: $metrics['leverage_type'] ?? 'none',
+                businessModel: $businessModel,
                 liveCostOfEquity: $health['cost_of_equity'] ?? 0.10
             );
 
@@ -221,7 +213,7 @@ class StockTracker
                 $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
                 $samRatio = (float) $stock->getSamRatio();
                 
-                $evaluationCapital = $isLeveragedIndustry ? $equity : $investedCapital;
+                $evaluationCapital = $isFinancial ? $equity : $investedCapital;
                 $marketShare = min(0.9999, $this->mathUtility->calculateMarketShare($evaluationCapital, $nominalGdpIndex, $samRatio));
                 
                 $stockUpdate['market_share'] = round($marketShare * 100, 2);
@@ -242,68 +234,8 @@ class StockTracker
             'updates' => $stockUpdates,
             'total_cap' => $totalMarketCap,
             'events' => $events,
-            'market_vol' => $this->currentMarketVol,
+            'market_vol' => $marketVol,
             'history' => $historyData,
         ];
-    }
-
-    /**
-     * Updates the overarching market volatility (The District VIX).
-     *
-     * Applies the advanced Quadratic-Exponential (QE) scheme for the variance process,
-     * along with the SVJJ Kou double-exponential jump mechanism to simulate 
-     * mathematically rigorous market-wide panics.
-     *
-     * @param float $dt         The time step delta.
-     * @param float $marketZ    The systemic market shock generated for this tick.
-     * @param array $macroState The current macro state (inflation, output gap, etc).
-     */
-    private function updateDistrictVariance(float $dt, float $marketZ, array $macroState = []): void
-    {
-        $cycleVolModifier = 1.0;
-        if (!empty($macroState)) {
-            // Positive output gap (boom) reduces vol slightly, negative gap (bust) increases vol
-            $cycleVolModifier = 1.0 - ($macroState['output_gap'] ?? 0.0);
-        }
-
-        $longTermVol = 0.15 * $cycleVolModifier;
-
-        $currentVar = $this->currentMarketVol * $this->currentMarketVol;
-        $longTermVar = $longTermVol * $longTermVol;
-
-        // Calculate macro shocks using the new SVJJ Kou model
-        // Macro panics are highly asymmetric: 10% chance of a sudden volatility crush, 90% chance of a volatility explosion
-        $jumpData = $this->mathUtility->calculateSVJJJumps(
-            lambda: 0.80,
-            pUp: 0.10,
-            etaUp: 10.0,
-            etaDown: 5.0,  // Very fat left tail for deep macroeconomic panics
-            muV: 0.05,     // Base variance jump size
-            dt: $dt
-        );
-
-        // Adjust theta downwards so the steady state expectation equals longTermVar
-        // E[VarJump] = (pUp * muV * 0.5) + (pDown * muV)
-        $expectedVarJump = (0.10 * 0.05 * 0.5) + (0.90 * 0.05);
-        $jumpVarianceDrag = (0.80 * $expectedVarJump) / 6.0;
-        $adjustedTheta = max(0.0001, $longTermVar - $jumpVarianceDrag);
-
-        // Advance the variance using the strictly positive QE scheme
-        $nextVar = $this->mathUtility->calculateQEVarianceStep(
-            currentVar: $currentVar,
-            theta: $adjustedTheta,
-            kappa: 6.0,
-            sigma: 0.30,
-            dt: $dt
-        );
-
-        // Add the contemporaneous market-wide variance jump
-        $nextVar += $jumpData['var_jump'];
-
-        // Convert back to volatility
-        $this->currentMarketVol = sqrt($nextVar);
-
-        // Hard bounds to prevent the global simulation from permanently breaking
-        $this->currentMarketVol = max(0.08, min(0.80, $this->currentMarketVol));
     }
 }

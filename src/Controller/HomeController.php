@@ -47,9 +47,9 @@ class HomeController extends AbstractController
             $shares = (float) $stock->getSharesOutstanding();
             $marketCap = $price * $shares;
 
-            $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['leverage_type'] ?? 'none';
-            $isLeveraged = $leverageType !== 'none';
-            $effectiveRoic = $isLeveraged 
+            $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['business_model'] ?? 'none';
+            $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+            $effectiveRoic = $isFinancial 
                 ? ((float) $stock->getCurrentRoe() ?: (float) $stock->getBaselineRoe()) 
                 : ((float) $stock->getCurrentRoic() ?: (float) $stock->getBaselineRoic());
 
@@ -106,9 +106,9 @@ class HomeController extends AbstractController
             $shares = (float) $stock->getSharesOutstanding();
             $marketCap = $price * $shares;
 
-            $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['leverage_type'] ?? 'none';
-            $isLeveraged = $leverageType !== 'none';
-            $effectiveRoic = $isLeveraged 
+            $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['business_model'] ?? 'none';
+            $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+            $effectiveRoic = $isFinancial 
                 ? ((float) $stock->getCurrentRoe() ?: (float) $stock->getBaselineRoe()) 
                 : ((float) $stock->getCurrentRoic() ?: (float) $stock->getBaselineRoic());
             
