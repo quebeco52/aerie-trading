@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Service\EarningsStrategy;
+namespace App\Service\BusinessModel;
 
 use App\Entity\Stock;
 use App\Service\MathUtility;
@@ -14,7 +14,7 @@ use App\Service\MacroEngine;
  * - Subject to supply chain inflation and physical depreciation.
  * - Operating scale is based on physical assets, not financial leverage.
  */
-class StandardCorporateEarningsStrategy implements EarningsStrategyInterface
+class StandardCorporateBusinessModel implements BusinessModelInterface
 {
     /**
      * Physical businesses evaluate their true structural scale based on Invested Capital 
@@ -46,7 +46,7 @@ class StandardCorporateEarningsStrategy implements EarningsStrategyInterface
     /**
      * Idiosyncratic variance is applied directly to sales volume.
      */
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MathUtility $mathUtility): array
+    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array $macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
         $revenueShock = $revenueZ * ($baselineVol * 0.15);
@@ -93,5 +93,10 @@ class StandardCorporateEarningsStrategy implements EarningsStrategyInterface
         $stock->setCurrentRoic((string) max(-0.50, min(1.0, $smoothedRoic)));
         
         return $truePostTaxReturn;
+    }
+
+    public function getEffectiveTaxRate(float $macroTaxRate): float
+    {
+        return $macroTaxRate;
     }
 }

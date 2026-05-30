@@ -79,8 +79,8 @@ class MarketResetCommand extends Command
             $targetPayout = $stockData['target_payout_ratio'] ?? 0.30;
             $startingDividend = ($annualEps / 4.0) * ($targetPayout * 0.50);
 
-            $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['leverage_type'] ?? 'none';
-            $isLeveraged = $leverageType !== 'none';
+            $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['business_model'] ?? 'none';
+            $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
 
             $conn->executeStatement(
                 'UPDATE stocks SET 
@@ -132,8 +132,8 @@ class MarketResetCommand extends Command
                     'jump_mean' => $stockData['jump_mean'],
                     'jump_vol' => $stockData['jump_vol'],
                     'importance' => $stockData['systemic_importance'] ?? 'none',
-                    'roic' => $isLeveraged ? 0.10 : ($stockData['baseline_roic'] ?? 0.10),
-                    'roe' => $isLeveraged ? ($stockData['baseline_roe'] ?? $stockData['baseline_roic'] ?? 0.10) : 0.10,
+                    'roic' => $isFinancial ? 0.10 : ($stockData['baseline_roic'] ?? 0.10),
+                    'roe' => $isFinancial ? ($stockData['baseline_roe'] ?? $stockData['baseline_roic'] ?? 0.10) : 0.10,
                     'capex' => $stockData['capex_ratio'] ?? 0.20,
                     'payout' => $stockData['target_payout_ratio'] ?? 0.30,
                     'div_speed' => $stockData['dividendSpeed'] ?? 0.20,

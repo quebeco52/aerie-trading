@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Service\EarningsStrategy;
+namespace App\Service\BusinessModel;
 
 use App\Entity\Stock;
 use App\Service\MathUtility;
@@ -14,7 +14,7 @@ use App\Service\MacroEngine;
  * - Revenue scales off trading volume, investment banking advisory, and margin loans.
  * - Evaluated on Return on Equity (ROE).
  */
-class BrokerageEarningsStrategy implements EarningsStrategyInterface
+class BrokerageBusinessModel implements BusinessModelInterface
 {
     /**
      * Brokerages don't use fractional customer deposits or float. 
@@ -49,15 +49,15 @@ class BrokerageEarningsStrategy implements EarningsStrategyInterface
      * Idiosyncratic shock applied to retail trading volume and institutional deal flow.
      * Capital Markets have higher top-line variance compared to sticky Asset Managers.
      */
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MathUtility $mathUtility): array
+    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array $macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
         
         // Brokerage revenues are hyper-sensitive to the VIX (Systemic Market Volatility).
         // High Volatility = Massive trading volume (panic selling or euphoria buying).
         $vix = $macroState['market_volatility'] ?? 0.15;
-        
         $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($vix * 0.50)));
+
         $actualVariableCosts = $actualRevenue * $realizedVariableMargin;
 
         return [
@@ -94,5 +94,10 @@ class BrokerageEarningsStrategy implements EarningsStrategyInterface
         $stock->setCurrentRoe((string) max(-0.50, min(1.0, $smoothedRoe)));
         
         return $truePostTaxReturn;
+    }
+
+    public function getEffectiveTaxRate(float $macroTaxRate): float
+    {
+        return $macroTaxRate;
     }
 }

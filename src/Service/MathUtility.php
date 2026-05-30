@@ -571,7 +571,7 @@ class MathUtility
 
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $isLeveraged = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+        $isLeveraged = \App\Data\Sectors::isFinancial($businessModel);
 
         // Floor the bleed factor at 0.10 so normal companies still face gravity
         $baselineReturn = $isLeveraged ? (float) $stock->getBaselineRoe() : (float) $stock->getBaselineRoic();

@@ -108,6 +108,7 @@ class MarketOperator
         $stock->setEarningsPerShare((string) (mt_rand(325, 433) / 100));
         $stock->setFreeCashFlowPerShare("0.00");
         $stock->setCurrentRoic($stock->getBaselineRoic());
+        $stock->setCurrentRoe($stock->getBaselineRoe());
         $stock->setHistoricalFixedRate("0.05");
         $stock->setCorporateTreasury("5000000000.00");
         $stock->setTotalEquity("20000000000.00");

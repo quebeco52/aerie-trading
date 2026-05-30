@@ -282,7 +282,7 @@ class MarketEngine
         float $liveCostOfEquity = 0.10
     ): array {
         
-        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
         
         // MACROECONOMIC STRESS INDEX (MSI)
         $recessionStress = max(0.0, -$outputGap); 

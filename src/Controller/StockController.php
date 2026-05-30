@@ -81,7 +81,7 @@ class StockController extends AbstractController
             $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
             
             $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$asset->getIndustry() ?? 'General']['business_model'] ?? 'none';
-            $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+            $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
             $investedCapital = $asset->getInvestedCapital();
             $evaluationCapital = $isFinancial ? (float) $asset->getTotalEquity() : $asset->getInvestedCapital();
             

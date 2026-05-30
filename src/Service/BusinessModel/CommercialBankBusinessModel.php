@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Service\EarningsStrategy;
+namespace App\Service\BusinessModel;
 
 use App\Entity\Stock;
 use App\Service\MathUtility;
@@ -14,7 +14,7 @@ use App\Service\MacroEngine;
  * - Evaluated strictly on Return on Equity (ROE) rather than ROIC.
  * - Customer deposits act as operating leverage (inventory), requiring an APY Beta to prevent capital flight.
  */
-class CommercialBankEarningsStrategy implements EarningsStrategyInterface
+class CommercialBankBusinessModel implements BusinessModelInterface
 {
     /**
      * Target ROE is dynamically adjusted by the steepness of the yield curve (NS Slope).
@@ -76,7 +76,7 @@ class CommercialBankEarningsStrategy implements EarningsStrategyInterface
     /**
      * Standard idiosyncratic shock applied directly to loan origination volume and fee revenue.
      */
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MathUtility $mathUtility): array
+    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array $macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
         $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * 0.15)));
@@ -118,5 +118,10 @@ class CommercialBankEarningsStrategy implements EarningsStrategyInterface
         $stock->setCurrentRoe((string) max(-0.50, min(1.0, $smoothedRoe)));
         
         return $truePostTaxReturn;
+    }
+
+    public function getEffectiveTaxRate(float $macroTaxRate): float
+    {
+        return $macroTaxRate;
     }
 }

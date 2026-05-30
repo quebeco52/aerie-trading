@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Service\EarningsStrategy;
+namespace App\Service\BusinessModel;
 
 use App\Entity\Stock;
 use App\Service\MathUtility;
@@ -15,7 +15,7 @@ use App\Service\MacroEngine;
  * - Highly stable, recurring revenue from long-term leases.
  * - Target yields (Cap Rates) loosely track the 10-year Treasury yield.
  */
-class ReitEarningsStrategy implements EarningsStrategyInterface
+class ReitBusinessModel implements BusinessModelInterface
 {
     /**
      * Real Estate Cap Rates are deeply tied to the 10-Year Treasury Yield.
@@ -62,7 +62,7 @@ class ReitEarningsStrategy implements EarningsStrategyInterface
     /**
      * REIT revenues are incredibly stable due to multi-year binding leases.
      */
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MathUtility $mathUtility): array
+    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array $macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
         
@@ -117,5 +117,11 @@ class ReitEarningsStrategy implements EarningsStrategyInterface
         $stock->setCurrentRoic((string) max(-0.50, min(1.0, $smoothedRoic)));
         
         return $truePostTaxReturn;
+    }
+
+    public function getEffectiveTaxRate(float $macroTaxRate): float
+    {
+        // REITs are pass-through entities and legally pay 0% corporate tax at the entity level.
+        return 0.0;
     }
 }

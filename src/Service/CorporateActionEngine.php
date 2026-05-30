@@ -299,7 +299,7 @@ class CorporateActionEngine
         $newTreasury -= $divData['total_paid'];
 
         // CALCULATE EXCESS CASH (The War Chest)
-        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
         $targetOperatingCash = $this->mathUtility->calculateTargetOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt(), $businessModel);
         $excessCash = max(0.0, $newTreasury - $targetOperatingCash);
 
@@ -396,7 +396,7 @@ class CorporateActionEngine
         // Emergency Liquidity Preservation
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
         
         $isRegulatoryDividendHalt = false;
         if ($isFinancial) {
@@ -533,7 +533,7 @@ class CorporateActionEngine
 
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
         
         if ($isFinancial) {
             $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['equity_limit'] ?? 10.0;
@@ -731,7 +731,7 @@ class CorporateActionEngine
 
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
 
         if ($isFinancial) {
             // Financials use true Return on Equity (ROE) computed by the EarningsEngine
@@ -875,7 +875,7 @@ class CorporateActionEngine
         $totalDebt = $state['wholesaleDebt'] + $state['customerDeposits'];
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
         $targetCashReservs = $this->mathUtility->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt'], $businessModel) * 1.20;
         $liveInvestedCapital = $this->mathUtility->calculateLiveInvestedCapital($newEquity, $totalDebt, $state['treasury']);
         
@@ -981,7 +981,7 @@ class CorporateActionEngine
         $totalDebt = $state['wholesaleDebt'] + $state['customerDeposits'];
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
         $minOperatingCash = $this->mathUtility->calculateMinOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt'], $businessModel);
 
         if ($state['treasury'] < $minOperatingCash) {
@@ -1032,7 +1032,7 @@ class CorporateActionEngine
         $totalDebt = $state['wholesaleDebt'] + $state['customerDeposits'];
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
         $targetOperatingCash = $this->mathUtility->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt'], $businessModel);
 
         if (!$state['debtActionTaken'] && $health['wants_to_paydown_debt'] && $state['wholesaleDebt'] > 0 && $state['treasury'] > $targetOperatingCash) {
@@ -1084,7 +1084,7 @@ class CorporateActionEngine
         $totalDebt = $state['wholesaleDebt'] + $state['customerDeposits'];
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
         $targetOperatingCash = $this->mathUtility->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt'], $businessModel);
 
         if (!$state['debtActionTaken'] && $state['wholesaleDebt'] > 0.0 && $state['treasury'] > $targetOperatingCash) {

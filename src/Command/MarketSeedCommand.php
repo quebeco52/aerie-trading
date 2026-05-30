@@ -68,10 +68,10 @@ class MarketSeedCommand extends Command
                 $stock->setJumpVol((string) $stockData['jump_vol']);
                 $stock->setSystemicImportance($stockData['systemic_importance'] ?? 'none');
 
-                $leverageType = \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['leverage_type'] ?? 'none';
-                $isLeveraged = $leverageType !== 'none';
+                $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['business_model'] ?? 'none';
+                $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
                 
-                if ($isLeveraged) {
+                if ($isFinancial) {
                     $roe = $stockData['baseline_roe'] ?? $stockData['baseline_roic'] ?? 0.10;
                     $stock->setBaselineRoe((string) $roe);
                     $stock->setCurrentRoe((string) $roe);

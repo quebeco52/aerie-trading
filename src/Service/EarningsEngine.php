@@ -88,15 +88,7 @@ class EarningsEngine
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
         
-        /** @var \App\Service\EarningsStrategy\EarningsStrategyInterface $strategy */
-        $strategy = match ($businessModel) {
-            'commercial_bank' => new \App\Service\EarningsStrategy\CommercialBankEarningsStrategy(),
-            'insurance' => new \App\Service\EarningsStrategy\InsuranceEarningsStrategy(),
-            'brokerage' => new \App\Service\EarningsStrategy\BrokerageEarningsStrategy(),
-            'asset_manager' => new \App\Service\EarningsStrategy\AssetManagementEarningsStrategy(),
-            'reit' => new \App\Service\EarningsStrategy\ReitEarningsStrategy(),
-            default => new \App\Service\EarningsStrategy\StandardCorporateEarningsStrategy(),
-        };
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
 
         // STRUCTURAL COST BASE (Sticky)
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
@@ -136,7 +128,7 @@ class EarningsEngine
         $expectedEbit = $expectedRevenue - $fixedCosts - $expectedVariableCosts;
 
         // APPLY THE IDIOSYNCRATIC Z-SCORE SHOCK
-        $shockData = $strategy->generateIdiosyncraticShock($stock, $expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol, $this->mathUtility);
+        $shockData = $strategy->generateIdiosyncraticShock($stock, $expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol, $macroState, $this->mathUtility);
         $actualRevenue = $shockData['actual_revenue'];
         $actualVariableCosts = $shockData['actual_variable_costs'];
         $ebit = $shockData['ebit'];
@@ -172,7 +164,8 @@ class EarningsEngine
             $expectedEbt = $expectedEbit - $expectedInterestExpense + $interestIncome;
             $actualEbt = $ebit - $actualInterestExpense + $interestIncome;
 
-            $corporateTaxRate = ($businessModel === 'reit') ? 0.0 : ($macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE);
+            $macroTaxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
+            $corporateTaxRate = $strategy->getEffectiveTaxRate($macroTaxRate);
 
             $expectedTotalNetIncome = $expectedEbt > 0 ? $expectedEbt * (1.0 - $corporateTaxRate) : $expectedEbt;
             $actualTotalNetIncome = $actualEbt > 0 ? $actualEbt * (1.0 - $corporateTaxRate) : $actualEbt;
@@ -204,7 +197,7 @@ class EarningsEngine
             // physical number to maintain a mathematically flawless Balance Sheet.
             $stock->setEarningsPerShare((string) $actualAnnualEpsRaw);
 
-            $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+            $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
             $fcfData = $this->calculateFreeCashFlowPerShare($actualTotalNetIncome, $sharesOutstanding, $stock, $macroState, $absoluteDepreciation, $isFinancial);
             $annualFcfPerShare = $fcfData['fcf_per_share'];
             $actualAnnualCapEx = $fcfData['capex'];
@@ -304,64 +297,90 @@ class EarningsEngine
             // Create the main Earnings Event
             $earningsEvent = $this->marketEvent->publish($stock, 'EARNINGS', $description, $totalShockPct * 100);
 
-            $allEvents = [$earningsEvent];
-
-            $report = new \App\Entity\CorporateReport();
-            $report->setStock($stock);
-            $report->setRecordedAt(new \DateTime());
-
-            // The Holy Trinity of the Income Statement
-            $report->setRevenue((string) $actualRevenue);
-            $report->setNetIncome((string) $actualTotalNetIncome);
-            
-            $report->setOperatingMargin((string) $trueOperatingMargin);
-
-            // Debt & Treasury Data
-            $report->setInterestExpense((string) $debtMetrics['interest_expense']);
-            $report->setInterestIncome((string) $interestIncome);
-            $report->setBlendedRate((string) $debtMetrics['blended_rate']);
-            $report->setDynamicSpread((string) $debtMetrics['dynamic_spread']);
-
-            // Cash Flow & Balance Sheet
             $totalReportedCapex = ($actualAnnualCapEx / 4.0) + $reportedOrganicCapex;
-            $report->setCapitalExpenditures((string) $totalReportedCapex);
-            $report->setEquity($stock->getTotalEquity());
-            $report->setTotalDebt($stock->getTotalDebt());
-            $report->setTreasury($stock->getCorporateTreasury());
+            
+            // Persist the comprehensive quarterly report
+            $this->buildCorporateReport(
+                $stock, 
+                $actualRevenue, 
+                $actualTotalNetIncome, 
+                $trueOperatingMargin, 
+                $debtMetrics, 
+                $interestIncome, 
+                $totalReportedCapex, 
+                $truePostTaxReturn, 
+                $wacc, 
+                $annualEconomicProfit, 
+                $allocation, 
+                $health, 
+                $businessModel
+            );
 
-            // Metrics
-            $report->setRoic((string) $truePostTaxReturn);
-            $report->setShares((string) $stock->getSharesOutstanding());
-            $report->setWacc((string) $wacc);
-            $report->setEva((string) $annualEconomicProfit);
-            $report->setDividendPaid((string) $allocation['total_paid']);
-            $report->setStockBuybacks((string) $allocation['total_cash_spent']);
-            $report->setCashYield((string) $health['cash_yield']);
-            $report->setDepositApy(isset($allocation['bank_apy']) ? (string) $allocation['bank_apy'] : null);
+            return [$earningsEvent];
 
-            // Leveraged/Banking specific metrics
-            $finalEquity = (float) $stock->getTotalEquity();
-            $finalTotalDebt = (float) $stock->getTotalDebt();
-            $roe = $finalEquity > 0 ? ($actualTotalNetIncome / $finalEquity) : 0.0;
-            $report->setReturnOnEquity((string) $roe);
-            $report->setCostOfEquity((string) ($health['cost_of_equity'] ?? 0.10));
-            $capitalRatio = ($finalEquity + $finalTotalDebt) > 0 ? ($finalEquity / ($finalEquity + $finalTotalDebt)) : 1.0;
-            $report->setCapitalRatio((string) $capitalRatio);
-
-            if ($businessModel === 'commercial_bank' || $businessModel === 'insurance') {
-                $customerDeposits = (float) $stock->getCustomerDeposits();
-                $depositRatio = $finalTotalDebt > 0 ? ($customerDeposits / $finalTotalDebt) : 0.0;
-                $report->setCustomerDepositRatio((string) $depositRatio);
-            }
-
-            $this->entityManager->persist($report);
         } finally {
             // Restore the structural margin so Asset Turnover math isn't corrupted next quarter
             $stock->setOperatingMargin((string) $stableMargin);
         }
+    }
 
-        // Return the array of events
-        return $allEvents;
+    /**
+     * Assembles and persists the CorporateReport database entity for charting.
+     */
+    private function buildCorporateReport(
+        Stock $stock, float $revenue, float $netIncome, float $operatingMargin, array $debtMetrics, 
+        float $interestIncome, float $capex, float $roic, float $wacc, float $eva, 
+        array $allocation, array $health, string $businessModel
+    ): void {
+        $report = new \App\Entity\CorporateReport();
+        $report->setStock($stock);
+        $report->setRecordedAt(new \DateTime());
+
+        // The Holy Trinity
+        $report->setRevenue((string) $revenue);
+        $report->setNetIncome((string) $netIncome);
+        $report->setOperatingMargin((string) $operatingMargin);
+
+        // Debt & Treasury Data
+        $report->setInterestExpense((string) $debtMetrics['interest_expense']);
+        $report->setInterestIncome((string) $interestIncome);
+        $report->setBlendedRate((string) $debtMetrics['blended_rate']);
+        $report->setDynamicSpread((string) $debtMetrics['dynamic_spread']);
+
+        // Cash Flow & Balance Sheet
+        $report->setCapitalExpenditures((string) $capex);
+        $report->setEquity($stock->getTotalEquity());
+        $report->setTotalDebt($stock->getTotalDebt());
+        $report->setTreasury($stock->getCorporateTreasury());
+
+        // Metrics
+        $report->setRoic((string) $roic);
+        $report->setShares((string) $stock->getSharesOutstanding());
+        $report->setWacc((string) $wacc);
+        $report->setEva((string) $eva);
+        $report->setDividendPaid((string) $allocation['total_paid']);
+        $report->setStockBuybacks((string) $allocation['total_cash_spent']);
+        $report->setCashYield((string) $health['cash_yield']);
+        $report->setDepositApy(isset($allocation['bank_apy']) ? (string) $allocation['bank_apy'] : null);
+
+        // Leveraged/Banking specific metrics
+        $finalEquity = (float) $stock->getTotalEquity();
+        $finalTotalDebt = (float) $stock->getTotalDebt();
+        
+        $roe = $finalEquity > 0 ? ($netIncome / $finalEquity) : 0.0;
+        $report->setReturnOnEquity((string) $roe);
+        $report->setCostOfEquity((string) ($health['cost_of_equity'] ?? 0.10));
+        
+        $capitalRatio = ($finalEquity + $finalTotalDebt) > 0 ? ($finalEquity / ($finalEquity + $finalTotalDebt)) : 1.0;
+        $report->setCapitalRatio((string) $capitalRatio);
+
+        if ($businessModel === 'commercial_bank' || $businessModel === 'insurance') {
+            $customerDeposits = (float) $stock->getCustomerDeposits();
+            $depositRatio = $finalTotalDebt > 0 ? ($customerDeposits / $finalTotalDebt) : 0.0;
+            $report->setCustomerDepositRatio((string) $depositRatio);
+        }
+
+        $this->entityManager->persist($report);
     }
 
     /**

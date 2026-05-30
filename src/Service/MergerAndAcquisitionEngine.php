@@ -53,7 +53,7 @@ class MergerAndAcquisitionEngine
         $industry = $acquirer->getIndustry() ?: 'General';
         $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 1.0;
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
         
         // Allow up to their maximum structural equity limit + a 20% M&A over-leverage buffer
         $maxAllowableDebt = $equity * $equityLimit;
@@ -278,7 +278,7 @@ class MergerAndAcquisitionEngine
 
         $industry = $seller->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
         $currentReturn = $isFinancial ? (float) $seller->getCurrentRoe() : (float) $seller->getCurrentRoic();
         $hurdleRate = $isFinancial ? ($health['cost_of_equity'] ?? 0.10) : $wacc;
 

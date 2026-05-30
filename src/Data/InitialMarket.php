@@ -566,17 +566,17 @@ class InitialMarket
             'retained_earnings' => 60_000_000_000.00
         ],
         [
-            'ticker' => 'BRKW', 'name' => 'Breakwater Trust', 'sector' => 'Financials', 'industry' => 'Asset Management', 'systemic_importance' => 'titan',
+            'ticker' => 'BRKW', 'name' => 'Breakwater Trust', 'sector' => 'Industrials', 'industry' => 'Conglomerates', 'systemic_importance' => 'titan',
             'price' => 950.00, 'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.10, 'beta' => 0.20, 'jump_intensity' => 0.30, 'jump_mean' => 0.04, 'jump_vol' => 0.09,
-            'baseline_roe' => 0.064, 'capex_ratio' => 0.10, 'target_payout_ratio' => 0.40, 'dividendSpeed' => 0.02,
-            'fixed_cost_ratio' => 0.20, 'operating_margin' => 0.35, 'public_float' => 0.40, 'sam_ratio' => 1.25,
+            'baseline_roic' => 0.084, 'capex_ratio' => 0.10, 'target_payout_ratio' => 0.40, 'dividendSpeed' => 0.02,
+            'fixed_cost_ratio' => 0.20, 'operating_margin' => 0.35, 'public_float' => 0.40, 'sam_ratio' => 1.50,
             'floating_debt_ratio' => 0.10, 'historical_fixed_rate' => 0.030, 'credit_spread' => 0.0040, 'depreciation_rate' => 0.03,
             'corporate_treasury' => 55_000_000_000.00,
             'total_net_income'  => 40_710_000_000.00,   
             'total_equity'      => 800_000_000_000.00, 
             'customer_deposits' => 0.00,
-            'wholesale_debt'    => 500_000_000_000.00,
+            'wholesale_debt'    => 100_000_000_000.00,
             'retained_earnings' => 600_000_000_000.00   
         ],
         [

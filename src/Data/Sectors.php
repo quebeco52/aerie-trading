@@ -142,4 +142,33 @@ class Sectors
         'Waste Management' => ['pe' => 22.00, 'depreciation' => 0.05, 'ebitda_limit' => 4.0, 'equity_limit' => 1.5, 'business_model' => 'none'], // Trash is cash. High P/E.
         'General' => ['pe' => 18.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'none'],
     ];
+
+       /**
+     * Helper to determine if a business model belongs to a financial institution.
+     *
+     * @param string $businessModel
+     * @return bool
+     */
+    public static function isFinancial(string $businessModel): bool
+    {
+        return in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+    }
+
+    /**
+     * Factory method to retrieve the financial physics model for a given business type.
+     *
+     * @param string $businessModel
+     * @return \App\Service\BusinessModel\BusinessModelInterface
+     */
+    public static function getBusinessModelStrategy(string $businessModel): \App\Service\BusinessModel\BusinessModelInterface
+    {
+        return match ($businessModel) {
+            'commercial_bank' => new \App\Service\BusinessModel\CommercialBankBusinessModel(),
+            'insurance'       => new \App\Service\BusinessModel\InsuranceBusinessModel(),
+            'brokerage'       => new \App\Service\BusinessModel\BrokerageBusinessModel(),
+            'asset_manager'   => new \App\Service\BusinessModel\AssetManagementBusinessModel(),
+            'reit'            => new \App\Service\BusinessModel\ReitBusinessModel(),
+            default           => new \App\Service\BusinessModel\StandardCorporateBusinessModel(),
+        };
+    }
 }

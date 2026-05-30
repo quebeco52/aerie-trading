@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Service\EarningsStrategy;
+namespace App\Service\BusinessModel;
 
 use App\Entity\Stock;
 use App\Service\MathUtility;
@@ -14,7 +14,7 @@ use App\Service\MacroEngine;
  * - Revenue scales off highly sticky, recurring Assets Under Management (AUM) fees.
  * - Evaluated on Return on Equity (ROE).
  */
-class AssetManagementEarningsStrategy implements EarningsStrategyInterface
+class AssetManagementBusinessModel implements BusinessModelInterface
 {
     /**
      * Asset Managers scale EBIT to cover their target ROE and any operational wholesale debt.
@@ -52,7 +52,7 @@ class AssetManagementEarningsStrategy implements EarningsStrategyInterface
      * Idiosyncratic variance is relatively low compared to transactional brokerages.
      * AUM fees are highly recurring and sticky, providing a stable baseline of revenue.
      */
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MathUtility $mathUtility): array
+    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array $macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
         
@@ -97,5 +97,10 @@ class AssetManagementEarningsStrategy implements EarningsStrategyInterface
         $stock->setCurrentRoe((string) max(-0.50, min(1.0, $smoothedRoe)));
         
         return $truePostTaxReturn;
+    }
+
+    public function getEffectiveTaxRate(float $macroTaxRate): float
+    {
+        return $macroTaxRate;
     }
 }

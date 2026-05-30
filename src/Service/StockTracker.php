@@ -101,7 +101,7 @@ class StockTracker
             $industryKey = $stock->getIndustry() ?: 'General';
             $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industryKey] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
             $businessModel = $metrics['business_model'] ?? 'none';
-            $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+            $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
             $baselineIndustryPE = $metrics['pe'] ?? 20.0;
             $revenuePerShare = (float) $stock->getTotalRevenue() / $shares;
 

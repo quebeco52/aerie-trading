@@ -89,19 +89,12 @@ class DebtEngine
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
 
         $revenue = (float) $stock->getTotalRevenue();
 
         if ($revenue <= 0.0) {
-            $strategy = match ($businessModel) {
-                'commercial_bank' => new \App\Service\EarningsStrategy\CommercialBankEarningsStrategy(),
-                'insurance' => new \App\Service\EarningsStrategy\InsuranceEarningsStrategy(),
-                'brokerage' => new \App\Service\EarningsStrategy\BrokerageEarningsStrategy(),
-                'asset_manager' => new \App\Service\EarningsStrategy\AssetManagementEarningsStrategy(),
-                'reit' => new \App\Service\EarningsStrategy\ReitEarningsStrategy(),
-                default => new \App\Service\EarningsStrategy\StandardCorporateEarningsStrategy(),
-            };
+            $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
 
             $targetMetrics = $strategy->getTargetMetrics($stock, $macroState, $this->mathUtility);
             $investedCapital = $targetMetrics['invested_capital'];
@@ -265,7 +258,7 @@ class DebtEngine
 
         $debtMetrics = $this->calculateInterestExpense($stock, $macroState, false);
 
-        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
 
 
         // Gross Cost
@@ -423,7 +416,7 @@ class DebtEngine
         // Instead, evaluate Financials using a simplified Tier 1 Capital Ratio proxy (Equity / Total Assets).
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $isFinancial = in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager']);
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
 
         if ($isFinancial) {
             $capitalRatio = $equity / $totalAssets;

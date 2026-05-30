@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Service\EarningsStrategy;
+namespace App\Service\BusinessModel;
 
 use App\Entity\Stock;
 use App\Service\MathUtility;
@@ -14,7 +14,7 @@ use App\Service\MathUtility;
  * - Structural profits come from "The Float" (investing premium cash before it's paid out).
  * - Evaluated on Return on Equity (ROE) rather than ROIC.
  */
-class InsuranceEarningsStrategy implements EarningsStrategyInterface
+class InsuranceBusinessModel implements BusinessModelInterface
 {
     /**
      * Insurance companies target a Combined Ratio around 95% to 100% (breakeven underwriting).
@@ -55,7 +55,7 @@ class InsuranceEarningsStrategy implements EarningsStrategyInterface
      * Models the "Catastrophe Physics". Premium top-line revenue barely moves,
      * but cost margins can explode due to unpredictable massive claim payouts (Hurricanes, Mass Torts).
      */
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MathUtility $mathUtility): array
+    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array $macroState, MathUtility $mathUtility): array
     {
         // 1. Premium Revenue Shock (Very low top-line variance)
         $revenueZ = $mathUtility->generateStandardNormal();
@@ -104,5 +104,10 @@ class InsuranceEarningsStrategy implements EarningsStrategyInterface
         $stock->setCurrentRoe((string) max(-0.50, min(1.0, $smoothedRoe)));
         
         return $truePostTaxReturn;
+    }
+
+    public function getEffectiveTaxRate(float $macroTaxRate): float
+    {
+        return $macroTaxRate;
     }
 }
