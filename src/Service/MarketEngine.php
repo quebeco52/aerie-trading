@@ -361,7 +361,7 @@ class MarketEngine
         $pbFairValue = $bookValuePerShare * $pbMultiple;
 
         // PERFECTED WEIGHTED CONSENSUS MODEL
-        if ($businessModel === 'commercial_bank' || $businessModel === 'insurance') {
+        if (in_array($businessModel, ['commercial_bank', 'insurance', 'credit_services'])) {
             // Balance Sheet Heavy: Banks and Insurance trade heavily on their Book Value.
             $fairValue = ($earningsValue * 0.60) + ($pbFairValue * 0.40);
         } else {

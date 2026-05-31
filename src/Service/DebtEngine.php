@@ -177,7 +177,7 @@ class DebtEngine
         $floatingInterestRate = $policyRate + $dynamicSpread;
         
         // CUSTOMER DEPOSIT & LEVERAGE PHYSICS
-        if ($businessModel === 'commercial_bank') {
+        if (in_array($businessModel, ['commercial_bank', 'credit_services'])) {
             $customerDeposits = (float) $stock->getCustomerDeposits();
             $wholesaleDebt = (float) $stock->getWholesaleDebt();
             

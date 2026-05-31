@@ -584,7 +584,7 @@ class CorporateActionEngine
                 // Mega-hoarders are explicitly trying to drain accumulated dead cash
                 $maxWillingSpend = $excessCash * 0.30;
             } else {
-                if ($businessModel === 'commercial_bank') {
+                if (in_array($businessModel, ['commercial_bank', 'credit_services'])) {
                     // STRICT RULE: Banks can ONLY use cash generated this quarter (minus dividends paid)
                     // This permanently prevents debt-funded or old-hoard-draining buybacks for healthy banks!
                     $maxWillingSpend = min($excessCash * 0.10, $retainedEarningsThisQuarter);
@@ -750,7 +750,7 @@ class CorporateActionEngine
 
             if ($isFinancial) {
                 $evalDebt = $state['wholesaleDebt'];
-                $evalTolerance = $businessModel === 'commercial_bank' ? 2.0 : ($businessModel === 'asset_manager' ? 0.5 : 1.0);
+                $evalTolerance = in_array($businessModel, ['commercial_bank', 'credit_services']) ? 2.0 : ($businessModel === 'asset_manager' ? 0.5 : 1.0);
             } else {
                 $evalDebt = $totalDebt;
                 $evalTolerance = $health['debt_tolerance'];
@@ -787,7 +787,7 @@ class CorporateActionEngine
                     // We multiply by 20.0 so a 5% spread achieves maximum growth aggression.
                     $bankSpreadMultiplier = min(1.0, max(0.0, ($trueReturn - $hurdleRate) * 20.0));
                     
-                    if ($businessModel === 'commercial_bank') {
+                    if (in_array($businessModel, ['commercial_bank', 'credit_services'])) {
                         // Banks issue wholesale bonds to match loan demand aggressively.
                         $borrowProbability = 0.85 + ($bankSpreadMultiplier * 0.15); // 85% to 100% chance
                         $aggressiveness = 0.05 + (0.15 * $bankSpreadMultiplier); // Deploy up to 20% of capital capacity
@@ -801,7 +801,7 @@ class CorporateActionEngine
                         $aggressiveness = 0.05 + (0.10 * $bankSpreadMultiplier);
                     }
 
-                    if ($businessModel === 'commercial_bank') {
+                    if (in_array($businessModel, ['commercial_bank', 'credit_services'])) {
                         // DYNAMIC DEPOSIT CONSTRAINT
                         // If a bank is funding its loan book predominantly with expensive wholesale debt,
                         // the CFO will hit the brakes on expansion until the deposit base catches up.
@@ -905,7 +905,7 @@ class CorporateActionEngine
             $organicSpend = ($state['treasury'] - $targetCashReservs) * (0.02 + (0.13 * $spreadMultiplier));
             
             if ($isFinancial) {
-                if ($businessModel === 'commercial_bank') {
+                if (in_array($businessModel, ['commercial_bank', 'credit_services'])) {
                     // For a Bank, "CapEx" is actually the act of expanding their Loan Book.
                     // They take the cash from the vault (Treasury) and lend it out to the economy.
                     // Draining the Treasury mathematically shifts the value into Invested Capital.
@@ -948,7 +948,7 @@ class CorporateActionEngine
                 if ($expansionSpend > 1_000_000_000.0) {
                     $amtB = number_format($expansionSpend / 1_000_000_000, 2);
                     $actionText = match($businessModel) {
-                        'commercial_bank' => 'loan book expansion',
+                        'commercial_bank', 'credit_services' => 'loan book expansion',
                         'insurance' => 'underwriting infrastructure',
                         'brokerage' => 'platform expansion',
                         'asset_manager' => 'fund seeding and platform expansion',
@@ -1135,7 +1135,7 @@ class CorporateActionEngine
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
 
-        if ($businessModel !== 'commercial_bank' && $businessModel !== 'insurance') {
+        if (!in_array($businessModel, ['commercial_bank', 'insurance', 'credit_services'])) {
             return;
         }
 
@@ -1155,7 +1155,7 @@ class CorporateActionEngine
         // ---------------------------------------------------------
         // 1. COMMERCIAL BANK PHYSICS (APY & Yield Flight)
         // ---------------------------------------------------------
-        if ($businessModel === 'commercial_bank') {
+        if (in_array($businessModel, ['commercial_bank', 'credit_services'])) {
             $depositApyBeta = $this->mathUtility->calculateDepositBeta($totalDebt, $equity, $equityLimit, $currentLiabilities);
             $bankApy = max(0.001, $policyRate * $depositApyBeta);
             $state['bank_apy'] = $bankApy; // Saved for the frontend
@@ -1233,7 +1233,7 @@ class CorporateActionEngine
                 $state['wholesaleDebt'] += $liquidityShortfall; // Emergency borrowing
 
                 $amtB = number_format($liquidityShortfall / 1_000_000_000, 2);
-                $lore = $businessModel === 'commercial_bank' 
+                $lore = in_array($businessModel, ['commercial_bank', 'credit_services'])
                     ? "Suffered a bank run. Forced to borrow \${$amtB}B to cover deposit flight."
                     : "Catastrophe claim payouts exceeded cash reserves. Forced to borrow \${$amtB}B.";
 

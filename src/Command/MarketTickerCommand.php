@@ -95,6 +95,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         $historyInterval = (int) max(1, $this->ticksPerYear / 2400); // 2400 points per year
         $operatorInterval = (int) max(1, $this->ticksPerYear / 24);  // Operator audits once a game "month"
         $snapshotInterval = (int) max(1, $this->ticksPerYear / 52);  // Snapshots once a game "week"
+        $quarterlyInterval = (int) max(1, $this->ticksPerYear / 4);   // Snapshots once a game "quarter"
 
         $conn = $this->entityManager->getConnection();
 
@@ -208,6 +209,26 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                         $this->entityManager->flush();
                     }
                     $this->portfolio->recordBulkSnapshots();
+                }
+
+                // Save Macro Report Snapshot once a "Simulation Quarter"
+                if ($tickCount % $quarterlyInterval === 0) {
+                    $now = (new \DateTime())->format('Y-m-d H:i:s');
+                    $conn->executeStatement(
+                        "INSERT INTO macro_report (recorded_at, inflation, inflation_ema, output_gap, output_gap_ema, policy_rate, policy_rate_ema, yield10y, yield10y_ema, corporate_tax_rate, equity_risk_premium, nominal_gdp_index, market_volatility) 
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        [
+                            $now,
+                            $macroState['inflation'], $macroState['inflation_ema'],
+                            $macroState['output_gap'], $macroState['output_gap_ema'],
+                            $macroState['policy_rate'], $macroState['policy_rate_ema'],
+                            $macroState['yield_10y'], $macroState['yield_10y_ema'],
+                            $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE,
+                            $macroState['equity_risk_premium'],
+                            $macroState['nominal_gdp_index'],
+                            $macroState['market_volatility']
+                        ]
+                    );
                 }
 
                 $this->entityManager->commit();

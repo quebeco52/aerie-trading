@@ -4,6 +4,7 @@ namespace App\Command;
 
 use App\Entity\User;
 use App\Data\InitialMarket;
+use App\Entity\Stock;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -43,7 +44,16 @@ class MarketResetCommand extends Command
         $conn->executeStatement('TRUNCATE TABLE user_etfs');
         $conn->executeStatement('TRUNCATE TABLE portfolio_history'); 
         $conn->executeStatement('TRUNCATE TABLE corporate_report');
+        $conn->executeStatement('TRUNCATE TABLE macro_report');
         
+        // Delete any procedurally generated stocks
+        $initialTickers = array_column(InitialMarket::STOCKS, 'ticker');
+        $placeholders = implode(',', array_fill(0, count($initialTickers), '?'));
+        $conn->executeStatement(
+            "DELETE FROM stocks WHERE ticker NOT IN ($placeholders)",
+            $initialTickers
+        );
+
         // Ensure the test user exists
         $testUser = $this->entityManager->getRepository(User::class)->findOneBy(['email' => 'test.test@test.se']);
         if (!$testUser) {
@@ -172,7 +182,105 @@ class MarketResetCommand extends Command
             );
         }
 
+        $io->text('5. Generating new $50B procedural corporations for every industry...');
+        
+        $industryList = array_keys(\App\Data\Sectors::INDUSTRY_METRICS);
+        $prefixes = ['Apex', 'Horizon', 'Vertex', 'Quantum', 'Aegis', 'Omni', 'Vanguard', 'Pinnacle', 'Meridian', 'Zenith', 'Nova', 'Crest', 'Echo', 'Atlas', 'Helios'];
+        $sectorSuffixes = [
+            'Information Technology' => ['Technologies', 'Systems', 'Software', 'Networks'],
+            'Financials' => ['Capital', 'Financial', 'Partners', 'Holdings'],
+            'Health Care' => ['Medical', 'Health', 'Biosciences', 'Pharma'],
+            'Consumer Discretionary' => ['Brands', 'Retail', 'Apparel', 'Leisure'],
+            'Consumer Staples' => ['Foods', 'Consumer', 'Groceries', 'Beverages'],
+            'Industrials' => ['Industries', 'Dynamics', 'Manufacturing', 'Logistics'],
+            'Real Estate' => ['Properties', 'Realty', 'Estates', 'Development'],
+            'Energy' => ['Energy', 'Resources', 'Petroleum', 'Power'],
+            'Materials' => ['Materials', 'Metals', 'Chemicals', 'Mining'],
+            'Utilities' => ['Utilities', 'Power', 'Water', 'Energy'],
+            'Communication Services' => ['Communications', 'Media', 'Broadcasting', 'Telecom']
+        ];
+
+        $existingTickers = array_column(InitialMarket::STOCKS, 'ticker');
+
+        foreach ($industryList as $industry) {
+            if ($industry === 'General') continue;
+
+            $sector = $this->determineSectorForIndustry($industry);
+
+            $prefix = $prefixes[array_rand($prefixes)];
+            $suffixes = $sectorSuffixes[$sector] ?? ['Group', 'Holdings', 'Inc'];
+            $suffix = $suffixes[array_rand($suffixes)];
+            
+            $name = "$prefix $suffix";
+            
+            do {
+                $ticker = strtoupper(substr($prefix, 0, 1) . substr($suffix, 0, 1) . chr(mt_rand(65, 90)) . chr(mt_rand(65, 90)));
+            } while (in_array($ticker, $existingTickers));
+            
+            $existingTickers[] = $ticker;
+
+            $stock = new Stock();
+            $stock->setTicker($ticker);
+            $stock->setName($name);
+            $stock->setSector($sector);
+            $stock->setIndustry($industry);
+            $stock->setPrice('50.00');
+            $stock->setSharesOutstanding('1000000000'); // 1 Billion Shares = $50B Market Cap
+            $stock->setVolatility('0.20');
+            $stock->setCurrentVolatility('0.20');
+            $stock->setBeta('1.00');
+            $stock->setJumpIntensity('0.50');
+            $stock->setJumpMean('0.00');
+            $stock->setJumpVol('0.05');
+            $stock->setSystemicImportance('none');
+            $stock->setBaselineRoic('0.12');
+            $stock->setCurrentRoic('0.12');
+            $stock->setBaselineRoe('0.10');
+            $stock->setCurrentRoe('0.10');
+            $stock->setCapexRatio('0.20');
+            $stock->setTargetPayoutRatio('0.25');
+            $stock->setDividendSpeed('0.20');
+            $stock->setFixedCostRatio(0.35);
+            $stock->setDepreciationRate('0.05');
+            $stock->setCorporateTreasury('2500000000.00');
+            $stock->setFloatingDebtRatio('0.30');
+            $stock->setWholesaleDebt('10000000000.00');
+            $stock->setCustomerDeposits('0.00');
+            $stock->setOperatingMargin('0.15');
+            $stock->setPublicFloatPercentage('0.85');
+            $stock->setTotalNetIncome('5000000000.00');
+            $stock->setTotalEquity('20000000000.00');
+            $stock->setRetainedEarnings('5000000000.00');
+            $stock->setTotalRevenue('33333333333.33');
+            $stock->setHistoricalFixedRate('0.05');
+            $stock->setCreditSpread('0.015');
+            $stock->setLastDividend('0.15625');
+            $stock->setSamRatio('0.25');
+            $stock->setEarningsPerShare('5.00');
+            $stock->setDescription("A procedurally generated mega-corporation operating in the $industry space.");
+
+            $this->entityManager->persist($stock);
+        }
+        
+        $this->entityManager->flush();
+
         $io->success('Market Reset Complete! You can now start the ticker.');
         return Command::SUCCESS;
+    }
+
+    private function determineSectorForIndustry(string $industry): string
+    {
+        $industryLower = strtolower($industry);
+        if (str_contains($industryLower, 'bank') || str_contains($industryLower, 'insurance') || str_contains($industryLower, 'capital') || str_contains($industryLower, 'financial') || str_contains($industryLower, 'credit') || str_contains($industryLower, 'asset') || str_contains($industryLower, 'mortgage')) return 'Financials';
+        if (str_contains($industryLower, 'software') || str_contains($industryLower, 'computer') || str_contains($industryLower, 'semiconductor') || str_contains($industryLower, 'electronic') || str_contains($industryLower, 'information') || str_contains($industryLower, 'communication equipment')) return 'Information Technology';
+        if (str_contains($industryLower, 'medical') || str_contains($industryLower, 'health') || str_contains($industryLower, 'drug') || str_contains($industryLower, 'biotechnology') || str_contains($industryLower, 'diagnostics')) return 'Health Care';
+        if (str_contains($industryLower, 'apparel') || str_contains($industryLower, 'auto') || str_contains($industryLower, 'entertainment') || str_contains($industryLower, 'leisure') || str_contains($industryLower, 'luxury') || str_contains($industryLower, 'restaurant') || str_contains($industryLower, 'retail') || str_contains($industryLower, 'gambling') || str_contains($industryLower, 'travel') || str_contains($industryLower, 'footwear') || str_contains($industryLower, 'discount stores') || str_contains($industryLower, 'furnishings') || str_contains($industryLower, 'recreational') || str_contains($industryLower, 'lodging')) return 'Consumer Discretionary';
+        if (str_contains($industryLower, 'beverage') || str_contains($industryLower, 'food') || str_contains($industryLower, 'grocery') || str_contains($industryLower, 'tobacco') || str_contains($industryLower, 'household') || str_contains($industryLower, 'personal') || str_contains($industryLower, 'farm')) return 'Consumer Staples';
+        if (str_contains($industryLower, 'reit') || str_contains($industryLower, 'real estate')) return 'Real Estate';
+        if (str_contains($industryLower, 'oil') || str_contains($industryLower, 'gas') || str_contains($industryLower, 'energy') || str_contains($industryLower, 'solar')) return 'Energy';
+        if (str_contains($industryLower, 'aluminum') || str_contains($industryLower, 'chemical') || str_contains($industryLower, 'copper') || str_contains($industryLower, 'gold') || str_contains($industryLower, 'material') || str_contains($industryLower, 'steel') || str_contains($industryLower, 'agricultural')) return 'Materials';
+        if (str_contains($industryLower, 'utilit')) return 'Utilities';
+        if (str_contains($industryLower, 'communication') || str_contains($industryLower, 'advertising') || str_contains($industryLower, 'publishing') || str_contains($industryLower, 'telecom') || str_contains($industryLower, 'media')) return 'Communication Services';
+        return 'Industrials';
     }
 }

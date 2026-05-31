@@ -223,7 +223,7 @@ class EarningsEngine
             $organicCapex = $allocation['organic_capex'] ?? 0.0;
             
             // For banks, loan book expansion is a balance sheet transaction (Cash -> Loans), not physical CapEx
-            $reportedOrganicCapex = $businessModel == 'commercial_bank' ? 0.0 : $organicCapex;
+            $reportedOrganicCapex = in_array($businessModel, ['commercial_bank', 'credit_services']) ? 0.0 : $organicCapex;
 
             // Convert quarterly organic CapEx to an annualized per-share impact
             $annualizedOrganicCapex = $reportedOrganicCapex * 4.0;
@@ -374,7 +374,7 @@ class EarningsEngine
         $capitalRatio = ($finalEquity + $finalTotalDebt) > 0 ? ($finalEquity / ($finalEquity + $finalTotalDebt)) : 1.0;
         $report->setCapitalRatio((string) $capitalRatio);
 
-        if ($businessModel === 'commercial_bank' || $businessModel === 'insurance') {
+        if ($businessModel === 'commercial_bank' || $businessModel === 'insurance' || $businessModel === 'credit_services') {
             $customerDeposits = (float) $stock->getCustomerDeposits();
             $depositRatio = $finalTotalDebt > 0 ? ($customerDeposits / $finalTotalDebt) : 0.0;
             $report->setCustomerDepositRatio((string) $depositRatio);

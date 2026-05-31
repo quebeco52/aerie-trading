@@ -71,6 +71,7 @@ class MacroEngine
         $state['output_gap_ema'] = $state['output_gap_ema'] ?? $state['output_gap'];
         $state['policy_rate_ema'] = $state['policy_rate_ema'] ?? $state['policy_rate'];
         $state['ns_slope_ema'] = $state['ns_slope_ema'] ?? $currentNsSlope;
+        $state['yield_10y_ema'] = $state['yield_10y_ema'] ?? $yield10y;
         $state['market_volatility'] = $this->calculateMarketVolatility($state, $dt);
 
         // Nominal Growth include BOTH Real Growth AND Inflation
@@ -85,6 +86,7 @@ class MacroEngine
         $state['policy_rate_ema'] += $emaWeight * ($state['policy_rate'] - $state['policy_rate_ema']);
         $state['inflation_ema'] += $emaWeight * ($state['inflation'] - $state['inflation_ema']);
         $state['ns_slope_ema'] += $emaWeight * ($currentNsSlope - $state['ns_slope_ema']);
+        $state['yield_10y_ema'] += $emaWeight * ($yield10y - $state['yield_10y_ema']);
 
 
 
@@ -120,6 +122,7 @@ class MacroEngine
             'ns_slope_ema' => $state['ns_slope_ema'],
             'ns_curvature' => $yieldData['curvature'],
             'yield_10y' => $yield10y,
+            'yield_10y_ema' => $state['yield_10y_ema'],
             'qe_active' => $yieldData['qe_suppression'] > 0,
             'corporate_tax_rate' => $state['corporate_tax_rate'] ?? self::BASE_CORPORATE_TAX_RATE,
             'equity_risk_premium' => $erp,

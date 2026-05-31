@@ -26,7 +26,7 @@ class ReitBusinessModel implements BusinessModelInterface
         $investedCapital = $stock->getInvestedCapital();
         $baselineRoic = max(0.01, (float) $stock->getBaselineRoic());
         
-        $yield10y = $macroState['yield_10y'] ?? 0.04;
+        $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['yield_10y'] ?? 0.04);
         $realEstateRiskPremium = 0.035; // Target a 350 bps spread over the risk-free rate
         $targetCapRate = $yield10y + $realEstateRiskPremium;
         

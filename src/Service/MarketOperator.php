@@ -115,7 +115,7 @@ class MarketOperator
         $stock->setRetainedEarnings("0.00");
         $stock->setWholesaleDebt("10000000000.00"); // Give the restructured company a healthy 0.5x D/E ratio
 
-        if ($businessModel === 'commercial_bank' || $businessModel === 'insurance') {
+        if (in_array($businessModel, ['commercial_bank', 'insurance', 'credit_services'])) {
             // For a restructured bank or insurance company, assume 85% of its new debt is deposits/float.
             $stock->setCustomerDeposits("8500000000.00");
             $stock->setWholesaleDebt("1500000000.00"); // The remaining 1.5B is Wholesale
