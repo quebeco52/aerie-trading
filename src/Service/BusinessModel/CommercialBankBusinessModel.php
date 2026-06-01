@@ -17,76 +17,139 @@ use App\Service\MacroEngine;
 class CommercialBankBusinessModel implements BusinessModelInterface
 {
     /**
-     * Target ROE is dynamically adjusted by the steepness of the yield curve (NS Slope).
-     * Banks must generate enough EBIT to cover both wholesale interest and customer deposit APY
-     * before hitting their target net income.
+     * Returns a stable structural ROIC proxy to keep top-line loan revenue rock solid.
+     * Dynamic NIM (Net Interest Margin) expansion/compression is handled strictly in generateIdiosyncraticShock.
+     *
+     * @param Stock       $stock       The bank stock entity.
+     * @param array       $macroState  The macroeconomic state.
+     * @param MathUtility $mathUtility Mathematical utility.
+     * @return array{invested_capital: float, baseline_roic: float}
      */
     public function getTargetMetrics(Stock $stock, array $macroState, MathUtility $mathUtility): array
     {
         $equity = (float) $stock->getTotalEquity();
+        $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
         
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
-        
-        $structuralSpread = (float) $stock->getCreditSpread();
-        $wholesaleDebt = (float) $stock->getWholesaleDebt();
-        $customerDeposits = (float) $stock->getCustomerDeposits();
-        
-        $wholesaleRate = $policyRate + $structuralSpread;
-        $totalDebt = $wholesaleDebt + $customerDeposits;
-        
-        // Calculate the APY they must pay to retain customer deposits
-        $industry = $stock->getIndustry() ?: 'General';
-        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 10.0;
-        $depositBeta = $mathUtility->calculateDepositBeta($totalDebt, $equity, $equityLimit, $customerDeposits);
-        $depositRate = max(0.001, $policyRate * $depositBeta);
-        
-        // Total structural cost of capital
-        $structuralInterestExpense = ($wholesaleDebt * $wholesaleRate) + ($customerDeposits * $depositRate);
-        
-        // Steep yield curves (high slope) make banking wildly profitable (Borrow short, lend long)
-        $yieldCurveSlope = $macroState['ns_slope_ema'] ?? ($macroState['ns_slope'] ?? 0.0);
-        $nimModifier = max(0.1, 1.0 + ($yieldCurveSlope * 10.0));
-        
-        $baselineRoe = max(0.01, (float) $stock->getBaselineRoe()) * $nimModifier;
-        $targetNetIncome = $equity * $baselineRoe;
-        $targetEbt = $targetNetIncome / (1.0 - ($macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE));
-        
-        $treasury = (float) $stock->getCorporateTreasury();
-        $expectedInterestIncome = $treasury * max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD); 
-        
-        // Back out the required operating profit
-        $requiredEbit = max(0.01 * $equity, $targetEbt + $structuralInterestExpense - $expectedInterestIncome);
-
         return [
             'invested_capital' => $equity,
-            'baseline_roic' => $equity > 0 ? ($requiredEbit / $equity) : 0.01
+            'baseline_roic' => $baselineRoe * 1.5 // Proxy multiplier for standard bank asset turnover
         ];
     }
 
     /**
      * Banks don't manufacture physical goods, so inflation doesn't crush their supply chain.
      * Their pricing power is mainly tied to capturing the output gap during booms.
+     *
+     * @param Stock $stock      The bank stock entity.
+     * @param array $macroState The current macroeconomic state.
+     * @return float The calculated pricing power modifier.
      */
     public function calculatePricingPowerModifier(Stock $stock, array $macroState): float
     {
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
-        return ($outputGap * (float) $stock->getBeta() * 0.25);
+        $macroDrag = ($outputGap * (float) $stock->getBeta() * 0.25);
+        
+        return $macroDrag - $this->getAnalystMarginShift($stock, $macroState);
     }
 
     /**
-     * Standard idiosyncratic shock applied directly to loan origination volume and fee revenue.
+     * Helper method to align Wall Street analysts with the CFO's dynamic Net Interest Margin (NIM).
+     */
+    public function getAnalystMarginShift(Stock $stock, array $macroState): float
+    {
+        $equity = (float) $stock->getTotalEquity();
+        $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
+        
+        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        $structuralSpread = (float) $stock->getCreditSpread();
+        $wholesaleDebt = (float) $stock->getWholesaleDebt();
+        $customerDeposits = (float) $stock->getCustomerDeposits();
+        $totalDebt = $wholesaleDebt + $customerDeposits;
+        
+        $industry = $stock->getIndustry() ?: 'General';
+        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 10.0;
+        
+        $mathUtility = new MathUtility();
+        $depositBeta = $mathUtility->calculateDepositBeta($totalDebt, $equity, $equityLimit, $customerDeposits);
+        $depositRate = max(0.001, $policyRate * $depositBeta);
+        
+        $structuralInterestExpense = ($wholesaleDebt * ($policyRate + $structuralSpread)) + ($customerDeposits * $depositRate);
+        
+        $yieldCurveSlope = $macroState['ns_slope_ema'] ?? ($macroState['ns_slope'] ?? 0.0);
+        $nimModifier = max(0.1, 1.0 + ($yieldCurveSlope * 10.0));
+        
+        $targetEbt = ($equity * $baselineRoe * $nimModifier) / (1.0 - ($macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE));
+        $expectedInterestIncome = (float) $stock->getCorporateTreasury() * max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+        
+        $requiredEbit = max(0.01 * $equity, $targetEbt + $structuralInterestExpense - $expectedInterestIncome);
+        $structuralEbit = ($baselineRoe * 1.5) * $equity; 
+        
+        $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
+        $expectedRevenue = $equity * (($baselineRoe * 1.5) / $stableMargin) * (1.0 + (($macroState['output_gap_ema'] ?? 0.0) * (float)$stock->getBeta() * 0.25));
+        
+        if ($expectedRevenue > 0) {
+            return ($structuralEbit / $expectedRevenue) - ($requiredEbit / $expectedRevenue);
+        }
+        return 0.0;
+    }
+
+    /**
+     * Idiosyncratic shock applied directly to loan origination volume and fee revenue.
+     * Introduces massive Loss Provision write-offs during economic downturns.
      */
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array $macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
         $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * 0.15)));
-        $actualVariableCosts = $actualRevenue * $realizedVariableMargin;
+        
+        // 1. Dynamic NIM Alignment
+        $equity = (float) $stock->getTotalEquity();
+        $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
+        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        
+        $structuralSpread = (float) $stock->getCreditSpread();
+        $wholesaleDebt = (float) $stock->getWholesaleDebt();
+        $customerDeposits = (float) $stock->getCustomerDeposits();
+        $totalDebt = $wholesaleDebt + $customerDeposits;
+        
+        $industry = $stock->getIndustry() ?: 'General';
+        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 10.0;
+        $depositBeta = $mathUtility->calculateDepositBeta($totalDebt, $equity, $equityLimit, $customerDeposits);
+        $depositRate = max(0.001, $policyRate * $depositBeta);
+        
+        $structuralInterestExpense = ($wholesaleDebt * ($policyRate + $structuralSpread)) + ($customerDeposits * $depositRate);
+        $yieldCurveSlope = $macroState['ns_slope_ema'] ?? ($macroState['ns_slope'] ?? 0.0);
+        $nimModifier = max(0.1, 1.0 + ($yieldCurveSlope * 10.0));
+        
+        $targetEbt = ($equity * $baselineRoe * $nimModifier) / (1.0 - ($macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE));
+        $expectedInterestIncome = (float) $stock->getCorporateTreasury() * max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+        
+        $requiredEbit = max(0.01 * $equity, $targetEbt + $structuralInterestExpense - $expectedInterestIncome);
+        $requiredVariableCosts = $actualRevenue - $fixedCosts - $requiredEbit;
+        $requiredVariableMargin = $requiredVariableCosts / max(1.0, $actualRevenue);
+        
+        $pricingPower = $this->calculatePricingPowerModifier($stock, $macroState);
+        $requiredVariableMargin -= $pricingPower;
+        
+        // 2. The Credit Default Shock (Loss Provisions)
+        $defaultZ = $mathUtility->generateStandardNormal();
+        $lossProvisionShock = $defaultZ < -1.5 ? abs($defaultZ) * 0.10 : ($defaultZ > 1.0 ? -0.02 : 0.0);
+        
+        $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $requiredVariableMargin + $lossProvisionShock));
+        
+        $eventLore = null;
+        if ($defaultZ < -2.0) {
+            $eventLore = "Took a massive provision for credit losses due to rising loan defaults.";
+        } elseif ($defaultZ < -1.5) {
+            $eventLore = "Elevated loan defaults negatively impacted quarterly margins.";
+        }
 
         return [
             'actual_revenue' => $actualRevenue, 
             'actual_variable_costs' => $actualVariableCosts, 
             'ebit' => $actualRevenue - $fixedCosts - $actualVariableCosts, 
-            'primary_shock_z' => $revenueZ
+            'primary_shock_z' => abs($defaultZ) > abs($revenueZ) ? $defaultZ : $revenueZ,
+            'event_lore' => $eventLore
         ];
     }
 

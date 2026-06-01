@@ -23,16 +23,11 @@ class AssetManagementBusinessModel implements BusinessModelInterface
     public function getTargetMetrics(Stock $stock, array $macroState, MathUtility $mathUtility): array
     {
         $equity = (float) $stock->getTotalEquity();
+        $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
         
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
-        
-        $targetEbt = ($equity * max(0.01, (float) $stock->getBaselineRoe())) / (1.0 - ($macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE));
-        $expectedInterestExpense = (float) $stock->getWholesaleDebt() * ($policyRate + (float) $stock->getCreditSpread());
-        $requiredEbit = max(0.01 * $equity, $targetEbt + $expectedInterestExpense);
-
         return [
             'invested_capital' => $equity,
-            'baseline_roic' => $equity > 0 ? ($requiredEbit / $equity) : 0.01
+            'baseline_roic' => $baselineRoe * 1.25 // Stable top-line proxy for Asset Managers
         ];
     }
 
@@ -44,8 +39,31 @@ class AssetManagementBusinessModel implements BusinessModelInterface
     public function calculatePricingPowerModifier(Stock $stock, array $macroState): float
     {
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
+        $macroDrag = ($outputGap * (float) $stock->getBeta() * 1.5);
         
-        return ($outputGap * (float) $stock->getBeta() * 1.5);
+        return $macroDrag - $this->getAnalystMarginShift($stock, $macroState);
+    }
+
+    /**
+     * Helper method to align Wall Street analysts with the CFO's dynamic margins.
+     */
+    public function getAnalystMarginShift(Stock $stock, array $macroState): float
+    {
+        $equity = (float) $stock->getTotalEquity();
+        $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
+        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        
+        $targetEbt = ($equity * $baselineRoe) / (1.0 - ($macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE));
+        $expectedInterestExpense = (float) $stock->getWholesaleDebt() * ($policyRate + (float) $stock->getCreditSpread());
+        $expectedInterestIncome = $this->calculateInterestIncome($stock, $macroState, new MathUtility());
+        
+        $requiredEbit = max(0.01 * $equity, $targetEbt + $expectedInterestExpense - $expectedInterestIncome);
+        $structuralEbit = ($baselineRoe * 1.25) * $equity; 
+        
+        $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
+        $expectedRevenue = $equity * (($baselineRoe * 1.25) / $stableMargin) * (1.0 + (($macroState['output_gap_ema'] ?? 0.0) * (float)$stock->getBeta() * 1.5));
+        
+        return $expectedRevenue > 0 ? (($structuralEbit / $expectedRevenue) - ($requiredEbit / $expectedRevenue)) : 0.0;
     }
 
     /**
@@ -58,7 +76,24 @@ class AssetManagementBusinessModel implements BusinessModelInterface
         
         // AUM fees are highly recurring and sticky, making revenue variance significantly lower than trading-heavy brokerages
         $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * 0.10)));
-        $actualVariableCosts = $actualRevenue * $realizedVariableMargin;
+        
+        // Dynamic ROE Margin Alignment
+        $equity = (float) $stock->getTotalEquity();
+        $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
+        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        
+        $targetEbt = ($equity * $baselineRoe) / (1.0 - ($macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE));
+        $expectedInterestExpense = (float) $stock->getWholesaleDebt() * ($policyRate + (float) $stock->getCreditSpread());
+        $expectedInterestIncome = $this->calculateInterestIncome($stock, $macroState, $mathUtility);
+        
+        $requiredEbit = max(0.01 * $equity, $targetEbt + $expectedInterestExpense - $expectedInterestIncome);
+        $requiredVariableCosts = $actualRevenue - $fixedCosts - $requiredEbit;
+        $requiredVariableMargin = $requiredVariableCosts / max(1.0, $actualRevenue);
+        
+        $pricingPower = $this->calculatePricingPowerModifier($stock, $macroState);
+        $requiredVariableMargin -= $pricingPower;
+        
+        $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $requiredVariableMargin));
 
         return [
             'actual_revenue' => $actualRevenue, 

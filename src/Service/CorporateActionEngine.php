@@ -584,7 +584,7 @@ class CorporateActionEngine
                 // Mega-hoarders are explicitly trying to drain accumulated dead cash
                 $maxWillingSpend = $excessCash * 0.30;
             } else {
-                if (in_array($businessModel, ['commercial_bank', 'credit_services'])) {
+                if (in_array($businessModel, ['commercial_bank', 'credit_services', 'shadow_bank'])) {
                     // STRICT RULE: Banks can ONLY use cash generated this quarter (minus dividends paid)
                     // This permanently prevents debt-funded or old-hoard-draining buybacks for healthy banks!
                     $maxWillingSpend = min($excessCash * 0.10, $retainedEarningsThisQuarter);
@@ -750,7 +750,7 @@ class CorporateActionEngine
 
             if ($isFinancial) {
                 $evalDebt = $state['wholesaleDebt'];
-                $evalTolerance = in_array($businessModel, ['commercial_bank', 'credit_services']) ? 2.0 : ($businessModel === 'asset_manager' ? 0.5 : 1.0);
+                $evalTolerance = $businessModel === 'shadow_bank' ? $health['debt_tolerance'] : (in_array($businessModel, ['commercial_bank', 'credit_services']) ? 2.0 : ($businessModel === 'asset_manager' ? 0.5 : 1.0));
             } else {
                 $evalDebt = $totalDebt;
                 $evalTolerance = $health['debt_tolerance'];
@@ -787,7 +787,7 @@ class CorporateActionEngine
                     // We multiply by 20.0 so a 5% spread achieves maximum growth aggression.
                     $bankSpreadMultiplier = min(1.0, max(0.0, ($trueReturn - $hurdleRate) * 20.0));
                     
-                    if (in_array($businessModel, ['commercial_bank', 'credit_services'])) {
+                    if (in_array($businessModel, ['commercial_bank', 'credit_services', 'shadow_bank'])) {
                         // Banks issue wholesale bonds to match loan demand aggressively.
                         $borrowProbability = 0.85 + ($bankSpreadMultiplier * 0.15); // 85% to 100% chance
                         $aggressiveness = 0.05 + (0.15 * $bankSpreadMultiplier); // Deploy up to 20% of capital capacity
@@ -905,15 +905,15 @@ class CorporateActionEngine
             $organicSpend = ($state['treasury'] - $targetCashReservs) * (0.02 + (0.13 * $spreadMultiplier));
             
             if ($isFinancial) {
-                if (in_array($businessModel, ['commercial_bank', 'credit_services'])) {
+            if (in_array($businessModel, ['commercial_bank', 'credit_services', 'shadow_bank'])) {
                     // For a Bank, "CapEx" is actually the act of expanding their Loan Book.
                     // They take the cash from the vault (Treasury) and lend it out to the economy.
                     // Draining the Treasury mathematically shifts the value into Invested Capital.
                     $expansionSpend = max($organicSpend, $state['debtIssued'] * 0.95);
                 } else {
-                    // Insurance, Brokerages, and Asset Managers do NOT burn newly issued wholesale debt on physical CapEx.
-                    // They hold the debt proceeds as capital reserves to generate investment yield!
-                    $expansionSpend = $organicSpend;
+                    // Asset-light financials (Insurance, Brokerages, Asset Managers) do not build massive physical factories.
+                    // Their growth is driven by AUM and Float. They use excess cash for capital reserves, yield, and buybacks.
+                    $expansionSpend = 0.0;
                 }
             } else {
                 // Normal companies burn newly issued debt on physical infrastructure (factories, warehouses)
@@ -932,23 +932,11 @@ class CorporateActionEngine
                 $liveInvestedCapital = $this->mathUtility->calculateLiveInvestedCapital($newEquity, $totalDebt, $state['treasury']);
                 $expansionRatio = $expansionSpend / max(1.0, $liveInvestedCapital);
 
-                // LAW OF DIMINISHING RETURNS
-                // Expanding physical infrastructure makes the core business slightly less efficient to operate over time.
-                // We drag the structural baseline down, creating a natural gravity that prevents infinite exponential ROIC.
-                if (!$isFinancial) {
-                    $baselineRoic = (float) $stock->getBaselineRoic();
-                    $roicDrag = $baselineRoic * $expansionRatio * 0.02; 
-                    $stock->setBaselineRoic((string) max(0.03, $baselineRoic - $roicDrag));
-                } else {
-                    $baselineRoe = (float) $stock->getBaselineRoe();
-                    $roeDrag = $baselineRoe * $expansionRatio * 0.02;
-                    $stock->setBaselineRoe((string) max(0.03, $baselineRoe - $roeDrag));
-                }
 
                 if ($expansionSpend > 1_000_000_000.0) {
                     $amtB = number_format($expansionSpend / 1_000_000_000, 2);
                     $actionText = match($businessModel) {
-                        'commercial_bank', 'credit_services' => 'loan book expansion',
+                        'commercial_bank', 'credit_services', 'shadow_bank' => 'loan book expansion',
                         'insurance' => 'underwriting infrastructure',
                         'brokerage' => 'platform expansion',
                         'asset_manager' => 'fund seeding and platform expansion',
@@ -1093,7 +1081,7 @@ class CorporateActionEngine
             
             // Banks evaluate leverage sweeps strictly on Wholesale Debt (not Deposits)
             $evalDebt = $isFinancial ? $state['wholesaleDebt'] : $totalDebt;
-            $evalLimit = $isFinancial ? 2.0 : $macroDebtTolerance;
+            $evalLimit = $isFinancial ? ($businessModel === 'shadow_bank' ? $macroDebtTolerance : 2.0) : $macroDebtTolerance;
 
             $currentDebtRatio = $evalDebt / max(1.0, $newEquity);
 
@@ -1200,22 +1188,13 @@ class CorporateActionEngine
             $betaSensitivity = max(0.75, min(1.25, abs((float) $stock->getBeta())));
             $baseGrowth = $systemicGrowthQuarterly * $betaSensitivity * $capacityModifier;
             
-            // Asymmetric Variance (The Catastrophe Skew)
-            // Insurance premiums flow in steadily, but claims spike violently during disasters.
             $claimZ = $this->mathUtility->generateStandardNormal();
-            
-            if ($claimZ < -1.5) {
-                // Major Catastrophe (e.g., Hurricane): Massive claim payouts rip capital out of the Float
-                $randomSwing = $claimZ * 0.04; 
-            } else {
-                // Normal Quarter: Minor fluctuations in claim volume
-                $randomSwing = $claimZ * 0.005;
-            }
+            $randomSwing = $claimZ * 0.005; // Normal fluctuations
             
             $finalGrowthRate = max(-0.15, min(0.15, $baseGrowth + $randomSwing));
             $liabilityChange = $currentLiabilities * $finalGrowthRate;
 
-            $eventLoreOut = "net claim payouts";
+            $eventLoreOut = "policy roll-offs";
             $eventLoreIn  = "new premium Float";
         }
 

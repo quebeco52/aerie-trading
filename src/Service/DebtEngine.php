@@ -337,8 +337,17 @@ class DebtEngine
 
         $wacc = $baseWacc + $distressPremium;
 
-        // Cash Yield & Arbitrage Hurdle (Money Market Funds)
-        $yieldOnCash = max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+        // Cash Yield & Arbitrage Hurdle
+        if ($businessModel === 'insurance') {
+            $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['policy_rate_ema'] ?? 0.04) + 0.01;
+            $erp = $macroState['equity_risk_premium'] ?? MacroEngine::BASE_EQUITY_RISK_PREMIUM;
+            $outputGap = $macroState['output_gap_ema'] ?? 0.0;
+            $bondReturn = $yield10y;
+            $equityReturn = $yield10y + $erp + ($outputGap * 0.5);
+            $yieldOnCash = max(0.0, (0.80 * $bondReturn) + (0.20 * $equityReturn));
+        } else {
+            $yieldOnCash = max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+        }
 
 
         // Fetch the CFO's target Debt-to-Equity limit

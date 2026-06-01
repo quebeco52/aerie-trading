@@ -459,7 +459,7 @@ class MathUtility
      */
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt, string $businessModel): float
     {
-        if (in_array($businessModel, ['commercial_bank', 'credit_services'])) {
+        if (in_array($businessModel, ['commercial_bank', 'credit_services', 'shadow_bank'])) {
             // Banks are fractional. They only need to hold ~10% of deposits in the vault.
             return max($operatingBase * 0.05, $currentLiability * 0.10, $wholesaleDebt * 0.05);
         } elseif ($businessModel === 'insurance') {
@@ -486,7 +486,7 @@ class MathUtility
      */
     public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt, string $businessModel): float
     {
-        if (in_array($businessModel, ['commercial_bank', 'credit_services'])) {
+        if (in_array($businessModel, ['commercial_bank', 'credit_services', 'shadow_bank'])) {
             // If a bank's vault drops below 5% of deposits, they are actively in a Bank Run.
             return max($operatingBase * 0.03, $currentLiability * 0.05, $wholesaleDebt * 0.03); 
         } elseif ($businessModel === 'insurance') {
@@ -512,7 +512,7 @@ class MathUtility
      */
     public function evaluateHoardingStatus(float $excessCash, float $operatingBase, float $totalDebt, string $businessModel): array
     {
-        if (in_array($businessModel, ['commercial_bank', 'credit_services'])) {
+        if (in_array($businessModel, ['commercial_bank', 'credit_services', 'shadow_bank'])) {
             // Banks are spread businesses. Sitting on un-lent cash destroys their ROE.
             // Their tolerance for dead cash is relatively low compared to their massive balance sheets.
             return [

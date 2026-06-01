@@ -70,14 +70,27 @@ class ReitBusinessModel implements BusinessModelInterface
         $revenueShock = $revenueZ * ($baselineVol * 0.05);
         $actualRevenue = $expectedRevenue * (1.0 + $revenueShock);
         
-        $actualVariableCosts = $actualRevenue * $realizedVariableMargin;
+        // The Tenant Default Shock (Bad Debt & Vacancy)
+        // Leases are sticky, but deep recessions cause anchor tenants to break leases or go bankrupt.
+        $tenantDefaultZ = $mathUtility->generateStandardNormal();
+        $vacancyShock = $tenantDefaultZ < -1.5 ? abs($tenantDefaultZ) * 0.08 : ($tenantDefaultZ > 1.0 ? -0.01 : 0.0);
+        
+        $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $realizedVariableMargin + $vacancyShock));
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
+        
+        $eventLore = null;
+        if ($tenantDefaultZ < -2.0) {
+            $eventLore = "Suffered a sudden wave of anchor tenant bankruptcies and commercial lease defaults.";
+        } elseif ($tenantDefaultZ < -1.5) {
+            $eventLore = "Elevated commercial vacancies and unpaid rent impacted quarterly NOI.";
+        }
 
         return [
             'actual_revenue' => $actualRevenue, 
             'actual_variable_costs' => $actualVariableCosts, 
             'ebit' => $ebit, 
-            'primary_shock_z' => $revenueZ
+            'primary_shock_z' => abs($tenantDefaultZ) > abs($revenueZ) ? $tenantDefaultZ : $revenueZ,
+            'event_lore' => $eventLore
         ];
     }
 

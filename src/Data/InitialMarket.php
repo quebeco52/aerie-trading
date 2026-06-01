@@ -106,7 +106,7 @@ class InitialMarket
         [
             'ticker' => 'SAFE', 'name' => 'Safe Harbor Reinsurance', 'sector' => 'Financials', 'industry' => 'Insurance - Reinsurance', 'systemic_importance' => 'titan',
             'price' => 1270.00, 'shares_outstanding' => 1_000_000_000,
-            'volatility' => 0.10, 'beta' => 0.10, 'jump_intensity' => 0.15, 'jump_mean' => -0.25, 'jump_vol' => 0.15,
+            'volatility' => 0.10, 'beta' => 0.20, 'jump_intensity' => 0.15, 'jump_mean' => -0.25, 'jump_vol' => 0.15,
             'baseline_roe' => 0.14, 'capex_ratio' => 0.02, 'target_payout_ratio' => 0.60, 'dividendSpeed' => 0.04,
             'fixed_cost_ratio' => 0.20, 'operating_margin' => 0.28, 'public_float' => 0.70, 'sam_ratio' => 1.00,
             'floating_debt_ratio' => 0.05, 'historical_fixed_rate' => 0.025, 'credit_spread' => 0.0030, 'depreciation_rate' => 0.02,
@@ -704,6 +704,20 @@ class InitialMarket
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 270_000_000_000.00,
             'retained_earnings' => 67_500_000_000.00   
+        ],
+        [
+            'ticker' => 'POOL', 'name' => 'Brine Pool Capital', 'sector' => 'Financials', 'industry' => 'Mortgage Finance', 'systemic_importance' => 'systemic',
+            'price' => 595.00, 'shares_outstanding' => 1_000_000_000,
+            'volatility' => 0.32, 'beta' => 1.80, 'jump_intensity' => 1.50, 'jump_mean' => -0.25, 'jump_vol' => 0.15,
+            'baseline_roe' => 0.28, 'capex_ratio' => 0.05, 'target_payout_ratio' => 0.65, 'dividendSpeed' => 0.50,
+            'fixed_cost_ratio' => 0.30, 'operating_margin' => 0.45, 'public_float' => 0.85, 'sam_ratio' => 0.75,
+            'floating_debt_ratio' => 0.90, 'historical_fixed_rate' => 0.050, 'credit_spread' => 0.0190, 'depreciation_rate' => 0.01,
+            'corporate_treasury' => 100_000_000_000.00,
+            'total_net_income'  => 11_200_000_000.00,  
+            'total_equity'      => 150_000_000_000.00, 
+            'customer_deposits' => 0.00,
+            'wholesale_debt'    => 1_000_000_000_000.00, 
+            'retained_earnings' => 180_000_000_000.00   
         ],
     ];
 

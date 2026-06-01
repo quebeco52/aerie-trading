@@ -623,8 +623,14 @@ function updateCharts(timeframe) {
             yearCount++;
         }
     }
+    
+    // Convert Operating Margin to Combined Ratio (100 - Margin) specifically for Insurance companies
+    let marginLabel = BUSINESS_MODEL === 'insurance' ? 'Combined Ratio' : 'Operating Margin';
+    let displayMarginData = BUSINESS_MODEL === 'insurance' 
+        ? operatingMarginData.map(m => 100 - m) 
+        : operatingMarginData;
 
-    renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, operatingMarginData);
+    renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, displayMarginData, marginLabel);
     renderDebtEquityChart(labels, debtData, equityData, treasuryData);
     renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData, cashYieldData, depositApyData);
     renderCapitalReturnChart(labels, dividendData, buybackData);
@@ -648,7 +654,7 @@ function updateCharts(timeframe) {
     }
 }
 
-function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, operatingMarginData) {
+function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, operatingMarginData, marginLabel = 'Operating Margin') {
     if (profitEngineChartInstance) profitEngineChartInstance.destroy();
 
     const ctx = document.getElementById('netIncomeChart').getContext('2d');
@@ -686,7 +692,7 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
                 },
                 {
                     type: 'line',
-                    label: 'Operating Margin',
+                    label: marginLabel,
                     data: operatingMarginData,
                     borderColor: '#facc15',
                     backgroundColor: '#facc15',
@@ -710,7 +716,7 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
                 tooltip: { 
                     callbacks: { 
                         label: (ctx) => {
-                            if (ctx.dataset.label === 'Operating Margin') {
+                            if (ctx.dataset.label === marginLabel) {
                                 return `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`;
                             }
                             return `${ctx.dataset.label}: $${formatLarge(ctx.raw)}`;
@@ -749,7 +755,7 @@ function updateMacroCharts() {
 
     let labels = [];
     let inflationData = [], outputGapData = [];
-    let policyRateData = [], yield10yData = [];
+    let policyRateData = [], yield10yData = [], slopeData = [];
     let erpData = [], volData = [], taxData = [];
     let gdpData = [];
 
@@ -762,8 +768,12 @@ function updateMacroCharts() {
         inflationData.push(parseFloat(report.inflation_ema) * 100);
         outputGapData.push(parseFloat(report.output_gap_ema) * 100);
         
-        policyRateData.push(parseFloat(report.policy_rate_ema) * 100);
-        yield10yData.push(parseFloat(report.yield10y_ema) * 100);
+        let pr = parseFloat(report.policy_rate_ema) * 100;
+        let y10 = parseFloat(report.yield10y_ema) * 100;
+        
+        policyRateData.push(pr);
+        yield10yData.push(y10);
+        slopeData.push(y10 - pr);
         
         erpData.push(parseFloat(report.equity_risk_premium) * 100);
         volData.push(parseFloat(report.market_volatility) * 100);
@@ -774,7 +784,7 @@ function updateMacroCharts() {
     });
 
     renderMacroEconomyChart(labels, inflationData, outputGapData);
-    renderMacroRatesChart(labels, policyRateData, yield10yData);
+    renderMacroRatesChart(labels, policyRateData, yield10yData, slopeData);
     renderMacroRiskChart(labels, erpData, volData, taxData);
     renderMacroGdpChart(labels, gdpData);
 }
@@ -816,15 +826,16 @@ function renderMacroEconomyChart(labels, inflationData, outputGapData) {
     });
 }
 
-function renderMacroRatesChart(labels, policyRateData, yield10yData) {
+function renderMacroRatesChart(labels, policyRateData, yield10yData, slopeData) {
     if (macroRatesChartInstance) macroRatesChartInstance.destroy();
     const ctx = document.getElementById('macroRatesChart').getContext('2d');
     macroRatesChartInstance = new Chart(ctx, {
-        type: 'line',
+        type: 'bar', // Set base type to bar so we can render the background slope
         data: {
             labels: labels,
             datasets: [
                 {
+                    type: 'line',
                     label: 'Policy Rate (EMA)',
                     data: policyRateData,
                     borderColor: '#7dd3fc',
@@ -834,6 +845,7 @@ function renderMacroRatesChart(labels, policyRateData, yield10yData) {
                     pointRadius: 1
                 },
                 {
+                    type: 'line',
                     label: '10Y Yield (EMA)',
                     data: yield10yData,
                     borderColor: '#c084fc',
@@ -841,6 +853,13 @@ function renderMacroRatesChart(labels, policyRateData, yield10yData) {
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: 1
+                },
+                {
+                    type: 'bar',
+                    label: 'Yield Curve Slope',
+                    data: slopeData,
+                    backgroundColor: slopeData.map(val => val < 0 ? 'rgba(255, 179, 173, 0.4)' : 'rgba(192, 132, 252, 0.5)'),
+                    borderRadius: 4
                 }
             ]
         },

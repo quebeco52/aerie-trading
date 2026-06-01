@@ -24,6 +24,7 @@ class Sectors
         'brokerage'       => 'Asset-light capital market platforms. Generates revenue through trading fees and wealth management rather than taking direct risk on their balance sheet.',
         'asset_manager'   => 'Collects management fees based on total Assets Under Management (AUM). Highly scalable and asset-light, but vulnerable to market downturns reducing AUM.',
         'credit_services' => 'Operates like a bank but with unsecured loans. Generates massive swipe fee revenue tied to inflation, but suffers violently during recessions when loan defaults spike.',
+        'shadow_bank'     => 'Non-depository financial institutions that act like banks. They fund massive loan books entirely through wholesale debt markets, making them highly vulnerable to credit freezes.',
         'reit'            => 'Real Estate Investment Trusts hold physical real estate and collect rent. Required to pay out most of their income as dividends and rely heavily on debt to expand.',
         'utility'         => 'Regulated monopolies that provide essential services. They have stable, predictable cash flows and pay high dividends, but growth is capped by regulators.',
         'commodity'       => 'Highly cyclical businesses tied to the price of underlying raw materials. They have massive fixed CapEx costs and boom/bust revenue cycles.',
@@ -101,7 +102,7 @@ class Sectors
         'Medical Distribution' => ['pe' => 14.00, 'depreciation' => 0.04, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'none'], // Razor thin margins, high volume.
         'Medical Instruments & Supplies' => ['pe' => 22.00, 'depreciation' => 0.05, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'none'],
         'Metal Fabrication' => ['pe' => 13.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'business_model' => 'none'],
-        'Mortgage Finance' => ['pe' => 11.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 8.0, 'business_model' => 'commercial_bank'], // Shadow banks / Fannie Mae. Bank Rule.
+        'Mortgage Finance' => ['pe' => 11.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 8.0, 'business_model' => 'shadow_bank'], // Shadow banks / Fannie Mae. Bank Rule.
         'Oil & Gas E&P' => ['pe' => 11.00, 'depreciation' => 0.12, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'commodity'], // Exploration. Wells deplete incredibly fast.
         'Oil & Gas Equipment & Services' => ['pe' => 14.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'commodity'], // Cyclical services.
         'Oil & Gas Integrated' => ['pe' => 13.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'business_model' => 'commodity'], // Exxon/Chevron. Safer than E&P.
@@ -120,7 +121,7 @@ class Sectors
         'REIT - Healthcare Facilities' => ['pe' => 15.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'reit'], // Very stable
         'REIT - Hotel & Motel' => ['pe' => 13.00, 'depreciation' => 0.04, 'ebitda_limit' => 5.5, 'equity_limit' => 2.0, 'business_model' => 'none'], // Highly cyclical, less debt allowed
         'REIT - Industrial' => ['pe' => 18.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'reit'], // Warehouses (Amazon effect), premium P/E
-        'REIT - Mortgage' => ['pe' => 10.00, 'depreciation' => 0.01, 'ebitda_limit' => 999.0, 'equity_limit' => 8.0, 'business_model' => 'commercial_bank'], // Pure financial engineering (Bank Rule)
+        'REIT - Mortgage' => ['pe' => 10.00, 'depreciation' => 0.01, 'ebitda_limit' => 999.0, 'equity_limit' => 8.0, 'business_model' => 'shadow_bank'], // Pure financial engineering (Bank Rule)
         'REIT - Office' => ['pe' => 12.00, 'depreciation' => 0.04, 'ebitda_limit' => 6.0, 'equity_limit' => 2.5, 'business_model' => 'reit'], // Work-from-home headwinds
         'REIT - Residential' => ['pe' => 17.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'reit'], // Apartments, highly resilient
         'REIT - Retail' => ['pe' => 14.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.0, 'equity_limit' => 2.0, 'business_model' => 'reit'], // Malls, e-commerce risk
@@ -163,7 +164,7 @@ class Sectors
      */
     public static function isFinancial(string $businessModel): bool
     {
-        return in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager', 'credit_services']);
+        return in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager', 'credit_services', 'shadow_bank']);
     }
 
     /**
@@ -180,6 +181,7 @@ class Sectors
             'brokerage'       => new \App\Service\BusinessModel\BrokerageBusinessModel(),
             'asset_manager'   => new \App\Service\BusinessModel\AssetManagementBusinessModel(),
             'credit_services' => new \App\Service\BusinessModel\CreditServicesBusinessModel(),
+            'shadow_bank'     => new \App\Service\BusinessModel\ShadowBankBusinessModel(),
             'reit'            => new \App\Service\BusinessModel\ReitBusinessModel(),
             'utility'         => new \App\Service\BusinessModel\UtilityBusinessModel(),
             'commodity'       => new \App\Service\BusinessModel\CommodityBusinessModel(),

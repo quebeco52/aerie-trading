@@ -60,6 +60,20 @@ class PruneHistoryCommand extends Command
             );
             $io->success("Cleared $etfDeleted redundant rows from etf_history.");
 
+            // Prune Macro Reports (Keep the latest 100 simulation quarters)
+            $io->text("Pruning old macro reports (keeping the latest 100)...");
+            $macroCutoffId = $conn->fetchOne('SELECT id FROM macro_report ORDER BY id DESC LIMIT 1 OFFSET 99');
+            
+            if ($macroCutoffId) {
+                $macroDeleted = $conn->executeStatement(
+                    'DELETE FROM macro_report WHERE id < :cutoff',
+                    ['cutoff' => $macroCutoffId]
+                );
+                $io->success("Cleared $macroDeleted old rows from macro_report.");
+            } else {
+                $io->success("No old macro reports to clear.");
+            }
+
         } catch (\Exception $e) {
             $io->error("An error occurred: " . $e->getMessage());
             return Command::FAILURE;

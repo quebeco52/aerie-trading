@@ -133,6 +133,7 @@ class EarningsEngine
         $actualVariableCosts = $shockData['actual_variable_costs'];
         $ebit = $shockData['ebit'];
         $primaryShockZ = $shockData['primary_shock_z'];
+        $customEventLore = $shockData['event_lore'] ?? null;
 
         // Calculate EXPECTED Interest Expense (Pre-Shock)
         $expectedOperatingMargin = $expectedEbit / max(1.0, $expectedRevenue);
@@ -223,7 +224,7 @@ class EarningsEngine
             $organicCapex = $allocation['organic_capex'] ?? 0.0;
             
             // For banks, loan book expansion is a balance sheet transaction (Cash -> Loans), not physical CapEx
-            $reportedOrganicCapex = in_array($businessModel, ['commercial_bank', 'credit_services']) ? 0.0 : $organicCapex;
+            $reportedOrganicCapex = in_array($businessModel, ['commercial_bank', 'credit_services', 'shadow_bank']) ? 0.0 : $organicCapex;
 
             // Convert quarterly organic CapEx to an annualized per-share impact
             $annualizedOrganicCapex = $reportedOrganicCapex * 4.0;
@@ -236,6 +237,10 @@ class EarningsEngine
             // Aggregate total shock from earnings and corporate actions
             $totalShockPct = $priceGapPct;
             $corporateActionDescriptions = "";
+            
+            if ($customEventLore) {
+                $corporateActionDescriptions .= "\n• " . $customEventLore;
+            }
 
             if (!empty($allocation['events'])) {
                 foreach ($allocation['events'] as $subEvent) {
@@ -374,7 +379,7 @@ class EarningsEngine
         $capitalRatio = ($finalEquity + $finalTotalDebt) > 0 ? ($finalEquity / ($finalEquity + $finalTotalDebt)) : 1.0;
         $report->setCapitalRatio((string) $capitalRatio);
 
-        if ($businessModel === 'commercial_bank' || $businessModel === 'insurance' || $businessModel === 'credit_services') {
+        if (in_array($businessModel, ['commercial_bank', 'insurance', 'credit_services', 'shadow_bank'])) {
             $customerDeposits = (float) $stock->getCustomerDeposits();
             $depositRatio = $finalTotalDebt > 0 ? ($customerDeposits / $finalTotalDebt) : 0.0;
             $report->setCustomerDepositRatio((string) $depositRatio);

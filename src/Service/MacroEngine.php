@@ -138,6 +138,32 @@ class MacroEngine
     }
 
     /**
+     * Records a historical snapshot of the macroeconomic state directly to the database.
+     *
+     * @param array                     $macroState The current state to record.
+     * @param \Doctrine\DBAL\Connection $conn       The active database connection.
+     */
+    public function recordMacroSnapshot(array $macroState, \Doctrine\DBAL\Connection $conn): void
+    {
+        $now = (new \DateTime())->format('Y-m-d H:i:s');
+        $conn->executeStatement(
+            "INSERT INTO macro_report (recorded_at, inflation, inflation_ema, output_gap, output_gap_ema, policy_rate, policy_rate_ema, yield10y, yield10y_ema, corporate_tax_rate, equity_risk_premium, nominal_gdp_index, market_volatility) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                $now,
+                $macroState['inflation'], $macroState['inflation_ema'] ?? $macroState['inflation'],
+                $macroState['output_gap'], $macroState['output_gap_ema'] ?? $macroState['output_gap'],
+                $macroState['policy_rate'], $macroState['policy_rate_ema'] ?? $macroState['policy_rate'],
+                $macroState['yield_10y'], $macroState['yield_10y_ema'] ?? $macroState['yield_10y'],
+                $macroState['corporate_tax_rate'] ?? self::BASE_CORPORATE_TAX_RATE,
+                $macroState['equity_risk_premium'],
+                $macroState['nominal_gdp_index'],
+                $macroState['market_volatility']
+            ]
+        );
+    }
+
+    /**
      * Calculates the Central Bank's target policy rate using the Taylor Rule.
      *
      * @param array $state            The current macroeconomic state.
