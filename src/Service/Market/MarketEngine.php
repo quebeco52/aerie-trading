@@ -1,6 +1,9 @@
 <?php
 
-namespace App\Service;
+namespace App\Service\Market;
+
+use App\Service\Macro\MacroEngine;
+use App\Service\Math\MathUtility;
 
 /**
  * Service responsible for calculating stock price movements based on various market factors.
@@ -322,23 +325,8 @@ class MarketEngine
         $revenueFloorValue = $revenuePerShare * $psMultiple;
 
         // THE BANKING DCF BYPASS
-        if ($isFinancial) { // Use isFinancial
-            // Wall Street NEVER uses DCF for Financials. Cash is their inventory.
-            $earningsValue = $peFairValue;
-        } else {
-            // Discounted Cash Flow (DCF) Value for Normal Companies
-            if ($fcfPerShare !== null) {
-                if ($fcfPerShare > 0.0) {
-                    $multiplier = $this->mathUtility->calculateDcfMultiplier($liveWacc, 0.02);
-                    $dcfFairValue = max(0.01, $fcfPerShare * $multiplier);
-                    $earningsValue = ($peFairValue > 0) ? ($peFairValue + $dcfFairValue) / 2.0 : $dcfFairValue;
-                } else {
-                    $earningsValue = max($revenueFloorValue, $peFairValue) * 0.75;
-                }
-            } else {
-                $earningsValue = max($revenueFloorValue, $peFairValue);
-            }
-        }
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $earningsValue = $strategy->calculateEarningsValue($revenueFloorValue, $peFairValue, $fcfPerShare, $liveWacc, $this->mathUtility);
 
         // Dividend Yield Support (The Dividend Discount Model)
         $dividendSupportValue = 0.0;
@@ -357,17 +345,12 @@ class MarketEngine
         }
 
         // Intrinsic Price-to-Book (P/B) Valuation
-        $pbMultiple = max(0.20, min(10.0, $currentRoic / max(0.01, $hurdleRate)));
+        // A living company rarely trades below 0.4x Book Value unless bankruptcy is imminent.
+        $pbMultiple = max(0.40, min(10.0, $currentRoic / max(0.01, $hurdleRate)));
         $pbFairValue = $bookValuePerShare * $pbMultiple;
 
         // PERFECTED WEIGHTED CONSENSUS MODEL
-        if (in_array($businessModel, ['commercial_bank', 'insurance', 'credit_services', 'shadow_bank'])) {
-            // Balance Sheet Heavy: Banks and Insurance trade heavily on their Book Value.
-            $fairValue = ($earningsValue * 0.60) + ($pbFairValue * 0.40);
-        } else {
-            // Asset Light: Brokerages, Asset Managers, and Normal Companies trade on pure earnings power!
-            $fairValue = ($earningsValue * 0.90) + ($pbFairValue * 0.10);
-        }
+        $fairValue = $strategy->calculateFairValue($earningsValue, $pbFairValue, $normalizedEps);
 
         $perceivedFairValue = max(0.01, $fairValue, $dividendSupportValue);
         

@@ -1,5 +1,7 @@
 <?php
-namespace App\Service;
+namespace App\Service\Math;
+
+use App\Service\Macro\MacroEngine;
 
 /**
  * Utility service for advanced mathematical operations required by the simulation engine.
@@ -156,6 +158,26 @@ class MathUtility
         return $currentPrice * exp($gbmExponent);
     }
 
+    /**
+     * Calculates a step in the Cox-Ingersoll-Ross (CIR) process.
+     * Used to model mean-reverting, strictly positive continuous processes (like operating margins).
+     *
+     * @param float $currentValue The current state variable.
+     * @param float $kappa        The speed of mean reversion.
+     * @param float $theta        The long-term structural target.
+     * @param float $sigma        The volatility of the process.
+     * @param float $dt           The time step delta.
+     * @param float $dW           The Brownian motion Z-score.
+     * @return float The next value in the process.
+     */
+    public function calculateCIR(float $currentValue, float $kappa, float $theta, float $sigma, float $dt, float $dW): float
+    {
+        $currentValue = max(0.0001, $currentValue);
+        $drift = $kappa * ($theta - $currentValue) * $dt;
+        $diffusion = $sigma * sqrt($currentValue) * sqrt($dt) * $dW;
+        
+        return max(0.0001, $currentValue + $drift + $diffusion);
+    }
 
     /**
      * Generates a random number from an Exponential distribution.
@@ -394,261 +416,5 @@ class MathUtility
     public function calculateLeveredBeta(float $unleveredBeta, float $taxRate, float $debtToEquity, float $dampening = 1.0): float
     {
         return $unleveredBeta * (1.0 + ((1.0 - $taxRate) * ($debtToEquity * $dampening)));
-    }
-
-    /**
-     * Calculates the standard depreciation rate based on the industry.
-     *
-     * @param string $industry The industry classification of the stock.
-     * @return float The baseline annual depreciation rate.
-     */
-    public function getIndustryDepreciationRate(string $industry): float
-    {
-        return \App\Data\Sectors::INDUSTRY_METRICS[$industry]['depreciation'] ?? 0.05;
-    }
-
-    /**
-     * Calculates the company's current Market Share based on its Invested Capital and Dynamic SAM.
-     *
-     * @param float $investedCapital   The total physical capital invested in the business.
-     * @param float $nominalGdpIndex   The macroeconomic nominal GDP multiplier.
-     * @param float $samRatio          The Serviceable Addressable Market ratio for the company.
-     * @param float $baselineSectorTam The absolute baseline TAM for the sector.
-     * @return float The current market share as a decimal [0.0, 1.0+].
-     */
-    public function calculateMarketShare(float $investedCapital, float $nominalGdpIndex, float $samRatio, float $baselineSectorTam = 1000000000000.0): float
-    {
-        $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
-        return min(3, $investedCapital / max(1.0, $dynamicSam));
-    }
-
-    /**
-     * Calculates the physical operating base of a company.
-     *
-     * @param float $revenue The total trailing 12-month revenue.
-     * @param float $equity  The total book value of equity.
-     * @param float $floor   The absolute minimum operating base to prevent division by zero.
-     * @return float The proxy size of the operating business.
-     */
-    public function calculateOperatingBase(float $revenue, float $equity, float $floor = 10000000.0): float
-    {
-        return max($revenue, $equity, $floor);
-    }
-
-    /**
-     * Calculates the Live Invested Capital of a company.
-     *
-     * @param float $equity   The total book value of equity.
-     * @param float $debt     The total outstanding debt.
-     * @param float $treasury The total cash reserves (corporate treasury).
-     * @return float The net physical capital actively invested in operations.
-     */
-    public function calculateLiveInvestedCapital(float $equity, float $debt, float $treasury): float
-    {
-        return max($equity * 0.50, ($equity + $debt - $treasury));
-    }
-
-    /**
-     * Calculates the target cash reserves required for normal operations.
-     *
-     * @param float  $operatingBase    The proxy size of the operating business.
-     * @param float  $currentLiability The total customer deposits (Banks) or Float (Insurance).
-     * @param float  $wholesaleDebt    The total wholesale market debt.
-     * @param string $businessModel    The specific financial physics type of the company.
-     * @return float The target optimal cash reserve.
-     */
-    public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt, string $businessModel): float
-    {
-        if (in_array($businessModel, ['commercial_bank', 'credit_services', 'shadow_bank'])) {
-            // Banks are fractional. They only need to hold ~10% of deposits in the vault.
-            return max($operatingBase * 0.05, $currentLiability * 0.10, $wholesaleDebt * 0.05);
-        } elseif ($businessModel === 'insurance') {
-            // Insurance companies MUST protect their float. Target cash = 100% of Float + Operating buffer.
-            // If they don't do this, the CFO will accidentally spend claim money on stock buybacks!
-            return max($operatingBase * 0.05, $currentLiability * 1.0);
-        } elseif ($businessModel === 'brokerage' || $businessModel === 'asset_manager') {
-            // Brokerages and Asset Managers are asset-light fee collectors, but need regulatory capital buffers
-            return max($operatingBase * 0.10, $wholesaleDebt * 0.05);
-        }
-        
-        // Normal companies
-        return $operatingBase * 0.05;
-    }
-
-    /**
-     * Calculates the absolute minimum cash required before triggering a liquidity crisis.
-     *
-     * @param float  $operatingBase    The proxy size of the operating business.
-     * @param float  $currentLiability The total customer deposits (Banks) or Float (Insurance).
-     * @param float  $wholesaleDebt    The total wholesale market debt.
-     * @param string $businessModel    The specific financial physics type of the company.
-     * @return float The absolute minimum survival cash reserve.
-     */
-    public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt, string $businessModel): float
-    {
-        if (in_array($businessModel, ['commercial_bank', 'credit_services', 'shadow_bank'])) {
-            // If a bank's vault drops below 5% of deposits, they are actively in a Bank Run.
-            return max($operatingBase * 0.03, $currentLiability * 0.05, $wholesaleDebt * 0.03); 
-        } elseif ($businessModel === 'insurance') {
-            // If an insurance company's reserves drop below 85% of their total owed float, 
-            // they are facing an insolvency crisis and must issue emergency corporate bonds.
-            return max($operatingBase * 0.03, $currentLiability * 0.85);
-        } elseif ($businessModel === 'brokerage' || $businessModel === 'asset_manager') {
-            return $operatingBase * 0.05;
-        }
-
-        // Normal companies
-        return $operatingBase * 0.03;
-    }
-
-    /**
-     * Evaluates if a company is hoarding excessive cash beyond its structural needs.
-     *
-     * @param float  $excessCash    The amount of cash held above minimum operating requirements.
-     * @param float  $operatingBase The physical scale of the business (For financials, this is Equity).
-     * @param float  $totalDebt     The total debt (wholesale + deposits) for leverage evaluation.
-     * @param string $businessModel The specific financial physics type of the company.
-     * @return array{is_hoarder: bool, is_mega_hoarder: bool}
-     */
-    public function evaluateHoardingStatus(float $excessCash, float $operatingBase, float $totalDebt, string $businessModel): array
-    {
-        if (in_array($businessModel, ['commercial_bank', 'credit_services', 'shadow_bank'])) {
-            // Banks are spread businesses. Sitting on un-lent cash destroys their ROE.
-            // Their tolerance for dead cash is relatively low compared to their massive balance sheets.
-            return [
-                'is_hoarder'      => $excessCash > ($totalDebt * 0.10),
-                'is_mega_hoarder' => $excessCash > ($totalDebt * 0.20),
-            ];
-            
-        } elseif ($businessModel === 'insurance') {
-            // THE WAR CHEST: Insurance companies must survive extreme tail-risk catastrophes.
-            // They will happily sit on mountains of surplus cash (like Berkshire Hathaway).
-            // We force buybacks ONLY if their free cash eclipses their entire equity base.
-            return [
-                'is_hoarder'      => $excessCash > ($operatingBase * 0.50), // 50% of Equity
-                'is_mega_hoarder' => $excessCash > ($operatingBase * 1.00), // 100% of Equity!
-            ];
-            
-        } elseif ($businessModel === 'brokerage' || $businessModel === 'asset_manager') {
-            // Brokerages and Asset Managers are asset-light fee collectors. If they have massive cash piles, 
-            // it is purely dead weight because they don't face catastrophe risks or run loan books.
-            return [
-                'is_hoarder'      => $excessCash > ($operatingBase * 0.30),
-                'is_mega_hoarder' => $excessCash > ($operatingBase * 0.50),
-            ];
-        }
-        
-        // Normal companies (Physical assets, supply chains, standard operations)
-        return [
-            'is_hoarder'      => $excessCash > ($operatingBase * 0.25),
-            'is_mega_hoarder' => $excessCash > ($operatingBase * 0.40),
-        ];
-    }
-
-    /**
-     * Calculates the penalty based on Corporate Saturation (TAM).
-     *
-     * @param \App\Entity\Stock $stock           The stock entity being analyzed.
-     * @param float             $investedCapital The live invested capital (or equity for banks).
-     * @param array             $macroState      The current macroeconomic state.
-     * @return float The saturation penalty percentage to apply against growth/capex.
-     */
-    public function calculateMarketSaturationPenalty(\App\Entity\Stock $stock, float $investedCapital, array $macroState): float
-    {
-        $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
-        $samRatio = (float) $stock->getSamRatio();
-        $marketShare = $this->calculateMarketShare($investedCapital, $nominalGdpIndex, $samRatio);
-
-        $systemic_importance = $stock->getSystemicImportance();
-
-        // The larger the systemic importance, the stronger the "moat" protecting their volume from saturation
-        $moat = match ($systemic_importance) {
-            'titan'    => 0.30,  // Deflects 70% of the saturation penalty
-            'systemic' => 0.75,  // Deflects 25% of the penalty
-            'base'     => 0.90,  // Deflects 10% of the penalty
-            default    => 1.00,  // Takes full damage from market saturation
-        };
-
-        $industry = $stock->getIndustry() ?: 'General';
-        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $isLeveraged = \App\Data\Sectors::isFinancial($businessModel);
-
-        // Floor the bleed factor at 0.10 so normal companies still face gravity
-        $baselineReturn = $isLeveraged ? (float) $stock->getBaselineRoe() : (float) $stock->getBaselineRoic();
-        $effectiveReturn = max(0.10, $baselineReturn);
-        $gravityMultiplier = $effectiveReturn * 0.50;
-
-        $saturationPenalty = pow($marketShare, 4.0) * $gravityMultiplier * $moat;
-
-        return min(0.50, $saturationPenalty); // Cap penalty at 50% volume drag
-    }
-
-    /**
-     * Calculates the dynamic APY Beta offered by a bank based on its leverage utilization
-     * and its "thirst" for cheap customer deposits.
-     *
-     * @param float $totalDebt      Total debt (wholesale + deposits).
-     * @param float $equity         Total equity.
-     * @param float $equityLimit    The structural debt-to-equity limit.
-     * @param float $customerDeposits The amount of current customer deposits.
-     * @return float
-     */
-    public function calculateDepositBeta(float $totalDebt, float $equity, float $equityLimit, float $customerDeposits): float
-    {
-        $utilization = $equity > 0.0 ? ($totalDebt / ($equity * $equityLimit)) : 1.0;
-        $depositRatio = $totalDebt > 0 ? ($customerDeposits / $totalDebt) : 0.0;
-        
-        // DYNAMIC DECAY (The Smooth Thirst Mechanic)
-        // High deposits = fast decay (stingy). Low deposits = slow decay (aggressive).
-        $decayRate = 0.50 + (1.50 * $depositRatio);
-        
-        // DYNAMIC APY BETA CURVE:
-        // Example with a healthy Deposit Ratio (e.g., 80% deposits -> fast decay of 1.70):
-        // - 0.0 utilization = 0.70 (70% APY beta)
-        // - 0.7 utilization ≈ 0.21 (21% APY beta)
-        // - 1.0 utilization ≈ 0.13 (13% APY beta)
-        //
-        // Example with a "thirsty" Deposit Ratio (e.g., 0% deposits -> slow decay of 0.50):
-        // - 0.7 utilization ≈ 0.49 (49% APY beta)
-        // - 1.0 utilization ≈ 0.42 (42% APY beta - kept high to swap wholesale debt for deposits)
-        $depositBeta = max(0.10, 0.70 * exp(-$decayRate * $utilization));
-        
-        return min(0.70, $depositBeta); // Hard cap so they don't bankrupt themselves
-    }
-
-    /**
-     * Calculates a regulatory capacity modifier (throttle) based on structural leverage utilization.
-     *
-     * @param float $totalDebt   Total debt liabilities.
-     * @param float $equity      Total equity (surplus capital).
-     * @param float $equityLimit The structural limit.
-     * @param float|null $coreLiabilities Optional. The amount of core operating liabilities (Float/Deposits).
-     * @return float A multiplier (approaching 0.0 to 1.5) that throttles growth as the limit is approached.
-     */
-    public function calculateCapacityModifier(float $totalDebt, float $equity, float $equityLimit, ?float $coreLiabilities = null): float
-    {
-        $utilization = $equity > 0.0 ? ($totalDebt / ($equity * $equityLimit)) : 1.0;
-        $floatRatio = $totalDebt > 0 ? ($coreLiabilities / $totalDebt) : 0.0;
-        
-        // DYNAMIC DECAY (The Thirst Mechanic)
-        // High float = strict decay (e.g. 2.0). Low float = lenient decay (e.g. 0.5).
-        $decayRate = 0.50 + (1.50 * $floatRatio);
-        
-        // DYNAMIC CAPACITY CURVE:
-        // Example with a healthy Float Ratio (e.g., 100% float -> strict decay of 2.0):
-        // - 0.0 utilization = 1.50 (150% capacity)
-        // - 0.7 utilization ≈ 0.93 (93% capacity - virtually unhindered growth)
-        // - 1.0 utilization ≈ 0.20 (20% capacity - significant drag, but still moving)
-        //
-        // Example with a "thirsty" Float Ratio (e.g., 0% float -> lenient decay of 0.5):
-        // - 0.0 utilization = 1.50 (150% capacity)
-        // - 0.7 utilization ≈ 1.33 (133% capacity - heavily encouraged to capture float)
-        // - 1.0 utilization ≈ 0.91 (91% capacity - lenient lifeline to swap debt for float)
-        
-        // Smooth, single-formula continuous curve (peaks at 1.50, decays exponentially)
-        // Using ^4 keeps capacity high and flat initially, then drops off a cliff right at the 1.0 limit.
-        $capacityModifier = 1.50 * exp(-$decayRate * pow($utilization, 4.0));
-        
-        return max(0.01, min(1.50, $capacityModifier));
     }
 }

@@ -1,9 +1,16 @@
 <?php
 
-namespace App\Service;
+namespace App\Service\Market;
 
 use App\Entity\Stock;
 use Doctrine\ORM\EntityManagerInterface;
+use App\Service\Corporate\CorporateActionEngine;
+use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\EarningsEngine;
+use App\Service\Corporate\MergerAndAcquisitionEngine;
+use App\Service\Event\MarketEventPublisher;
+use App\Service\Math\CorporateMetrics;
+use App\Service\Math\MathUtility;
 
 /**
  * Service responsible for tracking and updating stock prices.
@@ -21,7 +28,7 @@ class StockTracker
      * @param MarketEngine $marketEngine Engine for calculating stock price movements.
      * @param EarningsEngine $earningsEngine Engine for processing quarterly earnings reports.
      * @param CorporateActionEngine $corporateActionEngine Engine for handling corporate actions like stock splits.
-     * @param MarketEvent $eventService Publisher for market events, shocks, and headlines.
+     * @param MarketEventPublisher $eventService Publisher for market events, shocks, and headlines.
      * @param MathUtility $mathUtility Utility for generating standard normal distributions.
      */
     public function __construct(
@@ -30,9 +37,10 @@ class StockTracker
         private EarningsEngine $earningsEngine,
         private CorporateActionEngine $corporateActionEngine,
         private MergerAndAcquisitionEngine $maEngine,
-        private MarketEvent $eventService,
+        private MarketEventPublisher $eventService,
         private DebtEngine $debtEngine,
-        private MathUtility $mathUtility
+        private MathUtility $mathUtility,
+        private CorporateMetrics $corporateMetrics
     ) {}
 
     /**
@@ -214,7 +222,7 @@ class StockTracker
                 $samRatio = (float) $stock->getSamRatio();
                 
                 $evaluationCapital = $isFinancial ? $equity : $investedCapital;
-                $marketShare = min(0.9999, $this->mathUtility->calculateMarketShare($evaluationCapital, $nominalGdpIndex, $samRatio));
+                $marketShare = min(0.9999, $this->corporateMetrics->calculateMarketShare($evaluationCapital, $nominalGdpIndex, $samRatio));
                 
                 $stockUpdate['market_share'] = round($marketShare * 100, 2);
             }

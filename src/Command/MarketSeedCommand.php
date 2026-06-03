@@ -99,6 +99,20 @@ class MarketSeedCommand extends Command
                 $stock->setSamRatio((string) ($stockData['sam_ratio'] ?? 1.00));
                 
                 $netIncome = $stockData['total_net_income'] ?? 0.00;
+                $margin = $stockData['operating_margin'] ?? 0.15;
+                $historicalRate = $stockData['historical_fixed_rate'] ?? 0.04;
+                $wholesaleDebt = $stockData['wholesale_debt'] ?? 0.0;
+                $customerDeposits = $stockData['customer_deposits'] ?? 0.0;
+                $treasury = $stockData['corporate_treasury'] ?? 0.0;
+
+                $interestExpense = ($wholesaleDebt * $historicalRate) + ($customerDeposits * 0.015);
+                $interestIncome = $treasury * 0.0375;
+                $ebt = $netIncome / 0.79;
+                $ebit = $ebt + $interestExpense - $interestIncome;
+                $revenue = $margin > 0 ? max(0.0, $ebit / $margin) : 0.0;
+                
+                $stock->setTotalRevenue((string) $revenue);
+
                 $shares = $stockData['shares_outstanding'] ?? 1_000_000_000;
                 $annualEps = $shares > 0 ? ($netIncome / $shares) : 0.0;
                 $targetPayout = $stockData['target_payout_ratio'] ?? 0.30;
@@ -127,6 +141,7 @@ class MarketSeedCommand extends Command
         $user->setUsername('Test');
 
         // Seed procedural mega-corps if none exist
+        /*
         $currentCount = $this->entityManager->getRepository(Stock::class)->count([]);
         if ($currentCount <= count(InitialMarket::STOCKS)) {
             $industryList = array_keys(\App\Data\Sectors::INDUSTRY_METRICS);
@@ -196,7 +211,13 @@ class MarketSeedCommand extends Command
                 $stock->setTotalNetIncome('5000000000.00');
                 $stock->setTotalEquity('20000000000.00');
                 $stock->setRetainedEarnings('5000000000.00');
-                $stock->setTotalRevenue('33333333333.33');
+                
+                $netIncomeGen = 5000000000.00;
+                $ebtGen = $netIncomeGen / 0.79;
+                $interestExpGen = 10000000000.00 * 0.05;
+                $interestIncGen = 2500000000.00 * 0.0375;
+                $ebitGen = $ebtGen + $interestExpGen - $interestIncGen;
+                $stock->setTotalRevenue((string) ($ebitGen / 0.15));
                 $stock->setHistoricalFixedRate('0.05');
                 $stock->setCreditSpread('0.015');
                 $stock->setLastDividend('0.15625');
@@ -207,6 +228,7 @@ class MarketSeedCommand extends Command
                 $this->entityManager->persist($stock);
             }
         }
+        */
 
         $this->entityManager->flush();
         $io->success('Database successfully seeded with full fundamental physics!');

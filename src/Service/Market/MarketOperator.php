@@ -1,10 +1,12 @@
 <?php
 
-namespace App\Service;
+namespace App\Service\Market;
 
 use App\Entity\Stock;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
+use App\Service\Corporate\DebtEngine;
+use App\Service\Event\MarketEventPublisher;
 
 /**
  * The "Invisible Hand" of the Aerie District.
@@ -15,7 +17,7 @@ class MarketOperator
     public function __construct(
         private EntityManagerInterface $entityManager,
         private LoggerInterface $logger,
-        private MarketEvent $marketEvent,
+        private MarketEventPublisher $marketEvent,
         private DebtEngine $debtEngine
     ) {}
 

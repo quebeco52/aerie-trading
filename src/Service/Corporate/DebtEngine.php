@@ -1,8 +1,11 @@
 <?php
 
-namespace App\Service;
+namespace App\Service\Corporate;
 
 use App\Entity\Stock;
+use App\Service\Macro\MacroEngine;
+use App\Service\Math\CorporateMetrics;
+use App\Service\Math\MathUtility;
 
 class DebtEngine
 {
@@ -11,7 +14,6 @@ class DebtEngine
 
     // Debt Analysis Constants
     private const ARBITRAGE_HURDLE = 0.030; // 300 bps spread is severe
-    private const MIN_INTEREST_COVERAGE_RATIO = 2.0;
 
     // Leverage Physics
     private const MAX_LEVERAGE_RATIO = 15.0;     // Cap extreme D/E or D/EBITDA ratios
@@ -27,11 +29,9 @@ class DebtEngine
     private const RATE_REFINANCE_THRESHOLD = 0.015; // 150 bps drop triggers early refinancing
     private const ACCELERATED_DEBT_TURNOVER = 0.15; // 15% of debt retired per quarter if refinancing
 
-    // ICR Bounds
-    private const LEVERAGED_INDUSTRY_MIN_ICR = 1.25;
-
     public function __construct(
-        private MathUtility $mathUtility
+        private MathUtility $mathUtility,
+        private CorporateMetrics $corporateMetrics
     ) {}
 
     /**
@@ -109,7 +109,7 @@ class DebtEngine
 
         // Calculate Depreciation to find true Cash Flow (EBITDA)
         $customDepreciation = (float) $stock->getDepreciationRate();
-        $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : $this->mathUtility->getIndustryDepreciationRate($industry);
+        $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($industry);
         
         $physicalCapital = $isFinancial ? (float) $stock->getTotalEquity() : $stock->getInvestedCapital();
         $depreciation = $physicalCapital * $depreciationRate;
@@ -176,33 +176,11 @@ class DebtEngine
 
         $floatingInterestRate = $policyRate + $dynamicSpread;
         
-        // CUSTOMER DEPOSIT & LEVERAGE PHYSICS
-        if (in_array($businessModel, ['commercial_bank', 'credit_services'])) {
-            $customerDeposits = (float) $stock->getCustomerDeposits();
-            $wholesaleDebt = (float) $stock->getWholesaleDebt();
-            
-            $wholesaleInterest = ($wholesaleDebt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($wholesaleDebt * $floatingRatio * $floatingInterestRate);
-            $wholesaleRate = $wholesaleDebt > 0 ? ($wholesaleInterest / $wholesaleDebt) : $currentMarketFixedRate;
-            
-            // Banks must pay APY
-            $depositBeta = $this->mathUtility->calculateDepositBeta($debt, $totalEquity, $equityLimit, $customerDeposits);
-            $depositRate = max(0.001, $policyRate * $depositBeta);
-            $depositInterest = $customerDeposits * $depositRate;
-            
-            $interestExpense = $wholesaleInterest + $depositInterest;
-
-        } elseif ($businessModel === 'insurance') {
-            $corporateDebt = (float) $stock->getWholesaleDebt();
-
-            // The Float is a true 0% interest loan. They only pay interest on Corporate Debt.
-            $interestExpense = ($corporateDebt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($corporateDebt * $floatingRatio * $floatingInterestRate);
-            $wholesaleRate = $corporateDebt > 0 ? ($interestExpense / $corporateDebt) : $currentMarketFixedRate;
-
-        } else {
-            // Normal companies, Brokerages, & Asset Managers pay standard market rates on all debt
-            $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingInterestRate);
-            $wholesaleRate = $debt > 0 ? ($interestExpense / $debt) : $currentMarketFixedRate;
-        }
+        // Customer Deposits & Leverage Physics
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $expenseMetrics = $strategy->calculateInterestExpenseAndWholesaleRate($stock, $blendedFixedRate, $floatingInterestRate, $currentMarketFixedRate, $policyRate, $equityLimit, $totalEquity, $debt);
+        $interestExpense = $expenseMetrics['interest_expense'];
+        $wholesaleRate = $expenseMetrics['wholesale_rate'];
 
         $trueBlendedRate = $debt > 0 ? ($interestExpense / $debt) : 0.0;
 
@@ -313,41 +291,39 @@ class DebtEngine
         $weightDebt = $totalCapital > 0 ? ($netDebtCapital / $totalCapital) : 0.0;
         $baseWacc = $this->mathUtility->calculateWACC($weightEquity, $costOfEquity, $weightDebt, $effectiveCostOfDebt);
 
-        // Leveraged industries inherently run lower interest coverage ratios as their core business is leverage
-        $minIcr = $isFinancial ? self::LEVERAGED_INDUSTRY_MIN_ICR : self::MIN_INTEREST_COVERAGE_RATIO;
+        $modelThresholds = \App\Data\Sectors::getModelThresholds($businessModel);
+        $minIcr = $modelThresholds['min_icr'];
 
-        // DISTRESS PENALTY: Prevent the "Anti-Gravity" WACC loop where crashing stocks get cheaper capital
+        // DISTRESS PENALTY
         $ebit = $debtMetrics['ebit'];
         $interestExpense = $debtMetrics['interest_expense'];
         
-        if ($isFinancial) {
-            $interestCoverageProxy = 999.0;
-        } else {
-            $interestCoverageProxy = $interestExpense > 0 ? ($ebit / $interestExpense) : 999.0;
-        }
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $interestCoverage = $strategy->getInterestCoverage($ebit, $interestExpense);
+
+        // Check if the company has a massive cash hoard to weather the storm
+        $operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity());
+        $minOperatingCash = $strategy->calculateMinOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
+        $hasCashBuffer = ((float) $stock->getCorporateTreasury()) > ($minOperatingCash * 1.5);
 
         $distressPremium = 0.0;
-        if ($interestCoverageProxy < $minIcr && $interestCoverageProxy >= 0) {
-            // Add up to a 10% penalty as coverage drops from the safe limit to 0
-            $distressPremium = ($minIcr - $interestCoverageProxy) * 0.05;
-        } elseif ($interestCoverageProxy < 0) {
-            // Flat 15% penalty for companies operating with negative EBIT
-            $distressPremium = 0.15;
+        if ($interestCoverage < $minIcr && $interestCoverage >= 0) {
+            $maxPenalty = $hasCashBuffer ? 0.05 : 0.10;
+            $penaltyMultiplier = $maxPenalty / max(0.01, $minIcr);
+            $distressPremium = ($minIcr - $interestCoverage) * $penaltyMultiplier;
+        } elseif ($interestCoverage < 0) {
+            // Milder penalty if they have cash to survive the negative quarter
+            $distressPremium = $hasCashBuffer ? 0.05 : 0.15;
         }
 
         $wacc = $baseWacc + $distressPremium;
-
-        // Cash Yield & Arbitrage Hurdle
-        if ($businessModel === 'insurance') {
-            $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['policy_rate_ema'] ?? 0.04) + 0.01;
-            $erp = $macroState['equity_risk_premium'] ?? MacroEngine::BASE_EQUITY_RISK_PREMIUM;
-            $outputGap = $macroState['output_gap_ema'] ?? 0.0;
-            $bondReturn = $yield10y;
-            $equityReturn = $yield10y + $erp + ($outputGap * 0.5);
-            $yieldOnCash = max(0.0, (0.80 * $bondReturn) + (0.20 * $equityReturn));
-        } else {
-            $yieldOnCash = max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+        
+        if ($isFinancial) {
+            // Financial institutions use Cost of Equity as their hurdle rate, so it must also suffer the distress penalty!
+            $costOfEquity += $distressPremium;
         }
+
+        $yieldOnCash = $strategy->calculateCashYield($macroState, $policyRate);
 
 
         // Fetch the CFO's target Debt-to-Equity limit
@@ -361,16 +337,6 @@ class DebtEngine
         $effectiveYieldOnCash = $yieldOnCash * (1.0 - $corporateTaxRate);
         
         $isSevereNegativeCarry = $effectiveCostOfDebt > ($effectiveYieldOnCash + $hurdle);
-
-        $ebit = $debtMetrics['ebit'];
-        $interestExpense = $debtMetrics['interest_expense'];
-
-        if ($isFinancial) {
-            // Financial institutions pay interest using Yield/Float, not underwriting EBIT.
-            $interestCoverage = 999.0;
-        } else {
-            $interestCoverage = $interestExpense > 0 ? ($ebit / $interestExpense) : ($ebit > 0 ? 999.0 : -999.0);
-        }
 
         $wantsToPaydownDebt = ($wholesaleDebt > 0) && ($isSevereNegativeCarry || $interestCoverage < $minIcr);
         
@@ -427,21 +393,26 @@ class DebtEngine
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
         $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
 
-        if ($isFinancial) {
+        if ($isFinancial || $businessModel === 'reit') {
             $capitalRatio = $equity / $totalAssets;
             $zScore = $capitalRatio * 100.0; // Convert to percentage points (e.g., 8% capital = 8.0 score)
 
+            $modelThresholds = \App\Data\Sectors::getModelThresholds($businessModel);
+            $distressThreshold = $modelThresholds['distress_equity'];
+            $warningThreshold = $modelThresholds['warning_equity'];
+            $bankruptThreshold = $modelThresholds['bankrupt_equity'];
+
             $zone = 'Safe';
-            if ($zScore < 4.0) {
-                $zone = 'Distress'; // Below 4% equity buffer triggers distress
-            } elseif ($zScore < 6.0) {
-                $zone = 'Grey'; // Between 4% and 6% is a warning zone
+            if ($zScore < $distressThreshold) {
+                $zone = 'Distress'; 
+            } elseif ($zScore < $warningThreshold) {
+                $zone = 'Grey'; 
             }
 
             return [
                 'z_score' => $zScore,
                 'zone' => $zone,
-                'is_bankrupt' => $zScore < 2.0 // Below 2% triggers regulatory seizure / bankruptcy
+                'is_bankrupt' => $zScore < $bankruptThreshold
             ];
         }
 

@@ -1,0 +1,265 @@
+<?php
+
+namespace App\Service\Corporate;
+
+use App\Entity\Stock;
+use Doctrine\ORM\EntityManagerInterface;
+use App\Service\Macro\MacroEngine;
+use App\Service\Math\CorporateMetrics;
+use App\Service\Math\MathUtility;
+
+/**
+ * Service responsible for returning cash to shareholders.
+ * Handles Dividends and Share Repurchases (Buybacks).
+ */
+class CapitalAllocationEngine
+{
+    public function __construct(
+        private EntityManagerInterface $entityManager,
+        private CorporateMetrics $corporateMetrics,
+        private DebtEngine $debtEngine,
+        private MathUtility $mathUtility,
+        private TreasuryEngine $treasuryEngine
+    ) {}
+
+    /**
+     * Allocates quarterly capital via dividends and buybacks, and updates the balance sheet.
+     */
+    public function allocateCapital(
+        Stock $stock,
+        float $actualAnnualEps,
+        float $quarterlyFcfPerShare,
+        float $currentPrice,
+        float $sharesOutstanding,
+        array $macroState,
+        float $actualTotalNetIncome = 0.0
+    ): array {
+        $events = [];
+        $oldShares = $sharesOutstanding;
+        $quarterlyEps = $actualAnnualEps / 4.0;
+        $quarterlyNetIncome = $actualTotalNetIncome != 0.0 ? ($actualTotalNetIncome / 4.0) : ($quarterlyEps * $oldShares);
+        
+        $currentTreasury = (float) $stock->getCorporateTreasury();
+        $operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity());
+        $investedCapital = $stock->getInvestedCapital();
+        
+        $industry = $stock->getIndustry() ?: 'General';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+
+        $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState);
+
+        $ebit = $health['raw_metrics']['ebit'] ?? 0.0;
+        $corporateTaxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $nopat = $ebit > 0 ? $ebit * (1.0 - $corporateTaxRate) : $ebit;
+
+        // CALCULATE BASELINE CASH CHANGES
+        $totalFcfGenerated = $quarterlyFcfPerShare * $oldShares;
+        $newTreasury = $currentTreasury + $totalFcfGenerated;
+        
+        // EXECUTE DIVIDENDS
+        $divData = $this->executeDividends($stock, $quarterlyEps, $oldShares, $currentPrice, $newTreasury, $operatingBase, $investedCapital, $nopat, $health, $actualTotalNetIncome);
+        if ($divData['event']) $events[] = $divData['event'];
+
+        $newTreasury -= $divData['total_paid'];
+
+        // CALCULATE EXCESS CASH
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $targetOperatingCash = $strategy->calculateTargetOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
+        $excessCash = max(0.0, $newTreasury - $targetOperatingCash);
+
+        $currentPE = $actualAnnualEps > 0 ? ($currentPrice / $actualAnnualEps) : 9999.0;
+        $retainedEarningsThisQuarter = max(0.0, $quarterlyNetIncome - $divData['total_paid']);
+
+        // THE TRADING DESK: EXECUTE BUYBACKS
+        if ($businessModel === 'reit') {
+            $buybackData = ['new_shares' => $oldShares, 'total_cash_spent' => 0.0, 'event' => null];
+        } else {
+            $buybackData = $this->executeBuybacks(
+                $stock, $excessCash, $oldShares, $currentPrice, $currentPE, $operatingBase, $investedCapital, $nopat, $health, $macroState, $actualTotalNetIncome, $retainedEarningsThisQuarter
+            );
+        }
+        if ($buybackData['event']) $events[] = $buybackData['event'];
+
+        $newTreasury -= $buybackData['total_cash_spent'];
+
+        // UPDATE THE BALANCE SHEET
+        $bsEvents = $this->treasuryEngine->updateBalanceSheet(
+            $stock, $quarterlyNetIncome, $divData['total_paid'], $buybackData['total_cash_spent'], $operatingBase, $nopat, $newTreasury, $macroState, $health
+        );
+
+        if (!empty($bsEvents['events'])) {
+            $events = array_merge($events, $bsEvents['events']);
+        }
+
+        return [
+            'new_shares' => $buybackData['new_shares'],
+            'dividend_paid' => $divData['dividend_per_share'],
+            'total_paid' => $divData['total_paid'],
+            'total_cash_spent' => $buybackData['total_cash_spent'],
+            'bank_apy' => $bsEvents['bank_apy'] ?? null,
+            'organic_capex' => $bsEvents['organic_capex'] ?? 0.0,
+            'events' => $events
+        ];
+    }
+
+    private function executeDividends(Stock $stock, float $quarterlyEps, float $shares, float $currentPrice, float $availableTreasury, float $operatingBase, float $investedCapital, float $nopat, array $health, float $actualTotalNetIncome = 0.0): array
+    {
+        $targetPayout = (float) $stock->getTargetPayoutRatio();
+        $speed = (float) $stock->getDividendSpeed();
+        $lastDividend = (float) $stock->getLastDividend();
+
+        $calculatedTarget = $quarterlyEps > 0 ? ($quarterlyEps * $targetPayout) : 0.0;
+        $targetDividend = $speed > 0.05 ? $calculatedTarget : max($calculatedTarget, $lastDividend);
+
+        $industry = $stock->getIndustry() ?: 'General';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
+        
+        $isRegulatoryDividendHalt = false;
+        if ($isFinancial) {
+            $trueReturn = (float)$stock->getTotalEquity() > 0 ? ($actualTotalNetIncome / (float)$stock->getTotalEquity()) : 0.0;
+            $hurdleRate = $health['cost_of_equity'] ?? 0.10;
+            
+            $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['equity_limit'] ?? 10.0;
+            if ((float)$stock->getDebtToEquityRatio() > $equityLimit) {
+                $isRegulatoryDividendHalt = true;
+            }
+        } else {
+            $trueReturn = $investedCapital > 0 ? ($nopat / $investedCapital) : 0.0;
+            $hurdleRate = $health['wacc'];
+        }
+        
+        $evaSpread = $trueReturn - $hurdleRate;
+        $isTitan = in_array($stock->getSystemicImportance(), ['titan']);
+        $isAristocrat = $speed <= 0.05;
+
+        $distressMultiplier = 1.0 + ($isTitan ? 0.2 : 0.0) + ($isAristocrat ? 0.2 : 0.0);
+
+        $hasCashBuffer = $availableTreasury > ($operatingBase * 0.10); 
+        $isCriticalCash = $availableTreasury < ($operatingBase * 0.05);
+
+        $isDeepDistress = $evaSpread < (-0.08 * $distressMultiplier);
+        $isModerateDistressNoCash = ($evaSpread < (-0.04 * $distressMultiplier)) && !$hasCashBuffer;
+
+        $modelThresholds = \App\Data\Sectors::getModelThresholds($businessModel);
+        $crisisThreshold = $modelThresholds['dividend_crisis_icr'];
+        $isLiquidityCrisis = $health['interest_coverage'] < 1.0 || ($health['interest_coverage'] < $crisisThreshold && !$hasCashBuffer);
+
+        if ($isDeepDistress || $isModerateDistressNoCash || $isLiquidityCrisis || $isRegulatoryDividendHalt) {
+            $targetDividend = 0.0;
+            $speed = ($isLiquidityCrisis || $isRegulatoryDividendHalt) ? 1.0 : min(1.0, $speed + 0.25);
+        } elseif ($isCriticalCash && $calculatedTarget < $lastDividend) {
+            $targetDividend = $calculatedTarget;
+            if ($speed <= 0.05) $speed = 0.50;
+        }
+
+        if ($lastDividend > 0 && $speed <= 0.05) {
+            $catchUpRatio = $calculatedTarget / $lastDividend;
+            if ($catchUpRatio > 1.30) {
+                $speed = min(0.15, $speed + (($catchUpRatio - 1.30) * 0.10));
+            }
+        }
+
+        $newDividend = max(0.0, $lastDividend + ($speed * ($targetDividend - $lastDividend)));
+
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $minOperatingCash = $strategy->calculateMinOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
+        $usableCash = max(0.0, $availableTreasury - $minOperatingCash);
+        
+        $maxDividendPerShare = $shares > 0 ? ($usableCash / $shares) : 0.0;
+        $maxMarketDividend = max(0.0, $currentPrice * 0.10);
+
+        $newDividend = min($newDividend, $maxDividendPerShare, $maxMarketDividend);
+        $totalPaid = $newDividend * $shares;
+        $event = null;
+
+        if ($newDividend > 0.0) {
+            $this->entityManager->getConnection()->executeStatement(
+                'UPDATE users u
+                 INNER JOIN user_stocks us ON u.id = us.user_id
+                 SET u.cash_balance = u.cash_balance + (us.quantity * :dividend)
+                 WHERE us.stock_id = :stock_id',
+                ['dividend' => $newDividend, 'stock_id' => $stock->getId()]
+            );
+
+            $stock->setLastDividend((string) $newDividend);
+            $yield = (($newDividend * 4) / max($currentPrice, 0.01)) * 100;
+            $totalPaidStr = $totalPaid >= 1_000_000_000 ? number_format($totalPaid / 1_000_000_000, 2) . 'B' : number_format($totalPaid / 1_000_000, 2) . 'M';
+
+            $event = ['description' => "Paid $" . number_format($newDividend, 2) . "/share div (\${$totalPaidStr} total, " . number_format($yield, 2) . "% yield).", 'shock' => 0.0];
+        } else {
+            $stock->setLastDividend('0.00');
+        }
+
+        return ['dividend_per_share' => $newDividend, 'total_paid' => $totalPaid, 'event' => $event];
+    }
+
+    private function executeBuybacks(Stock $stock, float $excessCash, float $shares, float $currentPrice, float $currentPE, float $operatingBase, float $investedCapital, float $nopat, array $health, array $macroState, float $actualTotalNetIncome = 0.0, float $retainedEarningsThisQuarter = 0.0): array
+    {
+        $canEasilyCoverDebt = $excessCash > ((float) $stock->getTotalDebt() * 2.0);
+        $industry = $stock->getIndustry() ?: 'General';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
+        
+        if ($isFinancial) {
+            $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['equity_limit'] ?? 10.0;
+            if ((float)$stock->getDebtToEquityRatio() > ($equityLimit * 0.85)) {
+                return ['new_shares' => $shares, 'total_cash_spent' => 0.0, 'event' => null];
+            }
+        }
+        
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $hoardStatus = $strategy->evaluateHoardingStatus($excessCash, $operatingBase, (float) $stock->getTotalDebt());
+        $isMegaHoarder = $hoardStatus['is_mega_hoarder'];
+
+        $isLiquidityCrisis = $health['interest_coverage'] < 1.0;
+        $modelThresholds = \App\Data\Sectors::getModelThresholds($businessModel);
+        $minBuybackIcr = $modelThresholds['buyback_min_icr'];
+
+        if ($isLiquidityCrisis || (!$isMegaHoarder && (($health['wants_to_paydown_debt'] && !$canEasilyCoverDebt) || $health['interest_coverage'] < $minBuybackIcr))) {
+            return ['new_shares' => $shares, 'total_cash_spent' => 0.0, 'event' => null];
+        }
+
+        $totalCashSpent = 0.0;
+        $event = null;
+
+        if ($isFinancial) {
+            $trueReturn = (float)$stock->getTotalEquity() > 0 ? ($actualTotalNetIncome / (float)$stock->getTotalEquity()) : 0.0;
+            $hurdleRate = $health['cost_of_equity'] ?? 0.10;
+        } else {
+            $trueReturn = $investedCapital > 0 ? ($nopat / $investedCapital) : 0.0;
+            $hurdleRate = $health['wacc'];
+        }
+        $economicSpread = $trueReturn - $hurdleRate;
+
+        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($macroState['policy_rate'] ?? 0.04, $economicSpread);
+
+        if (($economicSpread > 0.02 && $currentPE < ($fairValuePE + 3.0)) || $isMegaHoarder) {
+            $maxWillingSpend = $strategy->calculateMaxBuybackSpend($excessCash, $retainedEarningsThisQuarter, $isMegaHoarder);
+
+            $marketCap = $shares * max($currentPrice, 0.01);
+            $maxRegulatorySpend = $marketCap * ($isMegaHoarder ? 0.03 : 0.015);
+            $absoluteMaxSpend = min($maxWillingSpend, $maxRegulatorySpend);
+
+            $valuationDiscount = max(0.0, ($fairValuePE - $currentPE) / max(1.0, $fairValuePE));
+            $aggression = min(1.0, 0.50 + $valuationDiscount);
+
+            $actualSpend = $absoluteMaxSpend * $aggression * (mt_rand(50, 100) / 100.0);
+            $sharesRepurchased = (int) floor($actualSpend / max($currentPrice, 0.01));
+
+            if ($sharesRepurchased > 0) {
+                $totalCashSpent = $sharesRepurchased * max($currentPrice, 0.01);
+                $shares -= $sharesRepurchased;
+                $stock->setSharesOutstanding((string) $shares);
+
+                $pctRetired = ($sharesRepurchased / ($shares + $sharesRepurchased)) * 100;
+                $event = [
+                    'description' => "Bought back " . number_format($sharesRepurchased) . " shares.",
+                    'shock' => $pctRetired * 0.5
+                ];
+            }
+        }
+
+        return ['new_shares' => $shares, 'total_cash_spent' => $totalCashSpent, 'event' => $event];
+    }
+}

@@ -28,6 +28,8 @@ class Sectors
         'reit'            => 'Real Estate Investment Trusts hold physical real estate and collect rent. Required to pay out most of their income as dividends and rely heavily on debt to expand.',
         'utility'         => 'Regulated monopolies that provide essential services. They have stable, predictable cash flows and pay high dividends, but growth is capped by regulators.',
         'commodity'       => 'Highly cyclical businesses tied to the price of underlying raw materials. They have massive fixed CapEx costs and boom/bust revenue cycles.',
+        'financial_data'  => 'Asset-light data monopolies (Rating Agencies, Exchanges). Characterized by incredibly sticky recurring subscription revenue, high margins, and immunity to supply chain inflation.',
+        'tech'            => 'Asset-light intellectual property and platform businesses. Highly scalable with near-zero marginal costs. Immune to physical supply chains but vulnerable to regulatory tail risks.',
         'none'            => 'Standard corporate physics. Evaluated on Return on Invested Capital (ROIC). Generates revenue by selling goods/services at a margin and reinvesting free cash flow.',
     ];
 
@@ -71,7 +73,7 @@ class Sectors
         'Entertainment' => ['pe' => 20.00, 'depreciation' => 0.10, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'none'], // Media assets/parks support debt
         'Farm & Heavy Construction Machinery' => ['pe' => 15.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'none'],
         'Farm Products' => ['pe' => 16.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'business_model' => 'none'],
-        'Financial Data & Stock Exchanges' => ['pe' => 26.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'none'], // Monopolies, high P/E
+        'Financial Data & Stock Exchanges' => ['pe' => 26.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'financial_data'], // Monopolies, high P/E
         'Food Distribution' => ['pe' => 18.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'business_model' => 'none'],
         'Footwear & Accessories' => ['pe' => 18.00, 'depreciation' => 0.06, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'none'],
         'Furnishings, Fixtures & Appliances' => ['pe' => 15.00, 'depreciation' => 0.06, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'none'],
@@ -83,7 +85,7 @@ class Sectors
         'Home Improvement Retail' => ['pe' => 20.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'none'],
         'Household & Personal Products' => ['pe' => 22.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'business_model' => 'none'], // P&G, Colgate. Premium P/E.
         'Industrial Distribution' => ['pe' => 16.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'none'],
-        'Information Technology Services' => ['pe' => 24.00, 'depreciation' => 0.04, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'business_model' => 'none'], // Asset light
+        'Information Technology Services' => ['pe' => 24.00, 'depreciation' => 0.04, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'business_model' => 'tech'], // Asset light
         'Insurance Brokers' => ['pe' => 22.00, 'depreciation' => 0.02, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'business_model' => 'brokerage'], // Asset light fee business
         'Insurance - Diversified' => ['pe' => 12.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 7.0, 'business_model' => 'insurance'],
         'Insurance - Life' => ['pe' => 10.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 8.0, 'business_model' => 'insurance'],
@@ -91,7 +93,7 @@ class Sectors
         'Insurance - Reinsurance' => ['pe' => 11.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 5.0, 'business_model' => 'insurance'], // Taking the riskiest policies, highest capital requirements
         'Insurance - Specialty' => ['pe' => 13.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 6.0, 'business_model' => 'insurance'],
         'Integrated Freight & Logistics' => ['pe' => 18.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'none'], // UPS, FedEx. Heavy CapEx.
-        'Internet Content & Information' => ['pe' => 25.00, 'depreciation' => 0.05, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'none'], // Alphabet, Meta. Asset light.
+        'Internet Content & Information' => ['pe' => 25.00, 'depreciation' => 0.05, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'tech'], // Alphabet, Meta. Asset light.
         'Internet Retail' => ['pe' => 28.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'none'], // Amazon. Logistics heavy.
         'Leisure' => ['pe' => 18.00, 'depreciation' => 0.08, 'ebitda_limit' => 4.0, 'equity_limit' => 2.0, 'business_model' => 'none'], // Theme parks, cruises. Collateralized debt.
         'Lodging' => ['pe' => 18.00, 'depreciation' => 0.06, 'ebitda_limit' => 4.0, 'equity_limit' => 2.0, 'business_model' => 'none'], // Hotels. Real estate backed.
@@ -134,8 +136,8 @@ class Sectors
         'Security & Protection Services' => ['pe' => 18.00, 'depreciation' => 0.04, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'none'],
         'Semiconductor Equipment & Materials' => ['pe' => 22.00, 'depreciation' => 0.12, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'business_model' => 'none'], // ASML etc. Boom and bust.
         'Semiconductors' => ['pe' => 24.00, 'depreciation' => 0.15, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'business_model' => 'none'], // Fab plants age like milk
-        'Software - Application' => ['pe' => 28.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'business_model' => 'none'], // Asset light, pure IP, high growth
-        'Software - Infrastructure' => ['pe' => 26.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'business_model' => 'none'], // Sticky revenues (Microsoft, Oracle)
+        'Software - Application' => ['pe' => 28.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'business_model' => 'tech'], // Asset light, pure IP, high growth
+        'Software - Infrastructure' => ['pe' => 26.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'business_model' => 'tech'], // Sticky revenues (Microsoft, Oracle)
         'Solar' => ['pe' => 18.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'none'], // Capital intensive manufacturing
         'Specialty Business Services' => ['pe' => 18.00, 'depreciation' => 0.04, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'none'],
         'Specialty Chemicals' => ['pe' => 16.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'business_model' => 'none'],
@@ -156,6 +158,32 @@ class Sectors
         'General' => ['pe' => 18.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'none'],
     ];
 
+    public const BUSINESS_MODEL_THRESHOLDS = [
+        'commercial_bank' => ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => 2.0,  'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15],
+        'insurance'       => ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15],
+        'brokerage'       => ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15],
+        'asset_manager'   => ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => 0.5,  'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15],
+        'credit_services' => ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => 2.0,  'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15],
+        'shadow_bank'     => ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => null, 'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15],
+        'reit'            => ['min_icr' => 1.05, 'bankrupt_equity' => 10.0, 'distress_equity' => 20.0, 'warning_equity' => 30.0, 'wholesale_leverage_limit' => 2.0,  'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15],
+        'utility'         => ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00],
+        'commodity'       => ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00],
+        'financial_data'  => ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00],
+        'tech'            => ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00],
+        'none'            => ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00],
+    ];
+
+    /**
+     * Retrieves the structural thresholds for a specific business model.
+     *
+     * @param string $businessModel
+     * @return array<string, mixed>
+     */
+    public static function getModelThresholds(string $businessModel): array
+    {
+        return self::BUSINESS_MODEL_THRESHOLDS[$businessModel] ?? self::BUSINESS_MODEL_THRESHOLDS['none'];
+    }
+
        /**
      * Helper to determine if a business model belongs to a financial institution.
      *
@@ -171,21 +199,23 @@ class Sectors
      * Factory method to retrieve the financial physics model for a given business type.
      *
      * @param string $businessModel
-     * @return \App\Service\BusinessModel\BusinessModelInterface
+     * @return \App\Service\Model\BusinessModelInterface
      */
-    public static function getBusinessModelStrategy(string $businessModel): \App\Service\BusinessModel\BusinessModelInterface
+    public static function getBusinessModelStrategy(string $businessModel): \App\Service\Model\BusinessModelInterface
     {
         return match ($businessModel) {
-            'commercial_bank' => new \App\Service\BusinessModel\CommercialBankBusinessModel(),
-            'insurance'       => new \App\Service\BusinessModel\InsuranceBusinessModel(),
-            'brokerage'       => new \App\Service\BusinessModel\BrokerageBusinessModel(),
-            'asset_manager'   => new \App\Service\BusinessModel\AssetManagementBusinessModel(),
-            'credit_services' => new \App\Service\BusinessModel\CreditServicesBusinessModel(),
-            'shadow_bank'     => new \App\Service\BusinessModel\ShadowBankBusinessModel(),
-            'reit'            => new \App\Service\BusinessModel\ReitBusinessModel(),
-            'utility'         => new \App\Service\BusinessModel\UtilityBusinessModel(),
-            'commodity'       => new \App\Service\BusinessModel\CommodityBusinessModel(),
-            default           => new \App\Service\BusinessModel\StandardCorporateBusinessModel(),
+            'commercial_bank' => new \App\Service\Model\CommercialBankBusinessModel(),
+            'insurance'       => new \App\Service\Model\InsuranceBusinessModel(),
+            'brokerage'       => new \App\Service\Model\BrokerageBusinessModel(),
+            'asset_manager'   => new \App\Service\Model\AssetManagementBusinessModel(),
+            'credit_services' => new \App\Service\Model\CreditServicesBusinessModel(),
+            'shadow_bank'     => new \App\Service\Model\ShadowBankBusinessModel(),
+            'reit'            => new \App\Service\Model\ReitBusinessModel(),
+            'utility'         => new \App\Service\Model\UtilityBusinessModel(),
+            'commodity'       => new \App\Service\Model\CommodityBusinessModel(),
+            'financial_data'  => new \App\Service\Model\FinancialDataBusinessModel(),
+            'tech'            => new \App\Service\Model\TechBusinessModel(),
+            default           => new \App\Service\Model\StandardCorporateBusinessModel(),
         };
     }
 }

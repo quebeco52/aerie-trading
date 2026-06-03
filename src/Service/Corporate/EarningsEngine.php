@@ -1,8 +1,12 @@
 <?php
 
-namespace App\Service;
+namespace App\Service\Corporate;
 
 use App\Entity\Stock;
+use App\Service\Macro\MacroEngine;
+use App\Service\Event\MarketEventPublisher;
+use App\Service\Math\CorporateMetrics;
+use App\Service\Math\MathUtility;
 
 /**
  * Handles the simulation of quarterly earnings reports.
@@ -31,15 +35,16 @@ class EarningsEngine
     /**
      * Constructor.
      *
-     * @param MarketEvent $marketEvent Publisher for all market events, news headlines, and shocks.
+     * @param MarketEventPublisher $marketEvent Publisher for all market events, news headlines, and shocks.
      * @param MathUtility $mathUtility Utility for advanced mathematical operations (e.g., generating standard normal distribution).
      */
     public function __construct(
         private \Doctrine\ORM\EntityManagerInterface $entityManager,
-        private MarketEvent $marketEvent,
-        private CorporateActionEngine $corporateActionEngine,
+        private MarketEventPublisher $marketEvent,
+        private CapitalAllocationEngine $capitalAllocationEngine,
         private DebtEngine $debtEngine,
-        private MathUtility $mathUtility
+        private MathUtility $mathUtility,
+        private CorporateMetrics $corporateMetrics
     ) {}
 
     /**
@@ -87,6 +92,7 @@ class EarningsEngine
 
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
         
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
 
@@ -97,35 +103,53 @@ class EarningsEngine
         $investedCapital = $targetMetrics['invested_capital'];
         $baselineRoic = $targetMetrics['baseline_roic'];
 
-        // REVENUE GENERATION PHYSICS
-        $assetTurnover = $baselineRoic / $stableMargin;
-        $baselineRevenue = $investedCapital * $assetTurnover;
-
-        $fixedCostRatio = $stock->getFixedCostRatio();
-        $structuralTotalCosts = $baselineRevenue * (1.0 - $stableMargin);
-        $fixedCosts = $structuralTotalCosts * $fixedCostRatio;
-        $baselineVariableCosts = $structuralTotalCosts * (1.0 - $fixedCostRatio);
+        // STOCHASTIC FUNDAMENTAL PROCESSES (Paradigm 1: The Quant Approach)
+        $dt = 0.25; // 1 Quarter
         
-        $structuralVariableMargin = $baselineVariableCosts / max(1.0, $baselineRevenue);
-
-        // MACROECONOMIC SHIFTS (Volume & Pricing Power)
+        $assetTurnover = $baselineRoic / $stableMargin;
+        $structuralRevenue = max(1.0, abs($investedCapital) * $assetTurnover);
+        
+        $currentRevenue = max(1.0, (float) $stock->getTotalRevenue());
+        if ($currentRevenue <= 1.0) $currentRevenue = $structuralRevenue;
+        
+        // 1. REVENUE PROCESS (Mean-Reverting Geometric Brownian Motion)
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
+        $inflation = $macroState['inflation_ema'] ?? 0.02;
         $beta = (float) $stock->getBeta();
         
-        $macroVolumeModifier = 1.0 + ($outputGap * $beta);
-        $saturationPenalty = $this->mathUtility->calculateMarketSaturationPenalty($stock, $investedCapital, $macroState);
-        $macroVolumeModifier *= (1.0 - $saturationPenalty);
-
-        $expectedRevenue = $baselineRevenue * $macroVolumeModifier;
-
-        // Pricing Power
-        $pricingPowerModifier = $strategy->calculatePricingPowerModifier($stock, $macroState);
+        $macroGrowth = $inflation + $outputGap;
+        $drift = $macroGrowth * $beta;
         
-        $realizedVariableMargin = max(0.01, min(0.99, $structuralVariableMargin - $pricingPowerModifier));
-
-        // Expected EBIT (Pre-Shock)
-        $expectedVariableCosts = $expectedRevenue * $realizedVariableMargin;
-        $expectedEbit = $expectedRevenue - $fixedCosts - $expectedVariableCosts;
+        // Gravity pulls actual revenue towards the physical capacity of the firm.
+        // Financials reprice their loan books rapidly during rate hikes. Physical companies take years.
+        $gravityStrength = $isFinancial ? 6.0 : 2.0;
+        $gravity = $gravityStrength * log($structuralRevenue / $currentRevenue);
+        
+        $revenueVol = $baselineVol * 0.25;
+        $z1 = $this->mathUtility->generateStandardNormal();
+        
+        $expectedRevenue = $currentRevenue * exp(($drift + $gravity - 0.5 * pow($revenueVol, 2)) * $dt + $revenueVol * sqrt($dt) * $z1);
+        
+        // 2. MARGIN PROCESS (Cox-Ingersoll-Ross)
+        $kappa = 4.0; // Reversion speed
+        $macroDrag = ($outputGap * $beta * 0.5); 
+        $dynamicTheta = max(0.01, $stableMargin + $macroDrag);
+        
+        $z2 = $this->mathUtility->generateStandardNormal();
+        $marginVol = $baselineVol * 0.15;
+        
+        // The margin is a continuous process reverting to the dynamic macro target
+        $currentMargin = max(0.01, (float) $stock->getOperatingMargin());
+        $realizedOperatingMargin = $this->mathUtility->calculateCIR($currentMargin, $kappa, $dynamicTheta, $marginVol, $dt, $z2);
+        $realizedOperatingMargin = min(0.99, max(0.01, $realizedOperatingMargin));
+        
+        // Translate Operating Margin to Variable Margin for the Shock physics
+        $fixedCostRatio = (float) $stock->getFixedCostRatio();
+        $fixedCosts = ($expectedRevenue * (1.0 - $stableMargin)) * $fixedCostRatio;
+        
+        $expectedEbit = $expectedRevenue * $realizedOperatingMargin;
+        $expectedVariableCosts = $expectedRevenue - $fixedCosts - $expectedEbit;
+        $realizedVariableMargin = max(0.01, $expectedVariableCosts / max(1.0, $expectedRevenue));
 
         // APPLY THE IDIOSYNCRATIC Z-SCORE SHOCK
         $shockData = $strategy->generateIdiosyncraticShock($stock, $expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol, $macroState, $this->mathUtility);
@@ -159,7 +183,7 @@ class EarningsEngine
 
             // CALCULATE PHYSICAL DEPRECIATION
             $customDepreciation = (float) $stock->getDepreciationRate();
-            $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : $this->mathUtility->getIndustryDepreciationRate($industry);
+            $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($industry);
             $absoluteDepreciation = $investedCapital * $depreciationRate;
 
             $expectedEbt = $expectedEbit - $expectedInterestExpense + $interestIncome;
@@ -171,11 +195,21 @@ class EarningsEngine
             $expectedTotalNetIncome = $expectedEbt > 0 ? $expectedEbt * (1.0 - $corporateTaxRate) : $expectedEbt;
             $actualTotalNetIncome = $actualEbt > 0 ? $actualEbt * (1.0 - $corporateTaxRate) : $actualEbt;
 
+            $reportedExpectedNetIncome = $expectedTotalNetIncome;
+            $reportedActualNetIncome = $actualTotalNetIncome;
+            
+            // Wall Street evaluates REITs on Funds From Operations (FFO) rather than GAAP Net Income.
+            // We add back absolute depreciation to the reported earnings figures.
+            if ($businessModel === 'reit') {
+                $reportedExpectedNetIncome += $absoluteDepreciation;
+                $reportedActualNetIncome += $absoluteDepreciation;
+            }
+
             // UPDATE DYNAMIC ROIC AS AN OUTCOME
             $truePostTaxReturn = $strategy->updateDynamicRoic($stock, $actualTotalNetIncome, $investedCapital, $ebit, $corporateTaxRate);
 
-            $expectedAnnualEps = $expectedTotalNetIncome / max(1.0, $sharesOutstanding);
-            $actualAnnualEpsRaw = $actualTotalNetIncome / max(1.0, $sharesOutstanding);
+            $expectedAnnualEps = $reportedExpectedNetIncome / max(1.0, $sharesOutstanding);
+            $actualAnnualEpsRaw = $reportedActualNetIncome / max(1.0, $sharesOutstanding);
 
             // Calculate Market Expectations (Smoothed for the Surprise/Shock generation only)
             $expectedAnnualEpsDrifted = $oldAnnualEps + (($expectedAnnualEps - $oldAnnualEps) * 0.50);
@@ -197,8 +231,8 @@ class EarningsEngine
             // Overwriting EPS alters Total Net Income. We MUST save the raw 
             // physical number to maintain a mathematically flawless Balance Sheet.
             $stock->setEarningsPerShare((string) $actualAnnualEpsRaw);
+            $stock->setTotalNetIncome((string) $actualTotalNetIncome);
 
-            $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
             $fcfData = $this->calculateFreeCashFlowPerShare($actualTotalNetIncome, $sharesOutstanding, $stock, $macroState, $absoluteDepreciation, $isFinancial);
             $annualFcfPerShare = $fcfData['fcf_per_share'];
             $actualAnnualCapEx = $fcfData['capex'];
@@ -208,7 +242,7 @@ class EarningsEngine
             $quarterlyFcfPerShare = $annualFcfPerShare / 4.0;
 
             // ALLOCATE CAPITAL
-            $allocation = $this->corporateActionEngine->allocateCapital(
+            $allocation = $this->capitalAllocationEngine->allocateCapital(
                 $stock,
                 $actualAnnualEpsRaw,
                 $quarterlyFcfPerShare,

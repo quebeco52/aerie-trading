@@ -1,8 +1,9 @@
 <?php
 
-namespace App\Service;
+namespace App\Service\Macro;
 
 use Psr\Log\LoggerInterface;
+use App\Service\Math\MathUtility;
 
 class MacroEngine
 {

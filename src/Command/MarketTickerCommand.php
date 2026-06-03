@@ -3,11 +3,11 @@
 namespace App\Command;
 
 use App\Entity\Stock;
-use App\Service\StockTracker;
-use App\Service\EtfTracker;
-use App\Service\MacroEngine;
-use App\Service\MarketOperator;
-use App\Service\Portfolio;
+use App\Service\Market\StockTracker;
+use App\Service\Market\EtfTracker;
+use App\Service\Macro\MacroEngine;
+use App\Service\Market\MarketOperator;
+use App\Service\User\Portfolio;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;

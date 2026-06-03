@@ -82,7 +82,17 @@ class MarketResetCommand extends Command
             
             $netIncome = $stockData['total_net_income'] ?? 0.00;
             $margin = $stockData['operating_margin'] ?? 0.15;
-            $revenue = $margin > 0 ? $netIncome / $margin : 0.00;
+            
+            $historicalRate = $stockData['historical_fixed_rate'] ?? 0.04;
+            $wholesaleDebt = $stockData['wholesale_debt'] ?? 0.0;
+            $customerDeposits = $stockData['customer_deposits'] ?? 0.0;
+            $treasury = $stockData['corporate_treasury'] ?? 0.0;
+            
+            $interestExpense = ($wholesaleDebt * $historicalRate) + ($customerDeposits * 0.015);
+            $interestIncome = $treasury * 0.0375;
+            $ebt = $netIncome / 0.79;
+            $ebit = $ebt + $interestExpense - $interestIncome;
+            $revenue = $margin > 0 ? max(0.0, $ebit / $margin) : 0.0;
             
             $shares = $stockData['shares_outstanding'] ?? 1_000_000_000;
             $annualEps = $shares > 0 ? ($netIncome / $shares) : 0.0;
@@ -184,6 +194,7 @@ class MarketResetCommand extends Command
 
         $io->text('5. Generating new $50B procedural corporations for every industry...');
         
+        /*
         $industryList = array_keys(\App\Data\Sectors::INDUSTRY_METRICS);
         $prefixes = ['Apex', 'Horizon', 'Vertex', 'Quantum', 'Aegis', 'Omni', 'Vanguard', 'Pinnacle', 'Meridian', 'Zenith', 'Nova', 'Crest', 'Echo', 'Atlas', 'Helios'];
         $sectorSuffixes = [
@@ -251,7 +262,13 @@ class MarketResetCommand extends Command
             $stock->setTotalNetIncome('5000000000.00');
             $stock->setTotalEquity('20000000000.00');
             $stock->setRetainedEarnings('5000000000.00');
-            $stock->setTotalRevenue('33333333333.33');
+            
+            $netIncomeGen = 5000000000.00;
+            $ebtGen = $netIncomeGen / 0.79;
+            $interestExpGen = 10000000000.00 * 0.05;
+            $interestIncGen = 2500000000.00 * 0.0375;
+            $ebitGen = $ebtGen + $interestExpGen - $interestIncGen;
+            $stock->setTotalRevenue((string) ($ebitGen / 0.15));
             $stock->setHistoricalFixedRate('0.05');
             $stock->setCreditSpread('0.015');
             $stock->setLastDividend('0.15625');
@@ -263,6 +280,7 @@ class MarketResetCommand extends Command
         }
         
         $this->entityManager->flush();
+        */
 
         $io->success('Market Reset Complete! You can now start the ticker.');
         return Command::SUCCESS;
