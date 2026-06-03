@@ -196,30 +196,33 @@ class MacroEngine
      * @return float The updated policy rate for the current tick.
      */
     private function updatePolicyRate(array $state, float $targetRate, float $dt): float
-    {
+        {
         $currentPolicyRate = $state['policy_rate'];
         
-        // Default Speed: "Taking the stairs"
-        $cbSpeed = 2.0; 
+        // Default Speed: Slower base adjustment
+        $cbSpeed = 1.0; 
 
         if ($targetRate > $currentPolicyRate) {
             // THE INFLATION PANIC: "Taking the elevator up"
-            // Scales smoothly as inflation exceeds the 2% target, capping at a max speed of 10.0
             $inflationExcess = max(0.0, $state['inflation'] - 0.02);
-            $cbSpeed += min(8.0, $inflationExcess * 100.0); 
+            $cbSpeed += min(4.0, $inflationExcess * 50.0); 
         } else {
             // THE RECESSION/DEFLATION PANIC: "Taking the elevator down"
-            // Scales smoothly as the economy shrinks or enters deflation, capping at a max speed of 15.0
-            $deflationPanic = max(0.0, -$state['inflation']) * 300.0; 
-            $recessionPanic = max(0.0, -$state['output_gap']) * 250.0;
+            $deflationPanic = max(0.0, -$state['inflation']) * 100.0; 
+            $recessionPanic = max(0.0, -$state['output_gap']) * 100.0;
             
-            $cbSpeed += min(13.0, $deflationPanic + $recessionPanic);
+            $cbSpeed += min(6.0, $deflationPanic + $recessionPanic);
         }
 
+        // Hard limit the Central Bank to moving rates by a maximum of 6% (600 bps) per year (1.5% per quarter)
+        // to prevent historically unrealistic 600 bps jumps in a single quarter
+        $rawMove = $cbSpeed * ($targetRate - $currentPolicyRate);
+        $clampedMove = max(-0.06, min(0.06, $rawMove));
 
-        $newRate = $currentPolicyRate + $cbSpeed * ($targetRate - $currentPolicyRate) * $dt;
+        $newRate = $currentPolicyRate + $clampedMove * $dt;
 
         if ($targetRate > $currentPolicyRate) {
+
             return min($targetRate, $newRate); // Don't hike past the target
         } else {
             return max($targetRate, $newRate); // Don't cut past the target
@@ -290,9 +293,9 @@ class MacroEngine
         $realRate = $borrowingCost - $state['inflation'];
 
         // THE KALDOR-KALECKI PARAMETERS
-        $alpha = 0.5;   // Momentum coefficient (Boom/Bust accelerator)
-        $beta = 350.0;  // Cubic capacity constraint (The Rubber Band)
-        $gamma = 6.5;   // Sensitivity to Central Bank real rates
+        $alpha = 0.3;   // Momentum coefficient (Boom/Bust accelerator) - Reduced for stability
+        $beta = 250.0;  // Cubic capacity constraint (The Rubber Band)
+        $gamma = 2.5;   // Sensitivity to Central Bank real rates - Reduced to prevent whipping GDP
 
         // Momentum (Linear Accelerator)
         $momentum = $alpha * $y;
@@ -307,7 +310,7 @@ class MacroEngine
         $drift = ($momentum - $cubicConstraint - $monetaryDrag) * $dt;
 
         // Stochastic Volatility (dW_t)
-        $volatility = 0.03 * $stressMultiplier * sqrt($dt) * $outZ;
+        $volatility = 0.015 * $stressMultiplier * sqrt($dt) * $outZ; // Halved to smooth random GDP noise
 
         // Apply the Kaldor-Kalecki SDE step
         $newGap = $y + $drift + $volatility;
@@ -333,16 +336,16 @@ class MacroEngine
         $inflationDrift = 1.5 * $infDiff * $dt;
 
         // NON-LINEAR PHILLIPS CURVE (Capacity Bottlenecks)
-        $phillipsSlope = $state['output_gap'];
+        $phillipsSlope = $state['output_gap'] * 0.5; // Dampened linear slope
         
         // If the economy is booming, we add a quadratic acceleration.
         if ($state['output_gap'] > 0.0) {
-            $phillipsSlope += 2.5 * pow($state['output_gap'], 2);
+            $phillipsSlope += 1.0 * pow($state['output_gap'], 2); // Dampened capacity bottleneck
         }
         
         $phillipsEffect = $phillipsSlope * $dt;
 
-        $newInflation = $state['inflation'] + $inflationDrift + $phillipsEffect + (0.015 * $stressMultiplier * sqrt($dt) * $infZ);
+        $newInflation = $state['inflation'] + $inflationDrift + $phillipsEffect + (0.008 * $stressMultiplier * sqrt($dt) * $infZ);
         return max(-0.02, min(0.25, $newInflation));
     }
 
