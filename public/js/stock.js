@@ -83,76 +83,97 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!window.WS_TICKET || window.WS_TICKET === "") {
         console.log("Guest mode: Live WebSocket updates disabled.");
-        return; // Safe to exit here so we don't try to connect to the socket
+                return; // Safe to exit here so we don't try to connect to the socket
     }
 
-    // Websocket connection
     const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-    const marketSocket = new WebSocket(`${protocol}${window.location.host}/ws/?ticket=${window.WS_TICKET}`);
+    const host = window.location.host;
+    let marketSocket;
+    let reconnectTimeout = 1000;
 
-    // The Master Router
-    marketSocket.onmessage = function (event) {
-        const payload = JSON.parse(event.data);
+    function connectWebSocket() {
+        marketSocket = new WebSocket(`${protocol}${host}/ws/?ticket=${window.WS_TICKET}`);
 
-        if (IS_ETF) {
-            updateMacroIndicators(payload);
-            updateEtfPie(payload);
-        }
+        marketSocket.onopen = function() {
+            console.log("Connected to live market feed.");
+            reconnectTimeout = 1000;
+        };
 
-        const stockUpdate = payload.stocks.find(s => s.ticker === CURRENT_TICKER);
-        if (stockUpdate) {
-            const newPrice = parseFloat(stockUpdate.price);
-            updatePriceUI(newPrice, stockUpdate);
-            updateLiveChart(newPrice);
-        }
+        // The Master Router
+        marketSocket.onmessage = function (event) {
+            const payload = JSON.parse(event.data);
 
-        if (payload.events && payload.events.length > 0) {
-            renderEvents(payload.events);
-        }
+            if (IS_ETF) {
+                updateMacroIndicators(payload);
+                updateEtfPie(payload);
+            }
 
-        if (payload.macro) {
-            const infEl = document.getElementById('macro-inflation');
-            const gapEl = document.getElementById('macro-output-gap');
-            const rateEl = document.getElementById('macro-policy-rate');
-            const yieldEl = document.getElementById('macro-yield');
-            const gdpEl = document.getElementById('macro-gdp');
+            const stockUpdate = payload.stocks.find(s => s.ticker === CURRENT_TICKER);
+            if (stockUpdate) {
+                const newPrice = parseFloat(stockUpdate.price);
+                updatePriceUI(newPrice, stockUpdate);
+                updateLiveChart(newPrice);
+            }
 
-            if (infEl) infEl.textContent = (payload.macro.inflation * 100).toFixed(2) + '%';
-            if (rateEl) rateEl.textContent = (payload.macro.policy_rate * 100).toFixed(2) + '%';
-            if (yieldEl) yieldEl.textContent = (payload.macro.yield_10y * 100).toFixed(2) + '%';
+            if (payload.events && payload.events.length > 0) {
+                renderEvents(payload.events);
+            }
 
-            if (gapEl) {
-                const gapVal = payload.macro.output_gap * 100;
-                gapEl.textContent = gapVal.toFixed(2) + '%';
+            if (payload.macro) {
+                const infEl = document.getElementById('macro-inflation');
+                const gapEl = document.getElementById('macro-output-gap');
+                const rateEl = document.getElementById('macro-policy-rate');
+                const yieldEl = document.getElementById('macro-yield');
+                const gdpEl = document.getElementById('macro-gdp');
 
-                if (gapVal < -1.0) {
-                    gapEl.className = 'text-lg font-bold text-tertiary';
-                } else if (gapVal > 1.0) {
-                    gapEl.className = 'text-lg font-bold text-secondary';
-                } else {
-                    gapEl.className = 'text-lg font-bold text-on-surface';
+                if (infEl) infEl.textContent = (payload.macro.inflation * 100).toFixed(2) + '%';
+                if (rateEl) rateEl.textContent = (payload.macro.policy_rate * 100).toFixed(2) + '%';
+                if (yieldEl) yieldEl.textContent = (payload.macro.yield_10y * 100).toFixed(2) + '%';
+
+                if (gapEl) {
+                    const gapVal = payload.macro.output_gap * 100;
+                    gapEl.textContent = gapVal.toFixed(2) + '%';
+
+                    if (gapVal < -1.0) {
+                        gapEl.className = 'text-lg font-bold text-tertiary';
+                    } else if (gapVal > 1.0) {
+                        gapEl.className = 'text-lg font-bold text-secondary';
+                    } else {
+                        gapEl.className = 'text-lg font-bold text-on-surface';
+                    }
                 }
+
+                if (gdpEl && payload.macro.nominal_gdp_index !== undefined) {
+                    const gdpValue = 20.00 * payload.macro.nominal_gdp_index;
+                    gdpEl.textContent = '$' + gdpValue.toFixed(2) + 'T';
+                }
+
             }
 
-            if (gdpEl && payload.macro.nominal_gdp_index !== undefined) {
-                const gdpValue = 20.00 * payload.macro.nominal_gdp_index;
-                gdpEl.textContent = '$' + gdpValue.toFixed(2) + 'T';
+            // Update the Current Cycle Badge
+            if (payload.economic_cycle) {
+                const cycleEl = document.getElementById('market-economic-cycle');
+                if (cycleEl) cycleEl.textContent = payload.economic_cycle;
             }
+        };
 
-        }
+        marketSocket.onclose = function(event) {
+            console.log("WebSocket closed. Reconnecting in " + reconnectTimeout + "ms...");
+            setTimeout(connectWebSocket, reconnectTimeout);
+            reconnectTimeout = Math.min(reconnectTimeout * 2, 30000); // Exponential backoff
+        };
+        
+        marketSocket.onerror = function(err) {
+            console.error("WebSocket error observed:", err);
+            marketSocket.close(); // Force close to trigger reconnection
+        };
+    }
 
-        // Update the Current Cycle Badge
-        if (payload.economic_cycle) {
-            const cycleEl = document.getElementById('market-economic-cycle');
-            if (cycleEl) cycleEl.textContent = payload.economic_cycle;
-        }
-    };
-
-
-
+    connectWebSocket();
 
     function initMainChart() {
         const container = document.getElementById('mainChartContainer');
+
         lwChart = LightweightCharts.createChart(container, {
             layout: { background: { type: 'solid', color: 'transparent' }, textColor: '#c2c6d6', fontFamily: '"Courier Prime", monospace' },
             grid: { vertLines: { visible: false }, horzLines: { color: COLORS.grid, style: 3 } },
@@ -648,6 +669,9 @@ function updateCharts(timeframe) {
             // Brokerages don't use deposits/float, so we only pass the Capital Ratio
             renderRegulatoryRatiosChart(labels, capitalRatioData, null, null);
         }
+    } else if (BUSINESS_MODEL === 'reit') {
+        // REITs use FFO-adjusted ROIC, which is essentially the portfolio's Cap Rate
+        renderCapitalEfficiencyChart(labels, roicData, waccData, evaData, 'Cap Rate', 'WACC');
     } else {
         // Normal companies use ROIC
         renderCapitalEfficiencyChart(labels, roicData, waccData, evaData, 'ROIC', 'WACC');

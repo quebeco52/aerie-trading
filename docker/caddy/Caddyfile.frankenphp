@@ -1,0 +1,23 @@
+{
+    # Enable the FrankenPHP module in Caddy
+    frankenphp
+    order php_server before file_server
+}
+
+localhost {
+    # Route requests to your Symfony public directory
+    root * /app/public
+    
+    encode zstd gzip
+    
+    # 1. FORCE WebSocket traffic to Workerman, bypassing Symfony entirely
+    route /ws* {
+        uri strip_prefix /ws
+        reverse_proxy aerie-websocket:8080
+    }
+
+    # 2. Route all other normal HTTP traffic to Symfony
+    route {
+        php_server
+    }
+}

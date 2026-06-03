@@ -332,7 +332,7 @@ class MergerAndAcquisitionEngine
             // Desperate fire sale: Sheds up to 50% of the company for a terrible 4x multiple
             $divestedFraction = mt_rand(30, 50) / 100.0;
             $saleMultiple = mt_rand(3, 5);
-            $annualProbability = 8;
+            $annualProbability = 8.0;
         } elseif ($isDistressed) {
             // Standard distress: Sheds 15-30% for an 8x multiple
             $divestedFraction = mt_rand(15, 30) / 100.0;
@@ -340,12 +340,12 @@ class MergerAndAcquisitionEngine
             $annualProbability = 0.60;
         } else {
             // High P/E trimming (Taking advantage of an overvalued stock)
-            $divestedFraction = mt_rand(5, 15) / 100.0;
-            // Blend the company's inflated P/E with the sector average, and cap it at a realistic 25x.
+            $divestedFraction = mt_rand(5, 10) / 100.0;
+            // Blend the company's inflated P/E with the sector average, and cap it at a realistic 18x.
             $sectorPE = \App\Data\Sectors::MACRO_SECTORS[$seller->getSector()] ?? 20.0;
             $blendedMultiple = ($currentPE + $sectorPE) / 2.0;
-            $saleMultiple = min(25.0, $blendedMultiple);
-            $annualProbability = 0.20;
+            $saleMultiple = min(18.0, max(8.0, $blendedMultiple));
+            $annualProbability = 0.05;
         }
 
 
@@ -400,21 +400,25 @@ class MergerAndAcquisitionEngine
         $seller->setRetainedEarnings((string) ($currentRetained + $gainOnSale));
 
         // BOOST STRUCTURAL EFFICIENCY
-        // Shedding bloat permanently improves the company's core DNA (Baseline ROIC and Margin)
-        if ($isFinancial) {
-            $baselineRoe = (float) $seller->getBaselineRoe();
-            $roeBump = $baselineRoe * ($divestedFraction * 0.50);
-            $seller->setBaselineRoe((string) ($baselineRoe + $roeBump));
-        } else {
-            $baselineRoic = (float) $seller->getBaselineRoic();
-            $roicBump = $baselineRoic * ($divestedFraction * 0.50); // Up to a 25% relative improvement
-            $seller->setBaselineRoic((string) ($baselineRoic + $roicBump));
+        // Shedding bloat permanently improves the company's core DNA (Baseline ROIC and Margin).
+        // We ONLY do this if the company was distressed and selling toxic assets.
+        // Selling a highly profitable unit at a premium does NOT make the rest of the company fundamentally better.
+        if ($isDistressed || $isDying) {
+            if ($isFinancial) {
+                $baselineRoe = (float) $seller->getBaselineRoe();
+                $roeBump = $baselineRoe * ($divestedFraction * 0.50);
+                $seller->setBaselineRoe((string) ($baselineRoe + $roeBump));
+            } else {
+                $baselineRoic = (float) $seller->getBaselineRoic();
+                $roicBump = $baselineRoic * ($divestedFraction * 0.50); // Up to a 25% relative improvement
+                $seller->setBaselineRoic((string) ($baselineRoic + $roicBump));
+            }
+            $operatingMargin = (float) $seller->getOperatingMargin();
+            
+            $marginBump = $operatingMargin * ($divestedFraction * 0.30); 
+            
+            $seller->setOperatingMargin((string) ($operatingMargin + $marginBump));
         }
-        $operatingMargin = (float) $seller->getOperatingMargin();
-        
-        $marginBump = $operatingMargin * ($divestedFraction * 0.30); 
-        
-        $seller->setOperatingMargin((string) ($operatingMargin + $marginBump));
         
         // EarningsEngine will automatically calculate a higher CurrentRoic next quarter
 

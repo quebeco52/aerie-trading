@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Aerie Exchange{% endblock %}</title>
 
+
+    <script>
+        window.WS_TICKET = '{{ ws_ticket() }}';
+    </script>
+
     
     {% block meta %}
         <meta name="description" content="Aerie Exchange is a live, procedurally generated stock market simulation featuring real-time trading, clean surplus accounting, and dynamic macroeconomic cycles.">
@@ -74,9 +79,6 @@
         crossorigin="anonymous">
     </script>
 
-    <script>
-        window.WS_TICKET = "{{ generate_ws_ticket() }}";
-    </script>
     
     {% block javascripts %}{% endblock %}
     

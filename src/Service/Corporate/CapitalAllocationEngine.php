@@ -46,6 +46,14 @@ class CapitalAllocationEngine
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
 
+        if ($businessModel === 'reit') {
+            $customDepreciation = (float) $stock->getDepreciationRate();
+            $depRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($industry);
+            $absoluteDepreciation = $investedCapital * $depRate;
+            // Real Estate Appreciation: Offset GAAP depreciation so book value doesn't bleed to zero
+            $quarterlyNetIncome += ($absoluteDepreciation / 4.0);
+        }
+
         $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState);
 
         $ebit = $health['raw_metrics']['ebit'] ?? 0.0;
@@ -125,7 +133,13 @@ class CapitalAllocationEngine
                 $isRegulatoryDividendHalt = true;
             }
         } else {
-            $trueReturn = $investedCapital > 0 ? ($nopat / $investedCapital) : 0.0;
+            $adjustedNopat = $nopat;
+            if ($businessModel === 'reit') {
+                $customDepreciation = (float) $stock->getDepreciationRate();
+                $depRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($industry);
+                $adjustedNopat += ($investedCapital * $depRate); // FFO/NOI adjustment
+            }
+            $trueReturn = $investedCapital > 0 ? ($adjustedNopat / $investedCapital) : 0.0;
             $hurdleRate = $health['wacc'];
         }
         

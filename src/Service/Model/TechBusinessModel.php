@@ -41,7 +41,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
             $eventLore = "Suffered a massive anti-trust fine and sweeping data privacy restrictions.";
         } elseif ($eventZ < -2.0) {
             $regulatoryShock = 0.05;
-            $eventLore = "Experienced severe decline do to user trends";
+            $eventLore = "Experienced severe decline due to user trends.";
         } elseif ($eventZ > 2.5) {
             $actualRevenue *= 1.10; // 10% instant revenue bump
             $eventLore = "Achieved viral product-market fit with a major new software breakthrough.";

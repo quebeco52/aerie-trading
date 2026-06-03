@@ -196,7 +196,7 @@ class TreasuryEngine
         $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
         
-        $targetCashReservs = $strategy->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt']) * 1.20;
+        $targetCashReserves = $strategy->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt']) * 1.20;
         $liveInvestedCapital = $this->corporateMetrics->calculateLiveInvestedCapital($newEquity, $totalDebt, $state['treasury']);
         
         $trueReturn = $isFinancial ? (float) $stock->getCurrentRoe() : (float) $stock->getCurrentRoic();
@@ -209,12 +209,12 @@ class TreasuryEngine
 
         $fundInvestmentOpportunity = (mt_rand() / mt_getrandmax()) < $investmentProbability;
 
-        if (($trueReturn > $hurdleRate && $state['treasury'] > $targetCashReservs && !$health['wants_to_paydown_debt'] && $fundInvestmentOpportunity) || $state['debtActionTaken']) {
+        if (($trueReturn > $hurdleRate && $state['treasury'] > $targetCashReserves && !$health['wants_to_paydown_debt'] && $fundInvestmentOpportunity) || $state['debtActionTaken']) {
             $spreadMultiplier = min(1.0, max(0.0, ($trueReturn - $hurdleRate) * 10.0));
-            $organicSpend = ($state['treasury'] - $targetCashReservs) * (0.02 + (0.13 * $spreadMultiplier));
+            $organicSpend = ($state['treasury'] - $targetCashReserves) * (0.02 + (0.13 * $spreadMultiplier));
             
             $expansionSpend = $strategy->calculateOrganicCapexSpend($organicSpend, $state['debtIssued']);
-            $expansionSpend = min($expansionSpend, max(0.0, $state['treasury'] - $targetCashReservs));
+            $expansionSpend = min($expansionSpend, max(0.0, $state['treasury'] - $targetCashReserves));
             
             $maxGrowthSpeed = $isFinancial ? 0.08 : 0.05; 
             $expansionCapBasis = $isFinancial ? ($newEquity + $totalDebt) : $liveInvestedCapital;
@@ -322,7 +322,8 @@ class TreasuryEngine
             $macroDebtTolerance = $health['debt_tolerance'];
             
             $evalDebt = $isFinancial ? $state['wholesaleDebt'] : $totalDebt;
-            $evalLimit = $isFinancial ? ($businessModel === 'shadow_bank' ? $macroDebtTolerance : 2.0) : $macroDebtTolerance;
+            $modelThresholds = \App\Data\Sectors::getModelThresholds($businessModel);
+            $evalLimit = $isFinancial ? ($modelThresholds['wholesale_leverage_limit'] ?? $macroDebtTolerance) : $macroDebtTolerance;
 
             $currentDebtRatio = $evalDebt / max(1.0, $newEquity);
 

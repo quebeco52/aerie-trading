@@ -1,0 +1,31 @@
+FROM dunglas/frankenphp:1-php8.4
+
+# Install required system dependencies for Composer
+RUN apt-get update && apt-get install -y \
+    git \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# The dunglas/frankenphp image comes with a handy install-php-extensions script.
+# We install the exact extensions your Aerie Trading stack requires.
+RUN install-php-extensions \
+    pdo_mysql \
+    redis \
+    pcntl \
+    sockets \
+    opcache \
+    intl
+
+# Install Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+# Configure Git to trust the mounted /app directory
+RUN git config --global --add safe.directory /app
+
+# Copy your application into the container
+COPY . /app
+
+# THE MAGIC: Enable FrankenPHP Worker Mode!
+# This tells FrankenPHP to boot Symfony once and keep it in memory, 
+# vastly improving response times.
+ENV FRANKENPHP_CONFIG="worker ./public/index.php"

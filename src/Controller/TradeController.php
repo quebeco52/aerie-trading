@@ -7,7 +7,7 @@ use App\Entity\Stock;
 use App\Entity\User;
 use App\Entity\UserEtf;
 use App\Entity\UserStock;
-use App\Service\Portfolio;
+use App\Service\User\Portfolio;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -52,6 +52,9 @@ class TradeController extends AbstractController
         try {
             // Lock the user record to prevent race conditions (double spending)
             $em->lock($user, \Doctrine\DBAL\LockMode::PESSIMISTIC_WRITE);
+
+            // CRITICAL: Refresh the user entity from the DB to get the true cash balance after the lock is acquired
+            $em->refresh($user);
 
             // Fetch the asset
             $stock = $em->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);

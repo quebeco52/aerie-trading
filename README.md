@@ -30,10 +30,10 @@ If you do not have `make` installed, you can use these commands manually:
 
 ```bash
 docker compose --env-file .env.dev -f docker-compose.dev.yml up -d
-docker compose --env-file .env.dev -f docker-compose.dev.yml exec aerie-php composer install
-docker compose --env-file .env.dev -f docker-compose.dev.yml exec aerie-php php bin/console doctrine:migrations:migrate --no-interaction
-docker compose --env-file .env.dev -f docker-compose.dev.yml exec aerie-php php bin/console tailwind:build
-docker compose --env-file .env.dev -f docker-compose.dev.yml exec aerie-php php bin/console app:market-seed
+docker compose --env-file .env.dev -f docker-compose.dev.yml exec aerie-app composer install
+docker compose --env-file .env.dev -f docker-compose.dev.yml exec aerie-app php bin/console doctrine:migrations:migrate --no-interaction
+docker compose --env-file .env.dev -f docker-compose.dev.yml exec aerie-app php bin/console tailwind:build
+docker compose --env-file .env.dev -f docker-compose.dev.yml exec aerie-app php bin/console app:market-seed
 docker compose --env-file .env.dev -f docker-compose.dev.yml --profile live  up
 ```
 

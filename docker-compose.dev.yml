@@ -1,37 +1,30 @@
 services:
-  aerie-caddy:
-    image: caddy:latest
+  aerie-app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile.frankenphp
     restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
+      - "443:443/udp" # HTTP/3 Support
     volumes:
       - ./:/app
-      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile
+      - ./docker/caddy/Caddyfile.frankenphp:/etc/frankenphp/Caddyfile
       - caddy_data:/data
       - caddy_config:/config
-    depends_on:
-      - aerie-php
-
-  aerie-php:
-    build:
-      context: .
-      dockerfile: docker/php/Dockerfile
-      target: dev
-    restart: unless-stopped
-    volumes:
-      - ./:/app
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
       - aerie-database
       - aerie-redis
+    env_file:
+      - .env.dev
   
   aerie-worker:
     build: 
       context: .
-      dockerfile: docker/php/Dockerfile
-      target: dev
+      dockerfile: docker/php/Dockerfile.frankenphp
     volumes:
       - ./:/app
     depends_on:
@@ -39,12 +32,13 @@ services:
       - aerie-redis
     command: php bin/console messenger:consume async -vv --memory-limit=128M --time-limit=3600
     restart: unless-stopped
+    env_file:
+      - .env.dev
 
   aerie-scheduler:
     build:
       context: .
-      dockerfile: docker/php/Dockerfile
-      target: dev
+      dockerfile: docker/php/Dockerfile.frankenphp
     restart: unless-stopped
     command: php bin/console messenger:consume scheduler_default -vv
     volumes:
@@ -54,14 +48,15 @@ services:
     depends_on:
       - aerie-database
       - aerie-redis
+    env_file:
+      - .env.dev
   
   # The Market Ticker
   aerie-ticker:
     profiles: ["live"]
     build:
       context: .
-      dockerfile: docker/php/Dockerfile
-      target: dev
+      dockerfile: docker/php/Dockerfile.frankenphp
     command: sh -c "sleep 5 && exec php bin/console app:market-ticker --env=prod --no-debug"
     restart: unless-stopped
     volumes:
@@ -71,26 +66,14 @@ services:
     depends_on:
       - aerie-redis
       - aerie-database
-
-  # The Trade Worker
-  # aerie-worker:
-  #   build:
-  #     context: .
-  #     dockerfile: docker/php/Dockerfile
-  #   command: php bin/console app:trade-worker --env=prod --no-debug
-  #   restart: unless-stopped
-  #   volumes:
-  #     - ./:/app
-  #   depends_on:
-  #     - aerie-redis
-  #     - aerie-database
+    env_file:
+      - .env.dev
 
   # The WebSocket Server
   aerie-websocket:
     build:
       context: .
-      dockerfile: docker/php/Dockerfile
-      target: dev
+      dockerfile: docker/php/Dockerfile.frankenphp
     command: php bin/websocket-server.php start
     restart: unless-stopped
     volumes:
@@ -99,6 +82,8 @@ services:
       - "host.docker.internal:host-gateway"
     depends_on:
       - aerie-redis
+    env_file:
+      - .env.dev
 
   aerie-database:
     image: mariadb:11.8

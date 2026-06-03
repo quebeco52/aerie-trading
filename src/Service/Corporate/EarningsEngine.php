@@ -117,8 +117,8 @@ class EarningsEngine
         $inflation = $macroState['inflation_ema'] ?? 0.02;
         $beta = (float) $stock->getBeta();
         
-        $macroGrowth = $inflation + $outputGap;
-        $drift = $macroGrowth * $beta;
+        // Beta amplifies the economic cycle (Output Gap). Inflation affects nominal top-lines universally.
+        $drift = $inflation + ($outputGap * $beta);
         
         // Gravity pulls actual revenue towards the physical capacity of the firm.
         // Financials reprice their loan books rapidly during rate hikes. Physical companies take years.

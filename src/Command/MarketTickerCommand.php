@@ -193,7 +193,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     'stocks' => $allUpdates,
                     'events' => $events,
                     'market_vol' => $marketVol,
-                    'economic_cycle' => ($macroState['output_gap'] ?? 0) > 0.02 ? 'Boom' : (($macroState['output_gap'] ?? 0) < -0.02 ? 'Bust' : 'Neutral'),
+                    'economic_cycle' => ($macroState['output_gap'] ?? 0) > 0.01 ? 'Boom' : (($macroState['output_gap'] ?? 0) < -0.01 ? 'Bust' : 'Neutral'),
                     'council_rate' => $macroState['policy_rate'] ?? 0.04,
                     'macro' => $macroState,
                 ]));

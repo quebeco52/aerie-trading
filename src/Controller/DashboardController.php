@@ -27,9 +27,14 @@ class DashboardController extends AbstractController
         /** @var User $user */
         $user = $this->getUser();
 
-        // Fetch user's specific stock and ETF holdings
-        $stockHoldings = $entityManager->getRepository(UserStock::class)->findBy(['user' => $user]);
-        $etfHoldings = $entityManager->getRepository(UserEtf::class)->findBy(['user' => $user]);
+        // Fetch holdings with joined assets to completely eliminate N+1 lazy-loading queries
+        $stockHoldings = $entityManager->createQuery(
+            'SELECT us, s FROM App\Entity\UserStock us JOIN us.stock s WHERE us.user = :user'
+        )->setParameter('user', $user)->getResult();
+
+        $etfHoldings = $entityManager->createQuery(
+            'SELECT ue, e FROM App\Entity\UserEtf ue JOIN ue.etf e WHERE ue.user = :user'
+        )->setParameter('user', $user)->getResult();
 
         $portfolioValue = (float) $user->getCashBalance();
         $assetData = [];

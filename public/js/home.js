@@ -19,8 +19,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
     const host = window.location.host;
 
-    // Connect to the Caddy reverse proxy endpoint
-    const marketSocket = new WebSocket(`${protocol}${host}/ws/?ticket=${window.WS_TICKET}`);
+    let marketSocket;
+    let reconnectTimeout = 1000;
 
     // Midnight Atelier Colors for flashes
     const COLOR_SECONDARY = '#4edea3'; // Green (Up)
@@ -28,8 +28,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const COLOR_DEFAULT = '#dae2fd';
     const COLOR_MUTED = '#c2c6d6';
 
-    marketSocket.onmessage = function (event) {
-        const payload = JSON.parse(event.data);
+    function connectWebSocket() {
+        marketSocket = new WebSocket(`${protocol}${host}/ws/?ticket=${window.WS_TICKET}`);
+
+        marketSocket.onopen = function() {
+            console.log("Connected to live market feed.");
+            reconnectTimeout = 1000; // Reset timeout on successful connection
+        };
+
+        marketSocket.onmessage = function (event) {
+            const payload = JSON.parse(event.data);
 
         // Update the Market Index (ETF) Live
         const lbiStock = payload.stocks.find(s => s.ticker === 'LBI');
@@ -80,7 +88,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 }, 500);
             }
         });
-    };
+        };
+
+        marketSocket.onclose = function(event) {
+            console.log("WebSocket closed. Reconnecting in " + reconnectTimeout + "ms...");
+            setTimeout(connectWebSocket, reconnectTimeout);
+            reconnectTimeout = Math.min(reconnectTimeout * 2, 30000); // Exponential backoff up to 30s
+        };
+    }
+
+    connectWebSocket();
 
     // Throttled Table Sorter
     setInterval(() => {

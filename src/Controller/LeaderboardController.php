@@ -6,16 +6,21 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\Cache\CacheInterface;
+use Symfony\Contracts\Cache\ItemInterface;
 
 class LeaderboardController extends AbstractController
 {
     #[Route('/leaderboard', name: 'app_leaderboard')]
-    public function index(EntityManagerInterface $entityManager): Response
+    public function index(EntityManagerInterface $entityManager, CacheInterface $cache): Response
     {
-        $conn = $entityManager->getConnection();
-
-        // Calculate the total net worth of all users.
-        $sql = "
+        // Cache the heavy aggregation query for 60 seconds to prevent database throttling
+        $leaders = $cache->get('leaderboard_top_100', function (ItemInterface $item) use ($entityManager) {
+            $item->expiresAfter(60);
+            
+            $conn = $entityManager->getConnection();
+            
+            $sql = "
             SELECT COALESCE(u.username, 'Anonymous Trader') as username,
                    u.cash_balance,
                    COALESCE(stock_totals.stock_val, 0) as stock_value,
@@ -37,8 +42,9 @@ class LeaderboardController extends AbstractController
             ORDER BY total_value DESC
             LIMIT 100
         ";
-
-        $leaders = $conn->fetchAllAssociative($sql);
+            
+            return $conn->fetchAllAssociative($sql);
+        });
 
         return $this->render('leaderboard/index.html.twig', [
             'leaders' => $leaders,

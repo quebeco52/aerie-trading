@@ -1,88 +1,77 @@
 #!/usr/bin/env php
 <?php
 
-use App\Kernel;
 use Workerman\Worker;
 use Workerman\Redis\Client; // <--- We MUST use the Async client here!
-use Symfony\Component\Dotenv\Dotenv;
+use Firebase\JWT\JWT;
+use Firebase\JWT\Key;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
-// Load environment variables
-if (file_exists(dirname(__DIR__) . '/.env')) {
-    (new Dotenv())->bootEnv(dirname(__DIR__) . '/.env');
+// Retrieve the secret securely from the environment.
+// CRITICAL: We trim quotes because Docker does NOT strip them from env vars, but Symfony DOES!
+$appSecret = trim($_ENV['APP_SECRET'] ?? getenv('APP_SECRET') ?? '', '"\'');
+
+if (empty($appSecret)) {
+    die("FATAL: APP_SECRET is missing.\n");
 }
 
-$env = $_SERVER['APP_ENV'] ?? 'prod';
-$debug = (bool) ($_SERVER['APP_DEBUG'] ?? ('prod' !== $env));
-
-$kernel = new Kernel($env, $debug);
-$kernel->boot();
-
 echo "Starting Aerie WebSocket Server on port 8080...\n";
-
-// Initialize Workerman
 $worker = new Worker('websocket://0.0.0.0:8080');
-$worker->count = 4;
+$worker->count = 1; // Safer to use 1 worker for Redis PubSub to avoid duplicate messages
 
-// THE BOUNCER
+// Authenticate incoming WebSocket connections
+$worker->onWebSocketConnect = function ($connection, $http_buffer) use ($appSecret) {
+    try {
+        $ticket = '';
 
-$worker->onConnect = function ($connection) {
-    // Workerman v5+ moves the WebSocket handshake intercept to the connection object
-    $connection->onWebSocketConnect = function ($connection, $http_buffer) {
-        // Extract the ticket safely (fallback to raw HTTP buffer if $_GET is empty)
-        $ticket = $_GET['ticket'] ?? '';
-        if (empty($ticket) && preg_match('/ticket=([a-zA-Z0-9]+)/', $http_buffer, $matches)) {
+        if (is_object($http_buffer) && method_exists($http_buffer, 'get')) {
+            $ticket = $http_buffer->get('ticket') ?? '';
+        } elseif (is_string($http_buffer) && preg_match('/ticket=([a-zA-Z0-9\.\-_]+)/', $http_buffer, $matches)) {
             $ticket = $matches[1];
+        } elseif (isset($_GET['ticket'])) {
+            $ticket = $_GET['ticket'];
         }
 
         if (empty($ticket)) {
-            echo " [!] Rejected connection: No ticket provided.\n";
-            $connection->close();
-            return;
+            throw new \Exception("No ticket provided.");
         }
 
-        // Lazily initialize a synchronous Redis client per-worker
-        static $syncRedis = null;
-        if ($syncRedis === null) {
-            $syncRedis = new \Redis();
-            $redisUrl = parse_url($_ENV['REDIS_URL'] ?? 'redis://127.0.0.1:6379');
-            $syncRedis->connect($redisUrl['host'], $redisUrl['port'] ?? 6379);
-        }
-
-        // Check if the ticket exists in Redis
-        $userId = $syncRedis->get("ws_ticket:{$ticket}");
-
+        $decoded = JWT::decode($ticket, new Key($appSecret, 'HS256'));
+        
+        $userId = $decoded->uid ?? null;
         if (!$userId) {
-            echo " [!] Rejected connection: Invalid or expired ticket.\n";
-            $connection->close();
-            return;
+            throw new \Exception("Missing UID in token payload.");
         }
-
-        // Validated!
-        // give it a 15-second grace period. This allows multiple client scripts to connect simultaneously.
-        $syncRedis->expire("ws_ticket:{$ticket}", 15);
 
         // Attach the User ID to this specific connection object for future reference
         $connection->uid = $userId;
-        
+
         echo " [+] Authenticated User ID {$userId} connected! (IP: {$connection->getRemoteIp()})\n";
-    };
+    } catch (\Exception $e) {
+        echo " [!] Rejected connection: " . $e->getMessage() . "\n";
+        $connection->close();
+    }
 };
 
-
-// Subscribe to Redis ONCE when the worker boots up
-$worker->onWorkerStart = function (Worker $worker) {
+// SUBSCRIBE TO REDIS TO BROADCAST MARKET TICKS
+$worker->onWorkerStart = function ($worker) {
+    // Ensure correct scheme for Async Redis
     $redisUrl = $_ENV['REDIS_URL'] ?? 'redis://127.0.0.1:6379';
-    $asyncRedis = new Client($redisUrl);
-
-    $asyncRedis->subscribe('market_updates', function ($channel, $message) use ($worker) {
+    $redisUrl = str_replace('tcp://', 'redis://', $redisUrl); 
+    
+    $redis = new Client($redisUrl);
+    
+    // Subscribe to the channel that MarketTickerCommand publishes to
+    $redis->subscribe(['market_updates'], function ($channel, $message) use ($worker) {
         foreach ($worker->connections as $connection) {
-            $connection->send($message);
+            if (isset($connection->uid)) {
+                $connection->send($message);
+            }
         }
     });
-
-    echo " [√] Worker {$worker->id} connected to Async Redis! Listening for market updates...\n";
+    
+    echo " [v] Worker {$worker->id} started and subscribed to Redis.\n";
 };
 
 // Graceful Shutdown to prevent Docker Exit Code 137
@@ -100,6 +89,10 @@ $worker->onMessage = function ($connection, $data) {
 $worker->onClose = function ($connection) {
     $userId = $connection->uid ?? 'Unknown';
     echo " [-] Browser disconnected (User ID: {$userId}).\n";
+};
+
+$worker->onError = function ($connection, $code, $msg) {
+    echo " [!] Connection Error $code: $msg\n";
 };
 
 // Run the worker
