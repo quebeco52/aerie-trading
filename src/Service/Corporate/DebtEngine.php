@@ -1,8 +1,11 @@
 <?php
 
-namespace App\Service;
+namespace App\Service\Corporate;
 
 use App\Entity\Stock;
+use App\Service\Macro\MacroEngine;
+use App\Service\Math\CorporateMetrics;
+use App\Service\Math\MathUtility;
 
 class DebtEngine
 {
@@ -11,7 +14,6 @@ class DebtEngine
 
     // Debt Analysis Constants
     private const ARBITRAGE_HURDLE = 0.030; // 300 bps spread is severe
-    private const MIN_INTEREST_COVERAGE_RATIO = 2.0;
 
     // Leverage Physics
     private const MAX_LEVERAGE_RATIO = 15.0;     // Cap extreme D/E or D/EBITDA ratios
@@ -27,11 +29,9 @@ class DebtEngine
     private const RATE_REFINANCE_THRESHOLD = 0.015; // 150 bps drop triggers early refinancing
     private const ACCELERATED_DEBT_TURNOVER = 0.15; // 15% of debt retired per quarter if refinancing
 
-    // ICR Bounds
-    private const LEVERAGED_INDUSTRY_MIN_ICR = 1.25;
-
     public function __construct(
-        private MathUtility $mathUtility
+        private MathUtility $mathUtility,
+        private CorporateMetrics $corporateMetrics
     ) {}
 
     /**
@@ -63,6 +63,7 @@ class DebtEngine
         $rawCreditSpread = (float) $stock->getCreditSpread();
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
         $volatility = (float) $stock->getCurrentVolatility() ?: (float) $stock->getVolatility();
+        $vix = $macroState['market_volatility'] ?? 0.15;
         
         $rawBeta = (float) $stock->getBeta();
 
@@ -72,33 +73,32 @@ class DebtEngine
         $betaSensitivity = $rawBeta >= 0.0 ? max(0.5, $rawBeta) : min(-0.5, $rawBeta);
         $macroCreditAdjustment = -$outputGap * 0.10 * $betaSensitivity;
         
-        // THE VOLATILITY RISK PREMIUM
-        // Bondholders hate uncertainty. Companies with high stock volatility pay a risk premium.
-        // Volatility above 20% starts adding to the spread (e.g., 40% vol adds 40 bps).
+        // IDIOSYNCRATIC VOLATILITY PREMIUM
+        // Bondholders hate individual uncertainty. High stock volatility pays a risk premium.
         $volatilityPremium = max(0.0, ($volatility - 0.20) * 0.02);
+        
+        // SYSTEMIC VIX PANIC PREMIUM (Credit Market Freeze)
+        // When the global VIX spikes, credit markets seize up and spreads blow out across the board.
+        // High-beta stocks face massive credit downgrades during a market panic.
+        $vixPanicPremium = max(0.0, ($vix - 0.20) * 0.05 * abs($betaSensitivity));
         
         // Calculate the Dynamic Baseline Spread
         // Floored at 15 bps (0.0015) so ultra-safe Titans don't get negative spreads during massive economic booms.
-        $baselineCreditSpread = max(0.0015, $rawCreditSpread + $macroCreditAdjustment + $volatilityPremium);
+        $baselineCreditSpread = max(0.0015, $rawCreditSpread + $macroCreditAdjustment + $volatilityPremium + $vixPanicPremium);
 
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $industry = $stock->getIndustry() ?: 'General';
-        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leveraged_industry'] ?? false;
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
 
         $revenue = (float) $stock->getTotalRevenue();
 
         if ($revenue <= 0.0) {
-            $investedCapital = $isLeveraged ? (float) $stock->getTotalEquity() : $stock->getInvestedCapital();
-            
-            if ($isLeveraged) {
-                $equity = (float) $stock->getTotalEquity();
-                $targetNetIncome = $equity * max(0.01, (float) $stock->getBaselineRoe());
-                $baselineRoic = $equity > 0 ? ($targetNetIncome / $equity) : 0.01;
-            } else {
-                $baselineRoic = (float) $stock->getBaselineRoic();
-            }
-            
-            $baselineRoic = max(0.01, $baselineRoic);
+            $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+
+            $targetMetrics = $strategy->getTargetMetrics($stock, $macroState, $this->mathUtility);
+            $investedCapital = $targetMetrics['invested_capital'];
+            $baselineRoic = max(0.01, (float) $targetMetrics['baseline_roic']);
             $marginFallback = max(0.01, (float) $stock->getOperatingMargin());
             $assetTurnover = $baselineRoic / $marginFallback;
             $revenue = $investedCapital * $assetTurnover;
@@ -109,9 +109,9 @@ class DebtEngine
 
         // Calculate Depreciation to find true Cash Flow (EBITDA)
         $customDepreciation = (float) $stock->getDepreciationRate();
-        $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : $this->mathUtility->getIndustryDepreciationRate($industry);
+        $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($industry);
         
-        $physicalCapital = $isLeveraged ? (float) $stock->getTotalEquity() : $stock->getInvestedCapital();
+        $physicalCapital = $isFinancial ? (float) $stock->getTotalEquity() : $stock->getInvestedCapital();
         $depreciation = $physicalCapital * $depreciationRate;
         $ebitda = $ebit + $depreciation;
 
@@ -144,8 +144,8 @@ class DebtEngine
         // THE JUNK BOND BLOWOUT (Convex Penalty)
         $leveragePenalty = 0.0;
 
-        if ($metrics['leveraged_industry']) {
-            // Leveraged industries (Banks, Insurance) evaluated solely on Debt/Equity
+        if ($isFinancial) {
+            // Financial companies (Banks, Insurance, Brokerages, Asset Managers) evaluated solely on Debt/Equity
             if ($debtToEquity > $equityLimit) {
                 $excessLeverage = $debtToEquity - $equityLimit;
                 $leveragePenalty = (exp($excessLeverage * self::LEVERAGE_PENALTY_RATE) - 1.0) * self::LEVERAGE_PENALTY_BASE;
@@ -176,25 +176,11 @@ class DebtEngine
 
         $floatingInterestRate = $policyRate + $dynamicSpread;
         
-        // CUSTOMER DEPOSIT PHYSICS
-        if ($metrics['leveraged_industry']) {
-            $customerDeposits = (float) $stock->getCustomerDeposits();
-            $wholesaleDebt = (float) $stock->getWholesaleDebt();
-            
-            // Wholesale bonds pay standard market rates
-            $wholesaleInterest = ($wholesaleDebt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($wholesaleDebt * $floatingRatio * $floatingInterestRate);
-            $wholesaleRate = $wholesaleDebt > 0 ? ($wholesaleInterest / $wholesaleDebt) : $currentMarketFixedRate;
-            
-            // DEPOSIT BETA: Banks pass on only ~20% of the central bank policy rate to checking accounts
-            $depositRate = max(0.001, $policyRate * 0.20);
-            $depositInterest = $customerDeposits * $depositRate;
-            
-            $interestExpense = $wholesaleInterest + $depositInterest;
-        } else {
-            // Normal companies pay standard market rates on all debt
-            $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingInterestRate);
-            $wholesaleRate = $debt > 0 ? ($interestExpense / $debt) : $currentMarketFixedRate;
-        }
+        // Customer Deposits & Leverage Physics
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $expenseMetrics = $strategy->calculateInterestExpenseAndWholesaleRate($stock, $blendedFixedRate, $floatingInterestRate, $currentMarketFixedRate, $policyRate, $equityLimit, $totalEquity, $debt);
+        $interestExpense = $expenseMetrics['interest_expense'];
+        $wholesaleRate = $expenseMetrics['wholesale_rate'];
 
         $trueBlendedRate = $debt > 0 ? ($interestExpense / $debt) : 0.0;
 
@@ -243,13 +229,15 @@ class DebtEngine
         $policyRate = $macroState['policy_rate_ema'] ?? $macroState['policy_rate'] ?? 0.04;
         $corporateTaxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
 
+        
         $industry = $stock->getIndustry() ?: 'General';
         $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industry] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
-
+        $businessModel = $metrics['business_model'] ?? 'none';
 
         $debtMetrics = $this->calculateInterestExpense($stock, $macroState, false);
 
-        $isFinancial = $metrics['leveraged_industry'] ?? false;
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
+
 
         // Gross Cost
         if ($isFinancial) {
@@ -303,27 +291,39 @@ class DebtEngine
         $weightDebt = $totalCapital > 0 ? ($netDebtCapital / $totalCapital) : 0.0;
         $baseWacc = $this->mathUtility->calculateWACC($weightEquity, $costOfEquity, $weightDebt, $effectiveCostOfDebt);
 
-        // Leveraged industries inherently run lower interest coverage ratios as their core business is leverage
-        $minIcr = $isFinancial ? self::LEVERAGED_INDUSTRY_MIN_ICR : self::MIN_INTEREST_COVERAGE_RATIO;
+        $modelThresholds = \App\Data\Sectors::getModelThresholds($businessModel);
+        $minIcr = $modelThresholds['min_icr'];
 
-        // DISTRESS PENALTY: Prevent the "Anti-Gravity" WACC loop where crashing stocks get cheaper capital
+        // DISTRESS PENALTY
         $ebit = $debtMetrics['ebit'];
         $interestExpense = $debtMetrics['interest_expense'];
-        $interestCoverageProxy = $interestExpense > 0 ? ($ebit / $interestExpense) : 999.0;
+        
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $interestCoverage = $strategy->getInterestCoverage($ebit, $interestExpense);
+
+        // Check if the company has a massive cash hoard to weather the storm
+        $operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity());
+        $minOperatingCash = $strategy->calculateMinOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
+        $hasCashBuffer = ((float) $stock->getCorporateTreasury()) > ($minOperatingCash * 1.5);
 
         $distressPremium = 0.0;
-        if ($interestCoverageProxy < $minIcr && $interestCoverageProxy >= 0) {
-            // Add up to a 10% penalty as coverage drops from the safe limit to 0
-            $distressPremium = ($minIcr - $interestCoverageProxy) * 0.05;
-        } elseif ($interestCoverageProxy < 0) {
-            // Flat 15% penalty for companies operating with negative EBIT
-            $distressPremium = 0.15;
+        if ($interestCoverage < $minIcr && $interestCoverage >= 0) {
+            $maxPenalty = $hasCashBuffer ? 0.05 : 0.10;
+            $penaltyMultiplier = $maxPenalty / max(0.01, $minIcr);
+            $distressPremium = ($minIcr - $interestCoverage) * $penaltyMultiplier;
+        } elseif ($interestCoverage < 0) {
+            // Milder penalty if they have cash to survive the negative quarter
+            $distressPremium = $hasCashBuffer ? 0.05 : 0.15;
         }
 
         $wacc = $baseWacc + $distressPremium;
+        
+        if ($isFinancial) {
+            // Financial institutions use Cost of Equity as their hurdle rate, so it must also suffer the distress penalty!
+            $costOfEquity += $distressPremium;
+        }
 
-        // Cash Yield & Arbitrage Hurdle (Money Market Funds)
-        $yieldOnCash = max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+        $yieldOnCash = $strategy->calculateCashYield($macroState, $policyRate);
 
 
         // Fetch the CFO's target Debt-to-Equity limit
@@ -338,14 +338,9 @@ class DebtEngine
         
         $isSevereNegativeCarry = $effectiveCostOfDebt > ($effectiveYieldOnCash + $hurdle);
 
-        $ebit = $debtMetrics['ebit'];
-        $interestExpense = $debtMetrics['interest_expense'];
-
-        $interestCoverage = $interestExpense > 0 ? ($ebit / $interestExpense) : ($ebit > 0 ? 999.0 : -999.0);
-
         $wantsToPaydownDebt = ($wholesaleDebt > 0) && ($isSevereNegativeCarry || $interestCoverage < $minIcr);
         
-        $icrBuffer = $metrics['leveraged_industry'] ? 0.05 : 1.5;
+        $icrBuffer = $isFinancial ? 0.05 : 1.5;
         $canIssueDebt = $interestCoverage >= ($minIcr + $icrBuffer);
 
         // Macro-Economic CFO Tolerance
@@ -395,23 +390,29 @@ class DebtEngine
         // The Altman Z-Score explicitly excludes Financials because customer deposits (debt) skew their working capital.
         // Instead, evaluate Financials using a simplified Tier 1 Capital Ratio proxy (Equity / Total Assets).
         $industry = $stock->getIndustry() ?: 'General';
-        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leveraged_industry'] ?? false;
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
 
-        if ($isLeveraged) {
+        if ($isFinancial || $businessModel === 'reit') {
             $capitalRatio = $equity / $totalAssets;
             $zScore = $capitalRatio * 100.0; // Convert to percentage points (e.g., 8% capital = 8.0 score)
 
+            $modelThresholds = \App\Data\Sectors::getModelThresholds($businessModel);
+            $distressThreshold = $modelThresholds['distress_equity'];
+            $warningThreshold = $modelThresholds['warning_equity'];
+            $bankruptThreshold = $modelThresholds['bankrupt_equity'];
+
             $zone = 'Safe';
-            if ($zScore < 4.0) {
-                $zone = 'Distress'; // Below 4% equity buffer triggers distress
-            } elseif ($zScore < 6.0) {
-                $zone = 'Grey'; // Between 4% and 6% is a warning zone
+            if ($zScore < $distressThreshold) {
+                $zone = 'Distress'; 
+            } elseif ($zScore < $warningThreshold) {
+                $zone = 'Grey'; 
             }
 
             return [
                 'z_score' => $zScore,
                 'zone' => $zone,
-                'is_bankrupt' => $zScore < 2.0 // Below 2% triggers regulatory seizure / bankruptcy
+                'is_bankrupt' => $zScore < $bankruptThreshold
             ];
         }
 

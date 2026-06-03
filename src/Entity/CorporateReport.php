@@ -85,6 +85,12 @@ class CorporateReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $operatingMargin = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $depositApy = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $cashYield = null;
+
     public function __construct()
     {
         $this->recordedAt = new \DateTime();
@@ -359,6 +365,30 @@ class CorporateReport
     public function setOperatingMargin(?string $operatingMargin): static
     {
         $this->operatingMargin = $operatingMargin;
+
+        return $this;
+    }
+
+    public function getDepositApy(): ?string
+    {
+        return $this->depositApy;
+    }
+
+    public function setDepositApy(?string $depositApy): static
+    {
+        $this->depositApy = $depositApy;
+
+        return $this;
+    }
+
+    public function getCashYield(): ?string
+    {
+        return $this->cashYield;
+    }
+
+    public function setCashYield(?string $cashYield): static
+    {
+        $this->cashYield = $cashYield;
 
         return $this;
     }

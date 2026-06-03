@@ -3,10 +3,10 @@
 namespace App\Command;
 
 use App\Entity\Stock;
-use App\Service\StockTracker;
-use App\Service\EtfTracker;
-use App\Service\MacroEngine;
-use App\Service\MarketOperator;
+use App\Service\Market\StockTracker;
+use App\Service\Market\EtfTracker;
+use App\Service\Macro\MacroEngine;
+use App\Service\Market\MarketOperator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -63,6 +63,7 @@ class MarketSimulateCommand extends Command
         $years = (float) $input->getArgument('years');
         $totalTicks = (int) ($years * self::TICKS_PER_YEAR);
         $dt = 1.0 / self::TICKS_PER_YEAR;
+        $quarterlyInterval = (int) max(1, self::TICKS_PER_YEAR / 4);
 
         $output->writeln("<info>Initializing Aerie God Engine...</info>");
         $output->writeln("Target: <comment>{$years} Years</comment> ({$totalTicks} ticks)");
@@ -78,6 +79,7 @@ class MarketSimulateCommand extends Command
 
         // Load the stocks into RAM initially
         $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
+        $conn = $this->entityManager->getConnection();
 
         for ($tick = 1; $tick <= $totalTicks; $tick++) {
 
@@ -88,6 +90,11 @@ class MarketSimulateCommand extends Command
             // Pass the $stocks array in
             $result = $this->stockTracker->updateStocks($stocks, $dt, $isHistoryTick, $macroState, $tick, self::TICKS_PER_YEAR);
             $this->etfTracker->updateIndex($result['total_cap'], $isHistoryTick);
+
+            // Save Macro Report Snapshot once a "Simulation Quarter"
+            if ($tick % $quarterlyInterval === 0) {
+                $this->macroEngine->recordMacroSnapshot($macroState, $conn);
+            }
 
             // Batch flush every 1200 ticks to save RAM
             if ($tick % 365 === 0) {

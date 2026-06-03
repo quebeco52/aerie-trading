@@ -1,6 +1,9 @@
 <?php
 
-namespace App\Service;
+namespace App\Service\Market;
+
+use App\Service\Macro\MacroEngine;
+use App\Service\Math\MathUtility;
 
 /**
  * Service responsible for calculating stock price movements based on various market factors.
@@ -88,7 +91,7 @@ class MarketEngine
         float $liveWacc = 0.08,
         float $baselineIndustryPE = 20.0,
         float $revenuePerShare = 0.0,
-        bool $isLeveragedIndustry = false,
+        string $businessModel = 'none',
         float $liveCostOfEquity = 0.10,
     ): array {
 
@@ -167,7 +170,7 @@ class MarketEngine
             $dividendPerShare,
             $baselineIndustryPE,
             $revenuePerShare,
-            $isLeveragedIndustry,
+            $businessModel,
             $liveCostOfEquity
         );
 
@@ -278,33 +281,31 @@ class MarketEngine
         float $dividendPerShare,
         float $baselineIndustryPE = 20.0, 
         float $revenuePerShare = 0.0,      
-        bool $isLeveragedIndustry = false,
+        string $businessModel = 'none',
         float $liveCostOfEquity = 0.10
     ): array {
+        
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
+        
         // MACROECONOMIC STRESS INDEX (MSI)
-        $recessionStress = max(0.0, -$outputGap); // Negative output gap = economic contraction
-        $inflationStress = abs($inflation - 0.02); // Deviation from price stability
+        $recessionStress = max(0.0, -$outputGap); 
+        $inflationStress = abs($inflation - 0.02); 
         $systemicStressIndex = $recessionStress + $inflationStress;
 
-        
-
-        // DYNAMIC FUNDAMENTAL VALUATION
-
         // DYNAMIC P/E RE-RATING (Smoothed)
-        // Use pow(..., 0.5) to dampen extreme multiples during zero-interest-rate environments
         $rateModifier = pow(0.04 / max(0.01, $riskFreeRate), 0.5);
         $macroBasePE = max(self::MIN_BASE_PE, min(self::MAX_BASE_PE, $baselineIndustryPE * $rateModifier));
 
         // The EVA Premium (Quality Spread)
-        $hurdleRate = $isLeveragedIndustry ? $liveCostOfEquity : $liveWacc;
+        $hurdleRate = $isFinancial ? $liveCostOfEquity : $liveWacc; // Use isFinancial
         $evaSpread = $currentRoic - $hurdleRate;
         $qualityPremium = max(0.0, $evaSpread * 100) * 1.5;
         $distressDiscount = min(0.0, $evaSpread * 100) * 2.0;
 
         $fairValuePE = max(self::MIN_FAIR_VALUE_PE, min(self::MAX_FAIR_VALUE_PE, $macroBasePE + $qualityPremium + $distressDiscount));
 
-        if ($isLeveragedIndustry) {
-            // For Banks, Cash IS their operating inventory. Do not penalize them.
+        if ($isFinancial) { // Use isFinancial
+            // For Financials, Cash IS their operating inventory. Do not penalize them.
             $trueStructuralEps = $bookValuePerShare * $currentRoic;
         } else {
             // Standard corporates: Operating Equity = Book Value - Cash
@@ -324,37 +325,15 @@ class MarketEngine
         $revenueFloorValue = $revenuePerShare * $psMultiple;
 
         // THE BANKING DCF BYPASS
-        if ($isLeveragedIndustry) {
-            // Wall Street NEVER uses DCF for Banks. Cash is their inventory.
-            // Banks are valued strictly on Earnings (P/E) and Book Value (P/B).
-            $earningsValue = $peFairValue;
-        } else {
-            // Discounted Cash Flow (DCF) Value for Normal Companies
-            if ($fcfPerShare !== null) {
-                if ($fcfPerShare > 0.0) {
-                    $multiplier = $this->mathUtility->calculateDcfMultiplier($liveWacc, 0.02);
-                    $dcfFairValue = max(0.01, $fcfPerShare * $multiplier);
-
-                    $earningsValue = ($peFairValue > 0) ? ($peFairValue + $dcfFairValue) / 2.0 : $dcfFairValue;
-                } else {
-                    $earningsValue = max($revenueFloorValue, $peFairValue) * 0.75;
-                }
-            } else {
-                $earningsValue = max($revenueFloorValue, $peFairValue);
-            }
-        }
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $earningsValue = $strategy->calculateEarningsValue($revenueFloorValue, $peFairValue, $fcfPerShare, $liveWacc, $this->mathUtility);
 
         // Dividend Yield Support (The Dividend Discount Model)
-        // High dividends create a hard psychological and mathematical price floor for investors
         $dividendSupportValue = 0.0;
         if ($dividendPerShare > 0.0) {
-            // Cap the DDM valuation so it only prices in sustainable cash flows. 
-            // Banks don't use FCF, so we fallback to EPS for their sustainability check.
-            $cashFlowProxy = $isLeveragedIndustry ? $earningsPerShare : ($fcfPerShare ?? 0.0);
+            $cashFlowProxy = $isFinancial ? $earningsPerShare : ($fcfPerShare ?? 0.0); // Use isFinancial
             $sustainableDividend = min($dividendPerShare * 4.0, max(0.0, $cashFlowProxy));
             
-            // SAFEGUARD: Dividends are cash flows to Equity, so they MUST be discounted by the Cost of Equity, not WACC!
-            // This naturally prevents ultra-low WACC (from bank deposits) from creating infinite multiples.
             $assumedGrowth = 0.01;
             $requiredYield = max(0.02, $liveCostOfEquity);
             
@@ -366,19 +345,15 @@ class MarketEngine
         }
 
         // Intrinsic Price-to-Book (P/B) Valuation
-        // A company earning exactly its Cost of Capital trades at 1.0x Book. 
-        $pbMultiple = max(0.20, min(10.0, $currentRoic / max(0.01, $hurdleRate)));
+        // A living company rarely trades below 0.4x Book Value unless bankruptcy is imminent.
+        $pbMultiple = max(0.40, min(10.0, $currentRoic / max(0.01, $hurdleRate)));
         $pbFairValue = $bookValuePerShare * $pbMultiple;
 
-        // Weighted Consensus Model to prevent cherry-picked asset bubbles
-        if ($isLeveragedIndustry) {
-            $fairValue = ($earningsValue * 0.60) + ($pbFairValue * 0.40);
-        } else {
-            $fairValue = ($earningsValue * 0.90) + ($pbFairValue * 0.10);
-        }
+        // PERFECTED WEIGHTED CONSENSUS MODEL
+        $fairValue = $strategy->calculateFairValue($earningsValue, $pbFairValue, $normalizedEps);
 
         $perceivedFairValue = max(0.01, $fairValue, $dividendSupportValue);
-
+        
         
 
         // OVERVALUATION (The Bubble Gravity)

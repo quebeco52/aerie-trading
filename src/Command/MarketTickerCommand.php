@@ -3,11 +3,11 @@
 namespace App\Command;
 
 use App\Entity\Stock;
-use App\Service\StockTracker;
-use App\Service\EtfTracker;
-use App\Service\MacroEngine;
-use App\Service\MarketOperator;
-use App\Service\Portfolio;
+use App\Service\Market\StockTracker;
+use App\Service\Market\EtfTracker;
+use App\Service\Macro\MacroEngine;
+use App\Service\Market\MarketOperator;
+use App\Service\User\Portfolio;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -95,6 +95,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         $historyInterval = (int) max(1, $this->ticksPerYear / 2400); // 2400 points per year
         $operatorInterval = (int) max(1, $this->ticksPerYear / 24);  // Operator audits once a game "month"
         $snapshotInterval = (int) max(1, $this->ticksPerYear / 52);  // Snapshots once a game "week"
+        $quarterlyInterval = (int) max(1, $this->ticksPerYear / 4);   // Snapshots once a game "quarter"
 
         $conn = $this->entityManager->getConnection();
 
@@ -208,6 +209,11 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                         $this->entityManager->flush();
                     }
                     $this->portfolio->recordBulkSnapshots();
+                }
+
+                // Save Macro Report Snapshot once a "Simulation Quarter"
+                if ($tickCount % $quarterlyInterval === 0) {
+                    $this->macroEngine->recordMacroSnapshot($macroState, $conn);
                 }
 
                 $this->entityManager->commit();

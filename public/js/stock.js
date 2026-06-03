@@ -1,6 +1,7 @@
 const CURRENT_TICKER = window.AERIE_DATA.ticker;
 const IS_ETF = window.AERIE_DATA.isEtf;
-const IS_LEVERAGED = window.AERIE_DATA.isLeveraged || false;
+const BUSINESS_MODEL = window.AERIE_DATA.businessModel || 'none';
+const IS_FINANCIAL = window.AERIE_DATA.isFinancial || false;
 const SHARES_OUTSTANDING = window.AERIE_DATA.sharesOutstanding;
 const USER_QUANTITY = window.AERIE_DATA.userQuantity;
 const EPS = window.AERIE_DATA.eps;
@@ -60,8 +61,8 @@ document.addEventListener('DOMContentLoaded', () => {
     loadHistory('1y');
     setupEventListeners();
 
-    // Fetch Fundamental Data Skip if ETF
     if (!IS_ETF) {
+        // Fetch Stock Fundamental Data
         fetch(`/api/fundamentals?ticker=${CURRENT_TICKER}`)
             .then(res => res.json())
             .then(data => {
@@ -69,6 +70,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateCharts('5Y');
             })
             .catch(err => console.error("Failed to load fundamentals:", err));
+    } else {
+        // Fetch Macroeconomic Reports
+        fetch(`/api/macro-reports`)
+            .then(res => res.json())
+            .then(data => {
+                rawReports = data;
+                updateMacroCharts();
+            })
+            .catch(err => console.error("Failed to load macro reports:", err));
     }
 
     if (!window.WS_TICKET || window.WS_TICKET === "") {
@@ -504,6 +514,8 @@ function updateCharts(timeframe) {
     let spreadData = [];
     let blendedRateData = [];
     let expenseRatioData = [];
+    let cashYieldData = [];
+    let depositApyData = [];
 
     // Capital Efficiency
     let roicData = [];
@@ -541,6 +553,8 @@ function updateCharts(timeframe) {
             spreadData.push(parseFloat(report.dynamic_spread || 0) * 100);
             blendedRateData.push(parseFloat(report.blended_rate || 0) * 100);
             expenseRatioData.push(rev > 0 ? (intExp / rev) * 100 : 0.0);
+            cashYieldData.push(parseFloat(report.cash_yield || report.cashYield || 0) * 100);
+            depositApyData.push(parseFloat(report.deposit_apy || report.depositApy || 0) * 100);
 
             roicData.push(parseFloat(report.roic || 0) * 100);
             waccData.push(parseFloat(report.wacc || 0) * 100);
@@ -582,6 +596,8 @@ function updateCharts(timeframe) {
             spreadData.unshift(parseFloat(report.dynamic_spread || 0) * 100);
             blendedRateData.unshift(parseFloat(report.blended_rate || 0) * 100);
             expenseRatioData.unshift(rev > 0 ? (intExp / rev) * 100 : 0.0);
+            cashYieldData.unshift(parseFloat(report.cash_yield || report.cashYield || 0) * 100);
+            depositApyData.unshift(parseFloat(report.deposit_apy || report.depositApy || 0) * 100);
 
             roicData.unshift(parseFloat(report.roic || 0) * 100);
             waccData.unshift(parseFloat(report.wacc || 0) * 100);
@@ -607,21 +623,38 @@ function updateCharts(timeframe) {
             yearCount++;
         }
     }
+    
+    // Convert Operating Margin to Combined Ratio (100 - Margin) specifically for Insurance companies
+    let marginLabel = BUSINESS_MODEL === 'insurance' ? 'Combined Ratio' : 'Operating Margin';
+    let displayMarginData = BUSINESS_MODEL === 'insurance' 
+        ? operatingMarginData.map(m => 100 - m) 
+        : operatingMarginData;
 
-    renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, operatingMarginData);
+    renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, displayMarginData, marginLabel);
     renderDebtEquityChart(labels, debtData, equityData, treasuryData);
-    renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData);
+    renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData, cashYieldData, depositApyData);
     renderCapitalReturnChart(labels, dividendData, buybackData);
     
-    if (IS_LEVERAGED) {
+    // THE NEW FINANCIAL SPLIT LOGIC
+    if (IS_FINANCIAL) {
+        // ALL financial companies are evaluated on Return on Equity (ROE)
         renderCapitalEfficiencyChart(labels, roeData, coeData, evaData, 'ROE', 'Cost of Equity');
-        renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData);
+        
+        if (BUSINESS_MODEL === 'commercial_bank' || BUSINESS_MODEL === 'credit_services') {
+            renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData, 'Customer Deposit Ratio');
+        } else if (BUSINESS_MODEL === 'insurance') {
+            renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData, 'Float Ratio (0% Interest)');
+        } else if (BUSINESS_MODEL === 'brokerage') {
+            // Brokerages don't use deposits/float, so we only pass the Capital Ratio
+            renderRegulatoryRatiosChart(labels, capitalRatioData, null, null);
+        }
     } else {
+        // Normal companies use ROIC
         renderCapitalEfficiencyChart(labels, roicData, waccData, evaData, 'ROIC', 'WACC');
     }
 }
 
-function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, operatingMarginData) {
+function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, operatingMarginData, marginLabel = 'Operating Margin') {
     if (profitEngineChartInstance) profitEngineChartInstance.destroy();
 
     const ctx = document.getElementById('netIncomeChart').getContext('2d');
@@ -659,7 +692,7 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
                 },
                 {
                     type: 'line',
-                    label: 'Operating Margin',
+                    label: marginLabel,
                     data: operatingMarginData,
                     borderColor: '#facc15',
                     backgroundColor: '#facc15',
@@ -683,7 +716,7 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
                 tooltip: { 
                     callbacks: { 
                         label: (ctx) => {
-                            if (ctx.dataset.label === 'Operating Margin') {
+                            if (ctx.dataset.label === marginLabel) {
                                 return `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`;
                             }
                             return `${ctx.dataset.label}: $${formatLarge(ctx.raw)}`;
@@ -708,40 +741,250 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
     });
 }
 
-function renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData) {
+// =========================================================================
+// MACROECONOMIC CHARTING LOGIC
+// =========================================================================
+
+let macroEconomyChartInstance = null;
+let macroRatesChartInstance = null;
+let macroRiskChartInstance = null;
+let macroGdpChartInstance = null;
+
+function updateMacroCharts() {
+    if (!rawReports || rawReports.length === 0) return;
+
+    let labels = [];
+    let inflationData = [], outputGapData = [];
+    let policyRateData = [], yield10yData = [], slopeData = [];
+    let erpData = [], volData = [], taxData = [];
+    let gdpData = [];
+
+    let qCount = rawReports.length;
+
+    rawReports.forEach((report, index) => {
+        let labelQ = qCount - index - 1;
+        labels.push(labelQ === 0 ? 'Now' : `-${labelQ} Qtrs`);
+
+        inflationData.push(parseFloat(report.inflation_ema) * 100);
+        outputGapData.push(parseFloat(report.output_gap_ema) * 100);
+        
+        let pr = parseFloat(report.policy_rate_ema) * 100;
+        let y10 = parseFloat(report.yield10y_ema) * 100;
+        
+        policyRateData.push(pr);
+        yield10yData.push(y10);
+        slopeData.push(y10 - pr);
+        
+        erpData.push(parseFloat(report.equity_risk_premium) * 100);
+        volData.push(parseFloat(report.market_volatility) * 100);
+        taxData.push(parseFloat(report.corporate_tax_rate) * 100);
+        
+        // Base GDP in the system is $25 Trillion
+        gdpData.push(parseFloat(report.nominal_gdp_index) * 25.0); 
+    });
+
+    renderMacroEconomyChart(labels, inflationData, outputGapData);
+    renderMacroRatesChart(labels, policyRateData, yield10yData, slopeData);
+    renderMacroRiskChart(labels, erpData, volData, taxData);
+    renderMacroGdpChart(labels, gdpData);
+}
+
+function renderMacroEconomyChart(labels, inflationData, outputGapData) {
+    if (macroEconomyChartInstance) macroEconomyChartInstance.destroy();
+    const ctx = document.getElementById('macroEconomyChart').getContext('2d');
+    macroEconomyChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    type: 'line',
+                    label: 'Inflation (EMA)',
+                    data: inflationData,
+                    borderColor: '#facc15',
+                    backgroundColor: '#facc15',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 1,
+                    yAxisID: 'y'
+                },
+                {
+                    type: 'bar',
+                    label: 'Output Gap (EMA)',
+                    data: outputGapData,
+                    backgroundColor: outputGapData.map(val => val < 0 ? 'rgba(255, 179, 173, 0.4)' : 'rgba(78, 222, 163, 0.4)'),
+                    borderRadius: 4,
+                    yAxisID: 'y'
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } } },
+            scales: { y: { ticks: { callback: (val) => val + '%' }, title: { display: true, text: 'Percentage' } } }
+        }
+    });
+}
+
+function renderMacroRatesChart(labels, policyRateData, yield10yData, slopeData) {
+    if (macroRatesChartInstance) macroRatesChartInstance.destroy();
+    const ctx = document.getElementById('macroRatesChart').getContext('2d');
+    macroRatesChartInstance = new Chart(ctx, {
+        type: 'bar', // Set base type to bar so we can render the background slope
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    type: 'line',
+                    label: 'Policy Rate (EMA)',
+                    data: policyRateData,
+                    borderColor: '#7dd3fc',
+                    backgroundColor: '#7dd3fc',
+                    borderWidth: 2,
+                    tension: 0.1,
+                    pointRadius: 1
+                },
+                {
+                    type: 'line',
+                    label: '10Y Yield (EMA)',
+                    data: yield10yData,
+                    borderColor: '#c084fc',
+                    backgroundColor: '#c084fc',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 1
+                },
+                {
+                    type: 'bar',
+                    label: 'Yield Curve Slope',
+                    data: slopeData,
+                    backgroundColor: slopeData.map(val => val < 0 ? 'rgba(255, 179, 173, 0.4)' : 'rgba(192, 132, 252, 0.5)'),
+                    borderRadius: 4
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } } },
+            scales: { y: { ticks: { callback: (val) => val + '%' } } }
+        }
+    });
+}
+
+function renderMacroRiskChart(labels, erpData, volData, taxData) {
+    if (macroRiskChartInstance) macroRiskChartInstance.destroy();
+    const ctx = document.getElementById('macroRiskChart').getContext('2d');
+    macroRiskChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Market Volatility (VIX)',
+                    data: volData,
+                    borderColor: COLORS.negative,
+                    backgroundColor: 'rgba(255, 179, 173, 0.15)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 0
+                },
+                {
+                    label: 'Equity Risk Premium',
+                    data: erpData,
+                    borderColor: '#fde047',
+                    backgroundColor: '#fde047',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 1
+                },
+                {
+                    label: 'Corporate Tax Rate',
+                    data: taxData,
+                    borderColor: COLORS.primary,
+                    backgroundColor: COLORS.primary,
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    tension: 0.1,
+                    pointRadius: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } } },
+            scales: { y: { ticks: { callback: (val) => val + '%' } } }
+        }
+    });
+}
+
+function renderMacroGdpChart(labels, gdpData) {
+    if (macroGdpChartInstance) macroGdpChartInstance.destroy();
+    const ctx = document.getElementById('macroGdpChart').getContext('2d');
+    macroGdpChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Nominal GDP',
+                    data: gdpData,
+                    borderColor: COLORS.positive,
+                    backgroundColor: 'rgba(78, 222, 163, 0.2)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 2
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `$${ctx.raw.toFixed(2)}T` } } },
+            scales: { y: { ticks: { callback: (val) => '$' + val + 'T' } } }
+        }
+    });
+}
+
+function renderRegulatoryRatiosChart(labels, capitalRatioData, secondaryData, secondaryLabel) {
     const canvas = document.getElementById('regulatoryRatiosChart');
     if (!canvas) return;
 
     if (regulatoryRatiosChartInstance) regulatoryRatiosChartInstance.destroy();
+
+    const datasets = [
+        {
+            label: 'Capital Ratio',
+            data: capitalRatioData,
+            borderColor: '#7dd3fc',
+            backgroundColor: 'rgba(125, 211, 252, 0.2)',
+            borderWidth: 2,
+            tension: 0.3,
+            pointRadius: 3,
+            fill: true,
+        }
+    ];
+
+    // Only add the second line if the data was passed (Banks and Insurance)
+    if (secondaryData) {
+        datasets.push({
+            label: secondaryLabel,
+            data: secondaryData,
+            borderColor: '#facc15',
+            backgroundColor: 'rgba(250, 204, 21, 0.2)',
+            borderWidth: 2,
+            tension: 0.3,
+            pointRadius: 3,
+            fill: true,
+        });
+    }
 
     const ctx = canvas.getContext('2d');
     regulatoryRatiosChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
-            datasets: [
-                {
-                    label: 'Capital Ratio',
-                    data: capitalRatioData,
-                    borderColor: '#7dd3fc',
-                    backgroundColor: 'rgba(125, 211, 252, 0.2)',
-                    borderWidth: 2,
-                    tension: 0.3,
-                    pointRadius: 3,
-                    fill: true,
-                }
-                ,
-                {
-                    label: 'Customer Deposit Ratio',
-                    data: customerDepositRatioData,
-                    borderColor: '#facc15',
-                    backgroundColor: 'rgba(250, 204, 21, 0.2)',
-                    borderWidth: 2,
-                    tension: 0.3,
-                    pointRadius: 3,
-                    fill: true,
-                }
-            ]
+            datasets: datasets
         },
         options: {
             responsive: true,
@@ -804,14 +1047,14 @@ function renderDebtEquityChart(labels, debtData, equityData, treasuryData) {
     });
 }
 
-function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData) {
+function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData, cashYieldData, depositApyData) {
     const canvas = document.getElementById('creditHealthChart');
     if (!canvas) return;
 
     if (creditHealthChartInstance) creditHealthChartInstance.destroy();
 
     const ctx = canvas.getContext('2d');
-    creditHealthChartInstance = new Chart(ctx, {
+    const config = {
         type: 'line',
         data: {
             labels: labels,
@@ -843,6 +1086,15 @@ function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRat
                     borderDash: [5, 5],
                     tension: 0.3,
                     pointRadius: 0
+                },
+                {
+                    label: 'Cash Yield',
+                    data: cashYieldData,
+                    borderColor: COLORS.positive,
+                    backgroundColor: COLORS.positive,
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3
                 }
             ]
         },
@@ -864,8 +1116,25 @@ function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRat
                 }
             }
         }
-    });
+     };
+
+    // ONLY Banks pay Deposit APY. Insurance Float is 0%, Brokerages have no deposits.
+    if (BUSINESS_MODEL === 'commercial_bank' || BUSINESS_MODEL === 'credit_services') {
+        config.data.datasets.push({
+            label: 'Deposit APY',
+            data: depositApyData,
+            borderColor: '#c084fc', // Distinct purple color
+            backgroundColor: '#c084fc',
+            borderWidth: 2,
+            borderDash: [4, 4],
+            tension: 0.3,
+            pointRadius: 3
+        });
+    }
+
+    creditHealthChartInstance = new Chart(ctx, config);
 }
+
 
 function renderCapitalEfficiencyChart(labels, returnData, hurdleData, evaData, returnLabel, hurdleLabel) {
     const canvas = document.getElementById('capitalEfficiencyChart');

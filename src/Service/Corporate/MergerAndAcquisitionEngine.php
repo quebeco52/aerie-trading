@@ -1,9 +1,12 @@
 <?php
 
-namespace App\Service;
+namespace App\Service\Corporate;
 
 use App\Entity\Stock;
 use Doctrine\ORM\EntityManagerInterface;
+use App\Service\Event\MarketEventPublisher;
+use App\Service\Math\MathUtility;
+use App\Service\Math\CorporateMetrics;
 
 /**
  * Service responsible for executing Mergers and Acquisitions.
@@ -13,9 +16,10 @@ class MergerAndAcquisitionEngine
 {
     public function __construct(
         private EntityManagerInterface $entityManager,
-        private MarketEvent $marketEvent,
+        private MarketEventPublisher $marketEvent,
         private DebtEngine $debtEngine,
-        private MathUtility $mathUtility
+        private MathUtility $mathUtility,
+        private CorporateMetrics $corporateMetrics
     ) {}
 
     /**
@@ -33,7 +37,7 @@ class MergerAndAcquisitionEngine
         $shares = (float) $acquirer->getSharesOutstanding();
         $debtRatio = (float) $acquirer->getDebtToEquityRatio();
         
-        $operatingBase = $this->mathUtility->calculateOperatingBase((float) $acquirer->getTotalRevenue(), (float) $acquirer->getTotalEquity());
+        $operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $acquirer->getTotalRevenue(), (float) $acquirer->getTotalEquity());
         $equity = (float) $acquirer->getTotalEquity();
         $currentDebt = (float) $acquirer->getTotalDebt();
         $policyRate = $macroState['policy_rate'] ?? 0.04;
@@ -47,12 +51,14 @@ class MergerAndAcquisitionEngine
         }
 
         // PERSONAL BORROWING COST
-        $costOfNewBorrowing = $policyRate + (float) $acquirer->getCreditSpread();
+        $costOfNewBorrowing = $health['raw_metrics']['current_market_rate'] ?? ($policyRate + (float) $acquirer->getCreditSpread());
 
         // Leveraged industries have much higher natural limits.
         $industry = $acquirer->getIndustry() ?: 'General';
         $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 1.0;
-        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leveraged_industry'] ?? false;
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
         
         // Allow up to their maximum structural equity limit + a 20% M&A over-leverage buffer
         $maxAllowableDebt = $equity * $equityLimit;
@@ -61,33 +67,29 @@ class MergerAndAcquisitionEngine
         $totalBuyingPower = $treasury + $borrowingCapacity;
 
         // Calculate actual excess cash above target operating requirements
-        $targetCash = $this->mathUtility->calculateTargetOperatingCash($operatingBase, (float) $acquirer->getCustomerDeposits(), (float) $acquirer->getWholesaleDebt(), $isLeveraged);
+        $targetCash = $strategy->calculateTargetOperatingCash($operatingBase, (float) $acquirer->getCustomerDeposits(), (float) $acquirer->getWholesaleDebt());
         $excessCash = max(0.0, $treasury - $targetCash);
         
-        $isHoarder = $isLeveraged 
-            ? ($excessCash > ($currentDebt * 0.15)) 
-            : ($excessCash > ($operatingBase * 0.25));
-            
-        $isMegaHoarder = $isLeveraged 
-            ? ($excessCash > ($currentDebt * 0.25)) 
-            : ($excessCash > ($operatingBase * 0.50));
+        $hoardStatus = $strategy->evaluateHoardingStatus($excessCash, $operatingBase, $currentDebt);
+        $isHoarder = $hoardStatus['is_hoarder'];
+        $isMegaHoarder = $hoardStatus['is_mega_hoarder'];
         
         // Normalize the debt ratio against the sector's limit (1.0 = at max leverage, 0.5 = half levered)
         $normalizedDebtUtilization = $debtRatio / max(0.1, $equityLimit);
         
         $config = match (true) {
             $isMegaHoarder => [
-                'prob' => 4.00, 'spend' => 0.60, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => 'CONGLOMERATE EXPANSION', 'use_leverage' => false
+                'prob' => 4.00, 'spend' => 0.60, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'CONGLOMERATE EXPANSION', 'use_leverage' => false
             ],
             $isHoarder => [
-                'prob' => 1.00, 'spend' => 0.40, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => 'CONGLOMERATE EXPANSION', 'use_leverage' => false
+                'prob' => 1.00, 'spend' => 0.40, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'CONGLOMERATE EXPANSION', 'use_leverage' => false
             ],
             $health['can_issue_debt'] && $normalizedDebtUtilization < 0.30 && $totalBuyingPower > 5_000_000_000.0 && $costOfNewBorrowing < 0.07 => [
-                'prob' => 0.50, 'spend' => 0.40, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => 'LEVERAGED BUYOUT', 'use_leverage' => true
+                'prob' => 0.50, 'spend' => 0.40, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'LEVERAGED BUYOUT', 'use_leverage' => true
             ],
             // Secondary LBO tier: Allow up to 8% personal borrowing cost for moderate debt companies
             $health['can_issue_debt'] && $normalizedDebtUtilization < 0.80 && $totalBuyingPower > 5_000_000_000.0 && $costOfNewBorrowing < 0.08 => [
-                'prob' => 0.10, 'spend' => 0.30, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => 'LEVERAGED BUYOUT', 'use_leverage' => true
+                'prob' => 0.10, 'spend' => 0.30, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'LEVERAGED BUYOUT', 'use_leverage' => true
             ],
 
             default => null,
@@ -117,7 +119,7 @@ class MergerAndAcquisitionEngine
 
         // EXECUTE THE M&A DEAL
 
-        $minOperatingCash = $this->mathUtility->calculateMinOperatingCash($operatingBase, (float) $acquirer->getCustomerDeposits(), (float) $acquirer->getWholesaleDebt(), $isLeveraged);
+        $minOperatingCash = $strategy->calculateMinOperatingCash($operatingBase, (float) $acquirer->getCustomerDeposits(), (float) $acquirer->getWholesaleDebt());
         $usableTreasury = max(0.0, $treasury - $minOperatingCash);
 
         // Determine the Purchase Price based on their strategy (Cash vs Leverage)
@@ -128,8 +130,8 @@ class MergerAndAcquisitionEngine
         $maxPrivateCompanyValue = mt_rand(100, 500) * 1_000_000_000.0;
         $purchasePrice = min($purchasePrice, (float) $maxPrivateCompanyValue);
         
-        // Banks must safely cap their M&A spend to a fraction of their Tier 1 Capital (Equity)
-        if ($isLeveraged) {
+        // Financials must safely cap their M&A spend to a fraction of their Tier 1 Capital (Equity)
+        if ($isFinancial) {
             $purchasePrice = min($purchasePrice, $equity * 0.15);
         }
         
@@ -158,8 +160,9 @@ class MergerAndAcquisitionEngine
             $leveragePenalty = $excessLeverage * 0.05;
             $leveragePenalty = min(0.25, $leveragePenalty); // Cap the Junk Bond Penalty at 25%
             
-            // The cost of the new debt is the Central Bank Rate + Company's Credit Spread + Any Junk Penalty
-            $costOfNewDebt = $policyRate + (float) $acquirer->getCreditSpread() + $leveragePenalty;
+            // The cost of the new debt incorporates the dynamic credit spread (VIX, Macro, Volatility) + Any Junk Penalty
+            $dynamicSpread = $health['raw_metrics']['dynamic_spread'] ?? (float) $acquirer->getCreditSpread();
+            $costOfNewDebt = $policyRate + $dynamicSpread + $leveragePenalty;
             
             // Blend them together! ((Old Wholesale * Old Rate) + (New Debt * New Rate)) / New Wholesale Debt
             $currentWholesaleDebt = (float) $acquirer->getWholesaleDebt();
@@ -193,20 +196,20 @@ class MergerAndAcquisitionEngine
         $oldOperatingMargin = (float) $acquirer->getOperatingMargin();
         $oldInvestedCapital = $acquirer->getInvestedCapital();
         
-        $oldCapitalBase = $isLeveraged ? $equity : $oldInvestedCapital;
+        $oldCapitalBase = $isFinancial ? $equity : $oldInvestedCapital;
         
         // Private companies generally have average market returns (6% to 12%)
         $targetRoic = mt_rand(60, 120) / 1000.0;
         $effectiveTargetRoic = $targetRoic * $synergyMultiplier;
         
         // Assume the target has a slightly worse operating margin, but protect structural floors
-        $marginFloor = $isLeveraged ? 0.20 : 0.10;
+        $marginFloor = $isFinancial ? 0.20 : 0.10;
         $targetMargin = max($marginFloor, $oldOperatingMargin * (mt_rand(70, 95) / 100.0));
         
         $totalNewCapital = max(1.0, $oldCapitalBase + $purchasePrice);
         
         // Blend the Baseline ROIC (Only for normal companies, Banks use this as a Target ROE!)
-        if (!$isLeveraged) {
+        if (!$isFinancial) {
             $blendedBaselineRoic = (($oldCapitalBase * $oldBaselineRoic) + ($purchasePrice * $effectiveTargetRoic)) / $totalNewCapital;
             $acquirer->setBaselineRoic((string) max(0.01, $blendedBaselineRoic));
         } else {
@@ -271,7 +274,7 @@ class MergerAndAcquisitionEngine
     {
         $eps = (float) $seller->getEarningsPerShare();
         $price = (float) $seller->getPrice();
-        $currentPE = $eps > 0 ? $price / $eps : 0.0;
+        $shares = max(1.0, (float) $seller->getSharesOutstanding());
         $netIncome = (float) $seller->getTotalNetIncome();
 
         $health = $this->debtEngine->analyzeDebtHealth($seller, $macroState);
@@ -280,9 +283,10 @@ class MergerAndAcquisitionEngine
         // Is the company suffocating under its own weight?
 
         $industry = $seller->getIndustry() ?: 'General';
-        $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['leveraged_industry'] ?? false;
-        $currentReturn = $isLeveraged ? (float) $seller->getCurrentRoe() : (float) $seller->getCurrentRoic();
-        $hurdleRate = $isLeveraged ? ($health['cost_of_equity'] ?? 0.10) : $wacc;
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
+        $currentReturn = $isFinancial ? (float) $seller->getCurrentRoe() : (float) $seller->getCurrentRoic();
+        $hurdleRate = $isFinancial ? ($health['cost_of_equity'] ?? 0.10) : $wacc;
 
         $evaSpread = $currentReturn - $hurdleRate;
 
@@ -290,15 +294,26 @@ class MergerAndAcquisitionEngine
         $isDying = $currentReturn < 0.00 || $evaSpread < -0.05;
 
         $treasury = (float) $seller->getCorporateTreasury();
-        $operatingBase = $this->mathUtility->calculateOperatingBase((float) $seller->getTotalRevenue(), (float) $seller->getTotalEquity());
+        $operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $seller->getTotalRevenue(), (float) $seller->getTotalEquity());
         $hasCashBuffer = $treasury > ($operatingBase * 0.10); // 10% buffer is a massive fortress
 
+        $currentEquity = (float) $seller->getTotalEquity();
         $investedCapital = $seller->getInvestedCapital();
+        $evaluationCapital = $isFinancial ? $currentEquity : $investedCapital;
+        
+        // NORMALIZED EARNINGS FIX
+        // Because the new EarningsEngine introduces massive, realistic volatility spikes (like loan loss provisions),
+        // we must normalize the net income against its structural capacity to prevent valuing a divestiture at $0 during a temporary bad quarter.
+        $structuralNetIncome = $evaluationCapital * $currentReturn;
+        $normalizedNetIncome = ($netIncome * 0.50) + ($structuralNetIncome * 0.50);
+        
+        $normalizedEps = $normalizedNetIncome / $shares;
+        $currentPE = $normalizedEps > 0 ? $price / $normalizedEps : 0.0;
         
         
         $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
         $samRatio = (float) $seller->getSamRatio();
-        $marketShare = $this->mathUtility->calculateMarketShare($investedCapital, $nominalGdpIndex, $samRatio);
+        $marketShare = $this->corporateMetrics->calculateMarketShare($evaluationCapital, $nominalGdpIndex, $samRatio);
 
 
         // If they have a massive cash fortress, they can easily weather the storm without a fire sale!
@@ -308,7 +323,7 @@ class MergerAndAcquisitionEngine
         }
 
         // Only sell if highly valued OR deeply distressed
-        if (!$isDistressed && ($currentPE < 30.0 || $netIncome < 5_000_000_000.0)) {
+        if (!$isDistressed && ($currentPE < 30.0 || $normalizedNetIncome < 5_000_000_000.0)) {
             return null;
         }
 
@@ -340,14 +355,13 @@ class MergerAndAcquisitionEngine
 
         // EXECUTE THE DIVESTITURE
 
-        $lostNetIncome = $netIncome * $divestedFraction;
-        $currentEquity = (float) $seller->getTotalEquity();
+        $lostNetIncome = $normalizedNetIncome * $divestedFraction;
         $investedCapital = $seller->getInvestedCapital();
         $lostEquity = $currentEquity * $divestedFraction;
 
-        // If the company is losing money, buyers value the physical assets (Equity) 
+        // If the company is structurally losing money, buyers value the physical assets (Equity) 
         // at a steep discount, rather than applying a multiple to negative earnings.
-        if ($netIncome > 0) {
+        if ($normalizedNetIncome > 0) {
             $salePrice = $lostNetIncome * $saleMultiple;
         } else {
             // Sell the toxic assets for 40 to 80 cents on the dollar
@@ -368,6 +382,15 @@ class MergerAndAcquisitionEngine
         $lostDebt = $currentDebt * $divestedFraction;
         $seller->setWholesaleDebt((string) max(0.0, $currentDebt - $lostDebt));
 
+        if ($isFinancial) {
+            $currentDeposits = (float) $seller->getCustomerDeposits();
+            $lostDeposits = $currentDeposits * $divestedFraction;
+            $seller->setCustomerDeposits((string) max(0.0, $currentDeposits - $lostDeposits));
+            
+            // The cash reserves (Float) backing those transferred liabilities goes to the buyer!
+            $seller->setCorporateTreasury((string) max(0.0, ((float) $seller->getCorporateTreasury()) - $lostDeposits));
+        }
+
         $newEquity = $currentEquity - $lostEquity + $salePrice;
         $seller->setTotalEquity((string) max(10.0, $newEquity));
         
@@ -378,7 +401,7 @@ class MergerAndAcquisitionEngine
 
         // BOOST STRUCTURAL EFFICIENCY
         // Shedding bloat permanently improves the company's core DNA (Baseline ROIC and Margin)
-        if ($isLeveraged) {
+        if ($isFinancial) {
             $baselineRoe = (float) $seller->getBaselineRoe();
             $roeBump = $baselineRoe * ($divestedFraction * 0.50);
             $seller->setBaselineRoe((string) ($baselineRoe + $roeBump));

@@ -66,8 +66,11 @@
 							<div class="flex items-center gap-3 mb-2">
 								<h1 class="text-3xl font-bold text-on-surface tracking-tight">{{ asset.name }}</h1>
 								<img class="w-14 h-14 rounded-full" src="{{ asset('icons/' ~ asset.ticker ~ '.svg') }}" onerror="this.onerror=null; this.src='{{ asset('icons/default.svg') }}';" alt="{{ asset.ticker }} icon">
-								<span class="inline-flex items-center rounded-md bg-surface-container-highest px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
-									{{ isEtf ? 'Market Index' : asset.industry|default('General') }}
+								<span class="group relative cursor-help inline-flex items-center rounded-md bg-surface-container-highest px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">{{ isEtf ? 'Market Index' : asset.industry|default('General') }}</span>
+									{% set bmMap = constant('App\\Data\\Sectors::BUSINESS_MODEL_DESCRIPTIONS') %}
+									{% set bmDesc = isEtf ? 'An Exchange Traded Fund tracking a basket of underlying stocks, providing broad market exposure.' : (bmMap[businessModel|default('none')] ?? bmMap['none']) %}
+									{{ _self.tooltip(bmDesc, 'center', 'w-64') }}
 								</span>
 
 							</div>
@@ -168,7 +171,7 @@
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Capital Efficiency</span>
-									{% if isLeveraged|default(false) %}
+									{% if isFinancial|default(false) %}
 										{{ _self.tooltip('Shows Economic Value Added (EVA) and Return on Equity (ROE). Positive EVA means the company is creating true wealth above its capital costs.', 'right', 'w-64') }}
 									{% else %}
 										{{ _self.tooltip('Shows Economic Value Added (EVA) and Return on Invested Capital (ROIC). Positive EVA means the company is creating true wealth above its capital costs.', 'right', 'w-64') }}
@@ -191,7 +194,7 @@
 								<canvas id="capitalReturnChart"></canvas>
 							</div>
 						</div>
-						{% if isLeveraged|default(false) %}
+						{% if isFinancial|default(false) %}
 						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
@@ -205,6 +208,54 @@
 						</div>
 						{% endif %}
 
+					</div>
+				{% else %}
+					{# MACRO CHARTS #}
+					<div class="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 mt-2">
+						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+							<div class="flex justify-between items-center mb-6">
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Economic Engine</span>
+									{{ _self.tooltip('Tracks the District\'s Inflation and Output Gap over time.', 'left', 'w-64') }}
+								</h3>
+							</div>
+							<div class="relative h-48 w-full">
+								<canvas id="macroEconomyChart"></canvas>
+							</div>
+						</div>
+						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+							<div class="flex justify-between items-center mb-6">
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Interest Rates</span>
+									{{ _self.tooltip('The Policy Rate compared against the 10-Year Yield. Background bars show the Yield Curve Slope (Inverted = Red).', 'right', 'w-64') }}
+								</h3>
+							</div>
+							<div class="relative h-48 w-full">
+								<canvas id="macroRatesChart"></canvas>
+							</div>
+						</div>
+						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+							<div class="flex justify-between items-center mb-6">
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Systemic Risk</span>
+									{{ _self.tooltip('Visualizes the broader Market Volatility (VIX), Equity Risk Premium, and Corporate Tax Rate.', 'left', 'w-64') }}
+								</h3>
+							</div>
+							<div class="relative h-48 w-full">
+								<canvas id="macroRiskChart"></canvas>
+							</div>
+						</div>
+						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+							<div class="flex justify-between items-center mb-6">
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Nominal GDP Expansion</span>
+									{{ _self.tooltip('The total nominal value of all goods and services produced in the Aerie over time.', 'right', 'w-64') }}
+								</h3>
+							</div>
+							<div class="relative h-48 w-full">
+								<canvas id="macroGdpChart"></canvas>
+							</div>
+						</div>
 					</div>
 				{% endif %}
 			</div>
@@ -306,16 +357,19 @@
 							</div>
 							<div class="py-3 flex justify-between items-center">
 								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
-									{% if isLeveraged|default(false) %}
+									{% if isFinancial|default(false) %}
 										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">ROE</span>
 										{{ _self.tooltip('Return on Equity. Measures how effectively the company utilizes shareholders\' equity to generate profit.') }}
+									{% elseif businessModel|default('none') == 'reit' %}
+										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Cap Rate</span>
+										{{ _self.tooltip('Capitalization Rate (NOI / Property Value). Evaluates true real estate yield before debt service.') }}
 									{% else %}
 										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">ROIC</span>
 										{{ _self.tooltip('Return on Invested Capital. How efficiently the company utilizes capital to generate profit.') }}
 									{% endif %}
 								</dt>
 								<dd class="text-sm font-semibold text-on-surface" id="stat-roic">
-									{% if isLeveraged|default(false) %}
+									{% if isFinancial|default(false) %}
 										{{ ((asset.currentRoe != 0 ? asset.currentRoe : asset.baselineRoe) * 100)|number_format(2) }}%
 									{% else %}
 										{{ ((asset.currentRoic != 0 ? asset.currentRoic : asset.baselineRoic) * 100)|number_format(2) }}%
@@ -359,7 +413,7 @@
 							</div>
 						</dl>
 
-						{% if isLeveraged|default(false) %}
+						{% if isFinancial|default(false) %}
 							{# DEDICATED ASSET BREAKDOWN VISUALIZATION FOR BANKS #}
 							<div class="mt-6 p-4 bg-surface-container-highest rounded-xl border border-outline-variant/20 shadow-inner">
 								<div class="flex justify-between items-center mb-3">
@@ -480,7 +534,7 @@
 										{{ _self.tooltip('The rate at which the general level of prices for goods and services is rising in the District.') }}
 									</div>
 									<p class="text-lg font-bold text-on-surface" id="macro-inflation">
-										{{ (macro.inflation * 100)|number_format(2) }}%
+										{{ (macro.inflation|default(0) * 100)|number_format(2) }}%
 									</p>
 								</div>
 
@@ -491,7 +545,7 @@
 										{{ _self.tooltip('The difference between actual economic output and potential. Positive indicates an overheated boom.', 'right') }}
 									</div>
 									<p class="text-lg font-bold text-on-surface" id="macro-output-gap">
-										{{ (macro.output_gap * 100)|number_format(2) }}%
+										{{ (macro.output_gap|default(0) * 100)|number_format(2) }}%
 									</p>
 								</div>
 
@@ -502,7 +556,7 @@
 										{{ _self.tooltip('The baseline interest rate set by central authorities, dictating borrowing costs for the entire District.') }}
 									</div>
 									<p class="text-lg font-bold text-on-surface" id="macro-policy-rate">
-										{{ (macro.policy_rate * 100)|number_format(2) }}%
+										{{ (macro.policy_rate|default(0) * 100)|number_format(2) }}%
 									</p>
 								</div>
 
@@ -516,7 +570,7 @@
 										{{ _self.tooltip("The interest rate on the District's 10-year bond. It serves as the benchmark for long-term corporate borrowing costs and heavily influences the broader business cycle.", 'right', 'w-64') }}
 									</div>
 									<p class="text-lg font-bold {% if macro.qe_active|default(false) %}text-secondary{% else %}text-on-surface{% endif %}" id="macro-yield">
-										{{ (macro.yield_10y * 100)|number_format(2) }}%
+										{{ (macro.yield_10y|default(0) * 100)|number_format(2) }}%
 									</p>
 								</div>
 							</div>
@@ -597,7 +651,8 @@
 		window.AERIE_DATA = {
 ticker: "{{ asset.ticker }}",
 isEtf: {{ isEtf ? 'true' : 'false' }},
-isLeveraged: {{ isLeveraged|default(false) ? 'true' : 'false' }},
+isFinancial: {{ isFinancial|default(false) ? 'true' : 'false' }},
+businessModel: "{{ businessModel|default('none') }}",
 sharesOutstanding: {{ isEtf ? 0 : asset.sharesOutstanding }},
 userQuantity: {{ userQuantity|default(0) }},
 eps: {{ isEtf ? 0 : asset.earningsPerShare|default(0) }},

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Service;
+namespace App\Service\Event;
 
 use App\Entity\Stock;
 use App\Entity\StockEvent;
@@ -12,7 +12,7 @@ use Psr\Log\LoggerInterface;
 /**
  * Centralized publisher for all market events, news headlines, and shocks.
  */
-class MarketEvent
+class MarketEventPublisher
 {
     public function __construct(
         private EntityManagerInterface $entityManager,

@@ -32,8 +32,9 @@ class ScreenerController extends AbstractController
             $equity = (float) $stock->getTotalEquity();
             $debtToEquity = $equity > 0 ? ((float) $stock->getTotalDebt() / $equity) : null;
 
-            $isLeveraged = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['leveraged_industry'] ?? false;
-            $effectiveRoic = $isLeveraged 
+            $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['business_model'] ?? 'none';
+            $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
+            $effectiveRoic = $isFinancial 
                 ? ((float) $stock->getCurrentRoe() ?: (float) $stock->getBaselineRoe()) 
                 : ((float) $stock->getCurrentRoic() ?: (float) $stock->getBaselineRoic());
 

@@ -1,10 +1,11 @@
 <?php
 
-namespace App\Service;
+namespace App\Service\Market;
 
 use App\Entity\Etf;
 use App\Entity\EtfHistory;
 use Doctrine\ORM\EntityManagerInterface;
+use App\Service\Event\MarketEventPublisher;
 
 /**
  * Service responsible for tracking and updating ETF (Exchange Traded Fund) prices.
@@ -17,12 +18,12 @@ class EtfTracker
 {
     /**
      * @param EntityManagerInterface $entityManager The Doctrine Entity Manager
-     * @param MarketEvent $marketEvent The publisher for market announcements
+     * @param MarketEventPublisher $marketEvent The publisher for market announcements
      * @param \Redis $redis The Redis connection instance
      */
     public function __construct(
         private EntityManagerInterface $entityManager,
-        private MarketEvent $marketEvent,
+        private MarketEventPublisher $marketEvent,
         private \Redis $redis
     ) {
     }
