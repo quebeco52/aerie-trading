@@ -133,8 +133,14 @@ class EarningsEngine
         // 2. MARGIN PROCESS (Cox-Ingersoll-Ross)
         $kappa = 4.0; // Reversion speed
         $macroDrag = ($outputGap * $beta * 0.5); 
-        $dynamicTheta = max(0.01, $stableMargin + $macroDrag);
         
+        // The Bloat Penalty: As a company saturates its market, it becomes bureaucratic and slightly less efficient.
+        $evaluationCapital = $isFinancial ? (float)$stock->getTotalEquity() : $investedCapital;
+        $marketSharePenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
+        
+        $saturationMarginPenalty = $marketSharePenalty * 0.20;
+        $dynamicTheta = max(0.01, $stableMargin + $macroDrag - $saturationMarginPenalty);
+
         $z2 = $this->mathUtility->generateStandardNormal();
         $marginVol = $baselineVol * 0.15;
         

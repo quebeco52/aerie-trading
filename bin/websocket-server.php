@@ -2,11 +2,15 @@
 <?php
 
 use Workerman\Worker;
-use Workerman\Redis\Client; // <--- We MUST use the Async client here!
+use Workerman\Redis\Client;
+use Workerman\Connection\TcpConnection;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
+
+// Increase default buffer from 1MB to 10MB
+TcpConnection::$defaultMaxSendBufferSize = 10 * 1024 * 1024;
 
 // Retrieve the secret securely from the environment.
 // CRITICAL: We trim quotes because Docker does NOT strip them from env vars, but Symfony DOES!

@@ -17,7 +17,7 @@ class CorporateMetrics
     public function calculateMarketShare(float $investedCapital, float $nominalGdpIndex, float $samRatio, float $baselineSectorTam = 1000000000000.0): float
     {
         $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
-        return min(3, $investedCapital / max(1.0, $dynamicSam));
+        return min(5.0, $investedCapital / max(1.0, $dynamicSam));
     }
 
     public function calculateOperatingBase(float $revenue, float $equity, float $floor = 10000000.0): float
@@ -43,9 +43,6 @@ class CorporateMetrics
             default    => 1.00,
         };
 
-        $baselineReturn = max(0.01, (float) $stock->getBaselineRoe() ?: (float) $stock->getBaselineRoic());
-        $gravityMultiplier = $baselineReturn * 0.50;
-
-        return min(0.50, pow($marketShare, 4.0) * $gravityMultiplier * $moat);
+        return min(1.25, pow($marketShare, 4.0) * $moat);
     }
 }

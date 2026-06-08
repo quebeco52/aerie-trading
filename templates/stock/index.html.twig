@@ -1,13 +1,15 @@
 {% extends 'base.html.twig' %}
 
 {# --- TOOLTIP MACRO --- #}
-{% macro tooltip(text, position = 'left', width = 'w-48') %}
+{% macro tooltip(text, position = 'left', width = 'w-48', vpos = 'top') %}
 	{% set arrowPosition = position == 'right' ? 'right-4' : (position == 'center' ? 'left-1/2 -translate-x-1/2' : 'left-4') %}
 	{% set alignClass = position == 'right' ? 'right-0' : (position == 'center' ? 'left-1/2 -translate-x-1/2' : 'left-0') %}
+	{% set verticalClass = vpos == 'bottom' ? 'top-full mt-2.5' : 'bottom-full mb-2.5' %}
+	{% set arrowVerticalClass = vpos == 'bottom' ? '-top-[5px] border-t border-l' : '-bottom-[5px] border-b border-r' %}
 
-	<span role="tooltip" class="block pointer-events-none absolute {{ alignClass }} bottom-full mb-2.5 {{ width }} p-2.5 bg-[#0f172a] text-white text-[11px] leading-relaxed rounded-lg shadow-2xl opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 group-focus:opacity-100 group-focus:translate-y-0 transition-all duration-200 z-[100] normal-case tracking-normal font-normal border border-slate-700">
+	<span role="tooltip" class="block pointer-events-none absolute {{ alignClass }} {{ verticalClass }} {{ width }} p-2.5 bg-[#0f172a] text-white text-[11px] leading-relaxed rounded-lg shadow-2xl opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 group-focus:opacity-100 group-focus:translate-y-0 transition-all duration-200 z-[100] normal-case tracking-normal font-normal border border-slate-700">
 		{{ text }}
-		<span class="block absolute -bottom-[5px] {{ arrowPosition }} w-2.5 h-2.5 bg-[#0f172a] border-b border-r border-slate-700 transform rotate-45"></span>
+		<span class="block absolute {{ arrowVerticalClass }} {{ arrowPosition }} w-2.5 h-2.5 bg-[#0f172a] border-slate-700 transform rotate-45"></span>
 	</span>
 {% endmacro %}
 
@@ -70,7 +72,7 @@
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">{{ isEtf ? 'Market Index' : asset.industry|default('General') }}</span>
 									{% set bmMap = constant('App\\Data\\Sectors::BUSINESS_MODEL_DESCRIPTIONS') %}
 									{% set bmDesc = isEtf ? 'An Exchange Traded Fund tracking a basket of underlying stocks, providing broad market exposure.' : (bmMap[businessModel|default('none')] ?? bmMap['none']) %}
-									{{ _self.tooltip(bmDesc, 'center', 'w-64') }}
+									{{ _self.tooltip(bmDesc, 'left', 'w-72 z-50', 'bottom') }}
 								</span>
 
 							</div>
@@ -127,47 +129,58 @@
 				{% if not isEtf %}
 					<div class="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 mt-2">
 
-						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Net Income Trend</span>
 									{{ _self.tooltip('Tracks the total Revenue and Net Income generated each quarter.', 'left', 'w-64') }}
 								</h3>
-								<div class="flex space-x-2 bg-surface-container-lowest p-1 rounded-lg">
-									<button onclick="updateCharts('12Q')" id="btn-12Q" class="px-3 py-1 text-[10px] font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors uppercase tracking-widest">12Q</button>
-									<button onclick="updateCharts('5Y')" id="btn-5Y" class="px-3 py-1 text-[10px] font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors uppercase tracking-widest">12Y</button>
+								<div class="flex items-center gap-3">
+									<div class="flex space-x-2 bg-surface-container-lowest p-1 rounded-lg">
+										<button onclick="updateCharts('12Q')" id="btn-12Q" class="px-3 py-1 text-[10px] font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors uppercase tracking-widest">12Q</button>
+										<button onclick="updateCharts('5Y')" id="btn-5Y" class="px-3 py-1 text-[10px] font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors uppercase tracking-widest">12Y</button>
+									</div>
+									<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+										<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
+									</button>
 								</div>
 							</div>
-							<div class="relative h-48 w-full">
+							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
 								<canvas id="netIncomeChart"></canvas>
 							</div>
 						</div>
 
-						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Debt vs Equity</span>
 									{{ _self.tooltip("Visualizes the company's capital structure. Total Equity (Book Value) compared against Total Debt.", 'right', 'w-64') }}
 								</h3>
+								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
+								</button>
 							</div>
-							<div class="relative h-48 w-full">
+							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
 								<canvas id="debtEquityChart"></canvas>
 							</div>
 						</div>
 
-						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Credit Health & Maturity Wall</span>
 									{{ _self.tooltip('Displays the Interest Coverage Ratio (ability to pay interest from operating profit) and the Blended Interest Rate on existing debt.', 'left', 'w-64') }}
 								</h3>
+								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
+								</button>
 							</div>
-							<div class="relative h-48 w-full">
+							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
 								<canvas id="creditHealthChart"></canvas>
 							</div>
 						</div>
 
-						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Capital Efficiency</span>
@@ -177,32 +190,41 @@
 										{{ _self.tooltip('Shows Economic Value Added (EVA) and Return on Invested Capital (ROIC). Positive EVA means the company is creating true wealth above its capital costs.', 'right', 'w-64') }}
 									{% endif %}
 								</h3>
+								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
+								</button>
 							</div>
-							<div class="relative h-48 w-full">
+							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
 								<canvas id="capitalEfficiencyChart"></canvas>
 							</div>
 						</div>
 
-						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Shareholder Yield</span>
 									{{ _self.tooltip('Tracks capital returned to shareholders via Cash Dividends and Share Buybacks each quarter.', 'left', 'w-64') }}
 								</h3>
+								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
+								</button>
 							</div>
-							<div class="relative h-48 w-full">
+							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
 								<canvas id="capitalReturnChart"></canvas>
 							</div>
 						</div>
 						{% if isFinancial|default(false) %}
-						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Regulatory Ratios</span>
 									{{ _self.tooltip('Displays the Capital Ratio (Equity vs Total Assets) and Customer Deposit Ratio. Critical balance sheet health indicators for banks and financial institutions.', 'right', 'w-64') }}
 								</h3>
+								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
+								</button>
 							</div>
-							<div class="relative h-48 w-full">
+							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
 								<canvas id="regulatoryRatiosChart"></canvas>
 							</div>
 						</div>
@@ -212,47 +234,73 @@
 				{% else %}
 					{# MACRO CHARTS #}
 					<div class="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 mt-2">
-						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Economic Engine</span>
 									{{ _self.tooltip('Tracks the District\'s Inflation and Output Gap over time.', 'left', 'w-64') }}
 								</h3>
+								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
+								</button>
 							</div>
-							<div class="relative h-48 w-full">
+							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
 								<canvas id="macroEconomyChart"></canvas>
 							</div>
 						</div>
-						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Interest Rates</span>
-									{{ _self.tooltip('The Policy Rate compared against the 10-Year Yield. Background bars show the Yield Curve Slope (Inverted = Red).', 'right', 'w-64') }}
+									{{ _self.tooltip('Tracks various bond yields. The background bar shows the 2s10s Spread (10Y-2Y), the classic indicator of yield curve inversion.', 'right', 'w-64') }}
 								</h3>
+								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
+								</button>
 							</div>
-							<div class="relative h-48 w-full">
+							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
 								<canvas id="macroRatesChart"></canvas>
 							</div>
 						</div>
-						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
+							<div class="flex justify-between items-center mb-6">
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Mortgage Market</span>
+									{{ _self.tooltip('Tracks the 30-Year Mortgage Yield against the Policy Rate. The background bar shows the spread (Shadow Bank profitability).', 'left', 'w-64') }}
+								</h3>
+								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
+								</button>
+							</div>
+							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
+								<canvas id="macroMortgageChart"></canvas>
+							</div>
+						</div>
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Systemic Risk</span>
 									{{ _self.tooltip('Visualizes the broader Market Volatility (VIX), Equity Risk Premium, and Corporate Tax Rate.', 'left', 'w-64') }}
 								</h3>
+								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
+								</button>
 							</div>
-							<div class="relative h-48 w-full">
+							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
 								<canvas id="macroRiskChart"></canvas>
 							</div>
 						</div>
-						<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Nominal GDP Expansion</span>
 									{{ _self.tooltip('The total nominal value of all goods and services produced in the Aerie over time.', 'right', 'w-64') }}
 								</h3>
+								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
+								</button>
 							</div>
-							<div class="relative h-48 w-full">
+							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
 								<canvas id="macroGdpChart"></canvas>
 							</div>
 						</div>

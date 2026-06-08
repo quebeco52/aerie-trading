@@ -41,6 +41,7 @@ class MergerAndAcquisitionEngine
         $equity = (float) $acquirer->getTotalEquity();
         $currentDebt = (float) $acquirer->getTotalDebt();
         $policyRate = $macroState['policy_rate'] ?? 0.04;
+        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + 0.005);
 
        // THE NEGATIVE CARRY BLOCK (Calling the Centralized Brain)
         $health = $this->debtEngine->analyzeDebtHealth($acquirer, $macroState);
@@ -51,7 +52,7 @@ class MergerAndAcquisitionEngine
         }
 
         // PERSONAL BORROWING COST
-        $costOfNewBorrowing = $health['raw_metrics']['current_market_rate'] ?? ($policyRate + (float) $acquirer->getCreditSpread());
+        $costOfNewBorrowing = $health['raw_metrics']['current_market_rate'] ?? ($yield5y + (float) $acquirer->getCreditSpread());
 
         // Leveraged industries have much higher natural limits.
         $industry = $acquirer->getIndustry() ?: 'General';
@@ -79,17 +80,17 @@ class MergerAndAcquisitionEngine
         
         $config = match (true) {
             $isMegaHoarder => [
-                'prob' => 4.00, 'spend' => 0.60, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'CONGLOMERATE EXPANSION', 'use_leverage' => false
+                'prob' => 0.50, 'spend' => 0.60, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'CONGLOMERATE EXPANSION', 'use_leverage' => false
             ],
             $isHoarder => [
-                'prob' => 1.00, 'spend' => 0.40, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'CONGLOMERATE EXPANSION', 'use_leverage' => false
+                'prob' => 0.25, 'spend' => 0.40, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'CONGLOMERATE EXPANSION', 'use_leverage' => false
             ],
             $health['can_issue_debt'] && $normalizedDebtUtilization < 0.30 && $totalBuyingPower > 5_000_000_000.0 && $costOfNewBorrowing < 0.07 => [
-                'prob' => 0.50, 'spend' => 0.40, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'LEVERAGED BUYOUT', 'use_leverage' => true
+                'prob' => 0.10, 'spend' => 0.40, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'LEVERAGED BUYOUT', 'use_leverage' => true
             ],
             // Secondary LBO tier: Allow up to 8% personal borrowing cost for moderate debt companies
             $health['can_issue_debt'] && $normalizedDebtUtilization < 0.80 && $totalBuyingPower > 5_000_000_000.0 && $costOfNewBorrowing < 0.08 => [
-                'prob' => 0.10, 'spend' => 0.30, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'LEVERAGED BUYOUT', 'use_leverage' => true
+                'prob' => 0.05, 'spend' => 0.30, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'LEVERAGED BUYOUT', 'use_leverage' => true
             ],
 
             default => null,
@@ -105,7 +106,7 @@ class MergerAndAcquisitionEngine
         // If no primary deal happened, test the standard cash fallback
         if (!$dealExecuted && $excessCash > 15_000_000_000.0) {
             $config = [
-                'prob' => 0.30, 'spend' => 0.20, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => false
+                'prob' => 0.05, 'spend' => 0.20, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => false
             ];
             if ($this->mathUtility->checkProbability($config['prob'] * $dt)) {
                 $dealExecuted = true;
@@ -127,8 +128,8 @@ class MergerAndAcquisitionEngine
         $purchasePrice = $availableCapital * (mt_rand(50, 100) / 100.0) * $config['spend'];
         
 
-        $maxPrivateCompanyValue = mt_rand(100, 500) * 1_000_000_000.0;
-        $purchasePrice = min($purchasePrice, (float) $maxPrivateCompanyValue);
+        $maxPrivateCompanyValue = max((float) mt_rand(100, 500) * 1_000_000_000.0, $availableCapital * 0.50);
+        $purchasePrice = min($purchasePrice, $maxPrivateCompanyValue);
         
         // Financials must safely cap their M&A spend to a fraction of their Tier 1 Capital (Equity)
         if ($isFinancial) {
@@ -162,17 +163,10 @@ class MergerAndAcquisitionEngine
             
             // The cost of the new debt incorporates the dynamic credit spread (VIX, Macro, Volatility) + Any Junk Penalty
             $dynamicSpread = $health['raw_metrics']['dynamic_spread'] ?? (float) $acquirer->getCreditSpread();
-            $costOfNewDebt = $policyRate + $dynamicSpread + $leveragePenalty;
+            $costOfNewDebt = $yield5y + $dynamicSpread + $leveragePenalty;
             
-            // Blend them together! ((Old Wholesale * Old Rate) + (New Debt * New Rate)) / New Wholesale Debt
-            $currentWholesaleDebt = (float) $acquirer->getWholesaleDebt();
-            $newWholesaleDebt = $currentWholesaleDebt + $debtIssued;
-            if ($newWholesaleDebt > 0) {
-                $weightedRate = (($currentWholesaleDebt * $oldHistoricalRate) + ($debtIssued * $costOfNewDebt)) / $newWholesaleDebt;
-                $acquirer->setHistoricalFixedRate((string) $weightedRate);
-            }
-            
-            $acquirer->setWholesaleDebt((string) ((float)$acquirer->getWholesaleDebt() + $debtIssued));
+            // Issue the debt through the centralized DebtEngine
+            $this->debtEngine->issueDebt($acquirer, $debtIssued, $costOfNewDebt);
         }
 
         //THE RANDOMIZED SYNERGY ROLL
@@ -228,6 +222,11 @@ class MergerAndAcquisitionEngine
         // Calculate the TRUE Net Income contribution (Target Operating Earnings minus New Interest Expense)
         $acquiredOperatingIncome = $purchasePrice * $effectiveTargetRoic;
         
+        // ADD ACQUIRED REVENUE TO THE ACQUIRER
+        $acquiredRevenue = $acquiredOperatingIncome / max(0.01, $targetMargin);
+        $currentRevenue = (float) $acquirer->getTotalRevenue();
+        $acquirer->setTotalRevenue((string) ($currentRevenue + $acquiredRevenue));
+
         $newInterestExpense = 0.0;
         if ($debtIssued > 0) {
             // Calculate interest drag, factoring in the standard 21% corporate tax shield
@@ -332,12 +331,12 @@ class MergerAndAcquisitionEngine
             // Desperate fire sale: Sheds up to 50% of the company for a terrible 4x multiple
             $divestedFraction = mt_rand(30, 50) / 100.0;
             $saleMultiple = mt_rand(3, 5);
-            $annualProbability = 8.0;
+            $annualProbability = 2.0;
         } elseif ($isDistressed) {
             // Standard distress: Sheds 15-30% for an 8x multiple
             $divestedFraction = mt_rand(15, 30) / 100.0;
             $saleMultiple = mt_rand(6, 10);
-            $annualProbability = 0.60;
+            $annualProbability = 0.30;
         } else {
             // High P/E trimming (Taking advantage of an overvalued stock)
             $divestedFraction = mt_rand(5, 10) / 100.0;
@@ -357,7 +356,19 @@ class MergerAndAcquisitionEngine
 
         $lostNetIncome = $normalizedNetIncome * $divestedFraction;
         $investedCapital = $seller->getInvestedCapital();
-        $lostEquity = $currentEquity * $divestedFraction;
+        
+        $currentDebt = (float) $seller->getWholesaleDebt();
+        $lostDebt = $currentDebt * $divestedFraction;
+        
+        if ($isFinancial) {
+            $currentDeposits = (float) $seller->getCustomerDeposits();
+            $totalLoans = $currentEquity + $currentDebt + $currentDeposits - $treasury;
+            $lostLoans = $totalLoans * $divestedFraction;
+            $lostEquity = $lostLoans - $lostDebt;
+        } else {
+            $lostInvestedCapital = $investedCapital * $divestedFraction;
+            $lostEquity = $lostInvestedCapital - $lostDebt;
+        }
 
         // If the company is structurally losing money, buyers value the physical assets (Equity) 
         // at a steep discount, rather than applying a multiple to negative earnings.
@@ -378,8 +389,6 @@ class MergerAndAcquisitionEngine
         $seller->setEarningsPerShare((string) ($currentEps * (1.0 - $divestedFraction)));
 
         // SHED THE DEBT (Liabilities associated with the sold unit)
-        $currentDebt = (float) $seller->getWholesaleDebt();
-        $lostDebt = $currentDebt * $divestedFraction;
         $seller->setWholesaleDebt((string) max(0.0, $currentDebt - $lostDebt));
 
         if ($isFinancial) {
@@ -390,6 +399,10 @@ class MergerAndAcquisitionEngine
             // The cash reserves (Float) backing those transferred liabilities goes to the buyer!
             $seller->setCorporateTreasury((string) max(0.0, ((float) $seller->getCorporateTreasury()) - $lostDeposits));
         }
+        
+        // REDUCE REVENUE
+        $currentRevenue = (float) $seller->getTotalRevenue();
+        $seller->setTotalRevenue((string) max(1.0, $currentRevenue * (1.0 - $divestedFraction)));
 
         $newEquity = $currentEquity - $lostEquity + $salePrice;
         $seller->setTotalEquity((string) max(10.0, $newEquity));

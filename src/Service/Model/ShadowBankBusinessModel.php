@@ -27,16 +27,31 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
         
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + 0.005);
         $structuralSpread = (float) $stock->getCreditSpread();
+        $floatingRatio = (float) $stock->getFloatingDebtRatio();
         
-        $targetNetIncome = $equity * $baselineRoe;
         $taxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
-        $targetEbt = $targetNetIncome / (1.0 - $taxRate);
         
-        $expectedInterestExpense = $wholesaleDebt * ($policyRate + $structuralSpread);
-        $expectedInterestIncome = $treasury * max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+        $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
+
+        $industry = $stock->getIndustry() ?: 'General';
+        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 10.0;
+
+        // --- THE CLEAR BALANCE SHEET MATH ---
+        $effectiveEquity = max(1.0, $equity);
+        $optimalDebt = $effectiveEquity * max(1.0, $equityLimit - 1.0);
+        $optimalEarningAssets = $effectiveEquity + $optimalDebt;
         
-        $targetEbit = $targetEbt + $expectedInterestExpense - $expectedInterestIncome;
+        $optimalInterestExpense = $optimalDebt * $blendedWholesaleRate;
+        $optimalNetIncome = $effectiveEquity * $baselineRoe;
+        $optimalEbt = $optimalNetIncome / (1.0 - $taxRate);
+        
+        $optimalEbit = $optimalEbt + $optimalInterestExpense;
+        $structuralAssetYield = $optimalEbit / max(1.0, $optimalEarningAssets);
+        
+        $targetEbit = $earningAssets * $structuralAssetYield;
+        // ------------------------------------
         
         // Shadow Banks rely on loan volume. We floor target EBIT to guarantee baseline lending operations.
         $coreLiabilities = $wholesaleDebt;
@@ -72,8 +87,11 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         // Shadow Bank NIM Squeeze (high VULNERABILITY):
         // Shadow banks have ZERO cheap deposits. They fund their long-term loans entirely by borrowing 
         // short-term cash in the Repo Market. Yield curve inversions are real painful. (2.0x multiplier)
-        $yieldCurveSlope = $macroState['ns_slope_ema'] ?? ($macroState['ns_slope'] ?? 0.015);
-        $nimSqueeze = (0.010 - $yieldCurveSlope) * 2.0;
+        $yield30y = $macroState['yield_30y_ema'] ?? ($macroState['yield_30y'] ?? 0.045);
+        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        $mortgageSpread = $yield30y - $policyRate;
+        
+        $nimSqueeze = (0.020 - $mortgageSpread) * 2.0;
         
         $actualVariableCosts = $actualRevenue * min(0.99, max(0.01, $realizedVariableMargin + $lossProvisionShock + $nimSqueeze));
         

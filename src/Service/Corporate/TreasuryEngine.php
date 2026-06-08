@@ -14,6 +14,7 @@ class TreasuryEngine
 {
     public function __construct(
         private CorporateMetrics $corporateMetrics,
+        private DebtEngine $debtEngine,
         private MathUtility $mathUtility
     ) {}
 
@@ -158,23 +159,17 @@ class TreasuryEngine
                     $aggressiveness = $aggressionData['aggressiveness'];
                 }
 
-                if (!$isFinancial) {
-                    $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
-                    $borrowProbability *= max(0.10, 1.0 - $saturationPenalty);
-                }
+                $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
+                $borrowProbability *= max(0.05, 1.0 - $saturationPenalty);
 
                 if ((mt_rand() / mt_getrandmax()) < $borrowProbability) {
                     $newDebtIssued = $trueExpansionCapacity * $aggressiveness;
                     
-                    $oldHistoricalRate = (float) $stock->getHistoricalFixedRate();
-                    $newWholesaleDebt = $state['wholesaleDebt'] + $newDebtIssued;
-                    if ($newWholesaleDebt > 0) {
-                        $weightedRate = (($state['wholesaleDebt'] * $oldHistoricalRate) + ($newDebtIssued * $newBorrowingRate)) / $newWholesaleDebt;
-                        $stock->setHistoricalFixedRate((string) $weightedRate);
-                    }
+                    // Issue the debt and calculate blended fixed rate
+                    // Uses $newBorrowingRate which is the current Market Fixed Rate (Yield 5Y + Spread)
+                    $this->debtEngine->issueDebt($stock, $newDebtIssued, $newBorrowingRate);
 
-                    $state['wholesaleDebt'] += $newDebtIssued;
-                    $stock->setWholesaleDebt((string) $state['wholesaleDebt']);
+                    $state['wholesaleDebt'] = (float) $stock->getWholesaleDebt();
                     $state['treasury'] += $newDebtIssued;
                     $state['debtIssued'] = $newDebtIssued;
                     $state['debtActionTaken'] = true;
@@ -205,7 +200,12 @@ class TreasuryEngine
 
         $investmentProbability = min(0.95, max(0.10, 0.20 + ($trueReturn * 2.0)));
         $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
-        $investmentProbability *= max(0.10, 1.0 - $saturationPenalty);
+        $investmentProbability *= max(0.05, 1.0 - $saturationPenalty);
+
+        if ($isFinancial) {
+            $investmentProbability = 0.00;
+        }
+        
 
         $fundInvestmentOpportunity = (mt_rand() / mt_getrandmax()) < $investmentProbability;
 
@@ -248,17 +248,14 @@ class TreasuryEngine
 
         if ($state['treasury'] < $minOperatingCash) {
             $cashShortfall = $minOperatingCash - $state['treasury'];
-            $newWholesaleDebt = $state['wholesaleDebt'] + $cashShortfall;
+                
+                // Emergency debt is highly punitive (+200 bps penalty) but still anchors to the 5Y corporate fixed rate
+                $currentMarketRate = $health['raw_metrics']['current_market_rate'] ?? (($macroState['yield_5y_ema'] ?? 0.045) + (float) $stock->getCreditSpread());
+                $costOfEmergencyDebt = $currentMarketRate + 0.02;
+                
+                $this->debtEngine->issueDebt($stock, $cashShortfall, $costOfEmergencyDebt);
 
-            if ($newWholesaleDebt > 0) {
-                $costOfEmergencyDebt = ($macroState['policy_rate_ema'] ?? 0.04) + ($health['raw_metrics']['dynamic_spread'] ?? (float) $stock->getCreditSpread()) + 0.02;
-                $oldHistoricalRate = (float) $stock->getHistoricalFixedRate();
-                $weightedRate = (($state['wholesaleDebt'] * $oldHistoricalRate) + ($cashShortfall * $costOfEmergencyDebt)) / $newWholesaleDebt;
-                $stock->setHistoricalFixedRate((string) $weightedRate);
-            }
-
-            $state['wholesaleDebt'] += $cashShortfall;
-            $stock->setWholesaleDebt((string) $state['wholesaleDebt']);
+                $state['wholesaleDebt'] = (float) $stock->getWholesaleDebt();
             $state['treasury'] = $minOperatingCash;
             $state['debtActionTaken'] = true;
 

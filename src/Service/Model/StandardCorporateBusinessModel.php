@@ -67,7 +67,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
         $excessCash = max(0.0, $cash - ($operatingBase * 0.05));
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
         
-        return $excessCash * max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+        return $excessCash * $this->calculateCashYield($macroState, $policyRate);
     }
 
     /**
@@ -78,7 +78,9 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
         // NOPAT (Net Operating Profit After Tax) strips out interest expense to measure 
         // the pure operating efficiency of the physical business assets.
         $nopatProxy = $ebit > 0 ? $ebit * (1.0 - $corporateTaxRate) : $ebit;
-        $truePostTaxReturn = $investedCapital > 0 ? ($nopatProxy / $investedCapital) : 0.0;
+        
+        $effectiveCapital = max(1.0, abs($investedCapital));
+        $truePostTaxReturn = $nopatProxy / $effectiveCapital;
         
         $oldRoic = (float) $stock->getCurrentRoic();
         $smoothedRoic = $oldRoic === 0.0 ? $truePostTaxReturn : $oldRoic + (($truePostTaxReturn - $oldRoic) * 0.50);

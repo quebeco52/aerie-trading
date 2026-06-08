@@ -26,34 +26,49 @@ class AssetManagementBusinessModel implements BusinessModelInterface
         $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
         
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + 0.005);
         $structuralSpread = (float) $stock->getCreditSpread();
+        $floatingRatio = (float) $stock->getFloatingDebtRatio();
         
-        $targetNetIncome = $equity * $baselineRoe;
         $taxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
-        $targetEbt = $targetNetIncome / (1.0 - $taxRate);
         
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
         $treasury = (float) $stock->getCorporateTreasury();
         
-        $expectedInterestExpense = $wholesaleDebt * ($policyRate + $structuralSpread);
-        $expectedInterestIncome = $treasury * max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+        $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
+        $expectedInterestExpense = $wholesaleDebt * $blendedWholesaleRate;
+
+        // --- THE CLEAR BALANCE SHEET MATH ---
+        // Asset managers scale EBIT from their active operating equity (AUM/Platform capacity).
+        // Excess cash beyond target operating cash is considered idle and stripped from the ROE target.
+        $operatingBase = max((float) $stock->getTotalRevenue(), $equity, 10000000.0);
+        $targetOperatingCash = max($operatingBase * 0.10, $wholesaleDebt * 0.05);
         
-        $targetEbit = $targetEbt + $expectedInterestExpense - $expectedInterestIncome;
+        $excessCash = max(0.0, $treasury - $targetOperatingCash);
+        $operatingEquity = max(1.0, $equity - $excessCash);
+        
+        $targetOperatingNetIncome = $operatingEquity * $baselineRoe;
+        $targetEbt = $targetOperatingNetIncome / (1.0 - $taxRate);
+        
+        $operatingInterestIncome = min($treasury, $targetOperatingCash) * max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+        
+        $targetEbit = $targetEbt + $expectedInterestExpense - $operatingInterestIncome;
+        // ------------------------------------
         
         // The Fee Revenue Floor:
         // Asset-light financials don't have massive balance sheets, but they must maintain 
         // structural fee revenue (AUM / Advisory) to survive.
-        $minOperatingEbit = $equity * 0.05; // 5% minimum operating EBIT on equity
+        $minOperatingEbit = $operatingEquity * 0.05; 
         
         $targetEbit = max($minOperatingEbit, $targetEbit);
         
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
         
         $targetRevenue = max(0.0, $targetEbit) / $stableMargin;
-        $impliedTurnover = $targetRevenue / max(1.0, abs($equity));
+        $impliedTurnover = $targetRevenue / max(1.0, $operatingEquity);
         
         return [
-            'invested_capital' => $equity,
+            'invested_capital' => $operatingEquity,
             'baseline_roic' => $impliedTurnover * $stableMargin
         ];
     }
@@ -92,7 +107,7 @@ class AssetManagementBusinessModel implements BusinessModelInterface
         
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
         
-        return $excessCash * max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+        return $excessCash * $this->calculateCashYield($macroState, $policyRate);
     }
 
     /**
@@ -152,9 +167,24 @@ class AssetManagementBusinessModel implements BusinessModelInterface
     }
 
     public function getInterestCoverage(float $ebit, float $interestExpense): float { return $interestExpense > 0 ? ($ebit / $interestExpense) : ($ebit > 0 ? 999.0 : -999.0); }
-    public function calculateCashYield(array $macroState, float $policyRate): float { return max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD); }
+    public function calculateCashYield(array $macroState, float $policyRate): float 
+    {
+        $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['policy_rate_ema'] ?? 0.02) + 0.01;
+        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
+        
+        $bondReturn = $yield10y;
+        $equityReturn = 0.07 + ($outputGap * 2.0);
+        
+        // Asset Managers invest heavily in their own funds ("eating their own cooking").
+        // We use a classic 60/40 portfolio (60% Bonds / 40% Equities) which gives them higher market correlation.
+        return max(0.0, (0.60 * $bondReturn) + (0.40 * $equityReturn)); 
+    }
     public function getDebtExpansionAggressiveness(float $spreadMultiplier): array { return ['probability' => 0.50 + ($spreadMultiplier * 0.30), 'aggressiveness' => 0.05 + (0.10 * $spreadMultiplier)]; }
-    public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float { return 0.0; }
+    public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float 
+    { 
+        // Asset managers and brokerages use capital to seed new funds, acquire advisory firms, and build trading platforms.
+        return max($organicSpend, $debtIssued * 0.90); 
+    }
     public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float { return max($revenueFloorValue, $peFairValue); }
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps): float { return ($earningsValue * 0.90) + ($pbFairValue * 0.10); }
     public function processPassiveLiabilityGrowth(Stock $stock, array $macroState, array &$state, MathUtility $mathUtility): void {}

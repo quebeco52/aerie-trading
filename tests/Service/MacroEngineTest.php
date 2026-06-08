@@ -66,7 +66,7 @@ class MacroEngineTest extends TestCase
         $this->assertArrayHasKey('policy_rate', $result);
         $this->assertArrayHasKey('yield_10y', $result);
         
-        // Starts at natural rates, so policy rate should be around 0.04
+        // Starting in a 0.02 boom pulls the initial target rate up, raising the policy rate from 0.02 to ~0.04
         $this->assertEqualsWithDelta(0.04, $result['policy_rate'], 0.01);
         $this->assertEqualsWithDelta(0.02, $result['inflation'], 0.01);
     }

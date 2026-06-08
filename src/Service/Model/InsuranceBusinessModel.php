@@ -31,32 +31,53 @@ class InsuranceBusinessModel implements BusinessModelInterface
         $equity = (float) $stock->getTotalEquity();
         $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
         
-        $targetNetIncome = $equity * $baselineRoe;
         $taxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
-        $targetEbt = $targetNetIncome / (1.0 - $taxRate);
         
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + 0.005);
         $structuralSpread = (float) $stock->getCreditSpread();
+        $floatingRatio = (float) $stock->getFloatingDebtRatio();
         
-        $expectedInterestIncome = $this->calculateInterestIncome($stock, $macroState, $mathUtility);
-        $expectedInterestExpense = (float) $stock->getWholesaleDebt() * ($policyRate + $structuralSpread);
+        $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
+        $wholesaleDebt = (float) $stock->getWholesaleDebt();
+        $expectedInterestExpense = $wholesaleDebt * $blendedWholesaleRate;
+
+        // --- THE CLEAR BALANCE SHEET MATH ---
+        // For Insurance, underwriting capacity is constrained by Equity (The Kenney Rule).
+        // Target Underwriting Profit must scale on the true Physical Float, not idle Equity.
+        $floatYield = $this->calculateCashYield($macroState, $policyRate);
         
-        $targetEbit = $targetEbt + $expectedInterestExpense - $expectedInterestIncome;
+        $capacityRatio = 3.0; // Kenney Rule: $3 in premiums per $1 of surplus equity
+        $effectiveEquity = max(1.0, $equity);
+        $optimalFloat = $effectiveEquity * $capacityRatio;
+        
+        // At optimal leverage, the entire treasury is working float + equity
+        $optimalInterestIncome = ($effectiveEquity + $optimalFloat) * $floatYield;
+        $optimalNetIncome = $effectiveEquity * $baselineRoe;
+        $optimalEbt = $optimalNetIncome / (1.0 - $taxRate);
+        
+        $optimalUnderwritingEbit = $optimalEbt + $expectedInterestExpense - $optimalInterestIncome;
+        $structuralUnderwritingYield = $optimalUnderwritingEbit / max(1.0, $optimalFloat);
+        
+        $float = (float) $stock->getCustomerDeposits();
+        $targetEbit = $float * $structuralUnderwritingYield;
+        // ------------------------------------
         
         // The Underwriting Floor:
-        // Insurance companies will never shrink their policy base to zero just because their investment portfolio had a great year.
-        // We floor the target EBIT based on the size of their Float to guarantee they maintain baseline insurance operations.
-        $float = (float) $stock->getCustomerDeposits();
         $minUnderwritingEbit = $float * 0.015; // 1.5% structural underwriting profit floor on Float
         
         $targetEbit = max($minUnderwritingEbit, $targetEbit);
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
         
         $targetRevenue = max(0.0, $targetEbit) / $stableMargin;
-        $impliedTurnover = $targetRevenue / max(1.0, abs($equity));
+        
+        $operatingEquity = min($equity, $float / $capacityRatio);
+        $operatingEquity = max($operatingEquity, $equity * 0.10, 1.0); // Fallback for zero float
+        
+        $impliedTurnover = $targetRevenue / max(1.0, $operatingEquity);
         
         return [
-            'invested_capital' => $equity,
+            'invested_capital' => $operatingEquity,
             'baseline_roic' => $impliedTurnover * $stableMargin
         ];
     }
@@ -116,22 +137,9 @@ class InsuranceBusinessModel implements BusinessModelInterface
     public function calculateInterestIncome(Stock $stock, array $macroState, MathUtility $mathUtility): float
     {
         $cash = (float) $stock->getCorporateTreasury();
+        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
         
-        // The Float Portfolio:
-        // Insurance companies do not just hold cash in a vault; they invest their massive Float 
-        // heavily into long-duration bonds, with a smaller allocation to equities for growth.
-        $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['policy_rate_ema'] ?? 0.04) + 0.01;
-        $erp = $macroState['equity_risk_premium'] ?? MacroEngine::BASE_EQUITY_RISK_PREMIUM;
-        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
-        
-        // 80% Fixed Income (Anchored to the 10-Year Treasury Yield)
-        $bondReturn = $yield10y;
-        
-        // 20% Equities (Captures the Equity Risk Premium and fluctuates with the economic cycle)
-        $equityReturn = $yield10y + $erp + ($outputGap * 0.5);
-        
-        // Blended portfolio yield, floored at 0% so they don't mathematically lose the raw principal
-        $floatYield = max(0.0, (0.80 * $bondReturn) + (0.20 * $equityReturn));
+        $floatYield = $this->calculateCashYield($macroState, $policyRate);
         
         return $cash * $floatYield;
     }
@@ -183,8 +191,8 @@ class InsuranceBusinessModel implements BusinessModelInterface
     public function evaluateHoardingStatus(float $excessCash, float $operatingBase, float $totalDebt): array
     {
         return [
-            'is_hoarder'      => $excessCash > ($operatingBase * 0.50),
-            'is_mega_hoarder' => $excessCash > ($operatingBase * 1.00),
+            'is_hoarder'      => $excessCash > ($totalDebt * 0.90),
+            'is_mega_hoarder' => $excessCash > ($totalDebt * 1.10),
         ];
     }
 
@@ -218,10 +226,23 @@ class InsuranceBusinessModel implements BusinessModelInterface
     
     public function calculateCashYield(array $macroState, float $policyRate): float
     {
-        $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['policy_rate_ema'] ?? 0.04) + 0.01;
-        $erp = $macroState['equity_risk_premium'] ?? MacroEngine::BASE_EQUITY_RISK_PREMIUM;
+        // The Float Portfolio:
+        // Insurance companies do not just hold cash in a vault; they invest their massive Float 
+        // heavily into long-duration bonds, with a smaller allocation to equities for growth.
+        $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['policy_rate_ema'] ?? 0.02) + 0.01;
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
-        return max(0.0, (0.80 * $yield10y) + (0.20 * ($yield10y + $erp + ($outputGap * 0.5))));
+        
+        // 80% Fixed Income (Anchored to the 10-Year Treasury Yield)
+        $bondReturn = $yield10y;
+        
+        // 20% Equities (Suffers capital losses during recessions)
+        // A baseline 7% return, taking heavy realized losses during negative output gaps.
+        $equityReturn = 0.07 + ($outputGap * 2.0);
+        
+        // Blended portfolio yield, floored at 0% so they don't mathematically lose the raw principal
+        $floatYield = max(0.0, (0.80 * $bondReturn) + (0.20 * $equityReturn));
+        
+        return $floatYield;
     }
 
     public function getDebtExpansionAggressiveness(float $spreadMultiplier): array 

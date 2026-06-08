@@ -14,8 +14,8 @@ class MacroReportController extends AbstractController
     {
         $conn = $em->getConnection();
         
-        // Fetch the last 60 quarterly snapshots (15 years of history)
-        $sql = "SELECT * FROM macro_report ORDER BY id DESC LIMIT 60";
+        // Fetch the last 100 quarterly snapshots (25 years of history)
+        $sql = "SELECT * FROM macro_report ORDER BY id DESC LIMIT 100";
         $results = $conn->fetchAllAssociative($sql);
         
         // Reverse to chronological order for Chart.js

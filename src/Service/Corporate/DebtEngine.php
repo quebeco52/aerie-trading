@@ -59,11 +59,12 @@ class DebtEngine
         $debt = (float) $stock->getTotalDebt();
         $treasury = (float) $stock->getCorporateTreasury();
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + 0.005);
 
         $rawCreditSpread = (float) $stock->getCreditSpread();
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
         $volatility = (float) $stock->getCurrentVolatility() ?: (float) $stock->getVolatility();
-        $vix = $macroState['market_volatility'] ?? 0.15;
+        $vix = $macroState['market_volatility'] ?? 0.20;
         
         $rawBeta = (float) $stock->getBeta();
 
@@ -160,7 +161,9 @@ class DebtEngine
 
         $leveragePenalty = min(self::MAX_LEVERAGE_PENALTY, $leveragePenalty);
         $dynamicSpread = $baselineCreditSpread + $leveragePenalty;
-        $currentMarketFixedRate = $policyRate + $dynamicSpread;
+        
+        // Fixed-rate corporate debt is priced off the 5-Year Yield curve, not the overnight Policy Rate
+        $currentMarketFixedRate = $yield5y + $dynamicSpread;
 
         $historicalRate = (float) $stock->getHistoricalFixedRate();
 
@@ -443,5 +446,26 @@ class DebtEngine
             // A negative Z'' score is a near-mathematical certainty of insolvency
             'is_bankrupt' => $zScore < 0.00
         ];
+    }
+
+    /**
+     * Issues new wholesale debt and recalculates the blended historical fixed rate.
+     * 
+     * @param Stock $stock         The stock entity issuing debt.
+     * @param float $amountIssued  The amount of new debt issued.
+     * @param float $costOfNewDebt The fixed interest rate for the newly issued debt.
+     */
+    public function issueDebt(Stock $stock, float $amountIssued, float $costOfNewDebt): void
+    {
+        if ($amountIssued <= 0.0) return;
+
+        $currentWholesaleDebt = (float) $stock->getWholesaleDebt();
+        $newWholesaleDebt = $currentWholesaleDebt + $amountIssued;
+        
+        $oldHistoricalRate = (float) $stock->getHistoricalFixedRate();
+        $weightedRate = (($currentWholesaleDebt * $oldHistoricalRate) + ($amountIssued * $costOfNewDebt)) / $newWholesaleDebt;
+        
+        $stock->setHistoricalFixedRate((string) $weightedRate);
+        $stock->setWholesaleDebt((string) $newWholesaleDebt);
     }
 }

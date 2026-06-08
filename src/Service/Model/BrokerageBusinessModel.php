@@ -27,16 +27,26 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
         // The Volatility Bonus (Trading Volume):
         // Brokerage revenues are hyper-sensitive to the VIX (Systemic Market Volatility). 
         // High Volatility = Massive trading volume (panic selling or euphoria buying) which generates massive fees.
-        $vix = $macroState['market_volatility'] ?? 0.15;
-        $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($vix * 0.50)));
+        $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? 0.20);
+        $volatilityBonus = max(0.0, ($vixEma - 0.20) * 0.5); // Direct revenue boost from average quarterly trading volume
+        
+        $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * 0.20)) + $volatilityBonus);
 
         $actualVariableCosts = $actualRevenue * min(0.99, max(0.01, $realizedVariableMargin));
+
+        $eventLore = null;
+        if ($vixEma > 0.30) {
+            $eventLore = "Record trading volumes driven by extreme market volatility resulted in massive fee generation.";
+        } elseif ($revenueZ < -2.0) {
+            $eventLore = "Suffered a steep decline in investment banking deal flow and advisory fees.";
+        }
 
         return [
             'actual_revenue' => $actualRevenue, 
             'actual_variable_costs' => $actualVariableCosts, 
             'ebit' => $actualRevenue - $fixedCosts - $actualVariableCosts, 
-            'primary_shock_z' => $revenueZ
+            'primary_shock_z' => $revenueZ,
+            'event_lore' => $eventLore
         ];
     }
 }

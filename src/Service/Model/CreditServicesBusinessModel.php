@@ -41,8 +41,11 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         
         // Net Interest Margin (NIM) Squeeze.
         // 0.5x higher then banks
-        $yieldCurveSlope = $macroState['ns_slope_ema'] ?? ($macroState['ns_slope'] ?? 0.015);
-        $nimSqueeze = (0.010 - $yieldCurveSlope) * 1.5;
+        $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['yield_10y'] ?? 0.04);
+        $yield2y = $macroState['yield_2y_ema'] ?? ($macroState['yield_2y'] ?? 0.03);
+        
+        $bankSpread = $yield10y - $yield2y;
+        $nimSqueeze = (0.010 - $bankSpread) * 1.5;
         
         $actualVariableCosts = $actualRevenue * min(0.99, max(0.01, $realizedVariableMargin + $lossProvisionShock + $nimSqueeze));
         

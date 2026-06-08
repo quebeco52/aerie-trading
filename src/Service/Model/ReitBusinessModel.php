@@ -28,17 +28,30 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         
         // Real Estate Cap Rates are deeply tied to the 10-Year Treasury Yield plus a risk premium.
         $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['yield_10y'] ?? 0.04);
-        $realEstateRiskPremium = 0.035; // Target a 350 bps spread over the risk-free rate
+        $realEstateRiskPremium = $macroState['equity_risk_premium'] ?? MacroEngine::BASE_EQUITY_RISK_PREMIUM;
         $targetCapRate = $yield10y + $realEstateRiskPremium;
         
-        // Leases are multi-year, so the structural ROIC moves very slowly towards the target cap rate
-        $blendedCapRate = ($baselineRoic * 0.85) + ($targetCapRate * 0.15);
-        
+        // Baseline DNA change over time, but at a realistic physical rate.
+        // Commercial leases (Office, Healthcare) are typically 7 to 10 years long.
+        // This means a REIT only turns over about 2.5% of its portfolio per quarter.
+        // If they do a bad M&A, they will be punished for YEARS before leases expire and reset to market rates!
+        $portfolioTurnoverRate = 0.025; 
+        $blendedCapRate = ($baselineRoic * (1.0 - $portfolioTurnoverRate)) + ($targetCapRate * $portfolioTurnoverRate);
         $stock->setBaselineRoic((string) max(0.01, $blendedCapRate));
+        
+        // Cap Rate represents NOI (Net Operating Income) yield.
+        // However, the EarningsEngine targets EBIT (Earnings Before Interest & Taxes).
+        // Since EBIT = NOI - Depreciation, we MUST subtract depreciation from the target 
+        // to prevent REITs from mathematically double-counting depreciation and printing infinite FFO.
+        $industry = $stock->getIndustry() ?: 'General';
+        $customDepreciation = (float) $stock->getDepreciationRate();
+        $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : (\App\Data\Sectors::INDUSTRY_METRICS[$industry]['depreciation'] ?? 0.05);
+
+        $targetEbitYield = max(0.01, $blendedCapRate - $depreciationRate);
         
         return [
             'invested_capital' => $investedCapital,
-            'baseline_roic' => max(0.01, $blendedCapRate)
+            'baseline_roic' => $targetEbitYield
         ];
     }
 
@@ -52,8 +65,14 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         // REIT revenues are incredibly stable due to multi-year binding leases.
         // Volatility impact is sliced to just 5% of standard variance.
         $revenueShock = $revenueZ * ($baselineVol * 0.05);
-        $actualRevenue = $expectedRevenue * (1.0 + $revenueShock);
         
+        // The Inflation Hedge (CPI Rent Escalators):
+        // Commercial real estate leases almost universally contain automatic annual rent increases tied to inflation.
+        $inflation = $macroState['inflation_ema'] ?? 0.02;
+        $rentEscalator = max(0.0, $inflation * 0.80); // Capture 80% of inflation directly into top-line revenue
+        
+        $actualRevenue = $expectedRevenue * (1.0 + $revenueShock + $rentEscalator);
+
         // The Tenant Default Shock (Vacancy):
         // While leases are sticky, deep recessions cause anchor tenants to break leases or go bankrupt.
         $tenantDefaultZ = $mathUtility->generateStandardNormal();
@@ -109,5 +128,25 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     {
         // REITs are pass-through entities and legally pay 0% corporate tax at the entity level.
         return 0.0;
+    }
+
+    /**
+     * REITs pay out the vast majority of their income as dividends, leaving little retained earnings.
+     * To grow their portfolio, they MUST aggressively issue debt to finance new property acquisitions.
+     */
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier): array
+    {
+        return [
+            'probability' => 0.80 + ($spreadMultiplier * 0.20), // Constantly hunting for property acquisitions
+            'aggressiveness' => 0.15 + (0.35 * $spreadMultiplier) // High leverage tolerance for commercial real estate
+        ];
+    }
+
+    /**
+     * REITs trade heavily on their Net Asset Value (NAV) / Book Value.
+     */
+    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps): float
+    {
+        return ($earningsValue * 0.60) + ($pbFairValue * 0.40);
     }
 }

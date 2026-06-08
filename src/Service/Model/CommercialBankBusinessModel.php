@@ -40,11 +40,11 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 10.0;
         
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + 0.005);
         $structuralSpread = (float) $stock->getCreditSpread();
+        $floatingRatio = (float) $stock->getFloatingDebtRatio();
         
-        $targetNetIncome = $equity * $baselineRoe;
         $taxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
-        $targetEbt = $targetNetIncome / (1.0 - $taxRate);
         
         $customerDeposits = (float) $stock->getCustomerDeposits();
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
@@ -56,11 +56,29 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $depositBeta = min(0.70, max(0.10, 0.70 * exp(-$decayRate * $utilization)));
         $depositRate = max(0.001, $policyRate * $depositBeta);
         
-        $expectedInterestExpense = ($wholesaleDebt * ($policyRate + $structuralSpread)) + ($customerDeposits * $depositRate);
-        $expectedInterestIncome = $treasury * max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+        $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
+
+        // --- THE CLEAR BALANCE SHEET MATH ---
+        // We derive the structural asset yield assuming the bank is fully deployed at optimal leverage.
+        // This prevents the "Free Money Exploit" where injecting idle cash magically forces target EBIT to increase.
+        $effectiveEquity = max(1.0, $equity);
+        $optimalDebt = $effectiveEquity * max(1.0, $equityLimit - 1.0);
+        $optimalEarningAssets = $effectiveEquity + $optimalDebt;
         
-        // Required Operating Profit = Desired Net Income + Interest Paid - Interest Earned on Cash
-        $targetEbit = $targetEbt + $expectedInterestExpense - $expectedInterestIncome;
+        $optimalWholesaleDebt = $optimalDebt * (1.0 - $depositRatio);
+        $optimalDeposits = $optimalDebt * $depositRatio;
+        $optimalInterestExpense = ($optimalWholesaleDebt * $blendedWholesaleRate) + ($optimalDeposits * $depositRate);
+        
+        $optimalNetIncome = $effectiveEquity * $baselineRoe;
+        $optimalEbt = $optimalNetIncome / (1.0 - $taxRate);
+        
+        // At optimal leverage, there is no idle cash generating a treasury yield, only fully deployed earning assets
+        $optimalEbit = $optimalEbt + $optimalInterestExpense;
+        $structuralAssetYield = $optimalEbit / max(1.0, $optimalEarningAssets);
+        
+        // Apply the mathematically pure structural yield to the ACTUAL physical loan book
+        $targetEbit = $earningAssets * $structuralAssetYield;
+        // ------------------------------------
         
         // Banks and Credit Services will never shrink their core loan book to zero just because cash yields are high.
         // We floor the target EBIT based on their core liabilities to guarantee they maintain baseline lending operations.
@@ -92,17 +110,21 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $defaultZ = $mathUtility->generateStandardNormal();
         
         // Loan Loss Provisions:
-        // Economic downturns (negative output gap) force banks to take massive write-downs on commercial loans.
+        // Commercial banks hold highly collateralized loans (prime mortgages, corporate debt).
+        // Their Loss Given Default (LGD) is much lower than unsecured credit cards or shadow banks.
         $outputGap = $macroState['output_gap_ema'] ?? ($macroState['output_gap'] ?? 0.0);
-        $macroDefaultDrag = $outputGap < 0.0 ? abs($outputGap) * 0.8 : 0.0;
+        $macroDefaultDrag = $outputGap < 0.0 ? abs($outputGap) * 0.4 : 0.0;
         
-        $lossProvisionShock = ($defaultZ < -1.5 ? abs($defaultZ) * 0.10 : ($defaultZ > 1.0 ? -0.02 : 0.0)) + $macroDefaultDrag;
+        $lossProvisionShock = ($defaultZ < -1.5 ? abs($defaultZ) * 0.04 : ($defaultZ > 1.0 ? -0.01 : 0.0)) + $macroDefaultDrag;
         
         // Net Interest Margin (NIM) Squeeze:
         // Banks borrow short-term (deposits) and lend long-term (mortgages/commercial). 
         // A steep yield curve (e.g., +1.5%) is highly profitable. If the curve flattens or inverts (< 0.0), the spread collapses.
-        $yieldCurveSlope = $macroState['ns_slope_ema'] ?? ($macroState['ns_slope'] ?? 0.015);
-        $nimSqueeze = (0.010 - $yieldCurveSlope) * 1.0;
+        $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['yield_10y'] ?? 0.04);
+        $yield2y = $macroState['yield_2y_ema'] ?? ($macroState['yield_2y'] ?? 0.03);
+        
+        $bankSpread = $yield10y - $yield2y;
+        $nimSqueeze = (0.010 - $bankSpread) * 1.0;
         
         $actualVariableCosts = $actualRevenue * min(0.99, max(0.01, $realizedVariableMargin + $lossProvisionShock + $nimSqueeze));
         
@@ -133,7 +155,7 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
         
-        return $excessCash * max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+        return $excessCash * $this->calculateCashYield($macroState, $policyRate);
     }
 
     /**
@@ -170,8 +192,8 @@ class CommercialBankBusinessModel implements BusinessModelInterface
     public function evaluateHoardingStatus(float $excessCash, float $operatingBase, float $totalDebt): array
     {
         return [
-            'is_hoarder'      => $excessCash > ($totalDebt * 0.10),
-            'is_mega_hoarder' => $excessCash > ($totalDebt * 0.20),
+            'is_hoarder'      => $excessCash > ($totalDebt * 0.20),
+            'is_mega_hoarder' => $excessCash > ($totalDebt * 0.40),
         ];
     }
 

@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(res => res.json())
             .then(data => {
                 rawReports = data;
-                updateCharts('5Y');
+                updateCharts('12Y');
             })
             .catch(err => console.error("Failed to load fundamentals:", err));
     } else {
@@ -498,6 +498,33 @@ document.addEventListener('DOMContentLoaded', () => {
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') loadHistory(currentRange);
         });
+
+        // Setup Chart Expansion Logic
+        document.querySelectorAll('.expand-chart-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const card = this.closest('.chart-card');
+                const grid = card.closest('.grid');
+                const icon = this.querySelector('.expand-icon');
+                const canvasContainer = card.querySelector('.chart-canvas-container');
+                const allCards = grid.querySelectorAll('.chart-card');
+                
+                const isExpanded = card.classList.contains('md:col-span-2');
+                
+                if (isExpanded) {
+                    card.classList.remove('md:col-span-2');
+                    canvasContainer.classList.remove('h-96', 'md:h-[500px]');
+                    canvasContainer.classList.add('h-48');
+                    icon.textContent = 'open_in_full';
+                    allCards.forEach(c => { if (c !== card) c.style.display = ''; });
+                } else {
+                    card.classList.add('md:col-span-2');
+                    canvasContainer.classList.remove('h-48');
+                    canvasContainer.classList.add('h-96', 'md:h-[500px]');
+                    icon.textContent = 'close_fullscreen';
+                    allCards.forEach(c => { if (c !== card) c.style.display = 'none'; });
+                }
+            });
+        });
     }
 });
 
@@ -508,14 +535,14 @@ function updateCharts(timeframe) {
 
     // Update button styles to match your UI
     const btn12Q = document.getElementById('btn-12Q');
-    const btn5Y = document.getElementById('btn-5Y');
+    const btn12Y = document.getElementById('btn-12Y') || document.getElementById('btn-5Y');
 
     if (timeframe === '12Q') {
-        btn12Q.className = 'px-3 py-1 text-[10px] font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors uppercase tracking-widest';
-        btn5Y.className = 'px-3 py-1 text-[10px] font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors uppercase tracking-widest';
+        if (btn12Q) btn12Q.className = 'px-3 py-1 text-[10px] font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors uppercase tracking-widest';
+        if (btn12Y) btn12Y.className = 'px-3 py-1 text-[10px] font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors uppercase tracking-widest';
     } else {
-        btn5Y.className = 'px-3 py-1 text-[10px] font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors uppercase tracking-widest';
-        btn12Q.className = 'px-3 py-1 text-[10px] font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors uppercase tracking-widest';
+        if (btn12Y) btn12Y.className = 'px-3 py-1 text-[10px] font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors uppercase tracking-widest';
+        if (btn12Q) btn12Q.className = 'px-3 py-1 text-[10px] font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors uppercase tracking-widest';
     }
 
     let labels = [];
@@ -590,7 +617,7 @@ function updateCharts(timeframe) {
             customerDepositRatioData.push(parseFloat(report.customer_deposit_ratio || 0) * 100);
         });
     }
-    else if (timeframe === '5Y') {
+    else if (timeframe === '12Y' || timeframe === '5Y') {
         const yearsToFetch = 12;
         let yearCount = 1;
 
@@ -771,6 +798,7 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
 
 let macroEconomyChartInstance = null;
 let macroRatesChartInstance = null;
+let macroMortgageChartInstance = null;
 let macroRiskChartInstance = null;
 let macroGdpChartInstance = null;
 
@@ -779,15 +807,18 @@ function updateMacroCharts() {
 
     let labels = [];
     let inflationData = [], outputGapData = [];
-    let policyRateData = [], yield10yData = [], slopeData = [];
+    let policyRateData = [], yield2yData = [], yield5yData = [], yield10yData = [], yield30yData = [];
+    let spread2s10sData = [], spread30yData = [];
     let erpData = [], volData = [], taxData = [];
     let gdpData = [];
 
-    let qCount = rawReports.length;
+    // Expand and cap the macro charts to show exactly the last 100 quarters (25 years)
+    const slicedReports = rawReports.slice(-100);
+    let qCount = slicedReports.length;
 
-    rawReports.forEach((report, index) => {
+    slicedReports.forEach((report, index) => {
         let labelQ = qCount - index - 1;
-        labels.push(labelQ === 0 ? 'Now' : `-${labelQ} Qtrs`);
+        labels.push(labelQ === 0 ? 'Now' : `-${labelQ}Q`);
 
         inflationData.push(parseFloat(report.inflation_ema) * 100);
         outputGapData.push(parseFloat(report.output_gap_ema) * 100);
@@ -795,9 +826,24 @@ function updateMacroCharts() {
         let pr = parseFloat(report.policy_rate_ema) * 100;
         let y10 = parseFloat(report.yield10y_ema) * 100;
         
+        // Support both snake_case and camelCase serialization, fallback to null for historical records
+        let rawY2 = report.yield2y_ema || report.yield2yEma;
+        let y2 = rawY2 ? parseFloat(rawY2) * 100 : null;
+        
+        let rawY5 = report.yield5y_ema || report.yield5yEma;
+        let y5 = rawY5 ? parseFloat(rawY5) * 100 : null;
+        
+        let rawY30 = report.yield30y_ema || report.yield30yEma;
+        let y30 = rawY30 ? parseFloat(rawY30) * 100 : null;
+
         policyRateData.push(pr);
+        yield2yData.push(y2);
+        yield5yData.push(y5);
         yield10yData.push(y10);
-        slopeData.push(y10 - pr);
+        yield30yData.push(y30);
+        
+        spread2s10sData.push((y10 !== null && y2 !== null) ? y10 - y2 : null);
+        spread30yData.push((y30 !== null && pr !== null) ? y30 - pr : null);
         
         erpData.push(parseFloat(report.equity_risk_premium) * 100);
         volData.push(parseFloat(report.market_volatility) * 100);
@@ -808,7 +854,8 @@ function updateMacroCharts() {
     });
 
     renderMacroEconomyChart(labels, inflationData, outputGapData);
-    renderMacroRatesChart(labels, policyRateData, yield10yData, slopeData);
+    renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData, yield10yData, spread2s10sData);
+    renderMacroMortgageChart(labels, policyRateData, yield30yData, spread30yData);
     renderMacroRiskChart(labels, erpData, volData, taxData);
     renderMacroGdpChart(labels, gdpData);
 }
@@ -829,7 +876,7 @@ function renderMacroEconomyChart(labels, inflationData, outputGapData) {
                     backgroundColor: '#facc15',
                     borderWidth: 2,
                     tension: 0.3,
-                    pointRadius: 1,
+                    pointRadius: labels.length > 50 ? 0 : 1,
                     yAxisID: 'y'
                 },
                 {
@@ -844,13 +891,14 @@ function renderMacroEconomyChart(labels, inflationData, outputGapData) {
         },
         options: {
             responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
             plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } } },
             scales: { y: { ticks: { callback: (val) => val + '%' }, title: { display: true, text: 'Percentage' } } }
         }
     });
 }
 
-function renderMacroRatesChart(labels, policyRateData, yield10yData, slopeData) {
+function renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData, yield10yData, spread2s10sData) {
     if (macroRatesChartInstance) macroRatesChartInstance.destroy();
     const ctx = document.getElementById('macroRatesChart').getContext('2d');
     macroRatesChartInstance = new Chart(ctx, {
@@ -860,35 +908,106 @@ function renderMacroRatesChart(labels, policyRateData, yield10yData, slopeData) 
             datasets: [
                 {
                     type: 'line',
-                    label: 'Policy Rate (EMA)',
+                    label: 'Policy Rate',
                     data: policyRateData,
                     borderColor: '#7dd3fc',
                     backgroundColor: '#7dd3fc',
                     borderWidth: 2,
                     tension: 0.1,
-                    pointRadius: 1
+                    pointRadius: labels.length > 50 ? 0 : 1
                 },
                 {
                     type: 'line',
-                    label: '10Y Yield (EMA)',
+                    label: '2Y Yield',
+                    data: yield2yData,
+                    borderColor: '#4ade80',
+                    backgroundColor: '#4ade80',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: labels.length > 50 ? 0 : 1
+                },
+                {
+                    type: 'line',
+                    label: '5Y Yield',
+                    data: yield5yData,
+                    borderColor: '#facc15',
+                    backgroundColor: '#facc15',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: labels.length > 50 ? 0 : 1
+                },
+                {
+                    type: 'line',
+                    label: '10Y Yield',
                     data: yield10yData,
                     borderColor: '#c084fc',
                     backgroundColor: '#c084fc',
                     borderWidth: 2,
                     tension: 0.3,
-                    pointRadius: 1
+                    pointRadius: labels.length > 50 ? 0 : 1
                 },
                 {
                     type: 'bar',
-                    label: 'Yield Curve Slope',
-                    data: slopeData,
-                    backgroundColor: slopeData.map(val => val < 0 ? 'rgba(255, 179, 173, 0.4)' : 'rgba(192, 132, 252, 0.5)'),
+                    label: '2s10s Spread (10Y-2Y)',
+                    data: spread2s10sData,
+                    backgroundColor: spread2s10sData.map(val => val !== null && val < 0 ? 'rgba(255, 179, 173, 0.4)' : 'rgba(192, 132, 252, 0.4)'),
                     borderRadius: 4
                 }
             ]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } } },
+            scales: { y: { ticks: { callback: (val) => val + '%' } } }
+        }
+    });
+}
+
+function renderMacroMortgageChart(labels, policyRateData, yield30yData, spread30yData) {
+    const canvas = document.getElementById('macroMortgageChart');
+    if (!canvas) return; // Fail gracefully if the HTML template hasn't been updated yet
+
+    if (macroMortgageChartInstance) macroMortgageChartInstance.destroy();
+    const ctx = canvas.getContext('2d');
+    
+    macroMortgageChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    type: 'line',
+                    label: 'Policy Rate',
+                    data: policyRateData,
+                    borderColor: '#7dd3fc',
+                    backgroundColor: '#7dd3fc',
+                    borderWidth: 2,
+                    tension: 0.1,
+                    pointRadius: labels.length > 50 ? 0 : 1
+                },
+                {
+                    type: 'line',
+                    label: '30Y Mortgage Yield',
+                    data: yield30yData,
+                    borderColor: '#fb7185',
+                    backgroundColor: '#fb7185',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: labels.length > 50 ? 0 : 1
+                },
+                {
+                    type: 'bar',
+                    label: 'Mortgage Spread (30Y-PR)',
+                    data: spread30yData,
+                    backgroundColor: spread30yData.map(val => val !== null && val < 0 ? 'rgba(255, 179, 173, 0.4)' : 'rgba(251, 113, 133, 0.4)'),
+                    borderRadius: 4
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
             plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } } },
             scales: { y: { ticks: { callback: (val) => val + '%' } } }
         }
@@ -920,7 +1039,7 @@ function renderMacroRiskChart(labels, erpData, volData, taxData) {
                     backgroundColor: '#fde047',
                     borderWidth: 2,
                     tension: 0.3,
-                    pointRadius: 1
+                    pointRadius: labels.length > 50 ? 0 : 1
                 },
                 {
                     label: 'Corporate Tax Rate',
@@ -936,6 +1055,7 @@ function renderMacroRiskChart(labels, erpData, volData, taxData) {
         },
         options: {
             responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
             plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } } },
             scales: { y: { ticks: { callback: (val) => val + '%' } } }
         }
@@ -958,12 +1078,13 @@ function renderMacroGdpChart(labels, gdpData) {
                     borderWidth: 2,
                     tension: 0.3,
                     fill: true,
-                    pointRadius: 2
+                    pointRadius: labels.length > 50 ? 0 : 2
                 }
             ]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
             plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `$${ctx.raw.toFixed(2)}T` } } },
             scales: { y: { ticks: { callback: (val) => '$' + val + 'T' } } }
         }
