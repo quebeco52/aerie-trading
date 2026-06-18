@@ -28,6 +28,19 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
         ];
     }
 
+    public function getMacroPhysics(Stock $stock, array $macroState): array
+    {
+        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
+        $inflation = $macroState['inflation_ema'] ?? 0.02;
+        $beta = (float) $stock->getBeta();
+        
+        return [
+            'macro_demand_shift' => $outputGap * $beta,
+            'pricing_power_multiplier' => 1.0 + ($inflation * max(0.5, $beta)),
+            'operating_leverage_rate' => 0.15,
+        ];
+    }
+
     /**
      * Idiosyncratic variance is applied directly to sales volume.
      */
@@ -152,6 +165,12 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float
     {
         return max($organicSpend, $debtIssued * 0.75);
+    }
+
+    public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float
+    {
+        // Standard corporates borrow based on their balance sheet capacity, regardless of temporary cash hoards
+        return $baseCapacity;
     }
 
     public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float

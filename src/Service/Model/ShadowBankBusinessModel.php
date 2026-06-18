@@ -25,6 +25,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         
         $earningAssets = max($equity, $equity + $wholesaleDebt - $treasury);
         $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
+        $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
         
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
         $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + 0.005);
@@ -32,41 +33,17 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         
         $taxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
-        
-        $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
-
-        $industry = $stock->getIndustry() ?: 'General';
-        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 10.0;
-
-        // --- THE CLEAR BALANCE SHEET MATH ---
-        $effectiveEquity = max(1.0, $equity);
-        $optimalDebt = $effectiveEquity * max(1.0, $equityLimit - 1.0);
-        $optimalEarningAssets = $effectiveEquity + $optimalDebt;
-        
-        $optimalInterestExpense = $optimalDebt * $blendedWholesaleRate;
-        $optimalNetIncome = $effectiveEquity * $baselineRoe;
-        $optimalEbt = $optimalNetIncome / (1.0 - $taxRate);
-        
-        $optimalEbit = $optimalEbt + $optimalInterestExpense;
-        $structuralAssetYield = $optimalEbit / max(1.0, $optimalEarningAssets);
-        
-        $targetEbit = $earningAssets * $structuralAssetYield;
-        // ------------------------------------
-        
-        // Shadow Banks rely on loan volume. We floor target EBIT to guarantee baseline lending operations.
-        $coreLiabilities = $wholesaleDebt;
-        $minLendingEbit = $coreLiabilities * 0.015;
-        
-        $targetEbit = max($minLendingEbit, $targetEbit);
+        $grossYieldAnnually = $yield5y + $structuralSpread;
         
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
         
-        $targetRevenue = max(0.0, $targetEbit) / $stableMargin;
+        // Capacity Constraint: Shadow Bank revenue is strictly the gross yield of their loan book.
+        $targetRevenue = $earningAssets * $grossYieldAnnually;
         $grossYield = $targetRevenue / max(1.0, abs($earningAssets));
         
         return [
             'invested_capital' => $earningAssets,
-            'baseline_roic' => $grossYield * $stableMargin
+            'baseline_roic' => ($grossYield * $stableMargin) * (1.0 - $taxRate)
         ];
     }
 

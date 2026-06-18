@@ -110,19 +110,19 @@ class TreasuryEngine
             $newBorrowingRate = $health['raw_metrics']['current_market_rate'] ?? 0.05;
 
             if ($isFinancial) {
-                $evalDebt = $state['wholesaleDebt'];
                 $modelThresholds = \App\Data\Sectors::getModelThresholds($businessModel);
-                $evalTolerance = $modelThresholds['wholesale_leverage_limit'] ?? $health['debt_tolerance'];
+                $wholesaleTolerance = $modelThresholds['wholesale_leverage_limit'] ?? $health['debt_tolerance'];
+                
+                $wholesaleCapacity = max(0.0, ($newEquity * $wholesaleTolerance) - $state['wholesaleDebt']);
+                $totalCapacity = max(0.0, ($newEquity * $health['debt_tolerance']) - $totalDebt);
+                
+                $balanceSheetCapacity = min($wholesaleCapacity, $totalCapacity);
+                $incomeStatementCapacity = $balanceSheetCapacity; 
             } else {
                 $evalDebt = $totalDebt;
                 $evalTolerance = $health['debt_tolerance'];
-            }
-            
-            $balanceSheetCapacity = max(0.0, ($newEquity * $evalTolerance) - $evalDebt);
-
-            if ($isFinancial) {
-                $incomeStatementCapacity = $balanceSheetCapacity; 
-            } else {
+                $balanceSheetCapacity = max(0.0, ($newEquity * $evalTolerance) - $evalDebt);
+                
                 $ebit = $health['raw_metrics']['ebit'] ?? 0.0;
                 $minimumIcr = 3.5; 
                 $maxTolerableInterest = max(0.0, $ebit / $minimumIcr);
@@ -132,7 +132,18 @@ class TreasuryEngine
             }
 
             $trueExpansionCapacity = min($incomeStatementCapacity, $balanceSheetCapacity);
-            $trueExpansionCapacity = min($trueExpansionCapacity, $liveInvestedCapital * 0.15);
+
+            // Allow specific business models to adjust capacity (e.g., Banks spending cheap deposits first)
+            // Subtract excess cash from the TOTAL balance sheet capacity first
+            $operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity());
+            $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+            $targetCashReserves = $strategy->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt']) * 1.20;
+            $excessCash = max(0.0, $state['treasury'] - $targetCashReserves);
+            
+            $trueExpansionCapacity = $strategy->getUnfundedExpansionCapacity($trueExpansionCapacity, $excessCash);
+
+            // Max 25% of operations per quarter (Quarterly Flow Limit)
+            $trueExpansionCapacity = min($trueExpansionCapacity, $liveInvestedCapital * 0.25);
 
             if ($trueExpansionCapacity > 0) {
                 $spreadMultiplier = min(1.0, max(0.0, ($trueReturn - $hurdleRate) * 10.0));
@@ -202,21 +213,24 @@ class TreasuryEngine
         $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
         $investmentProbability *= max(0.05, 1.0 - $saturationPenalty);
 
-        if ($isFinancial) {
-            $investmentProbability = 0.00;
-        }
-        
+        $excessCash = max(0.0, $state['treasury'] - $targetCashReserves);
+        $hoardStatus = $strategy->evaluateHoardingStatus($excessCash, $operatingBase, $totalDebt);
+        $isHoarder = $hoardStatus['is_hoarder'];
+        $isMegaHoarder = $hoardStatus['is_mega_hoarder'];
 
-        $fundInvestmentOpportunity = (mt_rand() / mt_getrandmax()) < $investmentProbability;
+        $fundInvestmentOpportunity =  $isMegaHoarder || ((mt_rand() / mt_getrandmax()) < $investmentProbability);
 
-        if (($trueReturn > $hurdleRate && $state['treasury'] > $targetCashReserves && !$health['wants_to_paydown_debt'] && $fundInvestmentOpportunity) || $state['debtActionTaken']) {
-            $spreadMultiplier = min(1.0, max(0.0, ($trueReturn - $hurdleRate) * 10.0));
-            $organicSpend = ($state['treasury'] - $targetCashReserves) * (0.02 + (0.13 * $spreadMultiplier));
+        // Bypass the hurdle rate check if the company is hoarding cash. Sitting on excess cash is a mathematically guaranteed drag on ROE.
+        if ((($trueReturn > $hurdleRate || $isHoarder) && $excessCash > 0 && !$health['wants_to_paydown_debt'] && $fundInvestmentOpportunity) || $state['debtActionTaken']) {
+            $spreadMultiplier = $isHoarder ? 1.0 : min(1.0, max(0.0, ($trueReturn - $hurdleRate) * 10.0));
+            // Boosted deployment rate so massive hoards can actually be cleared
+            $organicSpend = $excessCash * (0.15 + (0.35 * $spreadMultiplier));
             
             $expansionSpend = $strategy->calculateOrganicCapexSpend($organicSpend, $state['debtIssued']);
-            $expansionSpend = min($expansionSpend, max(0.0, $state['treasury'] - $targetCashReserves));
+            $expansionSpend = min($expansionSpend, $excessCash);
             
-            $maxGrowthSpeed = $isFinancial ? 0.08 : 0.05; 
+            // Mega hoarders need massive physical capacity limits to flush the cash
+            $maxGrowthSpeed = $isFinancial ? ($isMegaHoarder ? 0.35 : ($isHoarder ? 0.20 : 0.12)) : ($isHoarder ? 0.15 : 0.08); 
             $expansionCapBasis = $isFinancial ? ($newEquity + $totalDebt) : $liveInvestedCapital;
             $expansionSpend = min($expansionSpend, $expansionCapBasis * $maxGrowthSpeed);
 
@@ -327,13 +341,21 @@ class TreasuryEngine
             $baselineSpread = (float) $stock->getCreditSpread();
             $dynamicSpread = $health['raw_metrics']['dynamic_spread'] ?? $baselineSpread;
             $isJunkBondStatus = $dynamicSpread > ($baselineSpread + 0.0011);
+            
+            $hoardStatus = $strategy->evaluateHoardingStatus($excessCash, $operatingBase, $totalDebt);
 
-            if ($currentDebtRatio > $evalLimit || $isJunkBondStatus) {
+            if ($currentDebtRatio > $evalLimit || $isJunkBondStatus || $hoardStatus['is_hoarder']) {
                 $targetRatio = $isJunkBondStatus ? max(0.10, $evalLimit * 0.75) : max(0.10, $evalLimit - 0.05);
 
                 $targetTotalDebt = $newEquity * $targetRatio;
                 $debtToPayOff = min($excessCash, max(0.0, $evalDebt - $targetTotalDebt));
                 $debtToPayOff = min($debtToPayOff, $state['wholesaleDebt']);
+                
+                // If they are hoarding cash, normal physical corporates ignore optimal leverage and burn as much wholesale debt as possible.
+                // Financial institutions fundamentally rely on debt (leverage) to generate ROE. They must NEVER burn debt below their optimal target!
+                if ($hoardStatus['is_hoarder'] && !$isFinancial) {
+                    $debtToPayOff = min($excessCash, $state['wholesaleDebt']);
+                }
 
                 if ($debtToPayOff > 0) {
                     $state['wholesaleDebt'] -= $debtToPayOff;

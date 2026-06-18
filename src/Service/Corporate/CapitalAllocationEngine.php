@@ -217,20 +217,26 @@ class CapitalAllocationEngine
         
         if ($isFinancial) {
             $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['equity_limit'] ?? 10.0;
-            if ((float)$stock->getDebtToEquityRatio() > ($equityLimit * 0.85)) {
+            
+            // Optimal leverage is structurally max(1.0, EquityLimit - 1.0). 
+            // We allow buybacks up to a safe 0.5x overshoot before locking them out to preserve capital.
+            $buybackLockoutThreshold = max(1.0, $equityLimit - 1.0) + 0.5;
+            
+            if ((float)$stock->getDebtToEquityRatio() > $buybackLockoutThreshold) {
                 return ['new_shares' => $shares, 'total_cash_spent' => 0.0, 'event' => null];
             }
         }
         
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
         $hoardStatus = $strategy->evaluateHoardingStatus($excessCash, $operatingBase, (float) $stock->getTotalDebt());
+        $isHoarder = $hoardStatus['is_hoarder'];
         $isMegaHoarder = $hoardStatus['is_mega_hoarder'];
 
         $isLiquidityCrisis = $health['interest_coverage'] < 1.0;
         $modelThresholds = \App\Data\Sectors::getModelThresholds($businessModel);
         $minBuybackIcr = $modelThresholds['buyback_min_icr'];
 
-        if ($isLiquidityCrisis || (!$isMegaHoarder && (($health['wants_to_paydown_debt'] && !$canEasilyCoverDebt) || $health['interest_coverage'] < $minBuybackIcr))) {
+        if ($isLiquidityCrisis || (!$isHoarder && (($health['wants_to_paydown_debt'] && !$canEasilyCoverDebt) || $health['interest_coverage'] < $minBuybackIcr))) {
             return ['new_shares' => $shares, 'total_cash_spent' => 0.0, 'event' => null];
         }
 
@@ -248,17 +254,19 @@ class CapitalAllocationEngine
 
         $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($macroState['policy_rate'] ?? 0.04, $economicSpread);
 
-        if (($economicSpread > 0.02 && $currentPE < ($fairValuePE + 3.0)) || $isMegaHoarder) {
+        if (($economicSpread > 0.02 && $currentPE < ($fairValuePE + 3.0)) || $isHoarder) {
             $maxWillingSpend = $strategy->calculateMaxBuybackSpend($excessCash, $retainedEarningsThisQuarter, $isMegaHoarder);
 
             $marketCap = $shares * max($currentPrice, 0.01);
-            $maxRegulatorySpend = $marketCap * ($isMegaHoarder ? 0.03 : 0.015);
+            $maxRegulatorySpend = $marketCap * ($isMegaHoarder ? 0.075 : ($isHoarder ? 0.05 : 0.015));
             $absoluteMaxSpend = min($maxWillingSpend, $maxRegulatorySpend);
 
             $valuationDiscount = max(0.0, ($fairValuePE - $currentPE) / max(1.0, $fairValuePE));
-            $aggression = min(1.0, 0.50 + $valuationDiscount);
+            // Hoarders ignore valuation discounts and always buy aggressively
+            $aggression = $isMegaHoarder ? 1.0 : min(1.0, 0.50 + $valuationDiscount);
 
-            $actualSpend = $absoluteMaxSpend * $aggression * (mt_rand(50, 100) / 100.0);
+            // Hoarders bypass the random execution dampener
+            $actualSpend = $absoluteMaxSpend * $aggression * ($isHoarder ? 1.0 : (mt_rand(50, 100) / 100.0));
             $sharesRepurchased = (int) floor($actualSpend / max($currentPrice, 0.01));
 
             if ($sharesRepurchased > 0) {

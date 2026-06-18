@@ -132,7 +132,8 @@ class MergerAndAcquisitionEngine
         $purchasePrice = min($purchasePrice, $maxPrivateCompanyValue);
         
         // Financials must safely cap their M&A spend to a fraction of their Tier 1 Capital (Equity)
-        if ($isFinancial) {
+        // EXCEPT Mega Hoarders, who are desperate to flush cash and execute transformational mergers
+        if ($isFinancial && !$isMegaHoarder) {
             $purchasePrice = min($purchasePrice, $equity * 0.15);
         }
         
@@ -197,8 +198,7 @@ class MergerAndAcquisitionEngine
         $effectiveTargetRoic = $targetRoic * $synergyMultiplier;
         
         // Assume the target has a slightly worse operating margin, but protect structural floors
-        $marginFloor = $isFinancial ? 0.20 : 0.10;
-        $targetMargin = max($marginFloor, $oldOperatingMargin * (mt_rand(70, 95) / 100.0));
+        $targetMargin = max(0.01, $oldOperatingMargin * (mt_rand(70, 95) / 100.0));
         
         $totalNewCapital = max(1.0, $oldCapitalBase + $purchasePrice);
         
@@ -212,9 +212,11 @@ class MergerAndAcquisitionEngine
             $acquirer->setBaselineRoe((string) max(0.01, $blendedBaselineRoe));
         }
         
-        // Blend the Structural Operating Margin
+        // Blend the Structural Operating Margin and apply M&A Indigestion
+        // Merging corporate hierarchies is chaotic. We apply a 10% penalty to the blended margin.
+        // The EarningsEngine CIR mean-reversion will naturally heal this over the next 3-4 quarters.
         $blendedMargin = (($oldCapitalBase * $oldOperatingMargin) + ($purchasePrice * $targetMargin)) / $totalNewCapital;
-        $acquirer->setOperatingMargin((string) max($marginFloor, $blendedMargin));
+        $acquirer->setOperatingMargin((string) max(0.01, $blendedMargin * 0.90));
         
         // We no longer manually shift CurrentRoic. The EarningsEngine will naturally calculate 
         // the diluted, bottom-up ROIC next quarter using this new blended DNA!
@@ -309,6 +311,16 @@ class MergerAndAcquisitionEngine
         $normalizedEps = $normalizedNetIncome / $shares;
         $currentPE = $normalizedEps > 0 ? $price / $normalizedEps : 0.0;
         
+        // THE HOARDER TRAP:
+        // Cash hoarders suffer from low ROE due to cash drag. If we let them divest, they sell 
+        // earning assets for MORE cash, accelerating their death spiral!
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $targetCash = $strategy->calculateTargetOperatingCash($operatingBase, (float) $seller->getCustomerDeposits(), (float) $seller->getWholesaleDebt());
+        $hoardStatus = $strategy->evaluateHoardingStatus(max(0.0, $treasury - $targetCash), $operatingBase, (float) $seller->getTotalDebt());
+        
+        if ($hoardStatus['is_hoarder']) {
+            return null; // Hoarders must BUY or DELEVERAGE, never sell!
+        }
         
         $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
         $samRatio = (float) $seller->getSamRatio();
@@ -380,9 +392,10 @@ class MergerAndAcquisitionEngine
             $salePrice = ($baseDistressValue * $divestedFraction) * (mt_rand(40, 80) / 100.0);
         }
 
-        // INJECT THE CASH
+        // INJECT THE CASH FROM THE SALE
         $currentTreasury = (float) $seller->getCorporateTreasury();
-        $seller->setCorporateTreasury((string) ($currentTreasury + $salePrice));
+        $newTreasury = $currentTreasury + $salePrice;
+        $seller->setCorporateTreasury((string) $newTreasury);
 
         // Restate forward guidance: Reduce EPS proportionally so the Earnings Engine doesn't report a massive miss next quarter
         $currentEps = (float) $seller->getEarningsPerShare();
@@ -396,8 +409,11 @@ class MergerAndAcquisitionEngine
             $lostDeposits = $currentDeposits * $divestedFraction;
             $seller->setCustomerDeposits((string) max(0.0, $currentDeposits - $lostDeposits));
             
-            // The cash reserves (Float) backing those transferred liabilities goes to the buyer!
-            $seller->setCorporateTreasury((string) max(0.0, ((float) $seller->getCorporateTreasury()) - $lostDeposits));
+            // In fractional reserve banking, deposits are backed by the loan book, not pure cash.
+            // We transfer the proportional share of the existing cash reserves, not the absolute deposit value.
+            // Note: We use the pre-sale $currentTreasury to calculate the divested portion.
+            $lostCashReserves = $currentTreasury * $divestedFraction;
+            $seller->setCorporateTreasury((string) max(0.0, ((float) $seller->getCorporateTreasury()) - $lostCashReserves));
         }
         
         // REDUCE REVENUE

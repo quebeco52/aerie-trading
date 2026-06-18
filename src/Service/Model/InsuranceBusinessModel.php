@@ -18,8 +18,8 @@ use App\Service\Macro\MacroEngine;
 class InsuranceBusinessModel implements BusinessModelInterface
 {
     /**
-     * Reverse engineers the required underwriting profit (EBIT) needed to hit the target ROE.
-     * Insurance companies heavily subsidize their underwriting using massive interest income from "The Float".
+     * Reverse engineers the required operating metrics based on Balance Sheet Capacity.
+     * Insurance revenue (Premiums) is strictly constrained by Surplus Equity (The Kenney Rule).
      *
      * @param Stock       $stock       The insurance stock entity being evaluated.
      * @param array       $macroState  The current macroeconomic state.
@@ -29,56 +29,39 @@ class InsuranceBusinessModel implements BusinessModelInterface
     public function getTargetMetrics(Stock $stock, array $macroState, MathUtility $mathUtility): array
     {
         $equity = (float) $stock->getTotalEquity();
-        $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
-        
-        $taxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
-        
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
-        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + 0.005);
-        $structuralSpread = (float) $stock->getCreditSpread();
-        $floatingRatio = (float) $stock->getFloatingDebtRatio();
-        
-        $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
-        $wholesaleDebt = (float) $stock->getWholesaleDebt();
-        $expectedInterestExpense = $wholesaleDebt * $blendedWholesaleRate;
+        $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
         // --- THE CLEAR BALANCE SHEET MATH ---
-        // For Insurance, underwriting capacity is constrained by Equity (The Kenney Rule).
-        // Target Underwriting Profit must scale on the true Physical Float, not idle Equity.
-        $floatYield = $this->calculateCashYield($macroState, $policyRate);
+        // 1. Capacity Constraint: Revenue must NEVER be reverse-engineered from target EBIT.
+        // It must be mathematically clamped to the firm's physical capital to prevent hyperinflation.
         
-        $capacityRatio = 3.0; // Kenney Rule: $3 in premiums per $1 of surplus equity
-        $effectiveEquity = max(1.0, $equity);
-        $optimalFloat = $effectiveEquity * $capacityRatio;
-        
-        // At optimal leverage, the entire treasury is working float + equity
-        $optimalInterestIncome = ($effectiveEquity + $optimalFloat) * $floatYield;
-        $optimalNetIncome = $effectiveEquity * $baselineRoe;
-        $optimalEbt = $optimalNetIncome / (1.0 - $taxRate);
-        
-        $optimalUnderwritingEbit = $optimalEbt + $expectedInterestExpense - $optimalInterestIncome;
-        $structuralUnderwritingYield = $optimalUnderwritingEbit / max(1.0, $optimalFloat);
-        
-        $float = (float) $stock->getCustomerDeposits();
-        $targetEbit = $float * $structuralUnderwritingYield;
-        // ------------------------------------
-        
-        // The Underwriting Floor:
-        $minUnderwritingEbit = $float * 0.015; // 1.5% structural underwriting profit floor on Float
-        
-        $targetEbit = max($minUnderwritingEbit, $targetEbit);
-        $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
-        
-        $targetRevenue = max(0.0, $targetEbit) / $stableMargin;
-        
-        $operatingEquity = min($equity, $float / $capacityRatio);
-        $operatingEquity = max($operatingEquity, $equity * 0.10, 1.0); // Fallback for zero float
-        
-        $impliedTurnover = $targetRevenue / max(1.0, $operatingEquity);
-        
+        $capacityRatio = 3.0; // Kenney Rule: Max 3.0x of surplus equity annually
+        $operatingEquity = max(1.0, $equity);
+
+        $taxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
+
+        // 2. Structural Revenue is anchored strictly to their capacity limit.
+        $targetRevenue = $operatingEquity * $capacityRatio;
+
+        // 3. The engine requires Baseline ROIC, which implies a specific Asset Turnover.
+        // Turnover = Revenue / Invested Capital
+        $impliedTurnover = $targetRevenue / $operatingEquity;
+
         return [
             'invested_capital' => $operatingEquity,
-            'baseline_roic' => $impliedTurnover * $stableMargin
+            'baseline_roic'    => ($impliedTurnover * $stableMargin) * (1.0 - $taxRate)
+        ];
+    }
+
+    public function getMacroPhysics(Stock $stock, array $macroState): array
+    {
+        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
+        $beta = (float) $stock->getBeta();
+        
+        return [
+            'macro_demand_shift' => $outputGap * $beta * 0.10, // Highly immune to macro demand
+            'pricing_power_multiplier' => 1.0, 
+            'operating_leverage_rate' => 0.05, 
         ];
     }
 
@@ -242,14 +225,25 @@ class InsuranceBusinessModel implements BusinessModelInterface
         // Blended portfolio yield, floored at 0% so they don't mathematically lose the raw principal
         $floatYield = max(0.0, (0.80 * $bondReturn) + (0.20 * $equityReturn));
         
-        return $floatYield;
+        // Dampening
+        return $floatYield * 0.50;
     }
 
     public function getDebtExpansionAggressiveness(float $spreadMultiplier): array 
     { 
         return ['probability' => 0.40 + ($spreadMultiplier * 0.30), 'aggressiveness' => 0.02 + (0.08 * $spreadMultiplier)]; 
     }
-    public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float { return 0.0; }
+    
+    public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float 
+    { 
+        return max($organicSpend, $debtIssued * 0.80); 
+    }
+
+    public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float
+    {
+        // Insurance companies should fund expansion using their premium float (excess cash) first
+        return max(0.0, $baseCapacity - $excessCash);
+    }
     public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float { return $peFairValue; }
 
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps): float

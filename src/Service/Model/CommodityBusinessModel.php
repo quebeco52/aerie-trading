@@ -26,6 +26,19 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         ];
     }
 
+    public function getMacroPhysics(Stock $stock, array $macroState): array
+    {
+        $physics = parent::getMacroPhysics($stock, $macroState);
+        
+        // Commodities are ultimate price takers. They perfectly capture supply chain inflation directly into top-line revenue.
+        $inflation = $macroState['inflation_ema'] ?? 0.02;
+        $beta = (float) $stock->getBeta();
+        
+        $physics['pricing_power_multiplier'] = 1.0 + ($inflation * max(0.5, $beta) * 1.5);
+        
+        return $physics;
+    }
+
     /**
      * Commodity revenues are highly volatile due to wild swings in global spot prices.
      */

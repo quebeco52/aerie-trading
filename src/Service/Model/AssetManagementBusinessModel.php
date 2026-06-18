@@ -36,24 +36,43 @@ class AssetManagementBusinessModel implements BusinessModelInterface
         $treasury = (float) $stock->getCorporateTreasury();
         
         $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
-        $expectedInterestExpense = $wholesaleDebt * $blendedWholesaleRate;
 
         // --- THE CLEAR BALANCE SHEET MATH ---
         // Asset managers scale EBIT from their active operating equity (AUM/Platform capacity).
         // Excess cash beyond target operating cash is considered idle and stripped from the ROE target.
-        $operatingBase = max((float) $stock->getTotalRevenue(), $equity, 10000000.0);
-        $targetOperatingCash = max($operatingBase * 0.10, $wholesaleDebt * 0.05);
+        $industry = $stock->getIndustry() ?: 'General';
+        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 1.0;
         
+        $effectiveEquity = max(1.0, $equity);
+        
+        // We use ACTUAL deployed leverage (capped at limits) to prevent the "Phantom Debt" exploit, 
+        // where low-leverage brokers pocket theoretical interest expense as massive ROE.
+        $actualLeverage = $effectiveEquity > 0 ? ($wholesaleDebt / $effectiveEquity) : 0.0;
+        $allowedLeverage = min($actualLeverage, max(0.0, $equityLimit));
+        $optimalDebt = $effectiveEquity * $allowedLeverage;
+        
+        $optimalInterestExpense = $optimalDebt * $blendedWholesaleRate;
+        
+        $optimalOperatingNetIncome = $effectiveEquity * $baselineRoe;
+        $optimalEbt = $optimalOperatingNetIncome / (1.0 - $taxRate);
+        
+        $operatingBase = max((float) $stock->getTotalRevenue(), $equity, 10000000.0);
+        $optimalOperatingCash = $this->calculateTargetOperatingCash($operatingBase, 0.0, $optimalDebt);
+        $minOperatingCash = $this->calculateMinOperatingCash($operatingBase, 0.0, $optimalDebt);
+        $optimalYieldingCash = max(0.0, $optimalOperatingCash - $minOperatingCash);
+        $optimalInterestIncome = $optimalYieldingCash * max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+        
+        $optimalEbit = $optimalEbt + $optimalInterestExpense - $optimalInterestIncome;
+        $structuralOperatingYield = $optimalEbit / max(1.0, $effectiveEquity);
+        
+        // Apply the pure structural yield to the ACTUAL active operating equity
+        $targetOperatingCash = $this->calculateTargetOperatingCash($operatingBase, 0.0, $wholesaleDebt);
         $excessCash = max(0.0, $treasury - $targetOperatingCash);
         $operatingEquity = max(1.0, $equity - $excessCash);
         
-        $targetOperatingNetIncome = $operatingEquity * $baselineRoe;
-        $targetEbt = $targetOperatingNetIncome / (1.0 - $taxRate);
-        
-        $operatingInterestIncome = min($treasury, $targetOperatingCash) * max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
-        
-        $targetEbit = $targetEbt + $expectedInterestExpense - $operatingInterestIncome;
+        $targetEbit = $operatingEquity * $structuralOperatingYield;
         // ------------------------------------
+        $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
         
         // The Fee Revenue Floor:
         // Asset-light financials don't have massive balance sheets, but they must maintain 
@@ -62,14 +81,29 @@ class AssetManagementBusinessModel implements BusinessModelInterface
         
         $targetEbit = max($minOperatingEbit, $targetEbit);
         
-        $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
-        
-        $targetRevenue = max(0.0, $targetEbit) / $stableMargin;
+        // We derive revenue from target EBIT to hit ROE expectations, 
+        // but we MUST cap the turnover. If margins compress due to market saturation, 
+        // uncapped reverse-engineering will cause top-line revenue hyperinflation!
+        $unboundedRevenue = max(0.0, $targetEbit) / $stableMargin;
+        $targetRevenue = min($unboundedRevenue, $operatingEquity * 2.0); // Hard cap turnover at 2.0x annually
+
         $impliedTurnover = $targetRevenue / max(1.0, $operatingEquity);
         
         return [
             'invested_capital' => $operatingEquity,
-            'baseline_roic' => $impliedTurnover * $stableMargin
+            'baseline_roic' => ($impliedTurnover * $stableMargin) * (1.0 - $taxRate)
+        ];
+    }
+
+    public function getMacroPhysics(Stock $stock, array $macroState): array
+    {
+        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
+        $beta = (float) $stock->getBeta();
+        
+        return [
+            'macro_demand_shift' => $outputGap * $beta * 0.25,
+            'pricing_power_multiplier' => 1.0, 
+            'operating_leverage_rate' => 0.05, 
         ];
     }
 
@@ -103,7 +137,8 @@ class AssetManagementBusinessModel implements BusinessModelInterface
     {
         $equity = (float) $stock->getTotalEquity();
         $operatingBase = max((float) $stock->getTotalRevenue(), $equity, 10000000.0);
-        $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - ($operatingBase * 0.05));
+        $minCash = $this->calculateMinOperatingCash($operatingBase, 0.0, (float) $stock->getWholesaleDebt());
+        $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - $minCash);
         
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
         
@@ -184,6 +219,12 @@ class AssetManagementBusinessModel implements BusinessModelInterface
     { 
         // Asset managers and brokerages use capital to seed new funds, acquire advisory firms, and build trading platforms.
         return max($organicSpend, $debtIssued * 0.90); 
+    }
+
+    public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float
+    {
+        // Asset managers and brokerages can expand using existing cash hoards before taking on new debt
+        return max(0.0, $baseCapacity - $excessCash);
     }
     public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float { return max($revenueFloorValue, $peFairValue); }
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps): float { return ($earningsValue * 0.90) + ($pbFairValue * 0.10); }

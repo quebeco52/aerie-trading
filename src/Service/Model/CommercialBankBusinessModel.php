@@ -50,19 +50,22 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
 
         // Calculate what the bank MUST pay depositors to keep them from fleeing.
-        $utilization = $equity > 0.0 ? ($totalDebt / ($equity * $equityLimit)) : 1.0;
         $depositRatio = $totalDebt > 0 ? ($customerDeposits / $totalDebt) : 0.0;
-        $decayRate = 0.50 + (1.50 * $depositRatio);
-        $depositBeta = min(0.70, max(0.10, 0.70 * exp(-$decayRate * $utilization)));
+        $depositBeta = $this->calculateDepositBeta($totalDebt, $equity, $equityLimit, $customerDeposits);
         $depositRate = max(0.001, $policyRate * $depositBeta);
         
         $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
 
         // --- THE CLEAR BALANCE SHEET MATH ---
-        // We derive the structural asset yield assuming the bank is fully deployed at optimal leverage.
-        // This prevents the "Free Money Exploit" where injecting idle cash magically forces target EBIT to increase.
+        // We derive the structural asset yield using the bank's ACTUAL deployed leverage (capped at regulatory limits).
+        // This prevents the "Phantom Debt" exploit, where banks operating below max leverage 
+        // pocket the theoretical interest expense as pure Net Income, causing ROE to hyper-inflate.
         $effectiveEquity = max(1.0, $equity);
-        $optimalDebt = $effectiveEquity * max(1.0, $equityLimit - 1.0);
+        
+        $actualLeverage = $effectiveEquity > 0 ? ($totalDebt / $effectiveEquity) : 0.0;
+        $allowedLeverage = min($actualLeverage, max(1.0, $equityLimit));
+        $optimalDebt = $effectiveEquity * $allowedLeverage;
+        
         $optimalEarningAssets = $effectiveEquity + $optimalDebt;
         
         $optimalWholesaleDebt = $optimalDebt * (1.0 - $depositRatio);
@@ -89,12 +92,29 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
         
-        $targetRevenue = max(0.0, $targetEbit) / $stableMargin;
+        // We derive revenue from target EBIT to hit ROE expectations, 
+        // but we MUST cap the gross yield. If margins compress, uncapped 
+        // reverse-engineering will cause the bank's loan yields to hyperinflate!
+        $unboundedRevenue = max(0.0, $targetEbit) / $stableMargin;
+        $targetRevenue = min($unboundedRevenue, $earningAssets * 0.40); // Hard cap gross yield at 40% annually
+
         $grossYield = $targetRevenue / max(1.0, abs($earningAssets));
         
         return [
             'invested_capital' => $earningAssets,
-            'baseline_roic' => $grossYield * $stableMargin
+            'baseline_roic' => ($grossYield * $stableMargin) * (1.0 - $taxRate)
+        ];
+    }
+
+    public function getMacroPhysics(Stock $stock, array $macroState): array
+    {
+        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
+        $beta = (float) $stock->getBeta();
+        
+        return [
+            'macro_demand_shift' => $outputGap * $beta * 0.25, // Less demand destruction than physical goods
+            'pricing_power_multiplier' => 1.0, // Top-line yields price off bond market natively
+            'operating_leverage_rate' => 0.05, // Lower physical leverage compared to factories
         ];
     }
 
@@ -124,7 +144,7 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $yield2y = $macroState['yield_2y_ema'] ?? ($macroState['yield_2y'] ?? 0.03);
         
         $bankSpread = $yield10y - $yield2y;
-        $nimSqueeze = (0.010 - $bankSpread) * 1.0;
+        $nimSqueeze = (0.005 - $bankSpread) * 1.0;
         
         $actualVariableCosts = $actualRevenue * min(0.99, max(0.01, $realizedVariableMargin + $lossProvisionShock + $nimSqueeze));
         
@@ -192,8 +212,9 @@ class CommercialBankBusinessModel implements BusinessModelInterface
     public function evaluateHoardingStatus(float $excessCash, float $operatingBase, float $totalDebt): array
     {
         return [
-            'is_hoarder'      => $excessCash > ($totalDebt * 0.20),
-            'is_mega_hoarder' => $excessCash > ($totalDebt * 0.40),
+            // Banks operate on fractional reserves. Holding more than 5% of their total debt in purely IDLE excess cash is hoarding.
+            'is_hoarder'      => $excessCash > ($totalDebt * 0.05),
+            'is_mega_hoarder' => $excessCash > ($totalDebt * 0.10),
         ];
     }
 
@@ -202,9 +223,9 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $utilization = $equity > 0.0 ? ($totalDebt / ($equity * $equityLimit)) : 1.0;
         $depositRatio = $totalDebt > 0 ? ($customerDeposits / $totalDebt) : 0.0;
         
-        $decayRate = 0.50 + (1.50 * $depositRatio);
+        $decayRate = 0.50 + (2.00 * $depositRatio);
         
-        return min(0.70, max(0.10, 0.70 * exp(-$decayRate * $utilization)));
+        return min(0.70, max(0.10, 0.80 * exp(-$decayRate * $utilization)));
     }
 
     public function calculateCapacityModifier(float $totalDebt, float $equity, float $equityLimit, ?float $coreLiabilities = null): float { return 1.0; }
@@ -234,8 +255,14 @@ class CommercialBankBusinessModel implements BusinessModelInterface
 
     public function getInterestCoverage(float $ebit, float $interestExpense): float { return $interestExpense > 0 ? ($ebit / $interestExpense) : ($ebit > 0 ? 999.0 : -999.0); }
     public function calculateCashYield(array $macroState, float $policyRate): float { return max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD); }
-    public function getDebtExpansionAggressiveness(float $spreadMultiplier): array { return ['probability' => 0.85 + ($spreadMultiplier * 0.15), 'aggressiveness' => 0.05 + (0.15 * $spreadMultiplier)]; }
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier): array { return ['probability' => 0.85 + ($spreadMultiplier * 0.15), 'aggressiveness' => 0.15 + (0.35 * $spreadMultiplier)]; }
     public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float { return max($organicSpend, $debtIssued * 0.95); }
+
+    public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float
+    {
+        // Banks must use their cheap deposit inflows (excess cash) before issuing expensive wholesale debt
+        return max(0.0, $baseCapacity - $excessCash);
+    }
     public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float { return $peFairValue; }
 
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps): float
@@ -281,10 +308,8 @@ class CommercialBankBusinessModel implements BusinessModelInterface
             
             if ($state['treasury'] < 0.0) {
                 $liquidityShortfall = abs($state['treasury']);
-                $state['treasury'] = 0.0;
-                $state['wholesaleDebt'] += $liquidityShortfall;
                 $amtB = number_format($liquidityShortfall / 1_000_000_000, 2);
-                $state['events'][] = ['description' => "Suffered a bank run. Forced to borrow \${$amtB}B to cover deposit flight.", 'shock' => -5.0];
+                $state['events'][] = ['description' => "Suffered a bank run. Forced into emergency borrowing of \${$amtB}B to cover deposit flight.", 'shock' => -5.0];
             }
             $stock->setCustomerDeposits((string) max(0.0, $state['customerDeposits']));
             if (($liabilityChange / $currentLiabilities) < -0.005) $state['events'][] = ['description' => "Suffered \$" . number_format(abs($liabilityChange) / 1_000_000_000, 2) . "B in customer deposit flight.", 'shock' => -2.0];

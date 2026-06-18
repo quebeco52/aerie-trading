@@ -33,6 +33,7 @@ class Sectors
         'tech'            => 'Asset-light platform businesses with near-zero marginal costs. Immune to physical supply chains but exposed to high wage inflation. Features higher baseline volatility and fat-tail risks like massive regulatory anti-trust fines or data breaches.',
         'consumer_staples' => 'Produces essential goods and non-cyclical services (Food, Tobacco, Household, Medical Care Facilities, Discount Stores). Features inelastic demand (very low volatility) and high pricing power, allowing them to completely ignore supply chain inflation penalties.',
         'defense_contractor' => 'Operates on government "Cost-Plus" contracts and municipal defense budgets (Aerospace, Security Services). Highly immune to recessions. Because their profit margin is a guaranteed percentage of total costs, inflation actually increases their absolute earnings.',
+        'clearing_house'  => 'Acts as the ultimate guarantor of all market trades. Holds massive "Initial Margin" deposits from member firms, earning interest on the float. Revenue scales off transaction volume, thriving during market panics (high VIX). Carries extreme apocalyptic tail risk if member defaults exceed the margin pool. Evaluated on ROE.',
         'none'            => 'Standard corporate physics. Evaluated on Return on Invested Capital (ROIC). Subject to physical depreciation and supply chain inflation penalties when costs rise faster than pricing power. Idiosyncratic variance applies directly to sales volume.',
     ];
 
@@ -77,6 +78,7 @@ class Sectors
         'Farm & Heavy Construction Machinery' => ['pe' => 15.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'none'],
         'Farm Products' => ['pe' => 16.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'business_model' => 'consumer_staples'],
         'Financial Data & Stock Exchanges' => ['pe' => 26.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'financial_data'], // Monopolies, high P/E
+        'Financial Clearinghouses' => ['pe' => 18.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 8.0, 'business_model' => 'clearing_house'],
         'Food Distribution' => ['pe' => 18.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'business_model' => 'none'],
         'Footwear & Accessories' => ['pe' => 18.00, 'depreciation' => 0.06, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'none'],
         'Furnishings, Fixtures & Appliances' => ['pe' => 15.00, 'depreciation' => 0.06, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'none'],
@@ -177,6 +179,7 @@ class Sectors
         'tech'            => ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00],
         'consumer_staples' => ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00],
         'defense_contractor' => ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00],
+        'clearing_house'  => ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15],
         'none'            => ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00],
     ];
 
@@ -199,7 +202,7 @@ class Sectors
      */
     public static function isFinancial(string $businessModel): bool
     {
-        return in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager', 'credit_services', 'shadow_bank', 'private_equity']);
+        return in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager', 'credit_services', 'shadow_bank', 'private_equity', 'clearing_house']);
     }
 
     /**
@@ -219,6 +222,7 @@ class Sectors
             'private_equity'  => new \App\Service\Model\PrivateEquityBusinessModel(),
             'shadow_bank'     => new \App\Service\Model\ShadowBankBusinessModel(),
             'reit'            => new \App\Service\Model\ReitBusinessModel(),
+            'clearing_house'  => new \App\Service\Model\ClearingHouseBusinessModel(),
             'utility'         => new \App\Service\Model\UtilityBusinessModel(),
             'commodity'       => new \App\Service\Model\CommodityBusinessModel(),
             'financial_data'  => new \App\Service\Model\FinancialDataBusinessModel(),

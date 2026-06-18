@@ -14,6 +14,8 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use App\Service\Math\MathUtility;
+use App\Service\Macro\MacroEngine;
 
 #[AsCommand(
     name: 'app:market-seed',
@@ -23,7 +25,8 @@ class MarketSeedCommand extends Command
 {
     public function __construct(
         private EntityManagerInterface $entityManager,
-        private UserPasswordHasherInterface $passwordHasher
+        private UserPasswordHasherInterface $passwordHasher,
+        private MathUtility $mathUtility
     ) {
         parent::__construct();
     }
@@ -32,6 +35,14 @@ class MarketSeedCommand extends Command
     {
         $io = new SymfonyStyle($input, $output);
         $io->title('Seeding the Lakebird Exchange (Production)');
+
+        $dummyMacro = [
+            'policy_rate_ema' => 0.04,
+            'yield_5y_ema' => 0.045,
+            'yield_10y_ema' => 0.05,
+            'output_gap_ema' => 0.0,
+            'corporate_tax_rate' => MacroEngine::BASE_CORPORATE_TAX_RATE,
+        ];
 
         // Loop through ETFs
         foreach (InitialMarket::ETFS as $etfData) {
@@ -55,9 +66,10 @@ class MarketSeedCommand extends Command
                 $stock->setIndustry($stockData['industry'] ?? null);
                 $stock->setPrice((string) $stockData['price']);
 
-                $targetPE = Sectors::MACRO_SECTORS[$stockData['sector']] ?? 20.0;
-                $neutralEps = (float) $stockData['price'] / $targetPE;
-                $stock->setEarningsPerShare((string) round($neutralEps, 2));
+                $netIncome = $stockData['total_net_income'] ?? 0.00;
+                $shares = $stockData['shares_outstanding'] ?? 1_000_000_000;
+                $trueEps = $shares > 0 ? ($netIncome / $shares) : 0.0;
+                $stock->setEarningsPerShare((string) round($trueEps, 2));
 
                 $stock->setSharesOutstanding((string) $stockData['shares_outstanding']);
                 $stock->setVolatility((string) $stockData['volatility']);
@@ -100,16 +112,16 @@ class MarketSeedCommand extends Command
                 
                 $netIncome = $stockData['total_net_income'] ?? 0.00;
                 $margin = $stockData['operating_margin'] ?? 0.15;
-                $historicalRate = $stockData['historical_fixed_rate'] ?? 0.04;
-                $wholesaleDebt = $stockData['wholesale_debt'] ?? 0.0;
-                $customerDeposits = $stockData['customer_deposits'] ?? 0.0;
-                $treasury = $stockData['corporate_treasury'] ?? 0.0;
 
-                $interestExpense = ($wholesaleDebt * $historicalRate) + ($customerDeposits * 0.015);
-                $interestIncome = $treasury * 0.0375;
-                $ebt = $netIncome / 0.79;
-                $ebit = $ebt + $interestExpense - $interestIncome;
-                $revenue = $margin > 0 ? max(0.0, $ebit / $margin) : 0.0;
+                $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+
+                // Query the exact structural metrics the engine uses to prevent massive gravity explosions on tick 1
+                $targetMetrics = $strategy->getTargetMetrics($stock, $dummyMacro, $this->mathUtility);
+                $investedCapital = $targetMetrics['invested_capital'];
+                $impliedRoic = max(0.01, (float) $targetMetrics['baseline_roic']);
+                $taxRate = $dummyMacro['corporate_tax_rate'] ?? 0.21;
+                $preTaxRoic = $impliedRoic / (1.0 - $taxRate);
+                $revenue = $margin > 0 ? ($investedCapital * ($preTaxRoic / $margin)) : 0.0;
                 
                 $stock->setTotalRevenue((string) $revenue);
 
@@ -139,6 +151,7 @@ class MarketSeedCommand extends Command
         }
         
         $user->setUsername('Test');
+        $user->setIsVerified(true);
 
         // Seed procedural mega-corps if none exist
         /*

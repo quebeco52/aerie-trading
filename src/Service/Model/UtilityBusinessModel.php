@@ -27,6 +27,18 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         ];
     }
 
+    public function getMacroPhysics(Stock $stock, array $macroState): array
+    {
+        $physics = parent::getMacroPhysics($stock, $macroState);
+        
+        // Regulated Utilities are virtually immune to economic output gaps (people always need power/water)
+        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
+        $beta = (float) $stock->getBeta();
+        $physics['macro_demand_shift'] = $outputGap * $beta * 0.10;
+        
+        return $physics;
+    }
+
     /**
      * Utility revenues are incredibly predictable. Weather causes minor fluctuations, but otherwise flat.
      */

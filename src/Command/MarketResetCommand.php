@@ -12,6 +12,8 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use App\Service\Math\MathUtility;
+use App\Service\Macro\MacroEngine;
 
 #[AsCommand(
     name: 'app:market-reset',
@@ -22,7 +24,8 @@ class MarketResetCommand extends Command
     public function __construct(
         private EntityManagerInterface $entityManager,
         private \Redis $redis,
-        private UserPasswordHasherInterface $passwordHasher
+        private UserPasswordHasherInterface $passwordHasher,
+        private MathUtility $mathUtility
     ) {
         parent::__construct();
     }
@@ -78,6 +81,15 @@ class MarketResetCommand extends Command
         $this->redis->flushAll();
 
         $io->text('3. Resetting Stock Prices & Absolute Values...');
+
+        $dummyMacro = [
+            'policy_rate_ema' => 0.04,
+            'yield_5y_ema' => 0.045,
+            'yield_10y_ema' => 0.05,
+            'output_gap_ema' => 0.0,
+            'corporate_tax_rate' => MacroEngine::BASE_CORPORATE_TAX_RATE,
+        ];
+
         foreach (InitialMarket::STOCKS as $stockData) {
             
             $netIncome = $stockData['total_net_income'] ?? 0.00;
@@ -88,18 +100,37 @@ class MarketResetCommand extends Command
             $customerDeposits = $stockData['customer_deposits'] ?? 0.0;
             $treasury = $stockData['corporate_treasury'] ?? 0.0;
             
-            $interestExpense = ($wholesaleDebt * $historicalRate) + ($customerDeposits * 0.015);
-            $interestIncome = $treasury * 0.0375;
-            $ebt = $netIncome / 0.79;
-            $ebit = $ebt + $interestExpense - $interestIncome;
-            $revenue = $margin > 0 ? max(0.0, $ebit / $margin) : 0.0;
+            $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['business_model'] ?? 'none';
+            $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+            $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
+
+            // Create a temporary entity to leverage the proper business model physics
+            $tempStock = new Stock();
+            $tempStock->setTotalEquity((string) ($stockData['total_equity'] ?? 0.0));
+            $tempStock->setWholesaleDebt((string) $wholesaleDebt);
+            $tempStock->setCustomerDeposits((string) $customerDeposits);
+            $tempStock->setCorporateTreasury((string) $treasury);
+            $tempStock->setFloatingDebtRatio((string) ($stockData['floating_debt_ratio'] ?? 0.30));
+            $tempStock->setHistoricalFixedRate((string) $historicalRate);
+            $tempStock->setOperatingMargin((string) $margin);
+            $tempStock->setIndustry($stockData['industry'] ?? 'General');
+            $tempStock->setBaselineRoe((string) ($isFinancial ? ($stockData['baseline_roe'] ?? $stockData['baseline_roic'] ?? 0.10) : 0.10));
+            $tempStock->setBaselineRoic((string) ($isFinancial ? 0.10 : ($stockData['baseline_roic'] ?? 0.10)));
+            
+
+            // Query the exact structural metrics the engine uses to prevent massive gravity explosions on tick 1
+            $targetMetrics = $strategy->getTargetMetrics($tempStock, $dummyMacro, $this->mathUtility);
+            $investedCapital = $targetMetrics['invested_capital'];
+            $impliedRoic = max(0.01, (float) $targetMetrics['baseline_roic']);
+            $taxRate = $dummyMacro['corporate_tax_rate'] ?? 0.21;
+            $preTaxRoic = $impliedRoic / (1.0 - $taxRate);
+            $revenue = $margin > 0 ? ($investedCapital * ($preTaxRoic / $margin)) : 0.0;
             
             $shares = $stockData['shares_outstanding'] ?? 1_000_000_000;
             $annualEps = $shares > 0 ? ($netIncome / $shares) : 0.0;
             $targetPayout = $stockData['target_payout_ratio'] ?? 0.30;
             $startingDividend = ($annualEps / 4.0) * ($targetPayout * 0.50);
 
-            $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['business_model'] ?? 'none';
             $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
 
             $conn->executeStatement(

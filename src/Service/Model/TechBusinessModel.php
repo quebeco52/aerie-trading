@@ -16,6 +16,17 @@ use App\Service\Math\MathUtility;
  */
 class TechBusinessModel extends StandardCorporateBusinessModel
 {
+    public function getMacroPhysics(Stock $stock, array $macroState): array
+    {
+        $physics = parent::getMacroPhysics($stock, $macroState);
+        
+        // Tech companies have massive structural operating leverage. 
+        // The marginal cost of adding an additional software user is practically zero.
+        $physics['operating_leverage_rate'] = 0.25;
+        
+        return $physics;
+    }
+
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array $macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();

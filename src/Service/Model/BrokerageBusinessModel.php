@@ -49,4 +49,31 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
             'event_lore' => $eventLore
         ];
     }
+
+    /**
+     * Brokerages and Investment Banks do not dump their treasury into 60/40 mutual funds.
+     * Their excess cash must remain highly liquid to satisfy clearinghouse margin requirements 
+     * and strict regulatory capital constraints. They earn standard risk-free money market yields.
+     */
+    public function calculateCashYield(array $macroState, float $policyRate): float
+    {
+        return max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+    }
+
+    /**
+     * Brokerages require significantly higher liquidity than standard asset managers.
+     * They must hold massive cash reserves against their wholesale debt to satisfy 
+     * clearinghouse margin requirements and facilitate high-frequency trade settlements.
+     */
+    public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
+    {
+        // Requires 15% cash backing on all outstanding wholesale debt
+        return max($operatingBase * 0.15, $wholesaleDebt * 0.15);
+    }
+
+    public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
+    {
+        // Hard 10% liquidity floor to prevent catastrophic margin calls
+        return max($operatingBase * 0.10, $wholesaleDebt * 0.10);
+    }
 }
