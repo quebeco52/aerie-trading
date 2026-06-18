@@ -3,8 +3,8 @@
 namespace App\Tests\Service;
 
 use PHPUnit\Framework\TestCase;
-use App\Service\MarketEngine;
-use App\Service\MathUtility;
+use App\Service\Market\MarketEngine;
+use App\Service\Math\MathUtility;
 use PHPUnit\Framework\MockObject\MockObject;
 
 class MarketEngineTest extends TestCase

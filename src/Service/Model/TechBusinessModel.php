@@ -4,6 +4,8 @@ namespace App\Service\Model;
 
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Event\ShockEvent;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Technology & Software companies.
@@ -22,7 +24,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         
         // Tech companies have massive structural operating leverage. 
         // The marginal cost of adding an additional software user is practically zero.
-        $physics['operating_leverage_rate'] = 0.25;
+        $physics['operating_leverage_rate'] = FinancialConstants::TECH_OPERATING_LEVERAGE;
         
         return $physics;
     }
@@ -45,17 +47,17 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         // Fat Tail Risk: Data Breaches, Anti-Trust, and Viral Breakthroughs
         $eventZ = $mathUtility->generateStandardNormal();
         $regulatoryShock = 0.0;
-        $eventLore = null;
+        $eventType = null;
         
         if ($eventZ < -2.5) {
             $regulatoryShock = 0.15; // Massive fixed cost fine / margin hit
-            $eventLore = "Suffered a massive anti-trust fine and sweeping data privacy restrictions.";
+            $eventType = ShockEvent::REGULATORY_FINE;
         } elseif ($eventZ < -2.0) {
             $regulatoryShock = 0.05;
-            $eventLore = "Experienced severe decline due to user trends.";
+            $eventType = ShockEvent::SEVERE_CHURN;
         } elseif ($eventZ > 2.5) {
             $actualRevenue *= 1.10; // 10% instant revenue bump
-            $eventLore = "Achieved viral product-market fit with a major new software breakthrough.";
+            $eventType = ShockEvent::VIRAL_GROWTH;
         }
 
         $actualVariableCosts = $actualRevenue * min(0.99, max(0.01, $realizedVariableMargin + $wageInflationPenalty + $regulatoryShock));
@@ -67,7 +69,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
             'ebit' => $ebit, 
             // Pass whichever Z-Score was more extreme so Volatility logic scales accordingly
             'primary_shock_z' => abs($eventZ) > abs($revenueZ) ? $eventZ : $revenueZ,
-            'event_lore' => $eventLore
+            'event_type' => $eventType
         ];
     }
 }

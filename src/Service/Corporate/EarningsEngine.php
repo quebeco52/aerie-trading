@@ -7,6 +7,8 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Math\MathUtility;
+use App\Service\Event\NarrativeEngine;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Handles the simulation of quarterly earnings reports.
@@ -14,25 +16,6 @@ use App\Service\Math\MathUtility;
  */
 class EarningsEngine
 {
-    // Volatility Adjustment Constants
-    /** @var float Z-Score threshold required to trigger an earnings surprise volatility spike. */
-    private const SURPRISE_Z_SCORE_THRESHOLD = 1.5;
-    /** @var float Z-Score threshold below which an earnings report is considered highly predictable, cooling volatility. */
-    private const BORING_Z_SCORE_THRESHOLD = 0.5;
-    /** @var float The multiplier applied to volatility when an earnings surprise occurs. */
-    private const VOLATILITY_SHOCK_FACTOR = 0.2;
-    /** @var float The percentage by which volatility cools after a boring report. */
-    private const VOLATILITY_COOLING_FACTOR = 0.25;
-    /** @var float The maximum allowable volatility multiplier from a single earnings event. */
-    private const MAX_VOLATILITY_MULTIPLIER = 3.0;
-    
-
-    // Price Gap Constants
-    /** @var float Dampens the immediate price jump/drop to prevent unrealistic fractional penny wipes. */
-    private const PRICE_GAP_DAMPENING = 0.20;
-    /** @var float Caps the maximum immediate price gap from a single earnings report. */
-    private const MAX_PRICE_GAP = 0.25;
-
     /**
      * Constructor.
      *
@@ -45,7 +28,8 @@ class EarningsEngine
         private CapitalAllocationEngine $capitalAllocationEngine,
         private DebtEngine $debtEngine,
         private MathUtility $mathUtility,
-        private CorporateMetrics $corporateMetrics
+        private CorporateMetrics $corporateMetrics,
+        private NarrativeEngine $narrativeEngine
     ) {}
 
     /**
@@ -203,7 +187,8 @@ class EarningsEngine
         $actualVariableCosts = $shockData['actual_variable_costs'];
         $ebit = $shockData['ebit'];
         $primaryShockZ = $shockData['primary_shock_z'];
-        $customEventLore = $shockData['event_lore'] ?? null;
+        $eventType = $shockData['event_type'] ?? null;
+        $customEventLore = $eventType ? $this->narrativeEngine->generateLore($eventType, $shockData['context'] ?? []) : ($shockData['event_lore'] ?? null);
 
         // Calculate EXPECTED Interest Expense (Pre-Shock)
         $expectedOperatingMargin = $expectedEbit / max(1.0, $expectedRevenue);
@@ -289,7 +274,16 @@ class EarningsEngine
             $actualAnnualCapEx = $fcfData['capex'];
 
             $currentPrice = (float) $stock->getPrice();
-            $currentPE = $actualAnnualEpsRaw > 0 ? $currentPrice / $actualAnnualEpsRaw : 35.0; // Fallback to a growth multiple if negative
+            
+            if ($actualAnnualEpsRaw > 0) {
+                $currentPE = $currentPrice / $actualAnnualEpsRaw;
+            } else {
+                // Fallback to Price-to-Sales (P/S) equivalent for unprofitable companies
+                $salesPerShare = $sharesOutstanding > 0 ? $actualRevenue / $sharesOutstanding : 1.0;
+                $priceToSales = $salesPerShare > 0 ? $currentPrice / $salesPerShare : 1.0;
+                // A P/S of 1.5 is roughly equivalent to a 15 P/E for a 10% margin business
+                $currentPE = $priceToSales * 10.0; 
+            }
 
             $priceGapPct = $this->calculatePriceGap($surprisePct, $currentPE, $beta);
             $quarterlyFcfPerShare = $annualFcfPerShare / 4.0;
@@ -331,7 +325,12 @@ class EarningsEngine
 
             if (!empty($allocation['events'])) {
                 foreach ($allocation['events'] as $subEvent) {
-                    $corporateActionDescriptions .= "\n• " . $subEvent['description'];
+                    if (isset($subEvent['event_type'])) {
+                        $desc = $this->narrativeEngine->generateLore($subEvent['event_type'], $subEvent['context'] ?? []);
+                    } else {
+                        $desc = $subEvent['description'] ?? '';
+                    }
+                    $corporateActionDescriptions .= "\n• " . $desc;
                     $totalShockPct += ($subEvent['shock'] / 100.0);
                 }
             }
@@ -496,14 +495,14 @@ class EarningsEngine
         $currentVol = (float) $stock->getCurrentVolatility();
         $zScore = abs($revenueZ); // How many standard deviations away from expectations
 
-        if ($zScore > self::SURPRISE_Z_SCORE_THRESHOLD) {
+        if ($zScore > FinancialConstants::SURPRISE_Z_SCORE_THRESHOLD) {
             // A 1.5+ sigma event is a genuine surprise. Spike the volatility.
-            $shockMultiplier = 1.0 + (($zScore - 1.0) * self::VOLATILITY_SHOCK_FACTOR);
-            $newVol = min($currentVol * $shockMultiplier, $baselineVol * self::MAX_VOLATILITY_MULTIPLIER);
+            $shockMultiplier = 1.0 + (($zScore - 1.0) * FinancialConstants::VOLATILITY_SHOCK_FACTOR);
+            $newVol = min($currentVol * $shockMultiplier, $baselineVol * FinancialConstants::MAX_VOLATILITY_MULTIPLIER);
             $stock->setCurrentVolatility((string) $newVol);
-        } elseif ($zScore < self::BORING_Z_SCORE_THRESHOLD && $currentVol > $baselineVol) {
+        } elseif ($zScore < FinancialConstants::BORING_Z_SCORE_THRESHOLD && $currentVol > $baselineVol) {
             // A boring, highly predictable quarter. Volatility cools off.
-            $newVol = $currentVol - (($currentVol - $baselineVol) * self::VOLATILITY_COOLING_FACTOR);
+            $newVol = $currentVol - (($currentVol - $baselineVol) * FinancialConstants::VOLATILITY_COOLING_FACTOR);
             $stock->setCurrentVolatility((string) max($newVol, $baselineVol));
         }
     }
@@ -524,16 +523,16 @@ class EarningsEngine
         // ASYMMETRIC VALUATION PHYSICS: 
         // Growth stocks (High PE) have "perfection priced in" and are punished brutally for misses.
         // Value stocks (Low PE) have lower expectations, taking smaller hits on misses but smaller pops on beats.
-        $valuationPremium = max(0.5, min(3.0, $peRatio / 15.0)); // 15.0 is baseline market PE
+        $valuationPremium = max(0.5, min(3.0, $peRatio / FinancialConstants::BASELINE_MARKET_PE)); 
 
         if ($surprisePct < 0) {
-            $priceGapPct = $surprisePct * self::PRICE_GAP_DAMPENING * $valuationPremium * max(0.8, $beta);
+            $priceGapPct = $surprisePct * FinancialConstants::PRICE_GAP_DAMPENING * $valuationPremium * max(0.8, $beta);
         } else {
             // Dampen reward for high-fliers (it was already priced in)
-            $priceGapPct = $surprisePct * self::PRICE_GAP_DAMPENING * (1.0 / sqrt($valuationPremium));
+            $priceGapPct = $surprisePct * FinancialConstants::PRICE_GAP_DAMPENING * (1.0 / sqrt($valuationPremium));
         }
 
-        return max(-self::MAX_PRICE_GAP, min(self::MAX_PRICE_GAP, $priceGapPct));
+        return max(-FinancialConstants::MAX_PRICE_GAP, min(FinancialConstants::MAX_PRICE_GAP, $priceGapPct));
     }
 
     /**

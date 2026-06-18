@@ -3,11 +3,13 @@
 namespace App\Tests\Service;
 
 use PHPUnit\Framework\TestCase;
-use App\Service\EarningsEngine;
-use App\Service\MathUtility;
-use App\Service\MarketEvent;
-use App\Service\CorporateActionEngine;
-use App\Service\DebtEngine;
+use App\Service\Corporate\EarningsEngine;
+use App\Service\Math\MathUtility;
+use App\Service\Math\CorporateMetrics;
+use App\Service\Event\NarrativeEngine;
+use App\Service\Event\MarketEventPublisher;
+use App\Service\Corporate\CapitalAllocationEngine;
+use App\Service\Corporate\DebtEngine;
 use App\Data\EconomicCycle;
 use App\Entity\Stock;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -16,18 +18,20 @@ use Doctrine\ORM\EntityManagerInterface;
 class EarningsEngineTest extends TestCase
 {
     private MathUtility|MockObject $mathUtilityMock;
-    private MarketEvent|MockObject $marketEventMock;
+    private MarketEventPublisher|MockObject $marketEventMock;
     private EntityManagerInterface|MockObject $entityManagerMock;
-    private CorporateActionEngine|MockObject $corporateActionEngineMock;
+    private CapitalAllocationEngine|MockObject $capitalAllocationEngineMock;
     private DebtEngine|MockObject $debtEngineMock;
+    private CorporateMetrics|MockObject $corporateMetricsMock;
+    private NarrativeEngine|MockObject $narrativeEngineMock;
     private EarningsEngine $engine;
 
     protected function setUp(): void
     {
         $this->entityManagerMock = $this->createMock(EntityManagerInterface::class);
         
-        $this->corporateActionEngineMock = $this->createMock(CorporateActionEngine::class);
-        $this->corporateActionEngineMock->method('allocateCapital')->willReturn([
+        $this->capitalAllocationEngineMock = $this->createMock(CapitalAllocationEngine::class);
+        $this->capitalAllocationEngineMock->method('allocateCapital')->willReturn([
             'new_shares' => 1000000,
             'dividend_paid' => 0.0,
             'total_paid' => 0.0,
@@ -62,7 +66,7 @@ class EarningsEngineTest extends TestCase
             'raw_metrics' => []
         ]);
 
-        $this->marketEventMock = $this->createMock(MarketEvent::class);
+        $this->marketEventMock = $this->createMock(MarketEventPublisher::class);
         $this->marketEventMock->method('publish')->willReturnCallback(function($stock, $type, $desc, $pct) {
             return [
                 'type' => $type,
@@ -75,13 +79,20 @@ class EarningsEngineTest extends TestCase
         // 3. Mock MathUtility to control the stochastic Z-scores
         $this->mathUtilityMock = $this->createMock(MathUtility::class);
 
-        // 4. Instantiate the Engine
+        $this->corporateMetricsMock = $this->createMock(CorporateMetrics::class);
+        $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(10000000.0);
+
+        $this->narrativeEngineMock = $this->createMock(NarrativeEngine::class);
+
+        // Instantiate the core engine
         $this->engine = new EarningsEngine(
-            $this->entityManagerMock,
-            $this->marketEventMock,
-            $this->corporateActionEngineMock,
-            $this->debtEngineMock,
-            $this->mathUtilityMock
+            $this->entityManagerMock, 
+            $this->marketEventMock, 
+            $this->capitalAllocationEngineMock, 
+            $this->debtEngineMock, 
+            $this->mathUtilityMock,
+            $this->corporateMetricsMock,
+            $this->narrativeEngineMock
         );
     }
 

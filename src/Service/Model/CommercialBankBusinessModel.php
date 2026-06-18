@@ -5,6 +5,8 @@ namespace App\Service\Model;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
+use App\Service\Event\ShockEvent;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Commercial Banks.
@@ -114,7 +116,7 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         return [
             'macro_demand_shift' => $outputGap * $beta * 0.25, // Less demand destruction than physical goods
             'pricing_power_multiplier' => 1.0, // Top-line yields price off bond market natively
-            'operating_leverage_rate' => 0.05, // Lower physical leverage compared to factories
+            'operating_leverage_rate' => FinancialConstants::BANK_OPERATING_LEVERAGE, // Lower physical leverage compared to factories
         ];
     }
 
@@ -144,15 +146,19 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $yield2y = $macroState['yield_2y_ema'] ?? ($macroState['yield_2y'] ?? 0.03);
         
         $bankSpread = $yield10y - $yield2y;
-        $nimSqueeze = (0.005 - $bankSpread) * 1.0;
+        if ($bankSpread < 0) {
+            $nimSqueeze = (0.005 - $bankSpread) + pow(abs($bankSpread) * 50, 2) * 0.01;
+        } else {
+            $nimSqueeze = (0.005 - $bankSpread) * 1.0;
+        }
         
         $actualVariableCosts = $actualRevenue * min(0.99, max(0.01, $realizedVariableMargin + $lossProvisionShock + $nimSqueeze));
         
-        $eventLore = null;
+        $eventType = null;
         if ($defaultZ < -2.0) {
-            $eventLore = "Took a massive provision for credit losses due to rising loan defaults.";
+            $eventType = ShockEvent::MASSIVE_CREDIT_PROVISION;
         } elseif ($defaultZ < -1.5) {
-            $eventLore = "Elevated loan defaults negatively impacted quarterly margins.";
+            $eventType = ShockEvent::ELEVATED_LOAN_DEFAULTS;
         }
 
         return [
@@ -160,7 +166,7 @@ class CommercialBankBusinessModel implements BusinessModelInterface
             'actual_variable_costs' => $actualVariableCosts, 
             'ebit' => $actualRevenue - $fixedCosts - $actualVariableCosts, 
             'primary_shock_z' => abs($defaultZ) > abs($revenueZ) ? $defaultZ : $revenueZ,
-            'event_lore' => $eventLore
+            'event_type' => $eventType
         ];
     }
 
@@ -309,11 +315,11 @@ class CommercialBankBusinessModel implements BusinessModelInterface
             if ($state['treasury'] < 0.0) {
                 $liquidityShortfall = abs($state['treasury']);
                 $amtB = number_format($liquidityShortfall / 1_000_000_000, 2);
-                $state['events'][] = ['description' => "Suffered a bank run. Forced into emergency borrowing of \${$amtB}B to cover deposit flight.", 'shock' => -5.0];
+                $state['events'][] = ['event_type' => ShockEvent::BANK_RUN, 'context' => ['amount' => $amtB], 'shock' => -5.0];
             }
             $stock->setCustomerDeposits((string) max(0.0, $state['customerDeposits']));
-            if (($liabilityChange / $currentLiabilities) < -0.005) $state['events'][] = ['description' => "Suffered \$" . number_format(abs($liabilityChange) / 1_000_000_000, 2) . "B in customer deposit flight.", 'shock' => -2.0];
-            elseif (($liabilityChange / $currentLiabilities) > 0.005) $state['events'][] = ['description' => "Captured \$" . number_format($liabilityChange / 1_000_000_000, 2) . "B in new customer deposits.", 'shock' => 0.5];
+            if (($liabilityChange / $currentLiabilities) < -0.005) $state['events'][] = ['event_type' => ShockEvent::CUSTOMER_DEPOSIT_FLIGHT, 'context' => ['amount' => number_format(abs($liabilityChange) / 1_000_000_000, 2)], 'shock' => -2.0];
+            elseif (($liabilityChange / $currentLiabilities) > 0.005) $state['events'][] = ['event_type' => ShockEvent::CAPTURED_NEW_DEPOSITS, 'context' => ['amount' => number_format($liabilityChange / 1_000_000_000, 2)], 'shock' => 0.5];
         }
     }
 }

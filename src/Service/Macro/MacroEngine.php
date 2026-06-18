@@ -4,6 +4,7 @@ namespace App\Service\Macro;
 
 use Psr\Log\LoggerInterface;
 use App\Service\Math\MathUtility;
+use App\Service\Event\ShockEvent;
 
 class MacroEngine
 {
@@ -125,6 +126,25 @@ class MacroEngine
 
         $erp = max(0.02, $erp); // Floor at 2% to prevent WACC from collapsing completely
 
+        // SYSTEMIC MACRO SHOCKS
+        // A rare event that triggers massive economic shifts.
+        $eventType = null;
+        if ($this->mathUtility->checkProbability(0.005 * $dt)) { // ~0.5% chance per year
+            // Generate a massive crisis
+            $shockRoll = $this->mathUtility->generateUniform();
+            if ($shockRoll < 0.33) {
+                $eventType = ShockEvent::GLOBAL_RECESSION;
+                $state['output_gap'] -= 0.05; // Immediate 5% drop in output gap
+            } elseif ($shockRoll < 0.66) {
+                $eventType = ShockEvent::INFLATION_CRISIS;
+                $state['inflation'] += 0.04; // Immediate 4% spike in inflation
+            } else {
+                $eventType = ShockEvent::EMERGENCY_STIMULUS;
+                $state['policy_rate'] = 0.0; // Immediate cut to zero
+                $state['output_gap'] += 0.03; // Stimulus injects GDP
+            }
+        }
+
         $payload = [
             'inflation' => $state['inflation'],
             'inflation_ema' => $state['inflation_ema'],
@@ -148,6 +168,7 @@ class MacroEngine
             'yield_30y_ema' => $state['yield_30y_ema'],
             'qe_active' => $yieldData['qe_suppression'] > 0,
             'corporate_tax_rate' => $state['corporate_tax_rate'] ?? self::BASE_CORPORATE_TAX_RATE,
+            'event_type' => $eventType,
             'equity_risk_premium' => $erp,
             'potential_gdp_index' => $state['potential_gdp_index'],
             'nominal_gdp_index' => $state['nominal_gdp_index'],

@@ -4,14 +4,15 @@ namespace App\Tests\Service;
 
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\MockObject\MockObject;
-use App\Service\StockTracker;
-use App\Service\MergerAndAcquisitionEngine;
-use App\Service\MarketEngine;
-use App\Service\EarningsEngine;
-use App\Service\CorporateActionEngine;
-use App\Service\DebtEngine;
-use App\Service\MarketEvent;
-use App\Service\MathUtility;
+use App\Service\Market\StockTracker;
+use App\Service\Corporate\MergerAndAcquisitionEngine;
+use App\Service\Market\MarketEngine;
+use App\Service\Corporate\EarningsEngine;
+use App\Service\Corporate\CorporateActionEngine;
+use App\Service\Corporate\DebtEngine;
+use App\Service\Event\MarketEventPublisher;
+use App\Service\Math\MathUtility;
+use App\Service\Math\CorporateMetrics;
 use Doctrine\ORM\EntityManagerInterface;
 use App\Entity\Stock;
 use App\Entity\StockEvent;
@@ -24,9 +25,10 @@ class StockTrackerTest extends TestCase
     private EarningsEngine|MockObject $earningsEngineMock;
     private CorporateActionEngine|MockObject $corporateActionEngineMock;
     private MergerAndAcquisitionEngine|MockObject $maEngineMock;
-    private MarketEvent|MockObject $marketEventMock;
+    private MarketEventPublisher|MockObject $marketEventMock;
     private DebtEngine|MockObject $debtEngineMock;
     private MathUtility|MockObject $mathUtilityMock;
+    private CorporateMetrics|MockObject $corporateMetricsMock;
     private StockTracker $tracker;
 
     protected function setUp(): void
@@ -36,9 +38,10 @@ class StockTrackerTest extends TestCase
         $this->earningsEngineMock = $this->createMock(EarningsEngine::class);
         $this->corporateActionEngineMock = $this->createMock(CorporateActionEngine::class);
         $this->maEngineMock = $this->createMock(MergerAndAcquisitionEngine::class);
-        $this->marketEventMock = $this->createMock(MarketEvent::class);
+        $this->marketEventMock = $this->createMock(MarketEventPublisher::class);
         $this->debtEngineMock = $this->createMock(DebtEngine::class);
         $this->mathUtilityMock = $this->createMock(MathUtility::class);
+        $this->corporateMetricsMock = $this->createMock(CorporateMetrics::class);
         
         $this->mathUtilityMock->method('calculateSVJJJumps')->willReturn([
             'price_multiplier' => 1.0,
@@ -59,7 +62,8 @@ class StockTrackerTest extends TestCase
             $this->maEngineMock,
             $this->marketEventMock,
             $this->debtEngineMock,
-            $this->mathUtilityMock
+            $this->mathUtilityMock,
+            $this->corporateMetricsMock
         );
     }
 

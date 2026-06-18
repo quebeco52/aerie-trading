@@ -417,4 +417,5 @@ class MathUtility
     {
         return $unleveredBeta * (1.0 + ((1.0 - $taxRate) * ($debtToEquity * $dampening)));
     }
+
 }

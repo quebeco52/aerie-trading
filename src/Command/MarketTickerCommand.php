@@ -8,6 +8,9 @@ use App\Service\Market\EtfTracker;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\MarketOperator;
 use App\Service\User\Portfolio;
+use App\Service\Event\NarrativeEngine;
+use App\Service\Event\MarketEventPublisher;
+use App\Entity\Etf;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -44,6 +47,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private MarketOperator $marketOperator,
         private Portfolio $portfolio,
         private \Redis $redis,
+        private NarrativeEngine $narrativeEngine,
+        private MarketEventPublisher $marketEvent,
 
         private int $tickIntervalUs,
         private int $ticksPerYear,
@@ -125,6 +130,17 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                 // Check if it's time to record a database snapshot
                 $isHistoryTick = ($tickCount % $historyInterval === 0);
+
+                if (isset($macroState['event_type'])) {
+                    $lbi = $this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
+                    if ($lbi) {
+                        $desc = $this->narrativeEngine->generateLore($macroState['event_type']);
+                        // Massive macro shocks usually coincide with an immediate -5% or +5% index drop/jump
+                        $shockPct = $macroState['event_type'] === \App\Service\Event\ShockEvent::EMERGENCY_STIMULUS ? 5.0 : -5.0;
+                        $macroEvent = $this->marketEvent->publish($lbi, 'SHOCK', $desc, $shockPct);
+                        $events[] = $macroEvent;
+                    }
+                }
 
                 // Update the Stocks
                 $result = $this->stockTracker->updateStocks($stocks, $dt, $isHistoryTick, $macroState, $tickCount, $this->ticksPerYear);

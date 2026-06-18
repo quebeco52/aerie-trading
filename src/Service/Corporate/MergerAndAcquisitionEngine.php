@@ -78,19 +78,32 @@ class MergerAndAcquisitionEngine
         // Normalize the debt ratio against the sector's limit (1.0 = at max leverage, 0.5 = half levered)
         $normalizedDebtUtilization = $debtRatio / max(0.1, $equityLimit);
         
+        $eps = (float) $acquirer->getEarningsPerShare();
+        $currentPE = $eps > 0 ? ($price / $eps) : 9999.0;
+        
+        $trueReturn = $isFinancial ? (float) $acquirer->getCurrentRoe() : (float) $acquirer->getCurrentRoic();
+        $hurdleRate = $isFinancial ? ($health['cost_of_equity'] ?? 0.10) : ($health['wacc'] ?? 0.08);
+        $economicSpread = $trueReturn - $hurdleRate;
+        
+        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($policyRate, $economicSpread);
+        $isOvervalued = $currentPE > ($fairValuePE * 1.5) && $currentPE > 25.0;
+        
         $config = match (true) {
+            $isOvervalued => [
+                'prob' => 0.15, 'spend' => 0.50, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => 'STOCK-FOR-STOCK MERGER', 'use_leverage' => false, 'use_stock' => true
+            ],
             $isMegaHoarder => [
-                'prob' => 0.50, 'spend' => 0.60, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'CONGLOMERATE EXPANSION', 'use_leverage' => false
+                'prob' => 0.50, 'spend' => 0.60, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'CONGLOMERATE EXPANSION', 'use_leverage' => false, 'use_stock' => false
             ],
             $isHoarder => [
-                'prob' => 0.25, 'spend' => 0.40, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'CONGLOMERATE EXPANSION', 'use_leverage' => false
+                'prob' => 0.25, 'spend' => 0.40, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'CONGLOMERATE EXPANSION', 'use_leverage' => false, 'use_stock' => false
             ],
             $health['can_issue_debt'] && $normalizedDebtUtilization < 0.30 && $totalBuyingPower > 5_000_000_000.0 && $costOfNewBorrowing < 0.07 => [
-                'prob' => 0.10, 'spend' => 0.40, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'LEVERAGED BUYOUT', 'use_leverage' => true
+                'prob' => 0.10, 'spend' => 0.40, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'LEVERAGED BUYOUT', 'use_leverage' => true, 'use_stock' => false
             ],
             // Secondary LBO tier: Allow up to 8% personal borrowing cost for moderate debt companies
             $health['can_issue_debt'] && $normalizedDebtUtilization < 0.80 && $totalBuyingPower > 5_000_000_000.0 && $costOfNewBorrowing < 0.08 => [
-                'prob' => 0.05, 'spend' => 0.30, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'LEVERAGED BUYOUT', 'use_leverage' => true
+                'prob' => 0.05, 'spend' => 0.30, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'LEVERAGED BUYOUT', 'use_leverage' => true, 'use_stock' => false
             ],
 
             default => null,
@@ -106,7 +119,7 @@ class MergerAndAcquisitionEngine
         // If no primary deal happened, test the standard cash fallback
         if (!$dealExecuted && $excessCash > 15_000_000_000.0) {
             $config = [
-                'prob' => 0.05, 'spend' => 0.20, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => false
+                'prob' => 0.05, 'spend' => 0.20, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => false, 'use_stock' => false
             ];
             if ($this->mathUtility->checkProbability($config['prob'] * $dt)) {
                 $dealExecuted = true;
@@ -123,8 +136,8 @@ class MergerAndAcquisitionEngine
         $minOperatingCash = $strategy->calculateMinOperatingCash($operatingBase, (float) $acquirer->getCustomerDeposits(), (float) $acquirer->getWholesaleDebt());
         $usableTreasury = max(0.0, $treasury - $minOperatingCash);
 
-        // Determine the Purchase Price based on their strategy (Cash vs Leverage)
-        $availableCapital = $config['use_leverage'] ? ($usableTreasury + $borrowingCapacity) : $usableTreasury;
+        // Determine the Purchase Price based on their strategy (Cash vs Leverage vs Stock)
+        $availableCapital = $config['use_stock'] ? ($price * $shares * 0.10) : ($config['use_leverage'] ? ($usableTreasury + $borrowingCapacity) : $usableTreasury);
         $purchasePrice = $availableCapital * (mt_rand(50, 100) / 100.0) * $config['spend'];
         
 
@@ -141,12 +154,18 @@ class MergerAndAcquisitionEngine
 
         $target = $this->generateProceduralTarget();
 
-        // FUND THE DEAL (Drain Cash and/or Issue Debt)
+        // FUND THE DEAL (Drain Cash, Issue Debt, or Issue Stock)
         $costOfNewDebt = 0.0;
-        if ($purchasePrice <= $usableTreasury) {
+        $debtIssued = 0.0;
+        
+        if ($config['use_stock']) {
+            // Funded entirely with new shares
+            $offeringPrice = $price * 0.90; // Assume 10% underpricing for massive share issuance
+            $sharesIssued = $purchasePrice / max(0.01, $offeringPrice);
+            $acquirer->setSharesOutstanding((string) ($shares + $sharesIssued));
+        } elseif ($purchasePrice <= $usableTreasury) {
             // Funded entirely with cash on hand
             $acquirer->setCorporateTreasury((string) ($treasury - $purchasePrice));
-            $debtIssued = 0.0;
         } else {
             // Leveraged Buyout: Drain the usable treasury, borrow the rest!
             $debtIssued = $purchasePrice - $usableTreasury;

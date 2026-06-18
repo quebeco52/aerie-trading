@@ -97,6 +97,7 @@ class StockController extends AbstractController
         }
 
         $events = [];
+
         if (!$isEtf) {
             $events = $entityManager->getRepository(StockEvent::class)->findBy(
                 ['stock' => $asset],

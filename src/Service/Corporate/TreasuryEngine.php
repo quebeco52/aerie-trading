@@ -56,6 +56,7 @@ class TreasuryEngine
             'organicCapex' => 0.0,
             'debtActionTaken' => false,
             'bank_apy' => null,
+            'failed_emergency_borrow' => false,
             'events' => []
         ];
 
@@ -70,6 +71,9 @@ class TreasuryEngine
 
         // THE DEBT TRAP (Liquidity Crisis)
         $this->processEmergencyBorrowing($stock, $operatingBase, $macroState, $health, $state);
+
+        // EQUITY ISSUANCE (Secondary Offerings / Death Spirals)
+        $this->processEquityIssuance($stock, $operatingBase, $macroState, $health, $state);
 
         // ARBITRAGE PAYDOWN (Escape negative carry)
         $this->processArbitragePaydown($stock, $operatingBase, $health, $state);
@@ -262,7 +266,8 @@ class TreasuryEngine
 
         if ($state['treasury'] < $minOperatingCash) {
             $cashShortfall = $minOperatingCash - $state['treasury'];
-                
+            
+            if ($health['can_issue_debt']) {
                 // Emergency debt is highly punitive (+200 bps penalty) but still anchors to the 5Y corporate fixed rate
                 $currentMarketRate = $health['raw_metrics']['current_market_rate'] ?? (($macroState['yield_5y_ema'] ?? 0.045) + (float) $stock->getCreditSpread());
                 $costOfEmergencyDebt = $currentMarketRate + 0.02;
@@ -270,11 +275,79 @@ class TreasuryEngine
                 $this->debtEngine->issueDebt($stock, $cashShortfall, $costOfEmergencyDebt);
 
                 $state['wholesaleDebt'] = (float) $stock->getWholesaleDebt();
-            $state['treasury'] = $minOperatingCash;
-            $state['debtActionTaken'] = true;
+                $state['treasury'] = $minOperatingCash;
+                $state['debtActionTaken'] = true;
 
-            if ($cashShortfall > 10_000_000.0) {
-                $state['events'][] = ['description' => "Forced to borrow \$" . number_format($cashShortfall / 1_000_000_000, 2) . "B at penalty rates due to cash shortfall.", 'shock' => -5.0];
+                if ($cashShortfall > 10_000_000.0) {
+                    $state['events'][] = ['description' => "Forced to borrow \$" . number_format($cashShortfall / 1_000_000_000, 2) . "B at penalty rates due to cash shortfall.", 'shock' => -5.0];
+                }
+            } else {
+                // Liquidity Crisis - Cannot issue debt, MUST liquidate assets or dilute
+                $state['failed_emergency_borrow'] = true;
+            }
+        }
+    }
+
+    private function processEquityIssuance(Stock $stock, float $operatingBase, array $macroState, array $health, array &$state): void
+    {
+        $currentPrice = (float) $stock->getPrice();
+        if ($currentPrice <= 0.0) return;
+
+        $shares = (float) $stock->getSharesOutstanding();
+        $eps = (float) $stock->getEarningsPerShare();
+        $currentPE = $eps > 0 ? ($currentPrice / $eps) : 9999.0;
+        
+        $industry = $stock->getIndustry() ?: 'General';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
+        
+        $trueReturn = $isFinancial ? (float) $stock->getCurrentRoe() : (float) $stock->getCurrentRoic();
+        $hurdleRate = $isFinancial ? ($health['cost_of_equity'] ?? 0.10) : ($health['wacc'] ?? 0.08);
+        $economicSpread = $trueReturn - $hurdleRate;
+        
+        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($macroState['policy_rate'] ?? 0.04, $economicSpread);
+        
+        $isBubble = $currentPE > ($fairValuePE * 2.0) && $currentPE > 30.0;
+        $isDeathSpiral = $state['failed_emergency_borrow'] ?? false;
+        
+        if ($isBubble || $isDeathSpiral) {
+            $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+            $minOperatingCash = $strategy->calculateMinOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt']);
+            
+            $targetRaise = 0.0;
+            $reason = "";
+            $shock = 0.0;
+            
+            if ($isDeathSpiral) {
+                // Raise enough to cover the shortfall + 50% buffer
+                $shortfall = max(0.0, $minOperatingCash - $state['treasury']);
+                $targetRaise = $shortfall * 1.5;
+                $reason = "execute a highly dilutive emergency stock offering to stave off bankruptcy";
+                $shock = -15.0; // Market hates dilution, especially distressed dilution
+            } elseif ($isBubble) {
+                // Exploit the bubble to raise 5% of their market cap in cash
+                $marketCap = $shares * $currentPrice;
+                $targetRaise = $marketCap * 0.05;
+                $reason = "exploit premium valuation with a secondary offering";
+                $shock = -5.0; 
+            }
+            
+            // Only dilute if the raise is meaningful
+            if ($targetRaise > 10_000_000.0) {
+                // Assume a 10% underpricing discount for the offering
+                $offeringPrice = $currentPrice * 0.90;
+                $sharesIssued = $targetRaise / max(0.01, $offeringPrice);
+                
+                $stock->setSharesOutstanding((string) ($shares + $sharesIssued));
+                $state['treasury'] += $targetRaise;
+                
+                $amtB = number_format($targetRaise / 1_000_000_000, 2);
+                $state['events'][] = [
+                    'description' => "Issued new shares to raise \${$amtB}B and {$reason}.",
+                    'shock' => $shock
+                ];
+                
+                $state['failed_emergency_borrow'] = false;
             }
         }
     }

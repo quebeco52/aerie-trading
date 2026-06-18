@@ -5,8 +5,8 @@ namespace App\Tests\Service;
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
-use App\Service\MacroEngine;
-use App\Service\MathUtility;
+use App\Service\Macro\MacroEngine;
+use App\Service\Math\MathUtility;
 use App\Data\SectorPE;
 use App\Data\EconomicCycle;
 

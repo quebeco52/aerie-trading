@@ -5,6 +5,7 @@ namespace App\Service\Model;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for normal, non-financial companies.
@@ -37,7 +38,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
         return [
             'macro_demand_shift' => $outputGap * $beta,
             'pricing_power_multiplier' => 1.0 + ($inflation * max(0.5, $beta)),
-            'operating_leverage_rate' => 0.15,
+            'operating_leverage_rate' => FinancialConstants::STANDARD_OPERATING_LEVERAGE,
         ];
     }
 

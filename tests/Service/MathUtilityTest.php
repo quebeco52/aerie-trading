@@ -2,7 +2,7 @@
 
 namespace App\Tests\Service;
 
-use App\Service\MathUtility;
+use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
 class MathUtilityTest extends TestCase

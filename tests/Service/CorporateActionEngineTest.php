@@ -3,13 +3,13 @@
 namespace App\Tests\Service;
 
 use PHPUnit\Framework\TestCase;
-use App\Service\CorporateActionEngine;
-use App\Service\MarketEvent;
+use App\Service\Corporate\CorporateActionEngine;
+use App\Service\Event\MarketEventPublisher;
 use App\Entity\Stock;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\DBAL\Connection;
-use App\Service\DebtEngine;
-use App\Service\MathUtility;
+use App\Service\Corporate\DebtEngine;
+use App\Service\Math\MathUtility;
 
 class CorporateActionEngineTest extends TestCase
 {
@@ -24,13 +24,13 @@ class CorporateActionEngineTest extends TestCase
         $mockEntityManager = $this->createStub(EntityManagerInterface::class);
         $mockEntityManager->method('getConnection')->willReturn($mockConnection);
 
-        $mockMarketEvent = $this->createStub(MarketEvent::class);
+        $mockMarketEvent = $this->createStub(MarketEventPublisher::class);
         $mockDebtEngine = $this->createStub(DebtEngine::class);
         $mockRedis = $this->createStub(\Redis::class);
         $mockMathUtility = $this->createStub(MathUtility::class);
 
         // 2. Instantiate the Engine with our fake database
-        $this->engine = new CorporateActionEngine($mockEntityManager, $mockMarketEvent, $mockDebtEngine, $mockRedis, $mockMathUtility);
+        $this->engine = new CorporateActionEngine($mockEntityManager, $mockMarketEvent, $mockRedis);
     }
 
     public function testRecursiveForwardSplitProtectsNetWorth()
