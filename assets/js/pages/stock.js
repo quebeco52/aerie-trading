@@ -1,12 +1,30 @@
-const CURRENT_TICKER = window.AERIE_DATA.ticker;
-const IS_ETF = window.AERIE_DATA.isEtf;
-const BUSINESS_MODEL = window.AERIE_DATA.businessModel || 'none';
-const IS_FINANCIAL = window.AERIE_DATA.isFinancial || false;
-const SHARES_OUTSTANDING = window.AERIE_DATA.sharesOutstanding;
-const USER_QUANTITY = window.AERIE_DATA.userQuantity;
-const EPS = window.AERIE_DATA.eps;
-const TICKS_PER_YEAR = window.AERIE_DATA.ticksPerYear || 54000;
-const SECONDS_PER_TICK = Math.round(31536000 / TICKS_PER_YEAR);
+import { BRAND_COLORS, FALLBACK_PALETTE } from '../utils/colors.js';
+
+let CURRENT_TICKER = window.AERIE_DATA?.ticker;
+let IS_ETF = window.AERIE_DATA?.isEtf;
+let BUSINESS_MODEL = window.AERIE_DATA?.businessModel || 'none';
+let IS_FINANCIAL = window.AERIE_DATA?.isFinancial || false;
+let SHARES_OUTSTANDING = window.AERIE_DATA?.sharesOutstanding;
+let USER_QUANTITY = window.AERIE_DATA?.userQuantity;
+let EPS = window.AERIE_DATA?.eps;
+let TICKS_PER_YEAR = window.AERIE_DATA?.ticksPerYear || 54000;
+let SECONDS_PER_TICK = Math.round(31536000 / TICKS_PER_YEAR);
+
+function updateAerieData() {
+    if (window.AERIE_DATA) {
+        CURRENT_TICKER = window.AERIE_DATA.ticker;
+        IS_ETF = window.AERIE_DATA.isEtf;
+        BUSINESS_MODEL = window.AERIE_DATA.businessModel || 'none';
+        IS_FINANCIAL = window.AERIE_DATA.isFinancial || false;
+        SHARES_OUTSTANDING = window.AERIE_DATA.sharesOutstanding;
+        USER_QUANTITY = window.AERIE_DATA.userQuantity;
+        EPS = window.AERIE_DATA.eps;
+        TICKS_PER_YEAR = window.AERIE_DATA.ticksPerYear || 54000;
+        SECONDS_PER_TICK = Math.round(31536000 / TICKS_PER_YEAR);
+    }
+}
+
+document.addEventListener('turbo:load', updateAerieData);
 
 let rawReports = [];
 let profitEngineChartInstance = null;
@@ -15,6 +33,10 @@ let creditHealthChartInstance = null;
 let capitalEfficiencyChartInstance = null;
 let capitalReturnChartInstance = null;
 let regulatoryRatiosChartInstance = null;
+let lwChart = null;
+let areaSeries = null;
+let etfPieChart = null;
+let chartResizeObserver = null;
 
 Chart.defaults.color = '#c2c6d6';
 Chart.defaults.scale.grid.color = 'rgba(45, 52, 73, 0.4)';
@@ -26,7 +48,6 @@ const COLORS = {
     negative: '#ffb3ad',
     grid: '#2d3449'
 };
-
 
 function formatLarge(num) {
     if (num === null || num === undefined) return '0.00';
@@ -43,16 +64,35 @@ function formatLarge(num) {
     return isNegative ? '-' + formatted : formatted;
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+function initStockPage() {
+    const container = document.getElementById('mainChartContainer');
+    if (!container) return;
+    if (container.dataset.initialized) return;
+    container.dataset.initialized = 'true';
+
+    let isAborted = false;
+
+    if (lwChart) {
+        try { lwChart.remove(); } catch(e) {}
+        lwChart = null;
+    }
+    if (chartResizeObserver) {
+        try { chartResizeObserver.disconnect(); } catch(e) {}
+        chartResizeObserver = null;
+    }
+    if (etfPieChart) {
+        try { etfPieChart.destroy(); } catch(e) {}
+        etfPieChart = null;
+    }
+
+    container.innerHTML = '';
+
     // variables
     let previousPrice = null;
     let currentRange = '1y';
     let currentSimTime = 0;
     let lastChartPointTime = 0;
     let currentStepSize = 1;
-    let lwChart = null;
-    let areaSeries = null;
-    let etfPieChart = null;
     let etfComponents = prepareEtfData();
 
     // Initial ui
@@ -66,6 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
         fetch(`/api/fundamentals?ticker=${CURRENT_TICKER}`)
             .then(res => res.json())
             .then(data => {
+                if (isAborted) return;
                 rawReports = data;
                 updateCharts('12Y');
             })
@@ -75,101 +116,76 @@ document.addEventListener('DOMContentLoaded', () => {
         fetch(`/api/macro-reports`)
             .then(res => res.json())
             .then(data => {
+                if (isAborted) return;
                 rawReports = data;
                 updateMacroCharts();
             })
             .catch(err => console.error("Failed to load macro reports:", err));
     }
 
-    if (!window.WS_TICKET || window.WS_TICKET === "") {
-        console.log("Guest mode: Live WebSocket updates disabled.");
-                return; // Safe to exit here so we don't try to connect to the socket
+    function onMarketUpdate(event) {
+        const payload = event.detail;
+
+        if (IS_ETF) {
+            updateMacroIndicators(payload);
+            updateEtfPie(payload);
+        }
+
+        const stockUpdate = payload.stocks.find(s => s.ticker === CURRENT_TICKER);
+        if (stockUpdate) {
+            const newPrice = parseFloat(stockUpdate.price);
+            updatePriceUI(newPrice, stockUpdate);
+            updateLiveChart(newPrice);
+        }
+
+        if (payload.events && payload.events.length > 0) {
+            renderEvents(payload.events);
+        }
+
+        if (payload.macro) {
+            const infEl = document.getElementById('macro-inflation');
+            const gapEl = document.getElementById('macro-output-gap');
+            const rateEl = document.getElementById('macro-policy-rate');
+            const yieldEl = document.getElementById('macro-yield');
+            const gdpEl = document.getElementById('macro-gdp');
+
+            if (infEl) infEl.textContent = (payload.macro.inflation * 100).toFixed(2) + '%';
+            if (rateEl) rateEl.textContent = (payload.macro.policy_rate * 100).toFixed(2) + '%';
+            if (yieldEl) yieldEl.textContent = (payload.macro.yield_10y * 100).toFixed(2) + '%';
+
+            if (gapEl) {
+                const gapVal = payload.macro.output_gap * 100;
+                gapEl.textContent = gapVal.toFixed(2) + '%';
+
+                if (gapVal < -1.0) {
+                    gapEl.className = 'text-lg font-bold text-tertiary';
+                } else if (gapVal > 1.0) {
+                    gapEl.className = 'text-lg font-bold text-secondary';
+                } else {
+                    gapEl.className = 'text-lg font-bold text-on-surface';
+                }
+            }
+
+            if (gdpEl && payload.macro.nominal_gdp_index !== undefined) {
+                const gdpValue = 20.00 * payload.macro.nominal_gdp_index;
+                gdpEl.textContent = '$' + gdpValue.toFixed(2) + 'T';
+            }
+        }
+
+        // Update the Current Cycle Badge
+        if (payload.economic_cycle) {
+            const cycleEl = document.getElementById('market-economic-cycle');
+            if (cycleEl) cycleEl.textContent = payload.economic_cycle;
+        }
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-    const host = window.location.host;
-    let marketSocket;
-    let reconnectTimeout = 1000;
+    document.addEventListener('market:update', onMarketUpdate);
 
-    function connectWebSocket() {
-        marketSocket = new WebSocket(`${protocol}${host}/ws/?ticket=${window.WS_TICKET}`);
-
-        marketSocket.onopen = function() {
-            console.log("Connected to live market feed.");
-            reconnectTimeout = 1000;
-        };
-
-        // The Master Router
-        marketSocket.onmessage = function (event) {
-            const payload = JSON.parse(event.data);
-
-            if (IS_ETF) {
-                updateMacroIndicators(payload);
-                updateEtfPie(payload);
-            }
-
-            const stockUpdate = payload.stocks.find(s => s.ticker === CURRENT_TICKER);
-            if (stockUpdate) {
-                const newPrice = parseFloat(stockUpdate.price);
-                updatePriceUI(newPrice, stockUpdate);
-                updateLiveChart(newPrice);
-            }
-
-            if (payload.events && payload.events.length > 0) {
-                renderEvents(payload.events);
-            }
-
-            if (payload.macro) {
-                const infEl = document.getElementById('macro-inflation');
-                const gapEl = document.getElementById('macro-output-gap');
-                const rateEl = document.getElementById('macro-policy-rate');
-                const yieldEl = document.getElementById('macro-yield');
-                const gdpEl = document.getElementById('macro-gdp');
-
-                if (infEl) infEl.textContent = (payload.macro.inflation * 100).toFixed(2) + '%';
-                if (rateEl) rateEl.textContent = (payload.macro.policy_rate * 100).toFixed(2) + '%';
-                if (yieldEl) yieldEl.textContent = (payload.macro.yield_10y * 100).toFixed(2) + '%';
-
-                if (gapEl) {
-                    const gapVal = payload.macro.output_gap * 100;
-                    gapEl.textContent = gapVal.toFixed(2) + '%';
-
-                    if (gapVal < -1.0) {
-                        gapEl.className = 'text-lg font-bold text-tertiary';
-                    } else if (gapVal > 1.0) {
-                        gapEl.className = 'text-lg font-bold text-secondary';
-                    } else {
-                        gapEl.className = 'text-lg font-bold text-on-surface';
-                    }
-                }
-
-                if (gdpEl && payload.macro.nominal_gdp_index !== undefined) {
-                    const gdpValue = 20.00 * payload.macro.nominal_gdp_index;
-                    gdpEl.textContent = '$' + gdpValue.toFixed(2) + 'T';
-                }
-
-            }
-
-            // Update the Current Cycle Badge
-            if (payload.economic_cycle) {
-                const cycleEl = document.getElementById('market-economic-cycle');
-                if (cycleEl) cycleEl.textContent = payload.economic_cycle;
-            }
-        };
-
-        marketSocket.onclose = function(event) {
-            console.log("WebSocket closed. Reconnecting in " + reconnectTimeout + "ms...");
-            setTimeout(connectWebSocket, reconnectTimeout);
-            reconnectTimeout = Math.min(reconnectTimeout * 2, 30000); // Exponential backoff
-        };
-        
-        marketSocket.onerror = function(err) {
-            console.error("WebSocket error observed:", err);
-            marketSocket.close(); // Force close to trigger reconnection
-        };
-    }
-
-    connectWebSocket();
+    // Clean up when leaving the page to prevent ghost DOM errors
+    document.addEventListener('turbo:before-render', () => {
+        isAborted = true;
+        document.removeEventListener('market:update', onMarketUpdate);
+    }, { once: true });
 
     function initMainChart() {
         const container = document.getElementById('mainChartContainer');
@@ -187,11 +203,14 @@ document.addEventListener('DOMContentLoaded', () => {
             lineWidth: 2, priceFormat: { type: 'price', precision: 2, minMove: 0.01 }
         });
 
-        new ResizeObserver(entries => {
+        chartResizeObserver = new ResizeObserver(entries => {
             if (entries.length > 0 && entries[0].target === container) {
-                lwChart.applyOptions({ height: entries[0].contentRect.height, width: entries[0].contentRect.width });
+                if (lwChart) {
+                    lwChart.applyOptions({ height: entries[0].contentRect.height, width: entries[0].contentRect.width });
+                }
             }
-        }).observe(container);
+        });
+        chartResizeObserver.observe(container);
     }
 
     function initEtfChart() {
@@ -282,6 +301,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updatePriceUI(newPrice, stockUpdate) {
         const el = document.getElementById('big-price');
+        if (!el) return;
+        
         const oldPrice = previousPrice || newPrice;
 
         el.innerText = '$' + newPrice.toFixed(2);
@@ -290,7 +311,10 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => el.style.color = '#dae2fd', 500);
 
         if (USER_QUANTITY > 0) {
-            document.getElementById('user-holding-value').innerText = '$' + (newPrice * USER_QUANTITY).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const holdingEl = document.getElementById('user-holding-value');
+            if (holdingEl) {
+                holdingEl.innerText = '$' + (newPrice * USER_QUANTITY).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
         }
 
         if (!IS_ETF) {
@@ -526,9 +550,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
-});
+}
 
 // FUNDAMENTAL CHARTING LOGIC
+window.updateCharts = updateCharts;
 
 function updateCharts(timeframe) {
     if (!rawReports || rawReports.length === 0) return;
@@ -1416,3 +1441,5 @@ function renderCapitalReturnChart(labels, dividendData, buybackData) {
         }
     });
 }
+document.addEventListener('turbo:load', initStockPage);
+initStockPage();

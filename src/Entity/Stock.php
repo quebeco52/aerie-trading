@@ -142,11 +142,14 @@ class Stock
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $currentVolatility = null;
 
-    /**
-     * @var string|null The stock's sensitivity to broader market index movements.
-     */
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 2, nullable: true, options: ['default' => '1.00'])]
     private ?string $beta = '1.00';
+
+    /**
+     * @var string The personality and behavioral archetype of the company's CEO.
+     */
+    #[ORM\Column(length: 50, options: ['default' => \App\Data\CeoArchetypes::OPPORTUNIST])]
+    private string $ceoArchetype = \App\Data\CeoArchetypes::OPPORTUNIST;
 
     /**
      * @var string|null Jump intensity (Lambda) - expected number of market shocks per year (Merton Jump Diffusion).
@@ -438,6 +441,17 @@ class Stock
     public function setJumpVol(?string $jumpVol): static
     {
         $this->jumpVol = $jumpVol;
+        return $this;
+    }
+
+    public function getCeoArchetype(): ?string
+    {
+        return $this->ceoArchetype;
+    }
+
+    public function setCeoArchetype(?string $ceoArchetype): static
+    {
+        $this->ceoArchetype = $ceoArchetype;
         return $this;
     }
 

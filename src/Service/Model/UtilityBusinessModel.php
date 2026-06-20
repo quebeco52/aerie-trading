@@ -17,7 +17,7 @@ use App\Service\Macro\MacroEngine;
  */
 class UtilityBusinessModel extends StandardCorporateBusinessModel
 {
-    public function getTargetMetrics(Stock $stock, array $macroState, MathUtility $mathUtility): array
+    public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array
     {
         // The Regulated Rate Base:
         // Regulators legally guarantee utilities a steady baseline ROIC (usually 8-10%) on their physical assets.
@@ -27,7 +27,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         ];
     }
 
-    public function getMacroPhysics(Stock $stock, array $macroState): array
+    public function getMacroPhysics(Stock $stock, array &$macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
         
@@ -42,7 +42,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     /**
      * Utility revenues are incredibly predictable. Weather causes minor fluctuations, but otherwise flat.
      */
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array $macroState, MathUtility $mathUtility): array
+    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
         

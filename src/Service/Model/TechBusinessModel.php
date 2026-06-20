@@ -18,7 +18,7 @@ use App\Service\Math\FinancialConstants;
  */
 class TechBusinessModel extends StandardCorporateBusinessModel
 {
-    public function getMacroPhysics(Stock $stock, array $macroState): array
+    public function getMacroPhysics(Stock $stock, array &$macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
         
@@ -29,7 +29,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         return $physics;
     }
 
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array $macroState, MathUtility $mathUtility): array
+    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
         

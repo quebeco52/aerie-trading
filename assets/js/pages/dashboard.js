@@ -1,25 +1,17 @@
 const previousPrices = {};
 let previousPortfolioValue = null;
 
-document.addEventListener('DOMContentLoaded', () => {
-
-    if (!window.WS_TICKET || window.WS_TICKET === "") {
-        console.log("Guest mode: Live WebSocket updates disabled.");
-        return; 
-    }
-
-    // Automatically use WSS (Secure) if on HTTPS, and detect the current domain
-    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-    const host = window.location.host;
-
-    // Connect to the Caddy reverse proxy endpoint
-    const marketSocket = new WebSocket(`${protocol}${host}/ws/?ticket=${window.WS_TICKET}`);
+function initDashboard() {
+    const totalValElInit = document.getElementById('portfolio-total-value');
+    if (!totalValElInit) return;
+    if (totalValElInit.dataset.initialized) return;
+    totalValElInit.dataset.initialized = 'true';
 
     const COLOR_SECONDARY = '#4edea3'; // Positive / Green
     const COLOR_TERTIARY = '#ffb3ad';  // Negative / Red
 
-    marketSocket.onmessage = function (event) {
-        const payload = JSON.parse(event.data);
+    function onMarketUpdate(event) {
+        const payload = event.detail;
         let hasHoldingsUpdates = false;
 
         if (payload.stocks && window.PORTFOLIO_HOLDINGS) {
@@ -72,7 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Update Total Invested & Portfolio Value DOM
                 const investedEl = document.getElementById('total-invested');
-                const portfolioValEl = document.getElementById('portfolio-value');
+                const portfolioValEl = document.getElementById('portfolio-total-value');
 
                 if (investedEl) {
                     investedEl.innerText = '$' + totalInvested.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -93,5 +85,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         }
-    };
-});
+    }
+
+    document.addEventListener('market:update', onMarketUpdate);
+
+    // Clean up when leaving the page to prevent ghost DOM errors
+    document.addEventListener('turbo:before-render', () => {
+        document.removeEventListener('market:update', onMarketUpdate);
+    }, { once: true });
+}
+
+document.addEventListener('turbo:load', initDashboard);
+initDashboard();

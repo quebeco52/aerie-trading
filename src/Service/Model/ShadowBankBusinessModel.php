@@ -17,7 +17,7 @@ use App\Service\Macro\MacroEngine;
  */
 class ShadowBankBusinessModel extends CommercialBankBusinessModel
 {
-    public function getTargetMetrics(Stock $stock, array $macroState, MathUtility $mathUtility): array
+    public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array
     {
         $equity = (float) $stock->getTotalEquity();
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
@@ -47,7 +47,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         ];
     }
 
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array $macroState, MathUtility $mathUtility): array
+    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
         $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * 0.20))); // Slightly higher baseline vol than deposit-backed banks
@@ -68,7 +68,13 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
         $mortgageSpread = $yield30y - $policyRate;
         
-        $nimSqueeze = (0.020 - $mortgageSpread) * 2.0;
+        if ($mortgageSpread < 0) {
+            // Extreme exponential distress when inverted (repo market freeze)
+            $nimSqueeze = (0.015 - $mortgageSpread) * 1.0 + pow(abs($mortgageSpread) * 20, 2) * 0.2;
+        } else {
+            // Mild linear squeeze when simply flat, not an instant death sentence
+            $nimSqueeze = (0.015 - $mortgageSpread) * 1.0;
+        }
         
         $actualVariableCosts = $actualRevenue * min(0.99, max(0.01, $realizedVariableMargin + $lossProvisionShock + $nimSqueeze));
         

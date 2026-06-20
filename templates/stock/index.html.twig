@@ -74,6 +74,15 @@
 									{% set bmDesc = isEtf ? 'An Exchange Traded Fund tracking a basket of underlying stocks, providing broad market exposure.' : (bmMap[businessModel|default('none')] ?? bmMap['none']) %}
 									{{ _self.tooltip(bmDesc, 'left', 'w-72 z-50', 'bottom') }}
 								</span>
+								
+								{% if not isEtf and asset.ceoArchetype is defined %}
+								<span class="group relative cursor-help inline-flex items-center rounded-md bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-primary focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-primary/70 pb-0.5">CEO: {{ asset.ceoArchetype|replace({'_': ' '})|title }}</span>
+									{% set archetypeDescMap = constant('App\\Data\\CeoArchetypes::DESCRIPTIONS') %}
+									{% set archetypeDesc = archetypeDescMap[asset.ceoArchetype] ?? 'The personality of the current CEO.' %}
+									{{ _self.tooltip(archetypeDesc, 'left', 'w-64 z-50', 'bottom') }}
+								</span>
+								{% endif %}
 
 							</div>
 							<p class="text-lg text-on-surface-variant">{{ asset.ticker }}</p>
@@ -138,7 +147,7 @@
 								<div class="flex items-center gap-3">
 									<div class="flex space-x-2 bg-surface-container-lowest p-1 rounded-lg">
 										<button onclick="updateCharts('12Q')" id="btn-12Q" class="px-3 py-1 text-[10px] font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors uppercase tracking-widest">12Q</button>
-										<button onclick="updateCharts('5Y')" id="btn-5Y" class="px-3 py-1 text-[10px] font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors uppercase tracking-widest">12Y</button>
+										<button onclick="updateCharts('12Y')" id="btn-12Y" class="px-3 py-1 text-[10px] font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors uppercase tracking-widest">12Y</button>
 									</div>
 									<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
 										<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
@@ -720,6 +729,7 @@ ticksPerYear: {{ ticksPerYear }}
 };
 	</script>
 
-	<script src="{{ asset('js/colors.js') }}"></script>
-	<script src="{{ asset('js/stock.js') }}"></script>
+    <script type="module">
+        import 'pages/stock';
+    </script>
 {% endblock %}

@@ -21,6 +21,26 @@
 			</div>
 		</div>
 
+		{# Macroeconomic Indicators #}
+		{% if macro is defined %}
+		<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+			{# Economic Cycle #}
+			<div class="bg-surface-container-low shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-6 border border-outline-variant/15 flex flex-col justify-between relative overflow-hidden group">
+				<div class="absolute -right-10 -top-10 w-32 h-32 bg-primary/5 rounded-full blur-2xl pointer-events-none"></div>
+				<div class="relative z-10">
+					<p class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-2 flex items-center gap-2"><span class="material-symbols-outlined text-[14px]">public</span> Economic Cycle</p>
+					<div class="flex items-end gap-2">
+						<p id="macro-cycle" class="text-3xl font-bold text-on-surface tracking-tight transition-colors">{{ macro.output_gap > 0.01 ? 'Boom' : (macro.output_gap < -0.01 ? 'Bust' : 'Neutral') }}</p>
+					</div>
+				</div>
+			</div>
+
+
+
+
+		</div>
+		{% endif %}
+
 		{# The Market Index Highlight #}
 		{% if etf %}
 			<a href="/stock/{{ etf.ticker }}" class="block bg-surface-container-low shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-6 md:p-8 border border-outline-variant/15 hover:border-primary/30 transition-all cursor-pointer group relative overflow-hidden">
@@ -102,5 +122,7 @@
 };
 	</script>
 
-	<script src="{{ asset('js/home.js') }}"></script>
+    <script type="module">
+        import 'pages/home';
+    </script>
 {% endblock %}

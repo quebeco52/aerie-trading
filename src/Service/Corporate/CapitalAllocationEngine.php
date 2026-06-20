@@ -31,7 +31,7 @@ class CapitalAllocationEngine
         float $quarterlyFcfPerShare,
         float $currentPrice,
         float $sharesOutstanding,
-        array $macroState,
+        array &$macroState,
         float $actualTotalNetIncome = 0.0
     ): array {
         $events = [];
@@ -46,12 +46,13 @@ class CapitalAllocationEngine
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
 
+        $realEstateAppreciation = 0.0;
         if ($businessModel === 'reit') {
             $customDepreciation = (float) $stock->getDepreciationRate();
             $depRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($industry);
             $absoluteDepreciation = $investedCapital * $depRate;
             // Real Estate Appreciation: Offset GAAP depreciation so book value doesn't bleed to zero
-            $quarterlyNetIncome += ($absoluteDepreciation / 4.0);
+            $realEstateAppreciation = $absoluteDepreciation / 4.0;
         }
 
         $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState);
@@ -92,7 +93,7 @@ class CapitalAllocationEngine
 
         // UPDATE THE BALANCE SHEET
         $bsEvents = $this->treasuryEngine->updateBalanceSheet(
-            $stock, $quarterlyNetIncome, $divData['total_paid'], $buybackData['total_cash_spent'], $operatingBase, $nopat, $newTreasury, $macroState, $health
+            $stock, $quarterlyNetIncome, $divData['total_paid'], $buybackData['total_cash_spent'], $operatingBase, $nopat, $newTreasury, $macroState, $health, $realEstateAppreciation
         );
 
         if (!empty($bsEvents['events'])) {
@@ -115,6 +116,9 @@ class CapitalAllocationEngine
         $targetPayout = (float) $stock->getTargetPayoutRatio();
         $speed = (float) $stock->getDividendSpeed();
         $lastDividend = (float) $stock->getLastDividend();
+        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
+
+        $targetPayout = $archetypeStrategy->modifyTargetPayoutRatio($targetPayout);
 
         $calculatedTarget = $quarterlyEps > 0 ? ($quarterlyEps * $targetPayout) : 0.0;
         $targetDividend = $speed > 0.05 ? $calculatedTarget : max($calculatedTarget, $lastDividend);
@@ -159,9 +163,15 @@ class CapitalAllocationEngine
         $crisisThreshold = $modelThresholds['dividend_crisis_icr'];
         $isLiquidityCrisis = $health['interest_coverage'] < 1.0 || ($health['interest_coverage'] < $crisisThreshold && !$hasCashBuffer);
 
+        $cutDividend = false;
         if ($isDeepDistress || $isModerateDistressNoCash || $isLiquidityCrisis || $isRegulatoryDividendHalt) {
-            $targetDividend = 0.0;
-            $speed = ($isLiquidityCrisis || $isRegulatoryDividendHalt) ? 1.0 : min(1.0, $speed + 0.25);
+            if ($archetypeStrategy->shouldResistDividendCut($isLiquidityCrisis, $isRegulatoryDividendHalt)) {
+                // The CEO refuses to cut the dividend!
+            } else {
+                $targetDividend = 0.0;
+                $cutDividend = true;
+                $speed = ($isLiquidityCrisis || $isRegulatoryDividendHalt) ? 1.0 : min(1.0, $speed + 0.25);
+            }
         } elseif ($isCriticalCash && $calculatedTarget < $lastDividend) {
             $targetDividend = $calculatedTarget;
             if ($speed <= 0.05) $speed = 0.50;
@@ -208,7 +218,7 @@ class CapitalAllocationEngine
         return ['dividend_per_share' => $newDividend, 'total_paid' => $totalPaid, 'event' => $event];
     }
 
-    private function executeBuybacks(Stock $stock, float $excessCash, float $shares, float $currentPrice, float $currentPE, float $operatingBase, float $investedCapital, float $nopat, array $health, array $macroState, float $actualTotalNetIncome = 0.0, float $retainedEarningsThisQuarter = 0.0): array
+    private function executeBuybacks(Stock $stock, float $excessCash, float $shares, float $currentPrice, float $currentPE, float $operatingBase, float $investedCapital, float $nopat, array $health, array &$macroState, float $actualTotalNetIncome = 0.0, float $retainedEarningsThisQuarter = 0.0): array
     {
         $canEasilyCoverDebt = $excessCash > ((float) $stock->getTotalDebt() * 2.0);
         $industry = $stock->getIndustry() ?: 'General';
@@ -229,8 +239,11 @@ class CapitalAllocationEngine
         
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
         $hoardStatus = $strategy->evaluateHoardingStatus($excessCash, $operatingBase, (float) $stock->getTotalDebt());
+        
         $isHoarder = $hoardStatus['is_hoarder'];
         $isMegaHoarder = $hoardStatus['is_mega_hoarder'];
+
+        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
 
         $isLiquidityCrisis = $health['interest_coverage'] < 1.0;
         $modelThresholds = \App\Data\Sectors::getModelThresholds($businessModel);
@@ -264,6 +277,7 @@ class CapitalAllocationEngine
             $valuationDiscount = max(0.0, ($fairValuePE - $currentPE) / max(1.0, $fairValuePE));
             // Hoarders ignore valuation discounts and always buy aggressively
             $aggression = $isMegaHoarder ? 1.0 : min(1.0, 0.50 + $valuationDiscount);
+            $aggression = $archetypeStrategy->modifyBuybackAggression($aggression);
 
             // Hoarders bypass the random execution dampener
             $actualSpend = $absoluteMaxSpend * $aggression * ($isHoarder ? 1.0 : (mt_rand(50, 100) / 100.0));

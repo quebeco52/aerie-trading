@@ -20,7 +20,7 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
      * Idiosyncratic shock applied to retail trading volume and institutional deal flow.
      * Capital Markets have higher top-line variance compared to sticky Asset Managers.
      */
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array $macroState, MathUtility $mathUtility): array
+    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
         
@@ -55,7 +55,7 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
      * Their excess cash must remain highly liquid to satisfy clearinghouse margin requirements 
      * and strict regulatory capital constraints. They earn standard risk-free money market yields.
      */
-    public function calculateCashYield(array $macroState, float $policyRate): float
+    public function calculateCashYield(array &$macroState, float $policyRate): float
     {
         return max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
     }

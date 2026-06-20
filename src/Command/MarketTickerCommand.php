@@ -147,9 +147,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $stockUpdates = $result['updates'];
                 $totalMarketCap = $result['total_cap'];
                 $events = $result['events'];
-                $marketVol = $result['market_vol'];
-
-                if (!empty($operatorEvents)) {
+                $marketVol = $result['market_vol'];                if (!empty($operatorEvents)) {
                     $events = array_merge($events, $operatorEvents);
                 }
 
@@ -216,6 +214,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                 $this->redis->set('stocks_live_data', json_encode($stockUpdates));
                 $this->redis->set('etf_live_data', json_encode([$etfUpdate]));
+                $this->redis->set(\App\Service\Macro\MacroEngine::REDIS_MACRO_STATE, json_encode($macroState));
 
                 // Save Portfolio Snapshots once a "Simulation Week"
                 if ($tickCount % $snapshotInterval === 0) {

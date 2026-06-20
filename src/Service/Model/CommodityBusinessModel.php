@@ -17,7 +17,7 @@ use App\Service\Macro\MacroEngine;
  */
 class CommodityBusinessModel extends StandardCorporateBusinessModel
 {
-    public function getTargetMetrics(Stock $stock, array $macroState, MathUtility $mathUtility): array
+    public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array
     {
         // Physical scale is dictated by their massive invested capital (Mines, Oil Rigs, Blast Furnaces)
         return [
@@ -26,7 +26,7 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         ];
     }
 
-    public function getMacroPhysics(Stock $stock, array $macroState): array
+    public function getMacroPhysics(Stock $stock, array &$macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
         
@@ -42,7 +42,7 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
     /**
      * Commodity revenues are highly volatile due to wild swings in global spot prices.
      */
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array $macroState, MathUtility $mathUtility): array
+    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
         

@@ -14,11 +14,24 @@ use App\Service\Event\MarketEventPublisher;
  */
 class MarketOperator
 {
+    // Corporate Governance Constants
+    private const GOVERNANCE_RETIRE_PROBABILITY = 0.005;
+    private const GOVERNANCE_FIRE_PROBABILITY_ABYSMAL = 0.07;
+    private const GOVERNANCE_FIRE_PROBABILITY_UNDERPERFORM = 0.02;
+    private const GOVERNANCE_PERFORMANCE_ABYSMAL_SPREAD = -0.05;
+    private const GOVERNANCE_PERFORMANCE_UNDERPERFORM_SPREAD = -0.02;
+    
+    private const SHOCK_FIRE_MIN = 2.0;
+    private const SHOCK_FIRE_MAX = 5.0;
+    private const SHOCK_RETIRE_MIN = -3.0;
+    private const SHOCK_RETIRE_MAX = 1.0;
+
     public function __construct(
         private EntityManagerInterface $entityManager,
         private LoggerInterface $logger,
         private MarketEventPublisher $marketEvent,
-        private DebtEngine $debtEngine
+        private DebtEngine $debtEngine,
+        private \App\Service\Math\MathUtility $mathUtility
     ) {}
 
     /**
@@ -50,6 +63,11 @@ class MarketOperator
             if ($restructureEvents !== null) {
                 $generatedEvents = array_merge($generatedEvents, $restructureEvents);
                 continue;
+            }
+
+            $governanceEvents = $this->evaluateCorporateGovernance($stock);
+            if ($governanceEvents !== null) {
+                $generatedEvents = array_merge($generatedEvents, $governanceEvents);
             }
 
             // RULE : Volatility Dampening
@@ -88,7 +106,7 @@ class MarketOperator
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
 
-        $isHostile = mt_rand(1, 100) > 50;
+        $isHostile = $this->mathUtility->checkProbability(0.5);
 
         if ($isHostile) {
             $this->logger->info("BANKRUPTCY DETECTED: {$stock->getTicker()} collapsed. Black Swan Capital initiating hostile liquidation.");
@@ -107,15 +125,19 @@ class MarketOperator
 
         $stock->setPrice("50.00");
         $stock->setSharesOutstanding("1000000000");
-        $stock->setEarningsPerShare((string) (mt_rand(325, 433) / 100));
+        $stock->setEarningsPerShare((string) $this->mathUtility->generateUniformBetween(3.25, 4.33));
         $stock->setFreeCashFlowPerShare("0.00");
         $stock->setCurrentRoic($stock->getBaselineRoic());
         $stock->setCurrentRoe($stock->getBaselineRoe());
         $stock->setHistoricalFixedRate("0.05");
         $stock->setCorporateTreasury("5000000000.00");
-        $stock->setTotalEquity("20000000000.00");
+        $stock->setTotalEquity((string) ($this->mathUtility->generateUniformBetween(10, 100) * 1000000000));
         $stock->setRetainedEarnings("0.00");
         $stock->setWholesaleDebt("10000000000.00"); // Give the restructured company a healthy 0.5x D/E ratio
+        
+        // Fire the old CEO and install a new random one
+        $newArchetype = \App\Data\CeoArchetypes::getRandomArchetype();
+        $stock->setCeoArchetype($newArchetype);
 
         if (in_array($businessModel, ['commercial_bank', 'insurance', 'credit_services'])) {
             // For a restructured bank or insurance company, assume 85% of its new debt is deposits/float.
@@ -133,6 +155,72 @@ class MarketOperator
         return [
             $this->marketEvent->publish($stock, 'BANKRUPTCY', $event1Desc, -100.00),
             $this->marketEvent->publish($stock, 'BAILOUT', $event2Desc, 0.00)
+        ];
+    }
+
+    /**
+     * Evaluates whether the CEO should be fired for poor performance or naturally retire.
+     */
+    private function evaluateCorporateGovernance(Stock $stock): ?array
+    {
+        $industry = $stock->getIndustry() ?: 'General';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
+        
+        $trueReturn = $isFinancial ? (float) $stock->getCurrentRoe() : (float) $stock->getCurrentRoic();
+        $baselineReturn = $isFinancial ? (float) $stock->getBaselineRoe() : (float) $stock->getBaselineRoic();
+        
+        // Performance versus their structural baseline
+        $performanceSpread = $trueReturn - $baselineReturn;
+        
+        $firingProbability = 0.0;
+        $retireProbability = self::GOVERNANCE_RETIRE_PROBABILITY; 
+        
+        if ($performanceSpread < self::GOVERNANCE_PERFORMANCE_ABYSMAL_SPREAD) {
+            // Abysmal performance, Board is angry
+            $firingProbability += self::GOVERNANCE_FIRE_PROBABILITY_ABYSMAL; 
+        } elseif ($performanceSpread < self::GOVERNANCE_PERFORMANCE_UNDERPERFORM_SPREAD) {
+            // Underperforming
+            $firingProbability += self::GOVERNANCE_FIRE_PROBABILITY_UNDERPERFORM; 
+        }
+        
+        $isFired = $this->mathUtility->checkProbability($firingProbability);
+        $isRetired = !$isFired && $this->mathUtility->checkProbability($retireProbability);
+        
+        if (!$isFired && !$isRetired) {
+            return null;
+        }
+
+        
+        $oldArchetype = $stock->getCeoArchetype();
+        $newArchetype = \App\Data\CeoArchetypes::getRandomArchetype();
+        
+        // Ensure they actually change archetypes or at least "refresh" with the same one
+        if ($newArchetype === $oldArchetype && $this->mathUtility->checkProbability(0.5)) {
+            $newArchetype = \App\Data\CeoArchetypes::getRandomArchetype();
+        }
+        
+        $stock->setCeoArchetype($newArchetype);
+        
+        $newTitle = \App\Data\CeoArchetypes::getTitle($newArchetype);
+        $name = $stock->getName();
+        $ticker = $stock->getTicker();
+        
+        $shock = 0.0;
+        if ($isFired) {
+            // The market usually cheers a terrible CEO getting fired
+            $shock = $this->mathUtility->generateUniformBetween(self::SHOCK_FIRE_MIN, self::SHOCK_FIRE_MAX);
+            $desc = "The Board of Directors at {$name} ({$ticker}) has ousted the CEO after dismal performance. The new CEO is known as {$newTitle}.";
+        } else {
+            // Retirement creates uncertainty
+            $shock = $this->mathUtility->generateUniformBetween(self::SHOCK_RETIRE_MIN, self::SHOCK_RETIRE_MAX);
+            $desc = "The CEO of {$name} ({$ticker}) has announced their unexpected retirement. The Board has appointed {$newTitle} as the successor.";
+        }
+        
+        $this->logger->info("CORPORATE GOVERNANCE: " . $desc);
+        
+        return [
+            $this->marketEvent->publish($stock, 'GOVERNANCE', $desc, $shock)
         ];
     }
 }

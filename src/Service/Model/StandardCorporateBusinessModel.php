@@ -15,13 +15,13 @@ use App\Service\Math\FinancialConstants;
  * - Subject to supply chain inflation and physical depreciation.
  * - Operating scale is based on physical assets, not financial leverage.
  */
-class StandardCorporateBusinessModel implements BusinessModelInterface
+class StandardCorporateBusinessModel extends AbstractBusinessModel
 {
     /**
      * Physical businesses evaluate their true structural scale based on Invested Capital 
      * (Total Equity + Debt - Cash), requiring physical assets to turn a profit.
      */
-    public function getTargetMetrics(Stock $stock, array $macroState, MathUtility $mathUtility): array
+    public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array
     {
         return [
             'invested_capital' => $stock->getInvestedCapital(),
@@ -29,7 +29,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
         ];
     }
 
-    public function getMacroPhysics(Stock $stock, array $macroState): array
+    public function getMacroPhysics(Stock $stock, array &$macroState): array
     {
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
         $inflation = $macroState['inflation_ema'] ?? 0.02;
@@ -45,7 +45,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     /**
      * Idiosyncratic variance is applied directly to sales volume.
      */
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array $macroState, MathUtility $mathUtility): array
+    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
         $revenueShock = $revenueZ * ($baselineVol * 0.15);
@@ -72,7 +72,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
      * Normal companies earn standard money-market yields only on excess liquidity 
      * that isn't required to run the day-to-day business.
      */
-    public function calculateInterestIncome(Stock $stock, array $macroState, MathUtility $mathUtility): float
+    public function calculateInterestIncome(Stock $stock, array &$macroState, MathUtility $mathUtility): float
     {
         $cash = (float) $stock->getCorporateTreasury();
         $equity = (float) $stock->getTotalEquity();
@@ -104,38 +104,6 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
         return $truePostTaxReturn;
     }
 
-    public function getEffectiveTaxRate(float $macroTaxRate): float
-    {
-        return $macroTaxRate;
-    }
-
-    public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
-    {
-        return $operatingBase * 0.05;
-    }
-
-    public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
-    {
-        return $operatingBase * 0.03;
-    }
-
-    public function evaluateHoardingStatus(float $excessCash, float $operatingBase, float $totalDebt): array
-    {
-        return [
-            'is_hoarder'      => $excessCash > ($operatingBase * 0.25),
-            'is_mega_hoarder' => $excessCash > ($operatingBase * 0.40),
-        ];
-    }
-
-    public function calculateDepositBeta(float $totalDebt, float $equity, float $equityLimit, float $customerDeposits): float { return 0.0; }
-
-    public function calculateCapacityModifier(float $totalDebt, float $equity, float $equityLimit, ?float $coreLiabilities = null): float { return 1.0; }
-
-    public function calculateMaxBuybackSpend(float $excessCash, float $retainedEarningsThisQuarter, bool $isMegaHoarder): float
-    {
-        return $isMegaHoarder ? $excessCash * 0.30 : $excessCash * 0.10;
-    }
-
     public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array
     {
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
@@ -148,32 +116,6 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
         return ['interest_expense' => $interestExpense, 'wholesale_rate' => $wholesaleRate];
     }
 
-    public function getInterestCoverage(float $ebit, float $interestExpense): float
-    {
-        return $interestExpense > 0 ? ($ebit / $interestExpense) : ($ebit > 0 ? 999.0 : -999.0);
-    }
-
-    public function calculateCashYield(array $macroState, float $policyRate): float
-    {
-        return max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
-    }
-
-    public function getDebtExpansionAggressiveness(float $spreadMultiplier): array
-    {
-        return ['probability' => 0.40 + ($spreadMultiplier * 0.50), 'aggressiveness' => 0.05 + (0.35 * $spreadMultiplier)];
-    }
-
-    public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float
-    {
-        return max($organicSpend, $debtIssued * 0.75);
-    }
-
-    public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float
-    {
-        // Standard corporates borrow based on their balance sheet capacity, regardless of temporary cash hoards
-        return $baseCapacity;
-    }
-
     public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float
     {
         if ($fcfPerShare !== null && $fcfPerShare > 0.0) {
@@ -183,8 +125,4 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
         }
         return $fcfPerShare !== null ? max($revenueFloorValue, $peFairValue) * 0.75 : max($revenueFloorValue, $peFairValue);
     }
-
-    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps): float { return ($earningsValue * 0.90) + ($pbFairValue * 0.10); }
-
-    public function processPassiveLiabilityGrowth(Stock $stock, array $macroState, array &$state, MathUtility $mathUtility): void {}
 }

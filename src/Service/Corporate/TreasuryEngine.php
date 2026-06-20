@@ -31,8 +31,9 @@ class TreasuryEngine
         float $operatingBase,
         float $nopat,
         float $newTreasury,
-        array $macroState,
-        array $health
+        array &$macroState,
+        array $health,
+        float $realEstateAppreciation = 0.0
     ): array {
         $events = [];
         $totalCashSpent = $totalDividendsPaid + $totalBuybackCash;
@@ -44,7 +45,7 @@ class TreasuryEngine
 
         // TOTAL EQUITY (Clean Surplus Accounting)
         $currentEquity = (float) $stock->getTotalEquity();
-        $newEquity = $currentEquity + $quarterlyNetIncome - $totalCashSpent;
+        $newEquity = $currentEquity + $quarterlyNetIncome + $realEstateAppreciation - $totalCashSpent;
         $stock->setTotalEquity((string) $newEquity);
 
         // STATE MANAGER FOR MUTATIONS
@@ -91,7 +92,7 @@ class TreasuryEngine
         ];
     }
 
-    private function processDebtExpansion(Stock $stock, float $newEquity, float $nopat, array $macroState, array $health, array &$state): void
+    private function processDebtExpansion(Stock $stock, float $newEquity, float $nopat, array &$macroState, array $health, array &$state): void
     {
         $totalDebt = $state['wholesaleDebt'] + $state['customerDeposits'];
         $liveInvestedCapital = $this->corporateMetrics->calculateLiveInvestedCapital($newEquity, $totalDebt, $state['treasury']);
@@ -198,7 +199,7 @@ class TreasuryEngine
         }
     }
 
-    private function processOrganicCapex(Stock $stock, float $newEquity, float $nopat, float $operatingBase, array $macroState, array $health, array &$state): void
+    private function processOrganicCapex(Stock $stock, float $newEquity, float $nopat, float $operatingBase, array &$macroState, array $health, array &$state): void
     {
         $totalDebt = $state['wholesaleDebt'] + $state['customerDeposits'];
         $industry = $stock->getIndustry() ?: 'General';
@@ -214,18 +215,24 @@ class TreasuryEngine
         $evaluationCapital = $isFinancial ? $newEquity : $liveInvestedCapital;
 
         $investmentProbability = min(0.95, max(0.10, 0.20 + ($trueReturn * 2.0)));
+        
+        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
+        $investmentProbability = $archetypeStrategy->modifyInvestmentProbability($investmentProbability, $trueReturn);
         $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
-        $investmentProbability *= max(0.05, 1.0 - $saturationPenalty);
+        $saturationPenalty = $archetypeStrategy->modifySaturationPenalty($saturationPenalty);
+        $investmentProbability = max(0.05, $investmentProbability - $saturationPenalty);
+        
+        if ((mt_rand(1, 1000) / 1000.0) > $investmentProbability) {
+            return; // Management decided to hold onto cash instead of expanding
+        }
 
         $excessCash = max(0.0, $state['treasury'] - $targetCashReserves);
         $hoardStatus = $strategy->evaluateHoardingStatus($excessCash, $operatingBase, $totalDebt);
         $isHoarder = $hoardStatus['is_hoarder'];
         $isMegaHoarder = $hoardStatus['is_mega_hoarder'];
 
-        $fundInvestmentOpportunity =  $isMegaHoarder || ((mt_rand() / mt_getrandmax()) < $investmentProbability);
-
         // Bypass the hurdle rate check if the company is hoarding cash. Sitting on excess cash is a mathematically guaranteed drag on ROE.
-        if ((($trueReturn > $hurdleRate || $isHoarder) && $excessCash > 0 && !$health['wants_to_paydown_debt'] && $fundInvestmentOpportunity) || $state['debtActionTaken']) {
+        if ((($trueReturn > $hurdleRate || $isHoarder) && $excessCash > 0 && !$health['wants_to_paydown_debt']) || $state['debtActionTaken']) {
             $spreadMultiplier = $isHoarder ? 1.0 : min(1.0, max(0.0, ($trueReturn - $hurdleRate) * 10.0));
             // Boosted deployment rate so massive hoards can actually be cleared
             $organicSpend = $excessCash * (0.15 + (0.35 * $spreadMultiplier));
@@ -258,7 +265,7 @@ class TreasuryEngine
         }
     }
 
-    private function processEmergencyBorrowing(Stock $stock, float $operatingBase, array $macroState, array $health, array &$state): void
+    private function processEmergencyBorrowing(Stock $stock, float $operatingBase, array &$macroState, array $health, array &$state): void
     {
         $industry = $stock->getIndustry() ?: 'General';
         $strategy = \App\Data\Sectors::getBusinessModelStrategy(\App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none');
@@ -288,7 +295,7 @@ class TreasuryEngine
         }
     }
 
-    private function processEquityIssuance(Stock $stock, float $operatingBase, array $macroState, array $health, array &$state): void
+    private function processEquityIssuance(Stock $stock, float $operatingBase, array &$macroState, array $health, array &$state): void
     {
         $currentPrice = (float) $stock->getPrice();
         if ($currentPrice <= 0.0) return;
@@ -400,6 +407,9 @@ class TreasuryEngine
         $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
         $targetOperatingCash = $strategy->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt']);
+        
+        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
+        $targetOperatingCash = $archetypeStrategy->modifyTargetOperatingCash($targetOperatingCash);
 
         if (!$state['debtActionTaken'] && $state['wholesaleDebt'] > 0.0 && $state['treasury'] > $targetOperatingCash) {
             $excessCash = $state['treasury'] - $targetOperatingCash;
@@ -408,6 +418,7 @@ class TreasuryEngine
             $evalDebt = $isFinancial ? $state['wholesaleDebt'] : $totalDebt;
             $modelThresholds = \App\Data\Sectors::getModelThresholds($businessModel);
             $evalLimit = $isFinancial ? ($modelThresholds['wholesale_leverage_limit'] ?? $macroDebtTolerance) : $macroDebtTolerance;
+            $evalLimit = $archetypeStrategy->modifyDebtToleranceLimit($evalLimit);
 
             $currentDebtRatio = $evalDebt / max(1.0, $newEquity);
 
@@ -447,7 +458,7 @@ class TreasuryEngine
         }
     }
 
-    private function processPassiveLiabilityGrowth(Stock $stock, array $macroState, array &$state): void
+    private function processPassiveLiabilityGrowth(Stock $stock, array &$macroState, array &$state): void
     {
         $industry = $stock->getIndustry() ?: 'General';
         $strategy = \App\Data\Sectors::getBusinessModelStrategy(\App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none');

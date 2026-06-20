@@ -37,6 +37,14 @@ class MathUtility
     }
 
     /**
+     * Generates a random float between $min and $max from a uniform distribution.
+     */
+    public function generateUniformBetween(float $min, float $max): float
+    {
+        return $min + $this->generateUniform() * ($max - $min);
+    }
+
+    /**
      * Checks if an event occurs given a specific probability [0, 1].
      *
      * @param float $probability The probability of the event occurring.

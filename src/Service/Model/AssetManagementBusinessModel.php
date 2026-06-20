@@ -14,13 +14,13 @@ use App\Service\Macro\MacroEngine;
  * - Revenue scales off highly sticky, recurring Assets Under Management (AUM) fees.
  * - Evaluated on Return on Equity (ROE).
  */
-class AssetManagementBusinessModel implements BusinessModelInterface
+class AssetManagementBusinessModel extends AbstractBusinessModel
 {
     /**
      * Asset Managers scale EBIT to cover their target ROE and any operational wholesale debt.
      * They do not use fractional customer deposits or float to generate leverage.
      */
-    public function getTargetMetrics(Stock $stock, array $macroState, MathUtility $mathUtility): array
+    public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array
     {
         $equity = (float) $stock->getTotalEquity();
         $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
@@ -95,7 +95,7 @@ class AssetManagementBusinessModel implements BusinessModelInterface
         ];
     }
 
-    public function getMacroPhysics(Stock $stock, array $macroState): array
+    public function getMacroPhysics(Stock $stock, array &$macroState): array
     {
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
         $beta = (float) $stock->getBeta();
@@ -111,7 +111,7 @@ class AssetManagementBusinessModel implements BusinessModelInterface
      * Idiosyncratic variance is relatively low compared to transactional brokerages.
      * AUM fees are highly recurring and sticky, providing a stable baseline of revenue.
      */
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array $macroState, MathUtility $mathUtility): array
+    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
         
@@ -133,7 +133,7 @@ class AssetManagementBusinessModel implements BusinessModelInterface
      * Asset Managers earn standard money-market yields only on excess liquidity 
      * that isn't actively deployed or required for daily operations.
      */
-    public function calculateInterestIncome(Stock $stock, array $macroState, MathUtility $mathUtility): float
+    public function calculateInterestIncome(Stock $stock, array &$macroState, MathUtility $mathUtility): float
     {
         $equity = (float) $stock->getTotalEquity();
         $operatingBase = max((float) $stock->getTotalRevenue(), $equity, 10000000.0);
@@ -161,11 +161,6 @@ class AssetManagementBusinessModel implements BusinessModelInterface
         return $truePostTaxReturn;
     }
 
-    public function getEffectiveTaxRate(float $macroTaxRate): float
-    {
-        return $macroTaxRate;
-    }
-
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
     {
         return max($operatingBase * 0.10, $wholesaleDebt * 0.05);
@@ -184,15 +179,6 @@ class AssetManagementBusinessModel implements BusinessModelInterface
         ];
     }
 
-    public function calculateDepositBeta(float $totalDebt, float $equity, float $equityLimit, float $customerDeposits): float { return 0.0; }
-
-    public function calculateCapacityModifier(float $totalDebt, float $equity, float $equityLimit, ?float $coreLiabilities = null): float { return 1.0; }
-
-    public function calculateMaxBuybackSpend(float $excessCash, float $retainedEarningsThisQuarter, bool $isMegaHoarder): float
-    {
-        return $isMegaHoarder ? $excessCash * 0.30 : $excessCash * 0.10;
-    }
-
     public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array
     {
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
@@ -200,9 +186,7 @@ class AssetManagementBusinessModel implements BusinessModelInterface
         $wholesaleRate = $debt > 0 ? ($interestExpense / $debt) : $currentMarketFixedRate;
         return ['interest_expense' => $interestExpense, 'wholesale_rate' => $wholesaleRate];
     }
-
-    public function getInterestCoverage(float $ebit, float $interestExpense): float { return $interestExpense > 0 ? ($ebit / $interestExpense) : ($ebit > 0 ? 999.0 : -999.0); }
-    public function calculateCashYield(array $macroState, float $policyRate): float 
+    public function calculateCashYield(array &$macroState, float $policyRate): float 
     {
         $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['policy_rate_ema'] ?? 0.02) + 0.01;
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
@@ -227,6 +211,4 @@ class AssetManagementBusinessModel implements BusinessModelInterface
         return max(0.0, $baseCapacity - $excessCash);
     }
     public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float { return max($revenueFloorValue, $peFairValue); }
-    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps): float { return ($earningsValue * 0.90) + ($pbFairValue * 0.10); }
-    public function processPassiveLiabilityGrowth(Stock $stock, array $macroState, array &$state, MathUtility $mathUtility): void {}
 }

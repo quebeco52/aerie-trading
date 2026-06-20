@@ -21,7 +21,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
      * Real Estate Cap Rates are deeply tied to the 10-Year Treasury Yield.
      * As rates rise, property values effectively drop, demanding a higher yield.
      */
-    public function getTargetMetrics(Stock $stock, array $macroState, MathUtility $mathUtility): array
+    public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array
     {
         $investedCapital = $stock->getInvestedCapital();
         $baselineRoic = max(0.01, (float) $stock->getBaselineRoic());
@@ -58,7 +58,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     /**
      * REIT revenues are incredibly stable due to multi-year binding leases.
      */
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array $macroState, MathUtility $mathUtility): array
+    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
         

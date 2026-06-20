@@ -17,7 +17,7 @@ use App\Service\Macro\MacroEngine;
  */
 class CreditServicesBusinessModel extends CommercialBankBusinessModel
 {
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array $macroState, MathUtility $mathUtility): array
+    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
         
@@ -45,7 +45,11 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $yield2y = $macroState['yield_2y_ema'] ?? ($macroState['yield_2y'] ?? 0.03);
         
         $bankSpread = $yield10y - $yield2y;
-        $nimSqueeze = (0.005 - $bankSpread) * 1.5;
+        if ($bankSpread < 0) {
+            $nimSqueeze = (0.005 - $bankSpread) + pow(abs($bankSpread) * 15, 2) * 0.15;
+        } else {
+            $nimSqueeze = (0.005 - $bankSpread) * 1.5;
+        }
         
         $actualVariableCosts = $actualRevenue * min(0.99, max(0.01, $realizedVariableMargin + $lossProvisionShock + $nimSqueeze));
         

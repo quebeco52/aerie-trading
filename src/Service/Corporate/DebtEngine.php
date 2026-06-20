@@ -41,7 +41,7 @@ class DebtEngine
      * leverage penalties (Junk Bond blowouts) to determine the true cost of debt.
      *
      * @param Stock $stock           The stock entity being analyzed.
-     * @param array $macroState      The current macroeconomic state.
+     * @param array &$macroState      The current macroeconomic state.
      * @param bool  $advanceMaturity Whether to advance the maturity wall and lock in new blended rates.
      * @return array{
      *     interest_expense: float,
@@ -54,7 +54,7 @@ class DebtEngine
      *     revenue: float
      * }
      */
-    public function calculateInterestExpense(Stock $stock, array $macroState, bool $advanceMaturity = false): array
+    public function calculateInterestExpense(Stock $stock, array &$macroState, bool $advanceMaturity = false): array
     {
         $debt = (float) $stock->getTotalDebt();
         $treasury = (float) $stock->getCorporateTreasury();
@@ -207,7 +207,7 @@ class DebtEngine
      * crisis or suffering from negative carry.
      *
      * @param Stock $stock      The stock entity being analyzed.
-     * @param array $macroState The current macroeconomic state.
+     * @param array &$macroState The current macroeconomic state.
      * @return array{
      *     gross_cost: float,
      *     effective_cost: float,
@@ -223,7 +223,7 @@ class DebtEngine
      *     raw_metrics: array
      * }
      */
-    public function analyzeDebtHealth(Stock $stock, array $macroState): array
+    public function analyzeDebtHealth(Stock $stock, array &$macroState): array
     {
         $currentDebt = (float) $stock->getTotalDebt();
         $wholesaleDebt = (float) $stock->getWholesaleDebt();

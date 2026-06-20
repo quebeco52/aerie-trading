@@ -16,7 +16,7 @@ use App\Service\Macro\MacroEngine;
  */
 class ClearingHouseBusinessModel extends InsuranceBusinessModel
 {
-    public function getTargetMetrics(Stock $stock, array $macroState, MathUtility $mathUtility): array
+    public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array
     {
         $equity = (float) $stock->getTotalEquity();
         $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
@@ -69,7 +69,7 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
         ];
     }
 
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array $macroState, MathUtility $mathUtility): array
+    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
         
@@ -127,7 +127,7 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
         ];
     }
 
-    public function calculateCashYield(array $macroState, float $policyRate): float
+    public function calculateCashYield(array &$macroState, float $policyRate): float
     {
         // Clearinghouses cannot take equity risk, but they do park margin in short-duration 
         // government bonds (up to 2 years) to capture slight duration premiums over overnight rates.
@@ -136,7 +136,7 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
         return max(0.0, $yield2y - MacroEngine::CASH_YIELD_SPREAD);
     }
 
-    public function processPassiveLiabilityGrowth(Stock $stock, array $macroState, array &$state, MathUtility $mathUtility): void
+    public function processPassiveLiabilityGrowth(Stock $stock, array &$macroState, array &$state, MathUtility $mathUtility): void
     {
         $currentLiabilities = $state['customerDeposits']; 
         if ($currentLiabilities <= 0) return;

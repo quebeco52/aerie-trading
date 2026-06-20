@@ -16,7 +16,7 @@ use App\Service\Math\FinancialConstants;
  * - Evaluated strictly on Return on Equity (ROE) rather than ROIC.
  * - Customer deposits act as operating leverage (inventory), requiring an APY Beta to prevent capital flight.
  */
-class CommercialBankBusinessModel implements BusinessModelInterface
+class CommercialBankBusinessModel extends AbstractBusinessModel
 {
     /**
      * Returns a stable structural ROIC proxy to keep top-line loan revenue rock solid.
@@ -27,7 +27,7 @@ class CommercialBankBusinessModel implements BusinessModelInterface
      * @param MathUtility $mathUtility Mathematical utility.
      * @return array{invested_capital: float, baseline_roic: float}
      */
-    public function getTargetMetrics(Stock $stock, array $macroState, MathUtility $mathUtility): array
+    public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array
     {
         $equity = (float) $stock->getTotalEquity();
         $totalDebt = (float) $stock->getTotalDebt();
@@ -108,7 +108,7 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         ];
     }
 
-    public function getMacroPhysics(Stock $stock, array $macroState): array
+    public function getMacroPhysics(Stock $stock, array &$macroState): array
     {
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
         $beta = (float) $stock->getBeta();
@@ -124,7 +124,7 @@ class CommercialBankBusinessModel implements BusinessModelInterface
      * Idiosyncratic shock applied directly to loan origination volume and fee revenue.
      * Introduces massive Loss Provision write-offs during economic downturns.
      */
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array $macroState, MathUtility $mathUtility): array
+    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
         $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * 0.15)));
@@ -147,7 +147,7 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         
         $bankSpread = $yield10y - $yield2y;
         if ($bankSpread < 0) {
-            $nimSqueeze = (0.005 - $bankSpread) + pow(abs($bankSpread) * 50, 2) * 0.01;
+            $nimSqueeze = (0.005 - $bankSpread) + pow(abs($bankSpread) * 10, 2) * 0.1;
         } else {
             $nimSqueeze = (0.005 - $bankSpread) * 1.0;
         }
@@ -173,7 +173,7 @@ class CommercialBankBusinessModel implements BusinessModelInterface
     /**
      * Banks earn standard money-market yields only on excess liquidity that isn't actively deployed.
      */
-    public function calculateInterestIncome(Stock $stock, array $macroState, MathUtility $mathUtility): float
+    public function calculateInterestIncome(Stock $stock, array &$macroState, MathUtility $mathUtility): float
     {
         $equity = (float) $stock->getTotalEquity();
         $operatingBase = max((float) $stock->getTotalRevenue(), $equity, 10000000.0);
@@ -198,11 +198,6 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $stock->setCurrentRoe((string) max(-0.50, min(1.0, $smoothedRoe)));
         
         return $truePostTaxReturn;
-    }
-
-    public function getEffectiveTaxRate(float $macroTaxRate): float
-    {
-        return $macroTaxRate;
     }
 
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
@@ -234,8 +229,6 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         return min(0.70, max(0.10, 0.80 * exp(-$decayRate * $utilization)));
     }
 
-    public function calculateCapacityModifier(float $totalDebt, float $equity, float $equityLimit, ?float $coreLiabilities = null): float { return 1.0; }
-
     public function calculateMaxBuybackSpend(float $excessCash, float $retainedEarningsThisQuarter, bool $isMegaHoarder): float
     {
         return $isMegaHoarder ? $excessCash * 0.30 : min($excessCash * 0.10, $retainedEarningsThisQuarter);
@@ -259,8 +252,6 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         return ['interest_expense' => $wholesaleInterest + $depositInterest, 'wholesale_rate' => $wholesaleRate];
     }
 
-    public function getInterestCoverage(float $ebit, float $interestExpense): float { return $interestExpense > 0 ? ($ebit / $interestExpense) : ($ebit > 0 ? 999.0 : -999.0); }
-    public function calculateCashYield(array $macroState, float $policyRate): float { return max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD); }
     public function getDebtExpansionAggressiveness(float $spreadMultiplier): array { return ['probability' => 0.85 + ($spreadMultiplier * 0.15), 'aggressiveness' => 0.15 + (0.35 * $spreadMultiplier)]; }
     public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float { return max($organicSpend, $debtIssued * 0.95); }
 
@@ -280,7 +271,7 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         return ($earningsValue * $earningsWeight) + ($pbFairValue * $bookWeight);
     }
 
-    public function processPassiveLiabilityGrowth(Stock $stock, array $macroState, array &$state, MathUtility $mathUtility): void
+    public function processPassiveLiabilityGrowth(Stock $stock, array &$macroState, array &$state, MathUtility $mathUtility): void
     {
         $currentLiabilities = $state['customerDeposits'];
         if ($currentLiabilities <= 0) return;

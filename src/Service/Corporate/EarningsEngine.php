@@ -42,12 +42,12 @@ class EarningsEngine
      * (Z-Score) of the revenue shift (e.g., punishing or rewarding surprise reports).
      *
      * @param Stock $stock The stock entity to process earnings for.
-     * @param array $macroState The current state of the macroeconomic cycle.
+     * @param array &$macroState The current state of the macroeconomic cycle.
      * @param int $tickCount The current simulation tick, used to determine if it is earnings season.
      * @param int $ticksPerYear The total number of ticks in a simulated year.
      * @return array<string, mixed>|null  Returns the generated market event array if an earnings report occurred, otherwise null.
      */
-    public function calculate(Stock $stock, array $macroState = [], int $tickCount = 0, int $ticksPerYear = 252): ?array
+    public function calculate(Stock $stock, array &$macroState = [], int $tickCount = 0, int $ticksPerYear = 252): ?array
     {
 
         $ticksPerQuarter = (int) ($ticksPerYear / 4);
@@ -184,8 +184,12 @@ class EarningsEngine
         // APPLY THE IDIOSYNCRATIC Z-SCORE SHOCK
         $shockData = $strategy->generateIdiosyncraticShock($stock, $expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol, $macroState, $this->mathUtility);
         $actualRevenue = $shockData['actual_revenue'];
+
         $actualVariableCosts = $shockData['actual_variable_costs'];
-        $ebit = $shockData['ebit'];
+        
+        // Recalculate EBIT (If demand collapsed, they still paid the variable costs for unsold goods, causing a massive loss!)
+        $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
+        
         $primaryShockZ = $shockData['primary_shock_z'];
         $eventType = $shockData['event_type'] ?? null;
         $customEventLore = $eventType ? $this->narrativeEngine->generateLore($eventType, $shockData['context'] ?? []) : ($shockData['event_lore'] ?? null);
@@ -544,7 +548,7 @@ class EarningsEngine
      * @param float $actualTotalNetIncome The total net income generated this quarter.
      * @param float $sharesOutstanding    The total shares currently outstanding.
      * @param Stock $stock                The stock entity.
-     * @param array $macroState           The current macroeconomic state.
+     * @param array &$macroState           The current macroeconomic state.
      * @param float $absoluteDepreciation The absolute depreciation amount (non-cash expense).
      * @param bool  $isLeveraged          Whether the company is a leveraged financial institution.
      * @return array{fcf_per_share: float, capex: float}
@@ -553,7 +557,7 @@ class EarningsEngine
         float $actualTotalNetIncome,
         float $sharesOutstanding,
         Stock $stock,
-        array $macroState,
+        array &$macroState,
         float $absoluteDepreciation,
         bool $isLeveraged
     ): array {

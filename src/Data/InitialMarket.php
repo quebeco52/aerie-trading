@@ -17,7 +17,8 @@ class InitialMarket
             'total_equity'      => 1_178_750_000_000.00, 
             'customer_deposits' => 9_000_000_000_000.00,
             'wholesale_debt'    => 250_000_000_000.00,
-            'retained_earnings' => 500_000_000_000.00   
+            'retained_earnings' => 500_000_000_000.00,
+            'ceo_archetype' => \App\Data\CeoArchetypes::CONSERVATIVE
         ],
         [
             'ticker' => 'SWAN', 'name' => 'Black Swan Capital', 'sector' => 'Financials', 'industry' => 'Private Equity', 'systemic_importance' => 'titan',
@@ -31,7 +32,8 @@ class InitialMarket
             'total_equity'      => 708_750_000_000.00, 
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 1_800_000_000_000.00,
-            'retained_earnings' => 250_000_000_000.00
+            'retained_earnings' => 250_000_000_000.00,
+            'ceo_archetype' => \App\Data\CeoArchetypes::EMPIRE_BUILDER
         ],
         [
             'ticker' => 'HUMM', 'name' => 'Hummingbird Interactive', 'sector' => 'Information Technology', 'industry' => 'Internet Content & Information', 'systemic_importance' => 'titan',
@@ -45,7 +47,8 @@ class InitialMarket
             'total_equity'      => 250_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 0.00,
-            'retained_earnings' => 200_000_000_000.00
+            'retained_earnings' => 200_000_000_000.00,
+            'ceo_archetype' => \App\Data\CeoArchetypes::CONSERVATIVE
         ],
         [
             'ticker' => 'OWLS', 'name' => 'Owl Capital Partners', 'sector' => 'Financials', 'industry' => 'Asset Management', 'systemic_importance' => 'systemic',
@@ -59,7 +62,8 @@ class InitialMarket
             'total_equity'      => 190_500_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 0.00,
-            'retained_earnings' => 80_000_000_000.00
+            'retained_earnings' => 80_000_000_000.00,
+            'ceo_archetype' => \App\Data\CeoArchetypes::YIELD_KING
         ],
         [
             'ticker' => 'KING', 'name' => 'Kingfisher Capital', 'sector' => 'Financials', 'industry' => 'Capital Markets', 'systemic_importance' => 'systemic',
@@ -73,7 +77,8 @@ class InitialMarket
             'total_equity'      => 146_090_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 800_526_000_000.00,
-            'retained_earnings' => 50_000_000_000.00
+            'retained_earnings' => 50_000_000_000.00,
+            'ceo_archetype' => \App\Data\CeoArchetypes::CANNIBAL
         ],
         [
             'ticker' => 'PERE', 'name' => 'Peregrine Prime Securities', 'sector' => 'Financials', 'industry' => 'Capital Markets', 'systemic_importance' => 'systemic',
@@ -87,7 +92,8 @@ class InitialMarket
             'total_equity'      => 132_660_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 500_926_000_000.00,
-            'retained_earnings' => 30_000_000_000.00
+            'retained_earnings' => 30_000_000_000.00,
+            'ceo_archetype' => \App\Data\CeoArchetypes::OPPORTUNIST
         ],
         [
             'ticker' => 'RIVR', 'name' => 'Riverstone Financial', 'sector' => 'Financials', 'industry' => 'Banks - Regional', 'systemic_importance' => 'none',
@@ -98,10 +104,11 @@ class InitialMarket
             'floating_debt_ratio' => 0.35, 'historical_fixed_rate' => 0.035, 'credit_spread' => 0.0200, 'depreciation_rate' => 0.02,
             'corporate_treasury' => 8_000_000_000.00,
             'total_net_income'  => 16_420_000_000.00,   
-            'total_equity'      => 117_280_000_000.00,
-            'customer_deposits' => 130_000_000_000.00,
-            'wholesale_debt'    => 10_736_000_000.00,
-            'retained_earnings' => 30_000_000_000.00
+            'total_equity'      => 108_750_000_000.00, 
+            'customer_deposits' => 700_000_000_000.00,
+            'wholesale_debt'    => 35_000_000_000.00,
+            'retained_earnings' => 20_000_000_000.00,
+            'ceo_archetype' => \App\Data\CeoArchetypes::CONSERVATIVE
         ],
         [
             'ticker' => 'SAFE', 'name' => 'Safe Harbor Reinsurance', 'sector' => 'Financials', 'industry' => 'Insurance - Reinsurance', 'systemic_importance' => 'titan',

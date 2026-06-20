@@ -11,10 +11,10 @@ use App\Service\Math\MathUtility;
  */
 interface BusinessModelInterface
 {
-    public function getTargetMetrics(Stock $stock, array $macroState, MathUtility $mathUtility): array;
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array $macroState, MathUtility $mathUtility): array;
-    public function getMacroPhysics(Stock $stock, array $macroState): array;
-    public function calculateInterestIncome(Stock $stock, array $macroState, MathUtility $mathUtility): float;
+    public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array;
+    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array;
+    public function getMacroPhysics(Stock $stock, array &$macroState): array;
+    public function calculateInterestIncome(Stock $stock, array &$macroState, MathUtility $mathUtility): float;
     public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate): float;
     public function getEffectiveTaxRate(float $macroTaxRate): float;
 
@@ -27,11 +27,11 @@ interface BusinessModelInterface
 
     public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array;
     public function getInterestCoverage(float $ebit, float $interestExpense): float;
-    public function calculateCashYield(array $macroState, float $policyRate): float;
+    public function calculateCashYield(array &$macroState, float $policyRate): float;
     public function getDebtExpansionAggressiveness(float $spreadMultiplier): array;
     public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float;
     public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float;
     public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float;
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps): float;
-    public function processPassiveLiabilityGrowth(Stock $stock, array $macroState, array &$state, MathUtility $mathUtility): void;
+    public function processPassiveLiabilityGrowth(Stock $stock, array &$macroState, array &$state, MathUtility $mathUtility): void;
 }

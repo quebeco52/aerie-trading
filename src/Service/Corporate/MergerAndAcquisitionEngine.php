@@ -88,9 +88,17 @@ class MergerAndAcquisitionEngine
         $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($policyRate, $economicSpread);
         $isOvervalued = $currentPE > ($fairValuePE * 1.5) && $currentPE > 25.0;
         
+        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($acquirer->getCeoArchetype());
+        $aggression = $archetypeStrategy->modifyAcquisitionAggression(1.0);
+        $isEmpireBuilder = $aggression >= 2.0;
+        
         $config = match (true) {
             $isOvervalued => [
                 'prob' => 0.15, 'spend' => 0.50, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => 'STOCK-FOR-STOCK MERGER', 'use_leverage' => false, 'use_stock' => true
+            ],
+            // Empire Builders aggressively execute M&A with massive leverage, ignoring standard utilization limits and personal borrowing costs
+            $isEmpireBuilder && $health['can_issue_debt'] && $totalBuyingPower > 2_000_000_000.0 => [
+                'prob' => 0.75, 'spend' => 0.80, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'LEVERAGED BUYOUT', 'use_leverage' => true, 'use_stock' => false
             ],
             $isMegaHoarder => [
                 'prob' => 0.50, 'spend' => 0.60, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'CONGLOMERATE EXPANSION', 'use_leverage' => false, 'use_stock' => false
@@ -145,8 +153,8 @@ class MergerAndAcquisitionEngine
         $purchasePrice = min($purchasePrice, $maxPrivateCompanyValue);
         
         // Financials must safely cap their M&A spend to a fraction of their Tier 1 Capital (Equity)
-        // EXCEPT Mega Hoarders, who are desperate to flush cash and execute transformational mergers
-        if ($isFinancial && !$isMegaHoarder) {
+        // EXCEPT Mega Hoarders (who are desperate to flush cash) and Empire Builders (who don't care about safety limits)
+        if ($isFinancial && !$isMegaHoarder && !$isEmpireBuilder) {
             $purchasePrice = min($purchasePrice, $equity * 0.15);
         }
         

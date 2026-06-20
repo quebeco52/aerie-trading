@@ -134,6 +134,7 @@ class MarketSeedCommand extends Command
                 $stock->setCreditSpread((string) ($stockData['credit_spread'] ?? 0.0100));
                 $stock->setHistoricalFixedRate((string) ($stockData['historical_fixed_rate'] ?? 0.04));
                 $stock->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$stockData['ticker']] ?? null);
+                $stock->setCeoArchetype($stockData['ceo_archetype'] ?? \App\Data\CeoArchetypes::OPPORTUNIST);
 
                 $this->entityManager->persist($stock);
             }

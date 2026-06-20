@@ -1,10 +1,10 @@
-const UI_COLORS = {
+export const UI_COLORS = {
     POSITIVE: '#4edea3',
     NEGATIVE: '#ffb3ad',
     GRID: '#2d3449'
 };
 
-const BRAND_COLORS = {
+export const BRAND_COLORS = {
     'LAKE': '#045729',  // Green
     'SWAN': '#770707',  // Red
     'HUMM': '#ec4899',  // Pink
@@ -52,7 +52,7 @@ const BRAND_COLORS = {
     'SWFT': '#FFBC0D',  // soft yellow/orange
 };
 
-const FALLBACK_PALETTE = [
+export const FALLBACK_PALETTE = [
     '#6366f1', '#14b8a6', '#f43f5e', '#84cc16', 
     '#06b6d4', '#0ea5e9', '#d946ef', '#64748b'
 ];

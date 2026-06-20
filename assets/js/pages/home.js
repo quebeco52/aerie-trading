@@ -1,3 +1,4 @@
+// Removed import
 const previousPrices = {};
 
 // Add the formatter at the top of the file
@@ -8,42 +9,43 @@ function formatLarge(num) {
     return num.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+function initHome() {
+    const etfEl = document.getElementById('etf-price');
+    if (!etfEl) return;
+    if (etfEl.dataset.initialized) return;
+    etfEl.dataset.initialized = 'true';
     
-    if (!window.WS_TICKET || window.WS_TICKET === "") {
-        console.log("Guest mode: Live WebSocket updates disabled.");
-        return; 
-    }
-
-    // Automatically use WSS (Secure) if on HTTPS, and detect the current domain
-    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-    const host = window.location.host;
-
-    let marketSocket;
-    let reconnectTimeout = 1000;
-
     // Midnight Atelier Colors for flashes
     const COLOR_SECONDARY = '#4edea3'; // Green (Up)
     const COLOR_TERTIARY = '#ffb3ad';  // Red (Down)
     const COLOR_DEFAULT = '#dae2fd';
     const COLOR_MUTED = '#c2c6d6';
 
-    function connectWebSocket() {
-        marketSocket = new WebSocket(`${protocol}${host}/ws/?ticket=${window.WS_TICKET}`);
+    function onMarketUpdate(event) {
+        const payload = event.detail;
 
-        marketSocket.onopen = function() {
-            console.log("Connected to live market feed.");
-            reconnectTimeout = 1000; // Reset timeout on successful connection
-        };
+        // Update Macro UI
+        if (payload.macro) {
+            const macroCycleEl = document.getElementById('macro-cycle');
 
-        marketSocket.onmessage = function (event) {
-            const payload = JSON.parse(event.data);
+
+            if (macroCycleEl) {
+                const cycleText = payload.macro.output_gap > 0.01 ? 'Boom' : (payload.macro.output_gap < -0.01 ? 'Bust' : 'Neutral');
+                if (macroCycleEl.innerText !== cycleText) {
+                    macroCycleEl.innerText = cycleText;
+                    macroCycleEl.style.color = COLOR_SECONDARY;
+                    setTimeout(() => macroCycleEl.style.color = COLOR_DEFAULT, 500);
+                }
+            }
+
+
+        }
 
         // Update the Market Index (ETF) Live
         const lbiStock = payload.stocks.find(s => s.ticker === 'LBI');
         if (lbiStock) {
-            const etfEl = document.getElementById('etf-price');
-            if (etfEl) etfEl.innerText = '$' + parseFloat(lbiStock.price).toFixed(2);
+            const etfElLive = document.getElementById('etf-price');
+            if (etfElLive) etfElLive.innerText = '$' + parseFloat(lbiStock.price).toFixed(2);
         }
 
         // Loop through the live prices and update the DOM
@@ -88,19 +90,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 }, 500);
             }
         });
-        };
-
-        marketSocket.onclose = function(event) {
-            console.log("WebSocket closed. Reconnecting in " + reconnectTimeout + "ms...");
-            setTimeout(connectWebSocket, reconnectTimeout);
-            reconnectTimeout = Math.min(reconnectTimeout * 2, 30000); // Exponential backoff up to 30s
-        };
     }
 
-    connectWebSocket();
+    document.addEventListener('market:update', onMarketUpdate);
 
     // Throttled Table Sorter
-    setInterval(() => {
+    const sortInterval = setInterval(() => {
         const tbody = document.getElementById('market-table-body');
         if (!tbody) return;
 
@@ -118,4 +113,12 @@ document.addEventListener('DOMContentLoaded', () => {
         
     }, 5000); 
 
-});
+    // Clean up when leaving the page to prevent ghost DOM errors
+    document.addEventListener('turbo:before-render', () => {
+        document.removeEventListener('market:update', onMarketUpdate);
+        clearInterval(sortInterval);
+    }, { once: true });
+}
+
+document.addEventListener('turbo:load', initHome);
+initHome();

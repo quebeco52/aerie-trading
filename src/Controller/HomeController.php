@@ -25,11 +25,13 @@ class HomeController extends AbstractController
      * @return Response Returns the rendered home page view with market data.
      */
     #[Route('/', name: 'app_home')]
-    public function index(EntityManagerInterface $entityManager): Response
+    public function index(EntityManagerInterface $entityManager, \App\Service\Macro\MacroEngine $macroEngine): Response
     {
         $etf = $entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
 
         $stocks = $entityManager->getRepository(Stock::class)->findAll();
+        
+        $macroState = $macroEngine->getLiveState();
 
         /**
          * @var array<int, array{
@@ -76,7 +78,8 @@ class HomeController extends AbstractController
 
         return $this->render('home/index.html.twig', [
             'etf' => $etf,
-            'stocks' => $marketData
+            'stocks' => $marketData,
+            'macro' => $macroState->toArray()
         ]);
     }
 

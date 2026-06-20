@@ -60,14 +60,13 @@ class StockTracker
      * 
      * @return array{updates: array<mixed>, total_cap: float, events: array<mixed>, market_vol: float, history: array<mixed>}
      */
-    public function updateStocks(array $stocks, float $dt, bool $recordHistory, array $macroState = [], int $tickCount = 0, int $ticksPerYear = 252): array
+    public function updateStocks(array $stocks, float $dt, bool $recordHistory, array &$macroState = [], int $tickCount = 0, int $ticksPerYear = 252): array
     {
 
         $stockUpdates = [];
+        $historyData = [];
         $totalMarketCap = 0.0;
         $events = [];
-        $historyData = [];
-
 
         // Pull systemic variables from the Macro Engine
         $marketZ = $macroState['market_z'] ?? $this->mathUtility->generateStandardNormal();
@@ -151,13 +150,12 @@ class StockTracker
             $stock->setPrice((string) $newPrice);
             $stock->setCurrentVolatility((string) $nextVolatility);
 
-            
-
             // Earnings Engine
             $generatedEvents = $this->earningsEngine->calculate($stock, $macroState, $tickCount, $ticksPerYear);
             if (!empty($generatedEvents)) {
                 $events = array_merge($events, $generatedEvents);
             }
+
             $currentPriceAfterEarnings = (float) $stock->getPrice();
 
             // CORPORATE ACTIONS (SPLITS)
@@ -240,10 +238,10 @@ class StockTracker
 
         return [
             'updates' => $stockUpdates,
+            'history' => $historyData,
             'total_cap' => $totalMarketCap,
             'events' => $events,
-            'market_vol' => $marketVol,
-            'history' => $historyData,
+            'market_vol' => $marketVol
         ];
     }
 }
