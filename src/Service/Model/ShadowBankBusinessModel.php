@@ -23,7 +23,8 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
         $treasury = (float) $stock->getCorporateTreasury();
         
-        $earningAssets = max($equity, $equity + $wholesaleDebt - $treasury);
+        $effectiveEquity = max(1.0, $equity);
+        $earningAssets = max($effectiveEquity, $effectiveEquity + $wholesaleDebt - $treasury);
         $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
         
@@ -33,12 +34,25 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         
         $taxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
-        $grossYieldAnnually = $yield5y + $structuralSpread;
         
-        $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
+        // Reverse-engineer the optimal EBIT needed to cover massive wholesale debt
+        $optimalNetIncome = $equity * $baselineRoe;
+        $optimalEbt = $optimalNetIncome / max(0.01, 1.0 - $taxRate);
         
-        // Capacity Constraint: Shadow Bank revenue is strictly the gross yield of their loan book.
-        $targetRevenue = $earningAssets * $grossYieldAnnually;
+        $floatingInterestRate = $policyRate + $structuralSpread;
+        $optimalInterestExpense = ($wholesaleDebt * (1.0 - $floatingRatio) * (float) $stock->getHistoricalFixedRate()) 
+                                + ($wholesaleDebt * $floatingRatio * $floatingInterestRate);
+        
+        $operatingBase = $this->getOperatingBase($stock);
+        $excessCash = max(0.0, $treasury - ($operatingBase * 0.05));
+        $expectedTreasuryIncome = $excessCash * $this->calculateCashYield($macroState, $policyRate);
+        
+        $optimalEbit = $optimalEbt + $optimalInterestExpense - $expectedTreasuryIncome;
+        $targetEbit = max(0.0, $optimalEbit);
+        
+        $unboundedRevenue = max(0.0, $targetEbit) / $stableMargin;
+        $targetRevenue = min($unboundedRevenue, $earningAssets * 0.50); // Hard cap gross yield at 50%
+        
         $grossYield = $targetRevenue / max(1.0, abs($earningAssets));
         
         return [
@@ -76,7 +90,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             $nimSqueeze = (0.015 - $mortgageSpread) * 1.0;
         }
         
-        $actualVariableCosts = $actualRevenue * min(0.99, max(0.01, $realizedVariableMargin + $lossProvisionShock + $nimSqueeze));
+        $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $realizedVariableMargin + $lossProvisionShock + $nimSqueeze));
         
         $eventLore = null;
         if ($creditZ < -2.0) {

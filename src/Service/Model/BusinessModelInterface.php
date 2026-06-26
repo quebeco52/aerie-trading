@@ -20,7 +20,7 @@ interface BusinessModelInterface
 
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float;
     public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float;
-    public function evaluateHoardingStatus(float $excessCash, float $operatingBase, float $totalDebt): array;
+    public function evaluateHoardingStatus(float $treasury, float $targetCashReserves, float $operatingBase, float $totalDebt): array;
     public function calculateDepositBeta(float $totalDebt, float $equity, float $equityLimit, float $customerDeposits): float;
     public function calculateCapacityModifier(float $totalDebt, float $equity, float $equityLimit, ?float $coreLiabilities = null): float;
     public function calculateMaxBuybackSpend(float $excessCash, float $retainedEarningsThisQuarter, bool $isMegaHoarder): float;

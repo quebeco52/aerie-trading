@@ -230,10 +230,22 @@ class Stock
     private string $currentRoic = '0.0000';
 
     /**
+     * @var string The Trailing Twelve Months (TTM) Return on Invested Capital.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, options: ['default' => '0.0000'])]
+    private string $roicTtm = '0.0000';
+
+    /**
      * @var string The dynamic, current Return on Equity.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, options: ['default' => '0.0000'])]
     private string $currentRoe = '0.0000';
+
+    /**
+     * @var string The Trailing Twelve Months (TTM) Return on Equity.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, options: ['default' => '0.0000'])]
+    private string $roeTtm = '0.0000';
 
     /**
      * @var string Absolute dollar amount remaining in the board-authorized buyback program.
@@ -551,7 +563,7 @@ class Stock
     {
         return $this->currentRoe;
     }
-    
+
     public function setCurrentRoe(string $currentRoe): self
     {
         $this->currentRoe = $currentRoe;
@@ -847,4 +859,25 @@ class Stock
         return (string) number_format($wholesale + $deposits, 4, '.', '');
     }
 
+    public function getRoicTtm(): string
+    {
+        return $this->roicTtm;
+    }
+
+    public function setRoicTtm(string $roicTtm): self
+    {
+        $this->roicTtm = $roicTtm;
+        return $this;
+    }
+
+    public function getRoeTtm(): string
+    {
+        return $this->roeTtm;
+    }
+
+    public function setRoeTtm(string $roeTtm): self
+    {
+        $this->roeTtm = $roeTtm;
+        return $this;
+    }
 }

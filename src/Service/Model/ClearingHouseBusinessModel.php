@@ -37,7 +37,7 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
         
         $yield2y = $macroState['yield_2y_ema'] ?? ($macroState['yield_2y'] ?? $policyRate);
         $earnedYield = max(0.0, $yield2y - MacroEngine::CASH_YIELD_SPREAD);
-        $rebateRate = max(0.001, $policyRate - 0.0015);
+        $rebateRate = max(0.001, $earnedYield - 0.0015); // Pass back the yield they actually earn, minus 15 bps spread
         
         $optimalInterestIncome = ($marginPool + $effectiveEquity + $corporateDebt) * $earnedYield;
         
@@ -58,8 +58,7 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
         $targetEbit = max($minEbit, $optimalEbit);
         
         // 4. Reverse-engineer Revenue
-        $unboundedRevenue = $targetEbit / $stableMargin;
-        $targetRevenue = min($unboundedRevenue, $effectiveEquity * 2.0); // Cap turnover at 2.0x
+        $targetRevenue = $targetEbit / $stableMargin; // Removed the arbitrary 2.0x cap which caused systemic under-earning death spirals
         
         $impliedTurnover = $targetRevenue / $effectiveEquity;
 
@@ -104,6 +103,31 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
         ];
     }
 
+    public function getMacroPhysics(Stock $stock, array &$macroState): array
+    {
+        // Volatility is the primary macro driver for clearinghouses.
+        $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? 0.20);
+        $volatilityShift = ($vixEma - 0.20) * 0.5; // High VIX = Higher Demand for clearing
+        
+        return [
+            'macro_demand_shift' => $volatilityShift, 
+            'pricing_power_multiplier' => 1.0, 
+            'operating_leverage_rate' => 0.0, 
+        ];
+    }
+
+    public function calculateInterestIncome(Stock $stock, array &$macroState, MathUtility $mathUtility): float
+    {
+        // Clearinghouses earn interest on their entire liquid treasury, which is primarily composed of the margin pool.
+        $cash = (float) $stock->getCorporateTreasury();
+        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+
+        // They do not take equity risk with the margin pool. They park cash in overnight repo and short-duration bonds.
+        $repoYield = $this->calculateCashYield($macroState, $policyRate);
+
+        return $cash * $repoYield;
+    }
+
     public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array
     {
         $corporateDebt = (float) $stock->getWholesaleDebt();
@@ -115,7 +139,11 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
         // Margin Pool Rebate (Customer Deposits)
         // Clearinghouses MUST pay interest back to clearing members on their initial margin, keeping a small spread.
         $marginPool = (float) $stock->getCustomerDeposits();
-        $rebateRate = max(0.001, $policyRate - 0.0015); // Pass back policy rate minus 15 bps
+        
+        $yield2y = $macroState['yield_2y_ema'] ?? ($macroState['yield_2y'] ?? $policyRate);
+        $earnedYield = max(0.0, $yield2y - MacroEngine::CASH_YIELD_SPREAD);
+        $rebateRate = max(0.001, $earnedYield - 0.0015); // Pass back the yield they actually earn, minus 15 bps spread
+        
         $marginInterest = $marginPool * $rebateRate;
         
         $totalInterestExpense = $corporateInterest + $marginInterest;
@@ -134,6 +162,19 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
         $yield2y = $macroState['yield_2y_ema'] ?? ($macroState['yield_2y'] ?? $policyRate);
         
         return max(0.0, $yield2y - MacroEngine::CASH_YIELD_SPREAD);
+    }
+
+    public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
+    {
+        // A Clearing House MUST hold 100% of its margin pool in liquid reserves.
+        // It cannot use customer margin deposits to execute M&A or pay dividends!
+        return ($currentLiability * 1.0) + ($operatingBase * 0.05);
+    }
+
+    public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
+    {
+        // The absolute minimum floor before emergency borrowing is triggered.
+        return ($currentLiability * 1.0) + ($operatingBase * 0.02);
     }
 
     public function processPassiveLiabilityGrowth(Stock $stock, array &$macroState, array &$state, MathUtility $mathUtility): void

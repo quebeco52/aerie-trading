@@ -7,6 +7,7 @@ use App\Entity\Etf;
 use App\Entity\User;
 use App\Entity\UserStock;
 use App\Entity\StockEvent;
+use App\Entity\EtfEvent;
 use Doctrine\ORM\EntityManagerInterface;
 use Redis;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -29,7 +30,7 @@ class StockController extends AbstractController
      * @return Response Returns the rendered view with asset details.
      */
     #[Route('/stock/{ticker}', name: 'app_stock_view')]
-    public function view(string $ticker, EntityManagerInterface $entityManager, \Redis $redis): Response
+    public function view(string $ticker, EntityManagerInterface $entityManager, \Redis $redis, \App\Service\Math\CorporateMetrics $corporateMetrics): Response
     {
         $isEtf = false;
         $asset = $entityManager->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);
@@ -55,9 +56,12 @@ class StockController extends AbstractController
 
         $userQuantity = 0;
         if ($currentUser) {
-            $user = $entityManager->getRepository(User::class)->find($currentUser->getId());
-            $userStock = $entityManager->getRepository(UserStock::class)->findOneBy(['user' => $user, 'stock' => $isEtf ? null : $asset]);
-            $userQuantity = $userStock ? $userStock->getQuantity() : 0;
+            if ($isEtf) {
+                $userAsset = $entityManager->getRepository(\App\Entity\UserEtf::class)->findOneBy(['user' => $currentUser, 'etf' => $asset]);
+            } else {
+                $userAsset = $entityManager->getRepository(UserStock::class)->findOneBy(['user' => $currentUser, 'stock' => $asset]);
+            }
+            $userQuantity = $userAsset ? $userAsset->getQuantity() : 0;
         }
 
         $marketCap = 0;
@@ -76,16 +80,13 @@ class StockController extends AbstractController
             $peRatio = ($eps > 0) ? ((float) $asset->getPrice() / $eps) : null;
 
             $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
-            $baselineSectorTam = 1_000_000_000_000;
             $samRatio = (float) $asset->getSamRatio();
-            $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
             
             $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$asset->getIndustry() ?? 'General']['business_model'] ?? 'none';
             $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
-            $investedCapital = $asset->getInvestedCapital();
             $evaluationCapital = $isFinancial ? (float) $asset->getTotalEquity() : $asset->getInvestedCapital();
             
-            $marketShare = min(0.9999, $evaluationCapital / max(1.0, $dynamicSam));
+            $marketShare = min(0.9999, $corporateMetrics->calculateMarketShare($evaluationCapital, $nominalGdpIndex, $samRatio));
         }
 
         $generalInfo = $asset->getDescription();
@@ -102,11 +103,26 @@ class StockController extends AbstractController
             $events = $entityManager->getRepository(StockEvent::class)->findBy(
                 ['stock' => $asset],
                 ['recordedAt' => 'DESC'], // Newest first
-                15 // Limit to 10
+                15 // Limit to 15
+            );
+        } else {
+            $events = $entityManager->getRepository(EtfEvent::class)->findBy(
+                ['etf' => $asset],
+                ['recordedAt' => 'DESC'],
+                15 // Limit to 15
             );
         }
 
         $economicCycle = $redis->get('economy_state') ?: 'Expansion';
+
+        $openOrders = [];
+        if ($currentUser) {
+            $openOrders = $entityManager->getRepository(\App\Entity\TradeOrder::class)->findBy([
+                'user' => $currentUser,
+                'ticker' => $ticker,
+                'status' => 'OPEN'
+            ], ['createdAt' => 'DESC']);
+        }
 
         return $this->render('stock/index.html.twig', [
             'asset' => $asset,
@@ -125,7 +141,8 @@ class StockController extends AbstractController
             'economic_cycle' => $economicCycle,
             'macro' => $macroState,
             'marketShare' => $marketShare,
-            'quote' => $quote
+            'quote' => $quote,
+            'openOrders' => $openOrders
         ]);
     }
 

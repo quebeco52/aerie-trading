@@ -1,4 +1,4 @@
-.PHONY: up down clean install seed reset ticker ticker-stop tailwind-watch bash
+.PHONY: up down clean install seed reset ticker ticker-stop tailwind-watch bash test phpstan
 
 DC = docker compose --env-file .env.dev -f docker-compose.dev.yml
 EXEC_PHP = $(DC) exec aerie-php
@@ -35,3 +35,9 @@ tailwind-watch:
 
 bash:
 	$(EXEC_PHP) bash
+
+test: up
+	$(EXEC_PHP) vendor/bin/phpunit
+
+phpstan: up
+	$(EXEC_PHP) vendor/bin/phpstan analyse

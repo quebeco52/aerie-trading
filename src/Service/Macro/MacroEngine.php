@@ -29,12 +29,21 @@ class MacroEngine
     public const SVJJ_MU_V = 0.05;
 
     // MACRO SHOCK CONSTANTS
-    public const SHOCK_BASE_PROBABILITY = 0.005;
-    public const SHOCK_RECESSION_THRESHOLD = 0.33;
-    public const SHOCK_INFLATION_THRESHOLD = 0.66;
-    public const SHOCK_RECESSION_IMPACT = 0.05;
-    public const SHOCK_INFLATION_IMPACT = 0.04;
-    public const SHOCK_STIMULUS_IMPACT = 0.03;
+    public const SHOCK_BASE_PROBABILITY = 0.250;
+
+    // Relative weights for different macro shocks (makes it easy to add new events)
+    public const MACRO_SHOCK_WEIGHTS = [
+        ShockEvent::GLOBAL_RECESSION => 1.0,
+        ShockEvent::INFLATION_CRISIS => 1.0,
+        ShockEvent::EMERGENCY_STIMULUS => 1.0,
+        ShockEvent::SURPRISE_STRONG_ECONOMY => 2.0,
+    ];
+
+    public const SHOCK_RECESSION_IMPACT = 0.02;
+    public const SHOCK_INFLATION_IMPACT = 0.015;
+    public const SHOCK_STIMULUS_IMPACT = 0.015;
+    public const SHOCK_STRONG_ECONOMY_GAP_IMPACT = 0.01;
+    public const SHOCK_STRONG_ECONOMY_INFLATION_IMPACT = 0.01;
 
     // YIELD WEIGHTS
     public const BORROWING_POLICY_WEIGHT = 0.70;
@@ -67,7 +76,7 @@ class MacroEngine
         $state->policyRate = $this->updatePolicyRate($state, $state->targetRate, $dt);
 
         $yieldData = $this->calculateYieldCurveAndQE($state, self::TARGET_INFLATION, self::NATURAL_RATE);
-        
+
         $state->yield2y = $yieldData['yield_2y'];
         $state->yield5y = $yieldData['yield_5y'];
         $state->yield10y = $yieldData['yield_10y'];
@@ -75,7 +84,7 @@ class MacroEngine
         $state->nsLevel = $yieldData['level'];
         $state->nsCurvature = $yieldData['curvature'];
         $state->qeActive = $yieldData['qe_suppression'] > 0;
-        
+
         $state->nsSlope = $state->yield10y - $state->policyRate;
 
         $state->marketZ = $this->mathUtility->generateStandardNormal();
@@ -97,7 +106,7 @@ class MacroEngine
 
     public function recordMacroSnapshot(array $macroState, \Doctrine\DBAL\Connection $conn): void
     {
-        $now = (new \DateTime())->format('Y-m-d H:i:s');
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
         $conn->executeStatement(
             "INSERT INTO macro_report (recorded_at, inflation, inflation_ema, output_gap, output_gap_ema, policy_rate, policy_rate_ema, yield2y, yield2y_ema, yield5y, yield5y_ema, yield10y, yield10y_ema, yield30y, yield30y_ema, corporate_tax_rate, equity_risk_premium, nominal_gdp_index, market_volatility) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -194,12 +203,12 @@ class MacroEngine
             'yield_30y' => max(0.00, $yield30y)
         ];
     }
-    
+
     private function calculateNelsonSiegelTenor(float $t, float $level, float $nsBeta1, float $nsBeta2, MacroState $state, float $qeYieldSuppression): float
     {
         $timeScale = sqrt($t / 10.0);
         $termPremium = (0.015 * $timeScale) + ($state->outputGap * 0.15 * $timeScale);
-        
+
         $qeTimeScale = min(1.0, $timeScale);
         $qeTargetedSuppression = $qeYieldSuppression * $qeTimeScale;
 
@@ -271,14 +280,14 @@ class MacroEngine
 
         return max(0.08, min(0.80, sqrt($nextVar)));
     }
-    
+
     private function calculatePotentialAndNominalGdp(MacroState $state, float $naturalRate, float $dt): void
     {
         $nominalPotentialGrowth = $naturalRate + $state->inflation;
         $state->potentialGdpIndex = max(0.10, $state->potentialGdpIndex * exp($nominalPotentialGrowth * $dt));
         $state->nominalGdpIndex = $state->potentialGdpIndex * (1.0 + $state->outputGap);
     }
-    
+
     private function updateExponentialMovingAverages(MacroState $state, float $dt): void
     {
         $emaWeight = min(1.0, $dt / 0.25);
@@ -287,25 +296,25 @@ class MacroEngine
         $state->policyRateEma += $emaWeight * ($state->policyRate - $state->policyRateEma);
         $state->inflationEma += $emaWeight * ($state->inflation - $state->inflationEma);
         $state->nsSlopeEma += $emaWeight * ($state->nsSlope - $state->nsSlopeEma);
-        
+
         $state->yield2yEma += $emaWeight * ($state->yield2y - $state->yield2yEma);
         $state->yield5yEma += $emaWeight * ($state->yield5y - $state->yield5yEma);
         $state->yield10yEma += $emaWeight * ($state->yield10y - $state->yield10yEma);
         $state->yield30yEma += $emaWeight * ($state->yield30y - $state->yield30yEma);
-        
+
         $state->marketVolatilityEma += $emaWeight * ($state->marketVolatility - $state->marketVolatilityEma);
     }
-    
+
     private function calculateDynamicFiscalPolicy(MacroState $state): void
     {
         $fiscalPolicyTarget = self::BASE_CORPORATE_TAX_RATE + ($state->outputGapEma * 1.0);
         $state->corporateTaxRate = max(0.12, min(0.30, $fiscalPolicyTarget));
     }
-    
+
     private function calculateEquityRiskPremium(MacroState $state): void
     {
         $erp = self::BASE_EQUITY_RISK_PREMIUM;
-        
+
         if ($state->outputGapEma < 0.0) {
             $erp += abs($state->outputGapEma) * 0.5;
         } else {
@@ -314,23 +323,44 @@ class MacroEngine
 
         $state->equityRiskPremium = max(0.02, $erp);
     }
-    
+
     private function generateMacroShocks(MacroState $state, float $dt): void
     {
         $state->eventType = null;
-        
+
         if ($this->mathUtility->checkProbability(self::SHOCK_BASE_PROBABILITY * $dt)) {
-            $shockRoll = $this->mathUtility->generateUniform();
-            if ($shockRoll < self::SHOCK_RECESSION_THRESHOLD) {
-                $state->eventType = ShockEvent::GLOBAL_RECESSION;
-                $state->outputGap -= self::SHOCK_RECESSION_IMPACT;
-            } elseif ($shockRoll < self::SHOCK_INFLATION_THRESHOLD) {
-                $state->eventType = ShockEvent::INFLATION_CRISIS;
-                $state->inflation += self::SHOCK_INFLATION_IMPACT;
-            } else {
-                $state->eventType = ShockEvent::EMERGENCY_STIMULUS;
-                $state->policyRate = 0.0;
-                $state->outputGap += self::SHOCK_STIMULUS_IMPACT;
+            $totalWeight = array_sum(self::MACRO_SHOCK_WEIGHTS);
+            // $this->mathUtility->generateUniform() generates between 0.0 and 1.0, so multiply by totalWeight
+            $roll = $this->mathUtility->generateUniform() * $totalWeight;
+
+            $cumulativeWeight = 0.0;
+            $selectedEvent = null;
+
+            foreach (self::MACRO_SHOCK_WEIGHTS as $event => $weight) {
+                $cumulativeWeight += $weight;
+                if ($roll <= $cumulativeWeight) {
+                    $selectedEvent = $event;
+                    break;
+                }
+            }
+
+            $state->eventType = $selectedEvent;
+
+            switch ($selectedEvent) {
+                case ShockEvent::GLOBAL_RECESSION:
+                    $state->outputGap -= self::SHOCK_RECESSION_IMPACT;
+                    break;
+                case ShockEvent::INFLATION_CRISIS:
+                    $state->inflation += self::SHOCK_INFLATION_IMPACT;
+                    break;
+                case ShockEvent::EMERGENCY_STIMULUS:
+                    $state->policyRate = 0.0;
+                    $state->outputGap += self::SHOCK_STIMULUS_IMPACT;
+                    break;
+                case ShockEvent::SURPRISE_STRONG_ECONOMY:
+                    $state->outputGap += self::SHOCK_STRONG_ECONOMY_GAP_IMPACT;
+                    $state->inflation -= self::SHOCK_STRONG_ECONOMY_INFLATION_IMPACT;
+                    break;
             }
         }
     }

@@ -18,4 +18,16 @@ class ConservativeArchetype extends AbstractArchetype
     { 
         return $prob * 0.90; 
     }
+    
+    public function modifyFixedCostRatio(float $fixedCostRatio): float 
+    { 
+        // Lean, conservative corporate structure
+        return $fixedCostRatio * 0.90; 
+    }
+    
+    public function modifyCreditSpread(float $spread): float 
+    { 
+        // Highly trusted by bond markets
+        return max(0.0010, $spread * 0.85); 
+    }
 }

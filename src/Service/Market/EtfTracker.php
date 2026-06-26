@@ -36,10 +36,12 @@ class EtfTracker
      * @param string $ticker         The ETF ticker symbol to update (defaults to 'LBI').
      * @return array{ticker: string, price: float, name: string, is_etf: bool}
      */
-    public function updateIndex(float $totalMarketCap, bool $recordHistory = false, string $ticker = 'LBI'): array
+    public function updateIndex(float $totalMarketCap, bool $recordHistory = false, string $ticker = 'LBI', ?Etf $etf = null): array
     {
 
-        $etf = $this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => $ticker]);
+        if ($etf === null) {
+            $etf = $this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => $ticker]);
+        }
         
         $divisor = $this->redis->get('market_index_divisor');
 

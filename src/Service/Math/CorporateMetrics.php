@@ -14,10 +14,10 @@ class CorporateMetrics
         return \App\Data\Sectors::INDUSTRY_METRICS[$industry]['depreciation'] ?? 0.05;
     }
 
-    public function calculateMarketShare(float $investedCapital, float $nominalGdpIndex, float $samRatio, float $baselineSectorTam = 1000000000000.0): float
+    public function calculateMarketShare(float $investedCapital, float $nominalGdpIndex, float $samRatio, float $baselineSectorTam = 2000000000000.0): float
     {
         $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
-        return min(5.0, $investedCapital / max(1.0, $dynamicSam));
+        return $investedCapital / max(1.0, $dynamicSam);
     }
 
     public function calculateOperatingBase(float $revenue, float $equity, float $floor = 10000000.0): float

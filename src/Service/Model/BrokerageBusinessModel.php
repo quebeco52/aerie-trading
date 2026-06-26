@@ -23,16 +23,16 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
-        
+
         // The Volatility Bonus (Trading Volume):
         // Brokerage revenues are hyper-sensitive to the VIX (Systemic Market Volatility). 
         // High Volatility = Massive trading volume (panic selling or euphoria buying) which generates massive fees.
         $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? 0.20);
         $volatilityBonus = max(0.0, ($vixEma - 0.20) * 0.5); // Direct revenue boost from average quarterly trading volume
-        
+
         $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * 0.20)) + $volatilityBonus);
 
-        $actualVariableCosts = $actualRevenue * min(0.99, max(0.01, $realizedVariableMargin));
+        $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $realizedVariableMargin));
 
         $eventLore = null;
         if ($vixEma > 0.30) {
@@ -42,11 +42,106 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
         }
 
         return [
-            'actual_revenue' => $actualRevenue, 
-            'actual_variable_costs' => $actualVariableCosts, 
-            'ebit' => $actualRevenue - $fixedCosts - $actualVariableCosts, 
+            'actual_revenue' => $actualRevenue,
+            'actual_variable_costs' => $actualVariableCosts,
+            'ebit' => $actualRevenue - $fixedCosts - $actualVariableCosts,
             'primary_shock_z' => $revenueZ,
             'event_lore' => $eventLore
+        ];
+    }
+
+    public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array
+    {
+        $equity = (float) $stock->getTotalEquity();
+        $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
+
+        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + 0.005);
+        $structuralSpread = (float) $stock->getCreditSpread();
+        $floatingRatio = (float) $stock->getFloatingDebtRatio();
+
+        $taxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
+
+        $wholesaleDebt = (float) $stock->getWholesaleDebt();
+        $treasury = (float) $stock->getCorporateTreasury();
+
+        $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
+
+        $industry = $stock->getIndustry() ?: 'General';
+        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 8.0;
+
+        $effectiveEquity = max(1.0, $equity);
+
+        // Brokerages rely heavily on wholesale debt to fund high-yielding margin loans for their clients.
+        $actualLeverage = $effectiveEquity > 0 ? ($wholesaleDebt / $effectiveEquity) : 0.0;
+        $allowedLeverage = min($actualLeverage, max(0.0, $equityLimit));
+        $optimalDebt = $effectiveEquity * $allowedLeverage;
+
+        $optimalInterestExpense = $optimalDebt * $blendedWholesaleRate;
+
+        // Margin loans yield a spread over the policy rate.
+        $marginLoanYield = $policyRate + 0.03;
+        $optimalInterestIncome = $optimalDebt * $marginLoanYield;
+
+        $optimalOperatingNetIncome = $effectiveEquity * $baselineRoe;
+        $optimalEbt = $optimalOperatingNetIncome / (1.0 - $taxRate);
+
+        $optimalEbit = $optimalEbt + $optimalInterestExpense - $optimalInterestIncome;
+        $structuralOperatingYield = $optimalEbit / max(1.0, $effectiveEquity);
+
+        $operatingBase = $this->getOperatingBase($stock);
+        $targetOperatingCash = $this->calculateTargetOperatingCash($operatingBase, 0.0, $wholesaleDebt);
+        $excessCash = max(0.0, $treasury - $targetOperatingCash);
+        $operatingEquity = max(1.0, $equity - $excessCash);
+
+        $targetEbit = $operatingEquity * $structuralOperatingYield;
+        $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
+
+        $minOperatingEbit = $operatingEquity * 0.05;
+        $targetEbit = max($minOperatingEbit, $targetEbit);
+
+        $unboundedRevenue = max(0.0, $targetEbit) / $stableMargin;
+        $targetRevenue = min($unboundedRevenue, $operatingEquity * 2.0);
+
+        $impliedTurnover = $targetRevenue / max(1.0, $operatingEquity);
+
+        return [
+            'invested_capital' => $operatingEquity,
+            'baseline_roic' => ($impliedTurnover * $stableMargin) * (1.0 - $taxRate)
+        ];
+    }
+
+    public function calculateInterestIncome(Stock $stock, array &$macroState, MathUtility $mathUtility): float
+    {
+        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+
+        // 1. Margin Loan Yield
+        // Brokerages lend their wholesale debt to clients as margin loans.
+        $marginLoanYield = $policyRate + 0.03;
+        $marginLoans = (float) $stock->getWholesaleDebt(); // Proxy: Wholesale debt is deployed into margin loans
+        $marginInterest = $marginLoans * $marginLoanYield;
+
+        // 2. Excess Cash Yield
+        $operatingBase = $this->getOperatingBase($stock);
+        $minCash = $this->calculateMinOperatingCash($operatingBase, 0.0, (float) $stock->getWholesaleDebt());
+        $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - $minCash);
+        $cashYield = $this->calculateCashYield($macroState, $policyRate);
+        $cashInterest = $excessCash * $cashYield;
+
+        return $marginInterest + $cashInterest;
+    }
+
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array
+    {
+        $floatingRatio = (float) $stock->getFloatingDebtRatio();
+
+        // Brokerages fund operations and margin lending purely via wholesale debt markets.
+        $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingInterestRate);
+        $wholesaleRate = $debt > 0 ? ($interestExpense / $debt) : $currentMarketFixedRate;
+
+        return [
+            'interest_expense' => $interestExpense,
+            'wholesale_rate' => $wholesaleRate
         ];
     }
 

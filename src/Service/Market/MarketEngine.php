@@ -87,6 +87,7 @@ class MarketEngine
         float $bookValuePerShare = 0.0,
         float $maShock = 0.0,
         float $currentRoic = 0.10,
+        float $roicTtm = 0.10,
         float $dividendPerShare = 0.0,
         float $liveWacc = 0.08,
         float $baselineIndustryPE = 20.0,
@@ -164,6 +165,7 @@ class MarketEngine
             $reversionSpeed,
             $earningsPerShare,
             $currentRoic,
+            $roicTtm,
             $fcfPerShare,
             $riskFreeRate,
             $bookValuePerShare,
@@ -256,6 +258,7 @@ class MarketEngine
      * @param float $reversionSpeed      The baseline speed at which the stock reverts to fair value.
      * @param float $earningsPerShare    The current EPS (Earnings Per Share).
      * @param float $currentRoic         The current Return on Invested Capital (or ROE for banks).
+     * @param float $roicTtm             The Trailing Twelve Month ROIC (or ROE).
      * @param float|null $fcfPerShare    The Free Cash Flow per share (null for banks).
      * @param float $riskFreeRate        The central bank's policy rate.
      * @param float $bookValuePerShare   The equity value per share.
@@ -275,53 +278,80 @@ class MarketEngine
         float $reversionSpeed,
         float $earningsPerShare,
         float $currentRoic,
+        float $roicTtm,
         ?float $fcfPerShare,
         float $riskFreeRate,
         float $bookValuePerShare,
         float $dividendPerShare,
-        float $baselineIndustryPE = 20.0, 
-        float $revenuePerShare = 0.0,      
+        float $baselineIndustryPE = 20.0,
+        float $revenuePerShare = 0.0,
         string $businessModel = 'none',
         float $liveCostOfEquity = 0.10
     ): array {
-        
+
         $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
-        
+        $hurdleRate = $isFinancial ? $liveCostOfEquity : $liveWacc;
+
+        // Structural ROIC is simply the TTM ROIC.
+        $structuralRoic = $roicTtm;
+
         // MACROECONOMIC STRESS INDEX (MSI)
-        $recessionStress = max(0.0, -$outputGap); 
-        $inflationStress = abs($inflation - 0.02); 
+        $recessionStress = max(0.0, -$outputGap);
+        $inflationStress = abs($inflation - 0.02);
         $systemicStressIndex = $recessionStress + $inflationStress;
 
-        // DYNAMIC P/E RE-RATING (Smoothed)
+        // 1. MACRO FORWARD GUIDANCE (Future Expectations)
         $rateModifier = pow(0.04 / max(0.01, $riskFreeRate), 0.5);
-        $macroBasePE = max(self::MIN_BASE_PE, min(self::MAX_BASE_PE, $baselineIndustryPE * $rateModifier));
+
+        // Markets are forward-looking. They expand multiples during economic booms (future growth)
+        // and compress them during recessions and high inflation.
+        $forwardGrowthPremium = $outputGap * 100.0; // e.g. +2% gap = +2.0 P/E
+        $inflationDiscount = max(0.0, $inflation - 0.02) * -100.0; // e.g. 5% inflation = -3.0 P/E
+
+        $macroBasePE = max(self::MIN_BASE_PE, min(self::MAX_BASE_PE, ($baselineIndustryPE * $rateModifier) + $forwardGrowthPremium + $inflationDiscount));
 
         // The EVA Premium (Quality Spread)
-        $hurdleRate = $isFinancial ? $liveCostOfEquity : $liveWacc; // Use isFinancial
-        $evaSpread = $currentRoic - $hurdleRate;
-        $qualityPremium = max(0.0, $evaSpread * 100) * 1.5;
+        $evaSpread = $structuralRoic - $hurdleRate;
+
+        // Use a logarithmic curve for Quality Premium to prevent hyper-profitable Asset-Light companies 
+        // (with 100%+ ROIC) from getting astronomical P/E multiples.
+        $positiveSpread = max(0.0, $evaSpread * 100);
+        $qualityPremium = $positiveSpread > 0 ? (log($positiveSpread + 1) * 4.0) : 0.0;
         $distressDiscount = min(0.0, $evaSpread * 100) * 2.0;
 
         $fairValuePE = max(self::MIN_FAIR_VALUE_PE, min(self::MAX_FAIR_VALUE_PE, $macroBasePE + $qualityPremium + $distressDiscount));
 
         if ($isFinancial) { // Use isFinancial
             // For Financials, Cash IS their operating inventory. Do not penalize them.
-            $trueStructuralEps = $bookValuePerShare * $currentRoic;
+            $trueStructuralEps = $bookValuePerShare * $structuralRoic;
         } else {
             // Standard corporates: Operating Equity = Book Value - Cash
             $cashPerShare = max(0.0, $revenuePerShare > 0 ? ($revenuePerShare * 0.10) : 0.0);
             $operatingBookValue = max(0.01, $bookValuePerShare - $cashPerShare);
-            
-            $structuralOperatingEps = $operatingBookValue * $currentRoic;
+
+            $structuralOperatingEps = $operatingBookValue * $structuralRoic;
             $structuralCashYieldEps = $cashPerShare * $riskFreeRate;
             $trueStructuralEps = $structuralOperatingEps + $structuralCashYieldEps;
         }
 
-        $normalizedEps = ($earningsPerShare * 0.50) + ($trueStructuralEps * 0.50);
+        // 2. STRUCTURAL EPS SMOOTHING (Past Performance)
+        // Real analysts value a company based on its established structural run-rate (past performance)
+        // rather than overreacting to a single quarterly print.
+        $safeStructuralEps = max(0.01, $trueStructuralEps);
+        $deviation = abs($earningsPerShare - $safeStructuralEps) / $safeStructuralEps;
+
+        // Trust in the single quarterly print decays exponentially the more it deviates from the structural norm.
+        // Base weight on the single quarter is 25% (since it's 1 quarter out of 4 for an annual run-rate).
+        // As deviation approaches 100%+, the weight decays towards ~9%, treating it as a pure anomaly.
+        $recentEpsWeight = 0.25 * exp(-$deviation);
+        $structuralWeight = 1.0 - $recentEpsWeight;
+
+        $normalizedEps = ($earningsPerShare * $recentEpsWeight) + ($trueStructuralEps * $structuralWeight);
+
         $peFairValue = max(0.00, $normalizedEps * $fairValuePE);
-        
+
         // THE ZOMBIE FIX: Revenue Floor
-        $psMultiple = max(0.2, min(5.0, ($currentRoic + 0.10) * 10)); 
+        $psMultiple = max(0.2, min(5.0, ($structuralRoic + 0.10) * 10));
         $revenueFloorValue = $revenuePerShare * $psMultiple;
 
         // THE BANKING DCF BYPASS
@@ -331,12 +361,14 @@ class MarketEngine
         // Dividend Yield Support (The Dividend Discount Model)
         $dividendSupportValue = 0.0;
         if ($dividendPerShare > 0.0) {
-            $cashFlowProxy = $isFinancial ? $earningsPerShare : ($fcfPerShare ?? 0.0); // Use isFinancial
+            // Use Normalized EPS to determine if dividend is structurally sustainable, 
+            // rather than raw TTM cash flow which might be temporarily negative.
+            $cashFlowProxy = $isFinancial ? $normalizedEps : max($fcfPerShare ?? 0.0, $normalizedEps);
             $sustainableDividend = min($dividendPerShare * 4.0, max(0.0, $cashFlowProxy));
-            
+
             $assumedGrowth = 0.01;
             $requiredYield = max(0.02, $liveCostOfEquity);
-            
+
             $dividendSupportValue = $this->mathUtility->calculateDividendDiscountModel(
                 $sustainableDividend,
                 $requiredYield,
@@ -346,21 +378,21 @@ class MarketEngine
 
         // Intrinsic Price-to-Book (P/B) Valuation
         // A living company rarely trades below 0.4x Book Value unless bankruptcy is imminent.
-        $pbMultiple = max(0.40, min(10.0, $currentRoic / max(0.01, $hurdleRate)));
+        $pbMultiple = max(0.40, min(10.0, $structuralRoic / max(0.01, $hurdleRate)));
         $pbFairValue = $bookValuePerShare * $pbMultiple;
 
         // PERFECTED WEIGHTED CONSENSUS MODEL
         $fairValue = $strategy->calculateFairValue($earningsValue, $pbFairValue, $normalizedEps);
 
         $perceivedFairValue = max(0.01, $fairValue, $dividendSupportValue);
-        
-        
+
+
 
         // OVERVALUATION (The Bubble Gravity)
         $valuationRatio = $currentPrice / $perceivedFairValue;
         $overvaluation = max(0.0, $valuationRatio - 1.0) * 0.5;
         $gravityCurve = ($overvaluation) + pow($overvaluation, 2.0);
-        
+
         // UNDERVALUATION (Value Spring)
         $inverseRatio = $perceivedFairValue / max(0.01, $currentPrice);
         $undervaluation = max(0.0, $inverseRatio - 1.0) * 0.5;
@@ -368,7 +400,7 @@ class MarketEngine
 
         // Smoothly scale macro resistance based on the output gap instead of a hard cliff.
         // Base resistance is 0.02. As the economy dips into recession, fear scales up linearly.
-        $macroResistance = 0.02 + (max(0.0, -$outputGap) * 10.0); 
+        $macroResistance = 0.02 + (max(0.0, -$outputGap) * 10.0);
         $bubbleGravity = $gravityCurve * $macroResistance;
 
         // Enthusiasm scales up in a booming economy, accelerating the spring
@@ -378,7 +410,7 @@ class MarketEngine
 
         // FLIGHT-TO-QUALITY REVERSION (Liquidity Drain)
         $dynamicReversion = $reversionSpeed * (1.0 + ($systemicStressIndex * 5.0));
-        
+
         $dynamicReversion += min(15.0, $bubbleGravity); // Cap max panic reversion
         $dynamicReversion += min(15.0, $valueSpring);
 

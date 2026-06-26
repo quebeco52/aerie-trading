@@ -28,58 +28,24 @@ class HomeController extends AbstractController
     public function index(EntityManagerInterface $entityManager, \App\Service\Macro\MacroEngine $macroEngine): Response
     {
         $etf = $entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
-
         $stocks = $entityManager->getRepository(Stock::class)->findAll();
-        
         $macroState = $macroEngine->getLiveState();
 
-        /**
-         * @var array<int, array{
-         *  ticker: string,
-         *  name: string,
-         *  sector: string,
-         *  price: float,
-         *  shares: float,
-         *  marketCap: float
-         * }> $marketData
-         */
-        $marketData = [];
-        foreach ($stocks as $stock) {
-            $price = (float) $stock->getPrice();
-            $shares = (float) $stock->getSharesOutstanding();
-            $marketCap = $price * $shares;
-
-            $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['business_model'] ?? 'none';
-            $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
-            $effectiveRoic = $isFinancial 
-                ? ((float) $stock->getCurrentRoe() ?: (float) $stock->getBaselineRoe()) 
-                : ((float) $stock->getCurrentRoic() ?: (float) $stock->getBaselineRoic());
-
-            $marketData[] = [
-                'ticker' => $stock->getTicker(),
-                'name' => $stock->getName(),
-                'sector' => $stock->getSector(),
-                'price' => $price,
-                'shares' => $shares,
-                'marketCap' => $marketCap,
-                'currentRoic' => $effectiveRoic
-            ];
-        }
-
+        $marketData = $this->buildBaseMarketData($stocks);
         usort($marketData, fn($a, $b) => $b['marketCap'] <=> $a['marketCap']);
 
         // If the user is not logged in, render a dedicated landing page
         if (!$this->getUser()) {
             return $this->render('home/landing.html.twig', [
-                'etf' => $etf,
+                'etf'        => $etf,
                 'top_stocks' => array_slice($marketData, 0, 6) // Show a preview of the top 6 stocks
             ]);
         }
 
         return $this->render('home/index.html.twig', [
-            'etf' => $etf,
+            'etf'    => $etf,
             'stocks' => $marketData,
-            'macro' => $macroState->toArray()
+            'macro'  => $macroState->toArray()
         ]);
     }
 
@@ -93,7 +59,7 @@ class HomeController extends AbstractController
     #[Route('/api/market', name: 'api_market')]
     public function apiMarket(EntityManagerInterface $entityManager): Response
     {
-        $etf = $entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
+        $etf    = $entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
         $stocks = $entityManager->getRepository(Stock::class)->findAll();
 
         // Helper function for the API
@@ -104,38 +70,60 @@ class HomeController extends AbstractController
         };
 
         $marketData = [];
-        foreach ($stocks as $stock) {
-            $price = (float) $stock->getPrice();
-            $shares = (float) $stock->getSharesOutstanding();
-            $marketCap = $price * $shares;
-
-            $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['business_model'] ?? 'none';
-            $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
-            $effectiveRoic = $isFinancial 
-                ? ((float) $stock->getCurrentRoe() ?: (float) $stock->getBaselineRoe()) 
-                : ((float) $stock->getCurrentRoic() ?: (float) $stock->getBaselineRoic());
-            
+        foreach ($this->buildBaseMarketData($stocks) as $row) {
             $marketData[] = [
-                'ticker' => $stock->getTicker(),
-                'name' => $stock->getName(),
-                'sector' => $stock->getSector(),
-                'price' => number_format($price, 2),
-                'marketCapRaw' => $marketCap,
-                
-                'marketCap' => $formatLarge($marketCap), 
-                'treasury' => $formatLarge((float) $stock->getCorporateTreasury()),
-                'equity' => $formatLarge((float) $stock->getTotalEquity()),
-                'currentRoic' => $effectiveRoic,
+                'ticker'       => $row['ticker'],
+                'name'         => $row['name'],
+                'sector'       => $row['sector'],
+                'price'        => number_format($row['price'], 2),
+                'marketCapRaw' => $row['marketCap'],
+                'marketCap'    => $formatLarge($row['marketCap']),
+                'treasury'     => $formatLarge($row['treasury']),
+                'equity'       => $formatLarge($row['equity']),
+                'currentRoic'  => $row['currentRoic'],
             ];
         }
 
         usort($marketData, fn($a, $b) => $b['marketCapRaw'] <=> $a['marketCapRaw']);
 
         return $this->json([
-            'etf' => [
-                'price' => $etf ? number_format((float) $etf->getPrice(), 2) : '0.00'
-            ],
+            'etf'    => ['price' => $etf ? number_format((float) $etf->getPrice(), 2) : '0.00'],
             'stocks' => $marketData
         ]);
+    }
+
+    /**
+     * Builds the base market data array shared across page and API endpoints.
+     *
+     * @param Stock[] $stocks
+     * @return array<int, array{ticker: string, name: string, sector: string, price: float, shares: float, marketCap: float, treasury: float, equity: float, currentRoic: float}>
+     */
+    private function buildBaseMarketData(array $stocks): array
+    {
+        $marketData = [];
+        foreach ($stocks as $stock) {
+            $price     = (float) $stock->getPrice();
+            $shares    = (float) $stock->getSharesOutstanding();
+            $marketCap = $price * $shares;
+
+            $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['business_model'] ?? 'none';
+            $isFinancial   = \App\Data\Sectors::isFinancial($businessModel);
+            $effectiveRoic = $isFinancial
+                ? ((float) $stock->getCurrentRoe() ?: (float) $stock->getBaselineRoe())
+                : ((float) $stock->getCurrentRoic() ?: (float) $stock->getBaselineRoic());
+
+            $marketData[] = [
+                'ticker'      => $stock->getTicker(),
+                'name'        => $stock->getName(),
+                'sector'      => $stock->getSector(),
+                'price'       => $price,
+                'shares'      => $shares,
+                'marketCap'   => $marketCap,
+                'treasury'    => (float) $stock->getCorporateTreasury(),
+                'equity'      => (float) $stock->getTotalEquity(),
+                'currentRoic' => $effectiveRoic,
+            ];
+        }
+        return $marketData;
     }
 }

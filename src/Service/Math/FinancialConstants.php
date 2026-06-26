@@ -14,6 +14,7 @@ class FinancialConstants
     public const VOLATILITY_SHOCK_FACTOR = 0.2;
     public const VOLATILITY_COOLING_FACTOR = 0.25;
     public const MAX_VOLATILITY_MULTIPLIER = 3.0;
+    public const MIN_OPERATING_BASE_CASH = 10000000.0;
 
     // --- Price Gap Dampening ---
     public const PRICE_GAP_DAMPENING = 0.20;

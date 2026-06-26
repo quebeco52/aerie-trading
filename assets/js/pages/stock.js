@@ -73,15 +73,15 @@ function initStockPage() {
     let isAborted = false;
 
     if (lwChart) {
-        try { lwChart.remove(); } catch(e) {}
+        try { lwChart.remove(); } catch (e) { }
         lwChart = null;
     }
     if (chartResizeObserver) {
-        try { chartResizeObserver.disconnect(); } catch(e) {}
+        try { chartResizeObserver.disconnect(); } catch (e) { }
         chartResizeObserver = null;
     }
     if (etfPieChart) {
-        try { etfPieChart.destroy(); } catch(e) {}
+        try { etfPieChart.destroy(); } catch (e) { }
         etfPieChart = null;
     }
 
@@ -167,7 +167,7 @@ function initStockPage() {
             }
 
             if (gdpEl && payload.macro.nominal_gdp_index !== undefined) {
-                const gdpValue = 20.00 * payload.macro.nominal_gdp_index;
+                const gdpValue = 50.00 * payload.macro.nominal_gdp_index;
                 gdpEl.textContent = '$' + gdpValue.toFixed(2) + 'T';
             }
         }
@@ -302,7 +302,7 @@ function initStockPage() {
     function updatePriceUI(newPrice, stockUpdate) {
         const el = document.getElementById('big-price');
         if (!el) return;
-        
+
         const oldPrice = previousPrice || newPrice;
 
         el.innerText = '$' + newPrice.toFixed(2);
@@ -341,6 +341,44 @@ function initStockPage() {
                 document.getElementById('stat-market-share').innerText = stockUpdate.market_share.toFixed(2) + '%';
             }
 
+            if (IS_FINANCIAL && stockUpdate.invested_capital !== undefined && stockUpdate.treasury !== undefined) {
+                const invCap = parseFloat(stockUpdate.invested_capital);
+                const treasury = parseFloat(stockUpdate.treasury);
+                const totalAssets = invCap + treasury;
+                const loanPct = totalAssets > 0 ? (invCap / totalAssets) * 100 : 0;
+                const cashPct = totalAssets > 0 ? (treasury / totalAssets) * 100 : 0;
+
+                if (document.getElementById('stat-total-assets')) document.getElementById('stat-total-assets').innerText = formatLarge(totalAssets);
+                if (document.getElementById('stat-loan-book')) document.getElementById('stat-loan-book').innerText = formatLarge(invCap);
+                if (document.getElementById('stat-vault-cash')) document.getElementById('stat-vault-cash').innerText = formatLarge(treasury);
+                
+                let assetTypeLabel = 'Invested Capital';
+                if (BUSINESS_MODEL === 'commercial_bank') assetTypeLabel = 'Loan Book';
+                else if (BUSINESS_MODEL === 'insurance') assetTypeLabel = 'Investment Portfolio';
+                else if (BUSINESS_MODEL === 'credit_services') assetTypeLabel = 'Credit Receivables';
+
+                let cashLabel = 'Treasury Reserves';
+                if (BUSINESS_MODEL === 'commercial_bank') cashLabel = 'Vault Cash';
+                else if (BUSINESS_MODEL === 'insurance') cashLabel = 'Cash Reserves';
+
+                const barLoan = document.getElementById('bar-loan-book');
+                if (barLoan) {
+                    barLoan.style.width = loanPct + '%';
+                    barLoan.title = `${assetTypeLabel}: ${loanPct.toFixed(1)}%`;
+                }
+                const barCash = document.getElementById('bar-cash');
+                if (barCash) {
+                    barCash.style.width = cashPct + '%';
+                    barCash.title = `${cashLabel}: ${cashPct.toFixed(1)}%`;
+                }
+
+                const labelLoan = document.getElementById('label-loan-book');
+                if (labelLoan) labelLoan.innerText = `${assetTypeLabel} (${loanPct.toFixed(1)}%)`;
+
+                const labelCash = document.getElementById('label-vault-cash');
+                if (labelCash) labelCash.innerText = `${cashLabel} (${cashPct.toFixed(1)}%)`;
+            }
+
             // Other live stats
             if (stockUpdate.current_volatility !== undefined) {
                 document.getElementById('stat-volatility').innerText = stockUpdate.current_volatility.toFixed(2) + '%';
@@ -351,7 +389,7 @@ function initStockPage() {
             if (stockUpdate.current_roic !== undefined && document.getElementById('stat-roic')) {
                 document.getElementById('stat-roic').innerText = (stockUpdate.current_roic * 100).toFixed(2) + '%';
             }
-            
+
 
             // Update Analyst Consensus Targets
             if (stockUpdate.analyst_targets) {
@@ -366,8 +404,8 @@ function initStockPage() {
                 const valueTarget = stockUpdate.analyst_targets.value_analyst;
 
                 // Use perceived fair value (the blended consensus) as the main target
-                const compositeTarget = stockUpdate.perceived_fair_value !== undefined 
-                    ? parseFloat(stockUpdate.perceived_fair_value) 
+                const compositeTarget = stockUpdate.perceived_fair_value !== undefined
+                    ? parseFloat(stockUpdate.perceived_fair_value)
                     : Math.max(growthTarget, incomeTarget, valueTarget);
 
                 // Helper to determine color based on 5% neutral margin
@@ -525,15 +563,15 @@ function initStockPage() {
 
         // Setup Chart Expansion Logic
         document.querySelectorAll('.expand-chart-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
+            btn.addEventListener('click', function () {
                 const card = this.closest('.chart-card');
                 const grid = card.closest('.grid');
                 const icon = this.querySelector('.expand-icon');
                 const canvasContainer = card.querySelector('.chart-canvas-container');
                 const allCards = grid.querySelectorAll('.chart-card');
-                
+
                 const isExpanded = card.classList.contains('md:col-span-2');
-                
+
                 if (isExpanded) {
                     card.classList.remove('md:col-span-2');
                     canvasContainer.classList.remove('h-96', 'md:h-[500px]');
@@ -598,7 +636,7 @@ function updateCharts(timeframe) {
     // Capital Return (Shareholder Yield)
     let dividendData = [];
     let buybackData = [];
-    
+
     // Leveraged Metrics (Banking)
     let roeData = [];
     let coeData = [];
@@ -610,9 +648,9 @@ function updateCharts(timeframe) {
         sliced.forEach((report, index) => {
             labels.push(`Q${(index % 4) + 1}`);
 
-            let rev = parseFloat(report.revenue || 0) / 4;
-            let inc = parseFloat(report.net_income || 0) / 4;
-            let intExp = parseFloat(report.interest_expense || 0) / 4;
+            let rev = parseFloat(report.revenue || 0);
+            let inc = parseFloat(report.net_income || 0);
+            let intExp = parseFloat(report.interest_expense || 0);
 
             revenueData.push(rev);
             netIncomeData.push(inc);
@@ -653,13 +691,27 @@ function updateCharts(timeframe) {
             else if (yearCount === 2) labels.unshift("-1 Yr");
             else labels.unshift(`-${yearCount - 1} Yrs`);
 
-            let rev = parseFloat(report.revenue || 0);
-            let inc = parseFloat(report.net_income || 0);
-            let intExp = parseFloat(report.interest_expense || 0);
+            // Sum the last 4 quarters for a accurate annualized figure
+            let sumRev = 0;
+            let sumInc = 0;
+            let sumIntExp = 0;
+            let sumCapEx = 0;
+            let sumDiv = 0;
+            let sumBuy = 0;
+            for (let j = 0; j < 4; j++) {
+                if (i - j >= 0) {
+                    sumRev += parseFloat(rawReports[i - j].revenue || 0);
+                    sumInc += parseFloat(rawReports[i - j].net_income || 0);
+                    sumIntExp += parseFloat(rawReports[i - j].interest_expense || 0);
+                    sumCapEx += parseFloat(rawReports[i - j].capital_expenditures || 0);
+                    sumDiv += parseFloat(rawReports[i - j].dividend_paid || 0);
+                    sumBuy += parseFloat(rawReports[i - j].stock_buybacks || 0);
+                }
+            }
 
-            revenueData.unshift(rev);
-            netIncomeData.unshift(inc);
-            capexData.unshift(-(parseFloat(report.capital_expenditures || 0) * 4));
+            revenueData.unshift(sumRev);
+            netIncomeData.unshift(sumInc);
+            capexData.unshift(-sumCapEx);
             operatingMarginData.unshift(parseFloat(report.operating_margin || 0) * 100);
 
             debtData.unshift(parseFloat(report.total_debt || 0));
@@ -668,7 +720,7 @@ function updateCharts(timeframe) {
 
             spreadData.unshift(parseFloat(report.dynamic_spread || 0) * 100);
             blendedRateData.unshift(parseFloat(report.blended_rate || 0) * 100);
-            expenseRatioData.unshift(rev > 0 ? (intExp / rev) * 100 : 0.0);
+            expenseRatioData.unshift(sumRev > 0 ? (sumIntExp / sumRev) * 100 : 0.0);
             cashYieldData.unshift(parseFloat(report.cash_yield || report.cashYield || 0) * 100);
             depositApyData.unshift(parseFloat(report.deposit_apy || report.depositApy || 0) * 100);
 
@@ -676,18 +728,9 @@ function updateCharts(timeframe) {
             waccData.unshift(parseFloat(report.wacc || 0) * 100);
             evaData.unshift(parseFloat(report.eva || 0));
 
-            // Sum the last 4 quarters for a accurate annualized figure
-            let sumDiv = 0;
-            let sumBuy = 0;
-            for (let j = 0; j < 4; j++) {
-                if (i - j >= 0) {
-                    sumDiv += parseFloat(rawReports[i - j].dividend_paid || 0);
-                    sumBuy += parseFloat(rawReports[i - j].stock_buybacks || 0);
-                }
-            }
             dividendData.unshift(sumDiv);
             buybackData.unshift(sumBuy);
-            
+
             roeData.unshift(parseFloat(report.return_on_equity || 0) * 100);
             coeData.unshift(parseFloat(report.cost_of_equity || 0) * 100);
             capitalRatioData.unshift(parseFloat(report.capital_ratio || 0) * 100);
@@ -696,23 +739,23 @@ function updateCharts(timeframe) {
             yearCount++;
         }
     }
-    
+
     // Convert Operating Margin to Combined Ratio (100 - Margin) specifically for Insurance companies
     let marginLabel = BUSINESS_MODEL === 'insurance' ? 'Combined Ratio' : 'Operating Margin';
-    let displayMarginData = BUSINESS_MODEL === 'insurance' 
-        ? operatingMarginData.map(m => 100 - m) 
+    let displayMarginData = BUSINESS_MODEL === 'insurance'
+        ? operatingMarginData.map(m => 100 - m)
         : operatingMarginData;
 
     renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, displayMarginData, marginLabel);
     renderDebtEquityChart(labels, debtData, equityData, treasuryData);
     renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData, cashYieldData, depositApyData);
     renderCapitalReturnChart(labels, dividendData, buybackData);
-    
+
     // THE NEW FINANCIAL SPLIT LOGIC
     if (IS_FINANCIAL) {
         // ALL financial companies are evaluated on Return on Equity (ROE)
         renderCapitalEfficiencyChart(labels, roeData, coeData, evaData, 'ROE', 'Cost of Equity');
-        
+
         if (BUSINESS_MODEL === 'commercial_bank' || BUSINESS_MODEL === 'credit_services') {
             renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData, 'Customer Deposit Ratio');
         } else if (BUSINESS_MODEL === 'insurance') {
@@ -789,22 +832,22 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
             maintainAspectRatio: false,
             plugins: {
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
-                tooltip: { 
-                    callbacks: { 
+                tooltip: {
+                    callbacks: {
                         label: (ctx) => {
                             if (ctx.dataset.label === marginLabel) {
                                 return `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`;
                             }
                             return `${ctx.dataset.label}: $${formatLarge(ctx.raw)}`;
                         }
-                    } 
+                    }
                 }
             },
             scales: {
-                y: { 
+                y: {
                     type: 'linear',
                     position: 'left',
-                    ticks: { callback: (val) => formatLarge(val) } 
+                    ticks: { callback: (val) => formatLarge(val) }
                 },
                 y1: {
                     type: 'linear',
@@ -847,17 +890,17 @@ function updateMacroCharts() {
 
         inflationData.push(parseFloat(report.inflation_ema) * 100);
         outputGapData.push(parseFloat(report.output_gap_ema) * 100);
-        
+
         let pr = parseFloat(report.policy_rate_ema) * 100;
         let y10 = parseFloat(report.yield10y_ema) * 100;
-        
+
         // Support both snake_case and camelCase serialization, fallback to null for historical records
         let rawY2 = report.yield2y_ema || report.yield2yEma;
         let y2 = rawY2 ? parseFloat(rawY2) * 100 : null;
-        
+
         let rawY5 = report.yield5y_ema || report.yield5yEma;
         let y5 = rawY5 ? parseFloat(rawY5) * 100 : null;
-        
+
         let rawY30 = report.yield30y_ema || report.yield30yEma;
         let y30 = rawY30 ? parseFloat(rawY30) * 100 : null;
 
@@ -866,16 +909,16 @@ function updateMacroCharts() {
         yield5yData.push(y5);
         yield10yData.push(y10);
         yield30yData.push(y30);
-        
+
         spread2s10sData.push((y10 !== null && y2 !== null) ? y10 - y2 : null);
         spread30yData.push((y30 !== null && pr !== null) ? y30 - pr : null);
-        
+
         erpData.push(parseFloat(report.equity_risk_premium) * 100);
         volData.push(parseFloat(report.market_volatility) * 100);
         taxData.push(parseFloat(report.corporate_tax_rate) * 100);
-        
+
         // Base GDP in the system is $25 Trillion
-        gdpData.push(parseFloat(report.nominal_gdp_index) * 25.0); 
+        gdpData.push(parseFloat(report.nominal_gdp_index) * 25.0);
     });
 
     renderMacroEconomyChart(labels, inflationData, outputGapData);
@@ -995,7 +1038,7 @@ function renderMacroMortgageChart(labels, policyRateData, yield30yData, spread30
 
     if (macroMortgageChartInstance) macroMortgageChartInstance.destroy();
     const ctx = canvas.getContext('2d');
-    
+
     macroMortgageChartInstance = new Chart(ctx, {
         type: 'bar',
         data: {
@@ -1286,7 +1329,7 @@ function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRat
                 }
             }
         }
-     };
+    };
 
     // ONLY Banks pay Deposit APY. Insurance Float is 0%, Brokerages have no deposits.
     if (BUSINESS_MODEL === 'commercial_bank' || BUSINESS_MODEL === 'credit_services') {

@@ -323,9 +323,10 @@ class MathUtility
      * @param float $evaSpread    The spread between the company's Return on Capital and its Cost of Capital.
      * @return float The intrinsic fair value P/E multiple.
      */
-    public function calculateIntrinsicFairValuePE(float $riskFreeRate, float $evaSpread): float
+    public function calculateIntrinsicFairValuePE(float $riskFreeRate, float $evaSpread, float $equityRiskPremium = \App\Service\Macro\MacroEngine::BASE_EQUITY_RISK_PREMIUM): float
     {
-        $marketBasePE = max(8.0, min(30.0, 1.0 / max(0.01, $riskFreeRate)));
+        $costOfEquity = $riskFreeRate + $equityRiskPremium;
+        $marketBasePE = max(8.0, min(30.0, 1.0 / max(0.01, $costOfEquity)));
         $qualityPremium = max(0.0, $evaSpread * 100) * 1.5;
         $distressDiscount = min(0.0, $evaSpread * 100) * 2.0;
         

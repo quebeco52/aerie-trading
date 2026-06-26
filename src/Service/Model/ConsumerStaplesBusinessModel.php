@@ -38,10 +38,11 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
             $recallPenalty = 0.08; // 8% margin hit for massive product recall and write-offs
             $eventLore = "Suffered a massive product recall due to severe supply chain contamination.";
         } elseif ($eventZ < -2.0) {
+            $recallPenalty = 0.03; // 3% margin hit for fines and legal fees
             $eventLore = "Faced sudden regulatory scrutiny and fines over product health concerns.";
         }
 
-        $actualVariableCosts = $actualRevenue * min(0.99, max(0.01, $realizedVariableMargin + $recallPenalty));
+        $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $realizedVariableMargin + $recallPenalty));
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
         return [

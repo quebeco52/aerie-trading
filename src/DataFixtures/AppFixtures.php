@@ -80,6 +80,12 @@ class AppFixtures extends Fixture
             // THE FIX: Adding all the new Fundamental & Macro Metrics
             $stock->setBaselineRoic((string) ($stockData['baseline_roic'] ?? 0.10));
             $stock->setCurrentRoic((string) ($stockData['baseline_roic'] ?? 0.10));
+            $stock->setRoicTtm((string) ($stockData['baseline_roic'] ?? 0.10));
+            
+            $stock->setBaselineRoe((string) ($stockData['baseline_roe'] ?? 0.10));
+            $stock->setCurrentRoe((string) ($stockData['baseline_roe'] ?? 0.10));
+            $stock->setRoeTtm((string) ($stockData['baseline_roe'] ?? 0.10));
+
             $stock->setCapexRatio((string) ($stockData['capex_ratio'] ?? 0.20));
             $stock->setTargetPayoutRatio((string) ($stockData['target_payout_ratio'] ?? 0.30));
             $stock->setDividendSpeed((string) ($stockData['dividendSpeed'] ?? 0.20));

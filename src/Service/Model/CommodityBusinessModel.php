@@ -55,9 +55,18 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         $inflation = $macroState['inflation_ema'] ?? 0.02;
         $inflationBonus = max(0.0, ($inflation - 0.02) * abs((float) $stock->getBeta()) * 2.0);
         
-        $actualRevenue = $expectedRevenue * (1.0 + $revenueShock + $inflationBonus);
+        // The physical volume of commodities extracted/sold (subject to standard operational variance)
+        $physicalVolumeRevenue = $expectedRevenue * (1.0 + $revenueShock);
         
-        $actualVariableCosts = $actualRevenue * $realizedVariableMargin;
+        // Actual revenue explodes upward during inflation due to spot price spikes
+        $actualRevenue = $physicalVolumeRevenue + ($expectedRevenue * $inflationBonus);
+        
+        // CRITICAL FINANCIAL FIX: 
+        // Variable extraction costs (labor, diesel, equipment) scale with the physical volume produced,
+        // NOT the wildly fluctuating global spot price of the refined commodity. 
+        // By decoupling variable costs from the inflation premium, operating margins properly explode 
+        // during a commodity supercycle, just like real life.
+        $actualVariableCosts = $physicalVolumeRevenue * $realizedVariableMargin;
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
         return [

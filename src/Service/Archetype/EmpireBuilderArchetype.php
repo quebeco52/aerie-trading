@@ -28,4 +28,17 @@ class EmpireBuilderArchetype extends AbstractArchetype
     { 
         return $baseAggression * 5.0; 
     }
+    
+    public function modifyMAndASynergyRange(float $min, float $max): array 
+    { 
+        // Willing to massively overpay just to get the deal done and build their empire.
+        // Shifts synergy range DOWN, ensuring frequent Goodwill write-offs.
+        return ['min' => $min - 0.20, 'max' => $max - 0.05]; 
+    }
+    
+    public function modifyFixedCostRatio(float $fixedCostRatio): float 
+    { 
+        // Bloated corporate structure, too many executives and private jets
+        return min(0.85, $fixedCostRatio * 1.20); 
+    }
 }

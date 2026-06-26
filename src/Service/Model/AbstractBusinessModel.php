@@ -5,6 +5,7 @@ namespace App\Service\Model;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Base class for all Business Models to reduce code duplication for standard financial physics.
@@ -16,21 +17,41 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
         return $macroTaxRate;
     }
 
+    protected function getOperatingBase(Stock $stock): float
+    {
+        return max((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity(), FinancialConstants::MIN_OPERATING_BASE_CASH);
+    }
+
+    public function calculateInterestIncome(Stock $stock, array &$macroState, MathUtility $mathUtility): float
+    {
+        $cash = (float) $stock->getCorporateTreasury();
+        $operatingBase = $this->getOperatingBase($stock);
+        
+        // Default behavior: Cash above target operating cash earns money-market yields.
+        $targetCash = $this->calculateTargetOperatingCash($operatingBase, 0.0, (float) $stock->getWholesaleDebt());
+        $excessCash = max(0.0, $cash - $targetCash);
+        
+        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        return $excessCash * $this->calculateCashYield($macroState, $policyRate);
+    }
+
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
     {
-        return $operatingBase * 0.05;
+        return $operatingBase * FinancialConstants::TARGET_OPERATING_CASH_RATIO;
     }
 
     public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
     {
-        return $operatingBase * 0.03;
+        return $operatingBase * FinancialConstants::MIN_OPERATING_CASH_RATIO;
     }
 
-    public function evaluateHoardingStatus(float $excessCash, float $operatingBase, float $totalDebt): array
+    public function evaluateHoardingStatus(float $treasury, float $targetCashReserves, float $operatingBase, float $totalDebt): array
     {
+        $excessCash = max(0.0, $treasury - $targetCashReserves);
         return [
-            'is_hoarder'      => $excessCash > ($operatingBase * 0.25),
-            'is_mega_hoarder' => $excessCash > ($operatingBase * 0.40),
+            'excess_cash'     => $excessCash,
+            'is_hoarder'      => $excessCash > ($operatingBase * FinancialConstants::HOARDER_THRESHOLD_RATIO),
+            'is_mega_hoarder' => $excessCash > ($operatingBase * FinancialConstants::MEGA_HOARDER_THRESHOLD_RATIO),
         ];
     }
 
@@ -74,6 +95,9 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
 
     public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float
     {
+        // Real financial theory dictates that companies optimize their WACC by maintaining a target capital structure.
+        // They do NOT self-fund CapEx with cash if issuing debt lowers their cost of capital.
+        // Instead, they issue debt to maintain their optimal Debt/Equity ratio, and use excess cash to buy back shares.
         return $baseCapacity;
     }
 

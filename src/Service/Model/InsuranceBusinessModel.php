@@ -34,9 +34,12 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         // --- THE CLEAR BALANCE SHEET MATH ---
         // 1. Capacity Constraint: Revenue must NEVER be reverse-engineered from target EBIT.
         // It must be mathematically clamped to the firm's physical capital to prevent hyperinflation.
-        
+
         $capacityRatio = 3.0; // Kenney Rule: Max 3.0x of surplus equity annually
-        $operatingEquity = max(1.0, $equity);
+
+        // Prevent zombie state: Regulators allow insolvent insurers to operate in runoff using a fraction of their float as implied equity
+        $impliedRunoffEquity = (float) $stock->getCustomerDeposits() * 0.10;
+        $operatingEquity = max($impliedRunoffEquity, max(1.0, $equity));
 
         $taxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
 
@@ -57,11 +60,11 @@ class InsuranceBusinessModel extends AbstractBusinessModel
     {
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
         $beta = (float) $stock->getBeta();
-        
+
         return [
             'macro_demand_shift' => $outputGap * $beta * 0.10, // Highly immune to macro demand
-            'pricing_power_multiplier' => 1.0, 
-            'operating_leverage_rate' => 0.05, 
+            'pricing_power_multiplier' => 1.0,
+            'operating_leverage_rate' => 0.05,
         ];
     }
 
@@ -83,15 +86,15 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         // 1. Premium Revenue Shock (Very low top-line variance)
         $revenueZ = $mathUtility->generateStandardNormal();
         $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * 0.05)));
-        
+
         // 2. The Combined Ratio Shock (Catastrophes/Underwriting Cycle)
         $claimZ = $mathUtility->generateStandardNormal();
-        
+
         // Catastrophes are asymmetric. A hurricane causes massive losses, but a lack of hurricanes only mildly boosts profits.
         $underwritingShock = $claimZ < -1.5 ? abs($claimZ) * 0.15 : ($claimZ > 1.0 ? -0.05 : 0.0);
-        
-        $actualVariableCosts = $actualRevenue * min(0.99, max(0.01, $realizedVariableMargin + $underwritingShock));
-        
+
+        $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $realizedVariableMargin + $underwritingShock));
+
         $eventLore = null;
         if ($claimZ < -2.0) {
             $eventLore = "Suffered catastrophic claim losses from a major systemic disaster.";
@@ -100,9 +103,9 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         }
 
         return [
-            'actual_revenue' => $actualRevenue, 
-            'actual_variable_costs' => $actualVariableCosts, 
-            'ebit' => $actualRevenue - $fixedCosts - $actualVariableCosts, 
+            'actual_revenue' => $actualRevenue,
+            'actual_variable_costs' => $actualVariableCosts,
+            'ebit' => $actualRevenue - $fixedCosts - $actualVariableCosts,
             'primary_shock_z' => abs($claimZ) > abs($revenueZ) ? $claimZ : $revenueZ,
             'event_lore' => $eventLore
         ];
@@ -121,9 +124,9 @@ class InsuranceBusinessModel extends AbstractBusinessModel
     {
         $cash = (float) $stock->getCorporateTreasury();
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
-        
+
         $floatYield = $this->calculateCashYield($macroState, $policyRate);
-        
+
         return $cash * $floatYield;
     }
 
@@ -140,37 +143,46 @@ class InsuranceBusinessModel extends AbstractBusinessModel
     public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate): float
     {
         $equity = (float) $stock->getTotalEquity();
-        $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) : 0.0;
-        
-        $oldRoe = (float) $stock->getCurrentRoe();
-        $smoothedRoe = $oldRoe === 0.0 ? $truePostTaxReturn : $oldRoe + (($truePostTaxReturn - $oldRoe) * 0.50);
-        
-        $stock->setCurrentRoe((string) max(-0.50, min(1.0, $smoothedRoe)));
-        
+        $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * 4.0 : 0.0;
+
+        $stock->setCurrentRoe((string) max(-0.50, min(1.0, $truePostTaxReturn)));
+
+        // Insurance earnings are extremely lumpy due to catastrophes. Use a 0.15 smoothing factor (85% historical weight)
+        // to prevent the P/E multiple and stock price from violently whipsawing every time a hurricane hits.
+        $oldTtm = (float) $stock->getRoeTtm();
+        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * 0.15) + ($oldTtm * 0.85);
+        $stock->setRoeTtm((string) max(-0.50, min(1.0, $newTtm)));
+
         return $truePostTaxReturn;
     }
 
     /**
-     * Retrieves the effective corporate tax rate for the insurance business.
+     * Calculates the target operating cash required for the insurance business.
      *
-     * @param float $macroTaxRate The baseline macroeconomic corporate tax rate.
-     * @return float The effective tax rate applied to earnings.
+     * @param float $operatingBase    The base operating expenses.
+     * @param float $currentLiability The current liabilities (customer deposits / float).
+     * @param float $wholesaleDebt    The wholesale debt balance.
+     * @return float The target operating cash to maintain.
      */
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
     {
-        return max($operatingBase * 0.05, $currentLiability * 1.0);
+        // Target 100% of Customer Deposits to maintain a strict regulatory surplus buffer.
+        // This prevents the company from buying back shares until they have a solid safety net against catastrophes.
+        return max($operatingBase * 0.05, $currentLiability * 1.00);
     }
 
     public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
     {
-        return max($operatingBase * 0.03, $currentLiability * 0.85);
+        return max($operatingBase * 0.03, $currentLiability * 0.50);
     }
 
-    public function evaluateHoardingStatus(float $excessCash, float $operatingBase, float $totalDebt): array
+    public function evaluateHoardingStatus(float $treasury, float $targetCashReserves, float $operatingBase, float $totalDebt): array
     {
+        $excessCash = max(0.0, $treasury - $targetCashReserves);
         return [
-            'is_hoarder'      => $excessCash > ($totalDebt * 0.90),
-            'is_mega_hoarder' => $excessCash > ($totalDebt * 1.10),
+            'excess_cash'     => $excessCash,
+            'is_hoarder'      => $excessCash > ($totalDebt * 0.25),
+            'is_mega_hoarder' => $excessCash > ($totalDebt * 0.40),
         ];
     }
 
@@ -178,10 +190,10 @@ class InsuranceBusinessModel extends AbstractBusinessModel
     {
         $utilization = $equity > 0.0 ? ($totalDebt / ($equity * $equityLimit)) : 1.0;
         $floatRatio = $totalDebt > 0 ? ($coreLiabilities / $totalDebt) : 0.0;
-        
+
         $decayRate = 0.50 + (1.50 * $floatRatio);
         $capacityModifier = 1.50 * exp(-$decayRate * pow($utilization, 4.0));
-        
+
         return max(0.01, min(1.50, $capacityModifier));
     }
 
@@ -198,8 +210,11 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         return ['interest_expense' => $interestExpense, 'wholesale_rate' => $corporateDebt > 0 ? ($interestExpense / $corporateDebt) : $currentMarketFixedRate];
     }
 
-    public function getInterestCoverage(float $ebit, float $interestExpense): float { return 999.0; }
-    
+    public function getInterestCoverage(float $ebit, float $interestExpense): float
+    {
+        return 999.0;
+    }
+
     public function calculateCashYield(array &$macroState, float $policyRate): float
     {
         // The Float Portfolio:
@@ -207,29 +222,30 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         // heavily into long-duration bonds, with a smaller allocation to equities for growth.
         $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['policy_rate_ema'] ?? 0.02) + 0.01;
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
-        
+
         // 80% Fixed Income (Anchored to the 10-Year Treasury Yield)
         $bondReturn = $yield10y;
-        
+
         // 20% Equities (Suffers capital losses during recessions)
-        // A baseline 7% return, taking heavy realized losses during negative output gaps.
-        $equityReturn = 0.07 + ($outputGap * 2.0);
-        
+        // A baseline return of Risk-Free Rate + Equity Risk Premium, taking heavy realized losses during negative output gaps.
+        $erp = $macroState['equity_risk_premium'] ?? 0.045;
+        $equityReturn = ($policyRate + $erp) + ($outputGap * 2.0);
+
         // Blended portfolio yield, floored at 0% so they don't mathematically lose the raw principal
         $floatYield = max(0.0, (0.80 * $bondReturn) + (0.20 * $equityReturn));
-        
+
         // Dampening
         return $floatYield * 0.50;
     }
 
-    public function getDebtExpansionAggressiveness(float $spreadMultiplier): array 
-    { 
-        return ['probability' => 0.40 + ($spreadMultiplier * 0.30), 'aggressiveness' => 0.02 + (0.08 * $spreadMultiplier)]; 
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier): array
+    {
+        return ['probability' => 0.40 + ($spreadMultiplier * 0.30), 'aggressiveness' => 0.02 + (0.08 * $spreadMultiplier)];
     }
-    
-    public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float 
-    { 
-        return max($organicSpend, $debtIssued * 0.80); 
+
+    public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float
+    {
+        return max($organicSpend, $debtIssued * 0.80);
     }
 
     public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float
@@ -237,7 +253,10 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         // Insurance companies should fund expansion using their premium float (excess cash) first
         return max(0.0, $baseCapacity - $excessCash);
     }
-    public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float { return $peFairValue; }
+    public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float
+    {
+        return $peFairValue;
+    }
 
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps): float
     {
@@ -247,16 +266,16 @@ class InsuranceBusinessModel extends AbstractBusinessModel
 
     public function processPassiveLiabilityGrowth(Stock $stock, array &$macroState, array &$state, MathUtility $mathUtility): void
     {
-        $currentLiabilities = $state['customerDeposits']; 
+        $currentLiabilities = $state['customerDeposits'];
         if ($currentLiabilities <= 0) return;
 
         $equity = (float) $stock->getTotalEquity();
         $totalDebt = $state['wholesaleDebt'] + $currentLiabilities;
         $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?: 'General']['equity_limit'] ?? 10.0;
-        
+
         // Nominal Systemic Growth: The Float grows naturally alongside the M2 Money Supply.
         $systemicGrowthQuarterly = (($macroState['inflation_ema'] ?? 0.02) + 0.02 + ((($macroState['output_gap_ema'] ?? 0.0) > 0.0 ? ($macroState['output_gap_ema'] ?? 0.0) * 0.5 : ($macroState['output_gap_ema'] ?? 0.0) * 2.0))) / 4.0;
-        
+
         // Premium-to-Surplus Capacity constraint (Kenney Rule) throttles growth if they don't have enough equity to back the policies.
         $baseGrowth = $systemicGrowthQuarterly * max(0.75, min(1.25, abs((float) $stock->getBeta()))) * $this->calculateCapacityModifier($totalDebt, $equity, $equityLimit, $currentLiabilities);
         $liabilityChange = $currentLiabilities * max(-0.15, min(0.15, $baseGrowth + ($mathUtility->generateStandardNormal() * 0.005)));
@@ -264,7 +283,7 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         if (abs($liabilityChange) > 0) {
             $state['treasury'] += $liabilityChange;
             $state['customerDeposits'] += $liabilityChange;
-            
+
             if ($state['treasury'] < 0.0) {
                 $liquidityShortfall = abs($state['treasury']);
                 $state['treasury'] = 0.0;

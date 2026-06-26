@@ -3,10 +3,14 @@
 namespace App\Command;
 
 use App\Entity\Stock;
+use App\Entity\Etf;
 use App\Service\Market\StockTracker;
 use App\Service\Market\EtfTracker;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\MarketOperator;
+use App\Service\Event\MarketEventPublisher;
+use App\Service\Event\NarrativeEngine;
+use App\Service\Event\ShockEvent;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -39,6 +43,8 @@ class MarketSimulateCommand extends Command
         private EtfTracker $etfTracker,
         private MacroEngine $macroEngine,
         private MarketOperator $marketOperator,
+        private MarketEventPublisher $marketEvent,
+        private NarrativeEngine $narrativeEngine,
         private \Redis $redis,
     ) {
         parent::__construct();
@@ -91,6 +97,15 @@ class MarketSimulateCommand extends Command
             $result = $this->stockTracker->updateStocks($stocks, $dt, $isHistoryTick, $macroState, $tick, self::TICKS_PER_YEAR);
             $this->etfTracker->updateIndex($result['total_cap'], $isHistoryTick);
 
+            if (isset($macroState['event_type'])) {
+                $lbi = $this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
+                if ($lbi) {
+                    $desc = $this->narrativeEngine->generateLore($macroState['event_type']);
+                    $shockPct = in_array($macroState['event_type'], [ShockEvent::EMERGENCY_STIMULUS, ShockEvent::SURPRISE_STRONG_ECONOMY]) ? 5.0 : -5.0;
+                    $this->marketEvent->publish($lbi, 'SHOCK', $desc, $shockPct);
+                }
+            }
+
             // Save Macro Report Snapshot once a "Simulation Quarter"
             if ($tick % $quarterlyInterval === 0) {
                 $this->macroEngine->recordMacroSnapshot($macroState, $conn);
@@ -111,7 +126,7 @@ class MarketSimulateCommand extends Command
             }
 
             if ($tick % 100 === 0) {
-                $this->marketOperator->enforceMarketStability($stocks);
+                $this->marketOperator->enforceMarketStability($stocks, $macroState);
             }
 
 

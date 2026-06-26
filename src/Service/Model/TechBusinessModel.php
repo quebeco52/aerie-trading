@@ -60,7 +60,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::VIRAL_GROWTH;
         }
 
-        $actualVariableCosts = $actualRevenue * min(0.99, max(0.01, $realizedVariableMargin + $wageInflationPenalty + $regulatoryShock));
+        $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $realizedVariableMargin + $wageInflationPenalty + $regulatoryShock));
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
         return [

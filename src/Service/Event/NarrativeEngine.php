@@ -48,19 +48,24 @@ class NarrativeEngine
                 "Saw a surge in safety-seeking capital, adding \$" . ($context['amount'] ?? '0.00') . "B in deposits."
             ]),
             ShockEvent::GLOBAL_RECESSION => $this->getRandomPhrase([
-                "The global economy has officially entered a severe recession, triggering widespread panic.",
-                "Global GDP contracts sharply as a severe economic recession takes hold across all sectors.",
-                "A systemic global downturn begins, marked by plunging output and skyrocketing unemployment."
+                "An unexpected bankruptcy of a major global institution triggers a sudden market panic.",
+                "A severe, localized financial collapse sends shockwaves through the global economy.",
+                "A sudden disruption in global supply chains sparks a sharp contraction in economic output."
             ]),
             ShockEvent::INFLATION_CRISIS => $this->getRandomPhrase([
-                "Inflation spirals out of control globally, devastating consumer purchasing power.",
-                "A historic inflation crisis grips the world economy, forcing central banks into extreme measures.",
-                "Runaway inflation destabilizes the global supply chain, causing a massive cost-of-living crisis."
+                "A sudden surge in global energy prices triggers a sharp, unexpected spike in inflation.",
+                "Unexpected resource shortages cause a rapid and destabilizing increase in the cost of goods.",
+                "A severe localized commodity crisis ripples through the market, driving up global inflation."
             ]),
             ShockEvent::EMERGENCY_STIMULUS => $this->getRandomPhrase([
-                "Central banks announce an unprecedented emergency stimulus package to rescue the economy.",
-                "Global authorities deploy massive quantitative easing to flood the financial system with liquidity.",
-                "Emergency rate cuts and trillions in stimulus are injected to prevent a total market collapse."
+                "A large liquidity injection by government initiative catches the market by surprise.",
+                "Central banks unexpectedly announce a targeted stimulus program to support market stability.",
+                "Authorities deploy an emergency quantitative easing measure, flooding the market with capital."
+            ]),
+            ShockEvent::SURPRISE_STRONG_ECONOMY => $this->getRandomPhrase([
+                "A major breakthrough in global trade agreements sparks a sudden surge in economic optimism.",
+                "Unexpectedly strong consumer spending data catches the market off guard, accelerating growth.",
+                "A sudden technological boom triggers a massive wave of global investment and expansion."
             ]),
             default => "Experienced an unexpected market event."
         };

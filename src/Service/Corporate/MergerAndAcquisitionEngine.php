@@ -69,9 +69,8 @@ class MergerAndAcquisitionEngine
 
         // Calculate actual excess cash above target operating requirements
         $targetCash = $strategy->calculateTargetOperatingCash($operatingBase, (float) $acquirer->getCustomerDeposits(), (float) $acquirer->getWholesaleDebt());
-        $excessCash = max(0.0, $treasury - $targetCash);
-        
-        $hoardStatus = $strategy->evaluateHoardingStatus($excessCash, $operatingBase, $currentDebt);
+        $hoardStatus = $strategy->evaluateHoardingStatus($treasury, $targetCash, $operatingBase, $currentDebt);
+        $excessCash = $hoardStatus['excess_cash'];
         $isHoarder = $hoardStatus['is_hoarder'];
         $isMegaHoarder = $hoardStatus['is_mega_hoarder'];
         
@@ -85,8 +84,11 @@ class MergerAndAcquisitionEngine
         $hurdleRate = $isFinancial ? ($health['cost_of_equity'] ?? 0.10) : ($health['wacc'] ?? 0.08);
         $economicSpread = $trueReturn - $hurdleRate;
         
-        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($policyRate, $economicSpread);
-        $isOvervalued = $currentPE > ($fairValuePE * 1.5) && $currentPE > 25.0;
+        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($policyRate, $economicSpread, $macroState['equity_risk_premium'] ?? \App\Service\Macro\MacroEngine::BASE_EQUITY_RISK_PREMIUM);
+        $acquirerShares = (float) $acquirer->getSharesOutstanding();
+        $bookValuePerShare = max(0.01, $acquirer->getTotalEquity() / max(1.0, $acquirerShares));
+        $priceToBook = $price / $bookValuePerShare;
+        $isOvervalued = $economicSpread > 0.0 && $currentPE > ($fairValuePE * 1.5) && $currentPE > 25.0 && $priceToBook > 2.0;
         
         $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($acquirer->getCeoArchetype());
         $aggression = $archetypeStrategy->modifyAcquisitionAggression(1.0);
@@ -197,9 +199,12 @@ class MergerAndAcquisitionEngine
             $this->debtEngine->issueDebt($acquirer, $debtIssued, $costOfNewDebt);
         }
 
+        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($acquirer->getCeoArchetype());
+        $synergyRange = $archetypeStrategy->modifyMAndASynergyRange($config['syn_min'], $config['syn_max']);
+        
         //THE RANDOMIZED SYNERGY ROLL
-        $minInt = (int) ($config['syn_min'] * 100);
-        $maxInt = (int) ($config['syn_max'] * 100);
+        $minInt = (int) ($synergyRange['min'] * 100);
+        $maxInt = (int) ($synergyRange['max'] * 100);
         $synergyMultiplier = mt_rand(min($minInt, $maxInt), max($minInt, $maxInt)) / 100.0;
 
         //GOODWILL & CLEAN SURPLUS ACCOUNTING
@@ -343,7 +348,7 @@ class MergerAndAcquisitionEngine
         // earning assets for MORE cash, accelerating their death spiral!
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
         $targetCash = $strategy->calculateTargetOperatingCash($operatingBase, (float) $seller->getCustomerDeposits(), (float) $seller->getWholesaleDebt());
-        $hoardStatus = $strategy->evaluateHoardingStatus(max(0.0, $treasury - $targetCash), $operatingBase, (float) $seller->getTotalDebt());
+        $hoardStatus = $strategy->evaluateHoardingStatus($treasury, $targetCash, $operatingBase, (float) $seller->getTotalDebt());
         
         if ($hoardStatus['is_hoarder']) {
             return null; // Hoarders must BUY or DELEVERAGE, never sell!

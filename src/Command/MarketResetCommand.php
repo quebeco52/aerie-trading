@@ -279,8 +279,10 @@ class MarketResetCommand extends Command
             $stock->setSystemicImportance('none');
             $stock->setBaselineRoic('0.12');
             $stock->setCurrentRoic('0.12');
+            $stock->setRoicTtm('0.12');
             $stock->setBaselineRoe('0.10');
             $stock->setCurrentRoe('0.10');
+            $stock->setRoeTtm('0.10');
             $stock->setCapexRatio('0.20');
             $stock->setTargetPayoutRatio('0.25');
             $stock->setDividendSpeed('0.20');

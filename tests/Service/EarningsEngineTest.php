@@ -110,7 +110,8 @@ class EarningsEngineTest extends TestCase
         
         // Tick 50 is outside the earnings season for a standard 252-tick year
         // (Season is the first ~9 ticks of the 63-tick quarter)
-        $result = $this->engine->calculate($stock, [], 50, 252);
+        $macroState = [];
+        $result = $this->engine->calculate($stock, $macroState, 50, 252);
         
         $this->assertNull($result, 'Engine should return null when the earnings probability check fails.');
     }
@@ -138,7 +139,8 @@ class EarningsEngineTest extends TestCase
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.5);
 
         $reportingTick = $this->getReportingTick('TEST');
-        $result = $this->engine->calculate($stock, [], $reportingTick, 252);
+        $macroState = [];
+        $result = $this->engine->calculate($stock, $macroState, $reportingTick, 252);
 
         $this->assertNotNull($result);
         $this->assertArrayHasKey(0, $result);
@@ -172,7 +174,8 @@ class EarningsEngineTest extends TestCase
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(2.0);
 
         $reportingTick = $this->getReportingTick('SHOCK');
-        $this->engine->calculate($stock, [], $reportingTick, 252);
+        $macroState = [];
+        $this->engine->calculate($stock, $macroState, $reportingTick, 252);
 
         $this->assertGreaterThan(0.20, (float) $stock->getCurrentVolatility(), 'Volatility should have spiked due to the extreme surprise.');
     }
@@ -200,7 +203,8 @@ class EarningsEngineTest extends TestCase
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $reportingTick = $this->getReportingTick('RECOV');
-        $this->engine->calculate($stock, [], $reportingTick, 252);
+        $macroState = [];
+        $this->engine->calculate($stock, $macroState, $reportingTick, 252);
 
         $this->assertNotEquals(-10.00, (float) $stock->getEarningsPerShare(), 'A company with negative EPS should still see EPS changes.');
     }

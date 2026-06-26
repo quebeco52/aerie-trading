@@ -30,7 +30,7 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         // Unlike physical corporates, data monopolies have zero supply chain costs.
         // They pass inflation directly to consumers without margin compression, so we omit the inflation penalty entirely.
         
-        $actualVariableCosts = $actualRevenue * min(0.99, max(0.01, $realizedVariableMargin));
+        $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $realizedVariableMargin));
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
         return [

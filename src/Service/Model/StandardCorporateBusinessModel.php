@@ -34,7 +34,7 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
         $inflation = $macroState['inflation_ema'] ?? 0.02;
         $beta = (float) $stock->getBeta();
-        
+
         return [
             'macro_demand_shift' => $outputGap * $beta,
             'pricing_power_multiplier' => 1.0 + ($inflation * max(0.5, $beta)),
@@ -50,39 +50,24 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
         $revenueZ = $mathUtility->generateStandardNormal();
         $revenueShock = $revenueZ * ($baselineVol * 0.15);
         $actualRevenue = $expectedRevenue * (1.0 + $revenueShock);
-        
+
         // Supply Chain Inflation Penalty:
         // Physical companies get squeezed by inflation because raw material and labor costs rise 
         // faster than they can safely raise prices on consumers without destroying demand.
         $inflation = $macroState['inflation_ema'] ?? 0.02;
         $inflationPenalty = $inflation > 0.03 ? ($inflation - 0.03) * abs((float) $stock->getBeta()) * 1.5 : 0.0;
-        
-        $actualVariableCosts = $actualRevenue * min(0.99, max(0.01, $realizedVariableMargin + $inflationPenalty));
+
+        $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $realizedVariableMargin + $inflationPenalty));
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
         return [
-            'actual_revenue' => $actualRevenue, 
-            'actual_variable_costs' => $actualVariableCosts, 
-            'ebit' => $ebit, 
+            'actual_revenue' => $actualRevenue,
+            'actual_variable_costs' => $actualVariableCosts,
+            'ebit' => $ebit,
             'primary_shock_z' => $revenueZ
         ];
     }
 
-    /**
-     * Normal companies earn standard money-market yields only on excess liquidity 
-     * that isn't required to run the day-to-day business.
-     */
-    public function calculateInterestIncome(Stock $stock, array &$macroState, MathUtility $mathUtility): float
-    {
-        $cash = (float) $stock->getCorporateTreasury();
-        $equity = (float) $stock->getTotalEquity();
-        $operatingBase = max((float) $stock->getTotalRevenue(), $equity, 10000000.0);
-        
-        $excessCash = max(0.0, $cash - ($operatingBase * 0.05));
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
-        
-        return $excessCash * $this->calculateCashYield($macroState, $policyRate);
-    }
 
     /**
      * Normal physical companies are evaluated on NOPAT / Invested Capital (ROIC).
@@ -92,22 +77,23 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
         // NOPAT (Net Operating Profit After Tax) strips out interest expense to measure 
         // the pure operating efficiency of the physical business assets.
         $nopatProxy = $ebit > 0 ? $ebit * (1.0 - $corporateTaxRate) : $ebit;
-        
+
         $effectiveCapital = max(1.0, abs($investedCapital));
-        $truePostTaxReturn = $nopatProxy / $effectiveCapital;
-        
-        $oldRoic = (float) $stock->getCurrentRoic();
-        $smoothedRoic = $oldRoic === 0.0 ? $truePostTaxReturn : $oldRoic + (($truePostTaxReturn - $oldRoic) * 0.50);
-        
-        $stock->setCurrentRoic((string) max(-0.50, min(1.0, $smoothedRoic)));
-        
+        $truePostTaxReturn = ($nopatProxy / $effectiveCapital) * 4.0;
+
+        $stock->setCurrentRoic((string) max(-0.50, min(1.0, $truePostTaxReturn)));
+
+        $oldTtm = (float) $stock->getRoicTtm();
+        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * 0.25) + ($oldTtm * 0.75);
+        $stock->setRoicTtm((string) max(-0.50, min(1.0, $newTtm)));
+
         return $truePostTaxReturn;
     }
 
     public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array
     {
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
-        
+
         // Standard corporates pay market interest rates on ALL of their debt. 
         // They do not get the benefit of cheap customer deposits like banks do.
         $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingInterestRate);
@@ -120,7 +106,10 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
     {
         if ($fcfPerShare !== null && $fcfPerShare > 0.0) {
             $multiplier = $mathUtility->calculateDcfMultiplier($liveWacc, 0.02);
-            $dcfFairValue = max(0.01, $fcfPerShare * $multiplier);
+            // The FCF passed from EarningsEngine is Quarterly. We MUST annualize it!
+            $annualFcf = $fcfPerShare * 4.0;
+            // Cap the DCF so a temporary lack of CapEx doesn't cause an infinite perpetual valuation.
+            $dcfFairValue = min(max(0.01, $annualFcf * $multiplier), $peFairValue * 1.5);
             return ($peFairValue + $dcfFairValue) / 2.0;
         }
         return $fcfPerShare !== null ? max($revenueFloorValue, $peFairValue) * 0.75 : max($revenueFloorValue, $peFairValue);

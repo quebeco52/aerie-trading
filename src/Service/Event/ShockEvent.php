@@ -17,4 +17,5 @@ class ShockEvent
     public const GLOBAL_RECESSION = 'global_recession';
     public const INFLATION_CRISIS = 'inflation_crisis';
     public const EMERGENCY_STIMULUS = 'emergency_stimulus';
+    public const SURPRISE_STRONG_ECONOMY = 'surprise_strong_economy';
 }

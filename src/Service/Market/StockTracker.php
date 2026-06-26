@@ -87,7 +87,7 @@ class StockTracker
                 $events[] = $maResult['event'];
                 $maShock = $maResult['shock'];
             }
-            
+
             // DIVESTITURE (Spin-offs)
             // A company won't acquire and divest in the exact same tick
             if (!$maResult) {
@@ -112,9 +112,13 @@ class StockTracker
             $baselineIndustryPE = $metrics['pe'] ?? 20.0;
             $revenuePerShare = (float) $stock->getTotalRevenue() / $shares;
 
-            $effectiveRoic = $isFinancial 
-                ? (float) ($stock->getCurrentRoe() ?: $stock->getBaselineRoe()) 
+            $effectiveRoic = $isFinancial
+                ? (float) ($stock->getCurrentRoe() ?: $stock->getBaselineRoe())
                 : (float) ($stock->getCurrentRoic() ?: $stock->getBaselineRoic());
+
+            $roicTtm = $isFinancial
+                ? (float) $stock->getRoeTtm()
+                : (float) $stock->getRoicTtm();
 
             // Calculate new price (GBM + SVJJ)
             $calculation = $this->marketEngine->calculateNextPrice(
@@ -133,6 +137,7 @@ class StockTracker
                 bookValuePerShare: (float) $stock->getBookValuePerShare(),
                 maShock: $maShock,
                 currentRoic: $effectiveRoic,
+                roicTtm: $roicTtm,
                 dividendPerShare: (float) $stock->getLastDividend(),
                 liveWacc: $health['wacc'],
                 baselineIndustryPE: $baselineIndustryPE,
@@ -218,13 +223,13 @@ class StockTracker
                 $equity = (float) $stock->getTotalEquity();
                 $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
                 $samRatio = (float) $stock->getSamRatio();
-                
+
                 $evaluationCapital = $isFinancial ? $equity : $investedCapital;
                 $marketShare = min(0.9999, $this->corporateMetrics->calculateMarketShare($evaluationCapital, $nominalGdpIndex, $samRatio));
-                
+
                 $stockUpdate['market_share'] = round($marketShare * 100, 2);
             }
-            
+
             $stockUpdates[] = $stockUpdate;
 
             if ($recordHistory) {

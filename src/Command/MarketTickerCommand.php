@@ -49,6 +49,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private \Redis $redis,
         private NarrativeEngine $narrativeEngine,
         private MarketEventPublisher $marketEvent,
+        private \Symfony\Component\Messenger\MessageBusInterface $messageBus,
 
         private int $tickIntervalUs,
         private int $ticksPerYear,
@@ -92,10 +93,10 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
         // Fetch the stocks ONCE into RAM before the loop starts!
         $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
+        $lbiEtf = $this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
 
         $dt = 1.0 / $this->ticksPerYear;
         $tickCount = 0;
-
 
         $historyInterval = (int) max(1, $this->ticksPerYear / 2400); // 2400 points per year
         $operatorInterval = (int) max(1, $this->ticksPerYear / 24);  // Operator audits once a game "month"
@@ -114,9 +115,11 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $simDay = ($tickCount / $this->ticksPerYear) * 365;
                 $output->writeln("Updating Market Prices... (Day: " . number_format($simDay, 1) . ") [Tick: $tickCount]");
             }
+            
+            $macroState = $this->macroEngine->updateMacroState($dt);
 
             if ($tickCount % $operatorInterval === 0) {
-                $operatorEvents = $this->marketOperator->enforceMarketStability($stocks);
+                $operatorEvents = $this->marketOperator->enforceMarketStability($stocks, $macroState);
             } else {
                 $operatorEvents = [];
             }
@@ -124,37 +127,43 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
             try {
                 $this->entityManager->beginTransaction();
 
-
-                // Update the labels and the Sector P/E math
-                $macroState = $this->macroEngine->updateMacroState($dt);
-
-                // Check if it's time to record a database snapshot
                 $isHistoryTick = ($tickCount % $historyInterval === 0);
 
-                if (isset($macroState['event_type'])) {
-                    $lbi = $this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
-                    if ($lbi) {
-                        $desc = $this->narrativeEngine->generateLore($macroState['event_type']);
-                        // Massive macro shocks usually coincide with an immediate -5% or +5% index drop/jump
-                        $shockPct = $macroState['event_type'] === \App\Service\Event\ShockEvent::EMERGENCY_STIMULUS ? 5.0 : -5.0;
-                        $macroEvent = $this->marketEvent->publish($lbi, 'SHOCK', $desc, $shockPct);
-                        $events[] = $macroEvent;
-                    }
-                }
-
-                // Update the Stocks
                 $result = $this->stockTracker->updateStocks($stocks, $dt, $isHistoryTick, $macroState, $tickCount, $this->ticksPerYear);
                 $stockUpdates = $result['updates'];
                 $totalMarketCap = $result['total_cap'];
+                $marketVol = $result['market_vol'];
                 $events = $result['events'];
-                $marketVol = $result['market_vol'];                if (!empty($operatorEvents)) {
+
+                if (isset($macroState['event_type'])) {
+                    if ($lbiEtf) {
+                        $desc = $this->narrativeEngine->generateLore($macroState['event_type']);
+                        $shockPct = in_array($macroState['event_type'], [\App\Service\Event\ShockEvent::EMERGENCY_STIMULUS, \App\Service\Event\ShockEvent::SURPRISE_STRONG_ECONOMY]) ? 5.0 : -5.0;
+                        $events[] = $this->marketEvent->publish($lbiEtf, 'SHOCK', $desc, $shockPct);
+                    }
+                }
+
+                if (!empty($operatorEvents)) {
                     $events = array_merge($events, $operatorEvents);
                 }
 
-                $etfUpdate = $this->etfTracker->updateIndex($totalMarketCap, $isHistoryTick);
+                $etfUpdate = $this->etfTracker->updateIndex($totalMarketCap, $isHistoryTick, 'LBI', $lbiEtf);
 
                 $allUpdates = array_merge($stockUpdates, [$etfUpdate]);
 
+                // Limit Order Check
+                foreach ($allUpdates as $update) {
+                    $ticker = $update['ticker'];
+                    $price = $update['price'];
+                    
+                    $boundsJson = $this->redis->get("limit_bounds:$ticker");
+                    if ($boundsJson) {
+                        $bounds = json_decode($boundsJson, true);
+                        if ($price <= ($bounds['buy'] ?? 0.0) || $price >= ($bounds['sell'] ?? 999999999.0)) {
+                            $this->messageBus->dispatch(new \App\Message\ProcessLimitOrdersMessage($ticker, $price));
+                        }
+                    }
+                }
 
                 if ($isHistoryTick) {
 
@@ -181,24 +190,22 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                     $this->entityManager->clear();
                     $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
+                    $lbiEtf = $this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
                 }
 
                 $nowStr = (new \DateTime())->format('Y-m-d H:i:s');
                 $redisBufferSize = (int) ceil($this->ticksPerYear / 12);
 
-                // Open the pipeline
                 $pipeline = $this->redis->multi(\Redis::PIPELINE);
 
                 foreach ($allUpdates as $update) {
                     $cacheKey = "chart_buffer:{$update['ticker']}";
                     $point = json_encode(['price' => $update['price'], 'recorded_at' => $nowStr]);
 
-                    // Queue the commands in the pipeline instead of executing them immediately
                     $pipeline->lPush($cacheKey, $point);
                     $pipeline->lTrim($cacheKey, 0,  $redisBufferSize - 1);
                 }
 
-                // Execute all queued commands in one burst
                 $pipeline->exec();
 
                 // Publish pub/sub updates
@@ -247,6 +254,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 // Clear detached entities and reload fresh ones so the next tick has a valid state
                 $this->entityManager->clear();
                 $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
+                $lbiEtf = $this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
 
                 sleep(5);
             }

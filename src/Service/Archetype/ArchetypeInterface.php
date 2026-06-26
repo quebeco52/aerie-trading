@@ -43,4 +43,30 @@ interface ArchetypeInterface
      * Modifies the aggressiveness of M&A execution.
      */
     public function modifyAcquisitionAggression(float $baseAggression): float;
+
+    /**
+     * Modifies the structural fixed cost ratio (bloat vs lean).
+     */
+    public function modifyFixedCostRatio(float $fixedCostRatio): float;
+
+    /**
+     * Modifies the variable margin target (theta) for the CIR process.
+     */
+    public function modifyVariableMarginTheta(float $theta): float;
+
+    /**
+     * Modifies the baseline idiosyncratic volatility (revenue shocks).
+     */
+    public function modifyIdiosyncraticVol(float $vol): float;
+
+    /**
+     * Modifies the baseline credit spread (bond market trust/penalty).
+     */
+    public function modifyCreditSpread(float $spread): float;
+
+    /**
+     * Modifies the minimum and maximum boundaries of the M&A synergy multiplier roll.
+     * @return array{min: float, max: float}
+     */
+    public function modifyMAndASynergyRange(float $min, float $max): array;
 }

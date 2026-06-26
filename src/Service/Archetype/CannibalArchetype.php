@@ -13,4 +13,16 @@ class CannibalArchetype extends AbstractArchetype
     { 
         return min(1.0, $aggression * 1.50); 
     }
+    
+    public function modifyVariableMarginTheta(float $theta): float 
+    { 
+        // Underinvests in operations, causing structural margins to decay over time
+        return $theta * 0.90; 
+    }
+    
+    public function modifyCreditSpread(float $spread): float 
+    { 
+        // Bond market penalizes financial engineering
+        return $spread * 1.10; 
+    }
 }

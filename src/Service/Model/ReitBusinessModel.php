@@ -25,20 +25,20 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     {
         $investedCapital = $stock->getInvestedCapital();
         $baselineRoic = max(0.01, (float) $stock->getBaselineRoic());
-        
+
         // Real Estate Cap Rates are deeply tied to the 10-Year Treasury Yield plus a risk premium.
         $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['yield_10y'] ?? 0.04);
         $realEstateRiskPremium = $macroState['equity_risk_premium'] ?? MacroEngine::BASE_EQUITY_RISK_PREMIUM;
         $targetCapRate = $yield10y + $realEstateRiskPremium;
-        
+
         // Baseline DNA change over time, but at a realistic physical rate.
         // Commercial leases (Office, Healthcare) are typically 7 to 10 years long.
         // This means a REIT only turns over about 2.5% of its portfolio per quarter.
         // If they do a bad M&A, they will be punished for YEARS before leases expire and reset to market rates!
-        $portfolioTurnoverRate = 0.025; 
+        $portfolioTurnoverRate = 0.025;
         $blendedCapRate = ($baselineRoic * (1.0 - $portfolioTurnoverRate)) + ($targetCapRate * $portfolioTurnoverRate);
         $stock->setBaselineRoic((string) max(0.01, $blendedCapRate));
-        
+
         // Cap Rate represents NOI (Net Operating Income) yield.
         // However, the EarningsEngine targets EBIT (Earnings Before Interest & Taxes).
         // Since EBIT = NOI - Depreciation, we MUST subtract depreciation from the target 
@@ -48,7 +48,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : (\App\Data\Sectors::INDUSTRY_METRICS[$industry]['depreciation'] ?? 0.05);
 
         $targetEbitYield = max(0.01, $blendedCapRate - $depreciationRate);
-        
+
         return [
             'invested_capital' => $investedCapital,
             'baseline_roic' => $targetEbitYield
@@ -61,26 +61,26 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
-        
+
         // REIT revenues are incredibly stable due to multi-year binding leases.
         // Volatility impact is sliced to just 5% of standard variance.
         $revenueShock = $revenueZ * ($baselineVol * 0.05);
-        
+
         // The Inflation Hedge (CPI Rent Escalators):
         // Commercial real estate leases almost universally contain automatic annual rent increases tied to inflation.
         $inflation = $macroState['inflation_ema'] ?? 0.02;
         $rentEscalator = max(0.0, $inflation * 0.80); // Capture 80% of inflation directly into top-line revenue
-        
+
         $actualRevenue = $expectedRevenue * (1.0 + $revenueShock + $rentEscalator);
 
         // The Tenant Default Shock (Vacancy):
         // While leases are sticky, deep recessions cause anchor tenants to break leases or go bankrupt.
         $tenantDefaultZ = $mathUtility->generateStandardNormal();
         $vacancyShock = $tenantDefaultZ < -1.5 ? abs($tenantDefaultZ) * 0.08 : ($tenantDefaultZ > 1.0 ? -0.01 : 0.0);
-        
+
         $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $realizedVariableMargin + $vacancyShock));
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
-        
+
         $eventLore = null;
         if ($tenantDefaultZ < -2.0) {
             $eventLore = "Suffered a sudden wave of anchor tenant bankruptcies and commercial lease defaults.";
@@ -89,9 +89,9 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         }
 
         return [
-            'actual_revenue' => $actualRevenue, 
-            'actual_variable_costs' => $actualVariableCosts, 
-            'ebit' => $ebit, 
+            'actual_revenue' => $actualRevenue,
+            'actual_variable_costs' => $actualVariableCosts,
+            'ebit' => $ebit,
             'primary_shock_z' => abs($tenantDefaultZ) > abs($revenueZ) ? $tenantDefaultZ : $revenueZ,
             'event_lore' => $eventLore
         ];
@@ -106,21 +106,23 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $industry = $stock->getIndustry() ?: 'General';
         $customDepreciation = (float) $stock->getDepreciationRate();
         $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : (\App\Data\Sectors::INDUSTRY_METRICS[$industry]['depreciation'] ?? 0.05);
-        
+
         $absoluteDepreciation = $investedCapital * $depreciationRate;
-        
+        $quarterlyDepreciation = $absoluteDepreciation / 4.0;
+
         // Funds From Operations (FFO) / Net Operating Income (NOI):
         // Because real estate appreciates, GAAP depreciation is an accounting fiction.
         // We add it back to EBIT to calculate the true cash yield (Cap Rate) of the properties.
-        $noi = $ebit + $absoluteDepreciation;
-        
-        $truePostTaxReturn = $investedCapital > 0 ? ($noi / $investedCapital) : 0.0;
-        
-        $oldRoic = (float) $stock->getCurrentRoic();
-        $smoothedRoic = $oldRoic === 0.0 ? $truePostTaxReturn : $oldRoic + (($truePostTaxReturn - $oldRoic) * 0.50);
-        
-        $stock->setCurrentRoic((string) max(-0.50, min(1.0, $smoothedRoic)));
-        
+        $noi = $ebit + $quarterlyDepreciation;
+
+        $truePostTaxReturn = $investedCapital > 0 ? ($noi / $investedCapital) * 4.0 : 0.0;
+
+        $stock->setCurrentRoic((string) max(-0.50, min(1.0, $truePostTaxReturn)));
+
+        $oldTtm = (float) $stock->getRoicTtm();
+        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * 0.25) + ($oldTtm * 0.75);
+        $stock->setRoicTtm((string) max(-0.50, min(1.0, $newTtm)));
+
         return $truePostTaxReturn;
     }
 
