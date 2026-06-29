@@ -70,6 +70,12 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $marketVolatility = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $macroCreditSpread = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $macroCreditSpreadEma = null;
+
     // --- Standard Getters & Setters ---
 
     public function getId(): ?int { return $this->id; }
@@ -130,4 +136,10 @@ class MacroReport
 
     public function getMarketVolatility(): ?string { return $this->marketVolatility; }
     public function setMarketVolatility(string $marketVolatility): self { $this->marketVolatility = $marketVolatility; return $this; }
+
+    public function getMacroCreditSpread(): ?string { return $this->macroCreditSpread; }
+    public function setMacroCreditSpread(?string $macroCreditSpread): self { $this->macroCreditSpread = $macroCreditSpread; return $this; }
+
+    public function getMacroCreditSpreadEma(): ?string { return $this->macroCreditSpreadEma; }
+    public function setMacroCreditSpreadEma(?string $macroCreditSpreadEma): self { $this->macroCreditSpreadEma = $macroCreditSpreadEma; return $this; }
 }

@@ -5,6 +5,7 @@ namespace App\Service\Model;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Brokerages & Capital Markets.
@@ -54,6 +55,11 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
     {
         $equity = (float) $stock->getTotalEquity();
         $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
+        
+        $ttmRoe = (float) $stock->getRoeTtm();
+        if ($ttmRoe !== 0.0) {
+            $baselineRoe = ($baselineRoe * 0.70) + ($ttmRoe * 0.30);
+        }
 
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
         $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + 0.005);
@@ -80,34 +86,35 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
         $optimalInterestExpense = $optimalDebt * $blendedWholesaleRate;
 
         // Margin loans yield a spread over the policy rate.
-        $marginLoanYield = $policyRate + 0.03;
+        $marginLoanYield = $policyRate + FinancialConstants::MARGIN_LOAN_SPREAD;
         $optimalInterestIncome = $optimalDebt * $marginLoanYield;
 
         $optimalOperatingNetIncome = $effectiveEquity * $baselineRoe;
         $optimalEbt = $optimalOperatingNetIncome / (1.0 - $taxRate);
 
         $optimalEbit = $optimalEbt + $optimalInterestExpense - $optimalInterestIncome;
-        $structuralOperatingYield = $optimalEbit / max(1.0, $effectiveEquity);
+        $optimalEarningAssets = $effectiveEquity + $optimalDebt;
+        $structuralAssetYield = $optimalEbit / max(1.0, $optimalEarningAssets);
 
         $operatingBase = $this->getOperatingBase($stock);
         $targetOperatingCash = $this->calculateTargetOperatingCash($operatingBase, 0.0, $wholesaleDebt);
         $excessCash = max(0.0, $treasury - $targetOperatingCash);
-        $operatingEquity = max(1.0, $equity - $excessCash);
+        $earningAssets = max(1.0, ($equity + $wholesaleDebt) - $excessCash);
 
-        $targetEbit = $operatingEquity * $structuralOperatingYield;
+        $targetEbit = $earningAssets * $structuralAssetYield;
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
-        $minOperatingEbit = $operatingEquity * 0.05;
+        $minOperatingEbit = $earningAssets * 0.015;
         $targetEbit = max($minOperatingEbit, $targetEbit);
 
         $unboundedRevenue = max(0.0, $targetEbit) / $stableMargin;
-        $targetRevenue = min($unboundedRevenue, $operatingEquity * 2.0);
+        $targetRevenue = min($unboundedRevenue, $earningAssets * 1.50); // Hard cap gross yield on total assets
 
-        $impliedTurnover = $targetRevenue / max(1.0, $operatingEquity);
+        $grossYield = $targetRevenue / max(1.0, $earningAssets);
 
         return [
-            'invested_capital' => $operatingEquity,
-            'baseline_roic' => ($impliedTurnover * $stableMargin) * (1.0 - $taxRate)
+            'invested_capital' => $earningAssets,
+            'baseline_roic' => ($grossYield * $stableMargin) * (1.0 - $taxRate)
         ];
     }
 
@@ -117,7 +124,7 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
 
         // 1. Margin Loan Yield
         // Brokerages lend their wholesale debt to clients as margin loans.
-        $marginLoanYield = $policyRate + 0.03;
+        $marginLoanYield = $policyRate + FinancialConstants::MARGIN_LOAN_SPREAD;
         $marginLoans = (float) $stock->getWholesaleDebt(); // Proxy: Wholesale debt is deployed into margin loans
         $marginInterest = $marginLoans * $marginLoanYield;
 

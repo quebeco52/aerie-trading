@@ -110,7 +110,9 @@ class StockTracker
             $businessModel = $metrics['business_model'] ?? 'none';
             $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
             $baselineIndustryPE = $metrics['pe'] ?? 20.0;
-            $revenuePerShare = (float) $stock->getTotalRevenue() / $shares;
+
+            // Annualize the quarterly revenue so the Market Engine correctly evaluates Price-to-Sales
+            $revenuePerShare = ((float) $stock->getTotalRevenue() * 4.0) / $shares;
 
             $effectiveRoic = $isFinancial
                 ? (float) ($stock->getCurrentRoe() ?: $stock->getBaselineRoe())

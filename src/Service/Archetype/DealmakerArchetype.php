@@ -10,10 +10,11 @@ class DealmakerArchetype extends AbstractArchetype
         return $baseAggression * 2.5;
     }
     
-    public function modifyDebtToleranceLimit(float $limit): float
+    public function modifyDebtToleranceLimit(float $limit, float $effectiveCostOfDebt): float
     {
-        // Extremely comfortable with high leverage (LBOs)
-        return $limit * 1.5;
+        // Extremely comfortable with high leverage (LBOs). Inherits base elasticity but adds a buffer.
+        $adjusted = parent::modifyDebtToleranceLimit($limit, $effectiveCostOfDebt);
+        return $adjusted + 0.15;
     }
     
     public function modifyCreditSpread(float $spread): float

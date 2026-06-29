@@ -23,9 +23,16 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
      */
     public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array
     {
+        $baselineRoic = max(0.01, (float) $stock->getBaselineRoic());
+        $ttmRoic = (float) $stock->getRoicTtm();
+        
+        if ($ttmRoic !== 0.0) {
+            $baselineRoic = ($baselineRoic * 0.70) + ($ttmRoic * 0.30);
+        }
+
         return [
             'invested_capital' => $stock->getInvestedCapital(),
-            'baseline_roic' => max(0.01, (float) $stock->getBaselineRoic())
+            'baseline_roic' => $baselineRoic
         ];
     }
 
@@ -54,8 +61,8 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
         // Supply Chain Inflation Penalty:
         // Physical companies get squeezed by inflation because raw material and labor costs rise 
         // faster than they can safely raise prices on consumers without destroying demand.
-        $inflation = $macroState['inflation_ema'] ?? 0.02;
-        $inflationPenalty = $inflation > 0.03 ? ($inflation - 0.03) * abs((float) $stock->getBeta()) * 1.5 : 0.0;
+        $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
+        $inflationPenalty = $inflation > MacroEngine::TARGET_INFLATION ? ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * 0.5 : 0.0;
 
         $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $realizedVariableMargin + $inflationPenalty));
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;

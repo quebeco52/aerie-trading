@@ -13,9 +13,9 @@ class ShockEvent
     public const CUSTOMER_DEPOSIT_FLIGHT = 'customer_deposit_flight';
     public const CAPTURED_NEW_DEPOSITS = 'captured_new_deposITS';
 
-    // Global Macro Systemic Shocks
-    public const GLOBAL_RECESSION = 'global_recession';
-    public const INFLATION_CRISIS = 'inflation_crisis';
-    public const EMERGENCY_STIMULUS = 'emergency_stimulus';
-    public const SURPRISE_STRONG_ECONOMY = 'surprise_strong_economy';
+    // District Lore Systemic Shocks
+    public const COUNCIL_TIGHTENING = 'council_tightening';
+    public const DISTRICT_OVERHEATING = 'district_overheating';
+    public const TITAN_INTERVENTION = 'titan_intervention';
+    public const SOVEREIGN_WEALTH_DEPLOYMENT = 'sovereign_wealth_deployment';
 }

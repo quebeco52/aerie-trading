@@ -27,7 +27,7 @@ class CorporateMetrics
 
     public function calculateLiveInvestedCapital(float $equity, float $debt, float $treasury): float
     {
-        return max($equity * 0.50, ($equity + $debt - $treasury));
+        return max(1.0, max($equity * 0.50, ($equity + $debt - $treasury)));
     }
 
     public function calculateMarketSaturationPenalty(Stock $stock, float $investedCapital, array $macroState): float

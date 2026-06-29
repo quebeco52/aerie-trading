@@ -89,6 +89,8 @@ class EarningsEngine
         $investedCapital = $targetMetrics['invested_capital'];
         $baselineRoic = $targetMetrics['baseline_roic'];
 
+
+
         $macroTaxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
         $corporateTaxRate = $strategy->getEffectiveTaxRate($macroTaxRate);
 
@@ -326,8 +328,8 @@ class EarningsEngine
             // Subtract the Growth CapEx (Organic CapEx) spent by the CEO to find True FCF
             $organicCapex = $allocation['organic_capex'] ?? 0.0;
 
-            // For banks, loan book expansion is a balance sheet transaction (Cash -> Loans), not physical CapEx
-            $reportedOrganicCapex = in_array($businessModel, ['commercial_bank', 'credit_services', 'shadow_bank']) ? 0.0 : $organicCapex;
+            // For banks and brokerages, balance sheet expansion (Cash -> Loans/Trading Assets) is not physical CapEx
+            $reportedOrganicCapex = in_array($businessModel, ['commercial_bank', 'credit_services', 'shadow_bank', 'brokerage']) ? 0.0 : $organicCapex;
 
             // Convert quarterly organic CapEx to an annualized per-share impact
             $annualizedOrganicCapex = $reportedOrganicCapex * 4.0;

@@ -101,7 +101,7 @@ class MarketSimulateCommand extends Command
                 $lbi = $this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
                 if ($lbi) {
                     $desc = $this->narrativeEngine->generateLore($macroState['event_type']);
-                    $shockPct = in_array($macroState['event_type'], [ShockEvent::EMERGENCY_STIMULUS, ShockEvent::SURPRISE_STRONG_ECONOMY]) ? 5.0 : -5.0;
+                    $shockPct = in_array($macroState['event_type'], [ShockEvent::TITAN_INTERVENTION, ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT]) ? 5.0 : -5.0;
                     $this->marketEvent->publish($lbi, 'SHOCK', $desc, $shockPct);
                 }
             }

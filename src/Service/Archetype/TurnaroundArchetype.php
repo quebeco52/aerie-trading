@@ -10,10 +10,11 @@ class TurnaroundArchetype extends AbstractArchetype
         return min(0.85, $fixedCostRatio * 0.75);
     }
 
-    public function modifyDebtToleranceLimit(float $limit): float
+    public function modifyDebtToleranceLimit(float $limit, float $effectiveCostOfDebt): float
     {
-        // Highly averse to debt; aggressive deleveraging sweeps
-        return $limit * 0.50;
+        // Inherits AbstractArchetype but forces a massive reduction to pay down debt
+        $adjusted = parent::modifyDebtToleranceLimit($limit, $effectiveCostOfDebt);
+        return max(0.1, $adjusted - 0.2);
     }
 
     public function shouldResistDividendCut(bool $isLiquidityCrisis, bool $isRegulatoryDividendHalt): bool

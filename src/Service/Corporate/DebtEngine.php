@@ -62,9 +62,7 @@ class DebtEngine
         $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + 0.005);
 
         $rawCreditSpread = (float) $stock->getCreditSpread();
-        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
         $volatility = (float) $stock->getCurrentVolatility() ?: (float) $stock->getVolatility();
-        $vix = $macroState['market_volatility'] ?? 0.20;
 
         $rawBeta = (float) $stock->getBeta();
 
@@ -72,20 +70,21 @@ class DebtEngine
         // Spreads widen during recessions (negative gap) as lenders panic, and tighten during booms.
         // High-beta (cyclical) stocks see their spreads widen much faster than low-beta (defensive) stocks.
         $betaSensitivity = $rawBeta >= 0.0 ? max(0.5, $rawBeta) : min(-0.5, $rawBeta);
-        $macroCreditAdjustment = -$outputGap * 0.10 * $betaSensitivity;
+
+        // Use the aggregate Macro Credit Spread (excess over the 200bps baseline)
+        $aggregateCreditSpread = $macroState['macro_credit_spread_ema'] ?? 0.02;
+        $macroCreditExcess = max(0.0, $aggregateCreditSpread - 0.02);
+
+        // High beta stocks suffer the full brunt (or more) of credit market blowouts
+        $macroCreditAdjustment = $macroCreditExcess * abs($betaSensitivity);
 
         // IDIOSYNCRATIC VOLATILITY PREMIUM
         // Bondholders hate individual uncertainty. High stock volatility pays a risk premium.
         $volatilityPremium = max(0.0, ($volatility - 0.20) * 0.02);
 
-        // SYSTEMIC VIX PANIC PREMIUM (Credit Market Freeze)
-        // When the global VIX spikes, credit markets seize up and spreads blow out across the board.
-        // High-beta stocks face massive credit downgrades during a market panic.
-        $vixPanicPremium = max(0.0, ($vix - 0.20) * 0.05 * abs($betaSensitivity));
-
         // Calculate the Dynamic Baseline Spread
         // Floored at 15 bps (0.0015) so ultra-safe Titans don't get negative spreads during massive economic booms.
-        $baselineCreditSpread = max(0.0015, $rawCreditSpread + $macroCreditAdjustment + $volatilityPremium + $vixPanicPremium);
+        $baselineCreditSpread = max(0.0015, $rawCreditSpread + $macroCreditAdjustment + $volatilityPremium);
 
         $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
         $baselineCreditSpread = $archetypeStrategy->modifyCreditSpread($baselineCreditSpread);
@@ -125,19 +124,25 @@ class DebtEngine
                 'blended_rate' => 0.0,
                 'historical_fixed_rate' => (float) $stock->getHistoricalFixedRate(),
                 'dynamic_spread' => $baselineCreditSpread,
-                'current_market_rate' => $policyRate + $baselineCreditSpread,
-                'wholesale_rate' => $policyRate + $baselineCreditSpread,
+                'current_market_rate' => $yield5y + $baselineCreditSpread,
+                'wholesale_rate' => $yield5y + $baselineCreditSpread,
                 'ebit' => $ebit,
-                'revenue' => $revenue
+                'revenue' => $revenue,
+                'depreciation' => $depreciation,
+                'ebitda' => $ebitda
             ];
         }
 
         $netDebt = max(0.0, $debt - $treasury);
         $totalEquity = (float) $stock->getTotalEquity();
 
-        // Normalize EBITDA to prevent mathematical blowouts during temporary losses
-        $normalizedEbitda = max($ebitda, $revenue * 0.08);
-        $debtToEbitda = $normalizedEbitda > 0 ? min(self::MAX_LEVERAGE_RATIO, $netDebt / $normalizedEbitda) : self::MAX_LEVERAGE_RATIO;
+        // If a company is burning cash (negative EBITDA), immediately apply maximum leverage penalties.
+        if ($ebitda <= 0.0) {
+            $debtToEbitda = self::MAX_LEVERAGE_RATIO;
+        } else {
+            $debtToEbitda = min(self::MAX_LEVERAGE_RATIO, $netDebt / $ebitda);
+        }
+
         $debtToEquity = $totalEquity > 0 ? min(self::MAX_LEVERAGE_RATIO, $debt / $totalEquity) : self::MAX_LEVERAGE_RATIO;
 
         // Fetch our Dual Constraints
@@ -198,7 +203,9 @@ class DebtEngine
             'current_market_rate' => $currentMarketFixedRate,
             'wholesale_rate' => $wholesaleRate,
             'ebit' => $ebit,
-            'revenue' => $revenue
+            'revenue' => $revenue,
+            'depreciation' => $depreciation,
+            'ebitda' => $ebitda
         ];
     }
 
@@ -244,19 +251,36 @@ class DebtEngine
 
         $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
 
+        $ebit = $debtMetrics['ebit'];
+        $interestExpense = $debtMetrics['interest_expense'];
 
         // Gross Cost
         if ($isFinancial) {
             // WACC and financial leverage should reflect the cost of wholesale capital markets, not checking accounts
             $grossCostOfDebt = $debtMetrics['wholesale_rate'];
+            $totalInterestCost = $grossCostOfDebt * $wholesaleDebt;
+            $evalDebt = max(1.0, $wholesaleDebt);
         } else {
             $grossCostOfDebt = $currentDebt > 0
-                ? $debtMetrics['interest_expense'] / $currentDebt
+                ? $interestExpense / $currentDebt
                 : $debtMetrics['current_market_rate'];
+            $totalInterestCost = $interestExpense;
+            $evalDebt = max(1.0, $currentDebt);
         }
 
-        // Tax Shield (Interest payments reduce taxable income)
-        $effectiveCostOfDebt = $grossCostOfDebt * (1.0 - $corporateTaxRate);
+        // 1. DYNAMIC TAX SHIELD (Phantom Tax Shield Fix)
+        // A company only receives a tax shield on its debt if it actually pays taxes.
+        $taxesWithoutDebt = max(0.0, $ebit) * $corporateTaxRate;
+        $taxesWithDebt = max(0.0, $ebit - $totalInterestCost) * $corporateTaxRate;
+        $taxSavings = $taxesWithoutDebt - $taxesWithDebt;
+
+        $impliedTaxShieldRate = $totalInterestCost > 0 ? ($taxSavings / $totalInterestCost) : ($ebit > 0 ? $corporateTaxRate : 0.0);
+
+        if ($currentDebt > 0 || $wholesaleDebt > 0) {
+            $effectiveCostOfDebt = ($totalInterestCost - $taxSavings) / $evalDebt;
+        } else {
+            $effectiveCostOfDebt = $grossCostOfDebt * (1.0 - $corporateTaxRate);
+        }
 
         // CALCULATE NET DEBT FIRST
         $treasury = (float) $stock->getCorporateTreasury();
@@ -283,7 +307,9 @@ class DebtEngine
 
             // The $baseBeta from the DB already partially accounts for historical leverage. 
             // Dampen the Hamada equation multiplier (* 0.25) so to not double-count the debt risk
-            $leveredBeta = $this->mathUtility->calculateLeveredBeta($baseBeta, $corporateTaxRate, $effectiveDebtToEquity, self::HAMADA_DAMPENING_FACTOR);
+            // 2. HAMADA EQUATION RISK UN-DAMPENER
+            // Unprofitable companies get no tax dampening on their Beta!
+            $leveredBeta = $this->mathUtility->calculateLeveredBeta($baseBeta, $impliedTaxShieldRate, $effectiveDebtToEquity, self::HAMADA_DAMPENING_FACTOR);
         }
 
         // Cost of Equity (CAPM) - Unified to Policy Rate to perfectly match MarketEngine valuation physics
@@ -301,9 +327,6 @@ class DebtEngine
         $minIcr = $modelThresholds['min_icr'];
 
         // DISTRESS PENALTY
-        $ebit = $debtMetrics['ebit'];
-        $interestExpense = $debtMetrics['interest_expense'];
-
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
 
         // For financial institutions, interest income generated by their treasury/float 
@@ -313,7 +336,8 @@ class DebtEngine
             $ebit += $interestIncome;
         }
 
-        $interestCoverage = $strategy->getInterestCoverage($ebit, $interestExpense);
+        $depreciation = $debtMetrics['depreciation'] ?? 0.0;
+        $interestCoverage = $strategy->getInterestCoverage($ebit, $interestExpense, $depreciation);
 
         // Check if the company has a massive cash hoard to weather the storm
         $operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity());
@@ -348,9 +372,13 @@ class DebtEngine
         $hurdleMultiplier = max(1.0, $equityLimit / 1.0);
         $hurdle = self::ARBITRAGE_HURDLE * $hurdleMultiplier;
 
-        $effectiveYieldOnCash = $yieldOnCash * (1.0 - $corporateTaxRate);
+        // 4. TAX-FREE CASH YIELDS FOR ZOMBIES
+        // If a company is unprofitable, they have Net Operating Losses (NOLs) that shield interest income from taxes.
+        $effectiveYieldTaxRate = $ebit > 0 ? $corporateTaxRate : 0.0;
+        $effectiveYieldOnCash = $yieldOnCash * (1.0 - $effectiveYieldTaxRate);
 
         $isSevereNegativeCarry = $effectiveCostOfDebt > ($effectiveYieldOnCash + $hurdle);
+        $isNegativeCarry = $effectiveCostOfDebt > $effectiveYieldOnCash;
 
         // A company should only execute an Arbitrage Paydown if the debt is bleeding them via negative carry.
         // A drop in earnings (low ICR) should NEVER cause a company to burn its precious liquidity buffer to pay off cheap principal!
@@ -361,16 +389,21 @@ class DebtEngine
         $canIssueDebt = $interestCoverage >= ($minIcr + $icrBuffer);
 
         // Macro-Economic CFO Tolerance
-        // Pass the pure D/E target limit to the CFO, shrinking it proportionally if rates are painfully high
-        $macroDebtTolerance = min($equityLimit, max(0.10, $equityLimit * (1.0 - ($effectiveCostOfDebt * 3.0))));
-
+        // Pass the pure D/E target limit and effective cost of debt to the CFO to calculate their personalized elasticity
         $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
-        $macroDebtTolerance = $archetypeStrategy->modifyDebtToleranceLimit($macroDebtTolerance);
+        $macroDebtTolerance = $archetypeStrategy->modifyDebtToleranceLimit($equityLimit, $effectiveCostOfDebt);
+
+        $currentDebtRatio = $currentDebt / max(1.0, $equity);
+        $isUnderLeveraged = $currentDebtRatio < ($macroDebtTolerance * 0.60);
+
+        $isLiquidityCrisis = $interestCoverage < 0;
+        $isLiquidityWarning = $interestCoverage >= 0 && $interestCoverage < $minIcr;
 
         return [
             'gross_cost' => $grossCostOfDebt,
             'effective_cost' => $effectiveCostOfDebt,
             'cash_yield' => $yieldOnCash,
+            'is_negative_carry' => $isNegativeCarry,
             'is_severe_negative_carry' => $isSevereNegativeCarry,
             'interest_coverage' => $interestCoverage,
             'wants_to_paydown_debt' => $wantsToPaydownDebt,
@@ -379,7 +412,10 @@ class DebtEngine
             'wacc' => $wacc,
             'cost_of_equity' => $costOfEquity,
             'levered_beta' => $leveredBeta,
-            'raw_metrics' => $debtMetrics
+            'raw_metrics' => $debtMetrics,
+            'is_liquidity_crisis' => $isLiquidityCrisis,
+            'is_liquidity_warning' => $isLiquidityWarning,
+            'is_under_leveraged' => $isUnderLeveraged
         ];
     }
 
@@ -415,7 +451,7 @@ class DebtEngine
 
         if ($isFinancial || $businessModel === 'reit') {
             $capitalRatio = $equity / $totalAssets;
-            $zScore = $capitalRatio * 100.0; // Convert to percentage points (e.g., 8% capital = 8.0 score)
+            $zScore = max(-100.0, min(100.0, $capitalRatio * 100.0)); // Convert to percentage points (e.g., 8% capital = 8.0 score)
 
             $modelThresholds = \App\Data\Sectors::getModelThresholds($businessModel);
             $distressThreshold = $modelThresholds['distress_equity'];
@@ -448,6 +484,7 @@ class DebtEngine
 
         // The Z''-Score Formula (Modern Service/Tech/Financial Weights)
         $zScore = (6.56 * $x1) + (3.26 * $x2) + (6.72 * $x3) + (1.05 * $x4);
+        $zScore = max(-100.0, min(100.0, $zScore));
 
         // Z'' has different threshold thresholds than the 1968 model
         $zone = 'Safe';

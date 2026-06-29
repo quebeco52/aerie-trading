@@ -9,9 +9,11 @@ class ConservativeArchetype extends AbstractArchetype
         return $targetCash * 1.5; 
     }
     
-    public function modifyDebtToleranceLimit(float $limit): float 
+    public function modifyDebtToleranceLimit(float $limit, float $effectiveCostOfDebt): float 
     { 
-        return $limit * 0.80; 
+        // Conservatives are highly terrified of debt costs (5.0 multiplier) and then take an extra 20% haircut
+        $adjusted = min($limit, max(0.10, $limit * (1.0 - ($effectiveCostOfDebt * 5.0))));
+        return max(0.1, $adjusted * 0.80); 
     }
     
     public function modifyInvestmentProbability(float $prob, float $trueReturn): float 

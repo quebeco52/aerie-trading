@@ -6,7 +6,10 @@ abstract class AbstractArchetype implements ArchetypeInterface
 {
     public function modifyTargetOperatingCash(float $targetCash): float { return $targetCash; }
     
-    public function modifyDebtToleranceLimit(float $limit): float { return $limit; }
+    public function modifyDebtToleranceLimit(float $limit, float $effectiveCostOfDebt): float 
+    { 
+        return min($limit, max(0.10, $limit * (1.0 - ($effectiveCostOfDebt * 3.0))));
+    }
     
     public function modifyInvestmentProbability(float $prob, float $trueReturn): float { return $prob; }
     

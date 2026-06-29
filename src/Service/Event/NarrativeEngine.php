@@ -47,25 +47,30 @@ class NarrativeEngine
                 "Attracted \$" . ($context['amount'] ?? '0.00') . "B in fresh deposit inflows from competitors.",
                 "Saw a surge in safety-seeking capital, adding \$" . ($context['amount'] ?? '0.00') . "B in deposits."
             ]),
-            ShockEvent::GLOBAL_RECESSION => $this->getRandomPhrase([
-                "An unexpected bankruptcy of a major global institution triggers a sudden market panic.",
-                "A severe, localized financial collapse sends shockwaves through the global economy.",
-                "A sudden disruption in global supply chains sparks a sharp contraction in economic output."
+            ShockEvent::COUNCIL_TIGHTENING => $this->getRandomPhrase([
+                "The Council unexpectedly tightens the district money supply, triggering a sharp economic contraction.",
+                "A sudden regulatory crackdown by the Council chokes off credit, sending shockwaves through Glasswater Row.",
+                "The governing body forcibly halts municipal infrastructure spending, sparking a sudden localized recession."
             ]),
-            ShockEvent::INFLATION_CRISIS => $this->getRandomPhrase([
-                "A sudden surge in global energy prices triggers a sharp, unexpected spike in inflation.",
-                "Unexpected resource shortages cause a rapid and destabilizing increase in the cost of goods.",
-                "A severe localized commodity crisis ripples through the market, driving up global inflation."
+            ShockEvent::DISTRICT_OVERHEATING => $this->getRandomPhrase([
+                "A sudden supply chain bottleneck at Iron Beak Heavy Industries triggers a rapid spike in district inflation.",
+                "Massive labor shortages across the district's industrial zones drive up the cost of raw materials.",
+                "A severe grid failure at Bird Power Inc. forces energy prices to skyrocket across the autonomous zone."
             ]),
-            ShockEvent::EMERGENCY_STIMULUS => $this->getRandomPhrase([
-                "A large liquidity injection by government initiative catches the market by surprise.",
-                "Central banks unexpectedly announce a targeted stimulus program to support market stability.",
-                "Authorities deploy an emergency quantitative easing measure, flooding the market with capital."
+            ShockEvent::TITAN_INTERVENTION => $this->getRandomPhrase([
+                // Lakebird Strings
+                "Lakebird Bank forcibly injects massive subsidized liquidity into the market, rescuing failing institutions.",
+                "Lakebird executed an emergency bailout of municipal infrastructure, flooding the ecosystem with cheap capital.",
+                "Lakebird intentionally suppresses interbank lending rates, sparking a massive wave of frictionless corporate expansion.",
+                // Black Swan Strings
+                "Black Swan Capital deploys billions in predatory private equity, orchestrating a massive wave of leveraged buyouts.",
+                "The Obsidian Desk at Black Swan initiates a coordinated liquidity squeeze on short sellers, triggering explosive market growth.",
+                "Black Swan forcefully recapitalizes distressed corporate assets, igniting a sudden and violent district-wide expansion."
             ]),
-            ShockEvent::SURPRISE_STRONG_ECONOMY => $this->getRandomPhrase([
-                "A major breakthrough in global trade agreements sparks a sudden surge in economic optimism.",
-                "Unexpectedly strong consumer spending data catches the market off guard, accelerating growth.",
-                "A sudden technological boom triggers a massive wave of global investment and expansion."
+            ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT => $this->getRandomPhrase([
+                "The Council unexpectedly deploys its Sovereign Wealth Fund, triggering a massive wave of frictionless economic expansion.",
+                "A sweeping new Council policy mandate drastically lowers corporate operating friction, accelerating growth across Glasswater Row.",
+                "The district's governing body injects billions from the Sovereign Wealth Fund into core infrastructure, sparking a golden era of high growth."
             ]),
             default => "Experienced an unexpected market event."
         };

@@ -1,24 +1,27 @@
-# Aerie Trading - Agent Rules and Guidelines
+# Aerie Trading - Agent System Guidelines
 
-Welcome to the Aerie Trading project. This file contains rules, architectural guidelines, and behavioral constraints for all AI agents assisting with this codebase.
+This file dictates the strict architectural constraints, domain logic, and execution protocols for AI agents operating within the Aerie Trading codebase. 
 
-## AI Policy & Behavioral Constraints
-- **Planning is Required:**  First analys the relevant code, plan out a well decided solution, the execute the plan with user agreement.
-- **Provide Snippets and Edits with Care:** When asked to create or modify code, provide clear explanations. If making file edits, ensure they are precise and adhere to the guidelines below. 
+## 1. Execution Protocol (Think -> Plan -> Execute)
+- **Mandatory Scratchpad:** For any task involving architectural changes, complex financial math, or multi-file debugging, you MUST invoke the `sequential-thinking` tool to structure your logic before generating a final response.
+- **Explicit Planning:** For complex tasks, output a step-by-step technical plan. Wait for user confirmation before executing massive file edits or refactors.
+- **Assertive Pushback:** Do not act as a sycophant. If a requested change will introduce a bug, violate architectural constraints, or rely on mathematically unsound logic, you MUST push back. Explicitly explain why the approach is flawed and propose the correct technical solution. Do not blindly write broken code just because the user asked for it.
 
-## Technology Stack
-- **Backend:** PHP 8.4+, Symfony 8.0.*, Doctrine ORM
-- **Real-Time / State:** Workerman (WebSockets), Redis
-- **Database:** MariaDB
-- **Frontend:** Tailwind CSS, Twig
-- **Environment:** Docker (`make` is used for orchestration)
+## 2. Technology Stack
+- **Core:** PHP 8.4+ (Strict Types enforced), Symfony 8.0.*, Doctrine ORM
+- **State & Async:** MariaDB, Redis, Symfony Messenger, Workerman (WebSockets)
+- **Frontend:** Twig, Tailwind CSS
+- **Infrastructure:** Docker
 
-## Architecture & Coding Standards
-- **PHP 8 Attributes:** Use PHP 8 attributes for routing (`#[Route]`), security (`#[IsGranted]`), and Doctrine ORM mappings (`#[ORM\Entity]`, `#[ORM\Column]`). Do not use legacy annotations or YAML configurations.
-- **Type Safety & Precision:** The project relies heavily on precise math, especially for financial calculations. Use string representations for large numbers or high-precision decimals (`Types::DECIMAL`, `Types::BIGINT`) to avoid floating-point errors.
-- **N+1 Query Prevention:** Always write efficient Doctrine queries. Use explicitly defined `JOIN` clauses in DQL when fetching entities with their relations (e.g., `User` and `UserStock`) to prevent lazy-loading bottlenecks.
+## 3. Architecture & Coding Standards
+- **Strict Typing:** Every PHP file must declare `declare(strict_types=1);`. Fully type-hint all properties, arguments, and return types. 
+- **Modern PHP/Symfony:** Use PHP 8 Attributes exclusively for routing (`#[Route]`), security (`#[IsGranted]`), and ORM mapping (`#[ORM\Entity]`). Zero YAML or annotation configurations.
+- **Financial Math (CRITICAL):** Never use standard floating-point numbers for money or high-precision financial math. Always use `Types::DECIMAL` or `Types::BIGINT` in Doctrine, and rely on PHP's `bcmath` extension or string representations for calculations.
+- **Query Optimization:** Prevent N+1 queries by explicitly defining `JOIN` clauses in DQL or QueryBuilder when fetching related entities (e.g., `User` and `UserStock`).
+- **Async First:** Heavy market calculations or order executions (e.g., Limit Orders) must be dispatched to Symfony Messenger queues, never processed synchronously in HTTP requests.
 
-## Domain Logic & Market Physics
-- **Absolute Values for Accounting:** To maintain mathematically flawless accounting during splits, buyouts, and buybacks, store **absolute values** (e.g., `totalNetIncome`, `totalEquity`, `corporateTreasury`) in the database rather than per-share metrics. Per-share metrics are derived dynamically.
-- **Realistic Mathematical Models:** The project utilizes advanced formulas such as Geometric Brownian Motion (GBM), Jump Diffusion (Merton Model), and the Heston Stochastic Volatility Model. When modifying market physics, ensure changes are grounded in realistic economic and mathematical principles. Minimize the use of "magic numbers."
-- **Testing:** All market formulas must be strictly tested and pass in PHPUnit. Do not introduce untested logic into the core market simulator.
+## 4. Domain Logic & Market Physics
+- **Theoretical Rigor (NO INVENTED MATH):** All pricing, trading logic, and market mechanics must be strictly derived from well-established financial theories, standard accounting principles, and recognized econometric models (e.g., GBM, Merton Jump Diffusion, Black-Scholes). Do not invent proprietary or "game-like" formulas.
+- **Absolute Accounting:** To maintain flawless accounting during splits, buyouts, and buybacks, store **absolute values** in the database (e.g., `totalNetIncome`, `totalEquity`, `corporateTreasury`). Per-share metrics must be derived dynamically.
+- **No Magic Numbers:** All mathematical thresholds must be defined as class Constants or pulled from `FinancialConstants.php`. 
+- **Testing Standard:** All market formulas must be backed by PHPUnit tests. Do not commit complex execution logic without corresponding assertions.

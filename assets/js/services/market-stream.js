@@ -1,6 +1,8 @@
 let isConnected = false;
 let globalMarketSocket = null;
 let reconnectTimeout = 1000;
+let intentionalClose = false;
+let visibilityListenerAdded = false;
 
 export function initMarketStream() {
     if (!window.WS_TICKET || window.WS_TICKET === "") {
@@ -11,6 +13,7 @@ export function initMarketStream() {
     if (globalMarketSocket) return; // Already initialized
 
     function connect() {
+        intentionalClose = false;
         if (globalMarketSocket) {
             globalMarketSocket.close();
         }
@@ -36,14 +39,39 @@ export function initMarketStream() {
         };
 
         globalMarketSocket.onclose = function(event) {
-            console.log("WebSocket closed. Reconnecting in " + reconnectTimeout + "ms...");
             isConnected = false;
             globalMarketSocket = null;
             document.dispatchEvent(new CustomEvent('market:disconnected'));
-            setTimeout(connect, reconnectTimeout);
-            reconnectTimeout = Math.min(reconnectTimeout * 2, 30000); // Exponential backoff up to 30s
+            if (!intentionalClose) {
+                console.log("WebSocket closed. Reconnecting in " + reconnectTimeout + "ms...");
+                setTimeout(connect, reconnectTimeout);
+                reconnectTimeout = Math.min(reconnectTimeout * 2, 30000); // Exponential backoff up to 30s
+            } else {
+                console.log("WebSocket closed intentionally (page hidden).");
+            }
         };
     }
 
-    connect();
+    if (!visibilityListenerAdded) {
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                if (!globalMarketSocket) {
+                    console.log("Page visible, reconnecting WebSocket...");
+                    connect();
+                }
+            } else {
+                if (globalMarketSocket) {
+                    console.log("Page hidden, closing WebSocket to prevent buffer overflow...");
+                    intentionalClose = true;
+                    globalMarketSocket.close();
+                }
+            }
+        });
+        visibilityListenerAdded = true;
+    }
+
+    // Connect if the page is visible right now
+    if (document.visibilityState === 'visible') {
+        connect();
+    }
 }

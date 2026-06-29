@@ -4,9 +4,11 @@ namespace App\Service\Archetype;
 
 class EmpireBuilderArchetype extends AbstractArchetype
 {
-    public function modifyDebtToleranceLimit(float $limit): float 
+    public function modifyDebtToleranceLimit(float $limit, float $effectiveCostOfDebt): float 
     { 
-        return $limit * 1.25; 
+        // Empire builders largely ignore debt costs (1.0 multiplier) and add a huge 30% leverage buffer
+        $adjusted = min($limit, max(0.10, $limit * (1.0 - ($effectiveCostOfDebt * 1.0))));
+        return $adjusted + 0.3;
     }
     
     public function modifyInvestmentProbability(float $prob, float $trueReturn): float 

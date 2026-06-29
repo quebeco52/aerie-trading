@@ -38,6 +38,9 @@ class MacroState
     public float $marketVolatility = 0.15;
     public float $marketVolatilityEma = 0.20;
     public float $marketZ = 0.0;
+    
+    public float $macroCreditSpread = 0.02;
+    public float $macroCreditSpreadEma = 0.02;
 
     /**
      * Initializes the MacroState from a decoded JSON array payload.
@@ -80,6 +83,9 @@ class MacroState
         $state->marketVolatility = $data['market_volatility'] ?? 0.15;
         $state->marketVolatilityEma = $data['market_volatility_ema'] ?? $state->marketVolatility;
         $state->marketZ = $data['market_z'] ?? 0.0;
+        
+        $state->macroCreditSpread = $data['macro_credit_spread'] ?? 0.02;
+        $state->macroCreditSpreadEma = $data['macro_credit_spread_ema'] ?? $state->macroCreditSpread;
 
         return $state;
     }
@@ -117,7 +123,9 @@ class MacroState
             'nominal_gdp_index' => $this->nominalGdpIndex,
             'market_volatility' => $this->marketVolatility,
             'market_volatility_ema' => $this->marketVolatilityEma,
-            'market_z' => $this->marketZ
+            'market_z' => $this->marketZ,
+            'macro_credit_spread' => $this->macroCreditSpread,
+            'macro_credit_spread_ema' => $this->macroCreditSpreadEma
         ];
     }
 }

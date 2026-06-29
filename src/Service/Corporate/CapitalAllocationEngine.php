@@ -304,7 +304,7 @@ class CapitalAllocationEngine
             // CAPITAL STRUCTURE MAINTENANCE: 
             // If the company is under-leveraged, they can aggressively deploy excess cash to buy back stock.
             $currentDebtRatio = ((float) $stock->getTotalDebt()) / max(1.0, (float) $stock->getTotalEquity());
-            $isUnderLeveraged = $currentDebtRatio < (($health['debt_tolerance'] ?? 0.50) * 0.50);
+            $isUnderLeveraged = $health['is_under_leveraged'] ?? false;
 
             if ($isUnderLeveraged && $excessCash > 0) {
                 $maxWillingSpend = max($maxWillingSpend, $excessCash * 0.50);

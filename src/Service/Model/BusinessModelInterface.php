@@ -26,7 +26,7 @@ interface BusinessModelInterface
     public function calculateMaxBuybackSpend(float $excessCash, float $retainedEarningsThisQuarter, bool $isMegaHoarder): float;
 
     public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array;
-    public function getInterestCoverage(float $ebit, float $interestExpense): float;
+    public function getInterestCoverage(float $ebit, float $interestExpense, float $depreciation = 0.0): float;
     public function calculateCashYield(array &$macroState, float $policyRate): float;
     public function getDebtExpansionAggressiveness(float $spreadMultiplier): array;
     public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float;

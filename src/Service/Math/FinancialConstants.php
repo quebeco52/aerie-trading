@@ -24,7 +24,7 @@ class FinancialConstants
     public const TARGET_OPERATING_CASH_RATIO = 0.05;
     public const MIN_OPERATING_CASH_RATIO = 0.03;
     public const BASE_CASH_YIELD_TARGET_RATIO = 0.05;
-    
+
     public const HOARDER_THRESHOLD_RATIO = 0.25;
     public const MEGA_HOARDER_THRESHOLD_RATIO = 0.40;
 
@@ -36,4 +36,8 @@ class FinancialConstants
     public const TECH_OPERATING_LEVERAGE = 0.25;
     public const STANDARD_OPERATING_LEVERAGE = 0.15;
     public const BANK_OPERATING_LEVERAGE = 0.05;
+
+    // --- Brokerage & Lending ---
+    public const MARGIN_LOAN_SPREAD = 0.03;
+    public const BROKERAGE_MAX_EQUITY_TURNOVER = 15.0; // Brokerages have massive top-line turnover relative to pure equity
 }

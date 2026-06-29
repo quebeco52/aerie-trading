@@ -17,24 +17,16 @@ use App\Service\Macro\MacroEngine;
  */
 class CommodityBusinessModel extends StandardCorporateBusinessModel
 {
-    public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array
-    {
-        // Physical scale is dictated by their massive invested capital (Mines, Oil Rigs, Blast Furnaces)
-        return [
-            'invested_capital' => $stock->getInvestedCapital(),
-            'baseline_roic' => max(0.01, (float) $stock->getBaselineRoic())
-        ];
-    }
 
     public function getMacroPhysics(Stock $stock, array &$macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
         
-        // Commodities are ultimate price takers. They perfectly capture supply chain inflation directly into top-line revenue.
-        $inflation = $macroState['inflation_ema'] ?? 0.02;
-        $beta = (float) $stock->getBeta();
-        
-        $physics['pricing_power_multiplier'] = 1.0 + ($inflation * max(0.5, $beta) * 1.5);
+        // CRITICAL FIX: Commodities are absolute price takers. They have zero traditional pricing power.
+        // We set this to 1.0 because their top-line revenue is already dynamically forced up and down 
+        // by global spot prices ($inflationBonus) during the Idiosyncratic Shock phase. 
+        // Setting this higher would result in massive, compounded double-dipping on inflation.
+        $physics['pricing_power_multiplier'] = 1.0;
         
         return $physics;
     }
@@ -49,17 +41,17 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         // Higher top-line variance compared to standard retail/manufacturing
         $revenueShock = $revenueZ * ($baselineVol * 0.25);
         
-        // The Inflation Blessing:
+        // The Inflation Exposure:
         // While standard corporates get crushed by supply chain inflation, commodities *are* the supply chain. 
-        // Their margins explode upwards during inflationary spikes as spot prices rise.
-        $inflation = $macroState['inflation_ema'] ?? 0.02;
-        $inflationBonus = max(0.0, ($inflation - 0.02) * abs((float) $stock->getBeta()) * 2.0);
+        // Their margins explode upwards during inflationary spikes as spot prices rise, and violently contract during deflation.
+        $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
+        $inflationBonus = ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * 1.0;
         
         // The physical volume of commodities extracted/sold (subject to standard operational variance)
         $physicalVolumeRevenue = $expectedRevenue * (1.0 + $revenueShock);
         
-        // Actual revenue explodes upward during inflation due to spot price spikes
-        $actualRevenue = $physicalVolumeRevenue + ($expectedRevenue * $inflationBonus);
+        // Actual revenue explodes upward during inflation and crashes during deflation due to spot prices
+        $actualRevenue = max(0.0, $physicalVolumeRevenue + ($expectedRevenue * $inflationBonus));
         
         // CRITICAL FINANCIAL FIX: 
         // Variable extraction costs (labor, diesel, equipment) scale with the physical volume produced,

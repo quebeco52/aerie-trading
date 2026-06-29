@@ -111,7 +111,9 @@ class TreasuryEngine
 
         $evaluationCapital = $isFinancial ? $newEquity : $liveInvestedCapital;
 
-        if ($trueReturn > $hurdleRate && $health['can_issue_debt']) {
+        $isUnderLeveraged = $health['is_under_leveraged'] && !$health['is_severe_negative_carry'];
+
+        if (($trueReturn > $hurdleRate || $isUnderLeveraged) && $health['can_issue_debt']) {
             $newBorrowingRate = $health['raw_metrics']['current_market_rate'] ?? 0.05;
 
             if ($isFinancial) {
@@ -129,8 +131,16 @@ class TreasuryEngine
                 $balanceSheetCapacity = max(0.0, ($newEquity * $evalTolerance) - $evalDebt);
 
                 $ebit = $health['raw_metrics']['ebit'] ?? 0.0;
-                $minimumIcr = 3.5;
-                $maxTolerableInterest = max(0.0, $ebit / $minimumIcr);
+                $depreciation = $health['raw_metrics']['depreciation'] ?? 0.0;
+                
+                // REITs use FFO (EBIT + Depreciation) to cover interest, as depreciation is non-cash.
+                $operatingIncome = $businessModel === 'reit' ? ($ebit + $depreciation) : $ebit;
+                
+                // Highly stable businesses (like REITs and Utilities) can safely borrow at much lower ICR thresholds.
+                $modelThresholds = \App\Data\Sectors::getModelThresholds($businessModel);
+                $minimumIcr = ($modelThresholds['buyback_min_icr'] ?? 3.0) + 0.5;
+                
+                $maxTolerableInterest = max(0.0, $operatingIncome / $minimumIcr);
                 $currentInterestExpense = $health['raw_metrics']['interest_expense'] ?? 0.0;
                 $availableInterestCapacity = max(0.0, $maxTolerableInterest - $currentInterestExpense);
                 $incomeStatementCapacity = $newBorrowingRate > 0 ? ($availableInterestCapacity / $newBorrowingRate) : 0.0;
@@ -178,12 +188,13 @@ class TreasuryEngine
                 $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
 
                 // CAPITAL STRUCTURE MAINTENANCE:
-                // If a company is severely under-leveraged (Debt/Equity < 50% of tolerance), it issues debt to recapitalize
-                // rather than to capture new market share, so it ignores the market saturation penalty.
-                $currentDebtRatio = $totalDebt / max(1.0, $newEquity);
-                $isUnderLeveraged = $currentDebtRatio < ($health['debt_tolerance'] * 0.50);
+                // If a company is under-leveraged (Debt/Equity < 60% of tolerance), it aggressively issues debt to recapitalize
+                // rather than just to capture new market share, so it ignores the market saturation penalty.
 
-                if (!$isUnderLeveraged) {
+                if ($isUnderLeveraged) {
+                    $aggressiveness = max($aggressiveness, 0.50);
+                    $borrowProbability = max($borrowProbability, 0.90);
+                } else {
                     $borrowProbability *= max(0.05, 1.0 - $saturationPenalty);
                 }
 
@@ -368,9 +379,12 @@ class TreasuryEngine
                 $reason = "execute a highly dilutive emergency stock offering to stave off bankruptcy";
                 $shock = -15.0; // Market hates dilution, especially distressed dilution
             } elseif ($isBubble) {
-                // Exploit the bubble to raise 5% of their market cap in cash
+                // Exploit the bubble to raise 5% of their market cap in cash, but cap it against their physical reality.
+                // A company cannot raise more than 10% of its Invested Capital in a single offering without destroying its ROIC.
                 $marketCap = $shares * $currentPrice;
-                $targetRaise = $marketCap * 0.05;
+                $investedCapital = (float) $stock->getInvestedCapital();
+                $maxRaise = abs($investedCapital) * 0.10;
+                $targetRaise = min($marketCap * 0.05, $maxRaise);
                 $reason = "exploit premium valuation with a secondary offering";
                 $shock = -5.0;
             }
@@ -457,8 +471,13 @@ class TreasuryEngine
 
             $evalDebt = $isFinancial ? $state['wholesaleDebt'] : $totalDebt;
             $modelThresholds = \App\Data\Sectors::getModelThresholds($businessModel);
-            $evalLimit = $isFinancial ? ($modelThresholds['wholesale_leverage_limit'] ?? $macroDebtTolerance) : $macroDebtTolerance;
-            $evalLimit = $archetypeStrategy->modifyDebtToleranceLimit($evalLimit);
+            
+            if ($isFinancial && isset($modelThresholds['wholesale_leverage_limit'])) {
+                $effectiveCostOfDebt = $health['effective_cost'] ?? 0.05;
+                $evalLimit = $archetypeStrategy->modifyDebtToleranceLimit($modelThresholds['wholesale_leverage_limit'], $effectiveCostOfDebt);
+            } else {
+                $evalLimit = $macroDebtTolerance;
+            }
 
             $currentDebtRatio = $evalDebt / max(1.0, $newEquity);
 

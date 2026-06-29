@@ -874,7 +874,7 @@ function updateMacroCharts() {
     if (!rawReports || rawReports.length === 0) return;
 
     let labels = [];
-    let inflationData = [], outputGapData = [];
+    let inflationData = [], outputGapData = [], corpBorrowingData = [];
     let policyRateData = [], yield2yData = [], yield5yData = [], yield10yData = [], yield30yData = [];
     let spread2s10sData = [], spread30yData = [];
     let erpData = [], volData = [], taxData = [];
@@ -904,6 +904,10 @@ function updateMacroCharts() {
         let rawY30 = report.yield30y_ema || report.yield30yEma;
         let y30 = rawY30 ? parseFloat(rawY30) * 100 : null;
 
+        let creditSpread = report.macro_credit_spread_ema || report.macroCreditSpreadEma;
+        let corpRate = (y5 !== null && creditSpread !== undefined) ? y5 + (parseFloat(creditSpread) * 100) : null;
+        corpBorrowingData.push(corpRate);
+
         policyRateData.push(pr);
         yield2yData.push(y2);
         yield5yData.push(y5);
@@ -924,7 +928,7 @@ function updateMacroCharts() {
     renderMacroEconomyChart(labels, inflationData, outputGapData);
     renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData, yield10yData, spread2s10sData);
     renderMacroMortgageChart(labels, policyRateData, yield30yData, spread30yData);
-    renderMacroRiskChart(labels, erpData, volData, taxData);
+    renderMacroRiskChart(labels, erpData, volData, taxData, corpBorrowingData);
     renderMacroGdpChart(labels, gdpData);
 }
 
@@ -1082,7 +1086,7 @@ function renderMacroMortgageChart(labels, policyRateData, yield30yData, spread30
     });
 }
 
-function renderMacroRiskChart(labels, erpData, volData, taxData) {
+function renderMacroRiskChart(labels, erpData, volData, taxData, corpBorrowingData) {
     if (macroRiskChartInstance) macroRiskChartInstance.destroy();
     const ctx = document.getElementById('macroRiskChart').getContext('2d');
     macroRiskChartInstance = new Chart(ctx, {
@@ -1090,6 +1094,16 @@ function renderMacroRiskChart(labels, erpData, volData, taxData) {
         data: {
             labels: labels,
             datasets: [
+                {
+                    label: 'Corp Borrowing Rate',
+                    data: corpBorrowingData,
+                    borderColor: '#f43f5e', // Rose color for debt
+                    backgroundColor: '#f43f5e',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    tension: 0.3,
+                    pointRadius: labels.length > 50 ? 0 : 1
+                },
                 {
                     label: 'Market Volatility (VIX)',
                     data: volData,

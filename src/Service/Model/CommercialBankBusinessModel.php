@@ -40,6 +40,11 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
         $earningAssets = max($effectiveEquity, $effectiveEquity + $totalDebt - $treasury);
         $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
 
+        $ttmRoe = (float) $stock->getRoeTtm();
+        if ($ttmRoe !== 0.0) {
+            $baselineRoe = ($baselineRoe * 0.70) + ($ttmRoe * 0.30);
+        }
+
         $industry = $stock->getIndustry() ?: 'General';
         $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 10.0;
 
@@ -115,7 +120,7 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
         $beta = (float) $stock->getBeta();
 
         return [
-            'macro_demand_shift' => $outputGap * $beta * 0.25, // Less demand destruction than physical goods
+            'macro_demand_shift' => $outputGap * $beta * 0.50, // Less demand destruction than physical goods
             'pricing_power_multiplier' => 1.0, // Top-line yields price off bond market natively
             'operating_leverage_rate' => FinancialConstants::BANK_OPERATING_LEVERAGE, // Lower physical leverage compared to factories
         ];

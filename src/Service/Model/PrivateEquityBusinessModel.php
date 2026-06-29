@@ -19,14 +19,14 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
-        
+
         // Private Equity Volatility:
         // During booms (positive output gap), they exit investments at massive premiums (Carried Interest).
         // During busts (negative output gap), M&A markets freeze and they earn zero performance fees.
         $outputGap = $macroState['output_gap_ema'] ?? ($macroState['output_gap'] ?? 0.0);
-        
-        $dealFlowMultiplier = $outputGap > 0.0 ? ($outputGap * 3.0) : ($outputGap * 1.5); 
-        
+
+        $dealFlowMultiplier = $outputGap > 0.0 ? ($outputGap * 3.0) : ($outputGap * 1.5);
+
         $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * 0.15)) + $dealFlowMultiplier);
         $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $realizedVariableMargin));
 
@@ -38,9 +38,9 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         }
 
         return [
-            'actual_revenue' => $actualRevenue, 
-            'actual_variable_costs' => $actualVariableCosts, 
-            'ebit' => $actualRevenue - $fixedCosts - $actualVariableCosts, 
+            'actual_revenue' => $actualRevenue,
+            'actual_variable_costs' => $actualVariableCosts,
+            'ebit' => $actualRevenue - $fixedCosts - $actualVariableCosts,
             'primary_shock_z' => $revenueZ,
             'event_lore' => $eventLore
         ];
@@ -52,19 +52,19 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         return $isMegaHoarder ? $excessCash * 0.30 : min($excessCash * 0.10, $retainedEarningsThisQuarter);
     }
 
-    public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float 
-    { 
+    public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float
+    {
         // PE firms constantly inject capital into their portfolio companies (bolt-on acquisitions, restructuring costs).
-        return max($organicSpend, $debtIssued * 0.90); 
+        return max($organicSpend, $debtIssued * 0.90);
     }
 
-    public function getDebtExpansionAggressiveness(float $spreadMultiplier): array 
-    { 
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier): array
+    {
         // Highly aggressive borrowing to fuel buyouts and portfolio injections
         return [
-            'probability' => 0.70 + ($spreadMultiplier * 0.20), 
+            'probability' => 0.70 + ($spreadMultiplier * 0.20),
             'aggressiveness' => 0.10 + (0.30 * $spreadMultiplier)
-        ]; 
+        ];
     }
 
     public function evaluateHoardingStatus(float $treasury, float $targetCashReserves, float $operatingBase, float $totalDebt): array
@@ -105,4 +105,3 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         return $truePostTaxReturn;
     }
 }
-

@@ -62,7 +62,7 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         $beta = (float) $stock->getBeta();
 
         return [
-            'macro_demand_shift' => $outputGap * $beta * 0.10, // Highly immune to macro demand
+            'macro_demand_shift' => $outputGap * $beta * 0.25, // Highly immune to macro demand
             'pricing_power_multiplier' => 1.0,
             'operating_leverage_rate' => 0.05,
         ];
@@ -210,7 +210,7 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         return ['interest_expense' => $interestExpense, 'wholesale_rate' => $corporateDebt > 0 ? ($interestExpense / $corporateDebt) : $currentMarketFixedRate];
     }
 
-    public function getInterestCoverage(float $ebit, float $interestExpense): float
+    public function getInterestCoverage(float $ebit, float $interestExpense, float $depreciation = 0.0): float
     {
         return 999.0;
     }

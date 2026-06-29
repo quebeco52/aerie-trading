@@ -138,7 +138,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 if (isset($macroState['event_type'])) {
                     if ($lbiEtf) {
                         $desc = $this->narrativeEngine->generateLore($macroState['event_type']);
-                        $shockPct = in_array($macroState['event_type'], [\App\Service\Event\ShockEvent::EMERGENCY_STIMULUS, \App\Service\Event\ShockEvent::SURPRISE_STRONG_ECONOMY]) ? 5.0 : -5.0;
+                        $shockPct = in_array($macroState['event_type'], [\App\Service\Event\ShockEvent::TITAN_INTERVENTION, \App\Service\Event\ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT]) ? 5.0 : -5.0;
                         $events[] = $this->marketEvent->publish($lbiEtf, 'SHOCK', $desc, $shockPct);
                     }
                 }

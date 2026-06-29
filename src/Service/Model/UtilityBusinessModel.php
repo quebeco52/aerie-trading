@@ -17,15 +17,6 @@ use App\Service\Macro\MacroEngine;
  */
 class UtilityBusinessModel extends StandardCorporateBusinessModel
 {
-    public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array
-    {
-        // The Regulated Rate Base:
-        // Regulators legally guarantee utilities a steady baseline ROIC (usually 8-10%) on their physical assets.
-        return [
-            'invested_capital' => $stock->getInvestedCapital(),
-            'baseline_roic' => max(0.01, (float) $stock->getBaselineRoic())
-        ];
-    }
 
     public function getMacroPhysics(Stock $stock, array &$macroState): array
     {
@@ -34,13 +25,13 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         // Regulated Utilities are virtually immune to economic output gaps (people always need power/water)
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
         $beta = (float) $stock->getBeta();
-        $physics['macro_demand_shift'] = $outputGap * $beta * 0.10;
+        $physics['macro_demand_shift'] = $outputGap * $beta * 0.25;
 
         // Regulatory Lag: Utilities do get rate hikes to cover inflation, but they are delayed.
         // We give them a very small fraction of normal pricing power (0.25x vs the standard 0.5x minimum)
         // so their nominal revenue grows slowly, but they still suffer the margin compression penalty 
         // during inflationary spikes because costs rise much faster than this tiny revenue bump.
-        $inflation = $macroState['inflation_ema'] ?? 0.02;
+        $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
         $physics['pricing_power_multiplier'] = 1.0 + ($inflation * 0.25);
 
         return $physics;
@@ -59,8 +50,10 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
 
         // Regulatory Lag: 
         // It takes months/years to get rate hikes approved. During high inflation, their margins get temporarily compressed.
-        $inflation = $macroState['inflation_ema'] ?? 0.02;
-        $regulatoryLagPenalty = $inflation > 0.03 ? ($inflation - 0.03) * 0.8 : 0.0;
+        $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
+        // Utilities lag slightly, so penalty kicks in slightly above target
+        $lagThreshold = MacroEngine::TARGET_INFLATION + 0.01;
+        $regulatoryLagPenalty = $inflation > $lagThreshold ? ($inflation - $lagThreshold) * 0.8 : 0.0;
 
         $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $realizedVariableMargin + $regulatoryLagPenalty));
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;

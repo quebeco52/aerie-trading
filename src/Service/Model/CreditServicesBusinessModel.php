@@ -17,6 +17,15 @@ use App\Service\Macro\MacroEngine;
  */
 class CreditServicesBusinessModel extends CommercialBankBusinessModel
 {
+    public function getMacroPhysics(Stock $stock, array &$macroState): array
+    {
+        $physics = parent::getMacroPhysics($stock, $macroState);
+        // Swipe fees perfectly capture nominal inflation dynamically.
+        // We strip generic pricing power to prevent double-dipping.
+        $physics['pricing_power_multiplier'] = 1.0;
+        return $physics;
+    }
+
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
@@ -24,11 +33,11 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         // The Inflation Bonus (Interchange Fees):
         // Credit Services capture inflation directly into their REVENUE. 
         // Because swipe fees (Visa/Mastercard) are a percentage of the total transaction size, higher prices = higher revenue.
-        $inflation = $macroState['inflation_ema'] ?? ($macroState['inflation'] ?? 0.02);
-        $inflationBonus = max(0.0, ($inflation - 0.02) * abs((float) $stock->getBeta()));
+        $inflation = $macroState['inflation_ema'] ?? ($macroState['inflation'] ?? MacroEngine::TARGET_INFLATION);
+        $inflationBonus = ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta());
 
         // Moderate the random revenue fluctuations (higher than banks, but not pure chaos)
-        $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * 0.20)) + $inflationBonus);
+        $actualRevenue = max(0.0, $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * 0.20)) + $inflationBonus));
 
         $defaultZ = $mathUtility->generateStandardNormal();
 
@@ -78,6 +87,11 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $effectiveEquity = max(1.0, $equity);
         $earningAssets = max($effectiveEquity, $effectiveEquity + $totalDebt - $treasury);
         $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
+        
+        $ttmRoe = (float) $stock->getRoeTtm();
+        if ($ttmRoe !== 0.0) {
+            $baselineRoe = ($baselineRoe * 0.70) + ($ttmRoe * 0.30);
+        }
 
         $taxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;

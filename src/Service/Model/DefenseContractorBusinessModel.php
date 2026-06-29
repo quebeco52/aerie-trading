@@ -4,6 +4,7 @@ namespace App\Service\Model;
 
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Macro\MacroEngine;
 
 /**
  * Earnings strategy for Defense Contractors & Government Security.
@@ -16,6 +17,15 @@ use App\Service\Math\MathUtility;
  */
 class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 {
+    public function getMacroPhysics(Stock $stock, array &$macroState): array
+    {
+        $physics = parent::getMacroPhysics($stock, $macroState);
+        // Cost-plus contracts perfectly capture inflation dynamically. 
+        // We strip generic pricing power to prevent double-dipping.
+        $physics['pricing_power_multiplier'] = 1.0;
+        return $physics;
+    }
+
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
@@ -26,10 +36,10 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         // Cost-Plus Contracting (The Inflation Blessing):
         // If inflation drives up the cost of building a fighter jet, the contractor's absolute profit 
         // goes UP, because their margin is a guaranteed percentage of the total inflated cost.
-        $inflation = $macroState['inflation_ema'] ?? 0.02;
-        $costPlusBonus = max(0.0, ($inflation - 0.02) * 1.5);
+        $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
+        $costPlusBonus = ($inflation - MacroEngine::TARGET_INFLATION) * 1.5;
 
-        $actualRevenue = $expectedRevenue * (1.0 + $revenueShock + $costPlusBonus);
+        $actualRevenue = max(0.0, $expectedRevenue * (1.0 + $revenueShock + $costPlusBonus));
 
         // Tail Risk: Geopolitical Contract Wins/Losses
         $eventZ = $mathUtility->generateStandardNormal();

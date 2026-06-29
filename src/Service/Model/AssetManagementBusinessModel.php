@@ -25,6 +25,11 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         $equity = (float) $stock->getTotalEquity();
         $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
 
+        $ttmRoe = (float) $stock->getRoeTtm();
+        if ($ttmRoe !== 0.0) {
+            $baselineRoe = ($baselineRoe * 0.70) + ($ttmRoe * 0.30);
+        }
+
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
         $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + 0.005);
         $structuralSpread = (float) $stock->getCreditSpread();
@@ -101,7 +106,7 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         $beta = (float) $stock->getBeta();
 
         return [
-            'macro_demand_shift' => $outputGap * $beta * 0.25,
+            'macro_demand_shift' => $outputGap * $beta * 0.50,
             'pricing_power_multiplier' => 1.0,
             'operating_leverage_rate' => 0.05,
         ];

@@ -49,6 +49,11 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
         $targetEbitYield = max(0.01, $blendedCapRate - $depreciationRate);
 
+        $ttmRoic = (float) $stock->getRoicTtm();
+        if ($ttmRoic !== 0.0) {
+            $targetEbitYield = ($targetEbitYield * 0.70) + ($ttmRoic * 0.30);
+        }
+
         return [
             'invested_capital' => $investedCapital,
             'baseline_roic' => $targetEbitYield
@@ -58,6 +63,15 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     /**
      * REIT revenues are incredibly stable due to multi-year binding leases.
      */
+    public function getMacroPhysics(Stock $stock, array &$macroState): array
+    {
+        $physics = parent::getMacroPhysics($stock, $macroState);
+        // CPI Rent Escalators perfectly capture inflation dynamically.
+        // We strip generic pricing power to prevent double-dipping.
+        $physics['pricing_power_multiplier'] = 1.0;
+        return $physics;
+    }
+
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
@@ -68,8 +82,10 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
         // The Inflation Hedge (CPI Rent Escalators):
         // Commercial real estate leases almost universally contain automatic annual rent increases tied to inflation.
-        $inflation = $macroState['inflation_ema'] ?? 0.02;
-        $rentEscalator = max(0.0, $inflation * 0.80); // Capture 80% of inflation directly into top-line revenue
+        // Rent Escalators only provide an Earnings Surprise if inflation spikes above the expected baseline.
+        $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
+        $excessInflation = max(0.0, $inflation - MacroEngine::TARGET_INFLATION);
+        $rentEscalator = $excessInflation * 0.80; // Capture 80% of excess inflation directly into top-line revenue
 
         $actualRevenue = $expectedRevenue * (1.0 + $revenueShock + $rentEscalator);
 
@@ -130,6 +146,15 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     {
         // REITs are pass-through entities and legally pay 0% corporate tax at the entity level.
         return 0.0;
+    }
+
+    public function getInterestCoverage(float $ebit, float $interestExpense, float $depreciation = 0.0): float
+    {
+        // REITs evaluate their interest coverage on Funds From Operations (FFO) / NOI, not EBIT.
+        // Because real estate appreciates, GAAP depreciation is an accounting fiction that artificially 
+        // reduces EBIT. Adding it back reveals the true cash flow available to cover debt.
+        $ffo = $ebit + $depreciation;
+        return $interestExpense > 0 ? ($ffo / $interestExpense) : ($ffo > 0 ? 999.0 : -999.0);
     }
 
     /**

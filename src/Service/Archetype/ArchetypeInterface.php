@@ -12,7 +12,7 @@ interface ArchetypeInterface
     /**
      * Modifies the maximum debt tolerance limit before triggering a deleveraging sweep.
      */
-    public function modifyDebtToleranceLimit(float $limit): float;
+    public function modifyDebtToleranceLimit(float $limit, float $effectiveCostOfDebt): float;
 
     /**
      * Modifies the probability that the company will invest in organic CapEx.

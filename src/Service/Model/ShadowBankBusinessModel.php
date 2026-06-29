@@ -26,6 +26,11 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         $effectiveEquity = max(1.0, $equity);
         $earningAssets = max($effectiveEquity, $effectiveEquity + $wholesaleDebt - $treasury);
         $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
+        
+        $ttmRoe = (float) $stock->getRoeTtm();
+        if ($ttmRoe !== 0.0) {
+            $baselineRoe = ($baselineRoe * 0.70) + ($ttmRoe * 0.30);
+        }
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
         
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;

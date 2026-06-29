@@ -26,11 +26,11 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
     {
         $cash = (float) $stock->getCorporateTreasury();
         $operatingBase = $this->getOperatingBase($stock);
-        
+
         // Default behavior: Cash above target operating cash earns money-market yields.
         $targetCash = $this->calculateTargetOperatingCash($operatingBase, 0.0, (float) $stock->getWholesaleDebt());
         $excessCash = max(0.0, $cash - $targetCash);
-        
+
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
         return $excessCash * $this->calculateCashYield($macroState, $policyRate);
     }
@@ -70,7 +70,7 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
         return $isMegaHoarder ? $excessCash * 0.30 : $excessCash * 0.10;
     }
 
-    public function getInterestCoverage(float $ebit, float $interestExpense): float
+    public function getInterestCoverage(float $ebit, float $interestExpense, float $depreciation = 0.0): float
     {
         return $interestExpense > 0 ? ($ebit / $interestExpense) : ($ebit > 0 ? 999.0 : -999.0);
     }

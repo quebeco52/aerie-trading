@@ -6,6 +6,7 @@ use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\FinancialConstants;
+use App\Service\Macro\MacroEngine;
 
 /**
  * Earnings strategy for Technology & Software companies.
@@ -41,8 +42,10 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         // Supply Chain Immunity vs. Talent Inflation:
         // Tech companies don't buy steel or oil, they pay for engineers and cloud compute.
         // We dramatically reduce the standard supply chain inflation penalty, kicking in only at very high inflation.
-        $inflation = $macroState['inflation_ema'] ?? 0.02;
-        $wageInflationPenalty = $inflation > 0.04 ? ($inflation - 0.04) * abs((float) $stock->getBeta()) * 0.5 : 0.0;
+        $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
+        // Tech is immune to standard supply chain inflation, so penalty only kicks in at 2x Target Inflation
+        $wageInflationThreshold = MacroEngine::TARGET_INFLATION * 2.0;
+        $wageInflationPenalty = $inflation > $wageInflationThreshold ? ($inflation - $wageInflationThreshold) * abs((float) $stock->getBeta()) * 0.5 : 0.0;
         
         // Fat Tail Risk: Data Breaches, Anti-Trust, and Viral Breakthroughs
         $eventZ = $mathUtility->generateStandardNormal();
