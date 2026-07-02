@@ -37,9 +37,19 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
             $eventLore = "Suffered a severe deal drought as frozen credit markets prevented portfolio exits.";
         }
 
+        // Analyst Visibility
+        // PE Deal flow multiplier is tied directly to the public output gap (100% visible).
+        // Individual portfolio exits are mostly hidden until earnings (~20% visibility).
+        $analystError = $mathUtility->generateStandardNormal() * 0.05;
+        $dynamicVisibility = min(1.0, max(0.0, 0.20 + $analystError));
+        $analystExpectedRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * 0.15) * $dynamicVisibility) + $dealFlowMultiplier);
+        $analystExpectedVariableCosts = $analystExpectedRevenue * min(1.50, max(0.01, $realizedVariableMargin));
+
         return [
             'actual_revenue' => $actualRevenue,
             'actual_variable_costs' => $actualVariableCosts,
+            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
             'ebit' => $actualRevenue - $fixedCosts - $actualVariableCosts,
             'primary_shock_z' => $revenueZ,
             'event_lore' => $eventLore

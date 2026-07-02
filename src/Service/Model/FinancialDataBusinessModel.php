@@ -33,11 +33,25 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $realizedVariableMargin));
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
+        // Analyst Visibility
+        // Financial Data subscriptions are highly visible via quarterly subscriber count reporting (~80% visibility).
+        $analystError = $mathUtility->generateStandardNormal() * 0.10;
+        $dynamicVisibility = min(1.0, max(0.0, 0.80 + $analystError));
+        $analystExpectedRevenue = $expectedRevenue * (1.0 + ($revenueShock * $dynamicVisibility));
+        $analystExpectedVariableCosts = $analystExpectedRevenue * min(1.50, max(0.01, $realizedVariableMargin));
+
         return [
             'actual_revenue' => $actualRevenue, 
             'actual_variable_costs' => $actualVariableCosts, 
+            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
             'ebit' => $ebit, 
             'primary_shock_z' => $revenueZ
         ];
+    }
+
+    public function getMarginReversionSpeed(): float
+    {
+        return 2.0; // High switching costs and data monopoly moat
     }
 }

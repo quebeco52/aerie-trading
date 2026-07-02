@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Service\Corporate;
 
 use App\Entity\Stock;
@@ -123,9 +125,9 @@ class EarningsEngine
         $priceJumpMean = (float) ($stock->getJumpMean() ?? -0.05);
         $priceJumpVol = (float) ($stock->getJumpVol() ?? 0.10);
 
-        $jumpIntensity = $priceJumpIntensity * 0.25; // Fundamental shocks happen less frequently than price panics
-        $jumpMean = $priceJumpMean * 0.50;           // Physical revenue hits are smaller than valuation drops
-        $jumpVol = $priceJumpVol * 0.50;             // Variance of physical shocks is tighter
+        $jumpIntensity = $priceJumpIntensity * FinancialConstants::FUNDAMENTAL_JUMP_INTENSITY_SCALE;
+        $jumpMean = $priceJumpMean * FinancialConstants::FUNDAMENTAL_JUMP_MEAN_SCALE;
+        $jumpVol = $priceJumpVol * FinancialConstants::FUNDAMENTAL_JUMP_VOL_SCALE;
 
         $jumpData = $this->mathUtility->calculateJumpDiffusion($jumpIntensity, $jumpMean, $jumpVol, $dt);
         $jumpMagnitude = $jumpData['exponent'] ?? 0.0;
@@ -154,20 +156,18 @@ class EarningsEngine
         $baselineVariableMargin = $structuralVariableCosts / $structuralRevenue;
 
         // 2. VARIABLE MARGIN PROCESS (Cox-Ingersoll-Ross)
-        $kappa = 4.0; // Reversion speed
+        $kappa = $strategy->getMarginReversionSpeed();
 
 
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
         $beta = (float) $stock->getBeta();
-        // Macro drag (recessions) and Bloat create inefficiencies, RAISING the variable cost margin
-        $macroCostDrag = ($outputGap < 0 ? abs($outputGap) : 0.0) * $beta * 0.3;
 
         // The Bloat Penalty: As a company saturates its market, it becomes bureaucratic and slightly less efficient.
         $evaluationCapital = $isFinancial ? (float)$stock->getTotalEquity() : $investedCapital;
         $marketSharePenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
 
         $saturationCostPenalty = $marketSharePenalty * 0.15;
-        $dynamicVariableTheta = min(0.99, max(0.01, $baselineVariableMargin + $macroCostDrag + $saturationCostPenalty));
+        $dynamicVariableTheta = min(0.99, max(0.01, $baselineVariableMargin + $saturationCostPenalty));
         $dynamicVariableTheta = $archetypeStrategy->modifyVariableMarginTheta($dynamicVariableTheta);
 
         $z2 = $this->mathUtility->generateStandardNormal();
@@ -182,17 +182,20 @@ class EarningsEngine
         $realizedVariableMargin = $this->mathUtility->calculateCIR($currentVariableMargin, $kappa, $dynamicVariableTheta, $marginVol, $dt, $z2);
         $realizedVariableMargin = min(0.99, max(0.01, $realizedVariableMargin));
 
-        // Plug the math to output Expected EBIT natively
-        $expectedVariableCosts = $expectedRevenue * $realizedVariableMargin;
-        $expectedEbit = $expectedRevenue - $fixedCosts - $expectedVariableCosts;
-        // Failsafe: Prevent massive fixed costs from generating infinite negative EBIT
-        $expectedEbit = max(-$structuralRevenue * 0.50, $expectedEbit);
-
         // APPLY THE IDIOSYNCRATIC Z-SCORE SHOCK
         $shockData = $strategy->generateIdiosyncraticShock($stock, $expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol, $macroState, $this->mathUtility);
         $actualRevenue = $shockData['actual_revenue'];
-
         $actualVariableCosts = $shockData['actual_variable_costs'];
+
+        // ANALYST VISIBILITY (FORWARD GUIDANCE)
+        // Analysts see part of the shock depending on the Business Model (e.g. hurricanes are public, server failures are opaque).
+        $analystExpectedRevenue = $shockData['analyst_expected_revenue'] ?? $expectedRevenue;
+        $analystExpectedVariableCosts = $shockData['analyst_expected_variable_costs'] ?? ($analystExpectedRevenue * $realizedVariableMargin);
+
+        // Calculate Expected EBIT natively using the Analyst's updated forward guidance
+        $expectedEbit = $analystExpectedRevenue - $fixedCosts - $analystExpectedVariableCosts;
+        // Failsafe: Prevent massive fixed costs from generating infinite negative EBIT
+        $expectedEbit = max(-$structuralRevenue * 0.50, $expectedEbit);
 
         // Recalculate EBIT (If demand collapsed, they still paid the variable costs for unsold goods, causing a massive loss!)
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
@@ -203,239 +206,260 @@ class EarningsEngine
 
         // Calculate EXPECTED Interest Expense (Pre-Shock)
         $expectedOperatingMargin = $expectedEbit / max(1.0, $expectedRevenue);
-        $stock->setTotalRevenue((string) $expectedRevenue);
-        $stock->setOperatingMargin((string) $expectedOperatingMargin);
-        $expectedDebtMetrics = $this->debtEngine->calculateInterestExpense($stock, $macroState, false);
+        $expectedDebtMetrics = $this->debtEngine->calculateInterestExpense($stock, $macroState, false, $expectedRevenue, $expectedOperatingMargin);
         $expectedInterestExpense = $expectedDebtMetrics['interest_expense'];
 
         // Calculate ACTUAL Interest Expense (Post-Shock, Advancing Maturity)
         $stock->setTotalRevenue((string) $actualRevenue);
-        // Sync the true dynamic margin to the Stock Entity so DebtEngine calculates the precise Net Debt Leverage!
+        // The dynamic margin is passed directly to DebtEngine
         $trueOperatingMargin = $ebit / max(1.0, $actualRevenue);
-        $stock->setOperatingMargin((string) $trueOperatingMargin);
 
-        try {
-            $debtMetrics = $this->debtEngine->calculateInterestExpense($stock, $macroState, true);
+        $debtMetrics = $this->debtEngine->calculateInterestExpense($stock, $macroState, true, $actualRevenue, $trueOperatingMargin);
 
-            // DebtEngine returns ANNUAL interest expense. We must divide by 4 for the quarterly simulation.
-            $annualInterestExpense = $debtMetrics['interest_expense'];
-            $quarterlyInterestExpense = $annualInterestExpense / 4.0;
-            $debtMetrics['interest_expense'] = $quarterlyInterestExpense; // Save back for the DB report
+        // DebtEngine returns ANNUAL interest expense. We must divide by 4 for the quarterly simulation.
+        $annualInterestExpense = $debtMetrics['interest_expense'];
+        $quarterlyInterestExpense = $annualInterestExpense / 4.0;
+        $debtMetrics['interest_expense'] = $quarterlyInterestExpense; // Save back for the DB report
 
-            $expectedInterestExpense = $expectedDebtMetrics['interest_expense'] / 4.0;
+        $expectedInterestExpense = $expectedDebtMetrics['interest_expense'] / 4.0;
 
-            $stock->setHistoricalFixedRate((string) $debtMetrics['historical_fixed_rate']);
+        $stock->setHistoricalFixedRate((string) $debtMetrics['historical_fixed_rate']);
 
-            // Interest Income (Annualized from Business Models)
-            $annualInterestIncome = $strategy->calculateInterestIncome($stock, $macroState, $this->mathUtility);
-            $quarterlyInterestIncome = $annualInterestIncome / 4.0;
+        // Interest Income (Annualized from Business Models)
+        $annualInterestIncome = $strategy->calculateInterestIncome($stock, $macroState, $this->mathUtility);
+        $quarterlyInterestIncome = $annualInterestIncome / 4.0;
 
-            // CALCULATE PHYSICAL DEPRECIATION
-            $customDepreciation = (float) $stock->getDepreciationRate();
-            $baseDepreciationRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($industry);
+        // CALCULATE PHYSICAL DEPRECIATION
+        $customDepreciation = (float) $stock->getDepreciationRate();
+        $baseDepreciationRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($industry);
 
-            // WEAR AND TEAR PHYSICS: Running assets past 100% capacity accelerates depreciation dynamically
-            $capacityStrain = max(0.0, $capacityUtilization - 1.05);
-            $wearAndTearMultiplier = 1.0 + ($capacityStrain * 1.5);
+        // WEAR AND TEAR PHYSICS: Running assets past 100% capacity accelerates depreciation dynamically
+        $capacityStrain = max(0.0, $capacityUtilization - 1.05);
+        $wearAndTearMultiplier = 1.0 + ($capacityStrain * 1.5);
 
-            $annualDepreciation = $investedCapital * ($baseDepreciationRate * $wearAndTearMultiplier);
-            $quarterlyDepreciation = $annualDepreciation / 4.0;
+        $annualDepreciation = $investedCapital * ($baseDepreciationRate * $wearAndTearMultiplier);
+        $quarterlyDepreciation = $annualDepreciation / 4.0;
 
-            $expectedEbt = $expectedEbit - $expectedInterestExpense + $quarterlyInterestIncome;
-            $actualEbt = $ebit - $quarterlyInterestExpense + $quarterlyInterestIncome;
+        $expectedEbt = $expectedEbit - $expectedInterestExpense + $quarterlyInterestIncome;
+        $actualEbt = $ebit - $quarterlyInterestExpense + $quarterlyInterestIncome;
 
 
-            $expectedQuarterlyNetIncome = $expectedEbt > 0 ? $expectedEbt * (1.0 - $corporateTaxRate) : $expectedEbt;
-            $actualQuarterlyNetIncome = $actualEbt > 0 ? $actualEbt * (1.0 - $corporateTaxRate) : $actualEbt;
+        // NET OPERATING LOSS (NOL) CARRYFORWARD
+        // Companies accumulate losses and use them to shield future profits from taxes.
+        // This prevents the systematic penalization of cyclical companies (Commodities, Banks)
+        // that oscillate between massive profits and massive losses.
+        $nol = (float) $stock->getNetOperatingLoss();
 
-            $reportedExpectedNetIncome = $expectedQuarterlyNetIncome;
-            $reportedActualNetIncome = $actualQuarterlyNetIncome;
-
-            // Wall Street evaluates REITs on Funds From Operations (FFO) rather than GAAP Net Income.
-            // We add back absolute depreciation to the reported earnings figures.
-            if ($businessModel === 'reit') {
-                $reportedExpectedNetIncome += $quarterlyDepreciation;
-                $reportedActualNetIncome += $quarterlyDepreciation;
-            }
-
-            // UPDATE DYNAMIC ROIC AS AN OUTCOME
-            $truePostTaxReturn = $strategy->updateDynamicRoic($stock, $actualQuarterlyNetIncome, $investedCapital, $ebit, $corporateTaxRate);
-
-            // EPS relies on ANNUAL metrics. We must multiply the Quarterly Net Income by 4.0
-            $expectedAnnualEps = ($reportedExpectedNetIncome * 4.0) / max(1.0, $sharesOutstanding);
-            $actualAnnualEpsRaw = ($reportedActualNetIncome * 4.0) / max(1.0, $sharesOutstanding);
-
-            // Smooth the EPS into a Trailing Twelve Months (TTM) metric to prevent wild P/E oscillations
-            $oldEps = (float) $stock->getEarningsPerShare();
-            $ttmEps = $oldEps == 0.0 ? $actualAnnualEpsRaw : ($oldEps * 0.75) + ($actualAnnualEpsRaw * 0.25);
-
-            // Save the newly calculated Annual EPS back to the database
-            $stock->setEarningsPerShare((string) $ttmEps);
-
-            // Calculate Market Expectations
-            // Analysts update their models based on structural forward guidance. We do not drag this towards TTM EPS,
-            // otherwise a massive one-off shock (like a hurricane) will artificially depress expectations for 4 straight quarters.
-            $expectedAnnualEpsDrifted = $expectedAnnualEps;
-
-            // Calculate Quarterly metrics for the UI and price gap logic
-            $actualQuarterlyEps = $actualAnnualEpsRaw / 4.0;
-            $expectedQuarterlyEps = $expectedAnnualEpsDrifted / 4.0;
-            $surpriseAmountQuarterly = $actualQuarterlyEps - $expectedQuarterlyEps;
-
-            $surprisePct = abs($expectedQuarterlyEps) > 0.01
-                ? $surpriseAmountQuarterly / abs($expectedQuarterlyEps)
-                : ($surpriseAmountQuarterly > 0 ? 0.10 : ($surpriseAmountQuarterly < 0 ? -0.10 : 0.0));
-
-            // VOLATILITY SHOCK
-            $this->applyVolatilityShock($stock, $primaryShockZ, $baselineVol);
-
-            // The Stock Entity derives EPS directly from Total Net Income.
-            // By saving the Reported Net Income, REITs will correctly display FFO in the UI.
-            $stock->setTotalNetIncome((string) $reportedActualNetIncome);
-
-            // Calculate Free Cash Flow (Dividend Support). The inputs are Quarterly, so we must multiply by 4.0
-            $fcfData = $this->calculateFreeCashFlowPerShare($actualQuarterlyNetIncome, $sharesOutstanding, $stock, $macroState, $quarterlyDepreciation, $isFinancial);
-            $annualFcfPerShare = $fcfData['fcf_per_share'] * 4.0;
-            $actualAnnualCapEx = $fcfData['capex'] * 4.0;
-
-            $currentPrice = (float) $stock->getPrice();
-
-            if ($actualAnnualEpsRaw > 0) {
-                $currentPE = $currentPrice / $actualAnnualEpsRaw;
-            } else {
-                // Fallback to Price-to-Sales (P/S) equivalent for unprofitable companies
-                $salesPerShare = $sharesOutstanding > 0 ? $actualRevenue / $sharesOutstanding : 1.0;
-                $priceToSales = $salesPerShare > 0 ? $currentPrice / $salesPerShare : 1.0;
-                // A P/S of 1.5 is roughly equivalent to a 15 P/E for a 10% margin business
-                $currentPE = $priceToSales * 10.0;
-            }
-
-            $priceGapPct = $this->calculatePriceGap($surprisePct, $currentPE, $beta);
-
-            // ALLOCATE CAPITAL
-            $allocation = $this->capitalAllocationEngine->allocateCapital(
-                $stock,
-                $actualAnnualEpsRaw,
-                $fcfData['fcf_per_share'],
-                $currentPrice,
-                $sharesOutstanding,
-                $macroState,
-                $actualQuarterlyNetIncome // SECURITY FIX: Pass true GAAP Net Income to preserve Clean Surplus Accounting without double-counting depreciation
-            );
-
-            $stock->setSharesOutstanding((string) $allocation['new_shares']);
-
-            // Subtract the Growth CapEx (Organic CapEx) spent by the CEO to find True FCF
-            $organicCapex = $allocation['organic_capex'] ?? 0.0;
-
-            // For banks and brokerages, balance sheet expansion (Cash -> Loans/Trading Assets) is not physical CapEx
-            $reportedOrganicCapex = in_array($businessModel, ['commercial_bank', 'credit_services', 'shadow_bank', 'brokerage']) ? 0.0 : $organicCapex;
-
-            // Convert quarterly organic CapEx to an annualized per-share impact
-            $annualizedOrganicCapex = $reportedOrganicCapex * 4.0;
-            $organicCapexPerShare = $sharesOutstanding > 0 ? ($annualizedOrganicCapex / $sharesOutstanding) : 0.0;
-
-            // True FCF accounts for BOTH Maintenance CapEx and Growth CapEx
-            $trueAnnualFcfPerShare = $annualFcfPerShare - $organicCapexPerShare;
-            $stock->setFreeCashFlowPerShare((string) $trueAnnualFcfPerShare);
-
-            // Aggregate total shock from earnings and corporate actions
-            $totalShockPct = $priceGapPct;
-            $corporateActionDescriptions = "";
-
-            if ($customEventLore) {
-                $corporateActionDescriptions .= "\n• " . $customEventLore;
-            }
-
-            if (!empty($allocation['events'])) {
-                foreach ($allocation['events'] as $subEvent) {
-                    if (isset($subEvent['event_type'])) {
-                        $desc = $this->narrativeEngine->generateLore($subEvent['event_type'], $subEvent['context'] ?? []);
-                    } else {
-                        $desc = $subEvent['description'] ?? '';
-                    }
-                    $corporateActionDescriptions .= "\n• " . $desc;
-                    $totalShockPct += ($subEvent['shock'] / 100.0);
-                }
-            }
-
-            // APPLY THE GAP
-            $currentPrice = (float) $stock->getPrice();
-
-            // The Circuit Breaker (Limit Up / Limit Down)
-            $totalShockPct = max(-0.40, min(0.40, $totalShockPct));
-
-            // The Dividend Ex-Date Adjustment
-            // A stock's price drops by the exact dividend amount, but market physics prevent it from going to absolute zero.
-            // We floor it at $0.01 to prevent fractional penny infinite reverse-split loops.
-            $exDivPrice = ($currentPrice * (1.0 + $totalShockPct)) - $allocation['dividend_paid'];
-            $newPrice = max(0.01, $exDivPrice);
-
-            // Precision Assignment
-            $stock->setPrice(number_format($newPrice, 8, '.', ''));
-
-            $formattedEps = $actualQuarterlyEps < 0 ? '-$' . number_format(abs($actualQuarterlyEps), 2) : '$' . number_format($actualQuarterlyEps, 2);
-            $formattedSurprise = '$' . number_format(abs($surpriseAmountQuarterly), 2);
-
-            // Calculate Economic Value Added (EVA)
-            $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState);
-            $equity = (float) $stock->getTotalEquity();
-
-            if ($isFinancial) {
-                // Financials create EVA when Return on Equity > Cost of Equity
-                $costOfEquity = $health['cost_of_equity'] ?? 0.10;
-                $annualEconomicProfit = $equity * ($truePostTaxReturn - $costOfEquity);
-                $wacc = $costOfEquity; // Fallback for reporting purposes
-            } else {
-                // Normal companies create EVA when ROIC > WACC
-                $wacc = $health['wacc'];
-                $annualEconomicProfit = $investedCapital * ($truePostTaxReturn - $wacc);
-            }
-
-            $evaAbs = abs($annualEconomicProfit);
-            $formattedEva = $evaAbs >= 1_000_000_000
-                ? '$' . number_format($evaAbs / 1_000_000_000, 2) . 'B'
-                : '$' . number_format($evaAbs / 1_000_000, 2) . 'M';
-
-            $evaString = $annualEconomicProfit >= 0 ? "+{$formattedEva} EVA" : "-{$formattedEva} EVA";
-
-            if ($surpriseAmountQuarterly > 0.0) {
-                $description = "Q-Earnings: {$formattedEps} (Beat expectations by {$formattedSurprise} | {$evaString}).";
-            } elseif ($surpriseAmountQuarterly < 0.0) {
-                $description = "Q-Earnings: {$formattedEps} (Missed expectations by {$formattedSurprise} | {$evaString}).";
-            } else {
-                $description = "Q-Earnings: {$formattedEps} (Met expectations exactly | {$evaString}).";
-            }
-
-            $description .= $corporateActionDescriptions;
-
-            // Create the main Earnings Event
-            $earningsEvent = $this->marketEvent->publish($stock, 'EARNINGS', $description, $totalShockPct * 100);
-
-            $totalReportedCapex = ($actualAnnualCapEx / 4.0) + $reportedOrganicCapex;
-
-            // Persist the comprehensive quarterly report
-            $this->buildCorporateReport(
-                $stock,
-                $actualRevenue,
-                $reportedActualNetIncome,
-                $trueOperatingMargin,
-                $debtMetrics,
-                $quarterlyInterestIncome,
-                $totalReportedCapex,
-                $truePostTaxReturn,
-                $wacc,
-                $annualEconomicProfit,
-                $allocation,
-                $health,
-                $businessModel
-            );
-
-            return [$earningsEvent];
-        } finally {
-            // Restore the structural margin so Asset Turnover math isn't corrupted next quarter
-            $stock->setOperatingMargin((string) $stableMargin);
+        if ($actualEbt > 0 && $nol > 0) {
+            $shielded = min($actualEbt, $nol);
+            $taxableIncome = $actualEbt - $shielded;
+            $stock->setNetOperatingLoss((string) ($nol - $shielded));
+            $actualQuarterlyNetIncome = $actualEbt - ($taxableIncome * $corporateTaxRate);
+        } elseif ($actualEbt < 0) {
+            $stock->setNetOperatingLoss((string) ($nol + abs($actualEbt)));
+            $actualQuarterlyNetIncome = $actualEbt;
+        } else {
+            $actualQuarterlyNetIncome = $actualEbt * (1.0 - $corporateTaxRate);
         }
+
+        // Expected Net Income uses the same NOL-aware logic for accurate surprise calculation
+        $expectedQuarterlyNetIncome = $expectedEbt > 0 ? $expectedEbt * (1.0 - $corporateTaxRate) : $expectedEbt;
+
+        $reportedExpectedNetIncome = $expectedQuarterlyNetIncome;
+        $reportedActualNetIncome = $actualQuarterlyNetIncome;
+
+        // Wall Street evaluates REITs on Funds From Operations (FFO) rather than GAAP Net Income.
+        // We add back absolute depreciation to the reported earnings figures.
+        if ($businessModel === 'reit') {
+            $reportedExpectedNetIncome += $quarterlyDepreciation;
+            $reportedActualNetIncome += $quarterlyDepreciation;
+        }
+
+        // UPDATE DYNAMIC ROIC AS AN OUTCOME
+        $truePostTaxReturn = $strategy->updateDynamicRoic($stock, $actualQuarterlyNetIncome, $investedCapital, $ebit, $corporateTaxRate);
+
+        // EPS relies on ANNUAL metrics. We must multiply the Quarterly Net Income by 4.0
+        $expectedAnnualEps = ($reportedExpectedNetIncome * 4.0) / max(1.0, $sharesOutstanding);
+        $actualAnnualEpsRaw = ($reportedActualNetIncome * 4.0) / max(1.0, $sharesOutstanding);
+
+        // Smooth the EPS into a Trailing Twelve Months (TTM) metric to prevent wild P/E oscillations
+        $oldEps = (float) $stock->getEarningsPerShare();
+        $ttmEps = $oldEps == 0.0 ? $actualAnnualEpsRaw : ($oldEps * FinancialConstants::EPS_TTM_SMOOTHING_OLD_WEIGHT) + ($actualAnnualEpsRaw * FinancialConstants::EPS_TTM_SMOOTHING_NEW_WEIGHT);
+
+        // Save the newly calculated Annual EPS back to the database
+        $stock->setEarningsPerShare((string) $ttmEps);
+
+        // Calculate Market Expectations
+        // Analysts update their models based on structural forward guidance. We do not drag this towards TTM EPS,
+        // otherwise a massive one-off shock (like a hurricane) will artificially depress expectations for 4 straight quarters.
+        $expectedAnnualEpsDrifted = $expectedAnnualEps;
+
+        // Calculate Quarterly metrics for the UI and price gap logic
+        $actualQuarterlyEps = $actualAnnualEpsRaw / 4.0;
+        $expectedQuarterlyEps = $expectedAnnualEpsDrifted / 4.0;
+        $surpriseAmountQuarterly = $actualQuarterlyEps - $expectedQuarterlyEps;
+
+        $epsSurprisePct = abs($expectedQuarterlyEps) > 0.01
+            ? $surpriseAmountQuarterly / abs($expectedQuarterlyEps)
+            : ($surpriseAmountQuarterly > 0 ? 0.10 : ($surpriseAmountQuarterly < 0 ? -0.10 : 0.0));
+
+        // Calculate Revenue Surprise (Top-Line)
+        // Analysts use their updated forward guidance ($analystExpectedRevenue) to measure the surprise.
+        $revenueSurprisePct = abs($analystExpectedRevenue) > 1.0
+            ? ($actualRevenue - $analystExpectedRevenue) / abs($analystExpectedRevenue)
+            : 0.0;
+
+        // Blended Surprise: 60% Revenue (Stable), 40% EPS (Volatile).
+        // This solves the "Small Denominator Problem" where a 2-cent EPS beat mathematically reads as a massive 200% jump.
+        $surprisePct = ($revenueSurprisePct * 0.60) + ($epsSurprisePct * 0.40);
+
+        // VOLATILITY SHOCK
+        $this->applyVolatilityShock($stock, $primaryShockZ, $baselineVol);
+
+        // The Stock Entity derives EPS directly from Total Net Income.
+        // By saving the Reported Net Income, REITs will correctly display FFO in the UI.
+        $stock->setTotalNetIncome((string) $reportedActualNetIncome);
+
+        // Calculate Free Cash Flow (Dividend Support). The inputs are Quarterly, so we must multiply by 4.0
+        $fcfData = $this->calculateFreeCashFlowPerShare($actualQuarterlyNetIncome, $sharesOutstanding, $stock, $macroState, $quarterlyDepreciation, $isFinancial);
+        $annualFcfPerShare = $fcfData['fcf_per_share'] * 4.0;
+        $actualAnnualCapEx = $fcfData['capex'] * 4.0;
+
+        $currentPrice = (float) $stock->getPrice();
+
+        if ($actualAnnualEpsRaw > 0) {
+            $currentPE = $currentPrice / $actualAnnualEpsRaw;
+        } else {
+            // Fallback to Price-to-Sales (P/S) equivalent for unprofitable companies
+            $salesPerShare = $sharesOutstanding > 0 ? $actualRevenue / $sharesOutstanding : 1.0;
+            $priceToSales = $salesPerShare > 0 ? $currentPrice / $salesPerShare : 1.0;
+            // Dynamic P/S equivalence: scales with structural after-tax operating margin
+            $structuralAfterTaxMargin = max(0.01, (float) $stock->getOperatingMargin() * (1.0 - $corporateTaxRate));
+            $currentPE = $priceToSales * (1.0 / $structuralAfterTaxMargin);
+        }
+
+        $priceGapPct = $this->calculatePriceGap($surprisePct, $currentPE, $beta);
+
+        // ALLOCATE CAPITAL
+        $allocation = $this->capitalAllocationEngine->allocateCapital(
+            $stock,
+            $actualAnnualEpsRaw,
+            $fcfData['fcf_per_share'],
+            $currentPrice,
+            $sharesOutstanding,
+            $macroState,
+            $actualQuarterlyNetIncome // SECURITY FIX: Pass true GAAP Net Income to preserve Clean Surplus Accounting without double-counting depreciation
+        );
+
+        $stock->setSharesOutstanding((string) $allocation['new_shares']);
+
+        // Subtract the Growth CapEx (Organic CapEx) spent by the CEO to find True FCF
+        $organicCapex = $allocation['organic_capex'] ?? 0.0;
+
+        // For banks and brokerages, balance sheet expansion (Cash -> Loans/Trading Assets) is not physical CapEx
+        $reportedOrganicCapex = in_array($businessModel, ['commercial_bank', 'credit_services', 'shadow_bank', 'brokerage']) ? 0.0 : $organicCapex;
+
+        // Convert quarterly organic CapEx to an annualized per-share impact
+        $annualizedOrganicCapex = $reportedOrganicCapex * 4.0;
+        $organicCapexPerShare = $sharesOutstanding > 0 ? ($annualizedOrganicCapex / $sharesOutstanding) : 0.0;
+
+        // True FCF accounts for BOTH Maintenance CapEx and Growth CapEx
+        $trueAnnualFcfPerShare = $annualFcfPerShare - $organicCapexPerShare;
+        $stock->setFreeCashFlowPerShare((string) $trueAnnualFcfPerShare);
+
+        // Aggregate total shock from earnings and corporate actions
+        $totalShockPct = $priceGapPct;
+        $corporateActionDescriptions = "";
+
+        if ($customEventLore) {
+            $corporateActionDescriptions .= "\n• " . $customEventLore;
+        }
+
+        if (!empty($allocation['events'])) {
+            foreach ($allocation['events'] as $subEvent) {
+                if (isset($subEvent['event_type'])) {
+                    $desc = $this->narrativeEngine->generateLore($subEvent['event_type'], $subEvent['context'] ?? []);
+                } else {
+                    $desc = $subEvent['description'] ?? '';
+                }
+                $corporateActionDescriptions .= "\n• " . $desc;
+                $totalShockPct += ($subEvent['shock'] / 100.0);
+            }
+        }
+
+        // APPLY THE GAP
+        $currentPrice = (float) $stock->getPrice();
+
+        // The Circuit Breaker (Limit Up / Limit Down)
+        $totalShockPct = max(-FinancialConstants::MAX_QUARTERLY_PRICE_CIRCUIT_BREAKER, min(FinancialConstants::MAX_QUARTERLY_PRICE_CIRCUIT_BREAKER, $totalShockPct));
+
+        // The Dividend Ex-Date Adjustment
+        // A stock's price drops by the exact dividend amount, but market physics prevent it from going to absolute zero.
+        // We floor it at $0.01 to prevent fractional penny infinite reverse-split loops.
+        $exDivPrice = ($currentPrice * (1.0 + $totalShockPct)) - $allocation['dividend_paid'];
+        $newPrice = max(0.01, $exDivPrice);
+
+        // Precision Assignment
+        $stock->setPrice(number_format($newPrice, 8, '.', ''));
+
+        $formattedEps = $actualQuarterlyEps < 0 ? '-$' . number_format(abs($actualQuarterlyEps), 2) : '$' . number_format($actualQuarterlyEps, 2);
+        $formattedSurprise = '$' . number_format(abs($surpriseAmountQuarterly), 2);
+
+        // Calculate Economic Value Added (EVA)
+        $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState, $actualRevenue, $trueOperatingMargin);
+        $equity = (float) $stock->getTotalEquity();
+
+        if ($isFinancial) {
+            // Financials create EVA when Return on Equity > Cost of Equity
+            $costOfEquity = $health['cost_of_equity'] ?? 0.10;
+            $annualEconomicProfit = $equity * ($truePostTaxReturn - $costOfEquity);
+            $wacc = $costOfEquity; // Fallback for reporting purposes
+        } else {
+            // Normal companies create EVA when ROIC > WACC
+            $wacc = $health['wacc'];
+            $annualEconomicProfit = $investedCapital * ($truePostTaxReturn - $wacc);
+        }
+
+        $evaAbs = abs($annualEconomicProfit);
+        $formattedEva = $evaAbs >= 1_000_000_000
+            ? '$' . number_format($evaAbs / 1_000_000_000, 2) . 'B'
+            : '$' . number_format($evaAbs / 1_000_000, 2) . 'M';
+
+        $evaString = $annualEconomicProfit >= 0 ? "+{$formattedEva} EVA" : "-{$formattedEva} EVA";
+
+        if ($surpriseAmountQuarterly > 0.0) {
+            $description = "Q-Earnings: {$formattedEps} (Beat expectations by {$formattedSurprise} | {$evaString}).";
+        } elseif ($surpriseAmountQuarterly < 0.0) {
+            $description = "Q-Earnings: {$formattedEps} (Missed expectations by {$formattedSurprise} | {$evaString}).";
+        } else {
+            $description = "Q-Earnings: {$formattedEps} (Met expectations exactly | {$evaString}).";
+        }
+
+        $description .= $corporateActionDescriptions;
+
+        // Create the main Earnings Event
+        $earningsEvent = $this->marketEvent->publish($stock, 'EARNINGS', $description, $totalShockPct * 100);
+
+        $totalReportedCapex = ($actualAnnualCapEx / 4.0) + $reportedOrganicCapex;
+
+        // Persist the comprehensive quarterly report
+        $this->buildCorporateReport(
+            $stock,
+            $actualRevenue,
+            $reportedActualNetIncome,
+            $trueOperatingMargin,
+            $debtMetrics,
+            $quarterlyInterestIncome,
+            $totalReportedCapex,
+            $truePostTaxReturn,
+            $wacc,
+            $annualEconomicProfit,
+            $allocation,
+            $health,
+            $businessModel
+        );
+
+        return [$earningsEvent];
     }
 
     /**
@@ -520,8 +544,15 @@ class EarningsEngine
         $zScore = abs($revenueZ); // How many standard deviations away from expectations
 
         if ($zScore > FinancialConstants::SURPRISE_Z_SCORE_THRESHOLD) {
-            // A 1.5+ sigma event is a genuine surprise. Spike the volatility.
-            $shockMultiplier = 1.0 + (($zScore - 1.0) * FinancialConstants::VOLATILITY_SHOCK_FACTOR);
+            // THE LEVERAGE EFFECT (Black, 1976; Christie, 1982):
+            // Negative earnings surprises spike volatility harder than positive ones.
+            // Bad news increases financial leverage (equity drops → D/E rises → risk rises)
+            // and investor uncertainty cascades asymmetrically (panic spreads faster than euphoria).
+            $shockFactor = $revenueZ < 0
+                ? FinancialConstants::VOLATILITY_SHOCK_FACTOR * FinancialConstants::NEGATIVE_SURPRISE_VOL_MULTIPLIER
+                : FinancialConstants::VOLATILITY_SHOCK_FACTOR;
+
+            $shockMultiplier = 1.0 + (($zScore - 1.0) * $shockFactor);
             $newVol = min($currentVol * $shockMultiplier, $baselineVol * FinancialConstants::MAX_VOLATILITY_MULTIPLIER);
             $stock->setCurrentVolatility((string) $newVol);
         } elseif ($zScore < FinancialConstants::BORING_Z_SCORE_THRESHOLD && $currentVol > $baselineVol) {
@@ -587,7 +618,7 @@ class EarningsEngine
 
         $capExRatio = (float) $stock->getCapexRatio();
 
-        $outputGap = $macroState['output_gap'] ?? 0.0;
+        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
         $cycleCapExModifier = max(0.85, min(1.15, 1.00 + ($outputGap * 1.5)));
 
         $physicalCapital = $isLeveraged ? (float) $stock->getTotalEquity() : $stock->getInvestedCapital();

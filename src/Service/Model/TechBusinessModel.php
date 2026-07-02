@@ -4,9 +4,8 @@ namespace App\Service\Model;
 
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
-use App\Service\Event\ShockEvent;
-use App\Service\Math\FinancialConstants;
 use App\Service\Macro\MacroEngine;
+use App\Service\Event\ShockEvent;
 
 /**
  * Earnings strategy for Technology & Software companies.
@@ -19,16 +18,6 @@ use App\Service\Macro\MacroEngine;
  */
 class TechBusinessModel extends StandardCorporateBusinessModel
 {
-    public function getMacroPhysics(Stock $stock, array &$macroState): array
-    {
-        $physics = parent::getMacroPhysics($stock, $macroState);
-        
-        // Tech companies have massive structural operating leverage. 
-        // The marginal cost of adding an additional software user is practically zero.
-        $physics['operating_leverage_rate'] = FinancialConstants::TECH_OPERATING_LEVERAGE;
-        
-        return $physics;
-    }
 
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
@@ -66,13 +55,27 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $realizedVariableMargin + $wageInflationPenalty + $regulatoryShock));
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
+        // Analyst Visibility
+        // Tech usage/engagement data is partially public via 3rd party trackers (~20% visibility).
+        // Fat tail regulatory events are mostly surprises.
+        $analystError = $mathUtility->generateStandardNormal() * 0.05;
+        $dynamicVisibility = min(1.0, max(0.0, 0.20 + $analystError));
+        $analystExpectedRevenue = $expectedRevenue * (1.0 + ($revenueShock * $dynamicVisibility));
+        $analystExpectedVariableCosts = $analystExpectedRevenue * min(1.50, max(0.01, $realizedVariableMargin + $wageInflationPenalty));
+
         return [
             'actual_revenue' => $actualRevenue, 
             'actual_variable_costs' => $actualVariableCosts, 
+            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
             'ebit' => $ebit, 
-            // Pass whichever Z-Score was more extreme so Volatility logic scales accordingly
             'primary_shock_z' => abs($eventZ) > abs($revenueZ) ? $eventZ : $revenueZ,
             'event_type' => $eventType
         ];
+    }
+
+    public function getMarginReversionSpeed(): float
+    {
+        return 5.0; // Rapid innovation cycles and intense technological competition erode excess margins quickly
     }
 }

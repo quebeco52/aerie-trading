@@ -54,7 +54,7 @@ class DebtEngine
      *     revenue: float
      * }
      */
-    public function calculateInterestExpense(Stock $stock, array &$macroState, bool $advanceMaturity = false): array
+    public function calculateInterestExpense(Stock $stock, array &$macroState, bool $advanceMaturity = false, ?float $overrideRevenue = null, ?float $overrideMargin = null): array
     {
         $debt = (float) $stock->getTotalDebt();
         $treasury = (float) $stock->getCorporateTreasury();
@@ -94,7 +94,7 @@ class DebtEngine
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
         $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
 
-        $revenue = (float) $stock->getTotalRevenue();
+        $revenue = $overrideRevenue ?? (float) $stock->getTotalRevenue();
 
         if ($revenue <= 0.0) {
             $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
@@ -107,7 +107,7 @@ class DebtEngine
             $revenue = $investedCapital * $assetTurnover;
         }
 
-        $margin = (float) $stock->getOperatingMargin();
+        $margin = $overrideMargin ?? (float) $stock->getOperatingMargin();
         $ebit = $revenue * $margin;
 
         // Calculate Depreciation to find true Cash Flow (EBITDA)
@@ -150,25 +150,47 @@ class DebtEngine
         $ebitdaLimit = $metrics['ebitda_limit'];
         $equityLimit = $metrics['equity_limit'];
 
-        // THE JUNK BOND BLOWOUT (Convex Penalty)
-        $leveragePenalty = 0.0;
+        // MERTON'S STRUCTURAL MODEL OF DEFAULT
+        // Prices corporate credit spreads dynamically based on Default Probability
+        $equityVolatility = (float) ($stock->getCurrentVolatility() ?? $stock->getVolatility());
+        $equityVolatility = max(0.05, $equityVolatility); // Minimum vol failsafe
+        
+        $marketCap = max(1.0, (float) $stock->getPrice() * max(1.0, (float) $stock->getSharesOutstanding()));
+        // For default modeling, we evaluate Net Debt against Market Equity to approximate Firm Value
+        $assetValue = $marketCap + $netDebt; 
+        
+        // Asset Volatility approximation: sigma_V = sigma_E * (E / V)
+        $assetVolatility = $equityVolatility * ($marketCap / $assetValue);
+        $assetVolatility = max(0.02, $assetVolatility); // Minimum asset vol failsafe
 
+        $policyRate = $macroState['policy_rate_ema'] ?? $macroState['policy_rate'] ?? 0.04;
+        
+        // Debt maturity is approximated at 5 years for standard corporate credit spreads
+        $timeToMaturity = 5.0; 
+        // Standard Loss Given Default (LGD) is 40% (Historical recovery rate ~60%)
+        $lossGivenDefault = 0.40;
+        
         if ($isFinancial) {
-            // Financial companies (Banks, Insurance, Brokerages, Asset Managers) evaluated solely on Debt/Equity
-            if ($debtToEquity > $equityLimit) {
-                $excessLeverage = $debtToEquity - $equityLimit;
-                $leveragePenalty = (exp($excessLeverage * self::LEVERAGE_PENALTY_RATE) - 1.0) * self::LEVERAGE_PENALTY_BASE;
-            }
-        } else {
-            // Everyone else evaluated on Debt/EBITDA
-            if ($debtToEbitda > $ebitdaLimit) {
-                $excessLeverage = $debtToEbitda - $ebitdaLimit;
-                $leveragePenalty = (exp($excessLeverage * self::LEVERAGE_PENALTY_RATE) - 1.0) * self::LEVERAGE_PENALTY_BASE;
-            }
+            // Financials carry highly leveraged balance sheets but have central bank support (discount window).
+            // Their LGD is typically lower.
+            $lossGivenDefault = 0.30;
         }
+        
+        $distanceToDefault = $this->mathUtility->calculateDistanceToDefault(
+            $assetValue,
+            max(0.01, $netDebt),
+            $assetVolatility,
+            $policyRate,
+            $timeToMaturity
+        );
+        
+        $mertonSpread = $this->mathUtility->calculateMertonCreditSpread(
+            $distanceToDefault,
+            $lossGivenDefault,
+            $timeToMaturity
+        );
 
-        $leveragePenalty = min(self::MAX_LEVERAGE_PENALTY, $leveragePenalty);
-        $dynamicSpread = $baselineCreditSpread + $leveragePenalty;
+        $dynamicSpread = $baselineCreditSpread + $mertonSpread;
 
         // Fixed-rate corporate debt is priced off the 5-Year Yield curve, not the overnight Policy Rate
         $currentMarketFixedRate = $yield5y + $dynamicSpread;
@@ -233,7 +255,7 @@ class DebtEngine
      *     raw_metrics: array
      * }
      */
-    public function analyzeDebtHealth(Stock $stock, array &$macroState): array
+    public function analyzeDebtHealth(Stock $stock, array &$macroState, ?float $overrideRevenue = null, ?float $overrideMargin = null): array
     {
         $currentDebt = (float) $stock->getTotalDebt();
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
@@ -247,7 +269,7 @@ class DebtEngine
         $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industry] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
         $businessModel = $metrics['business_model'] ?? 'none';
 
-        $debtMetrics = $this->calculateInterestExpense($stock, $macroState, false);
+        $debtMetrics = $this->calculateInterestExpense($stock, $macroState, false, $overrideRevenue, $overrideMargin);
 
         $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
 

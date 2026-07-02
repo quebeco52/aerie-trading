@@ -102,6 +102,12 @@ class Stock
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
     private string $retainedEarnings = '0.0000';
 
+    /**
+     * @var string Accumulated Net Operating Losses (NOLs) carried forward to shield future profits from taxes.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $netOperatingLoss = '0.0000';
+
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
     private string $wholesaleDebt = '0.0000';
 
@@ -361,6 +367,16 @@ class Stock
     public function setRetainedEarnings(string $retainedEarnings): static
     {
         $this->retainedEarnings = $retainedEarnings;
+        return $this;
+    }
+
+    public function getNetOperatingLoss(): string
+    {
+        return $this->netOperatingLoss;
+    }
+    public function setNetOperatingLoss(string $netOperatingLoss): static
+    {
+        $this->netOperatingLoss = $netOperatingLoss;
         return $this;
     }
 

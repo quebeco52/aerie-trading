@@ -43,6 +43,21 @@ class CorporateMetrics
             default    => 1.00,
         };
 
-        return min(1.25, pow($marketShare, 4.0) * $moat);
+        // COURNOT & HHI MARKET SATURATION
+        // In a Cournot oligopoly, industry margins are proportional to HHI / Demand Elasticity.
+        // However, this engine penalizes firms that attempt to artificially inflate their market share 
+        // beyond natural Cournot equilibrium via sheer capital bloat (oversupply).
+        // We calculate the firm's isolated HHI contribution (s_i^2).
+        $firmHhiContribution = $marketShare * $marketShare;
+        
+        // As the firm pushes its isolated HHI towards a pure monopoly (1.0) or oversupplies the TAM (>1.0),
+        // the marginal cost to steal the remaining fractional market share approaches infinity.
+        // We use a Cournot deadweight loss derivation to model this exponential margin compression.
+        $demandElasticity = 1.25;
+        $cournotDeadweightLoss = ($firmHhiContribution * $firmHhiContribution) / $demandElasticity;
+        
+        $saturationPenalty = $cournotDeadweightLoss * $moat;
+        
+        return min(1.25, $saturationPenalty);
     }
 }

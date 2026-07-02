@@ -35,8 +35,8 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         // 1. Capacity Constraint: Revenue must NEVER be reverse-engineered from target EBIT.
         // It must be mathematically clamped to the firm's physical capital to prevent hyperinflation.
 
-        $capacityRatio = 3.0; // Kenney Rule: Max 3.0x of surplus equity annually
-
+        // Standard Premium-to-Surplus ratio is 1.5x (maintains strong credit ratings).
+        $capacityRatio = 1.5;
         // Prevent zombie state: Regulators allow insolvent insurers to operate in runoff using a fraction of their float as implied equity
         $impliedRunoffEquity = (float) $stock->getCustomerDeposits() * 0.10;
         $operatingEquity = max($impliedRunoffEquity, max(1.0, $equity));
@@ -64,7 +64,6 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         return [
             'macro_demand_shift' => $outputGap * $beta * 0.25, // Highly immune to macro demand
             'pricing_power_multiplier' => 1.0,
-            'operating_leverage_rate' => 0.05,
         ];
     }
 
@@ -102,9 +101,20 @@ class InsuranceBusinessModel extends AbstractBusinessModel
             $eventLore = "Elevated claim payouts negatively impacted quarterly underwriting margins.";
         }
 
+        // Analyst Visibility (Forward Guidance)
+        // Insurance catastrophes are highly visible (hurricanes, etc). Analysts see 80% of the shock on average.
+        $analystError = $mathUtility->generateStandardNormal() * 0.10;
+        $dynamicVisibility = min(1.0, max(0.0, 0.80 + $analystError));
+        $expectedUnderwritingShock = $underwritingShock * $dynamicVisibility;
+        $analystExpectedVariableCosts = $expectedRevenue * min(1.50, max(0.01, $realizedVariableMargin + $expectedUnderwritingShock));
+        // Revenue shock is mostly opaque premium variance, 0% visibility.
+        $analystExpectedRevenue = $expectedRevenue;
+
         return [
             'actual_revenue' => $actualRevenue,
             'actual_variable_costs' => $actualVariableCosts,
+            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
             'ebit' => $actualRevenue - $fixedCosts - $actualVariableCosts,
             'primary_shock_z' => abs($claimZ) > abs($revenueZ) ? $claimZ : $revenueZ,
             'event_lore' => $eventLore
@@ -217,25 +227,26 @@ class InsuranceBusinessModel extends AbstractBusinessModel
 
     public function calculateCashYield(array &$macroState, float $policyRate): float
     {
-        // The Float Portfolio:
-        // Insurance companies do not just hold cash in a vault; they invest their massive Float 
-        // heavily into long-duration bonds, with a smaller allocation to equities for growth.
         $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['policy_rate_ema'] ?? 0.02) + 0.01;
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
+        $erp = $macroState['equity_risk_premium'] ?? 0.045;
 
-        // 80% Fixed Income (Anchored to the 10-Year Treasury Yield)
+        // 1. Liquidity Reserve (15% T-Bills/Cash)
+        $liquidityReturn = $policyRate - MacroEngine::CASH_YIELD_SPREAD;
+
+        // 2. Core Fixed Income (75% Long-Duration Bonds)
         $bondReturn = $yield10y;
 
-        // 20% Equities (Suffers capital losses during recessions)
-        // A baseline return of Risk-Free Rate + Equity Risk Premium, taking heavy realized losses during negative output gaps.
-        $erp = $macroState['equity_risk_premium'] ?? 0.045;
-        $equityReturn = ($policyRate + $erp) + ($outputGap * 2.0);
+        // 3. Growth Portfolio (10% Equities)
+        // Expected CAPM Return + MTM Shock (Equities swing ~1.5x wider than raw GDP Output Gap)
+        $equityReturn = ($policyRate + $erp) + ($outputGap * 1.5);
 
-        // Blended portfolio yield, floored at 0% so they don't mathematically lose the raw principal
-        $floatYield = max(0.0, (0.80 * $bondReturn) + (0.20 * $equityReturn));
+        // Blended portfolio yield. 
+        // We REMOVE the 0.0 floor. If equities crash hard enough, the total yield goes negative 
+        // and the Insurance company takes a real Mark-to-Market principal loss on their float.
+        $floatYield = (0.15 * $liquidityReturn) + (0.75 * $bondReturn) + (0.10 * $equityReturn);
 
-        // Dampening
-        return $floatYield * 0.50;
+        return $floatYield;
     }
 
     public function getDebtExpansionAggressiveness(float $spreadMultiplier): array

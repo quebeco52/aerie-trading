@@ -5,6 +5,7 @@ namespace App\Service\Model;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Credit Services (Credit Cards, Consumer Finance).
@@ -55,7 +56,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
 
         $bankSpread = $yield10y - $yield2y;
         if ($bankSpread < 0) {
-            $nimSqueeze = (0.005 - $bankSpread) + pow(abs($bankSpread) * 15, 2) * 0.15;
+            $nimSqueeze = (0.005 - $bankSpread) + pow(abs($bankSpread) * FinancialConstants::YIELD_CURVE_INVERSION_SENSITIVITY, 2) * 0.15;
         } else {
             $nimSqueeze = (0.005 - $bankSpread) * 1.5;
         }
@@ -69,9 +70,20 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             $eventLore = "Elevated credit card defaults compressed quarterly margins.";
         }
 
+        // Analyst Visibility
+        // Credit card defaults are somewhat visible through macroeconomic data (credit card delinquency rates).
+        // Analysts see ~50% of the loan loss provision shock. Revenue is fully visible (inflation).
+        $analystExpectedRevenue = $expectedRevenue * (1.0 + $inflationBonus);
+        $analystError = $mathUtility->generateStandardNormal() * 0.10;
+        $dynamicVisibility = min(1.0, max(0.0, 0.50 + $analystError));
+        $expectedLossProvision = $lossProvisionShock * $dynamicVisibility;
+        $analystExpectedVariableCosts = $analystExpectedRevenue * min(1.50, max(0.01, $realizedVariableMargin + $expectedLossProvision));
+
         return [
             'actual_revenue' => $actualRevenue,
             'actual_variable_costs' => $actualVariableCosts,
+            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
             'ebit' => $actualRevenue - $fixedCosts - $actualVariableCosts,
             'primary_shock_z' => abs($defaultZ) > abs($revenueZ) ? $defaultZ : $revenueZ,
             'event_lore' => $eventLore
@@ -134,7 +146,8 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
         $unboundedRevenue = max(0.0, $targetEbit) / $stableMargin;
-        $targetRevenue = min($unboundedRevenue, $earningAssets * 0.80); // Cap gross yield at 80% (vs bank's 40%)
+        $maxApr = max(0.25, ($macroState['policy_rate_ema'] ?? 0.04) + 0.35);
+        $targetRevenue = min($unboundedRevenue, $earningAssets * $maxApr); // Floating gross yield ceiling based on macro policy rate
 
         $grossYield = $targetRevenue / max(1.0, abs($earningAssets));
 

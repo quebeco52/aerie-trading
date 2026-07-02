@@ -5,7 +5,6 @@ namespace App\Service\Model;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
-use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for normal, non-financial companies.
@@ -45,7 +44,6 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
         return [
             'macro_demand_shift' => $outputGap * $beta,
             'pricing_power_multiplier' => 1.0 + ($inflation * max(0.5, $beta)),
-            'operating_leverage_rate' => FinancialConstants::STANDARD_OPERATING_LEVERAGE,
         ];
     }
 
@@ -67,9 +65,19 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
         $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $realizedVariableMargin + $inflationPenalty));
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
+        // Analyst Visibility
+        // Supply chain inflation is fully visible via CPI/PPI reports. 
+        // Individual product demand shocks are partially visible via retail foot traffic (~20% visibility).
+        $analystError = $mathUtility->generateStandardNormal() * 0.05;
+        $dynamicVisibility = min(1.0, max(0.0, 0.20 + $analystError));
+        $analystExpectedRevenue = $expectedRevenue * (1.0 + ($revenueShock * $dynamicVisibility));
+        $analystExpectedVariableCosts = $analystExpectedRevenue * min(1.50, max(0.01, $realizedVariableMargin + $inflationPenalty));
+
         return [
             'actual_revenue' => $actualRevenue,
             'actual_variable_costs' => $actualVariableCosts,
+            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
             'ebit' => $ebit,
             'primary_shock_z' => $revenueZ
         ];

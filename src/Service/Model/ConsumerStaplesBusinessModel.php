@@ -45,12 +45,29 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $realizedVariableMargin + $recallPenalty));
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
+        // Analyst Visibility
+        // Recalls and regulatory fines are massive public news events (~80% visibility).
+        $revenueAnalystError = $mathUtility->generateStandardNormal() * 0.05;
+        $revenueVisibility = min(1.0, max(0.0, 0.20 + $revenueAnalystError));
+        $analystExpectedRevenue = $expectedRevenue * (1.0 + ($revenueShock * $revenueVisibility));
+        
+        $recallAnalystError = $mathUtility->generateStandardNormal() * 0.10;
+        $recallVisibility = min(1.0, max(0.0, 0.80 + $recallAnalystError));
+        $analystExpectedVariableCosts = $analystExpectedRevenue * min(1.50, max(0.01, $realizedVariableMargin + ($recallPenalty * $recallVisibility)));
+
         return [
             'actual_revenue' => $actualRevenue, 
             'actual_variable_costs' => $actualVariableCosts, 
+            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
             'ebit' => $ebit, 
             'primary_shock_z' => abs($eventZ) > abs($revenueZ) ? $eventZ : $revenueZ,
             'event_lore' => $eventLore
         ];
+    }
+
+    public function getMarginReversionSpeed(): float
+    {
+        return 5.0; // High retail competition and consumer price sensitivity cause rapid margin mean reversion
     }
 }

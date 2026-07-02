@@ -6,7 +6,6 @@ use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
 use App\Service\Event\ShockEvent;
-use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Commercial Banks.
@@ -122,7 +121,6 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
         return [
             'macro_demand_shift' => $outputGap * $beta * 0.50, // Less demand destruction than physical goods
             'pricing_power_multiplier' => 1.0, // Top-line yields price off bond market natively
-            'operating_leverage_rate' => FinancialConstants::BANK_OPERATING_LEVERAGE, // Lower physical leverage compared to factories
         ];
     }
 
@@ -167,9 +165,17 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
             $eventType = ShockEvent::ELEVATED_LOAN_DEFAULTS;
         }
 
+        // Analyst Visibility
+        // Commercial bank books are notoriously opaque. Analysts see almost none of the loan loss provisions until earnings.
+        // Visibility is 0%.
+        $analystExpectedRevenue = $expectedRevenue;
+        $analystExpectedVariableCosts = $expectedRevenue * $realizedVariableMargin; // They miss the NIM squeeze and loan losses entirely
+
         return [
             'actual_revenue' => $actualRevenue,
             'actual_variable_costs' => $actualVariableCosts,
+            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
             'ebit' => $actualRevenue - $fixedCosts - $actualVariableCosts,
             'primary_shock_z' => abs($defaultZ) > abs($revenueZ) ? $defaultZ : $revenueZ,
             'event_type' => $eventType

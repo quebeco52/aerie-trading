@@ -101,9 +101,9 @@ class MarketEngine
         $riskFreeRate = $macroState['policy_rate'] ?? 0.04;
         $outputGap = $macroState['output_gap'] ?? 0.0;
         $inflation = $macroState['inflation'] ?? 0.02;
-        $corporateTaxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $erp = $macroState['equity_risk_premium'] ?? MacroEngine::BASE_EQUITY_RISK_PREMIUM;
 
-        $finalDrift = $this->calculateMacroDrift($outputGap, $inflation, $macroState['ns_slope'] ?? 0.0, $drift, $beta, $riskFreeRate);
+        $finalDrift = $this->mathUtility->calculateCAPM($riskFreeRate, $beta, $erp);
 
         // State Variables
         $currentVar = $currentVolatility * $currentVolatility;
@@ -173,7 +173,8 @@ class MarketEngine
             $baselineIndustryPE,
             $revenuePerShare,
             $businessModel,
-            $liveCostOfEquity
+            $liveCostOfEquity,
+            $currentVolatility
         );
 
         $perceivedFairValue = $fundamentalState['perceived_fair_value'];
@@ -231,21 +232,7 @@ class MarketEngine
      * @param float $inflation    The current inflation rate.
      * @param float $nsSlope      The slope of the yield curve (Nelson-Siegel).
      * @param float $drift        The expected baseline return.
-     * @param float $beta         The stock's beta (market sensitivity).
-     * @param float $riskFreeRate The current central bank policy rate.
-     * @return float The final calculated drift rate.
-     */
-    private function calculateMacroDrift(float $outputGap, float $inflation, float $nsSlope, float $drift, float $beta, float $riskFreeRate): float
-    {
-        $outputGapModifier = $outputGap > 0 ? ($outputGap * 0.5) : ($outputGap * 2.0);
-        $inflationPenalty = $inflation > 0.04 ? - ($inflation - 0.04) * 1.5 : 0.0;
-        $yieldCurveInversionPenalty = min(0.0, $nsSlope) * 3.0;
 
-        $totalMarketPremium = $drift + $yieldCurveInversionPenalty + $outputGapModifier + $inflationPenalty;
-        return $riskFreeRate + ($totalMarketPremium * $beta);
-    }
-
-    /**
      * Evaluates the fundamental state of the stock under macroeconomic stress.
      * Calculates the systemic stress index, dynamic WACC, flight-to-quality reversion speed,
      * and the intrinsic fair value of the asset.
@@ -286,7 +273,8 @@ class MarketEngine
         float $baselineIndustryPE = 20.0,
         float $revenuePerShare = 0.0,
         string $businessModel = 'none',
-        float $liveCostOfEquity = 0.10
+        float $liveCostOfEquity = 0.10,
+        float $currentVolatility = 0.20
     ): array {
 
         $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
@@ -300,26 +288,12 @@ class MarketEngine
         $inflationStress = abs($inflation - 0.02);
         $systemicStressIndex = $recessionStress + $inflationStress;
 
-        // 1. MACRO FORWARD GUIDANCE (Future Expectations)
-        $rateModifier = pow(0.04 / max(0.01, $riskFreeRate), 0.5);
+        // 1. MACRO FORWARD GUIDANCE & FUNDAMENTAL P/E
+        // We use the Gordon Growth Model derivation for Fair Value P/E.
+        // Expected perpetual growth rate is tied to inflation and output gap, capped at 4%.
+        $expectedGrowth = max(0.0, min(0.04, $inflation + ($outputGap * 0.5)));
 
-        // Markets are forward-looking. They expand multiples during economic booms (future growth)
-        // and compress them during recessions and high inflation.
-        $forwardGrowthPremium = $outputGap * 100.0; // e.g. +2% gap = +2.0 P/E
-        $inflationDiscount = max(0.0, $inflation - 0.02) * -100.0; // e.g. 5% inflation = -3.0 P/E
-
-        $macroBasePE = max(self::MIN_BASE_PE, min(self::MAX_BASE_PE, ($baselineIndustryPE * $rateModifier) + $forwardGrowthPremium + $inflationDiscount));
-
-        // The EVA Premium (Quality Spread)
-        $evaSpread = $structuralRoic - $hurdleRate;
-
-        // Use a logarithmic curve for Quality Premium to prevent hyper-profitable Asset-Light companies 
-        // (with 100%+ ROIC) from getting astronomical P/E multiples.
-        $positiveSpread = max(0.0, $evaSpread * 100);
-        $qualityPremium = $positiveSpread > 0 ? (log($positiveSpread + 1) * 4.0) : 0.0;
-        $distressDiscount = min(0.0, $evaSpread * 100) * 2.0;
-
-        $fairValuePE = max(self::MIN_FAIR_VALUE_PE, min(self::MAX_FAIR_VALUE_PE, $macroBasePE + $qualityPremium + $distressDiscount));
+        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $structuralRoic, $expectedGrowth);
 
         if ($isFinancial) { // Use isFinancial
             // For Financials, Cash IS their operating inventory. Do not penalize them.
@@ -334,19 +308,18 @@ class MarketEngine
             $trueStructuralEps = $structuralOperatingEps + $structuralCashYieldEps;
         }
 
-        // 2. STRUCTURAL EPS SMOOTHING (Past Performance)
-        // Real analysts value a company based on its established structural run-rate (past performance)
-        // rather than overreacting to a single quarterly print.
+        // 2. STRUCTURAL EPS SMOOTHING (Past Performance via Kalman Filter)
+        // Real analysts value a company based on its established structural run-rate.
+        // We use a 1D Kalman Filter to optimally estimate the true EPS by weighing the structural prior 
+        // against the noisy quarterly measurement.
         $safeStructuralEps = max(0.01, $trueStructuralEps);
-        $deviation = abs($earningsPerShare - $safeStructuralEps) / $safeStructuralEps;
 
-        // Trust in the single quarterly print decays exponentially the more it deviates from the structural norm.
-        // Base weight on the single quarter is 25% (since it's 1 quarter out of 4 for an annual run-rate).
-        // As deviation approaches 100%+, the weight decays towards ~9%, treating it as a pure anomaly.
-        $recentEpsWeight = 0.25 * exp(-$deviation);
-        $structuralWeight = 1.0 - $recentEpsWeight;
-
-        $normalizedEps = ($earningsPerShare * $recentEpsWeight) + ($trueStructuralEps * $structuralWeight);
+        $normalizedEps = $this->mathUtility->calculateKalmanSmoothedEps(
+            $safeStructuralEps,
+            $earningsPerShare,
+            $currentVolatility,
+            $systemicStressIndex
+        );
 
         $peFairValue = max(0.00, $normalizedEps * $fairValuePE);
 

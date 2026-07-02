@@ -194,7 +194,7 @@ class Sectors
         return self::BUSINESS_MODEL_THRESHOLDS[$businessModel] ?? self::BUSINESS_MODEL_THRESHOLDS['none'];
     }
 
-       /**
+    /**
      * Helper to determine if a business model belongs to a financial institution.
      *
      * @param string $businessModel

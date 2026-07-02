@@ -61,9 +61,19 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         $actualVariableCosts = $physicalVolumeRevenue * $realizedVariableMargin;
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
+        // Analyst Visibility
+        // Commodity spot prices (inflation) are 100% public. But exact physical extraction volumes ($revenueShock) are ~20% visible.
+        $analystError = $mathUtility->generateStandardNormal() * 0.05;
+        $dynamicVisibility = min(1.0, max(0.0, 0.20 + $analystError));
+        $analystExpectedPhysicalVolume = $expectedRevenue * (1.0 + ($revenueShock * $dynamicVisibility));
+        $analystExpectedRevenue = max(0.0, $analystExpectedPhysicalVolume + ($expectedRevenue * $inflationBonus));
+        $analystExpectedVariableCosts = $analystExpectedPhysicalVolume * $realizedVariableMargin;
+
         return [
             'actual_revenue' => $actualRevenue, 
             'actual_variable_costs' => $actualVariableCosts, 
+            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
             'ebit' => $ebit, 
             'primary_shock_z' => $revenueZ
         ];

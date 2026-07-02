@@ -12,6 +12,9 @@ use App\Service\Math\MathUtility;
 interface BusinessModelInterface
 {
     public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array;
+    /**
+     * @return array{actual_revenue: float, actual_variable_costs: float, analyst_expected_revenue: float, analyst_expected_variable_costs: float, ebit: float, primary_shock_z: float, event_lore: string|null}
+     */
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array;
     public function getMacroPhysics(Stock $stock, array &$macroState): array;
     public function calculateInterestIncome(Stock $stock, array &$macroState, MathUtility $mathUtility): float;
@@ -33,5 +36,7 @@ interface BusinessModelInterface
     public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float;
     public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float;
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps): float;
+    public function getSustainableDividendBase(Stock $stock, float $quarterlyEps, float $investedCapital, float $depRate): float;
+    public function getMarginReversionSpeed(): float;
     public function processPassiveLiabilityGrowth(Stock $stock, array &$macroState, array &$state, MathUtility $mathUtility): void;
 }

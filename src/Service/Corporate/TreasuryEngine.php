@@ -4,6 +4,7 @@ namespace App\Service\Corporate;
 
 use App\Entity\Stock;
 use App\Service\Math\CorporateMetrics;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
 /**
@@ -19,38 +20,22 @@ class TreasuryEngine
     ) {}
 
     /**
-     * Updates the corporate balance sheet using Clean Surplus Accounting principles.
-     * Handles retained earnings, total equity, and dynamically manages debt levels
-     * (triggering emergency borrowing during liquidity crises or sweeping excess cash to pay down debt).
+     * Phase 1 of Balance Sheet Update: Execute Corporate Strategy
+     * Handles M2 growth, debt issuance (recapitalization/expansion), and organic CapEx.
+     * This must run BEFORE buybacks so that newly issued debt cash can fund Leveraged Buybacks,
+     * and Growth CapEx takes priority over share repurchases.
      */
-    public function updateBalanceSheet(
+    public function executeCorporateStrategy(
         Stock $stock,
-        float $quarterlyNetIncome,
-        float $totalDividendsPaid,
-        float $totalBuybackCash,
+        float $preBuybackEquity,
         float $operatingBase,
         float $nopat,
-        float $newTreasury,
+        float $currentTreasury,
         array &$macroState,
-        array $health,
-        float $realEstateAppreciation = 0.0
+        array $health
     ): array {
-        $events = [];
-        $totalCashSpent = $totalDividendsPaid + $totalBuybackCash;
-
-        // RETAINED EARNINGS
-        $currentRetained = (float) $stock->getRetainedEarnings();
-        $newRetained = $currentRetained + $quarterlyNetIncome - $totalDividendsPaid;
-        $stock->setRetainedEarnings((string) $newRetained);
-
-        // TOTAL EQUITY (Clean Surplus Accounting)
-        $currentEquity = (float) $stock->getTotalEquity();
-        $newEquity = $currentEquity + $quarterlyNetIncome + $realEstateAppreciation - $totalCashSpent;
-        $stock->setTotalEquity((string) $newEquity);
-
-        // STATE MANAGER FOR MUTATIONS
         $state = [
-            'treasury' => $newTreasury,
+            'treasury' => $currentTreasury,
             'wholesaleDebt' => (float) $stock->getWholesaleDebt(),
             'customerDeposits' => (float) $stock->getCustomerDeposits(),
             'debtIssued' => 0.0,
@@ -65,10 +50,58 @@ class TreasuryEngine
         $this->processPassiveLiabilityGrowth($stock, $macroState, $state);
 
         // DEBT MANAGEMENT (MACRO TOLERANCE)
-        $this->processDebtExpansion($stock, $newEquity, $nopat, $macroState, $health, $state);
+        $this->processDebtExpansion($stock, $preBuybackEquity, $nopat, $macroState, $health, $state);
 
-        //  ORGANIC BUSINESS EXPANSION (Internal CapEx)
-        $this->processOrganicCapex($stock, $newEquity, $nopat, $operatingBase, $macroState, $health, $state);
+        // ORGANIC BUSINESS EXPANSION (Internal CapEx)
+        $this->processOrganicCapex($stock, $preBuybackEquity, $nopat, $operatingBase, $macroState, $health, $state);
+
+        // SAVE INTERMEDIATE TREASURY (so CapitalAllocationEngine can use it for buybacks)
+        $stock->setCorporateTreasury((string) $state['treasury']);
+
+        return [
+            'events' => $state['events'],
+            'organic_capex' => $state['organicCapex'],
+            'bank_apy' => $state['bank_apy'],
+            'new_treasury' => $state['treasury']
+        ];
+    }
+
+    /**
+     * Phase 2 of Balance Sheet Update: Finalize Liquidity & Equity
+     * Handles emergency borrowing, deleveraging, and clean surplus accounting.
+     * This must run AFTER buybacks to capture the true final cash balance.
+     */
+    public function finalizeLiquidity(
+        Stock $stock,
+        float $quarterlyNetIncome,
+        float $totalDividendsPaid,
+        float $totalBuybackCash,
+        float $operatingBase,
+        float $finalTreasury,
+        array &$macroState,
+        array $health,
+        float $realEstateAppreciation = 0.0
+    ): array {
+        $totalCashSpent = $totalDividendsPaid + $totalBuybackCash;
+
+        // RETAINED EARNINGS
+        $currentRetained = (float) $stock->getRetainedEarnings();
+        $newRetained = $currentRetained + $quarterlyNetIncome - $totalDividendsPaid;
+        $stock->setRetainedEarnings((string) $newRetained);
+
+        // TOTAL EQUITY (Clean Surplus Accounting)
+        $currentEquity = (float) $stock->getTotalEquity();
+        $newEquity = $currentEquity + $quarterlyNetIncome + $realEstateAppreciation - $totalCashSpent;
+        $stock->setTotalEquity((string) $newEquity);
+
+        $state = [
+            'treasury' => $finalTreasury,
+            'wholesaleDebt' => (float) $stock->getWholesaleDebt(),
+            'customerDeposits' => (float) $stock->getCustomerDeposits(),
+            'debtActionTaken' => false,
+            'failed_emergency_borrow' => false,
+            'events' => []
+        ];
 
         // THE DEBT TRAP (Liquidity Crisis)
         $this->processEmergencyBorrowing($stock, $operatingBase, $macroState, $health, $state);
@@ -86,9 +119,7 @@ class TreasuryEngine
         $stock->setCorporateTreasury((string) $state['treasury']);
 
         return [
-            'events' => $state['events'],
-            'organic_capex' => $state['organicCapex'],
-            'bank_apy' => $state['bank_apy']
+            'events' => $state['events']
         ];
     }
 
@@ -303,7 +334,7 @@ class TreasuryEngine
             if ($health['can_issue_debt']) {
                 // Emergency debt is highly punitive (+200 bps penalty) but still anchors to the 5Y corporate fixed rate
                 $currentMarketRate = $health['raw_metrics']['current_market_rate'] ?? (($macroState['yield_5y_ema'] ?? 0.045) + (float) $stock->getCreditSpread());
-                $costOfEmergencyDebt = $currentMarketRate + 0.02;
+                $costOfEmergencyDebt = $currentMarketRate + FinancialConstants::EMERGENCY_DEBT_SPREAD_PENALTY;
 
                 $this->debtEngine->issueDebt($stock, $cashShortfall, $costOfEmergencyDebt);
 
@@ -341,7 +372,7 @@ class TreasuryEngine
         $hurdleRate = $isFinancial ? ($health['cost_of_equity'] ?? 0.10) : ($health['wacc'] ?? 0.08);
         $economicSpread = $trueReturn - $hurdleRate;
 
-        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($macroState['policy_rate'] ?? 0.04, $economicSpread, $macroState['equity_risk_premium'] ?? \App\Service\Macro\MacroEngine::BASE_EQUITY_RISK_PREMIUM);
+        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $trueReturn, 0.02);
 
         $bookValuePerShare = max(0.01, $stock->getTotalEquity() / max(1, $shares));
         $priceToBook = $currentPrice / $bookValuePerShare;
@@ -422,7 +453,7 @@ class TreasuryEngine
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
         $targetOperatingCash = $strategy->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt']);
 
-        if (!$state['debtActionTaken'] && $health['wants_to_paydown_debt'] && $state['wholesaleDebt'] > 0 && $state['treasury'] > $targetOperatingCash) {
+        if (empty($state['debtActionTaken']) && $health['wants_to_paydown_debt'] && $state['wholesaleDebt'] > 0 && $state['treasury'] > $targetOperatingCash) {
             $distressThreshold = $isFinancial ? 1.05 : 2.0;
             $isLiquidityCrisis = $health['interest_coverage'] < 1.0;
             $isDistressed = $health['interest_coverage'] < $distressThreshold;
@@ -465,7 +496,7 @@ class TreasuryEngine
         $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
         $targetOperatingCash = $archetypeStrategy->modifyTargetOperatingCash($targetOperatingCash);
 
-        if (!$state['debtActionTaken'] && $state['wholesaleDebt'] > 0.0 && $state['treasury'] > $targetOperatingCash) {
+        if (empty($state['debtActionTaken']) && $state['wholesaleDebt'] > 0.0 && $state['treasury'] > $targetOperatingCash) {
             $excessCash = $state['treasury'] - $targetOperatingCash;
             $macroDebtTolerance = $health['debt_tolerance'];
 

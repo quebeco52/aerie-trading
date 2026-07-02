@@ -108,7 +108,6 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         return [
             'macro_demand_shift' => $outputGap * $beta * 0.50,
             'pricing_power_multiplier' => 1.0,
-            'operating_leverage_rate' => 0.05,
         ];
     }
 
@@ -126,11 +125,21 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
 
         $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $realizedVariableMargin));
 
+        // Analyst Visibility
+        // Asset Management flows are mostly opaque until 13F filings or earnings reports. (~10% visibility)
+        $analystError = $mathUtility->generateStandardNormal() * 0.05;
+        $dynamicVisibility = min(1.0, max(0.0, 0.10 + $analystError));
+        $analystExpectedRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * 0.10) * $dynamicVisibility));
+        $analystExpectedVariableCosts = $analystExpectedRevenue * min(1.50, max(0.01, $realizedVariableMargin));
+
         return [
             'actual_revenue' => $actualRevenue,
             'actual_variable_costs' => $actualVariableCosts,
+            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
             'ebit' => $actualRevenue - $fixedCosts - $actualVariableCosts,
-            'primary_shock_z' => $revenueZ
+            'primary_shock_z' => $revenueZ,
+            'event_lore' => null
         ];
     }
 

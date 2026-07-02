@@ -5,6 +5,7 @@ namespace App\Service\Model;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Shadow Banks (Mortgage Finance, Non-bank lenders).
@@ -89,7 +90,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         
         if ($mortgageSpread < 0) {
             // Extreme exponential distress when inverted (repo market freeze)
-            $nimSqueeze = (0.015 - $mortgageSpread) * 1.0 + pow(abs($mortgageSpread) * 20, 2) * 0.2;
+            $nimSqueeze = (0.015 - $mortgageSpread) * 1.0 + pow(abs($mortgageSpread) * (FinancialConstants::YIELD_CURVE_INVERSION_SENSITIVITY * 1.33), 2) * 0.2;
         } else {
             // Mild linear squeeze when simply flat, not an instant death sentence
             $nimSqueeze = (0.015 - $mortgageSpread) * 1.0;
@@ -104,9 +105,19 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             $eventLore = "Elevated mortgage defaults negatively impacted quarterly margins.";
         }
 
+        // Analyst Visibility
+        // Mortgage default spikes are partially visible (~50%) through macro housing data before earnings.
+        $analystExpectedRevenue = $expectedRevenue;
+        $analystError = $mathUtility->generateStandardNormal() * 0.10;
+        $dynamicVisibility = min(1.0, max(0.0, 0.50 + $analystError));
+        $expectedLossProvision = $lossProvisionShock * $dynamicVisibility;
+        $analystExpectedVariableCosts = $analystExpectedRevenue * min(1.50, max(0.01, $realizedVariableMargin + $expectedLossProvision));
+
         return [
             'actual_revenue' => $actualRevenue, 
             'actual_variable_costs' => $actualVariableCosts, 
+            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
             'ebit' => $actualRevenue - $fixedCosts - $actualVariableCosts, 
             'primary_shock_z' => abs($creditZ) > abs($revenueZ) ? $creditZ : $revenueZ,
             'event_lore' => $eventLore

@@ -84,7 +84,7 @@ class MergerAndAcquisitionEngine
         $hurdleRate = $isFinancial ? ($health['cost_of_equity'] ?? 0.10) : ($health['wacc'] ?? 0.08);
         $economicSpread = $trueReturn - $hurdleRate;
         
-        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($policyRate, $economicSpread, $macroState['equity_risk_premium'] ?? \App\Service\Macro\MacroEngine::BASE_EQUITY_RISK_PREMIUM);
+        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $trueReturn, 0.02);
         $acquirerShares = (float) $acquirer->getSharesOutstanding();
         $bookValuePerShare = max(0.01, $acquirer->getTotalEquity() / max(1.0, $acquirerShares));
         $priceToBook = $price / $bookValuePerShare;
@@ -185,15 +185,38 @@ class MergerAndAcquisitionEngine
             $oldHistoricalRate = (float) $acquirer->getHistoricalFixedRate();
             $newTotalDebt = $currentDebt + $debtIssued;
             
-            // Evaluate if this new debt breaches their structural equity limit
-            $newDebtToEquity = $newTotalDebt / max(1.0, $equity);
-            $excessLeverage = max(0.0, $newDebtToEquity - $equityLimit);
-            $leveragePenalty = $excessLeverage * 0.05;
-            $leveragePenalty = min(0.25, $leveragePenalty); // Cap the Junk Bond Penalty at 25%
+            // MERTON LBO CREDIT SPREAD CALCULATION
+            // An LBO expands the firm's debt. We must calculate the credit spread of the post-merger entity.
+            $equityVolatility = (float) ($acquirer->getCurrentVolatility() ?? $acquirer->getVolatility());
+            $equityVolatility = max(0.05, $equityVolatility);
             
-            // The cost of the new debt incorporates the dynamic credit spread (VIX, Macro, Volatility) + Any Junk Penalty
-            $dynamicSpread = $health['raw_metrics']['dynamic_spread'] ?? (float) $acquirer->getCreditSpread();
-            $costOfNewDebt = $yield5y + $dynamicSpread + $leveragePenalty;
+            $marketCap = max(1.0, (float) $acquirer->getPrice() * max(1.0, (float) $acquirer->getSharesOutstanding()));
+            $currentNetDebt = max(0.0, $currentDebt - $treasury);
+            $newNetDebt = $currentNetDebt + $debtIssued;
+            
+            // The new asset value absorbs the purchase price
+            $newAssetValue = $marketCap + $currentNetDebt + $purchasePrice;
+            $newAssetVolatility = $equityVolatility * ($marketCap / $newAssetValue);
+            $newAssetVolatility = max(0.02, $newAssetVolatility);
+            
+            $lossGivenDefault = $isFinancial ? 0.30 : 0.40;
+            
+            $distanceToDefault = $this->mathUtility->calculateDistanceToDefault(
+                $newAssetValue,
+                max(0.01, $newNetDebt),
+                $newAssetVolatility,
+                $policyRate,
+                5.0
+            );
+            
+            $projectedSpread = $this->mathUtility->calculateMertonCreditSpread($distanceToDefault, $lossGivenDefault, 5.0);
+            
+            // Re-apply the baseline spread + the new projected Merton spread
+            $tmpArchetype = \App\Data\CeoArchetypes::getStrategy($acquirer->getCeoArchetype());
+            $baselineCreditSpread = $tmpArchetype->modifyCreditSpread((float) $acquirer->getCreditSpread());
+            $dynamicSpread = $baselineCreditSpread + $projectedSpread;
+            
+            $costOfNewDebt = $yield5y + $dynamicSpread;
             
             // Issue the debt through the centralized DebtEngine
             $this->debtEngine->issueDebt($acquirer, $debtIssued, $costOfNewDebt);

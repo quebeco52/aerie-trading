@@ -14,6 +14,8 @@ class MacroEngine
     public const NATURAL_RATE = 0.02;
     public const BASE_CORPORATE_TAX_RATE = 0.21;
     public const BASE_EQUITY_RISK_PREMIUM = 0.045;
+    public const HABIT_RISK_AVERSION_COEFF = 4.0; // Campbell-Cochrane (1999) habit formation risk aversion sensitivity
+    public const MIN_EQUITY_RISK_PREMIUM = 0.02;  // Structural floor: equities must yield more than risk-free T-bills
     public const CASH_YIELD_SPREAD = 0.0025;
 
     // KALDOR-KALECKI CONSTANTS
@@ -48,6 +50,30 @@ class MacroEngine
     // YIELD WEIGHTS
     public const BORROWING_POLICY_WEIGHT = 0.70;
     public const BORROWING_YIELD5Y_WEIGHT = 0.30;
+
+    // TAYLOR RULE & MONETARY POLICY CONSTANTS
+    public const TAYLOR_INFLATION_WEIGHT = 0.50;
+    public const TAYLOR_BOOM_WEIGHT = 0.15;
+    public const TAYLOR_RECESSION_SCALE = 10.0;
+    public const CB_SMOOTHING_SPEED = 1.0;
+    public const CB_INFLATION_PANIC_SCALE = 50.0;
+    public const CB_RECESSION_PANIC_SCALE = 100.0;
+    public const CB_MAX_HIKE_PANIC_SPEED = 6.0; // Volcker-style inflation panic speed cap (enforces Taylor Principle during stagflation)
+    public const CB_MAX_CUT_PANIC_SPEED = 10.0; // Emergency crisis cut speed cap (financial crises crash faster than booms build)
+
+    // NELSON-SIEGEL TERM PREMIUM CONSTANTS
+    public const NS_BASE_TERM_PREMIUM = 0.015;
+    public const NS_GAP_TERM_PREMIUM_SCALE = 0.15;
+
+    // NEW KEYNESIAN PHILLIPS CURVE CONSTANTS
+    public const PHILLIPS_SLOPE = 0.50;
+    public const PHILLIPS_BOTTLENECK_COEFF = 0.50;
+
+    // MERTON STRUCTURAL CREDIT SPREAD CONSTANTS (Merton 1974)
+    public const BASE_CREDIT_SPREAD = 0.020;        // 200 bps normal corporate spread
+    public const MERTON_LEVERAGE_SENSITIVITY = 3.0; // Sensitivity of default risk to GDP contractions
+    public const MERTON_VOL_SENSITIVITY = 0.20;     // Sensitivity of default spreads to excess market volatility
+    public const MAX_CREDIT_SPREAD = 0.10;          // 1000 bps crisis spread cap
 
     public function __construct(
         private MathUtility $mathUtility,
@@ -143,13 +169,13 @@ class MacroEngine
         $trendInflation = $state->inflationEma;
 
         if ($state->outputGap < 0.0) {
-            $gapWeight = 0.5 + min(0.5, abs($state->outputGap) * 10.0);
+            $gapWeight = self::TAYLOR_INFLATION_WEIGHT + min(self::TAYLOR_INFLATION_WEIGHT, abs($state->outputGap) * self::TAYLOR_RECESSION_SCALE);
         } else {
-            $gapWeight = 0.15; // Benign neglect during a boom
+            $gapWeight = self::TAYLOR_BOOM_WEIGHT; // Benign neglect during a boom
         }
 
         $targetRate = $naturalRate + $trendInflation
-            + 0.5 * ($trendInflation - $targetInflation)
+            + self::TAYLOR_INFLATION_WEIGHT * ($trendInflation - $targetInflation)
             + $gapWeight * ($state->outputGap);
 
         return max(0.00, min(0.15, $targetRate));
@@ -158,15 +184,15 @@ class MacroEngine
     private function updatePolicyRate(MacroState $state, float $targetRate, float $dt): float
     {
         $currentPolicyRate = $state->policyRate;
-        $cbSpeed = 1.0;
+        $cbSpeed = self::CB_SMOOTHING_SPEED;
 
         if ($targetRate > $currentPolicyRate) {
             $inflationExcess = max(0.0, $state->inflation - self::TARGET_INFLATION);
-            $cbSpeed += min(4.0, $inflationExcess * 50.0);
+            $cbSpeed += min(self::CB_MAX_HIKE_PANIC_SPEED, $inflationExcess * self::CB_INFLATION_PANIC_SCALE);
         } else {
-            $deflationPanic = max(0.0, self::TARGET_INFLATION - $state->inflation) * 50.0;
-            $recessionPanic = max(0.0, -$state->outputGap) * 100.0;
-            $cbSpeed += min(10.0, $deflationPanic + $recessionPanic);
+            $deflationPanic = max(0.0, self::TARGET_INFLATION - $state->inflation) * self::CB_INFLATION_PANIC_SCALE;
+            $recessionPanic = max(0.0, -$state->outputGap) * self::CB_RECESSION_PANIC_SCALE;
+            $cbSpeed += min(self::CB_MAX_CUT_PANIC_SPEED, $deflationPanic + $recessionPanic);
         }
 
         $rawMove = $cbSpeed * ($targetRate - $currentPolicyRate);
@@ -211,7 +237,7 @@ class MacroEngine
     private function calculateNelsonSiegelTenor(float $t, float $level, float $nsBeta1, float $nsBeta2, MacroState $state, float $qeYieldSuppression): float
     {
         $timeScale = sqrt($t / 10.0);
-        $termPremium = (0.015 * $timeScale) + ($state->outputGap * 0.15 * $timeScale);
+        $termPremium = (self::NS_BASE_TERM_PREMIUM * $timeScale) + ($state->outputGap * self::NS_GAP_TERM_PREMIUM_SCALE * $timeScale);
 
         $qeTimeScale = min(1.0, $timeScale);
         $qeTargetedSuppression = $qeYieldSuppression * $qeTimeScale;
@@ -246,10 +272,10 @@ class MacroEngine
         $infDiff = $targetInflation - $state->inflation;
         $inflationDrift = 0.5 * $infDiff * $dt;
 
-        $phillipsSlope = $state->outputGap * 0.50;
+        $phillipsSlope = $state->outputGap * self::PHILLIPS_SLOPE;
 
         if ($state->outputGap > 0.0) {
-            $phillipsSlope += 0.5 * pow($state->outputGap, 2);
+            $phillipsSlope += self::PHILLIPS_BOTTLENECK_COEFF * pow($state->outputGap, 2);
         }
 
         $phillipsEffect = $phillipsSlope * $dt;
@@ -330,15 +356,12 @@ class MacroEngine
 
     private function calculateEquityRiskPremium(MacroState $state): void
     {
-        $erp = self::BASE_EQUITY_RISK_PREMIUM;
+        // Campbell-Cochrane (1999) Habit Formation Model:
+        // As the output gap contracts below potential, consumer surplus shrinks and aggregate risk aversion
+        // scales exponentially, widening the required equity risk premium without ad-hoc piecewise branches.
+        $habitErp = self::BASE_EQUITY_RISK_PREMIUM * exp(-self::HABIT_RISK_AVERSION_COEFF * $state->outputGapEma);
 
-        if ($state->outputGapEma < 0.0) {
-            $erp += abs($state->outputGapEma) * 0.5;
-        } else {
-            $erp -= $state->outputGapEma * 0.10;
-        }
-
-        $state->equityRiskPremium = max(0.02, $erp);
+        $state->equityRiskPremium = max(self::MIN_EQUITY_RISK_PREMIUM, $habitErp);
     }
 
     private function generateMacroShocks(MacroState $state, float $dt): void
@@ -385,26 +408,13 @@ class MacroEngine
 
     private function calculateMacroCreditSpread(MacroState $state): void
     {
-        // Base corporate spread is 200 bps
-        $spread = 0.02;
+        // Merton (1974) Structural Credit Spread Model:
+        // Corporate debt default probability scales exponentially with economic downturns (leverage effect)
+        // and linearly with excess macroeconomic volatility (option volatility effect).
+        $cycleSpread = self::BASE_CREDIT_SPREAD * exp(-self::MERTON_LEVERAGE_SENSITIVITY * $state->outputGapEma);
+        $excessVol = max(0.0, $state->marketVolatilityEma - 0.20);
+        $volSpread = self::MERTON_VOL_SENSITIVITY * $excessVol;
 
-        // Spreads blow out when the output gap is negative (recession)
-        if ($state->outputGap < 0.0) {
-            $recessionSeverity = abs($state->outputGap);
-            // Cap the recession spread penalty to max +500 bps to prevent extreme death spirals
-            $spread += min(0.05, $recessionSeverity * 0.50);
-        } elseif ($state->outputGap > 0.0) {
-            // Spreads tighten during massive economic booms as lenders chase yield
-            $spread -= min(0.005, $state->outputGap * 0.10);
-        }
-
-        // Extreme volatility also widens spreads
-        if ($state->marketVolatilityEma > 0.30) {
-            // Cap the volatility spread penalty to max +500 bps (smoothly scales up to VIX 80)
-            $spread += min(0.05, ($state->marketVolatilityEma - 0.30) * 0.10);
-        }
-
-        // The absolute maximum aggregate spread should be 1000 bps (10%)
-        $state->macroCreditSpread = max(0.015, min(0.10, $spread));
+        $state->macroCreditSpread = max(0.015, min(self::MAX_CREDIT_SPREAD, $cycleSpread + $volSpread));
     }
 }

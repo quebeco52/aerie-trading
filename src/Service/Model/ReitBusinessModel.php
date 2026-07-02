@@ -36,7 +36,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         // This means a REIT only turns over about 2.5% of its portfolio per quarter.
         // If they do a bad M&A, they will be punished for YEARS before leases expire and reset to market rates!
         $portfolioTurnoverRate = 0.025;
-        $blendedCapRate = ($baselineRoic * (1.0 - $portfolioTurnoverRate)) + ($targetCapRate * $portfolioTurnoverRate);
+        $maxCapRate = max(0.15, ($macroState['yield_10y_ema'] ?? 0.04) + 0.12);
+        $blendedCapRate = min($maxCapRate, ($baselineRoic * (1.0 - $portfolioTurnoverRate)) + ($targetCapRate * $portfolioTurnoverRate));
         $stock->setBaselineRoic((string) max(0.01, $blendedCapRate));
 
         // Cap Rate represents NOI (Net Operating Income) yield.
@@ -104,9 +105,19 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             $eventLore = "Elevated commercial vacancies and unpaid rent impacted quarterly NOI.";
         }
 
+        // Analyst Visibility
+        // Rent escalators (inflation) are 100% visible. Tenant vacancies are partially public (~70% visibility).
+        $analystExpectedRevenue = $expectedRevenue * (1.0 + $rentEscalator);
+        $analystError = $mathUtility->generateStandardNormal() * 0.10;
+        $dynamicVisibility = min(1.0, max(0.0, 0.70 + $analystError));
+        $expectedVacancyShock = $vacancyShock * $dynamicVisibility;
+        $analystExpectedVariableCosts = $analystExpectedRevenue * min(1.50, max(0.01, $realizedVariableMargin + $expectedVacancyShock));
+
         return [
             'actual_revenue' => $actualRevenue,
             'actual_variable_costs' => $actualVariableCosts,
+            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
             'ebit' => $ebit,
             'primary_shock_z' => abs($tenantDefaultZ) > abs($revenueZ) ? $tenantDefaultZ : $revenueZ,
             'event_lore' => $eventLore
@@ -175,5 +186,21 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps): float
     {
         return ($earningsValue * 0.60) + ($pbFairValue * 0.40);
+    }
+
+    /**
+     * For REITs, dividends are legally and economically paid out of Funds From Operations (FFO)
+     * rather than GAAP net income, adding back non-cash property depreciation.
+     */
+    public function getSustainableDividendBase(Stock $stock, float $quarterlyEps, float $investedCapital, float $depRate): float
+    {
+        $shares = max(1.0, (float) $stock->getSharesOutstanding());
+        $quarterlyDepreciationPerShare = (($investedCapital * $depRate) / $shares) / 4.0;
+        return $quarterlyEps + $quarterlyDepreciationPerShare;
+    }
+
+    public function getMarginReversionSpeed(): float
+    {
+        return 2.0; // Multi-year commercial leases resist short-term margin erosion
     }
 }

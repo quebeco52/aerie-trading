@@ -317,20 +317,71 @@ class MathUtility
     }
 
     /**
-     * Calculates the Intrinsic Fair Value P/E ratio based on the risk-free rate and Economic Value Added (EVA) spread.
+     * Applies a 1-Dimensional Kalman Filter to smooth Earnings Per Share (EPS).
+     * Replaces arbitrary exponential decay heuristics with optimal statistical estimation.
      *
-     * @param float $riskFreeRate The current central bank policy rate.
-     * @param float $evaSpread    The spread between the company's Return on Capital and its Cost of Capital.
+     * @param float $structuralEps    The prior estimate (Structural EPS derived from Book Value and ROIC).
+     * @param float $quarterlyEps     The measurement (Actual Quarterly EPS print).
+     * @param float $assetVolatility  The volatility of the firm's assets/equity (used to derive measurement noise).
+     * @param float $macroUncertainty The level of macroeconomic stress (increases prior uncertainty).
+     * @return float The posterior (smoothed) EPS estimate.
+     */
+    public function calculateKalmanSmoothedEps(float $structuralEps, float $quarterlyEps, float $assetVolatility, float $macroUncertainty): float
+    {
+        // 1. Process Noise (Uncertainty in our Structural Prior)
+        // In stable times, we trust our structural ROIC. During macro stress (recessions), our prior is less reliable.
+        $priorErrorCovariance = max(0.01, $macroUncertainty);
+        
+        // 2. Measurement Noise (Uncertainty in the Quarterly Print)
+        // High-volatility companies (e.g., Tech startups) have very noisy quarterly earnings.
+        // Low-volatility companies (e.g., Utilities) have stable prints.
+        // We scale the variance based on asset volatility.
+        $measurementVariance = max(0.01, $assetVolatility * 2.0);
+        
+        // 3. Kalman Gain
+        // How much should we trust the new quarterly print vs our structural prior?
+        // If Measurement Noise is huge, K approaches 0 (we ignore the print).
+        // If Prior Uncertainty is huge, K approaches 1 (we blindly trust the new print).
+        $kalmanGain = $priorErrorCovariance / ($priorErrorCovariance + $measurementVariance);
+        
+        // 4. Posterior Estimate
+        // Update the structural prior with the new measurement, weighted by the Kalman Gain.
+        $posteriorEps = $structuralEps + $kalmanGain * ($quarterlyEps - $structuralEps);
+        
+        return $posteriorEps;
+    }
+
+    /**
+     * Calculates the Intrinsic Fair Value P/E ratio using fundamental drivers (Gordon Growth Model derivation).
+     * P/E = (1 - Reinvestment Rate) / (Cost of Equity - Growth Rate)
+     * Where Reinvestment Rate = Growth Rate / ROIC.
+     *
+     * @param float $costOfEquity The required rate of return for equity investors (Hurdle Rate).
+     * @param float $roic         The Return on Invested Capital.
+     * @param float $growthRate   The expected perpetual growth rate.
      * @return float The intrinsic fair value P/E multiple.
      */
-    public function calculateIntrinsicFairValuePE(float $riskFreeRate, float $evaSpread, float $equityRiskPremium = \App\Service\Macro\MacroEngine::BASE_EQUITY_RISK_PREMIUM): float
+    public function calculateIntrinsicFairValuePE(float $costOfEquity, float $roic, float $growthRate = 0.02): float
     {
-        $costOfEquity = $riskFreeRate + $equityRiskPremium;
-        $marketBasePE = max(8.0, min(30.0, 1.0 / max(0.01, $costOfEquity)));
-        $qualityPremium = max(0.0, $evaSpread * 100) * 1.5;
-        $distressDiscount = min(0.0, $evaSpread * 100) * 2.0;
+        // Failsafe: Cost of equity must be strictly greater than growth rate for Gordon Growth Model
+        $effectiveCoe = max($costOfEquity, $growthRate + 0.01);
         
-        return max(4.0, min(60.0, $marketBasePE + $qualityPremium + $distressDiscount));
+        // Failsafe: ROIC must be greater than 0 to calculate reinvestment
+        $effectiveRoic = max(0.01, $roic);
+        
+        // Reinvestment Rate = Growth / ROIC
+        $reinvestmentRate = $growthRate / $effectiveRoic;
+        
+        // Failsafe: A company cannot reinvest more than 100% of earnings perpetually without external financing.
+        // Cap the reinvestment rate at 1.0. If ROIC < growth, they are structurally destroying value.
+        $reinvestmentRate = min(1.0, $reinvestmentRate);
+        
+        $payoutRatio = 1.0 - $reinvestmentRate;
+        
+        $pe = $payoutRatio / ($effectiveCoe - $growthRate);
+        
+        // The market rarely values a dying company below 4x earnings, or a superstar above 100x structurally
+        return max(4.0, min(100.0, $pe));
     }
 
     /**
@@ -425,6 +476,81 @@ class MathUtility
     public function calculateLeveredBeta(float $unleveredBeta, float $taxRate, float $debtToEquity, float $dampening = 1.0): float
     {
         return $unleveredBeta * (1.0 + ((1.0 - $taxRate) * ($debtToEquity * $dampening)));
+    }
+
+    /**
+     * Calculates the cumulative distribution function (CDF) for the standard normal distribution.
+     * Uses a high-precision polynomial approximation.
+     *
+     * @param float $z The standard normal variable.
+     * @return float The probability that a standard normal variable is less than or equal to $z.
+     */
+    public function calculateNormalCDF(float $z): float
+    {
+        $b1 = 0.319381530;
+        $b2 = -0.356563782;
+        $b3 = 1.781477937;
+        $b4 = -1.821255978;
+        $b5 = 1.330274429;
+        $p  = 0.2316419;
+        $c  = 0.39894228;
+
+        if ($z >= 0.0) {
+            $t = 1.0 / (1.0 + $p * $z);
+            return (1.0 - $c * exp(-$z * $z / 2.0) * $t *
+                ($t * ($t * ($t * ($t * $b5 + $b4) + $b3) + $b2) + $b1));
+        } else {
+            $t = 1.0 / (1.0 - $p * $z);
+            return ($c * exp(-$z * $z / 2.0) * $t *
+                ($t * ($t * ($t * ($t * $b5 + $b4) + $b3) + $b2) + $b1));
+        }
+    }
+
+    /**
+     * Calculates the Distance to Default (DD) using Merton's Structural Model.
+     *
+     * @param float $assetValue      The total value of the firm's assets (V).
+     * @param float $debtFaceValue   The face value of the firm's debt (D).
+     * @param float $assetVolatility The volatility of the firm's assets (sigma_V).
+     * @param float $riskFreeRate    The risk-free rate (r).
+     * @param float $timeToMaturity  The time to maturity of the debt in years (T).
+     * @return float The Distance to Default in standard deviations.
+     */
+    public function calculateDistanceToDefault(float $assetValue, float $debtFaceValue, float $assetVolatility, float $riskFreeRate, float $timeToMaturity = 1.0): float
+    {
+        if ($debtFaceValue <= 0.0 || $assetValue <= 0.0 || $assetVolatility <= 0.0 || $timeToMaturity <= 0.0) {
+            return 10.0; // Effectively no default risk
+        }
+
+        $d1 = (log($assetValue / $debtFaceValue) + ($riskFreeRate + 0.5 * pow($assetVolatility, 2.0)) * $timeToMaturity) 
+              / ($assetVolatility * sqrt($timeToMaturity));
+        
+        // In the Merton model, the actual Distance to Default is d2
+        $d2 = $d1 - ($assetVolatility * sqrt($timeToMaturity));
+
+        return $d2;
+    }
+
+    /**
+     * Calculates the theoretical credit spread based on Merton's Structural Model.
+     *
+     * @param float $distanceToDefault The distance to default (d2).
+     * @param float $lossGivenDefault  The expected loss percentage if default occurs (LGD).
+     * @param float $timeToMaturity    The time to maturity of the debt in years (T).
+     * @return float The theoretical credit spread in decimal (e.g. 0.02 for 2%).
+     */
+    public function calculateMertonCreditSpread(float $distanceToDefault, float $lossGivenDefault = 0.40, float $timeToMaturity = 1.0): float
+    {
+        // Probability of Default (PD) is N(-DD)
+        $probabilityOfDefault = $this->calculateNormalCDF(-$distanceToDefault);
+        
+        // Failsafe: Cap PD slightly below 1.0 to prevent log(0) in the spread formula
+        $probabilityOfDefault = min(0.9999, $probabilityOfDefault);
+        
+        $spread = -(1.0 / $timeToMaturity) * log(1.0 - ($probabilityOfDefault * $lossGivenDefault));
+        
+        // Failsafe: Prevent negative spreads or astronomical blowout
+        return max(0.0, min(1.0, $spread)); // Max spread capped at 10,000 bps
     }
 
 }

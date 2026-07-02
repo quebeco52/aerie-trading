@@ -106,6 +106,16 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
         return ($earningsValue * 0.90) + ($pbFairValue * 0.10);
     }
 
+    public function getSustainableDividendBase(Stock $stock, float $quarterlyEps, float $investedCapital, float $depRate): float
+    {
+        return $quarterlyEps;
+    }
+
+    public function getMarginReversionSpeed(): float
+    {
+        return 4.0;
+    }
+
     public function processPassiveLiabilityGrowth(Stock $stock, array &$macroState, array &$state, MathUtility $mathUtility): void
     {
         // No-op by default

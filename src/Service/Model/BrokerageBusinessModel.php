@@ -42,9 +42,17 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
             $eventLore = "Suffered a steep decline in investment banking deal flow and advisory fees.";
         }
 
+        // Analyst Visibility
+        // The Volatility Bonus is completely public. Analysts track the VIX daily and know exactly how much 
+        // trading volume spiked. However, internal advisory flow ($revenueZ) is hidden.
+        $analystExpectedRevenue = $expectedRevenue * (1.0 + $volatilityBonus);
+        $analystExpectedVariableCosts = $analystExpectedRevenue * min(1.50, max(0.01, $realizedVariableMargin));
+
         return [
             'actual_revenue' => $actualRevenue,
             'actual_variable_costs' => $actualVariableCosts,
+            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
             'ebit' => $actualRevenue - $fixedCosts - $actualVariableCosts,
             'primary_shock_z' => $revenueZ,
             'event_lore' => $eventLore

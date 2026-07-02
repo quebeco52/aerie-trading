@@ -73,6 +73,30 @@ class CapitalAllocationEngine
 
         $newTreasury -= $divData['total_paid'];
 
+        // CORPORATE STRATEGY (CapEx & Debt Expansion)
+        // We calculate pre-buyback equity to pass to Treasury for leverage ratios
+        $currentEquity = (float) $stock->getTotalEquity();
+        $preBuybackEquity = $currentEquity + $quarterlyNetIncome + $realEstateAppreciation - $divData['total_paid'];
+
+        $strategyEvents = $this->treasuryEngine->executeCorporateStrategy(
+            $stock,
+            $preBuybackEquity,
+            $operatingBase,
+            $nopat,
+            $newTreasury,
+            $macroState,
+            $health
+        );
+
+        if (!empty($strategyEvents['events'])) {
+            $events = array_merge($events, $strategyEvents['events']);
+        }
+
+        // Update Treasury with post-strategy cash (includes newly issued debt minus CapEx)
+        $newTreasury = $strategyEvents['new_treasury'];
+        $organicCapex = $strategyEvents['organic_capex'] ?? 0.0;
+        $bankApy = $strategyEvents['bank_apy'] ?? null;
+
         // CALCULATE EXCESS CASH
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
         $targetOperatingCash = $strategy->calculateTargetOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
@@ -105,22 +129,21 @@ class CapitalAllocationEngine
 
         $newTreasury -= $buybackData['total_cash_spent'];
 
-        // UPDATE THE BALANCE SHEET
-        $bsEvents = $this->treasuryEngine->updateBalanceSheet(
+        // FINALIZE LIQUIDITY & EQUITY
+        $liquidityEvents = $this->treasuryEngine->finalizeLiquidity(
             $stock,
             $quarterlyNetIncome,
             $divData['total_paid'],
             $buybackData['total_cash_spent'],
             $operatingBase,
-            $nopat,
             $newTreasury,
             $macroState,
             $health,
             $realEstateAppreciation
         );
 
-        if (!empty($bsEvents['events'])) {
-            $events = array_merge($events, $bsEvents['events']);
+        if (!empty($liquidityEvents['events'])) {
+            $events = array_merge($events, $liquidityEvents['events']);
         }
 
         return [
@@ -128,8 +151,8 @@ class CapitalAllocationEngine
             'dividend_paid' => $divData['dividend_per_share'],
             'total_paid' => $divData['total_paid'],
             'total_cash_spent' => $buybackData['total_cash_spent'],
-            'bank_apy' => $bsEvents['bank_apy'] ?? null,
-            'organic_capex' => $bsEvents['organic_capex'] ?? 0.0,
+            'bank_apy' => $bankApy,
+            'organic_capex' => $organicCapex,
             'events' => $events
         ];
     }
@@ -143,12 +166,17 @@ class CapitalAllocationEngine
 
         $targetPayout = $archetypeStrategy->modifyTargetPayoutRatio($targetPayout);
 
-        $calculatedTarget = $quarterlyEps > 0 ? ($quarterlyEps * $targetPayout) : 0.0;
-        $targetDividend = $speed > 0.05 ? $calculatedTarget : max($calculatedTarget, $lastDividend);
-
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
         $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
+
+        $customDepreciation = (float) $stock->getDepreciationRate();
+        $depRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($industry);
+
+        $sustainableBase = $strategy->getSustainableDividendBase($stock, $quarterlyEps, $investedCapital, $depRate);
+        $calculatedTarget = $sustainableBase > 0 ? ($sustainableBase * $targetPayout) : 0.0;
+        $targetDividend = $speed > 0.05 ? $calculatedTarget : max($calculatedTarget, $lastDividend);
 
         $isRegulatoryDividendHalt = false;
         if ($isFinancial) {
@@ -162,8 +190,6 @@ class CapitalAllocationEngine
         } else {
             $adjustedNopat = $nopat;
             if ($businessModel === 'reit') {
-                $customDepreciation = (float) $stock->getDepreciationRate();
-                $depRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($industry);
                 $adjustedNopat += ($investedCapital * $depRate); // FFO/NOI adjustment
             }
             $trueReturn = $investedCapital > 0 ? ($adjustedNopat / $investedCapital) * 4.0 : 0.0;
@@ -176,8 +202,9 @@ class CapitalAllocationEngine
 
         $distressMultiplier = 1.0 + ($isTitan ? 0.2 : 0.0) + ($isAristocrat ? 0.2 : 0.0);
 
-        $hasCashBuffer = $availableTreasury > ($operatingBase * 0.10);
-        $isCriticalCash = $availableTreasury < ($operatingBase * 0.05);
+        $minOperatingCash = $strategy->calculateMinOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
+        $hasCashBuffer = $availableTreasury > ($minOperatingCash * 1.5);
+        $isCriticalCash = $availableTreasury < $minOperatingCash;
 
         $isDeepDistress = $evaSpread < (-0.08 * $distressMultiplier);
         $isModerateDistressNoCash = ($evaSpread < (-0.04 * $distressMultiplier)) && !$hasCashBuffer;
@@ -187,13 +214,22 @@ class CapitalAllocationEngine
         $isLiquidityCrisis = $health['interest_coverage'] < 1.0 || ($health['interest_coverage'] < $crisisThreshold && !$hasCashBuffer);
 
         $cutDividend = false;
-        if ($isDeepDistress || $isModerateDistressNoCash || $isLiquidityCrisis || $isRegulatoryDividendHalt) {
+        if ($isDeepDistress || $isLiquidityCrisis || $isRegulatoryDividendHalt) {
             if ($archetypeStrategy->shouldResistDividendCut($isLiquidityCrisis, $isRegulatoryDividendHalt)) {
                 // The CEO refuses to cut the dividend!
             } else {
                 $targetDividend = 0.0;
                 $cutDividend = true;
                 $speed = ($isLiquidityCrisis || $isRegulatoryDividendHalt) ? 1.0 : min(1.0, $speed + 0.25);
+            }
+        } elseif ($isModerateDistressNoCash) {
+            if ($archetypeStrategy->shouldResistDividendCut(false, false)) {
+                // The CEO refuses to cut the dividend!
+            } else {
+                // Moderate distress without cash buffer: Rebase dividend to 50% of last dividend to preserve capital without total elimination
+                $targetDividend = $lastDividend * 0.50;
+                $cutDividend = true;
+                $speed = min(1.0, $speed + 0.15);
             }
         } elseif ($isCriticalCash && $calculatedTarget < $lastDividend) {
             $targetDividend = $calculatedTarget;
@@ -209,8 +245,6 @@ class CapitalAllocationEngine
 
         $newDividend = max(0.0, $lastDividend + ($speed * ($targetDividend - $lastDividend)));
 
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
-        $minOperatingCash = $strategy->calculateMinOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
         $usableCash = max(0.0, $availableTreasury - $minOperatingCash);
 
         $maxDividendPerShare = $shares > 0 ? ($usableCash / $shares) : 0.0;
@@ -293,7 +327,7 @@ class CapitalAllocationEngine
         }
         $economicSpread = $trueReturn - $hurdleRate;
 
-        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($macroState['policy_rate'] ?? 0.04, $economicSpread, $macroState['equity_risk_premium'] ?? \App\Service\Macro\MacroEngine::BASE_EQUITY_RISK_PREMIUM);
+        $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $trueReturn, 0.02);
 
         if (($economicSpread > 0.02 && $currentPE < ($fairValuePE + 3.0)) || $isHoarder) {
             $maxWillingSpend = $strategy->calculateMaxBuybackSpend($excessCash, $retainedEarningsThisQuarter, $isMegaHoarder);

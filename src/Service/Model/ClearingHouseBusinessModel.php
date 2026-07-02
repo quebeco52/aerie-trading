@@ -5,6 +5,7 @@ namespace App\Service\Model;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Central Counterparty Clearing Houses (CCP).
@@ -42,7 +43,7 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
 
         $yield2y = $macroState['yield_2y_ema'] ?? ($macroState['yield_2y'] ?? $policyRate);
         $earnedYield = max(0.0, $yield2y - MacroEngine::CASH_YIELD_SPREAD);
-        $rebateRate = max(0.001, $earnedYield - 0.0015); // Pass back the yield they actually earn, minus 15 bps spread
+        $rebateRate = max(0.001, $earnedYield - FinancialConstants::CUSTODY_CLEARING_SPREAD); // Pass back the yield they actually earn, minus spread
 
         $optimalInterestIncome = ($marginPool + $effectiveEquity + $corporateDebt) * $earnedYield;
 
@@ -99,9 +100,19 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
             $eventLore = "Record transaction volume driven by market panic generated massive clearing fees.";
         }
 
+        // Analyst Visibility
+        // Volatility is fully public. Systemic clearing defaults are partially rumored before earnings (10% visibility).
+        $analystExpectedRevenue = $expectedRevenue * (1.0 + $volatilityBonus);
+        $analystError = $mathUtility->generateStandardNormal() * 0.05;
+        $dynamicVisibility = min(1.0, max(0.0, 0.10 + $analystError));
+        $expectedCatastropheShock = $catastropheShock * $dynamicVisibility;
+        $analystExpectedVariableCosts = $analystExpectedRevenue * min(1.50, max(0.01, $realizedVariableMargin + $expectedCatastropheShock));
+
         return [
             'actual_revenue' => $actualRevenue,
             'actual_variable_costs' => $actualVariableCosts,
+            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
             'ebit' => $actualRevenue - $fixedCosts - $actualVariableCosts,
             'primary_shock_z' => abs($defaultZ) > abs($revenueZ) ? $defaultZ : $revenueZ,
             'event_lore' => $eventLore
@@ -117,7 +128,6 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
         return [
             'macro_demand_shift' => $volatilityShift,
             'pricing_power_multiplier' => 1.0,
-            'operating_leverage_rate' => 0.0,
         ];
     }
 
@@ -147,7 +157,7 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
 
         $yield2y = $macroState['yield_2y_ema'] ?? ($macroState['yield_2y'] ?? $policyRate);
         $earnedYield = max(0.0, $yield2y - MacroEngine::CASH_YIELD_SPREAD);
-        $rebateRate = max(0.001, $earnedYield - 0.0015); // Pass back the yield they actually earn, minus 15 bps spread
+        $rebateRate = max(0.001, $earnedYield - FinancialConstants::CUSTODY_CLEARING_SPREAD); // Pass back the yield they actually earn, minus spread
 
         $marginInterest = $marginPool * $rebateRate;
 
@@ -222,5 +232,10 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
                 $state['events'][] = ['description' => "Collected \$" . number_format($liabilityChange / 1_000_000_000, 2) . "B in additional Initial Margin.", 'shock' => 0.5];
             }
         }
+    }
+
+    public function getMarginReversionSpeed(): float
+    {
+        return 2.0; // Toll-booth monopoly moat resists margin compression
     }
 }

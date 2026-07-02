@@ -56,9 +56,18 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $realizedVariableMargin));
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
+        // Analyst Visibility
+        // Cost-plus inflation is 100% public. Defense contracts are mostly public but exact profitability is opaque until earnings (~50% visibility).
+        $analystError = $mathUtility->generateStandardNormal() * 0.10;
+        $dynamicVisibility = min(1.0, max(0.0, 0.50 + $analystError));
+        $analystExpectedRevenue = max(0.0, $expectedRevenue * (1.0 + ($revenueShock * $dynamicVisibility) + $costPlusBonus));
+        $analystExpectedVariableCosts = $analystExpectedRevenue * min(1.50, max(0.01, $realizedVariableMargin));
+
         return [
             'actual_revenue' => $actualRevenue,
             'actual_variable_costs' => $actualVariableCosts,
+            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
             'ebit' => $ebit,
             'primary_shock_z' => abs($eventZ) > abs($revenueZ) ? $eventZ : $revenueZ,
             'event_lore' => $eventLore
