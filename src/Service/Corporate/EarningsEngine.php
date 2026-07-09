@@ -162,11 +162,10 @@ class EarningsEngine
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
         $beta = (float) $stock->getBeta();
 
-        // The Bloat Penalty: As a company saturates its market, it becomes bureaucratic and slightly less efficient.
+        // The Bloat Penalty (Diseconomies of Scale): As a company saturates its market, administrative friction increases costs.
         $evaluationCapital = $isFinancial ? (float)$stock->getTotalEquity() : $investedCapital;
-        $marketSharePenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
+        $saturationCostPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
 
-        $saturationCostPenalty = $marketSharePenalty * 0.15;
         $dynamicVariableTheta = min(0.99, max(0.01, $baselineVariableMargin + $saturationCostPenalty));
         $dynamicVariableTheta = $archetypeStrategy->modifyVariableMarginTheta($dynamicVariableTheta);
 
@@ -315,10 +314,6 @@ class EarningsEngine
 
         // VOLATILITY SHOCK
         $this->applyVolatilityShock($stock, $primaryShockZ, $baselineVol);
-
-        // The Stock Entity derives EPS directly from Total Net Income.
-        // By saving the Reported Net Income, REITs will correctly display FFO in the UI.
-        $stock->setTotalNetIncome((string) $reportedActualNetIncome);
 
         // Calculate Free Cash Flow (Dividend Support). The inputs are Quarterly, so we must multiply by 4.0
         $fcfData = $this->calculateFreeCashFlowPerShare($actualQuarterlyNetIncome, $sharesOutstanding, $stock, $macroState, $quarterlyDepreciation, $isFinancial);

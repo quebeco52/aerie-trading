@@ -3,6 +3,7 @@
 namespace App\Service\Market;
 
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
 /**
@@ -131,18 +132,16 @@ class MarketEngine
             $cycleVolModifier = 1.0 - ($macroState['output_gap'] ?? 0.0);
         }
 
-        // Adjust theta downwards to account for the continuous positive variance jumps from the SVJJ model
-        // E[VarJump] = (pUp * dynamicMuV * 0.5) + (pDown * dynamicMuV)
-        $expectedVarJump = (self::SVJJ_P_UP * $dynamicMuV * 0.5) + (self::SVJJ_P_DOWN * $dynamicMuV);
-        $jumpVarianceDrag = ($lambda * $expectedVarJump) / $kappa;
-
-        $adjustedTheta = max(0.0001, ($longTermVar * $cycleVolModifier) - $jumpVarianceDrag);
+        // Dynamically scale variance reversion speed (kappa) during jump diffusion regimes
+        // instead of linearly clamping theta, preventing artificial volatility suppression
+        $dynamicKappa = $kappa * (1.0 + ($lambda * 0.15));
+        $adjustedTheta = max(0.0001, $longTermVar * $cycleVolModifier);
 
         // Variance Process via Quadratic-Exponential (QE) Scheme
         $nextVar = $this->mathUtility->calculateQEVarianceStep(
             currentVar: $currentVar,
             theta: $adjustedTheta,
-            kappa: $kappa,
+            kappa: $dynamicKappa,
             sigma: $volOfVol,
             dt: $dt
         );
@@ -277,6 +276,7 @@ class MarketEngine
         float $currentVolatility = 0.20
     ): array {
 
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
         $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
         $hurdleRate = $isFinancial ? $liveCostOfEquity : $liveWacc;
 
@@ -290,8 +290,8 @@ class MarketEngine
 
         // 1. MACRO FORWARD GUIDANCE & FUNDAMENTAL P/E
         // We use the Gordon Growth Model derivation for Fair Value P/E.
-        // Expected perpetual growth rate is tied to inflation and output gap, capped at 4%.
-        $expectedGrowth = max(0.0, min(0.04, $inflation + ($outputGap * 0.5)));
+        // Expected perpetual growth rate is tied to inflation and output gap, capped at 2.5% (long-run nominal GDP growth).
+        $expectedGrowth = max(0.0, min(0.025, $inflation + ($outputGap * 0.5)));
 
         $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $structuralRoic, $expectedGrowth);
 
@@ -299,8 +299,11 @@ class MarketEngine
             // For Financials, Cash IS their operating inventory. Do not penalize them.
             $trueStructuralEps = $bookValuePerShare * $structuralRoic;
         } else {
-            // Standard corporates: Operating Equity = Book Value - Cash
-            $cashPerShare = max(0.0, $revenuePerShare > 0 ? ($revenuePerShare * 0.10) : 0.0);
+            // Standard corporates & special models: Operating Base per share is max(Revenue, Book Value)
+            $operatingBasePerShare = max($revenuePerShare, $bookValuePerShare);
+
+            // Delegate operating cash determination directly to the domain business model!
+            $cashPerShare = $strategy->calculateTargetOperatingCash($operatingBasePerShare, 0.0, 0.0);
             $operatingBookValue = max(0.01, $bookValuePerShare - $cashPerShare);
 
             $structuralOperatingEps = $operatingBookValue * $structuralRoic;
@@ -323,12 +326,18 @@ class MarketEngine
 
         $peFairValue = max(0.00, $normalizedEps * $fairValuePE);
 
-        // THE ZOMBIE FIX: Revenue Floor
-        $psMultiple = max(0.2, min(5.0, ($structuralRoic + 0.10) * 10));
+        // THE ZOMBIE FIX: Revenue Floor (Margin-Adjusted Price-to-Sales)
+        // High-turnover physical corporations (retail, grocers) have thin net margins and cannot support software-like P/S multiples.
+        $impliedMargin = $revenuePerShare > 0.0
+            ? max(0.01, min(0.30, abs($safeStructuralEps) / max(0.01, $revenuePerShare)))
+            : 0.10;
+        $psMultiple = max(
+            FinancialConstants::MIN_PS_FALLBACK_MULT,
+            min(FinancialConstants::MAX_PS_FALLBACK_MULT, max(10.0, $fairValuePE) * $impliedMargin)
+        );
         $revenueFloorValue = $revenuePerShare * $psMultiple;
 
         // THE BANKING DCF BYPASS
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
         $earningsValue = $strategy->calculateEarningsValue($revenueFloorValue, $peFairValue, $fcfPerShare, $liveWacc, $this->mathUtility);
 
         // Dividend Yield Support (The Dividend Discount Model)
@@ -339,7 +348,7 @@ class MarketEngine
             $cashFlowProxy = $isFinancial ? $normalizedEps : max($fcfPerShare ?? 0.0, $normalizedEps);
             $sustainableDividend = min($dividendPerShare * 4.0, max(0.0, $cashFlowProxy));
 
-            $assumedGrowth = 0.01;
+            $assumedGrowth = FinancialConstants::DEFAULT_DDM_GROWTH_RATE;
             $requiredYield = max(0.02, $liveCostOfEquity);
 
             $dividendSupportValue = $this->mathUtility->calculateDividendDiscountModel(
@@ -351,7 +360,7 @@ class MarketEngine
 
         // Intrinsic Price-to-Book (P/B) Valuation
         // A living company rarely trades below 0.4x Book Value unless bankruptcy is imminent.
-        $pbMultiple = max(0.40, min(10.0, $structuralRoic / max(0.01, $hurdleRate)));
+        $pbMultiple = max(FinancialConstants::MIN_INTRINSIC_PB, min(FinancialConstants::MAX_INTRINSIC_PB, $structuralRoic / max(0.01, $hurdleRate)));
         $pbFairValue = $bookValuePerShare * $pbMultiple;
 
         // PERFECTED WEIGHTED CONSENSUS MODEL
@@ -361,31 +370,22 @@ class MarketEngine
 
 
 
-        // OVERVALUATION (The Bubble Gravity)
-        $valuationRatio = $currentPrice / $perceivedFairValue;
-        $overvaluation = max(0.0, $valuationRatio - 1.0) * 0.5;
-        $gravityCurve = ($overvaluation) + pow($overvaluation, 2.0);
+        // 1. ESTAR (Exponential Smooth Transition Autoregressive) Mean Reversion
+        // Explains non-linear institutional arbitrage around a fundamental target (Taylor, Peel, & Sarno, 2001).
+        // Within narrow valuation bands, transaction costs and noise-trader risk keep institutional arbitrage near zero.
+        // As mispricing spreads widen, institutions enter aggressively, scaling reversion speed smoothly toward an upper asymptotic limit.
+        $logValuationGap = abs(log($currentPrice / max(0.01, $perceivedFairValue)));
+        $arbitrageElasticity = FinancialConstants::ESTAR_ARBITRAGE_ELASTICITY;
+        $maxReversionCap = FinancialConstants::MAX_REVERSION_FORCE_CAP;
 
-        // UNDERVALUATION (Value Spring)
-        $inverseRatio = $perceivedFairValue / max(0.01, $currentPrice);
-        $undervaluation = max(0.0, $inverseRatio - 1.0) * 0.5;
-        $springCurve = ($undervaluation) + pow($undervaluation, 2.0);
+        $estarTransition = 1.0 - exp(-$arbitrageElasticity * ($logValuationGap * $logValuationGap));
+        $effectiveReversion = $reversionSpeed + (($maxReversionCap - $reversionSpeed) * $estarTransition);
 
-        // Smoothly scale macro resistance based on the output gap instead of a hard cliff.
-        // Base resistance is 0.02. As the economy dips into recession, fear scales up linearly.
-        $macroResistance = 0.02 + (max(0.0, -$outputGap) * 10.0);
-        $bubbleGravity = $gravityCurve * $macroResistance;
-
-        // Enthusiasm scales up in a booming economy, accelerating the spring
-        $macroEnthusiasm = 0.02 + (max(0.0, $outputGap) * 10.0);
-        $valueSpring = $springCurve * $macroEnthusiasm;
-
-
-        // FLIGHT-TO-QUALITY REVERSION (Liquidity Drain)
-        $dynamicReversion = $reversionSpeed * (1.0 + ($systemicStressIndex * 5.0));
-
-        $dynamicReversion += min(15.0, $bubbleGravity); // Cap max panic reversion
-        $dynamicReversion += min(15.0, $valueSpring);
+        // 2. Brunnermeier-Pedersen Funding Liquidity Dampener (2009)
+        // During macroeconomic stress and systemic crises, funding liquidity dries up and capital-constrained 
+        // arbitrageurs pull back, slowing down market efficiency and price correction speed.
+        $liquidityDampener = 1.0 / (1.0 + ($systemicStressIndex * FinancialConstants::FUNDING_LIQUIDITY_STRESS_FACTOR));
+        $dynamicReversion = $effectiveReversion * $liquidityDampener;
 
         return [
             'perceived_fair_value' => $perceivedFairValue,

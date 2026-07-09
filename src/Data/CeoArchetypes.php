@@ -34,8 +34,8 @@ class CeoArchetypes
     public static function getRandomArchetype(array $macroState = []): string
     {
         $weights = [
-            self::OPPORTUNIST => 40,
-            self::CONSERVATIVE => 15,
+            self::OPPORTUNIST => 50,
+            self::CONSERVATIVE => 20,
             self::CONGLOMERATE => 10,
             self::EMPIRE_BUILDER => 10,
             self::DEALMAKER => 10,
@@ -57,7 +57,7 @@ class CeoArchetypes
                 $weights[self::TURNAROUND] += 20;
                 $weights[self::YIELD_KING] += 10;
                 $weights[self::COST_CUTTER] += 10;
-                
+
                 $weights[self::EMPIRE_BUILDER] = max(1, $weights[self::EMPIRE_BUILDER] - 8);
                 $weights[self::DEALMAKER] = max(1, $weights[self::DEALMAKER] - 8);
                 $weights[self::VISIONARY] = max(1, $weights[self::VISIONARY] - 4);
@@ -66,7 +66,7 @@ class CeoArchetypes
                 $weights[self::EMPIRE_BUILDER] += 25;
                 $weights[self::DEALMAKER] += 20;
                 $weights[self::VISIONARY] += 15;
-                
+
                 $weights[self::CONSERVATIVE] = max(1, $weights[self::CONSERVATIVE] - 10);
                 $weights[self::COST_CUTTER] = max(1, $weights[self::COST_CUTTER] - 4);
             }

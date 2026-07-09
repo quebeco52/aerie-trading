@@ -22,7 +22,7 @@ class VisionaryArchetype extends AbstractArchetype
         return 0.0;
     }
 
-    public function shouldResistDividendCut(bool $isLiquidityCrisis, bool $isRegulatoryDividendHalt): bool
+    public function shouldResistDividendCut(bool $isLiquidityCrisis, bool $isRegulatoryDividendHalt, bool $isDeepDistress = false): bool
     {
         // They will cut the dividend the first chance they get
         return false;

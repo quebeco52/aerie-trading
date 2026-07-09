@@ -17,7 +17,7 @@ class TurnaroundArchetype extends AbstractArchetype
         return max(0.1, $adjusted - 0.2);
     }
 
-    public function shouldResistDividendCut(bool $isLiquidityCrisis, bool $isRegulatoryDividendHalt): bool
+    public function shouldResistDividendCut(bool $isLiquidityCrisis, bool $isRegulatoryDividendHalt, bool $isDeepDistress = false): bool
     {
         // A turnaround CEO will aggressively cut the dividend to preserve cash for survival
         return false;

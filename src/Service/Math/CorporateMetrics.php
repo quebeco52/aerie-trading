@@ -14,7 +14,7 @@ class CorporateMetrics
         return \App\Data\Sectors::INDUSTRY_METRICS[$industry]['depreciation'] ?? 0.05;
     }
 
-    public function calculateMarketShare(float $investedCapital, float $nominalGdpIndex, float $samRatio, float $baselineSectorTam = 2000000000000.0): float
+    public function calculateMarketShare(float $investedCapital, float $nominalGdpIndex, float $samRatio, float $baselineSectorTam = FinancialConstants::BASELINE_SECTOR_TAM): float
     {
         $dynamicSam = $baselineSectorTam * $nominalGdpIndex * $samRatio;
         return $investedCapital / max(1.0, $dynamicSam);
@@ -36,28 +36,19 @@ class CorporateMetrics
         $samRatio = (float) $stock->getSamRatio();
         $marketShare = $this->calculateMarketShare($investedCapital, $nominalGdpIndex, $samRatio);
 
-        $moat = match ($stock->getSystemicImportance()) {
-            'titan'    => 0.30,
-            'systemic' => 0.75,
-            'base'     => 0.90,
-            default    => 1.00,
-        };
+        $moatFactor = FinancialConstants::SYSTEMIC_MOAT_FACTORS[$stock->getSystemicImportance()]
+            ?? FinancialConstants::SYSTEMIC_MOAT_FACTORS['default'];
 
-        // COURNOT & HHI MARKET SATURATION
-        // In a Cournot oligopoly, industry margins are proportional to HHI / Demand Elasticity.
-        // However, this engine penalizes firms that attempt to artificially inflate their market share 
-        // beyond natural Cournot equilibrium via sheer capital bloat (oversupply).
-        // We calculate the firm's isolated HHI contribution (s_i^2).
-        $firmHhiContribution = $marketShare * $marketShare;
-        
-        // As the firm pushes its isolated HHI towards a pure monopoly (1.0) or oversupplies the TAM (>1.0),
-        // the marginal cost to steal the remaining fractional market share approaches infinity.
-        // We use a Cournot deadweight loss derivation to model this exponential margin compression.
-        $demandElasticity = 1.25;
-        $cournotDeadweightLoss = ($firmHhiContribution * $firmHhiContribution) / $demandElasticity;
-        
-        $saturationPenalty = $cournotDeadweightLoss * $moat;
-        
-        return min(1.25, $saturationPenalty);
+        // DISECONOMIES OF SCALE / PENROSE EFFECT
+        // As a company pushes its capital footprint beyond its optimal Serviceable Addressable Market (SAM),
+        // coordination friction and administrative bloat increase quadratically (convex curve) above threshold.
+        $optimalThreshold = FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD;
+        $excessRatio = max(0.0, ($marketShare - $optimalThreshold) / max(0.01, 1.0 - $optimalThreshold));
+        $convexBloat = ($excessRatio * $excessRatio) * FinancialConstants::DISECONOMY_FRICTION_COEFF;
+
+        $saturationPenalty = $convexBloat * $moatFactor;
+
+        // Safety limit
+        return min(0.25, $saturationPenalty);
     }
 }

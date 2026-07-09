@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Service\Model;
 
 use App\Entity\Stock;
@@ -17,6 +19,76 @@ use App\Service\Math\FinancialConstants;
  */
 class ClearingHouseBusinessModel extends InsuranceBusinessModel
 {
+    // --- ROE & Target Architecture ---
+    /** Weight given to historical baseline ROE when blending with TTM ROE. */
+    public const BASELINE_ROE_WEIGHT = 0.70;
+    /** Weight given to TTM ROE when blending with historical baseline ROE. */
+    public const TTM_ROE_WEIGHT      = 0.30;
+    /** Default 5Y Treasury spread over policy rate when yield curve data is absent. */
+    public const DEFAULT_5Y_YIELD_PREMIUM = 0.005;
+    /** Minimum structural operating EBIT floor as a fraction of equity. */
+    public const MIN_EQUITY_EBIT_YIELD    = 0.05;
+
+    // --- VIX & Transaction Volume Bonus ---
+    /** Baseline VIX threshold above which volatility expands clearing transaction volume. */
+    public const VIX_BASELINE_THRESHOLD = 0.20;
+    /** Sensitivity scalar translating excess VIX points into direct top-line clearing fee bonuses. */
+    public const VIX_REVENUE_SCALAR     = 0.40;
+    /** Extreme VIX threshold triggering record clearing volume event lore. */
+    public const VIX_EXTREME_THRESHOLD  = 0.30;
+
+    // --- Catastrophic Tail Risk & Shocks ---
+    /** Volatility multiplier for top-line revenue shocks in clearing fee generation. */
+    public const REVENUE_VARIANCE_SCALAR = 0.05;
+    /** Severe default z-score threshold triggering initial margin default losses. */
+    public const CATASTROPHE_Z_THRESHOLD = -2.50;
+    /** Loss multiplier applied to default severity when systemic breaches occur. */
+    public const CATASTROPHE_LOSS_SCALAR = 0.25;
+    /** Healthy credit environment z-score threshold triggering minor margin write-backs. */
+    public const HEALTHY_CREDIT_Z_FLOOR  = 1.00;
+    /** Minor variable cost reduction during exceptionally healthy credit environments. */
+    public const HEALTHY_CREDIT_BONUS    = -0.02;
+    /** Extreme default z-score threshold triggering apocalyptic clearinghouse bailout lore. */
+    public const LORE_DEFAULT_Z_THRESHOLD = -3.00;
+    /** Upper clamp for realized variable margin. */
+    public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
+    /** Lower clamp for realized variable margin. */
+    public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
+
+    // --- Analyst Visibility & Error ---
+    /** Base analyst visibility into systemic clearing defaults prior to quarterly earnings. */
+    public const ANALYST_BASE_VISIBILITY = 0.10;
+    /** Standard deviation of analyst estimation error for catastrophe losses. */
+    public const ANALYST_ERROR_STD_DEV   = 0.05;
+
+    // --- Clearinghouse Liquidity Rules ---
+    /** Required cash backing fraction for customer margin liabilities. */
+    public const LIABILITY_CASH_BACKING  = 1.00;
+    /** Target operating cash reserve ratio applied to corporate operating base. */
+    public const TARGET_OPERATING_BUFFER = 0.05;
+    /** Minimum emergency operating cash reserve ratio applied to corporate operating base. */
+    public const MIN_OPERATING_BUFFER    = 0.02;
+
+    // --- Passive Margin Pool Growth ---
+    /** Baseline real GDP growth rate in neutral economic conditions. */
+    public const BASE_GDP_GROWTH_RATE    = 0.02;
+    /** GDP growth acceleration multiplier during economic expansions. */
+    public const EXPANSION_GDP_MULT      = 0.50;
+    /** GDP contraction multiplier during recessions. */
+    public const RECESSION_GDP_MULT      = 0.30;
+    /** Sensitivity scalar translating VIX shifts into customer margin pool expansion/contraction. */
+    public const VIX_POOL_GROWTH_SCALAR  = 0.50;
+    /** Maximum allowable quarterly expansion or contraction of customer margin pools. */
+    public const MAX_POOL_CHANGE_CLAMP   = 0.15;
+    /** Standard deviation of random noise applied to quarterly margin pool growth. */
+    public const POOL_GROWTH_NOISE_STD   = 0.01;
+    /** Threshold percentage change in customer deposits required to trigger margin pool lore. */
+    public const LORE_POOL_CHANGE_THRESHOLD = 0.01;
+
+    // --- Monopoly Valuation Moat ---
+    /** Operating margin mean reversion speed: slower speed reflects toll-booth monopoly pricing power. */
+    public const MONOPOLY_REVERSION_SPEED = 2.0;
+
     public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array
     {
         $equity = (float) $stock->getTotalEquity();
@@ -24,7 +96,7 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
 
         $ttmRoe = (float) $stock->getRoeTtm();
         if ($ttmRoe !== 0.0) {
-            $baselineRoe = ($baselineRoe * 0.70) + ($ttmRoe * 0.30);
+            $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
         }
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
@@ -48,7 +120,7 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
         $optimalInterestIncome = ($marginPool + $effectiveEquity + $corporateDebt) * $earnedYield;
 
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
-        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + 0.005);
+        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + self::DEFAULT_5Y_YIELD_PREMIUM);
         $structuralSpread = (float) $stock->getCreditSpread();
         $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
         $corporateInterest = $corporateDebt * $blendedWholesaleRate;
@@ -60,7 +132,7 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
         $optimalEbit = $optimalEbt + $optimalInterestExpense - $optimalInterestIncome;
 
         // Clearinghouses must maintain a baseline transaction volume
-        $minEbit = $effectiveEquity * 0.05;
+        $minEbit = $effectiveEquity * self::MIN_EQUITY_EBIT_YIELD;
         $targetEbit = max($minEbit, $optimalEbit);
 
         // 4. Reverse-engineer Revenue
@@ -80,33 +152,33 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
 
         // The Volatility Bonus (Transaction Volume):
         // Clearinghouses thrive on sheer volume. Market panics = massive liquidations = massive fees.
-        $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? 0.20);
-        $volatilityBonus = max(0.0, ($vixEma - 0.20) * 0.4);
+        $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? self::VIX_BASELINE_THRESHOLD);
+        $volatilityBonus = max(0.0, ($vixEma - self::VIX_BASELINE_THRESHOLD) * self::VIX_REVENUE_SCALAR);
 
-        $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * 0.05)) + $volatilityBonus);
+        $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $volatilityBonus);
 
         // The Default Fund Shock (Catastrophic Tail Risk)
         $defaultZ = $mathUtility->generateStandardNormal();
 
         // Tail risk: if multiple titans default simultaneously, the clearinghouse eats the loss.
-        $catastropheShock = $defaultZ < -2.5 ? abs($defaultZ) * 0.25 : ($defaultZ > 1.0 ? -0.02 : 0.0);
+        $catastropheShock = $defaultZ < self::CATASTROPHE_Z_THRESHOLD ? abs($defaultZ) * self::CATASTROPHE_LOSS_SCALAR : ($defaultZ > self::HEALTHY_CREDIT_Z_FLOOR ? self::HEALTHY_CREDIT_BONUS : 0.0);
 
-        $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $realizedVariableMargin + $catastropheShock));
+        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $catastropheShock));
 
         $eventLore = null;
-        if ($defaultZ < -3.0) {
+        if ($defaultZ < self::LORE_DEFAULT_Z_THRESHOLD) {
             $eventLore = "A massive systemic default breached the initial margin pool, forcing the clearinghouse to cover billions in toxic settlements.";
-        } elseif ($vixEma > 0.30) {
+        } elseif ($vixEma > self::VIX_EXTREME_THRESHOLD) {
             $eventLore = "Record transaction volume driven by market panic generated massive clearing fees.";
         }
 
         // Analyst Visibility
         // Volatility is fully public. Systemic clearing defaults are partially rumored before earnings (10% visibility).
         $analystExpectedRevenue = $expectedRevenue * (1.0 + $volatilityBonus);
-        $analystError = $mathUtility->generateStandardNormal() * 0.05;
-        $dynamicVisibility = min(1.0, max(0.0, 0.10 + $analystError));
+        $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
+        $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
         $expectedCatastropheShock = $catastropheShock * $dynamicVisibility;
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(1.50, max(0.01, $realizedVariableMargin + $expectedCatastropheShock));
+        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $expectedCatastropheShock));
 
         return [
             'actual_revenue' => $actualRevenue,
@@ -122,8 +194,8 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
     public function getMacroPhysics(Stock $stock, array &$macroState): array
     {
         // Volatility is the primary macro driver for clearinghouses.
-        $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? 0.20);
-        $volatilityShift = ($vixEma - 0.20) * 0.5; // High VIX = Higher Demand for clearing
+        $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? self::VIX_BASELINE_THRESHOLD);
+        $volatilityShift = ($vixEma - self::VIX_BASELINE_THRESHOLD) * self::VIX_POOL_GROWTH_SCALAR; // High VIX = Higher Demand for clearing
 
         return [
             'macro_demand_shift' => $volatilityShift,
@@ -183,13 +255,13 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
     {
         // A Clearing House MUST hold 100% of its margin pool in liquid reserves.
         // It cannot use customer margin deposits to execute M&A or pay dividends!
-        return ($currentLiability * 1.0) + ($operatingBase * 0.05);
+        return ($currentLiability * self::LIABILITY_CASH_BACKING) + ($operatingBase * self::TARGET_OPERATING_BUFFER);
     }
 
     public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
     {
         // The absolute minimum floor before emergency borrowing is triggered.
-        return ($currentLiability * 1.0) + ($operatingBase * 0.02);
+        return ($currentLiability * self::LIABILITY_CASH_BACKING) + ($operatingBase * self::MIN_OPERATING_BUFFER);
     }
 
     public function processPassiveLiabilityGrowth(Stock $stock, array &$macroState, array &$state, MathUtility $mathUtility): void
@@ -200,16 +272,16 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
         // Nominal Systemic Growth: The baseline market grows over time.
         $inflation = $macroState['inflation_ema'] ?? 0.02;
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
-        $realGdpGrowth = 0.02 + ($outputGap > 0.0 ? $outputGap * 0.5 : $outputGap * 2.0);
+        $realGdpGrowth = self::BASE_GDP_GROWTH_RATE + ($outputGap > 0.0 ? $outputGap * self::EXPANSION_GDP_MULT : $outputGap * self::RECESSION_GDP_MULT);
         $systemicGrowthQuarterly = ($inflation + $realGdpGrowth) / 4.0;
 
         // Volatility Driver: When markets get chaotic, clearinghouses demand higher initial margins.
         // If VIX is above 20%, margins expand. If below, margins contract.
-        $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? 0.20);
-        $volatilityShift = ($vixEma - 0.20) * 0.50;
+        $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? self::VIX_BASELINE_THRESHOLD);
+        $volatilityShift = ($vixEma - self::VIX_BASELINE_THRESHOLD) * self::VIX_POOL_GROWTH_SCALAR;
 
         $baseGrowth = $systemicGrowthQuarterly + $volatilityShift;
-        $liabilityChange = $currentLiabilities * max(-0.15, min(0.15, $baseGrowth + ($mathUtility->generateStandardNormal() * 0.01)));
+        $liabilityChange = $currentLiabilities * max(-self::MAX_POOL_CHANGE_CLAMP, min(self::MAX_POOL_CHANGE_CLAMP, $baseGrowth + ($mathUtility->generateStandardNormal() * self::POOL_GROWTH_NOISE_STD)));
 
         if (abs($liabilityChange) > 0) {
             $state['treasury'] += $liabilityChange;
@@ -226,9 +298,9 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
             $stock->setCustomerDeposits((string) max(0.0, $state['customerDeposits']));
 
             $changePct = $liabilityChange / $currentLiabilities;
-            if ($changePct < -0.01) {
+            if ($changePct < -self::LORE_POOL_CHANGE_THRESHOLD) {
                 $state['events'][] = ['description' => "Margin pool contracted by \$" . number_format(abs($liabilityChange) / 1_000_000_000, 2) . "B.", 'shock' => -1.0];
-            } elseif ($changePct > 0.01) {
+            } elseif ($changePct > self::LORE_POOL_CHANGE_THRESHOLD) {
                 $state['events'][] = ['description' => "Collected \$" . number_format($liabilityChange / 1_000_000_000, 2) . "B in additional Initial Margin.", 'shock' => 0.5];
             }
         }
@@ -236,6 +308,7 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
 
     public function getMarginReversionSpeed(): float
     {
-        return 2.0; // Toll-booth monopoly moat resists margin compression
+        return self::MONOPOLY_REVERSION_SPEED; // Toll-booth monopoly moat resists margin compression
     }
 }
+

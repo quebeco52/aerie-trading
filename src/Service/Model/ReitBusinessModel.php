@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Service\Model;
 
 use App\Entity\Stock;
@@ -17,6 +19,96 @@ use App\Service\Macro\MacroEngine;
  */
 class ReitBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Cap Rate & Portfolio Turnover Rails ---
+    /** Quarterly portfolio turnover rate reflecting 7 to 10 year commercial leases. */
+    public const PORTFOLIO_TURNOVER_RATE    = 0.025;
+    /** Default 10Y Treasury yield fallback when macroeconomic state data is missing. */
+    public const DEFAULT_10Y_YIELD_FALLBACK = 0.04;
+    /** Maximum allowable cap rate ceiling to prevent unrealistic property devaluation. */
+    public const MAX_CAP_RATE_CLAMP         = 0.15;
+    /** Spread over 10Y Treasury yield used to define the upper cap rate boundary. */
+    public const CAP_RATE_CEILING_SPREAD    = 0.12;
+    /** Default property depreciation rate fallback if sector configuration is absent. */
+    public const DEFAULT_DEPRECIATION_RATE  = 0.05;
+
+    // --- EBIT Yield & ROIC Blending ---
+    /** Weight given to historical target EBIT yield when blending with TTM ROIC. */
+    public const TARGET_EBIT_WEIGHT         = 0.70;
+    /** Weight given to TTM ROIC when blending with historical target EBIT yield. */
+    public const TTM_ROIC_WEIGHT            = 0.30;
+    /** Annualization multiplier applied to quarterly Net Operating Income (NOI). */
+    public const ROIC_ANNUALIZATION_MULT    = 4.00;
+    /** Minimum allowable ROIC floor to prevent catastrophic negative overflow. */
+    public const MIN_ROIC_CLAMP             = -0.50;
+    /** Maximum allowable ROIC ceiling to prevent unrealistic hyperinflation. */
+    public const MAX_ROIC_CLAMP             = 1.00;
+    /** Weight given to current quarter ROIC when updating trailing twelve-month ROIC EMA. */
+    public const ROIC_TTM_EMA_WEIGHT        = 0.25;
+    /** Weight given to historical trailing twelve-month ROIC when updating ROIC EMA. */
+    public const ROIC_TTM_HIST_WEIGHT       = 0.75;
+
+    // --- Revenue & Vacancy Shock Physics ---
+    /** Volatility multiplier for top-line revenue shocks in stable multi-year lease models. */
+    public const REVENUE_VARIANCE_SCALAR    = 0.05;
+    /** Fraction of excess CPI inflation captured directly into revenue via automatic rent escalators. */
+    public const RENT_ESCALATOR_CAPTURE     = 0.80;
+    /** Tenant default z-score threshold triggering severe commercial vacancy penalties. */
+    public const VACANCY_Z_THRESHOLD        = -1.50;
+    /** Variable cost penalty multiplier applied during severe anchor tenant defaults. */
+    public const VACANCY_LOSS_SCALAR        = 0.08;
+    /** Benign leasing environment z-score threshold triggering minor margin bonuses. */
+    public const BENIGN_LEASING_Z_FLOOR     = 1.00;
+    /** Sensitivity scale for variable cost reduction during exceptionally strong occupancy environments. */
+    public const LEASING_BONUS_SCALE        = 0.015;
+    /** Sensitivity of property yield and cap rates to 10Y Treasury yields above baseline. */
+    public const CAP_RATE_SPREAD_SENSITIVITY = 1.20;
+    /** Variable margin penalty scaling with refinancing headwinds on maturing commercial property debt. */
+    public const REFINANCING_WALL_DRAG      = 0.25;
+    /** Structural minimum operating cost-to-revenue ratio reflecting property maintenance and leasing commissions. */
+    public const MIN_EFFICIENCY_RATIO       = 0.35;
+    /** Upper clamp for realized variable margin. */
+    public const MAX_VARIABLE_MARGIN_CLAMP  = 1.50;
+    /** Lower clamp for realized variable margin. */
+    public const MIN_VARIABLE_MARGIN_CLAMP  = 0.01;
+
+    // --- Event Lore Thresholds ---
+    /** Severe vacancy z-score threshold indicating anchor tenant bankruptcies and commercial lease defaults. */
+    public const LORE_ANCHOR_BANKRUPTCY_Z   = -2.00;
+    /** Severe vacancy z-score threshold indicating elevated commercial vacancies and unpaid rent. */
+    public const LORE_ELEVATED_VACANCY_Z    = -1.50;
+
+    // --- Analyst Visibility & Error ---
+    /** Base analyst visibility into tenant vacancies and lease renewals prior to quarterly earnings. */
+    public const ANALYST_BASE_VISIBILITY    = 0.70;
+    /** Standard deviation of analyst estimation error for quarterly tenant occupancy and default rates. */
+    public const ANALYST_ERROR_STD_DEV      = 0.10;
+
+    // --- Tax & Interest Coverage Rails ---
+    /** Effective entity-level corporate tax rate for pass-through Real Estate Investment Trusts. */
+    public const PASS_THROUGH_TAX_RATE      = 0.00;
+    /** Infinite positive interest coverage fallback when interest expense is zero. */
+    public const INFINITE_ICR_POS_FALLBACK  = 999.0;
+    /** Infinite negative interest coverage fallback when interest expense is zero and FFO is negative. */
+    public const INFINITE_ICR_NEG_FALLBACK  = -999.0;
+
+    // --- Aggressive Property Acquisition Borrowing ---
+    /** Baseline probability of initiating debt expansion to acquire new commercial properties. */
+    public const DEBT_EXPANSION_BASE_PROB   = 0.80;
+    /** Multiplier scaling debt expansion probability with spread attractiveness. */
+    public const DEBT_EXPANSION_PROB_MULT   = 0.20;
+    /** Baseline aggressiveness fraction for new debt issuance in property acquisition models. */
+    public const DEBT_EXPANSION_BASE_AGGR   = 0.15;
+    /** Multiplier scaling debt issuance aggressiveness with spread attractiveness. */
+    public const DEBT_EXPANSION_AGGR_MULT   = 0.35;
+
+    // --- Valuation & Lease Resistance Moat ---
+    /** Weight given to capitalized earnings (FFO) in fair value calculations. */
+    public const FAIR_VALUE_EARNINGS_WEIGHT = 0.60;
+    /** Weight given to property Net Asset Value (NAV / Book Value) in fair value calculations. */
+    public const FAIR_VALUE_BOOK_WEIGHT     = 0.40;
+    /** Operating margin mean reversion speed: slower speed reflects multi-year commercial leases. */
+    public const LEASE_REVERSION_SPEED      = 2.0;
+
     /**
      * Real Estate Cap Rates are deeply tied to the 10-Year Treasury Yield.
      * As rates rise, property values effectively drop, demanding a higher yield.
@@ -27,7 +119,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $baselineRoic = max(0.01, (float) $stock->getBaselineRoic());
 
         // Real Estate Cap Rates are deeply tied to the 10-Year Treasury Yield plus a risk premium.
-        $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['yield_10y'] ?? 0.04);
+        $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['yield_10y'] ?? self::DEFAULT_10Y_YIELD_FALLBACK);
         $realEstateRiskPremium = $macroState['equity_risk_premium'] ?? MacroEngine::BASE_EQUITY_RISK_PREMIUM;
         $targetCapRate = $yield10y + $realEstateRiskPremium;
 
@@ -35,8 +127,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         // Commercial leases (Office, Healthcare) are typically 7 to 10 years long.
         // This means a REIT only turns over about 2.5% of its portfolio per quarter.
         // If they do a bad M&A, they will be punished for YEARS before leases expire and reset to market rates!
-        $portfolioTurnoverRate = 0.025;
-        $maxCapRate = max(0.15, ($macroState['yield_10y_ema'] ?? 0.04) + 0.12);
+        $portfolioTurnoverRate = self::PORTFOLIO_TURNOVER_RATE;
+        $maxCapRate = max(self::MAX_CAP_RATE_CLAMP, ($macroState['yield_10y_ema'] ?? self::DEFAULT_10Y_YIELD_FALLBACK) + self::CAP_RATE_CEILING_SPREAD);
         $blendedCapRate = min($maxCapRate, ($baselineRoic * (1.0 - $portfolioTurnoverRate)) + ($targetCapRate * $portfolioTurnoverRate));
         $stock->setBaselineRoic((string) max(0.01, $blendedCapRate));
 
@@ -46,13 +138,13 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         // to prevent REITs from mathematically double-counting depreciation and printing infinite FFO.
         $industry = $stock->getIndustry() ?: 'General';
         $customDepreciation = (float) $stock->getDepreciationRate();
-        $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : (\App\Data\Sectors::INDUSTRY_METRICS[$industry]['depreciation'] ?? 0.05);
+        $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : (\App\Data\Sectors::INDUSTRY_METRICS[$industry]['depreciation'] ?? self::DEFAULT_DEPRECIATION_RATE);
 
         $targetEbitYield = max(0.01, $blendedCapRate - $depreciationRate);
 
         $ttmRoic = (float) $stock->getRoicTtm();
         if ($ttmRoic !== 0.0) {
-            $targetEbitYield = ($targetEbitYield * 0.70) + ($ttmRoic * 0.30);
+            $targetEbitYield = ($targetEbitYield * self::TARGET_EBIT_WEIGHT) + ($ttmRoic * self::TTM_ROIC_WEIGHT);
         }
 
         return [
@@ -79,48 +171,58 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
         // REIT revenues are incredibly stable due to multi-year binding leases.
         // Volatility impact is sliced to just 5% of standard variance.
-        $revenueShock = $revenueZ * ($baselineVol * 0.05);
+        $revenueShock = $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
 
         // The Inflation Hedge (CPI Rent Escalators):
         // Commercial real estate leases almost universally contain automatic annual rent increases tied to inflation.
         // Rent Escalators only provide an Earnings Surprise if inflation spikes above the expected baseline.
         $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
         $excessInflation = max(0.0, $inflation - MacroEngine::TARGET_INFLATION);
-        $rentEscalator = $excessInflation * 0.80; // Capture 80% of excess inflation directly into top-line revenue
+        $rentEscalator = $excessInflation * self::RENT_ESCALATOR_CAPTURE; // Capture 80% of excess inflation directly into top-line revenue
 
         $actualRevenue = $expectedRevenue * (1.0 + $revenueShock + $rentEscalator);
 
-        // The Tenant Default Shock (Vacancy):
-        // While leases are sticky, deep recessions cause anchor tenants to break leases or go bankrupt.
+        // The Tenant Default Shock (Vacancy) & Refinancing Wall:
+        // Deep recessions cause anchor tenants to break leases.
+        // Higher 10Y Treasury yields increase property cap rates and debt refinancing drag.
         $tenantDefaultZ = $mathUtility->generateStandardNormal();
-        $vacancyShock = $tenantDefaultZ < -1.5 ? abs($tenantDefaultZ) * 0.08 : ($tenantDefaultZ > 1.0 ? -0.01 : 0.0);
+        $vacancyShock = $tenantDefaultZ < self::VACANCY_Z_THRESHOLD
+            ? abs($tenantDefaultZ) * self::VACANCY_LOSS_SCALAR
+            : ($tenantDefaultZ > self::BENIGN_LEASING_Z_FLOOR
+                ? -($tenantDefaultZ - self::BENIGN_LEASING_Z_FLOOR) * self::LEASING_BONUS_SCALE
+                : 0.0);
 
-        $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $realizedVariableMargin + $vacancyShock));
+        $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['yield_10y'] ?? self::DEFAULT_10Y_YIELD_FALLBACK);
+        $refinancingDrag = max(0.0, ($yield10y - self::DEFAULT_10Y_YIELD_FALLBACK) * self::REFINANCING_WALL_DRAG);
+
+        $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
+        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max($minVariableMargin, $realizedVariableMargin + $vacancyShock + $refinancingDrag));
+        $actualVariableCosts = $actualRevenue * $clampedMargin;
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
         $eventLore = null;
-        if ($tenantDefaultZ < -2.0) {
+        if ($tenantDefaultZ < self::LORE_ANCHOR_BANKRUPTCY_Z) {
             $eventLore = "Suffered a sudden wave of anchor tenant bankruptcies and commercial lease defaults.";
-        } elseif ($tenantDefaultZ < -1.5) {
+        } elseif ($tenantDefaultZ < self::LORE_ELEVATED_VACANCY_Z) {
             $eventLore = "Elevated commercial vacancies and unpaid rent impacted quarterly NOI.";
         }
 
         // Analyst Visibility
-        // Rent escalators (inflation) are 100% visible. Tenant vacancies are partially public (~70% visibility).
+        // Rent escalators (inflation) and 10Y Treasury yields are 100% visible. Tenant vacancies are partially public (~70% visibility).
         $analystExpectedRevenue = $expectedRevenue * (1.0 + $rentEscalator);
-        $analystError = $mathUtility->generateStandardNormal() * 0.10;
-        $dynamicVisibility = min(1.0, max(0.0, 0.70 + $analystError));
+        $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
+        $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
         $expectedVacancyShock = $vacancyShock * $dynamicVisibility;
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(1.50, max(0.01, $realizedVariableMargin + $expectedVacancyShock));
+        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max($minVariableMargin, $realizedVariableMargin + $expectedVacancyShock + $refinancingDrag));
 
         return [
-            'actual_revenue' => $actualRevenue,
-            'actual_variable_costs' => $actualVariableCosts,
-            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'actual_revenue'                  => $actualRevenue,
+            'actual_variable_costs'           => $actualVariableCosts,
+            'analyst_expected_revenue'        => $analystExpectedRevenue,
             'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit' => $ebit,
-            'primary_shock_z' => abs($tenantDefaultZ) > abs($revenueZ) ? $tenantDefaultZ : $revenueZ,
-            'event_lore' => $eventLore
+            'ebit'                            => $ebit,
+            'primary_shock_z'                 => abs($tenantDefaultZ) > abs($revenueZ) ? $tenantDefaultZ : $revenueZ,
+            'event_lore'                      => $eventLore
         ];
     }
 
@@ -132,7 +234,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     {
         $industry = $stock->getIndustry() ?: 'General';
         $customDepreciation = (float) $stock->getDepreciationRate();
-        $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : (\App\Data\Sectors::INDUSTRY_METRICS[$industry]['depreciation'] ?? 0.05);
+        $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : (\App\Data\Sectors::INDUSTRY_METRICS[$industry]['depreciation'] ?? self::DEFAULT_DEPRECIATION_RATE);
 
         $absoluteDepreciation = $investedCapital * $depreciationRate;
         $quarterlyDepreciation = $absoluteDepreciation / 4.0;
@@ -142,13 +244,13 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         // We add it back to EBIT to calculate the true cash yield (Cap Rate) of the properties.
         $noi = $ebit + $quarterlyDepreciation;
 
-        $truePostTaxReturn = $investedCapital > 0 ? ($noi / $investedCapital) * 4.0 : 0.0;
+        $truePostTaxReturn = $investedCapital > 0 ? ($noi / $investedCapital) * self::ROIC_ANNUALIZATION_MULT : 0.0;
 
-        $stock->setCurrentRoic((string) max(-0.50, min(1.0, $truePostTaxReturn)));
+        $stock->setCurrentRoic((string) max(self::MIN_ROIC_CLAMP, min(self::MAX_ROIC_CLAMP, $truePostTaxReturn)));
 
         $oldTtm = (float) $stock->getRoicTtm();
-        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * 0.25) + ($oldTtm * 0.75);
-        $stock->setRoicTtm((string) max(-0.50, min(1.0, $newTtm)));
+        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::ROIC_TTM_EMA_WEIGHT) + ($oldTtm * self::ROIC_TTM_HIST_WEIGHT);
+        $stock->setRoicTtm((string) max(self::MIN_ROIC_CLAMP, min(self::MAX_ROIC_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;
     }
@@ -156,7 +258,20 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public function getEffectiveTaxRate(float $macroTaxRate): float
     {
         // REITs are pass-through entities and legally pay 0% corporate tax at the entity level.
-        return 0.0;
+        return self::PASS_THROUGH_TAX_RATE;
+    }
+
+    public function calculateEconomicReturn(Stock $stock, float $nopat, float $investedCapital): float
+    {
+        $industry = $stock->getIndustry() ?: 'General';
+        $customDepreciation = (float) $stock->getDepreciationRate();
+        $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : (\App\Data\Sectors::INDUSTRY_METRICS[$industry]['depreciation'] ?? self::DEFAULT_DEPRECIATION_RATE);
+
+        $absoluteDepreciation = $investedCapital * $depreciationRate;
+        $quarterlyDepreciation = $absoluteDepreciation / 4.0;
+        $noi = $nopat + $quarterlyDepreciation;
+
+        return $investedCapital > 0 ? ($noi / $investedCapital) * self::ROIC_ANNUALIZATION_MULT : 0.0;
     }
 
     public function getInterestCoverage(float $ebit, float $interestExpense, float $depreciation = 0.0): float
@@ -165,7 +280,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         // Because real estate appreciates, GAAP depreciation is an accounting fiction that artificially 
         // reduces EBIT. Adding it back reveals the true cash flow available to cover debt.
         $ffo = $ebit + $depreciation;
-        return $interestExpense > 0 ? ($ffo / $interestExpense) : ($ffo > 0 ? 999.0 : -999.0);
+        return $interestExpense > 0 ? ($ffo / $interestExpense) : ($ffo > 0 ? self::INFINITE_ICR_POS_FALLBACK : self::INFINITE_ICR_NEG_FALLBACK);
     }
 
     /**
@@ -175,8 +290,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public function getDebtExpansionAggressiveness(float $spreadMultiplier): array
     {
         return [
-            'probability' => 0.80 + ($spreadMultiplier * 0.20), // Constantly hunting for property acquisitions
-            'aggressiveness' => 0.15 + (0.35 * $spreadMultiplier) // High leverage tolerance for commercial real estate
+            'probability' => self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT), // Constantly hunting for property acquisitions
+            'aggressiveness' => self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier) // High leverage tolerance for commercial real estate
         ];
     }
 
@@ -185,7 +300,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
      */
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps): float
     {
-        return ($earningsValue * 0.60) + ($pbFairValue * 0.40);
+        return ($earningsValue * self::FAIR_VALUE_EARNINGS_WEIGHT) + ($pbFairValue * self::FAIR_VALUE_BOOK_WEIGHT);
     }
 
     /**
@@ -201,6 +316,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
     public function getMarginReversionSpeed(): float
     {
-        return 2.0; // Multi-year commercial leases resist short-term margin erosion
+        return self::LEASE_REVERSION_SPEED; // Multi-year commercial leases resist short-term margin erosion
     }
 }
+

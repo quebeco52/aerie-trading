@@ -265,15 +265,21 @@ class StockController extends AbstractController
         $conn = $entityManager->getConnection();
 
         // Fetch all fundamental reports for this stock, oldest to newest (for charting)
-        $sql = '
-            SELECT net_income, equity, total_debt, treasury, roic, shares, recorded_at, interest_expense, blended_rate, dynamic_spread, revenue, interest_income, capital_expenditures, wacc, eva, dividend_paid, stock_buybacks, return_on_equity, cost_of_equity, capital_ratio, customer_deposit_ratio, operating_margin, deposit_apy, cash_yield
-            FROM corporate_report 
-            WHERE stock_id = :id 
-            ORDER BY recorded_at ASC
-        ';
-
+        $sql = 'SELECT cr.* FROM corporate_report cr WHERE cr.stock_id = :id ORDER BY cr.recorded_at ASC';
         $stmt = $conn->executeQuery($sql, ['id' => $stock->getId()]);
         $results = $stmt->fetchAllAssociative();
+
+        $currentPrice = (string) $stock->getPrice();
+        $priceStmt = $conn->prepare('SELECT price FROM stock_history WHERE stock_id = :id AND recorded_at <= :date ORDER BY recorded_at DESC LIMIT 1');
+        $priceStmt->bindValue('id', $stock->getId());
+
+        foreach ($results as &$row) {
+            $row['current_price'] = $currentPrice;
+            $priceStmt->bindValue('date', $row['recorded_at']);
+            $priceResult = $priceStmt->executeQuery()->fetchOne();
+            $row['historical_price'] = $priceResult !== false ? (string) $priceResult : $currentPrice;
+        }
+        unset($row);
 
         return $this->json($results);
     }

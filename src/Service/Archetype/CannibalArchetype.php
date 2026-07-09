@@ -25,4 +25,10 @@ class CannibalArchetype extends AbstractArchetype
         // Bond market penalizes financial engineering
         return $spread * 1.10; 
     }
+
+    public function shouldResistDividendCut(bool $isLiquidityCrisis, bool $isRegulatoryDividendHalt, bool $isDeepDistress = false): bool 
+    { 
+        // Cannibal CEOs favor share buybacks over dividends and never resist cutting payouts.
+        return false; 
+    }
 }

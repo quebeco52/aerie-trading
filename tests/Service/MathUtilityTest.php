@@ -2,6 +2,7 @@
 
 namespace App\Tests\Service;
 
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
@@ -109,5 +110,50 @@ class MathUtilityTest extends TestCase
 
         $this->assertFalse(is_nan($price), 'Price returned NAN! The correlation cap failed.');
         $this->assertGreaterThan(0, $price, 'Price should be a valid positive float.');
+    }
+
+    public function testCalculateIntrinsicFairValuePEStandardValuation(): void
+    {
+        // COE = 10%, ROIC = 15%, Growth = 3%
+        // b = 0.03 / 0.15 = 0.20 -> Payout Ratio = 0.80
+        // Denominator = 0.10 - 0.03 = 0.07 -> PE = 0.80 / 0.07 ≈ 11.42857
+        $pe = $this->mathUtility->calculateIntrinsicFairValuePE(0.10, 0.15, 0.03);
+
+        $this->assertEqualsWithDelta(11.42857, $pe, 0.001, 'Standard Gordon Growth PE calculation failed.');
+    }
+
+    public function testCalculateIntrinsicFairValuePEClampsToMinWhenValueDestroying(): void
+    {
+        // COE = 10%, ROIC = 2%, Growth = 5%
+        // ROIC < Growth -> b > 1.0 -> Capped at 1.0 -> Payout Ratio = 0.0 -> PE = 0.0 -> Clamped to MIN_INTRINSIC_PE
+        $pe = $this->mathUtility->calculateIntrinsicFairValuePE(0.10, 0.02, 0.05);
+
+        $this->assertEquals(FinancialConstants::MIN_INTRINSIC_PE, $pe, 'Value-destroying growth must clamp to MIN_INTRINSIC_PE.');
+    }
+
+    public function testCalculateIntrinsicFairValuePEConstrainsGrowthBelowCOE(): void
+    {
+        // COE = 8%, ROIC = 20%, Growth = 15% (Growth >= COE)
+        // Growth constrained to 8% - 0.5% = 7.5%
+        // b = 0.075 / 0.20 = 0.375 -> Payout Ratio = 0.625 -> PE = 0.625 / 0.005 = 125.0 -> Clamped to MAX_INTRINSIC_PE
+        $pe = $this->mathUtility->calculateIntrinsicFairValuePE(0.08, 0.20, 0.15);
+
+        $this->assertEquals(FinancialConstants::MAX_INTRINSIC_PE, $pe, 'Growth >= COE must constrain growth and clamp to MAX_INTRINSIC_PE.');
+    }
+
+    public function testCalculateDcfMultiplier(): void
+    {
+        // WACC = 8%, Growth = 2% -> Spread = 6% -> Multiplier = 1.02 / 0.06 = 17.0
+        $multiplier = $this->mathUtility->calculateDcfMultiplier(0.08, 0.02);
+
+        $this->assertEqualsWithDelta(17.0, $multiplier, 0.001, 'DCF terminal multiplier calculation failed.');
+    }
+
+    public function testCalculateDividendDiscountModel(): void
+    {
+        // Dividend = 2.0, COE = 10%, Growth = 5% -> Denominator = 0.05 -> Fair Value = 2.0 / 0.05 = 40.0
+        $fairValue = $this->mathUtility->calculateDividendDiscountModel(2.0, 0.10, 0.05);
+
+        $this->assertEqualsWithDelta(40.0, $fairValue, 0.001, 'DDM fair value calculation failed.');
     }
 }

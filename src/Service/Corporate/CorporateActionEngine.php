@@ -115,6 +115,11 @@ class CorporateActionEngine
                 'UPDATE stock_history SET price = GREATEST(price / :factor, 0.00000001) WHERE stock_id = :stock_id',
                 ['factor' => $splitFactor, 'stock_id' => $stock->getId()]
             );
+
+            $conn->executeStatement(
+                "UPDATE trade_orders SET quantity = quantity * :factor, limit_price = ROUND(limit_price / :factor, 8) WHERE ticker = :ticker AND status = 'OPEN'",
+                ['factor' => $splitFactor, 'ticker' => $stock->getTicker()]
+            );
             $conn->commit();
         } catch (\Exception $e) {
             $conn->rollBack();
@@ -174,11 +179,30 @@ class CorporateActionEngine
         $conn->beginTransaction();
         try {
             $conn->executeStatement(
-                'UPDATE users u
-                 INNER JOIN user_stocks us ON u.id = us.user_id
-                 SET u.cash_balance = u.cash_balance + ((us.quantity % :factor) * :pre_split_price)
-                 WHERE us.stock_id = :stock_id',
-                ['factor' => $reverseFactor, 'pre_split_price' => $preSplitPrice, 'stock_id' => $stock->getId()]
+                "UPDATE users u
+                 INNER JOIN (
+                     SELECT user_id, SUM(remainder_qty) AS total_remainder
+                     FROM (
+                         SELECT user_id, (quantity % :factor) AS remainder_qty FROM user_stocks WHERE stock_id = :stock_id
+                         UNION ALL
+                         SELECT user_id, (quantity % :factor) AS remainder_qty FROM trade_orders WHERE ticker = :ticker AND status = 'OPEN' AND action = 'SELL'
+                     ) combined_remainders
+                     GROUP BY user_id
+                 ) remainders ON u.id = remainders.user_id
+                 SET u.cash_balance = u.cash_balance + (remainders.total_remainder * :pre_split_price)",
+                ['factor' => $reverseFactor, 'pre_split_price' => $preSplitPrice, 'stock_id' => $stock->getId(), 'ticker' => $stock->getTicker()]
+            );
+
+            $conn->executeStatement(
+                "UPDATE users u
+                 INNER JOIN (
+                     SELECT user_id, SUM((quantity % :factor) * limit_price) AS total_refund
+                     FROM trade_orders
+                     WHERE ticker = :ticker AND status = 'OPEN' AND action = 'BUY' AND (quantity % :factor) > 0
+                     GROUP BY user_id
+                 ) buy_refunds ON u.id = buy_refunds.user_id
+                 SET u.cash_balance = u.cash_balance + buy_refunds.total_refund",
+                ['factor' => $reverseFactor, 'ticker' => $stock->getTicker()]
             );
 
             $conn->executeStatement(
@@ -189,6 +213,16 @@ class CorporateActionEngine
             $conn->executeStatement(
                 'DELETE FROM user_stocks WHERE stock_id = :stock_id AND quantity = 0',
                 ['stock_id' => $stock->getId()]
+            );
+
+            $conn->executeStatement(
+                "UPDATE trade_orders SET quantity = FLOOR(quantity / :factor), limit_price = ROUND(limit_price * :factor, 8) WHERE ticker = :ticker AND status = 'OPEN'",
+                ['factor' => $reverseFactor, 'ticker' => $stock->getTicker()]
+            );
+
+            $conn->executeStatement(
+                "UPDATE trade_orders SET status = 'CANCELLED' WHERE ticker = :ticker AND status = 'OPEN' AND quantity = 0",
+                ['ticker' => $stock->getTicker()]
             );
 
             $conn->executeStatement(

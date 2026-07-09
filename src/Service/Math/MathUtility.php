@@ -361,42 +361,50 @@ class MathUtility
      * @param float $growthRate   The expected perpetual growth rate.
      * @return float The intrinsic fair value P/E multiple.
      */
-    public function calculateIntrinsicFairValuePE(float $costOfEquity, float $roic, float $growthRate = 0.02): float
-    {
-        // Failsafe: Cost of equity must be strictly greater than growth rate for Gordon Growth Model
-        $effectiveCoe = max($costOfEquity, $growthRate + 0.01);
-        
-        // Failsafe: ROIC must be greater than 0 to calculate reinvestment
+    public function calculateIntrinsicFairValuePE(
+        float $costOfEquity,
+        float $roic,
+        float $growthRate = FinancialConstants::DEFAULT_PERPETUAL_GROWTH_RATE
+    ): float {
+        // 1. In perpetual valuation, steady-state growth cannot exceed or equal the hurdle rate.
+        // Constrain perpetual growth to at least 50 bps (0.005) below Cost of Equity to prevent divergence.
+        $maxPermissibleGrowth = $costOfEquity - 0.005;
+        $effectiveGrowth = min($growthRate, $maxPermissibleGrowth);
+
+        // 2. Prevent division by zero or negative ROIC anomalies in perpetual calculations (floor at 0.01)
         $effectiveRoic = max(0.01, $roic);
-        
-        // Reinvestment Rate = Growth / ROIC
-        $reinvestmentRate = $growthRate / $effectiveRoic;
-        
-        // Failsafe: A company cannot reinvest more than 100% of earnings perpetually without external financing.
-        // Cap the reinvestment rate at 1.0. If ROIC < growth, they are structurally destroying value.
+
+        // 3. Reinvestment Rate = Growth / ROIC
+        $reinvestmentRate = $effectiveGrowth / $effectiveRoic;
+
+        // 4. If ROIC is structurally below growth, external financing is required (b > 1.0).
+        // Cap reinvestment at 100% (1.0) of earnings to prevent negative payout ratios in steady-state equity valuation.
         $reinvestmentRate = min(1.0, $reinvestmentRate);
-        
+
         $payoutRatio = 1.0 - $reinvestmentRate;
-        
-        $pe = $payoutRatio / ($effectiveCoe - $growthRate);
-        
-        // The market rarely values a dying company below 4x earnings, or a superstar above 100x structurally
-        return max(4.0, min(100.0, $pe));
+
+        // 5. Calculate Damodaran P/E multiple
+        $pe = $payoutRatio / ($costOfEquity - $effectiveGrowth);
+
+        // 6. Enforce structural market boundaries for distressed (4x) and superstar (100x) equities
+        return max(FinancialConstants::MIN_INTRINSIC_PE, min(FinancialConstants::MAX_INTRINSIC_PE, $pe));
     }
 
     /**
      * Calculates the terminal value multiplier for a Discounted Cash Flow (DCF) using the Gordon Growth Model.
      *
      * @param float $wacc               The Weighted Average Cost of Capital.
-     * @param float $terminalGrowthRate The expected perpetual growth rate (defaults to 2%).
+     * @param float $terminalGrowthRate The expected perpetual growth rate.
      * @return float The DCF terminal multiplier.
      */
-    public function calculateDcfMultiplier(float $wacc, float $terminalGrowthRate = 0.02): float
-    {
+    public function calculateDcfMultiplier(
+        float $wacc,
+        float $terminalGrowthRate = FinancialConstants::DEFAULT_PERPETUAL_GROWTH_RATE
+    ): float {
         $spread = $wacc - $terminalGrowthRate;
-        $multiplier = $spread > 0 ? (1.0 + $terminalGrowthRate) / $spread : 60.0;
-        
-        return min(33.33, $multiplier);
+        $multiplier = $spread > 0 ? (1.0 + $terminalGrowthRate) / $spread : FinancialConstants::DCF_FALLBACK_MULTIPLIER;
+
+        return min(FinancialConstants::MAX_DCF_MULTIPLIER, $multiplier);
     }
 
     /**
@@ -407,15 +415,18 @@ class MathUtility
      * @param float $growthRate     The expected perpetual dividend growth rate.
      * @return float The intrinsic value of the stock based purely on its dividend stream.
      */
-    public function calculateDividendDiscountModel(float $annualDividend, float $discountRate, float $growthRate = 0.01): float
-    {
+    public function calculateDividendDiscountModel(
+        float $annualDividend,
+        float $discountRate,
+        float $growthRate = 0.01
+    ): float {
         if ($annualDividend <= 0.0) {
             return 0.0;
         }
-        
-        // Prevent Division by Zero. The denominator must be at least 1%
+
+        // Prevent Division by Zero. The denominator must be at least 1% (0.01)
         $denominator = max(0.01, $discountRate - $growthRate);
-        
+
         return $annualDividend / $denominator;
     }
 

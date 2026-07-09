@@ -23,5 +23,13 @@ This file dictates the strict architectural constraints, domain logic, and execu
 ## 4. Domain Logic & Market Physics
 - **Theoretical Rigor (NO INVENTED MATH):** All pricing, trading logic, and market mechanics must be strictly derived from well-established financial theories, standard accounting principles, and recognized econometric models (e.g., GBM, Merton Jump Diffusion, Black-Scholes). Do not invent proprietary or "game-like" formulas.
 - **Absolute Accounting:** To maintain flawless accounting during splits, buyouts, and buybacks, store **absolute values** in the database (e.g., `totalNetIncome`, `totalEquity`, `corporateTreasury`). Per-share metrics must be derived dynamically.
-- **No Magic Numbers:** All mathematical thresholds must be defined as class Constants or pulled from `FinancialConstants.php`. 
+- **No Magic Numbers:** All IMPORTANT mathematical constants, thresholds, and corporate financial parameters (THAT ARE NOT OBVIOUS) should be defined as class constants or pulled from `FinancialConstants.php` if it could be used in different functions.
+- **Constant Documentation Style:** Group related constants under a `// --- Section Name ---` comment. Every constant must have a single-line `/** */` docblock — concise but informative. Not a wall of text, not bare. Example:
+  ```php
+  // --- NIM (Net Interest Margin) Squeeze ---
+  /** Break-even NIM floor (~50bps). Steep curve = profit; flat or inverted curve = squeeze. */
+  private const NIM_BASE_SPREAD_BUFFER = 0.005;
+  /** Calibrated so a -100bps inversion produces ~10% variable cost add-on. Tune with NIM_QUADRATIC_COEFF. */
+  private const NIM_INVERSION_SENSITIVITY = 10.0;
+  ```
 - **Testing Standard:** All market formulas must be backed by PHPUnit tests. Do not commit complex execution logic without corresponding assertions.

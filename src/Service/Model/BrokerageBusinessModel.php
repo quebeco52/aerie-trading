@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Service\Model;
 
 use App\Entity\Stock;
@@ -17,6 +19,56 @@ use App\Service\Math\FinancialConstants;
  */
 class BrokerageBusinessModel extends AssetManagementBusinessModel
 {
+    // --- VIX & Trading Volume Bonus ---
+    /** Baseline VIX threshold above which market volatility boosts trading volume and fee revenue. */
+    public const VIX_BASELINE_THRESHOLD = 0.20;
+    /** Sensitivity scalar translating excess VIX points into direct top-line revenue bonuses. */
+    public const VIX_REVENUE_SCALAR     = 0.50;
+    /** Extreme VIX threshold triggering record trading volume event lore. */
+    public const VIX_EXTREME_THRESHOLD  = 0.30;
+    /** Negative z-score threshold indicating severe advisory/deal flow collapse for event lore. */
+    public const ADVISORY_CRASH_Z_THRESHOLD = -2.00;
+
+    // --- Client Cash Sweep NII & Efficiency Floor ---
+    /** Client uninvested cash sweep deposit balances as a fraction of total wholesale debt / operating assets. */
+    public const CLIENT_SWEEP_BASE_RATIO   = 0.50;
+    /** Policy rate threshold below which brokerage deposit sweep rates remain near zero (~10bps). */
+    public const SWEEP_RATE_BUFFER         = 0.005;
+    /** Beta pass-through of short-term policy rate increases to retail cash sweep accounts above the buffer. */
+    public const SWEEP_DEPOSIT_BETA        = 0.20;
+    /** Structural minimum operating cost-to-revenue ratio reflecting brokerage technology and clearinghouse overhead. */
+    public const MIN_EFFICIENCY_RATIO      = 0.40;
+
+    // --- Revenue & Shock Physics ---
+    /** Volatility multiplier for top-line revenue shocks in transaction-driven markets. */
+    public const REVENUE_VARIANCE_SCALAR = 0.20;
+    /** Upper clamp for realized variable margin. */
+    public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
+    /** Lower clamp for realized variable margin. */
+    public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
+
+    // --- ROE & Target Architecture ---
+    /** Weight given to historical baseline ROE when blending with TTM ROE. */
+    public const BASELINE_ROE_WEIGHT = 0.70;
+    /** Weight given to TTM ROE when blending with historical baseline ROE. */
+    public const TTM_ROE_WEIGHT      = 0.30;
+    /** Default 5Y Treasury spread over policy rate when yield curve data is absent. */
+    public const DEFAULT_5Y_YIELD_PREMIUM = 0.005;
+    /** Default maximum financial leverage (Debt/Equity) limit if sector configuration is absent. */
+    public const DEFAULT_EQUITY_LIMIT     = 8.00;
+
+    // --- Structural Yield Rails ---
+    /** Minimum structural operating EBIT floor as a fraction of earning assets. */
+    public const MIN_OPERATING_EBIT_YIELD = 0.015;
+    /** Hard ceiling on gross asset yield to prevent reverse-engineered revenue hyperinflation. */
+    public const MAX_GROSS_ASSET_YIELD    = 1.50;
+
+    // --- Clearinghouse Liquidity Rules ---
+    /** Target operating cash reserve ratio required to support clearinghouse margin and trade settlements. */
+    public const TARGET_CASH_BACKING_RATIO = 0.15;
+    /** Hard minimum liquidity floor required to prevent clearinghouse margin defaults. */
+    public const MIN_CASH_BACKING_RATIO    = 0.10;
+
     /**
      * Idiosyncratic shock applied to retail trading volume and institutional deal flow.
      * Capital Markets have higher top-line variance compared to sticky Asset Managers.
@@ -28,17 +80,20 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
         // The Volatility Bonus (Trading Volume):
         // Brokerage revenues are hyper-sensitive to the VIX (Systemic Market Volatility). 
         // High Volatility = Massive trading volume (panic selling or euphoria buying) which generates massive fees.
-        $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? 0.20);
-        $volatilityBonus = max(0.0, ($vixEma - 0.20) * 0.5); // Direct revenue boost from average quarterly trading volume
+        $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? self::VIX_BASELINE_THRESHOLD);
+        $volatilityBonus = max(0.0, ($vixEma - self::VIX_BASELINE_THRESHOLD) * self::VIX_REVENUE_SCALAR);
 
-        $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * 0.20)) + $volatilityBonus);
+        $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $volatilityBonus);
 
-        $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $realizedVariableMargin));
+        // Structural Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
+        $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
+        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max($minVariableMargin, $realizedVariableMargin));
+        $actualVariableCosts = $actualRevenue * $clampedMargin;
 
         $eventLore = null;
-        if ($vixEma > 0.30) {
+        if ($vixEma > self::VIX_EXTREME_THRESHOLD) {
             $eventLore = "Record trading volumes driven by extreme market volatility resulted in massive fee generation.";
-        } elseif ($revenueZ < -2.0) {
+        } elseif ($revenueZ < self::ADVISORY_CRASH_Z_THRESHOLD) {
             $eventLore = "Suffered a steep decline in investment banking deal flow and advisory fees.";
         }
 
@@ -46,16 +101,16 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
         // The Volatility Bonus is completely public. Analysts track the VIX daily and know exactly how much 
         // trading volume spiked. However, internal advisory flow ($revenueZ) is hidden.
         $analystExpectedRevenue = $expectedRevenue * (1.0 + $volatilityBonus);
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(1.50, max(0.01, $realizedVariableMargin));
+        $analystExpectedVariableCosts = $analystExpectedRevenue * $clampedMargin;
 
         return [
-            'actual_revenue' => $actualRevenue,
-            'actual_variable_costs' => $actualVariableCosts,
-            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'actual_revenue'                  => $actualRevenue,
+            'actual_variable_costs'           => $actualVariableCosts,
+            'analyst_expected_revenue'        => $analystExpectedRevenue,
             'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit' => $actualRevenue - $fixedCosts - $actualVariableCosts,
-            'primary_shock_z' => $revenueZ,
-            'event_lore' => $eventLore
+            'ebit'                            => $actualRevenue - $fixedCosts - $actualVariableCosts,
+            'primary_shock_z'                 => $revenueZ,
+            'event_lore'                      => $eventLore
         ];
     }
 
@@ -63,14 +118,14 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
     {
         $equity = (float) $stock->getTotalEquity();
         $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
-        
+
         $ttmRoe = (float) $stock->getRoeTtm();
         if ($ttmRoe !== 0.0) {
-            $baselineRoe = ($baselineRoe * 0.70) + ($ttmRoe * 0.30);
+            $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
         }
 
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
-        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + 0.005);
+        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + self::DEFAULT_5Y_YIELD_PREMIUM);
         $structuralSpread = (float) $stock->getCreditSpread();
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
 
@@ -82,7 +137,7 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
         $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
 
         $industry = $stock->getIndustry() ?: 'General';
-        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 8.0;
+        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? self::DEFAULT_EQUITY_LIMIT;
 
         $effectiveEquity = max(1.0, $equity);
 
@@ -112,11 +167,11 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
         $targetEbit = $earningAssets * $structuralAssetYield;
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
-        $minOperatingEbit = $earningAssets * 0.015;
+        $minOperatingEbit = $earningAssets * self::MIN_OPERATING_EBIT_YIELD;
         $targetEbit = max($minOperatingEbit, $targetEbit);
 
         $unboundedRevenue = max(0.0, $targetEbit) / $stableMargin;
-        $targetRevenue = min($unboundedRevenue, $earningAssets * 1.50); // Hard cap gross yield on total assets
+        $targetRevenue = min($unboundedRevenue, $earningAssets * self::MAX_GROSS_ASSET_YIELD); // Hard cap gross yield on total assets
 
         $grossYield = $targetRevenue / max(1.0, $earningAssets);
 
@@ -133,17 +188,26 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
         // 1. Margin Loan Yield
         // Brokerages lend their wholesale debt to clients as margin loans.
         $marginLoanYield = $policyRate + FinancialConstants::MARGIN_LOAN_SPREAD;
-        $marginLoans = (float) $stock->getWholesaleDebt(); // Proxy: Wholesale debt is deployed into margin loans
+        $marginLoans = (float) $stock->getWholesaleDebt();
         $marginInterest = $marginLoans * $marginLoanYield;
 
-        // 2. Excess Cash Yield
+        // 2. Client Cash Sweep Net Interest Income (NII):
+        // Brokerages hold uninvested client deposit sweeps and earn NII spread over pass-through deposit rates.
         $operatingBase = $this->getOperatingBase($stock);
+        $sweepBalances = max(0.0, $operatingBase * self::CLIENT_SWEEP_BASE_RATIO);
+        $clientDepositRate = $policyRate > self::SWEEP_RATE_BUFFER
+            ? ($policyRate - self::SWEEP_RATE_BUFFER) * self::SWEEP_DEPOSIT_BETA
+            : 0.001;
+        $sweepSpreadYield = max(0.0, $policyRate - $clientDepositRate);
+        $sweepInterest = $sweepBalances * $sweepSpreadYield;
+
+        // 3. Excess Corporate Treasury Yield
         $minCash = $this->calculateMinOperatingCash($operatingBase, 0.0, (float) $stock->getWholesaleDebt());
         $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - $minCash);
         $cashYield = $this->calculateCashYield($macroState, $policyRate);
         $cashInterest = $excessCash * $cashYield;
 
-        return $marginInterest + $cashInterest;
+        return $marginInterest + $sweepInterest + $cashInterest;
     }
 
     public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array
@@ -178,12 +242,13 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
     {
         // Requires 15% cash backing on all outstanding wholesale debt
-        return max($operatingBase * 0.15, $wholesaleDebt * 0.15);
+        return max($operatingBase * self::TARGET_CASH_BACKING_RATIO, $wholesaleDebt * self::TARGET_CASH_BACKING_RATIO);
     }
 
     public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
     {
         // Hard 10% liquidity floor to prevent catastrophic margin calls
-        return max($operatingBase * 0.10, $wholesaleDebt * 0.10);
+        return max($operatingBase * self::MIN_CASH_BACKING_RATIO, $wholesaleDebt * self::MIN_CASH_BACKING_RATIO);
     }
 }
+

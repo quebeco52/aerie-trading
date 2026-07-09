@@ -32,7 +32,7 @@ interface ArchetypeInterface
     /**
      * Determines if the CEO will refuse to cut the dividend despite being in distress.
      */
-    public function shouldResistDividendCut(bool $isLiquidityCrisis, bool $isRegulatoryDividendHalt): bool;
+    public function shouldResistDividendCut(bool $isLiquidityCrisis, bool $isRegulatoryDividendHalt, bool $isDeepDistress = false): bool;
 
     /**
      * Modifies the aggressiveness of share buyback execution.

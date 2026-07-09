@@ -216,8 +216,23 @@
 						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Shareholder Yield</span>
-									{{ _self.tooltip('Tracks capital returned to shareholders via Cash Dividends and Share Buybacks each quarter.', 'left', 'w-64') }}
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Payout Allocation (LTM)</span>
+									{{ _self.tooltip('Proportion of Trailing 12-Month net income distributed to shareholders as cash dividends vs retained earnings for business growth.', 'right', 'w-64') }}
+								</h3>
+								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
+								</button>
+							</div>
+							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
+								<canvas id="payoutRatioChart"></canvas>
+							</div>
+						</div>
+
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
+							<div class="flex justify-between items-center mb-6">
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Capital Return & Yield</span>
+									{{ _self.tooltip('Tracks total dividends paid and stock buybacks over time (bars), overlaid with the trailing Dividend Yield percentage (orange line).', 'left', 'w-64') }}
 								</h3>
 								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
 									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>

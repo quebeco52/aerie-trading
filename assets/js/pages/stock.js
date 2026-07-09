@@ -5,6 +5,7 @@ let IS_ETF = window.AERIE_DATA?.isEtf;
 let BUSINESS_MODEL = window.AERIE_DATA?.businessModel || 'none';
 let IS_FINANCIAL = window.AERIE_DATA?.isFinancial || false;
 let SHARES_OUTSTANDING = window.AERIE_DATA?.sharesOutstanding;
+let CURRENT_PRICE = window.AERIE_DATA?.currentPrice || 0;
 let USER_QUANTITY = window.AERIE_DATA?.userQuantity;
 let EPS = window.AERIE_DATA?.eps;
 let TICKS_PER_YEAR = window.AERIE_DATA?.ticksPerYear || 54000;
@@ -17,6 +18,7 @@ function updateAerieData() {
         BUSINESS_MODEL = window.AERIE_DATA.businessModel || 'none';
         IS_FINANCIAL = window.AERIE_DATA.isFinancial || false;
         SHARES_OUTSTANDING = window.AERIE_DATA.sharesOutstanding;
+        CURRENT_PRICE = window.AERIE_DATA.currentPrice || 0;
         USER_QUANTITY = window.AERIE_DATA.userQuantity;
         EPS = window.AERIE_DATA.eps;
         TICKS_PER_YEAR = window.AERIE_DATA.ticksPerYear || 54000;
@@ -32,6 +34,7 @@ let debtEquityChartInstance = null;
 let creditHealthChartInstance = null;
 let capitalEfficiencyChartInstance = null;
 let capitalReturnChartInstance = null;
+let payoutRatioChartInstance = null;
 let regulatoryRatiosChartInstance = null;
 let lwChart = null;
 let areaSeries = null;
@@ -42,10 +45,32 @@ Chart.defaults.color = '#c2c6d6';
 Chart.defaults.scale.grid.color = 'rgba(45, 52, 73, 0.4)';
 Chart.defaults.font.family = '"Courier Prime", monospace';
 
+const centerTextPlugin = {
+    id: 'centerText',
+    beforeDraw(chart) {
+        if (chart.config.type !== 'doughnut') return;
+        const text = chart.config.options?.plugins?.centerText?.text;
+        if (!text) return;
+        const { ctx, chartArea } = chart;
+        if (!chartArea) return;
+        ctx.save();
+        ctx.font = 'bold 20px "Courier Prime", monospace';
+        ctx.fillStyle = '#e2e8f0';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const centerX = (chartArea.left + chartArea.right) / 2;
+        const centerY = (chartArea.top + chartArea.bottom) / 2;
+        ctx.fillText(text, centerX, centerY);
+        ctx.restore();
+    }
+};
+Chart.register(centerTextPlugin);
+
 const COLORS = {
     primary: '#adc6ff',
     positive: '#4edea3',
     negative: '#ffb3ad',
+    warning: '#ff9800',
     grid: '#2d3449'
 };
 
@@ -80,10 +105,15 @@ function initStockPage() {
         try { chartResizeObserver.disconnect(); } catch (e) { }
         chartResizeObserver = null;
     }
-    if (etfPieChart) {
-        try { etfPieChart.destroy(); } catch (e) { }
-        etfPieChart = null;
-    }
+    const destroyChart = (inst) => { if (inst) { try { inst.destroy(); } catch (e) { } } return null; };
+    etfPieChart = destroyChart(etfPieChart);
+    profitEngineChartInstance = destroyChart(profitEngineChartInstance);
+    debtEquityChartInstance = destroyChart(debtEquityChartInstance);
+    creditHealthChartInstance = destroyChart(creditHealthChartInstance);
+    capitalEfficiencyChartInstance = destroyChart(capitalEfficiencyChartInstance);
+    capitalReturnChartInstance = destroyChart(capitalReturnChartInstance);
+    payoutRatioChartInstance = destroyChart(payoutRatioChartInstance);
+    regulatoryRatiosChartInstance = destroyChart(regulatoryRatiosChartInstance);
 
     container.innerHTML = '';
 
@@ -636,6 +666,7 @@ function updateCharts(timeframe) {
     // Capital Return (Shareholder Yield)
     let dividendData = [];
     let buybackData = [];
+    let dividendYieldData = [];
 
     // Leveraged Metrics (Banking)
     let roeData = [];
@@ -671,8 +702,15 @@ function updateCharts(timeframe) {
             waccData.push(parseFloat(report.wacc || 0) * 100);
             evaData.push(parseFloat(report.eva || 0));
 
-            dividendData.push(parseFloat(report.dividend_paid || 0));
+            let divPaid = parseFloat(report.dividend_paid || 0);
+            dividendData.push(divPaid);
             buybackData.push(parseFloat(report.stock_buybacks || 0));
+
+            let shs = parseFloat(report.shares || SHARES_OUTSTANDING || 1000000000);
+            let pr = parseFloat(report.historical_price || report.current_price || CURRENT_PRICE || 0);
+            let mktCap = pr * shs;
+            let divYield = mktCap > 0 ? ((divPaid * 4) / mktCap) * 100 : 0.0;
+            dividendYieldData.push(divYield);
 
             roeData.push(parseFloat(report.return_on_equity || 0) * 100);
             coeData.push(parseFloat(report.cost_of_equity || 0) * 100);
@@ -731,6 +769,12 @@ function updateCharts(timeframe) {
             dividendData.unshift(sumDiv);
             buybackData.unshift(sumBuy);
 
+            let shs = parseFloat(report.shares || SHARES_OUTSTANDING || 1000000000);
+            let pr = parseFloat(report.historical_price || report.current_price || CURRENT_PRICE || 0);
+            let mktCap = pr * shs;
+            let divYield = mktCap > 0 ? (sumDiv / mktCap) * 100 : 0.0;
+            dividendYieldData.unshift(divYield);
+
             roeData.unshift(parseFloat(report.return_on_equity || 0) * 100);
             coeData.unshift(parseFloat(report.cost_of_equity || 0) * 100);
             capitalRatioData.unshift(parseFloat(report.capital_ratio || 0) * 100);
@@ -746,10 +790,19 @@ function updateCharts(timeframe) {
         ? operatingMarginData.map(m => 100 - m)
         : operatingMarginData;
 
+    let ltmDiv = 0;
+    let ltmInc = 0;
+    const recentReports = rawReports.slice(-4);
+    recentReports.forEach(r => {
+        ltmDiv += parseFloat(r.dividend_paid || 0);
+        ltmInc += parseFloat(r.net_income || 0);
+    });
+
     renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, displayMarginData, marginLabel);
     renderDebtEquityChart(labels, debtData, equityData, treasuryData);
     renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData, cashYieldData, depositApyData);
-    renderCapitalReturnChart(labels, dividendData, buybackData);
+    renderCapitalReturnChart(labels, dividendData, buybackData, dividendYieldData);
+    renderPayoutRatioChart(ltmDiv, ltmInc);
 
     // THE NEW FINANCIAL SPLIT LOGIC
     if (IS_FINANCIAL) {
@@ -1445,7 +1498,7 @@ function renderCapitalEfficiencyChart(labels, returnData, hurdleData, evaData, r
     });
 }
 
-function renderCapitalReturnChart(labels, dividendData, buybackData) {
+function renderCapitalReturnChart(labels, dividendData, buybackData, dividendYieldData) {
     const canvas = document.getElementById('capitalReturnChart');
     if (!canvas) return;
 
@@ -1463,6 +1516,7 @@ function renderCapitalReturnChart(labels, dividendData, buybackData) {
                     data: dividendData,
                     backgroundColor: COLORS.primary,
                     borderRadius: 4,
+                    yAxisID: 'y'
                 },
                 {
                     type: 'bar',
@@ -1470,6 +1524,22 @@ function renderCapitalReturnChart(labels, dividendData, buybackData) {
                     data: buybackData,
                     backgroundColor: COLORS.positive,
                     borderRadius: 4,
+                    yAxisID: 'y'
+                },
+                {
+                    type: 'line',
+                    label: 'Dividend Yield',
+                    data: dividendYieldData || [],
+                    borderColor: COLORS.warning,
+                    backgroundColor: 'rgba(255, 152, 0, 0.15)',
+                    borderWidth: 2.5,
+                    pointBackgroundColor: COLORS.warning,
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 1,
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                    tension: 0.3,
+                    yAxisID: 'y1'
                 }
             ]
         },
@@ -1481,7 +1551,12 @@ function renderCapitalReturnChart(labels, dividendData, buybackData) {
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => `${ctx.dataset.label}: $${formatLarge(ctx.raw)}`
+                        label: (ctx) => {
+                            if (ctx.dataset.type === 'line' || ctx.dataset.label.includes('Yield')) {
+                                return `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`;
+                            }
+                            return `${ctx.dataset.label}: $${formatLarge(ctx.raw)}`;
+                        }
                     }
                 }
             },
@@ -1493,10 +1568,75 @@ function renderCapitalReturnChart(labels, dividendData, buybackData) {
                     ticks: { callback: (val) => formatLarge(val) },
                     beginAtZero: true,
                     suggestedMax: 100000000
+                },
+                y1: {
+                    type: 'linear',
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    ticks: { callback: (val) => `${val.toFixed(1)}%` },
+                    beginAtZero: true
                 }
             }
         }
     });
 }
+
+function renderPayoutRatioChart(latestDiv, latestInc) {
+    const canvas = document.getElementById('payoutRatioChart');
+    if (!canvas) return;
+
+    let payoutRatio = 0;
+    if (latestInc > 0 && latestDiv > 0) {
+        payoutRatio = Math.min(100, (latestDiv / latestInc) * 100);
+    } else if (latestDiv > 0 && latestInc <= 0) {
+        payoutRatio = 100;
+    }
+    let retainedRatio = Math.max(0, 100 - payoutRatio);
+
+    if (payoutRatioChartInstance && payoutRatioChartInstance.canvas === canvas) {
+        payoutRatioChartInstance.data.datasets[0].data = [payoutRatio, retainedRatio];
+        if (payoutRatioChartInstance.options.plugins && payoutRatioChartInstance.options.plugins.centerText) {
+            payoutRatioChartInstance.options.plugins.centerText.text = `${payoutRatio.toFixed(1)}%`;
+        }
+        payoutRatioChartInstance.update('none');
+        return;
+    }
+
+    if (payoutRatioChartInstance) payoutRatioChartInstance.destroy();
+
+    const ctx = canvas.getContext('2d');
+    payoutRatioChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Payout Ratio', 'Retained Earnings'],
+            datasets: [{
+                data: [payoutRatio, retainedRatio],
+                backgroundColor: [COLORS.positive, '#2d3449'],
+                borderWidth: 1,
+                borderColor: 'rgba(255, 255, 255, 0.08)'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '72%',
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { boxWidth: 10, usePointStyle: true, padding: 15 }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.label}: ${ctx.raw.toFixed(2)}%`
+                    }
+                },
+                centerText: {
+                    text: `${payoutRatio.toFixed(1)}%`
+                }
+            }
+        }
+    });
+}
+
 document.addEventListener('turbo:load', initStockPage);
 initStockPage();

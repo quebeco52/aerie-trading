@@ -9,7 +9,7 @@ class YieldKingArchetype extends AbstractArchetype
         return min(0.90, $targetPayout * 1.20); 
     }
     
-    public function shouldResistDividendCut(bool $isLiquidityCrisis, bool $isRegulatoryDividendHalt): bool 
+    public function shouldResistDividendCut(bool $isLiquidityCrisis, bool $isRegulatoryDividendHalt, bool $isDeepDistress = false): bool 
     { 
         return !$isLiquidityCrisis && !$isRegulatoryDividendHalt;
     }

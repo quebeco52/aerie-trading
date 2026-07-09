@@ -135,6 +135,8 @@ class MarketResetCommand extends Command
 
             $conn->executeStatement(
                 'UPDATE stocks SET 
+                    name = :name,
+                    sector = :sector,
                     price = :price, 
                     shares_outstanding = :shares,
                     volatility = :vol,
@@ -204,6 +206,8 @@ class MarketResetCommand extends Command
                     'historical_rate' => $stockData['historical_fixed_rate'] ?? 0.0400,
                     'credit_spread' => $stockData['credit_spread'] ?? 0.0100,
                     'last_dividend' => $startingDividend,
+                    'name' => $stockData['name'],
+                    'sector' => $stockData['sector'],
                     'description' => \App\Data\StockInfo::DESCRIPTIONS[$stockData['ticker']] ?? null,
                     'sam_ratio' => $stockData['sam_ratio'] ?? 1.00,
                     'ceo_archetype' => $stockData['ceo_archetype'] ?? \App\Data\CeoArchetypes::OPPORTUNIST,
@@ -216,8 +220,9 @@ class MarketResetCommand extends Command
         $io->text('4. Resetting ETF Prices...');
         foreach (InitialMarket::ETFS as $etfData) {
             $conn->executeStatement(
-                'UPDATE etfs SET price = :price, description = :description WHERE ticker = :ticker',
+                'UPDATE etfs SET name = :name, price = :price, description = :description WHERE ticker = :ticker',
                 [
+                    'name' => $etfData['name'],
                     'price' => $etfData['price'],
                     'description' => \App\Data\StockInfo::DESCRIPTIONS[$etfData['ticker']] ?? null,
                     'ticker' => $etfData['ticker']

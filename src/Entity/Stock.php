@@ -275,6 +275,21 @@ class Stock
     private ?string $customerDeposits = '0.00';
 
 
+    public static function cleanBcStr(int|float|string|null $val, int $scale = 4): string
+    {
+        if ($val === null || $val === '') {
+            return '0.' . str_repeat('0', $scale);
+        }
+        if (is_int($val) || is_float($val)) {
+            return number_format((float) $val, $scale, '.', '');
+        }
+        $str = trim((string) $val);
+        if (stripos($str, 'e') !== false) {
+            return number_format((float) $str, $scale, '.', '');
+        }
+        return $str;
+    }
+
     public function getId(): ?int
     {
         return $this->id;
@@ -316,7 +331,7 @@ class Stock
     }
     public function setPrice(string $price): static
     {
-        $this->price = $price;
+        $this->price = self::cleanBcStr($price, 8);
         return $this;
     }
 
@@ -326,7 +341,7 @@ class Stock
     }
     public function setSharesOutstanding(int|string $sharesOutstanding): static
     {
-        $this->sharesOutstanding = $sharesOutstanding;
+        $this->sharesOutstanding = is_int($sharesOutstanding) ? $sharesOutstanding : (string) (int) self::cleanBcStr($sharesOutstanding, 0);
         return $this;
     }
 
@@ -336,7 +351,7 @@ class Stock
     }
     public function setTotalNetIncome(string $totalNetIncome): static
     {
-        $this->totalNetIncome = $totalNetIncome;
+        $this->totalNetIncome = self::cleanBcStr($totalNetIncome, 4);
         return $this;
     }
 
@@ -346,7 +361,7 @@ class Stock
     }
     public function setTotalEquity(string $totalEquity): static
     {
-        $this->totalEquity = $totalEquity;
+        $this->totalEquity = self::cleanBcStr($totalEquity, 4);
         return $this;
     }
 
@@ -356,7 +371,7 @@ class Stock
     }
     public function setTotalFreeCashFlow(?string $totalFreeCashFlow): static
     {
-        $this->totalFreeCashFlow = $totalFreeCashFlow;
+        $this->totalFreeCashFlow = $totalFreeCashFlow !== null ? self::cleanBcStr($totalFreeCashFlow, 4) : null;
         return $this;
     }
 
@@ -366,7 +381,7 @@ class Stock
     }
     public function setRetainedEarnings(string $retainedEarnings): static
     {
-        $this->retainedEarnings = $retainedEarnings;
+        $this->retainedEarnings = self::cleanBcStr($retainedEarnings, 4);
         return $this;
     }
 
@@ -376,7 +391,7 @@ class Stock
     }
     public function setNetOperatingLoss(string $netOperatingLoss): static
     {
-        $this->netOperatingLoss = $netOperatingLoss;
+        $this->netOperatingLoss = self::cleanBcStr($netOperatingLoss, 4);
         return $this;
     }
 
@@ -388,7 +403,7 @@ class Stock
     }
     public function setCorporateTreasury(string $corporateTreasury): static
     {
-        $this->corporateTreasury = $corporateTreasury;
+        $this->corporateTreasury = self::cleanBcStr($corporateTreasury, 4);
         return $this;
     }
 
@@ -398,7 +413,7 @@ class Stock
     }
     public function setOperatingMargin(string $operatingMargin): static
     {
-        $this->operatingMargin = $operatingMargin;
+        $this->operatingMargin = self::cleanBcStr($operatingMargin, 4);
         return $this;
     }
 
@@ -408,7 +423,7 @@ class Stock
     }
     public function setPublicFloatPercentage(string $publicFloatPercentage): static
     {
-        $this->publicFloatPercentage = $publicFloatPercentage;
+        $this->publicFloatPercentage = self::cleanBcStr($publicFloatPercentage, 4);
         return $this;
     }
 
@@ -418,7 +433,7 @@ class Stock
     }
     public function setVolatility(string $volatility): static
     {
-        $this->volatility = $volatility;
+        $this->volatility = self::cleanBcStr($volatility, 4);
         return $this;
     }
 
@@ -428,7 +443,7 @@ class Stock
     }
     public function setCurrentVolatility(?string $currentVolatility): static
     {
-        $this->currentVolatility = $currentVolatility;
+        $this->currentVolatility = $currentVolatility !== null ? self::cleanBcStr($currentVolatility, 4) : null;
         return $this;
     }
 
@@ -438,7 +453,7 @@ class Stock
     }
     public function setBeta(?string $beta): static
     {
-        $this->beta = $beta;
+        $this->beta = $beta !== null ? self::cleanBcStr($beta, 2) : null;
         return $this;
     }
 
@@ -448,7 +463,7 @@ class Stock
     }
     public function setJumpIntensity(?string $jumpIntensity): static
     {
-        $this->jumpIntensity = $jumpIntensity;
+        $this->jumpIntensity = $jumpIntensity !== null ? self::cleanBcStr($jumpIntensity, 2) : null;
         return $this;
     }
 
@@ -458,7 +473,7 @@ class Stock
     }
     public function setJumpMean(?string $jumpMean): static
     {
-        $this->jumpMean = $jumpMean;
+        $this->jumpMean = $jumpMean !== null ? self::cleanBcStr($jumpMean, 4) : null;
         return $this;
     }
 
@@ -468,7 +483,7 @@ class Stock
     }
     public function setJumpVol(?string $jumpVol): static
     {
-        $this->jumpVol = $jumpVol;
+        $this->jumpVol = $jumpVol !== null ? self::cleanBcStr($jumpVol, 4) : null;
         return $this;
     }
 
@@ -509,7 +524,7 @@ class Stock
     }
     public function setTargetPayoutRatio(string $targetPayoutRatio): static
     {
-        $this->targetPayoutRatio = $targetPayoutRatio;
+        $this->targetPayoutRatio = self::cleanBcStr($targetPayoutRatio, 4);
         return $this;
     }
 
@@ -519,7 +534,7 @@ class Stock
     }
     public function setDividendSpeed(string $dividendSpeed): static
     {
-        $this->dividendSpeed = $dividendSpeed;
+        $this->dividendSpeed = self::cleanBcStr($dividendSpeed, 4);
         return $this;
     }
 
@@ -529,8 +544,8 @@ class Stock
     }
     public function setLastDividend(string $lastDividend): static
     {
-        $val = min(999999.9999, max(0.0, (float) $lastDividend));
-        $this->lastDividend = (string) $val;
+        $val = min(999999.9999, max(0.0, (float) self::cleanBcStr($lastDividend, 4)));
+        $this->lastDividend = self::cleanBcStr($val, 4);
         return $this;
     }
 
@@ -540,7 +555,7 @@ class Stock
     }
     public function setBaselineRoic(string $baselineRoic): self
     {
-        $this->baselineRoic = $baselineRoic;
+        $this->baselineRoic = self::cleanBcStr($baselineRoic, 4);
         return $this;
     }
 
@@ -550,7 +565,7 @@ class Stock
     }
     public function setCapexRatio(string $capexRatio): self
     {
-        $this->capexRatio = $capexRatio;
+        $this->capexRatio = self::cleanBcStr($capexRatio, 4);
         return $this;
     }
 
@@ -560,7 +575,7 @@ class Stock
     }
     public function setCurrentRoic(string $currentRoic): self
     {
-        $this->currentRoic = $currentRoic;
+        $this->currentRoic = self::cleanBcStr($currentRoic, 4);
         return $this;
     }
 
@@ -568,10 +583,10 @@ class Stock
     {
         return $this->baselineRoe;
     }
-    
+
     public function setBaselineRoe(string $baselineRoe): self
     {
-        $this->baselineRoe = $baselineRoe;
+        $this->baselineRoe = self::cleanBcStr($baselineRoe, 4);
         return $this;
     }
 
@@ -582,7 +597,7 @@ class Stock
 
     public function setCurrentRoe(string $currentRoe): self
     {
-        $this->currentRoe = $currentRoe;
+        $this->currentRoe = self::cleanBcStr($currentRoe, 4);
         return $this;
     }
 
@@ -593,7 +608,7 @@ class Stock
 
     public function setCreditSpread(string $creditSpread): static
     {
-        $this->creditSpread = $creditSpread;
+        $this->creditSpread = self::cleanBcStr($creditSpread, 4);
 
         return $this;
     }
@@ -605,7 +620,7 @@ class Stock
 
     public function setGoodwill(string $goodwill): static
     {
-        $this->goodwill = $goodwill;
+        $this->goodwill = self::cleanBcStr($goodwill, 4);
 
         return $this;
     }
@@ -617,19 +632,19 @@ class Stock
 
     public function setBuybackAuthorization(string $buybackAuthorization): static
     {
-        $this->buybackAuthorization = $buybackAuthorization;
+        $this->buybackAuthorization = self::cleanBcStr($buybackAuthorization, 4);
 
         return $this;
     }
 
-       public function getDepreciationRate(): ?string
+    public function getDepreciationRate(): ?string
     {
         return $this->depreciationRate;
     }
 
     public function setDepreciationRate(string $depreciationRate): static
     {
-        $this->depreciationRate = $depreciationRate;
+        $this->depreciationRate = self::cleanBcStr($depreciationRate, 4);
 
         return $this;
     }
@@ -642,7 +657,7 @@ class Stock
 
     public function setFloatingDebtRatio(string $floatingDebtRatio): static
     {
-        $this->floatingDebtRatio = $floatingDebtRatio;
+        $this->floatingDebtRatio = self::cleanBcStr($floatingDebtRatio, 4);
 
         return $this;
     }
@@ -679,7 +694,7 @@ class Stock
 
     public function setSamRatio(?string $samRatio): static
     {
-        $this->samRatio = $samRatio;
+        $this->samRatio = $samRatio !== null ? self::cleanBcStr($samRatio, 2) : null;
         return $this;
     }
 
@@ -692,8 +707,8 @@ class Stock
      */
     public function getEarningsPerShare(): ?string
     {
-        $shares = max(1.0, (float) $this->sharesOutstanding);
-        return (string) round((float) $this->totalNetIncome / $shares, 8);
+        $sharesStr = self::cleanBcStr((float) $this->sharesOutstanding < 1.0 ? '1.00000000' : $this->sharesOutstanding, 8);
+        return \bcdiv(self::cleanBcStr($this->totalNetIncome, 4), $sharesStr, 8);
     }
 
     /**
@@ -704,9 +719,14 @@ class Stock
     public function setEarningsPerShare(?string $earningsPerShare): static
     {
         if ($earningsPerShare !== null) {
-            $shares = max(1.0, (float) $this->sharesOutstanding);
-            $totalNi = (float) $earningsPerShare * $shares;
-            $this->totalNetIncome = (string) max(-999999999999999.0, min(999999999999999.0, $totalNi));
+            $sharesStr = self::cleanBcStr((float) $this->sharesOutstanding < 1.0 ? '1.00000000' : $this->sharesOutstanding, 8);
+            $totalNi = \bcmul(self::cleanBcStr($earningsPerShare, 8), $sharesStr, 4);
+            if (\bccomp($totalNi, '999999999999999.0000', 4) > 0) {
+                $totalNi = '999999999999999.0000';
+            } elseif (\bccomp($totalNi, '-999999999999999.0000', 4) < 0) {
+                $totalNi = '-999999999999999.0000';
+            }
+            $this->totalNetIncome = self::cleanBcStr($totalNi, 4);
         } else {
             $this->totalNetIncome = '0.0000';
         }
@@ -721,8 +741,8 @@ class Stock
     public function getFreeCashFlowPerShare(): ?string
     {
         if ($this->totalFreeCashFlow === null) return null;
-        $shares = max(1.0, (float) $this->sharesOutstanding);
-        return (string) round((float) $this->totalFreeCashFlow / $shares, 8);
+        $sharesStr = self::cleanBcStr((float) $this->sharesOutstanding < 1.0 ? '1.00000000' : $this->sharesOutstanding, 8);
+        return \bcdiv(self::cleanBcStr($this->totalFreeCashFlow, 4), $sharesStr, 8);
     }
 
     /**
@@ -733,10 +753,14 @@ class Stock
     public function setFreeCashFlowPerShare(?string $freeCashFlowPerShare): self
     {
         if ($freeCashFlowPerShare !== null) {
-            $shares = max(1.0, (float) $this->sharesOutstanding);
-            $totalFcf = (float) $freeCashFlowPerShare * $shares;
-            // Add this clamp to prevent SQL 1264 out of range errors
-            $this->totalFreeCashFlow = (string) max(-999999999999999.0, min(999999999999999.0, $totalFcf));
+            $sharesStr = self::cleanBcStr((float) $this->sharesOutstanding < 1.0 ? '1.00000000' : $this->sharesOutstanding, 8);
+            $totalFcf = \bcmul(self::cleanBcStr($freeCashFlowPerShare, 8), $sharesStr, 4);
+            if (\bccomp($totalFcf, '999999999999999.0000', 4) > 0) {
+                $totalFcf = '999999999999999.0000';
+            } elseif (\bccomp($totalFcf, '-999999999999999.0000', 4) < 0) {
+                $totalFcf = '-999999999999999.0000';
+            }
+            $this->totalFreeCashFlow = self::cleanBcStr($totalFcf, 4);
         } else {
             $this->totalFreeCashFlow = null;
         }
@@ -750,8 +774,8 @@ class Stock
      */
     public function getBookValuePerShare(): string
     {
-        $shares = max(1.0, (float) $this->sharesOutstanding);
-        return (string) round((float) $this->totalEquity / $shares, 4);
+        $sharesStr = self::cleanBcStr((float) $this->sharesOutstanding < 1.0 ? '1.00000000' : $this->sharesOutstanding, 8);
+        return \bcdiv(self::cleanBcStr($this->totalEquity, 4), $sharesStr, 4);
     }
 
     /**
@@ -761,8 +785,8 @@ class Stock
      */
     public function setBookValuePerShare(string $bookValuePerShare): static
     {
-        $shares = max(1.0, (float) $this->sharesOutstanding);
-        $this->totalEquity = (string) ((float) $bookValuePerShare * $shares);
+        $sharesStr = self::cleanBcStr((float) $this->sharesOutstanding < 1.0 ? '1.00000000' : $this->sharesOutstanding, 8);
+        $this->totalEquity = self::cleanBcStr(\bcmul(self::cleanBcStr($bookValuePerShare, 4), $sharesStr, 4), 4);
         return $this;
     }
 
@@ -771,14 +795,14 @@ class Stock
      * 
      * @return string The computed Total Revenue.
      */
-    public function getTotalRevenue(): string 
+    public function getTotalRevenue(): string
     {
         return $this->totalRevenue;
     }
 
     public function setTotalRevenue(string $totalRevenue): static
     {
-        $this->totalRevenue = $totalRevenue;
+        $this->totalRevenue = self::cleanBcStr($totalRevenue, 4);
         return $this;
     }
 
@@ -789,9 +813,8 @@ class Stock
      */
     public function getRevenuePerShare(): string
     {
-        $shares = max(1, (int) $this->sharesOutstanding);
-        $totalRevenue = (float) $this->getTotalRevenue();
-        return (string) round($totalRevenue / $shares, 4);
+        $sharesStr = (float) $this->sharesOutstanding < 1.0 ? '1.00000000' : (string) $this->sharesOutstanding;
+        return \bcdiv((string) $this->getTotalRevenue(), $sharesStr, 4);
     }
 
     /**
@@ -803,7 +826,7 @@ class Stock
         $equity = (float) $this->totalEquity;
         $debt = (float) $this->getTotalDebt();
         $cash = (float) $this->corporateTreasury;
-        
+
         // 10% to prevent penalizing cash-rich "lean" tech companies,
         // while still maintaining a minimum physical asset base (desks, servers) to avoid Division by Zero.
         return max($equity * 0.10, ($equity + $debt - $cash));
@@ -815,10 +838,9 @@ class Stock
      */
     public function getDebtToEquityRatio(): string
     {
-        $equity = max(1.0, (float) $this->totalEquity);
-        $debt = (float) $this->getTotalDebt();
-        
-        return (string) round($debt / $equity, 4);
+        $equityStr = (float) $this->totalEquity < 1.0 ? '1.0000' : (string) $this->totalEquity;
+        $debtStr = (string) $this->getTotalDebt();
+        return \bcdiv($debtStr, $equityStr, 4);
     }
 
     public function getHistoricalFixedRate(): ?string
@@ -828,7 +850,7 @@ class Stock
 
     public function setHistoricalFixedRate(string $historicalFixedRate): static
     {
-        $this->historicalFixedRate = $historicalFixedRate;
+        $this->historicalFixedRate = self::cleanBcStr($historicalFixedRate, 4);
 
         return $this;
     }
@@ -852,7 +874,7 @@ class Stock
 
     public function setWholesaleDebt(string $wholesaleDebt): static
     {
-        $this->wholesaleDebt = $wholesaleDebt;
+        $this->wholesaleDebt = self::cleanBcStr($wholesaleDebt, 4);
         return $this;
     }
 
@@ -863,7 +885,7 @@ class Stock
 
     public function setCustomerDeposits(?string $customerDeposits): static
     {
-        $this->customerDeposits = $customerDeposits;
+        $this->customerDeposits = $customerDeposits !== null ? self::cleanBcStr($customerDeposits, 4) : null;
         return $this;
     }
 
@@ -871,8 +893,8 @@ class Stock
     {
         $wholesale = (float) $this->wholesaleDebt;
         $deposits = (float) $this->customerDeposits;
-        
-        return (string) number_format($wholesale + $deposits, 4, '.', '');
+
+        return self::cleanBcStr((string) number_format($wholesale + $deposits, 4, '.', ''), 4);
     }
 
     public function getRoicTtm(): string
@@ -882,7 +904,7 @@ class Stock
 
     public function setRoicTtm(string $roicTtm): self
     {
-        $this->roicTtm = $roicTtm;
+        $this->roicTtm = self::cleanBcStr($roicTtm, 4);
         return $this;
     }
 
@@ -893,7 +915,7 @@ class Stock
 
     public function setRoeTtm(string $roeTtm): self
     {
-        $this->roeTtm = $roeTtm;
+        $this->roeTtm = self::cleanBcStr($roeTtm, 4);
         return $this;
     }
 }

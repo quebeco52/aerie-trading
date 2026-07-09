@@ -44,8 +44,10 @@ class TradeExecutionService
             $asset = $stock ?? $etf;
             $assetType = $stock ? 'STOCK' : 'ETF';
             $livePrice = (float) $asset->getPrice();
-            $totalValue = $livePrice * $quantity;
-            $currentCash = (float) $user->getCashBalance();
+            $livePriceStr = (string) $asset->getPrice();
+            $quantityStr = (string) $quantity;
+            $totalValueStr = \bcmul($livePriceStr, $quantityStr, 4);
+            $currentCashStr = (string) $user->getCashBalance();
 
             $userAsset = null;
             if ($stock) {
@@ -66,21 +68,21 @@ class TradeExecutionService
             if ($orderType === 'MARKET') {
                 // Execute immediately at market price
                 if ($action === 'BUY') {
-                    if ($currentCash < $totalValue) {
+                    if (\bccomp($currentCashStr, $totalValueStr, 4) < 0) {
                         throw new \Exception('Insufficient funds.');
                     }
-                    $user->setCashBalance((string)($currentCash - $totalValue));
+                    $user->setCashBalance(\bcsub($currentCashStr, $totalValueStr, 4));
                     $userAsset = $this->addAssetToUser($user, $stock, $etf, $userAsset, $quantity);
                 } else { // SELL
                     if (!$userAsset || $userAsset->getQuantity() < $quantity) {
                         throw new \Exception('Insufficient shares.');
                     }
-                    $user->setCashBalance((string)($currentCash + $totalValue));
+                    $user->setCashBalance(\bcadd($currentCashStr, $totalValueStr, 4));
                     $this->removeAssetFromUser($userAsset, $quantity);
                 }
 
                 $order->setFilledQuantity($quantity);
-                $order->setExecutionPrice((string)$livePrice);
+                $order->setExecutionPrice($livePriceStr);
                 $order->setStatus('FILLED');
                 $order->setFilledAt(new \DateTime());
                 $this->em->persist($order);
@@ -99,30 +101,30 @@ class TradeExecutionService
                 if ($shouldFillImmediately) {
                     // Fill immediately at LIVE PRICE, not limit price (better execution)
                     if ($action === 'BUY') {
-                        if ($currentCash < $totalValue) {
+                        if (\bccomp($currentCashStr, $totalValueStr, 4) < 0) {
                             throw new \Exception('Insufficient funds.');
                         }
-                        $user->setCashBalance((string)($currentCash - $totalValue));
+                        $user->setCashBalance(\bcsub($currentCashStr, $totalValueStr, 4));
                         $userAsset = $this->addAssetToUser($user, $stock, $etf, $userAsset, $quantity);
                     } else { // SELL
                         if (!$userAsset || $userAsset->getQuantity() < $quantity) {
                             throw new \Exception('Insufficient shares.');
                         }
-                        $user->setCashBalance((string)($currentCash + $totalValue));
+                        $user->setCashBalance(\bcadd($currentCashStr, $totalValueStr, 4));
                         $this->removeAssetFromUser($userAsset, $quantity);
                     }
                     $order->setFilledQuantity($quantity);
-                    $order->setExecutionPrice((string)$livePrice);
+                    $order->setExecutionPrice($livePriceStr);
                     $order->setStatus('FILLED');
                     $order->setFilledAt(new \DateTime());
                 } else {
                     // Escrow and save as OPEN
                     if ($action === 'BUY') {
-                        $escrowCash = $limitPriceFloat * $quantity;
-                        if ($currentCash < $escrowCash) {
+                        $escrowCashStr = \bcmul((string) $limitPrice, $quantityStr, 4);
+                        if (\bccomp($currentCashStr, $escrowCashStr, 4) < 0) {
                             throw new \Exception('Insufficient funds for limit order.');
                         }
-                        $user->setCashBalance((string)($currentCash - $escrowCash));
+                        $user->setCashBalance(\bcsub($currentCashStr, $escrowCashStr, 4));
                     } else { // SELL
                         if (!$userAsset || $userAsset->getQuantity() < $quantity) {
                             throw new \Exception('Insufficient shares for limit order.');
@@ -172,8 +174,8 @@ class TradeExecutionService
 
             if ($order->getAction() === 'BUY') {
                 // Refund cash
-                $escrowCash = (float)$order->getLimitPrice() * $quantity;
-                $user->setCashBalance((string)((float)$user->getCashBalance() + $escrowCash));
+                $escrowCashStr = \bcmul((string) $order->getLimitPrice(), (string) $quantity, 4);
+                $user->setCashBalance(\bcadd((string) $user->getCashBalance(), $escrowCashStr, 4));
             } else {
                 // Refund shares
                 $stock = $this->em->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);
@@ -262,20 +264,20 @@ class TradeExecutionService
 
             if ($order->getAction() === 'BUY') {
                 // Cash was already escrowed at limit price. If execution price is better (lower), refund the difference.
-                $escrowedCash = $limitPrice * $quantity;
-                $actualCost = $executionPrice * $quantity;
-                $refund = $escrowedCash - $actualCost;
+                $escrowedCashStr = \bcmul((string) $limitPrice, (string) $quantity, 4);
+                $actualCostStr = \bcmul((string) $executionPrice, (string) $quantity, 4);
+                $refundStr = \bcsub($escrowedCashStr, $actualCostStr, 4);
 
-                if ($refund > 0) {
-                    $user->setCashBalance((string)((float)$user->getCashBalance() + $refund));
+                if (\bccomp($refundStr, '0.0000', 4) > 0) {
+                    $user->setCashBalance(\bcadd((string) $user->getCashBalance(), $refundStr, 4));
                 }
                 
                 $this->addAssetToUser($user, $stock, $etf, $userAsset, $quantity);
 
             } else { // SELL
                 // Shares were already escrowed. Just give them the cash from the sale.
-                $saleValue = $executionPrice * $quantity;
-                $user->setCashBalance((string)((float)$user->getCashBalance() + $saleValue));
+                $saleValueStr = \bcmul((string) $executionPrice, (string) $quantity, 4);
+                $user->setCashBalance(\bcadd((string) $user->getCashBalance(), $saleValueStr, 4));
             }
 
             $order->setFilledQuantity($quantity);

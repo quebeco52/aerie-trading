@@ -98,4 +98,84 @@ class CorporateActionEngineTest extends TestCase
         $newNetWorth = $result['price'] * $result['shares'];
         $this->assertEquals($startingNetWorth, $newNetWorth, 'The reverse split destroyed player wealth!');
     }
+
+    public function testForwardSplitMutatesTradeOrders()
+    {
+        $mockConnection = $this->createMock(Connection::class);
+        $executedQueries = [];
+        $mockConnection->method('executeStatement')->willReturnCallback(function ($sql, $params = []) use (&$executedQueries) {
+            $executedQueries[] = $sql;
+            return 1;
+        });
+
+        $mockEntityManager = $this->createStub(EntityManagerInterface::class);
+        $mockEntityManager->method('getConnection')->willReturn($mockConnection);
+
+        $engine = new CorporateActionEngine($mockEntityManager, $this->createStub(MarketEventPublisher::class), $this->createStub(\Redis::class));
+
+        $stock = new Stock();
+        $stock->setTicker('HYPR');
+        $stock->setName('HyperCorp');
+        $stock->setSharesOutstanding('1000');
+        $stock->setEarningsPerShare('40.0');
+
+        $engine->processSplits($stock, 1000.0, 1000);
+
+        $foundTradeOrderUpdate = false;
+        foreach ($executedQueries as $sql) {
+            if (str_contains($sql, 'UPDATE trade_orders SET quantity = quantity * :factor')) {
+                $foundTradeOrderUpdate = true;
+                break;
+            }
+        }
+        $this->assertTrue($foundTradeOrderUpdate, 'Forward split did not execute trade_orders update SQL!');
+    }
+
+    public function testReverseSplitMutatesTradeOrdersAndRefundsRemainders()
+    {
+        $mockConnection = $this->createMock(Connection::class);
+        $executedQueries = [];
+        $mockConnection->method('executeStatement')->willReturnCallback(function ($sql, $params = []) use (&$executedQueries) {
+            $executedQueries[] = $sql;
+            return 1;
+        });
+
+        $mockEntityManager = $this->createStub(EntityManagerInterface::class);
+        $mockEntityManager->method('getConnection')->willReturn($mockConnection);
+
+        $engine = new CorporateActionEngine($mockEntityManager, $this->createStub(MarketEventPublisher::class), $this->createStub(\Redis::class));
+
+        $stock = new Stock();
+        $stock->setTicker('DEAD');
+        $stock->setName('DeadCorp');
+        $stock->setSharesOutstanding('100000');
+        $stock->setEarningsPerShare('0.01');
+
+        $engine->processSplits($stock, 0.10, 100000);
+
+        $foundSellRemainderRefund = false;
+        $foundBuyRemainderRefund = false;
+        $foundTradeOrderUpdate = false;
+        $foundOrderCancellation = false;
+
+        foreach ($executedQueries as $sql) {
+            if (str_contains($sql, "FROM trade_orders WHERE ticker = :ticker AND status = 'OPEN' AND action = 'SELL'")) {
+                $foundSellRemainderRefund = true;
+            }
+            if (str_contains($sql, "FROM trade_orders") && str_contains($sql, "action = 'BUY' AND (quantity % :factor) > 0")) {
+                $foundBuyRemainderRefund = true;
+            }
+            if (str_contains($sql, "UPDATE trade_orders SET quantity = FLOOR(quantity / :factor), limit_price = ROUND(limit_price * :factor, 8)")) {
+                $foundTradeOrderUpdate = true;
+            }
+            if (str_contains($sql, "UPDATE trade_orders SET status = 'CANCELLED'")) {
+                $foundOrderCancellation = true;
+            }
+        }
+
+        $this->assertTrue($foundSellRemainderRefund, 'Reverse split did not refund open SELL order remainders!');
+        $this->assertTrue($foundBuyRemainderRefund, 'Reverse split did not refund open BUY order remainders!');
+        $this->assertTrue($foundTradeOrderUpdate, 'Reverse split did not update trade_orders quantity and limit_price!');
+        $this->assertTrue($foundOrderCancellation, 'Reverse split did not cancel zero quantity trade_orders!');
+    }
 }

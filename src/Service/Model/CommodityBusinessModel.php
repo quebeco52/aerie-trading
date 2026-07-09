@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Service\Model;
 
 use App\Entity\Stock;
@@ -17,6 +19,17 @@ use App\Service\Macro\MacroEngine;
  */
 class CommodityBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Commodity Spot Price & Inflation Physics ---
+    /** Volatility multiplier for top-line revenue shocks driven by global commodity spot prices. */
+    public const REVENUE_VARIANCE_SCALAR   = 0.25;
+    /** Sensitivity scalar scaling excess inflation with stock beta to determine spot price revenue bonus. */
+    public const INFLATION_BONUS_SCALAR    = 1.00;
+
+    // --- Analyst Visibility & Error ---
+    /** Base analyst visibility into opaque physical extraction volumes and refinery yields. */
+    public const ANALYST_BASE_VISIBILITY   = 0.20;
+    /** Standard deviation of analyst estimation error for quarterly extraction volumes. */
+    public const ANALYST_ERROR_STD_DEV     = 0.05;
 
     public function getMacroPhysics(Stock $stock, array &$macroState): array
     {
@@ -39,13 +52,13 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         $revenueZ = $mathUtility->generateStandardNormal();
         
         // Higher top-line variance compared to standard retail/manufacturing
-        $revenueShock = $revenueZ * ($baselineVol * 0.25);
+        $revenueShock = $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
         
         // The Inflation Exposure:
         // While standard corporates get crushed by supply chain inflation, commodities *are* the supply chain. 
         // Their margins explode upwards during inflationary spikes as spot prices rise, and violently contract during deflation.
         $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
-        $inflationBonus = ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * 1.0;
+        $inflationBonus = ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_BONUS_SCALAR;
         
         // The physical volume of commodities extracted/sold (subject to standard operational variance)
         $physicalVolumeRevenue = $expectedRevenue * (1.0 + $revenueShock);
@@ -63,8 +76,8 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
 
         // Analyst Visibility
         // Commodity spot prices (inflation) are 100% public. But exact physical extraction volumes ($revenueShock) are ~20% visible.
-        $analystError = $mathUtility->generateStandardNormal() * 0.05;
-        $dynamicVisibility = min(1.0, max(0.0, 0.20 + $analystError));
+        $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
+        $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
         $analystExpectedPhysicalVolume = $expectedRevenue * (1.0 + ($revenueShock * $dynamicVisibility));
         $analystExpectedRevenue = max(0.0, $analystExpectedPhysicalVolume + ($expectedRevenue * $inflationBonus));
         $analystExpectedVariableCosts = $analystExpectedPhysicalVolume * $realizedVariableMargin;

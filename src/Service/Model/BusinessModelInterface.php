@@ -18,8 +18,9 @@ interface BusinessModelInterface
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array;
     public function getMacroPhysics(Stock $stock, array &$macroState): array;
     public function calculateInterestIncome(Stock $stock, array &$macroState, MathUtility $mathUtility): float;
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate): float;
     public function getEffectiveTaxRate(float $macroTaxRate): float;
+    public function calculateEconomicReturn(Stock $stock, float $nopat, float $investedCapital): float;
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate): float;
 
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float;
     public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float;
@@ -39,4 +40,5 @@ interface BusinessModelInterface
     public function getSustainableDividendBase(Stock $stock, float $quarterlyEps, float $investedCapital, float $depRate): float;
     public function getMarginReversionSpeed(): float;
     public function processPassiveLiabilityGrowth(Stock $stock, array &$macroState, array &$state, MathUtility $mathUtility): void;
+    public function isUnderLeveraged(bool $isFinancial, float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool;
 }

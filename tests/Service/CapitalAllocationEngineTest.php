@@ -81,4 +81,56 @@ class CapitalAllocationEngineTest extends TestCase
 
         $this->assertGreaterThan(1.00, $result['dividend_paid'], 'REIT dividend should reflect FFO rather than raw GAAP EPS');
     }
+
+    public function testDividendDistributionCreditsEscrowedSellOrders(): void
+    {
+        $executedQueries = [];
+        $connectionMock = $this->createMock(Connection::class);
+        $connectionMock->method('executeStatement')->willReturnCallback(function ($sql, $params = []) use (&$executedQueries) {
+            $executedQueries[] = $sql;
+            return 1;
+        });
+
+        $entityManagerMock = $this->createMock(EntityManagerInterface::class);
+        $entityManagerMock->method('getConnection')->willReturn($connectionMock);
+
+        $engine = new CapitalAllocationEngine(
+            $entityManagerMock,
+            $this->corporateMetricsMock,
+            $this->debtEngineMock,
+            $this->mathUtilityMock,
+            $this->treasuryEngineMock
+        );
+
+        $stock = new Stock();
+        $stock->setSymbol('TEST_DIV');
+        $stock->setIndustry('Tech');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setPrice('100.00');
+        $stock->setTotalEquity('100000000');
+        $stock->setInvestedCapital('100000000');
+        $stock->setCorporateTreasury('50000000');
+        $stock->setTargetPayoutRatio('0.50');
+        $stock->setDividendSpeed('1.00');
+        $stock->setLastDividend('1.00');
+        $stock->setCeoArchetype('balanced');
+
+        $health = [
+            'wacc' => 0.06,
+            'cost_of_equity' => 0.08,
+            'interest_coverage' => 5.0
+        ];
+
+        $engine->allocateCapital($stock, 4.00, 100.00, 50000000.0, 0.0, 100000000.0, 2000000.0, 0.0, $health, 1000000.0);
+
+        $foundEscrowDividendSql = false;
+        foreach ($executedQueries as $sql) {
+            if (str_contains($sql, "FROM trade_orders WHERE ticker = :ticker AND status = 'OPEN' AND action = 'SELL'")) {
+                $foundEscrowDividendSql = true;
+                break;
+            }
+        }
+
+        $this->assertTrue($foundEscrowDividendSql, 'Dividend distribution SQL did not query trade_orders for escrowed SELL shares!');
+    }
 }

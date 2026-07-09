@@ -46,24 +46,23 @@ class MarketSeedCommand extends Command
 
         // Loop through ETFs
         foreach (InitialMarket::ETFS as $etfData) {
-            if (!$this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => $etfData['ticker']])) {
+            $etf = $this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => $etfData['ticker']]);
+            if (!$etf) {
                 $etf = new Etf();
                 $etf->setTicker($etfData['ticker']);
-                $etf->setName($etfData['name']);
                 $etf->setPrice((string) $etfData['price']);
-                $etf->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$etfData['ticker']] ?? null);
-                $this->entityManager->persist($etf);
             }
+            $etf->setName($etfData['name']);
+            $etf->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$etfData['ticker']] ?? null);
+            $this->entityManager->persist($etf);
         }
 
         // Loop through Stocks
         foreach (InitialMarket::STOCKS as $stockData) {
-            if (!$this->entityManager->getRepository(Stock::class)->findOneBy(['ticker' => $stockData['ticker']])) {
+            $stock = $this->entityManager->getRepository(Stock::class)->findOneBy(['ticker' => $stockData['ticker']]);
+            if (!$stock) {
                 $stock = new Stock();
                 $stock->setTicker($stockData['ticker']);
-                $stock->setName($stockData['name']);
-                $stock->setSector($stockData['sector']);
-                $stock->setIndustry($stockData['industry'] ?? null);
                 $stock->setPrice((string) $stockData['price']);
 
                 $netIncome = $stockData['total_net_income'] ?? 0.00;
@@ -135,11 +134,14 @@ class MarketSeedCommand extends Command
 
                 $stock->setCreditSpread((string) ($stockData['credit_spread'] ?? 0.0100));
                 $stock->setHistoricalFixedRate((string) ($stockData['historical_fixed_rate'] ?? 0.04));
-                $stock->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$stockData['ticker']] ?? null);
-                $stock->setCeoArchetype($stockData['ceo_archetype'] ?? \App\Data\CeoArchetypes::OPPORTUNIST);
-
-                $this->entityManager->persist($stock);
             }
+            $stock->setName($stockData['name']);
+            $stock->setSector($stockData['sector']);
+            $stock->setIndustry($stockData['industry'] ?? null);
+            $stock->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$stockData['ticker']] ?? null);
+            $stock->setCeoArchetype($stockData['ceo_archetype'] ?? \App\Data\CeoArchetypes::OPPORTUNIST);
+
+            $this->entityManager->persist($stock);
         }
 
         // Test User

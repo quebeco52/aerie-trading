@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Service\Model;
 
 use App\Entity\Stock;
@@ -16,6 +18,118 @@ use App\Service\Macro\MacroEngine;
  */
 class AssetManagementBusinessModel extends AbstractBusinessModel
 {
+    // --- ROE & Target Architecture ---
+    /** Weight given to historical baseline ROE when blending with TTM ROE. */
+    public const BASELINE_ROE_WEIGHT = 0.70;
+    /** Weight given to TTM ROE when blending with historical baseline ROE. */
+    public const TTM_ROE_WEIGHT      = 0.30;
+    /** Default 5Y Treasury spread over policy rate when yield curve data is absent. */
+    public const DEFAULT_5Y_YIELD_PREMIUM = 0.005;
+    /** Default maximum financial leverage (Debt/Equity) limit if sector configuration is absent. */
+    public const DEFAULT_EQUITY_LIMIT     = 1.00;
+
+    // --- Structural Yield Rails ---
+    /** Minimum structural operating EBIT floor as a fraction of operating equity. */
+    public const MIN_OPERATING_EBIT_YIELD = 0.05;
+    /** Hard ceiling on gross asset turnover to prevent reverse-engineered revenue hyperinflation. */
+    public const MAX_TURNOVER_CAP         = 2.00;
+
+    // --- Macro & Shock Physics ---
+    /** Macroeconomic demand shift sensitivity to output gap. */
+    public const MACRO_DEMAND_SCALAR      = 0.50;
+    /** Volatility multiplier for top-line revenue shocks in sticky fee models. */
+    public const REVENUE_VARIANCE_SCALAR  = 0.10;
+    /** Upper clamp for realized variable margin. */
+    public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
+    /** Lower clamp for realized variable margin. */
+    public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
+
+    // --- AUM Market Beta & Performance Fees ---
+    /** Sensitivity of AUM management fee base to macroeconomic output gap (market appreciation/depreciation). */
+    public const AUM_MARKET_BETA_SCALAR    = 0.40;
+    /** Z-score threshold above which strong fund alpha crystallizes outsized performance fees / carried interest. */
+    public const PERFORMANCE_FEE_Z_FLOOR   = 1.50;
+    /** Revenue bonus scalar applied per z-unit above the performance fee threshold. */
+    public const PERFORMANCE_FEE_SCALAR    = 0.08;
+    /** Severe negative z-score threshold indicating net institutional redemptions and fee compression. */
+    public const REDEMPTION_SHOCK_Z_FLOOR  = -1.50;
+    /** Revenue penalty scalar applied per z-unit below the redemption shock threshold. */
+    public const REDEMPTION_SHOCK_SCALAR   = 0.06;
+
+    // --- Structural Efficiency Floor ---
+    /** Minimum cost-to-revenue ratio: high operating leverage ensures variable margin does not collapse below structural platform overhead. */
+    public const MIN_EFFICIENCY_RATIO      = 0.35;
+
+    // --- Seed Capital & Co-Investment Volatility ---
+    /** Quarterly volatility of the 40% equity seed capital tranche in the treasury co-investment portfolio. */
+    public const SEED_EQUITY_VOL           = 0.10;
+    /** VIX threshold above which market panic drags seed capital co-investment returns. */
+    public const SEED_VIX_THRESHOLD        = 0.25;
+    /** Sensitivity of seed equity co-investment drag to elevated VIX above threshold. */
+    public const SEED_VIX_SENSITIVITY      = 0.25;
+
+    // --- Event Lore Thresholds ---
+    /** Z-score threshold triggering performance fee surge event lore. */
+    public const LORE_PERFORMANCE_SURGE_Z  = 1.80;
+    /** Z-score threshold triggering institutional fund outflows event lore. */
+    public const LORE_FUND_OUTFLOWS_Z      = -1.80;
+
+    // --- Analyst Visibility & Error ---
+    /** Base analyst visibility into opaque asset management fund flows prior to 13F filings. */
+    public const ANALYST_BASE_VISIBILITY  = 0.10;
+    /** Standard deviation of analyst estimation error for quarterly AUM fee revenue. */
+    public const ANALYST_ERROR_STD_DEV    = 0.05;
+
+    // --- Dynamic ROIC & ROE Clamping ---
+    /** Annualization multiplier applied to quarterly net income to derive annualized ROE. */
+    public const ROE_ANNUALIZATION_MULT   = 4.00;
+    /** Minimum allowable ROE floor to prevent catastrophic negative overflow. */
+    public const MIN_ROE_CLAMP            = -0.50;
+    /** Maximum allowable ROE ceiling to prevent unrealistic hyperinflation. */
+    public const MAX_ROE_CLAMP            = 1.00;
+    /** Weight given to current quarter ROE when updating trailing twelve-month ROE EMA. */
+    public const ROE_TTM_EMA_WEIGHT       = 0.25;
+    /** Weight given to historical trailing twelve-month ROE when updating ROE EMA. */
+    public const ROE_TTM_HIST_WEIGHT      = 0.75;
+
+    // --- Liquidity & Cash Reserves ---
+    /** Target operating cash reserve ratio applied to corporate operating base. */
+    public const TARGET_OPERATING_BUFFER  = 0.10;
+    /** Target operating cash reserve ratio applied to outstanding wholesale debt. */
+    public const TARGET_DEBT_BUFFER       = 0.05;
+    /** Minimum emergency operating cash reserve ratio applied to corporate operating base. */
+    public const MIN_OPERATING_BUFFER     = 0.05;
+    /** Threshold ratio of excess cash over operating base triggering standard hoarder status. */
+    public const HOARDER_THRESHOLD        = 0.30;
+    /** Threshold ratio of excess cash over operating base triggering mega-hoarder status. */
+    public const MEGA_HOARDER_THRESHOLD   = 0.50;
+
+    // --- Treasury Yield & 60/40 Portfolio ---
+    /** Default policy rate fallback when macroeconomic state data is missing. */
+    public const DEFAULT_POLICY_RATE_FALLBACK = 0.02;
+    /** Default 10Y Treasury spread over policy rate. */
+    public const DEFAULT_10Y_SPREAD       = 0.01;
+    /** Baseline structural equity market return in neutral macroeconomic conditions. */
+    public const BASE_EQUITY_RETURN       = 0.07;
+    /** Output gap multiplier scaling equity market returns during booms and busts. */
+    public const EQUITY_RETURN_GAP_MULT   = 2.00;
+    /** Weight allocated to fixed-income bonds in standard asset manager treasury portfolios. */
+    public const TREASURY_BOND_WEIGHT     = 0.60;
+    /** Weight allocated to equities in standard asset manager treasury portfolios. */
+    public const TREASURY_EQUITY_WEIGHT   = 0.40;
+
+    // --- Debt Issuance & Capital Deployment ---
+    /** Baseline probability of initiating debt expansion when spreads are neutral. */
+    public const DEBT_EXPANSION_BASE_PROB = 0.50;
+    /** Multiplier scaling debt expansion probability with spread attractiveness. */
+    public const DEBT_EXPANSION_PROB_MULT = 0.30;
+    /** Baseline aggressiveness fraction for new debt issuance. */
+    public const DEBT_EXPANSION_BASE_AGGR = 0.05;
+    /** Multiplier scaling debt issuance aggressiveness with spread attractiveness. */
+    public const DEBT_EXPANSION_AGGR_MULT = 0.10;
+    /** Minimum fraction of newly issued debt that must be deployed into organic capex or fund seeding. */
+    public const DEBT_CAPEX_DEPLOYMENT    = 0.90;
+
     /**
      * Asset Managers scale EBIT to cover their target ROE and any operational wholesale debt.
      * They do not use fractional customer deposits or float to generate leverage.
@@ -27,11 +141,11 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
 
         $ttmRoe = (float) $stock->getRoeTtm();
         if ($ttmRoe !== 0.0) {
-            $baselineRoe = ($baselineRoe * 0.70) + ($ttmRoe * 0.30);
+            $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
         }
 
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
-        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + 0.005);
+        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + self::DEFAULT_5Y_YIELD_PREMIUM);
         $structuralSpread = (float) $stock->getCreditSpread();
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
 
@@ -46,7 +160,7 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         // Asset managers scale EBIT from their active operating equity (AUM/Platform capacity).
         // Excess cash beyond target operating cash is considered idle and stripped from the ROE target.
         $industry = $stock->getIndustry() ?: 'General';
-        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 1.0;
+        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? self::DEFAULT_EQUITY_LIMIT;
 
         $effectiveEquity = max(1.0, $equity);
 
@@ -82,7 +196,7 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         // The Fee Revenue Floor:
         // Asset-light financials don't have massive balance sheets, but they must maintain 
         // structural fee revenue (AUM / Advisory) to survive.
-        $minOperatingEbit = $operatingEquity * 0.05;
+        $minOperatingEbit = $operatingEquity * self::MIN_OPERATING_EBIT_YIELD;
 
         $targetEbit = max($minOperatingEbit, $targetEbit);
 
@@ -90,7 +204,7 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         // but we MUST cap the turnover. If margins compress due to market saturation, 
         // uncapped reverse-engineering will cause top-line revenue hyperinflation!
         $unboundedRevenue = max(0.0, $targetEbit) / $stableMargin;
-        $targetRevenue = min($unboundedRevenue, $operatingEquity * 2.0); // Hard cap turnover at 2.0x annually
+        $targetRevenue = min($unboundedRevenue, $operatingEquity * self::MAX_TURNOVER_CAP); // Hard cap turnover at 2.0x annually
 
         $impliedTurnover = $targetRevenue / max(1.0, $operatingEquity);
 
@@ -106,57 +220,95 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         $beta = (float) $stock->getBeta();
 
         return [
-            'macro_demand_shift' => $outputGap * $beta * 0.50,
+            'macro_demand_shift' => $outputGap * $beta * self::MACRO_DEMAND_SCALAR,
             'pricing_power_multiplier' => 1.0,
         ];
     }
 
     /**
-     * Idiosyncratic variance is relatively low compared to transactional brokerages.
-     * AUM fees are highly recurring and sticky, providing a stable baseline of revenue.
+     * Idiosyncratic variance incorporates AUM mark-to-market appreciation/depreciation,
+     * asymmetric performance fee / carried interest surges during strong fund alpha quarters,
+     * institutional redemption shocks during severe market drawdowns, and structural efficiency floors.
      */
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
 
-        // Sticky Assets Under Management (AUM):
-        // AUM fees are highly recurring, making revenue variance significantly lower than trading-heavy brokerages.
-        $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * 0.10)));
+        // 1. AUM Mark-to-Market Beta:
+        // Asset managers earn fees as a percentage of AUM. When equity/credit markets rise or fall,
+        // base management fee revenue expands or contracts with macroeconomic asset values.
+        $outputGap = $macroState['output_gap_ema'] ?? ($macroState['output_gap'] ?? 0.0);
+        $aumMarketBeta = $outputGap * abs((float) $stock->getBeta()) * self::AUM_MARKET_BETA_SCALAR;
 
-        $actualVariableCosts = $actualRevenue * min(1.50, max(0.01, $realizedVariableMargin));
+        // 2. Asymmetric Performance Fees & Redemption Tail Shocks:
+        // Strong alpha quarters crystallize outsized performance fees / carried interest.
+        // Tail drawdowns trigger net institutional outflows and fee compression.
+        if ($revenueZ > self::PERFORMANCE_FEE_Z_FLOOR) {
+            $alphaFeeBonus = ($revenueZ - self::PERFORMANCE_FEE_Z_FLOOR) * self::PERFORMANCE_FEE_SCALAR;
+        } elseif ($revenueZ < self::REDEMPTION_SHOCK_Z_FLOOR) {
+            $alphaFeeBonus = -abs($revenueZ - self::REDEMPTION_SHOCK_Z_FLOOR) * self::REDEMPTION_SHOCK_SCALAR;
+        } else {
+            $alphaFeeBonus = 0.0;
+        }
 
-        // Analyst Visibility
-        // Asset Management flows are mostly opaque until 13F filings or earnings reports. (~10% visibility)
-        $analystError = $mathUtility->generateStandardNormal() * 0.05;
-        $dynamicVisibility = min(1.0, max(0.0, 0.10 + $analystError));
-        $analystExpectedRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * 0.10) * $dynamicVisibility));
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(1.50, max(0.01, $realizedVariableMargin));
+        $totalRevenueShock = ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $aumMarketBeta + $alphaFeeBonus;
+        $actualRevenue = max(0.0, $expectedRevenue * (1.0 + $totalRevenueShock));
+
+        // 3. Structural Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
+        $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
+        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max($minVariableMargin, $realizedVariableMargin));
+        $actualVariableCosts = $actualRevenue * $clampedMargin;
+
+        // 4. Dynamic Event Lore:
+        $eventLore = null;
+        if ($revenueZ > self::LORE_PERFORMANCE_SURGE_Z) {
+            $eventLore = "Crystallized outsized performance fees and carried interest following strong fund alpha.";
+        } elseif ($revenueZ < self::LORE_FUND_OUTFLOWS_Z) {
+            $eventLore = "Suffered net institutional outflows and fee compression amid risk-off market sentiment.";
+        }
+
+        // 5. Analyst Visibility:
+        // Standard AUM fee base trends are partially visible, but performance fees and sudden redemptions are opaque until filings.
+        $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
+        $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
+        $analystExpectedRevenue = max(0.0, $expectedRevenue * (1.0 + $aumMarketBeta + (($totalRevenueShock - $aumMarketBeta) * $dynamicVisibility)));
+        $analystExpectedVariableCosts = $analystExpectedRevenue * $clampedMargin;
 
         return [
-            'actual_revenue' => $actualRevenue,
-            'actual_variable_costs' => $actualVariableCosts,
-            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'actual_revenue'                  => $actualRevenue,
+            'actual_variable_costs'           => $actualVariableCosts,
+            'analyst_expected_revenue'        => $analystExpectedRevenue,
             'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit' => $actualRevenue - $fixedCosts - $actualVariableCosts,
-            'primary_shock_z' => $revenueZ,
-            'event_lore' => null
+            'ebit'                            => $actualRevenue - $fixedCosts - $actualVariableCosts,
+            'primary_shock_z'                 => $revenueZ,
+            'event_lore'                      => $eventLore,
         ];
     }
 
     /**
-     * Asset Managers earn standard money-market yields only on excess liquidity 
-     * that isn't actively deployed or required for daily operations.
+     * Asset Managers invest excess corporate treasury in seed capital co-investment portfolios (60/40).
+     * The 40% equity seed tranche experiences quarterly stochastic mark-to-market volatility and VIX tail risk.
      */
     public function calculateInterestIncome(Stock $stock, array &$macroState, MathUtility $mathUtility): float
     {
-        $equity = (float) $stock->getTotalEquity();
         $operatingBase = $this->getOperatingBase($stock);
         $minCash = $this->calculateMinOperatingCash($operatingBase, 0.0, (float) $stock->getWholesaleDebt());
         $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - $minCash);
 
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
 
-        return $excessCash * $this->calculateCashYield($macroState, $policyRate);
+        // Base deterministic yield (60% bonds + 40% deterministic CAPM equity return)
+        $baseYield = $this->calculateCashYield($macroState, $policyRate);
+
+        // Stochastic seed capital tranche: quarterly equity volatility + VIX market panic drag
+        $seedZ = $mathUtility->generateStandardNormal();
+        $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? 0.15);
+        $vixDrag = max(0.0, ($vixEma - self::SEED_VIX_THRESHOLD) * self::SEED_VIX_SENSITIVITY);
+
+        $stochasticEquityAdjustment = ($seedZ * self::SEED_EQUITY_VOL) - $vixDrag;
+        $effectiveYield = $baseYield + (self::TREASURY_EQUITY_WEIGHT * $stochasticEquityAdjustment);
+
+        return $excessCash * $effectiveYield;
     }
 
     /**
@@ -165,25 +317,25 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
     public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate): float
     {
         $equity = (float) $stock->getTotalEquity();
-        $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * 4.0 : 0.0;
+        $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * self::ROE_ANNUALIZATION_MULT : 0.0;
 
-        $stock->setCurrentRoe((string) max(-0.50, min(1.0, $truePostTaxReturn)));
+        $stock->setCurrentRoe((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $truePostTaxReturn)));
 
         $oldTtm = (float) $stock->getRoeTtm();
-        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * 0.25) + ($oldTtm * 0.75);
-        $stock->setRoeTtm((string) max(-0.50, min(1.0, $newTtm)));
+        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::ROE_TTM_EMA_WEIGHT) + ($oldTtm * self::ROE_TTM_HIST_WEIGHT);
+        $stock->setRoeTtm((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;
     }
 
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
     {
-        return max($operatingBase * 0.10, $wholesaleDebt * 0.05);
+        return max($operatingBase * self::TARGET_OPERATING_BUFFER, $wholesaleDebt * self::TARGET_DEBT_BUFFER);
     }
 
     public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
     {
-        return $operatingBase * 0.05;
+        return $operatingBase * self::MIN_OPERATING_BUFFER;
     }
 
     public function evaluateHoardingStatus(float $treasury, float $targetCashReserves, float $operatingBase, float $totalDebt): array
@@ -191,8 +343,8 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         $excessCash = max(0.0, $treasury - $targetCashReserves);
         return [
             'excess_cash'     => $excessCash,
-            'is_hoarder'      => $excessCash > ($operatingBase * 0.30),
-            'is_mega_hoarder' => $excessCash > ($operatingBase * 0.50),
+            'is_hoarder'      => $excessCash > ($operatingBase * self::HOARDER_THRESHOLD),
+            'is_mega_hoarder' => $excessCash > ($operatingBase * self::MEGA_HOARDER_THRESHOLD),
         ];
     }
 
@@ -203,26 +355,29 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         $wholesaleRate = $debt > 0 ? ($interestExpense / $debt) : $currentMarketFixedRate;
         return ['interest_expense' => $interestExpense, 'wholesale_rate' => $wholesaleRate];
     }
+
     public function calculateCashYield(array &$macroState, float $policyRate): float
     {
-        $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['policy_rate_ema'] ?? 0.02) + 0.01;
+        $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['policy_rate_ema'] ?? self::DEFAULT_POLICY_RATE_FALLBACK) + self::DEFAULT_10Y_SPREAD;
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
 
         $bondReturn = $yield10y;
-        $equityReturn = 0.07 + ($outputGap * 2.0);
+        $equityReturn = self::BASE_EQUITY_RETURN + ($outputGap * self::EQUITY_RETURN_GAP_MULT);
 
         // Asset Managers invest heavily in their own funds ("eating their own cooking").
         // We use a classic 60/40 portfolio (60% Bonds / 40% Equities) which gives them higher market correlation.
-        return max(0.0, (0.60 * $bondReturn) + (0.40 * $equityReturn));
+        return max(0.0, (self::TREASURY_BOND_WEIGHT * $bondReturn) + (self::TREASURY_EQUITY_WEIGHT * $equityReturn));
     }
+
     public function getDebtExpansionAggressiveness(float $spreadMultiplier): array
     {
-        return ['probability' => 0.50 + ($spreadMultiplier * 0.30), 'aggressiveness' => 0.05 + (0.10 * $spreadMultiplier)];
+        return ['probability' => self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT), 'aggressiveness' => self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier)];
     }
+
     public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float
     {
         // Asset managers and brokerages use capital to seed new funds, acquire advisory firms, and build trading platforms.
-        return max($organicSpend, $debtIssued * 0.90);
+        return max($organicSpend, $debtIssued * self::DEBT_CAPEX_DEPLOYMENT);
     }
 
     public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float
@@ -230,8 +385,10 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         // Asset managers and brokerages can expand using existing cash hoards before taking on new debt
         return max(0.0, $baseCapacity - $excessCash);
     }
+
     public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float
     {
         return max($revenueFloorValue, $peFairValue);
     }
 }
+

@@ -45,6 +45,19 @@ class FinancialConstants
     // --- Valuations ---
     public const BASELINE_MARKET_PE = 15.0;
     public const NEGATIVE_EPS_FALLBACK_PE = 35.0; // Legacy fallback, transitioning to P/S
+    public const DEFAULT_PERPETUAL_GROWTH_RATE = 0.02;
+    public const MIN_INTRINSIC_PE = 4.0;
+    public const MAX_INTRINSIC_PE = 35.0;
+    public const DCF_FALLBACK_MULTIPLIER = 60.0;
+    public const MAX_DCF_MULTIPLIER = 33.33;
+    public const DEFAULT_DDM_GROWTH_RATE = 0.01;
+    public const MIN_PS_FALLBACK_MULT = 0.2;
+    public const MAX_PS_FALLBACK_MULT = 5.0;
+    public const MIN_INTRINSIC_PB = 0.40;
+    public const MAX_INTRINSIC_PB = 10.0;
+    public const MAX_REVERSION_FORCE_CAP = 15.0;
+    public const ESTAR_ARBITRAGE_ELASTICITY = 2.0;
+    public const FUNDING_LIQUIDITY_STRESS_FACTOR = 2.0;
 
     // --- Brokerage & Lending ---
     public const MARGIN_LOAN_SPREAD = 0.03;
@@ -55,4 +68,16 @@ class FinancialConstants
     public const EMERGENCY_DEBT_SPREAD_PENALTY = 0.02; // +200 bps penalty rate for emergency liquidity borrowing
     public const MAX_QUARTERLY_PRICE_CIRCUIT_BREAKER = 0.40; // 40% single-quarter stock price limit up/down
     public const YIELD_CURVE_INVERSION_SENSITIVITY = 15.0; // Standardized duration sensitivity for NIM compression
+
+    // --- Market Saturation & Bureaucratic Bloat (Diseconomies of Scale) ---
+    public const BASELINE_SECTOR_TAM = 2000000000000.0;
+    public const COURNOT_DEMAND_ELASTICITY = 1.25;
+    public const DISECONOMY_OPTIMAL_SHARE_THRESHOLD = 0.50;
+    public const DISECONOMY_FRICTION_COEFF = 0.20;
+    public const SYSTEMIC_MOAT_FACTORS = [
+        'titan'    => 0.30,
+        'systemic' => 0.75,
+        'base'     => 0.90,
+        'default'  => 1.00,
+    ];
 }

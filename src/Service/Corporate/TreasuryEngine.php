@@ -85,14 +85,19 @@ class TreasuryEngine
         $totalCashSpent = $totalDividendsPaid + $totalBuybackCash;
 
         // RETAINED EARNINGS
-        $currentRetained = (float) $stock->getRetainedEarnings();
-        $newRetained = $currentRetained + $quarterlyNetIncome - $totalDividendsPaid;
-        $stock->setRetainedEarnings((string) $newRetained);
+        $currentRetainedStr = $this->formatBc($stock->getRetainedEarnings());
+        $netIncomeStr = $this->formatBc($quarterlyNetIncome);
+        $divPaidStr = $this->formatBc($totalDividendsPaid);
+        $newRetainedStr = \bcsub(\bcadd($currentRetainedStr, $netIncomeStr, 4), $divPaidStr, 4);
+        $stock->setRetainedEarnings($newRetainedStr);
 
         // TOTAL EQUITY (Clean Surplus Accounting)
-        $currentEquity = (float) $stock->getTotalEquity();
-        $newEquity = $currentEquity + $quarterlyNetIncome + $realEstateAppreciation - $totalCashSpent;
-        $stock->setTotalEquity((string) $newEquity);
+        $currentEquityStr = $this->formatBc($stock->getTotalEquity());
+        $reApprecStr = $this->formatBc($realEstateAppreciation);
+        $totalCashSpentStr = $this->formatBc($totalCashSpent);
+        $newEquityStr = \bcsub(\bcadd(\bcadd($currentEquityStr, $netIncomeStr, 4), $reApprecStr, 4), $totalCashSpentStr, 4);
+        $stock->setTotalEquity($newEquityStr);
+        $newEquity = (float) $newEquityStr;
 
         $state = [
             'treasury' => $finalTreasury,
@@ -132,19 +137,20 @@ class TreasuryEngine
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
         $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
 
-        if ($isFinancial) {
-            $trueReturn = (float) $stock->getCurrentRoe();
-            $hurdleRate = $health['cost_of_equity'] ?? 0.10;
-        } else {
-            $trueReturn = (float) $stock->getCurrentRoic();
-            $hurdleRate = $health['wacc'];
-        }
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $trueReturn = $strategy->calculateEconomicReturn($stock, $nopat, $liveInvestedCapital);
+        $hurdleRate = $isFinancial ? ($health['cost_of_equity'] ?? 0.10) : $health['wacc'];
 
         $evaluationCapital = $isFinancial ? $newEquity : $liveInvestedCapital;
 
+        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
+        $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
+        $saturationPenalty = $archetypeStrategy->modifySaturationPenalty($saturationPenalty);
+        $marginalReturn = max(0.0, $trueReturn - $saturationPenalty);
+
         $isUnderLeveraged = $health['is_under_leveraged'] && !$health['is_severe_negative_carry'];
 
-        if (($trueReturn > $hurdleRate || $isUnderLeveraged) && $health['can_issue_debt']) {
+        if (($marginalReturn > $hurdleRate || $isUnderLeveraged) && $health['can_issue_debt']) {
             $newBorrowingRate = $health['raw_metrics']['current_market_rate'] ?? 0.05;
 
             if ($isFinancial) {
@@ -192,10 +198,10 @@ class TreasuryEngine
             $trueExpansionCapacity = min($trueExpansionCapacity, $liveInvestedCapital * 0.25);
 
             if ($trueExpansionCapacity > 0) {
-                $spreadMultiplier = min(1.0, max(0.0, ($trueReturn - $hurdleRate) * 10.0));
+                $spreadMultiplier = min(1.0, max(0.0, ($marginalReturn - $hurdleRate) * 10.0));
 
                 if ($isFinancial) {
-                    $bankSpreadMultiplier = min(1.0, max(0.0, ($trueReturn - $hurdleRate) * 20.0));
+                    $bankSpreadMultiplier = min(1.0, max(0.0, ($marginalReturn - $hurdleRate) * 20.0));
                     $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
                     $aggressionData = $strategy->getDebtExpansionAggressiveness($bankSpreadMultiplier);
                     $borrowProbability = $aggressionData['probability'];
@@ -216,17 +222,13 @@ class TreasuryEngine
                     $aggressiveness = $aggressionData['aggressiveness'];
                 }
 
-                $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
-
-                // CAPITAL STRUCTURE MAINTENANCE:
-                // If a company is under-leveraged (Debt/Equity < 60% of tolerance), it aggressively issues debt to recapitalize
-                // rather than just to capture new market share, so it ignores the market saturation penalty.
+                // CAPITAL STRUCTURE MAINTENANCE (Modigliani-Miller / Trade-Off Theory):
+                // If a company is structurally under-leveraged (positive WACC arbitrage where Ke > Kd, strong ICR cushion,
+                // and below CFO target leverage), it aggressively issues debt to optimize capital structure and recapitalize.
 
                 if ($isUnderLeveraged) {
                     $aggressiveness = max($aggressiveness, 0.50);
                     $borrowProbability = max($borrowProbability, 0.90);
-                } else {
-                    $borrowProbability *= max(0.05, 1.0 - $saturationPenalty);
                 }
 
                 if ((mt_rand() / mt_getrandmax()) < $borrowProbability) {
@@ -264,17 +266,17 @@ class TreasuryEngine
         $targetCashReserves = $strategy->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt']) * 1.20;
         $liveInvestedCapital = $this->corporateMetrics->calculateLiveInvestedCapital($newEquity, $totalDebt, $state['treasury']);
 
-        $trueReturn = $isFinancial ? (float) $stock->getCurrentRoe() : (float) $stock->getCurrentRoic();
+        $trueReturn = $strategy->calculateEconomicReturn($stock, $nopat, $liveInvestedCapital);
         $hurdleRate = $isFinancial ? ($health['cost_of_equity'] ?? 0.10) : $health['wacc'];
         $evaluationCapital = $isFinancial ? $newEquity : $liveInvestedCapital;
 
-        $investmentProbability = min(0.95, max(0.10, 0.20 + ($trueReturn * 2.0)));
-
         $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
-        $investmentProbability = $archetypeStrategy->modifyInvestmentProbability($investmentProbability, $trueReturn);
         $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
         $saturationPenalty = $archetypeStrategy->modifySaturationPenalty($saturationPenalty);
-        $investmentProbability = max(0.05, $investmentProbability - $saturationPenalty);
+        $marginalReturn = max(0.0, $trueReturn - $saturationPenalty);
+
+        $investmentProbability = min(0.95, max(0.10, 0.20 + ($marginalReturn * 2.0)));
+        $investmentProbability = $archetypeStrategy->modifyInvestmentProbability($investmentProbability, $marginalReturn);
 
         $isRecap = !empty($state['recapActionTaken']);
         $forcedExpansion = $state['debtActionTaken'] && !$isRecap;
@@ -430,8 +432,8 @@ class TreasuryEngine
                 $state['treasury'] += $targetRaise;
 
                 // ACCOUNTING FIX: A stock issuance must increase Book Value (Paid-in Capital)
-                $currentEquity = (float) $stock->getTotalEquity();
-                $stock->setTotalEquity((string) ($currentEquity + $targetRaise));
+                $currentEquityStr = $this->formatBc($stock->getTotalEquity());
+                $stock->setTotalEquity(\bcadd($currentEquityStr, $this->formatBc($targetRaise), 4));
 
                 $amtB = number_format($targetRaise / 1_000_000_000, 2);
                 $state['events'][] = [
@@ -547,5 +549,27 @@ class TreasuryEngine
         $industry = $stock->getIndustry() ?: 'General';
         $strategy = \App\Data\Sectors::getBusinessModelStrategy(\App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none');
         $strategy->processPassiveLiabilityGrowth($stock, $macroState, $state, $this->mathUtility);
+    }
+
+    /**
+     * Converts a float or string into a decimal string without scientific notation (e.g. E+11),
+     * required for safe PHP bcmath functions and database string columns.
+     */
+    private function formatBc(int|float|string|null $val, int $scale = 4): string
+    {
+        if ($val === null || $val === '') {
+            return '0.' . str_repeat('0', $scale);
+        }
+        if (is_string($val)) {
+            if (stripos($val, 'e') !== false && is_numeric($val)) {
+                $val = (float) $val;
+            } else {
+                return $val;
+            }
+        }
+        if (is_numeric($val) && !is_finite((float) $val)) {
+            return '0.' . str_repeat('0', $scale);
+        }
+        return sprintf('%.'.$scale.'F', (float) $val);
     }
 }

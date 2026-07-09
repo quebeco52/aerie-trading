@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
     unzip \
     libicu-dev \
     && docker-php-ext-configure intl \
-    && docker-php-ext-install pdo_mysql pcntl intl \
+    && docker-php-ext-install pdo_mysql pcntl intl bcmath \
     && pecl install redis \
     && docker-php-ext-enable redis
 

@@ -32,4 +32,11 @@ class ConservativeArchetype extends AbstractArchetype
         // Highly trusted by bond markets
         return max(0.0010, $spread * 0.85); 
     }
+
+    public function shouldResistDividendCut(bool $isLiquidityCrisis, bool $isRegulatoryDividendHalt, bool $isDeepDistress = false): bool 
+    { 
+        // Conservative CEOs value predictable income and resist cuts during moderate, temporary downturns.
+        // However, if facing deep structural distress or a liquidity crisis, they pragmatically cut.
+        return !$isLiquidityCrisis && !$isRegulatoryDividendHalt && !$isDeepDistress; 
+    }
 }

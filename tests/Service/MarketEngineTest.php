@@ -104,4 +104,70 @@ class MarketEngineTest extends TestCase
         $this->assertEqualsWithDelta(51.3041, $result['price'], 0.001);
         $this->assertGreaterThan($currentPrice, $result['price'], 'Undervalued price should drift upwards towards fair value.');
     }
+
+    public function testEvaluateFundamentalStateLowMarginHighRevenueNotInflated()
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
+
+        $currentPrice = 40.0;
+        $earningsPerShare = 0.50; // low margin
+        $revenuePerShare = 32.0;  // high revenue
+
+        $result = $this->engine->calculateNextPrice(
+            currentPrice: $currentPrice,
+            currentVolatility: 0.2,
+            longTermVolatility: 0.2,
+            earningsPerShare: $earningsPerShare,
+            dt: 1.0,
+            lambda: 0.0,
+            drift: 0.0,
+            reversionSpeed: 0.25,
+            bookValuePerShare: 25.0,
+            currentRoic: 0.08,
+            roicTtm: 0.08,
+            liveWacc: 0.15,
+            revenuePerShare: $revenuePerShare,
+            businessModel: 'standard'
+        );
+
+        // Perceived fair value should not blow up to $60+ due to raw P/S floor
+        $this->assertLessThan(35.0, $result['perceived_fair_value'], 'Low-margin firm should not receive bubble fair value.');
+    }
+
+    public function testEstarReversionAndFundingLiquidityDampening()
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
+
+        // Calculate with 0 macro stress
+        $normalResult = $this->engine->calculateNextPrice(
+            currentPrice: 100.0,
+            currentVolatility: 0.2,
+            longTermVolatility: 0.2,
+            earningsPerShare: 5.0,
+            dt: 1.0,
+            lambda: 0.0,
+            reversionSpeed: 0.5,
+            macroState: ['output_gap' => 0.0, 'inflation' => 0.02] // 0 stress
+        );
+
+        // Calculate with high macro stress (severe recession and inflation spike)
+        $stressedResult = $this->engine->calculateNextPrice(
+            currentPrice: 100.0,
+            currentVolatility: 0.2,
+            longTermVolatility: 0.2,
+            earningsPerShare: 5.0,
+            dt: 1.0,
+            lambda: 0.0,
+            reversionSpeed: 0.5,
+            macroState: ['output_gap' => -0.10, 'inflation' => 0.08] // high stress
+        );
+
+        $this->assertLessThan(
+            $normalResult['dynamic_reversion'], 
+            $stressedResult['dynamic_reversion'], 
+            'Brunnermeier-Pedersen funding liquidity dampener must reduce reversion speed during high systemic stress.'
+        );
+    }
 }

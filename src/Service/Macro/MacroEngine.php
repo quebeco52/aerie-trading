@@ -31,7 +31,7 @@ class MacroEngine
     public const SVJJ_MU_V = 0.05;
 
     // MACRO SHOCK CONSTANTS
-    public const SHOCK_BASE_PROBABILITY = 0.25;
+    public const SHOCK_BASE_PROBABILITY = 0.15;
 
     // Relative weights for different macro shocks (makes it easy to add new events)
     public const MACRO_SHOCK_WEIGHTS = [
@@ -74,6 +74,13 @@ class MacroEngine
     public const MERTON_LEVERAGE_SENSITIVITY = 3.0; // Sensitivity of default risk to GDP contractions
     public const MERTON_VOL_SENSITIVITY = 0.20;     // Sensitivity of default spreads to excess market volatility
     public const MAX_CREDIT_SPREAD = 0.10;          // 1000 bps crisis spread cap
+
+    // BARRO TAX-SMOOTHING & FISCAL STABILIZER CONSTANTS (Barro 1979)
+    public const TARGET_CORPORATE_TAX_RATE = 0.20;     // 20% structural baseline corporate tax rate
+    public const FISCAL_STABILIZER_SENSITIVITY = 1.0;  // Countercyclical tax response to output gap
+    public const FISCAL_ADJUSTMENT_SPEED = 1.0;        // Institutional speed of tax legislation (~8 mo half-life)
+    public const MIN_CORPORATE_TAX_RATE = 0.12;        // 12% statutory tax floor during deep recessions
+    public const MAX_CORPORATE_TAX_RATE = 0.30;        // 30% statutory tax cap during overheating booms
 
     public function __construct(
         private MathUtility $mathUtility,
@@ -338,20 +345,15 @@ class MacroEngine
 
     private function calculateDynamicFiscalPolicy(MacroState $state, float $dt): void
     {
-        $currentTax = $state->corporateTaxRate;
+        // Barro's Countercyclical Fiscal Policy Rule (Barro, 1979):
+        // Replaces arbitrary dice rolls and step hikes with a smooth continuous institutional feedback loop.
+        // As the output gap expands (boom), automatic stabilizers and tax legislation increase the effective 
+        // tax burden to cool aggregate demand. In recessions, fiscal stimulus smoothly reduces corporate tax burden.
+        $targetTaxRate = self::TARGET_CORPORATE_TAX_RATE + (self::FISCAL_STABILIZER_SENSITIVITY * $state->outputGapEma);
+        $targetTaxRate = max(self::MIN_CORPORATE_TAX_RATE, min(self::MAX_CORPORATE_TAX_RATE, $targetTaxRate));
 
-        // Only attempt legislation if the economy is significantly off-baseline
-        if ($state->outputGapEma > 0.02 && $currentTax < 0.28) {
-            // Overheating: 25% chance per year to pass a 3% tax hike
-            if ($this->mathUtility->checkProbability(0.25 * $dt)) {
-                $state->corporateTaxRate = min(0.30, $currentTax + 0.03);
-            }
-        } elseif ($state->outputGapEma < -0.02 && $currentTax > 0.15) {
-            // Recession: 50% chance per year to pass a 3% tax cut (stimulus is usually faster to pass)
-            if ($this->mathUtility->checkProbability(0.50 * $dt)) {
-                $state->corporateTaxRate = max(0.12, $currentTax - 0.03);
-            }
-        }
+        // Smooth Ornstein-Uhlenbeck institutional adjustment toward the fiscal target
+        $state->corporateTaxRate += self::FISCAL_ADJUSTMENT_SPEED * ($targetTaxRate - $state->corporateTaxRate) * $dt;
     }
 
     private function calculateEquityRiskPremium(MacroState $state): void

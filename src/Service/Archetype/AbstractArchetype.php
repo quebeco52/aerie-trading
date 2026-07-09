@@ -17,7 +17,7 @@ abstract class AbstractArchetype implements ArchetypeInterface
     
     public function modifyTargetPayoutRatio(float $targetPayout): float { return $targetPayout; }
     
-    public function shouldResistDividendCut(bool $isLiquidityCrisis, bool $isRegulatoryDividendHalt): bool { return false; }
+    public function shouldResistDividendCut(bool $isLiquidityCrisis, bool $isRegulatoryDividendHalt, bool $isDeepDistress = false): bool { return false; }
     
     public function modifyBuybackAggression(float $aggression): float { return $aggression; }
     

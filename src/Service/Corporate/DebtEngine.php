@@ -416,7 +416,15 @@ class DebtEngine
         $macroDebtTolerance = $archetypeStrategy->modifyDebtToleranceLimit($equityLimit, $effectiveCostOfDebt);
 
         $currentDebtRatio = $currentDebt / max(1.0, $equity);
-        $isUnderLeveraged = $currentDebtRatio < ($macroDebtTolerance * 0.60);
+        $isUnderLeveraged = $strategy->isUnderLeveraged(
+            $isFinancial,
+            $currentDebtRatio,
+            $macroDebtTolerance,
+            $interestCoverage,
+            $minIcr,
+            $costOfEquity,
+            $effectiveCostOfDebt
+        );
 
         $isLiquidityCrisis = $interestCoverage < 0;
         $isLiquidityWarning = $interestCoverage >= 0 && $interestCoverage < $minIcr;

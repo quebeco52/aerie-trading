@@ -164,6 +164,8 @@ class CapitalAllocationEngine
         $lastDividend = (float) $stock->getLastDividend();
         $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
 
+        $isAristocrat = $speed <= 0.03;
+
         $targetPayout = $archetypeStrategy->modifyTargetPayoutRatio($targetPayout);
 
         $industry = $stock->getIndustry() ?: 'General';
@@ -176,31 +178,24 @@ class CapitalAllocationEngine
 
         $sustainableBase = $strategy->getSustainableDividendBase($stock, $quarterlyEps, $investedCapital, $depRate);
         $calculatedTarget = $sustainableBase > 0 ? ($sustainableBase * $targetPayout) : 0.0;
-        $targetDividend = $speed > 0.05 ? $calculatedTarget : max($calculatedTarget, $lastDividend);
+        $targetDividend = $isAristocrat ? max($calculatedTarget, $lastDividend) : $calculatedTarget;
 
         $isRegulatoryDividendHalt = false;
+        $trueReturn = $strategy->calculateEconomicReturn($stock, $isFinancial ? $actualTotalNetIncome : $nopat, $investedCapital);
         if ($isFinancial) {
-            $trueReturn = (float)$stock->getTotalEquity() > 0 ? ($actualTotalNetIncome / (float)$stock->getTotalEquity()) * 4.0 : 0.0;
             $hurdleRate = $health['cost_of_equity'] ?? 0.10;
 
             $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['equity_limit'] ?? 10.0;
-            if ((float)$stock->getDebtToEquityRatio() > $equityLimit) {
+            if ((float)$stock->getDebtToEquityRatio() > $equityLimit * 1.1) {
                 $isRegulatoryDividendHalt = true;
             }
         } else {
-            $adjustedNopat = $nopat;
-            if ($businessModel === 'reit') {
-                $adjustedNopat += ($investedCapital * $depRate); // FFO/NOI adjustment
-            }
-            $trueReturn = $investedCapital > 0 ? ($adjustedNopat / $investedCapital) * 4.0 : 0.0;
             $hurdleRate = $health['wacc'];
         }
 
         $evaSpread = $trueReturn - $hurdleRate;
-        $isTitan = in_array($stock->getSystemicImportance(), ['titan']);
-        $isAristocrat = $speed <= 0.05;
 
-        $distressMultiplier = 1.0 + ($isTitan ? 0.2 : 0.0) + ($isAristocrat ? 0.2 : 0.0);
+        $distressMultiplier = 1.0 + ($isAristocrat ? 0.2 : 0.0);
 
         $minOperatingCash = $strategy->calculateMinOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
         $hasCashBuffer = $availableTreasury > ($minOperatingCash * 1.5);
@@ -213,30 +208,23 @@ class CapitalAllocationEngine
         $crisisThreshold = $modelThresholds['dividend_crisis_icr'];
         $isLiquidityCrisis = $health['interest_coverage'] < 1.0 || ($health['interest_coverage'] < $crisisThreshold && !$hasCashBuffer);
 
-        $cutDividend = false;
-        if ($isDeepDistress || $isLiquidityCrisis || $isRegulatoryDividendHalt) {
-            if ($archetypeStrategy->shouldResistDividendCut($isLiquidityCrisis, $isRegulatoryDividendHalt)) {
-                // The CEO refuses to cut the dividend!
-            } else {
+        $resistsCut = $archetypeStrategy->shouldResistDividendCut($isLiquidityCrisis, $isRegulatoryDividendHalt, $isDeepDistress);
+
+        if ($resistsCut) {
+            // The CEO explicitly defends the payout: clamp target dividend to prevent silent erosion below last dividend
+            $targetDividend = max($targetDividend, $lastDividend);
+        } else {
+            if ($isDeepDistress || $isLiquidityCrisis || $isRegulatoryDividendHalt) {
                 $targetDividend = 0.0;
-                $cutDividend = true;
                 $speed = ($isLiquidityCrisis || $isRegulatoryDividendHalt) ? 1.0 : min(1.0, $speed + 0.25);
-            }
-        } elseif ($isModerateDistressNoCash) {
-            if ($archetypeStrategy->shouldResistDividendCut(false, false)) {
-                // The CEO refuses to cut the dividend!
-            } else {
-                // Moderate distress without cash buffer: Rebase dividend to 50% of last dividend to preserve capital without total elimination
-                $targetDividend = $lastDividend * 0.50;
-                $cutDividend = true;
+            } elseif ($isModerateDistressNoCash || ($isCriticalCash && $calculatedTarget < $lastDividend)) {
+                // Moderate distress or critical cash without CEO resistance: Rebase dividend to preserve capital without total elimination
+                $targetDividend = min($calculatedTarget, $lastDividend * 0.50);
                 $speed = min(1.0, $speed + 0.15);
             }
-        } elseif ($isCriticalCash && $calculatedTarget < $lastDividend) {
-            $targetDividend = $calculatedTarget;
-            if ($speed <= 0.05) $speed = 0.50;
         }
 
-        if ($lastDividend > 0 && $speed <= 0.05) {
+        if ($lastDividend > 0 && $isAristocrat) {
             $catchUpRatio = $calculatedTarget / $lastDividend;
             if ($catchUpRatio > 1.30) {
                 $speed = min(0.15, $speed + (($catchUpRatio - 1.30) * 0.10));
@@ -260,11 +248,18 @@ class CapitalAllocationEngine
 
         if ($newDividend > 0.0) {
             $this->entityManager->getConnection()->executeStatement(
-                'UPDATE users u
-                 INNER JOIN user_stocks us ON u.id = us.user_id
-                 SET u.cash_balance = u.cash_balance + (us.quantity * :dividend)
-                 WHERE us.stock_id = :stock_id',
-                ['dividend' => $newDividend, 'stock_id' => $stock->getId()]
+                "UPDATE users u
+                 INNER JOIN (
+                     SELECT user_id, SUM(total_qty) AS total_shares
+                     FROM (
+                         SELECT user_id, quantity AS total_qty FROM user_stocks WHERE stock_id = :stock_id
+                         UNION ALL
+                         SELECT user_id, quantity AS total_qty FROM trade_orders WHERE ticker = :ticker AND status = 'OPEN' AND action = 'SELL'
+                     ) combined_shares
+                     GROUP BY user_id
+                 ) holdings ON u.id = holdings.user_id
+                 SET u.cash_balance = u.cash_balance + (holdings.total_shares * :dividend)",
+                ['dividend' => $newDividend, 'stock_id' => $stock->getId(), 'ticker' => $stock->getTicker()]
             );
 
             $stock->setLastDividend((string) $newDividend);
@@ -318,13 +313,9 @@ class CapitalAllocationEngine
         $totalCashSpent = 0.0;
         $event = null;
 
-        if ($isFinancial) {
-            $trueReturn = (float)$stock->getTotalEquity() > 0 ? ($actualTotalNetIncome / (float)$stock->getTotalEquity()) * 4.0 : 0.0;
-            $hurdleRate = $health['cost_of_equity'] ?? 0.10;
-        } else {
-            $trueReturn = $investedCapital > 0 ? ($nopat / $investedCapital) * 4.0 : 0.0;
-            $hurdleRate = $health['wacc'];
-        }
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $trueReturn = $strategy->calculateEconomicReturn($stock, $isFinancial ? $actualTotalNetIncome : $nopat, $investedCapital);
+        $hurdleRate = $isFinancial ? ($health['cost_of_equity'] ?? 0.10) : $health['wacc'];
         $economicSpread = $trueReturn - $hurdleRate;
 
         $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $trueReturn, 0.02);
@@ -335,9 +326,9 @@ class CapitalAllocationEngine
             $marketCap = $shares * max($currentPrice, 0.01);
             $maxRegulatorySpend = $marketCap * ($isMegaHoarder ? 0.075 : ($isHoarder ? 0.05 : 0.015));
 
-            // CAPITAL STRUCTURE MAINTENANCE: 
-            // If the company is under-leveraged, they can aggressively deploy excess cash to buy back stock.
-            $currentDebtRatio = ((float) $stock->getTotalDebt()) / max(1.0, (float) $stock->getTotalEquity());
+            // CAPITAL STRUCTURE MAINTENANCE (Modigliani-Miller / Trade-Off Theory): 
+            // If the company is structurally under-leveraged (positive WACC arbitrage and ample ICR safety cushion),
+            // they can aggressively deploy excess cash to buy back stock and optimize capital efficiency.
             $isUnderLeveraged = $health['is_under_leveraged'] ?? false;
 
             if ($isUnderLeveraged && $excessCash > 0) {
@@ -363,8 +354,9 @@ class CapitalAllocationEngine
 
             if ($sharesRepurchased > 0) {
                 $totalCashSpent = $sharesRepurchased * max($currentPrice, 0.01);
-                $shares -= $sharesRepurchased;
-                $stock->setSharesOutstanding((string) $shares);
+                $sharesStr = \bcsub((string) $stock->getSharesOutstanding(), (string) $sharesRepurchased, 8);
+                $stock->setSharesOutstanding($sharesStr);
+                $shares = (float) $sharesStr;
 
                 $pctRetired = ($sharesRepurchased / ($shares + $sharesRepurchased)) * 100;
                 $event = [
