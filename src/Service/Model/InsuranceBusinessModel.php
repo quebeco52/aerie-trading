@@ -238,6 +238,15 @@ class InsuranceBusinessModel extends AbstractBusinessModel
      */
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
+        // Resolve company-specific tuned underwriting parameters
+        $params = $this->resolveModelParameters($stock, [
+            'catastrophe_z_threshold' => self::CATASTROPHE_Z_THRESHOLD,
+            'catastrophe_loss_scalar' => self::CATASTROPHE_LOSS_SCALAR,
+        ]);
+
+        $catThreshold = $params['catastrophe_z_threshold'];
+        $catScalar    = $params['catastrophe_loss_scalar'];
+
         // 1. Premium Revenue Shock (Very low top-line variance)
         $revenueZ = $mathUtility->generateStandardNormal();
         $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
@@ -246,7 +255,9 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         $claimZ = $mathUtility->generateStandardNormal();
 
         // Catastrophes are asymmetric. A hurricane causes massive losses, but a lack of hurricanes only mildly boosts profits.
-        $underwritingShock = $claimZ < self::CATASTROPHE_Z_THRESHOLD ? abs($claimZ) * self::CATASTROPHE_LOSS_SCALAR : ($claimZ > self::BENIGN_CLAIM_Z_FLOOR ? self::BENIGN_CLAIM_BONUS : 0.0);
+        $underwritingShock = $claimZ < $catThreshold
+            ? abs($claimZ) * $catScalar
+            : ($claimZ > self::BENIGN_CLAIM_Z_FLOOR ? self::BENIGN_CLAIM_BONUS : 0.0);
 
         $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $underwritingShock));
 
@@ -289,6 +300,15 @@ class InsuranceBusinessModel extends AbstractBusinessModel
      */
     public function calculateInterestIncome(Stock $stock, array &$macroState, MathUtility $mathUtility): float
     {
+        // Resolve company-specific tuned float allocation parameters
+        $params = $this->resolveModelParameters($stock, [
+            'float_equity_weight'  => self::FLOAT_EQUITY_WEIGHT,
+            'equity_portfolio_vol' => self::EQUITY_PORTFOLIO_VOL,
+        ]);
+
+        $floatEquityWeight = $params['float_equity_weight'];
+        $equityVol         = $params['equity_portfolio_vol'];
+
         $cash = (float) $stock->getCorporateTreasury();
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
 
@@ -302,17 +322,17 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         // This makes insurance float income meaningfully volatile during equity market crashes.
         $equityPortfolioZ = $mathUtility->generateStandardNormal();
         $stochasticEquityReturn = ($policyRate + $erp) + ($outputGap * self::EQUITY_RETURN_GAP_MULT)
-            + ($equityPortfolioZ * self::EQUITY_PORTFOLIO_VOL);
+            + ($equityPortfolioZ * $equityVol);
 
         // Catastrophe-Equity Correlation:
-        // Major disasters (9\/11, COVID, GFC) simultaneously cause high claims AND equity market crashes.
+        // Major disasters (9/11, COVID, GFC) simultaneously cause high claims AND equity market crashes.
         // VIX is a reliable real-time proxy: panic-level VIX (>25%) reliably accompanies both catastrophes
         // and broad equity drawdowns. This correlation is the channel the model exploits.
         $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? 0.15);
         $catastropheEquityPenalty = max(0.0, ($vixEma - self::CATASTROPHE_VIX_THRESHOLD) * self::CATASTROPHE_EQUITY_CORRELATION);
         $stochasticEquityReturn -= $catastropheEquityPenalty;
 
-        $floatYield = $baseYield + (self::FLOAT_EQUITY_WEIGHT * $stochasticEquityReturn);
+        $floatYield = $baseYield + ($floatEquityWeight * $stochasticEquityReturn);
 
         return $cash * $floatYield;
     }

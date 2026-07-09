@@ -19,6 +19,12 @@ use App\Service\Macro\MacroEngine;
  */
 class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Dual-Stream Defense & Security Architecture ---
+    /** Baseline fraction of revenue derived from long-term government defense contracts (Cost-Plus). */
+    public const GOVERNMENT_CONTRACT_WEIGHT = 0.80;
+    /** Baseline fraction of revenue derived from commercial security, cybersecurity, and protection systems. */
+    public const COMMERCIAL_SERVICES_WEIGHT = 0.20;
+
     // --- Government Contracting & Cost-Plus Physics ---
     /** Volatility multiplier for top-line revenue shocks in stable government budget models. */
     public const REVENUE_VARIANCE_SCALAR   = 0.05;
@@ -68,49 +74,60 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
-        $revenueZ = $mathUtility->generateStandardNormal();
+        $params = $this->resolveModelParameters($stock, [
+            'government_contract_weight' => self::GOVERNMENT_CONTRACT_WEIGHT,
+            'commercial_services_weight' => self::COMMERCIAL_SERVICES_WEIGHT,
+        ]);
 
-        // Government Contracts: Extremely low base volatility
-        $revenueShock = $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
+        $govtWeight       = $params['government_contract_weight'];
+        $commercialWeight = $params['commercial_services_weight'];
+
+        // Independent stream Z-scores
+        $contractZ   = $mathUtility->generateStandardNormal(); // Core sovereign defense contracts
+        $commercialZ = $mathUtility->generateStandardNormal(); // Commercial security & protection consulting
 
         // Cost-Plus Contracting (The Inflation Blessing):
-        // If inflation drives up the cost of building a fighter jet, the contractor's absolute profit 
-        // goes UP, because their margin is a guaranteed percentage of the total inflated cost.
+        // Applies specifically to long-term sovereign government defense contracts ($govtWeight).
         $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
         $costPlusBonus = ($inflation - MacroEngine::TARGET_INFLATION) * self::COST_PLUS_BONUS_SCALAR;
 
-        $actualRevenue = max(0.0, $expectedRevenue * (1.0 + $revenueShock + $costPlusBonus));
+        $govtRevenue       = $expectedRevenue * $govtWeight * (1.0 + ($contractZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $costPlusBonus);
+        $commercialRevenue = $expectedRevenue * $commercialWeight * (1.0 + ($commercialZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
 
-        // Tail Risk: Geopolitical Contract Wins/Losses
+        // Tail Risk: Geopolitical Contract Wins/Losses impact the sovereign government contract stream directly
         $eventZ = $mathUtility->generateStandardNormal();
         $eventLore = null;
 
         if ($eventZ < self::CONTRACT_LOSS_Z_SCORE) {
-            $actualRevenue *= self::CONTRACT_LOSS_MULT; // Lost a massive 10% contract
+            $govtRevenue *= self::CONTRACT_LOSS_MULT;
             $eventLore = "Lost a multi-billion dollar next-generation government defense contract to a rival.";
         } elseif ($eventZ > self::CONTRACT_WIN_Z_SCORE) {
-            $actualRevenue *= self::CONTRACT_WIN_MULT; // Won a massive 10% contract
+            $govtRevenue *= self::CONTRACT_WIN_MULT;
             $eventLore = "Secured a massive, multi-decade international defense contract.";
         }
+
+        $actualRevenue = max(0.0, $govtRevenue + $commercialRevenue);
 
         $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin));
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
         // Analyst Visibility
-        // Cost-plus inflation is 100% public. Defense contracts are mostly public but exact profitability is opaque until earnings (~50% visibility).
+        // Cost-plus inflation is 100% public. Defense contracts are mostly public (~50% visibility).
         $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
         $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
-        $analystExpectedRevenue = max(0.0, $expectedRevenue * (1.0 + ($revenueShock * $dynamicVisibility) + $costPlusBonus));
+        $analystExpectedRevenue = max(0.0, $expectedRevenue * (1.0 + (($contractZ * $govtWeight + $commercialZ * $commercialWeight) * $dynamicVisibility) + ($costPlusBonus * $govtWeight)));
         $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin));
 
+        $primaryShockZ = abs($eventZ) > abs($contractZ) ? $eventZ : $contractZ;
+
         return [
-            'actual_revenue' => $actualRevenue,
-            'actual_variable_costs' => $actualVariableCosts,
-            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'actual_revenue'                  => $actualRevenue,
+            'actual_variable_costs'           => $actualVariableCosts,
+            'analyst_expected_revenue'        => $analystExpectedRevenue,
             'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit' => $ebit,
-            'primary_shock_z' => abs($eventZ) > abs($revenueZ) ? $eventZ : $revenueZ,
-            'event_lore' => $eventLore
+            'ebit'                            => $ebit,
+            'primary_shock_z'                 => $primaryShockZ,
+            'event_lore'                      => $eventLore
         ];
     }
 

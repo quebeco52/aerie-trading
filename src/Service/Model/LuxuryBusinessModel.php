@@ -18,6 +18,12 @@ use App\Service\Macro\MacroEngine;
  */
 class LuxuryBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Dual-Stream Luxury Brand Architecture ---
+    /** Baseline fraction of revenue derived from ultra-high-net-worth Maison leather goods and haute couture. */
+    public const HAUTE_COUTURE_WEIGHT     = 0.45;
+    /** Baseline fraction of revenue derived from accessible luxury (perfume, eyewear, cosmetics, accessories). */
+    public const ACCESSIBLE_LUXURY_WEIGHT = 0.55;
+
     // --- Veblen Pricing & Macro Physics ---
     /** Macroeconomic demand shift sensitivity to global output gaps for elite luxury goods. */
     public const MACRO_DEMAND_SCALAR       = 0.70;
@@ -73,49 +79,61 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
 
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
-        $revenueZ = $mathUtility->generateStandardNormal();
-        
-        // Luxury demand exhibits steady, low-to-moderate idiosyncratic variance
-        $revenueShock = $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
-        $actualRevenue = $expectedRevenue * (1.0 + $revenueShock);
-        
-        // Veblen Inflation Benefit vs. Standard Supply Chain Penalty:
-        // Unlike normal corporates that suffer an inflation penalty, luxury brands raise prices faster than raw material costs.
-        $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
-        $veblenMarginBenefit = $inflation > MacroEngine::TARGET_INFLATION ? -($inflation - MacroEngine::TARGET_INFLATION) * self::VEBLEN_MARGIN_BENEFIT : 0.0;
+        $params = $this->resolveModelParameters($stock, [
+            'haute_couture_weight'     => self::HAUTE_COUTURE_WEIGHT,
+            'accessible_luxury_weight' => self::ACCESSIBLE_LUXURY_WEIGHT,
+        ]);
 
-        // Tail Risk: Brand Dilution / Creative Director Departure vs. Viral Fashion Super-Cycle
+        $hauteWeight      = $params['haute_couture_weight'];
+        $accessibleWeight = $params['accessible_luxury_weight'];
+
+        // Independent stream Z-scores
+        $hauteZ      = $mathUtility->generateStandardNormal(); // UHNW leather goods / couture demand
+        $accessibleZ = $mathUtility->generateStandardNormal(); // Fragrance & cosmetics retail volume
+
+        $hauteRevenue      = $expectedRevenue * $hauteWeight * (1.0 + ($hauteZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
+        $accessibleRevenue = $expectedRevenue * $accessibleWeight * (1.0 + ($accessibleZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
+
+        // Veblen Inflation Benefit vs. Standard Supply Chain Penalty:
+        $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
+        $veblenMarginBenefit = $inflation > MacroEngine::TARGET_INFLATION ? -($inflation - MacroEngine::TARGET_INFLATION) * self::VEBLEN_MARGIN_BENEFIT * $hauteWeight : 0.0;
+
+        // Tail Risk: Brand Dilution vs. Viral Fashion Super-Cycle
         $eventZ = $mathUtility->generateStandardNormal();
         $eventLore = null;
         $brandModifier = 0.0;
-        
+
         if ($eventZ < self::BRAND_DILUTION_Z_SCORE) {
-            $brandModifier = self::BRAND_DILUTION_PENALTY; // 6% margin hit due to excess inventory discounting and brand dilution
+            $brandModifier = self::BRAND_DILUTION_PENALTY * $hauteWeight;
             $eventLore = "Suffered brand dilution and inventory write-downs following a poorly received creative direction.";
         } elseif ($eventZ > self::BRAND_BOOM_Z_SCORE) {
-            $actualRevenue *= self::BRAND_BOOM_REV_MULT; // 15% revenue surge from iconic collection demand
-            $brandModifier = self::BRAND_BOOM_MARGIN_BONUS;
+            $hauteRevenue *= self::BRAND_BOOM_REV_MULT;
+            $brandModifier = self::BRAND_BOOM_MARGIN_BONUS * $hauteWeight;
             $eventLore = "Captured immense global demand with a culturally dominant fashion collection.";
         }
+
+        $actualRevenue = max(0.0, $hauteRevenue + $accessibleRevenue);
 
         $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $veblenMarginBenefit + $brandModifier));
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
         // Analyst Visibility
-        // Fashion cycles and brand momentum are heavily tracked by retail data and boutique foot traffic (~50% visibility).
+        // Fashion cycles and brand momentum are heavily tracked by retail data (~50% visibility).
         $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
         $dynamicVisibility = min(1.0, max(self::MIN_ANALYST_VISIBILITY, self::ANALYST_BASE_VISIBILITY + $analystError));
-        $analystExpectedRevenue = $expectedRevenue * (1.0 + ($revenueShock * $dynamicVisibility));
+        $analystExpectedRevenue = $expectedRevenue * (1.0 + (($hauteZ * $hauteWeight + $accessibleZ * $accessibleWeight) * $dynamicVisibility));
         $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + (($veblenMarginBenefit + $brandModifier) * $dynamicVisibility)));
 
+        $primaryShockZ = abs($eventZ) > abs($hauteZ) ? $eventZ : $hauteZ;
+
         return [
-            'actual_revenue' => $actualRevenue,
-            'actual_variable_costs' => $actualVariableCosts,
-            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'actual_revenue'                  => $actualRevenue,
+            'actual_variable_costs'           => $actualVariableCosts,
+            'analyst_expected_revenue'        => $analystExpectedRevenue,
             'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit' => $ebit,
-            'primary_shock_z' => abs($eventZ) > abs($revenueZ) ? $eventZ : $revenueZ,
-            'event_lore' => $eventLore
+            'ebit'                            => $ebit,
+            'primary_shock_z'                 => $primaryShockZ,
+            'event_lore'                      => $eventLore
         ];
     }
 

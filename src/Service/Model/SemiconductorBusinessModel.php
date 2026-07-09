@@ -20,6 +20,12 @@ use App\Service\Macro\MacroEngine;
  */
 class SemiconductorBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Dual-Stream Semiconductor Architecture ---
+    /** Baseline fraction of revenue derived from physical cleanroom fab manufacturing and wafer sales. */
+    public const FOUNDRY_REVENUE_WEIGHT = 0.85;
+    /** Baseline fraction of revenue derived from fabless chip IP design and accelerator licensing. */
+    public const DESIGN_REVENUE_WEIGHT  = 0.15;
+
     // --- Cyclical Demand & Macro Physics ---
     /** Macroeconomic demand shift sensitivity to global tech CapEx cycles. */
     public const MACRO_DEMAND_SCALAR       = 1.50;
@@ -87,38 +93,45 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
 
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
-        $revenueZ = $mathUtility->generateStandardNormal();
-        
-        // Chip cycles exhibit high volatility (shortages vs. inventory glut bullwhip effect)
-        $revenueShock = $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
-        
+        $params = $this->resolveModelParameters($stock, [
+            'foundry_revenue_weight' => self::FOUNDRY_REVENUE_WEIGHT,
+            'design_revenue_weight'  => self::DESIGN_REVENUE_WEIGHT,
+        ]);
+
+        $foundryWeight = $params['foundry_revenue_weight'];
+        $designWeight  = $params['design_revenue_weight'];
+
+        // Independent stream Z-scores
+        $foundryZ = $mathUtility->generateStandardNormal(); // Cleanroom wafer manufacturing volume
+        $designZ  = $mathUtility->generateStandardNormal(); // IP architecture licensing & AI design mandates
+
         // Fab Utilization Leverage & Tech Super-Cycles
+        // Crucially, capacity utilization leverage applies to physical fab manufacturing ($foundryWeight),
+        // while fabless IP licensing scales independently with tech demand.
         $outputGap = $macroState['output_gap_ema'] ?? ($macroState['output_gap'] ?? 0.0);
         $utilizationMultiplier = 0.0;
         $eventLore = null;
 
         $cycleZ = $mathUtility->generateStandardNormal();
         if ($outputGap > self::BOOM_GAP_THRESHOLD && $cycleZ > self::BOOM_Z_SCORE_THRESHOLD) {
-            // AI / Tech hardware super-cycle causes severe chip shortages and 100% fab utilization
             $utilizationMultiplier = $outputGap * self::BOOM_UTILIZATION_MULT;
-            $actualRevenue = $expectedRevenue * (1.0 + $revenueShock + $utilizationMultiplier);
             $eventLore = "Achieved 100% fab capacity utilization amid a global technological hardware shortage.";
         } elseif ($outputGap < self::GLUT_GAP_THRESHOLD && $cycleZ < self::GLUT_Z_SCORE_THRESHOLD) {
-            // Inventory bullwhip correction causes fab underutilization
             $utilizationMultiplier = $outputGap * self::GLUT_UTILIZATION_MULT;
-            $actualRevenue = $expectedRevenue * (1.0 + $revenueShock + $utilizationMultiplier);
             $eventLore = "Suffered severe margin drag from underutilized cleanrooms during an industry inventory correction.";
-        } else {
-            $actualRevenue = $expectedRevenue * (1.0 + $revenueShock);
         }
 
+        $foundryRevenue = $expectedRevenue * $foundryWeight * (1.0 + ($foundryZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $utilizationMultiplier);
+        $designRevenue  = $expectedRevenue * $designWeight * (1.0 + ($designZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
+        $actualRevenue  = max(0.0, $foundryRevenue + $designRevenue);
+
         // CapEx Hurdle Rate & Yield Penalties
-        // In semiconductor manufacturing, massive ongoing CapEx is mandatory table stakes to maintain cleanroom purity and lithography tool calibration.
+        // In semiconductor manufacturing, massive ongoing CapEx is mandatory table stakes to maintain cleanroom purity.
+        // Underinvestment scrap penalties compress margins proportionally on physical foundry operations.
         $capexRatio = (float) $stock->getCapexRatio();
         $yieldModifier = 0.0;
         if ($capexRatio < self::CAPEX_HURDLE_RATIO) {
-            // Underinvesting in lithography and cleanroom upgrades degrades silicon wafer yields
-            $yieldModifier = self::WAFER_SCRAP_PENALTY; // 8% penalty on variable costs due to defective wafer scrap
+            $yieldModifier = self::WAFER_SCRAP_PENALTY * $foundryWeight; // Scaled by foundry weight
         }
 
         $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $yieldModifier));
@@ -128,17 +141,19 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         // Semiconductor lead times and wafer shipments are closely monitored by supply chain analysts (~60% visibility).
         $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
         $dynamicVisibility = min(1.0, max(self::MIN_ANALYST_VISIBILITY, self::ANALYST_BASE_VISIBILITY + $analystError));
-        $analystExpectedRevenue = $expectedRevenue * (1.0 + (($revenueShock + $utilizationMultiplier) * $dynamicVisibility));
+        $analystExpectedRevenue = $expectedRevenue * (1.0 + (($foundryZ * $foundryWeight + $utilizationMultiplier * $foundryWeight) * $dynamicVisibility));
         $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + ($yieldModifier * $dynamicVisibility)));
 
+        $primaryShockZ = abs($cycleZ) > abs($foundryZ) ? $cycleZ : $foundryZ;
+
         return [
-            'actual_revenue' => $actualRevenue,
-            'actual_variable_costs' => $actualVariableCosts,
-            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'actual_revenue'                  => $actualRevenue,
+            'actual_variable_costs'           => $actualVariableCosts,
+            'analyst_expected_revenue'        => $analystExpectedRevenue,
             'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit' => $ebit,
-            'primary_shock_z' => abs($cycleZ) > abs($revenueZ) ? $cycleZ : $revenueZ,
-            'event_lore' => $eventLore
+            'ebit'                            => $ebit,
+            'primary_shock_z'                 => $primaryShockZ,
+            'event_lore'                      => $eventLore
         ];
     }
 

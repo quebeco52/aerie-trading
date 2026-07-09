@@ -20,6 +20,12 @@ use App\Service\Macro\MacroEngine;
  */
 class BiotechBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Dual-Stream Biotech Portfolio Architecture ---
+    /** Baseline fraction of revenue derived from commercially marketed, patent-protected established pharmaceuticals. */
+    public const ESTABLISHED_DRUG_WEIGHT = 0.70;
+    /** Baseline fraction of revenue derived from high-risk clinical trial pipeline and new indications. */
+    public const PIPELINE_DRUG_WEIGHT    = 0.30;
+
     // --- Inelastic Healthcare Demand & Macro Physics ---
     /** Macroeconomic demand shift sensitivity to output gap for essential medical treatments. */
     public const MACRO_DEMAND_SCALAR       = 0.25;
@@ -85,28 +91,38 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
 
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
-        $revenueZ = $mathUtility->generateStandardNormal();
+        $params = $this->resolveModelParameters($stock, [
+            'established_drug_weight' => self::ESTABLISHED_DRUG_WEIGHT,
+            'pipeline_drug_weight'    => self::PIPELINE_DRUG_WEIGHT,
+        ]);
 
-        // Biotech is subject to high idiosyncratic variance due to ongoing clinical trial readouts
-        $revenueShock = $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
-        $actualRevenue = $expectedRevenue * (1.0 + $revenueShock);
+        $establishedWeight = $params['established_drug_weight'];
+        $pipelineWeight    = $params['pipeline_drug_weight'];
+
+        // Independent stream Z-scores
+        $establishedZ = $mathUtility->generateStandardNormal(); // Commercial prescription volume variance
+        $pipelineZ    = $mathUtility->generateStandardNormal(); // Clinical trial milestone readouts
+
+        $establishedRevenue = $expectedRevenue * $establishedWeight * (1.0 + ($establishedZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
+        $pipelineRevenue    = $expectedRevenue * $pipelineWeight * (1.0 + ($pipelineZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
 
         // Patent Cliff vs. Blockbuster R&D Super-Cycle
+        // Applies directly to the high-risk pipeline drug stream ($pipelineWeight).
         $patentModifier = 0.0;
         $eventLore = null;
 
         $trialZ = $mathUtility->generateStandardNormal();
         if ($trialZ > self::TRIAL_APPROVAL_Z_SCORE) {
-            // Blockbuster FDA Approval
-            $actualRevenue *= self::TRIAL_APPROVAL_REV_MULT;
-            $patentModifier = self::TRIAL_APPROVAL_MARGIN_BONUS; // 8% margin improvement due to high-margin patent monopoly
+            $pipelineRevenue *= self::TRIAL_APPROVAL_REV_MULT;
+            $patentModifier = self::TRIAL_APPROVAL_MARGIN_BONUS * $pipelineWeight;
             $eventLore = "Received landmark regulatory approval for a blockbuster specialty drug pipeline.";
         } elseif ($trialZ < self::TRIAL_FAILURE_Z_SCORE) {
-            // Phase III Clinical Trial Failure / Patent Expiration
-            $actualRevenue *= self::TRIAL_FAILURE_REV_MULT;
-            $patentModifier = self::TRIAL_FAILURE_MARGIN_PENALTY; // 10% margin compression from generic drug competition
+            $pipelineRevenue *= self::TRIAL_FAILURE_REV_MULT;
+            $patentModifier = self::TRIAL_FAILURE_MARGIN_PENALTY * $pipelineWeight;
             $eventLore = "Suffered a major clinical trial setback and patent cliff generic erosion.";
         }
+
+        $actualRevenue = max(0.0, $establishedRevenue + $pipelineRevenue);
 
         $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $patentModifier));
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
@@ -115,17 +131,19 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         // Clinical trial results and FDA decisions are sudden, binary public news events (~85% visibility when they occur).
         $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
         $dynamicVisibility = $eventLore !== null ? min(1.0, max(self::EVENT_VISIBILITY_MIN, self::EVENT_VISIBILITY_BASE + $analystError)) : min(1.0, max(self::ROUTINE_VISIBILITY_MIN, self::ROUTINE_VISIBILITY_BASE + $analystError));
-        $analystExpectedRevenue = $expectedRevenue * (1.0 + ($revenueShock * $dynamicVisibility));
+        $analystExpectedRevenue = $expectedRevenue * (1.0 + (($establishedZ * $establishedWeight + $pipelineZ * $pipelineWeight) * $dynamicVisibility));
         $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + ($patentModifier * $dynamicVisibility)));
 
+        $primaryShockZ = abs($trialZ) > abs($establishedZ) ? $trialZ : $establishedZ;
+
         return [
-            'actual_revenue' => $actualRevenue,
-            'actual_variable_costs' => $actualVariableCosts,
-            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'actual_revenue'                  => $actualRevenue,
+            'actual_variable_costs'           => $actualVariableCosts,
+            'analyst_expected_revenue'        => $analystExpectedRevenue,
             'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit' => $ebit,
-            'primary_shock_z' => abs($trialZ) > abs($revenueZ) ? $trialZ : $revenueZ,
-            'event_lore' => $eventLore
+            'ebit'                            => $ebit,
+            'primary_shock_z'                 => $primaryShockZ,
+            'event_lore'                      => $eventLore
         ];
     }
 

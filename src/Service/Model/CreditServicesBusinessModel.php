@@ -20,6 +20,12 @@ use App\Service\Math\FinancialConstants;
  */
 class CreditServicesBusinessModel extends CommercialBankBusinessModel
 {
+    // --- Dual-Stream Credit Services Architecture ---
+    /** Baseline fraction of revenue derived from revolving consumer lending interest. */
+    public const LENDING_REVENUE_WEIGHT  = 0.65;
+    /** Baseline fraction of revenue derived from payment network interchange / swipe fees. */
+    public const NETWORK_REVENUE_WEIGHT  = 0.35;
+
     // --- ROE & Target Architecture ---
     /** Weight given to historical baseline ROE when blending with TTM ROE. */
     public const BASELINE_ROE_WEIGHT = 0.70;
@@ -113,16 +119,33 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
 
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
-        $revenueZ = $mathUtility->generateStandardNormal();
+        // Resolve company-specific tuned credit services parameters
+        $params = $this->resolveModelParameters($stock, [
+            'lending_revenue_weight'  => self::LENDING_REVENUE_WEIGHT,
+            'network_revenue_weight'  => self::NETWORK_REVENUE_WEIGHT,
+            'cecl_spread_sensitivity' => self::CECL_SPREAD_SENSITIVITY,
+        ]);
 
-        // Inflation Bonus (Interchange Fees):
+        $lendingWeight   = $params['lending_revenue_weight'];
+        $networkWeight   = $params['network_revenue_weight'];
+        $ceclSensitivity = $params['cecl_spread_sensitivity'];
+
+        // Independent stream Z-scores
+        $lendingZ = $mathUtility->generateStandardNormal(); // Revolving credit loan origination volume
+        $swipeZ   = $mathUtility->generateStandardNormal(); // Payment gateway transaction swipe volume
+        $defaultZ = $mathUtility->generateStandardNormal(); // Consumer credit default Z-score
+
+        // Inflation Bonus (Interchange Swipe Fees):
         // Swipe fees (Visa/MC network) are a percentage of transaction value — higher prices = higher revenue.
         $inflation = $macroState['inflation_ema'] ?? ($macroState['inflation'] ?? MacroEngine::TARGET_INFLATION);
         $inflationBonus = ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta());
 
-        $actualRevenue = max(0.0, $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $inflationBonus));
-
-        $defaultZ = $mathUtility->generateStandardNormal();
+        // Blended dual-stream revenue (Lending vs. Payment Network Interchange)
+        $lendingRevenue = $expectedRevenue * $lendingWeight
+            * (1.0 + ($lendingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
+        $networkRevenue = $expectedRevenue * $networkWeight
+            * (1.0 + ($swipeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $inflationBonus);
+        $actualRevenue = max(0.0, $lendingRevenue + $networkRevenue);
 
         // Unsecured Default Shock:
         // Credit card debt is unsecured. Consumers default on cards long before mortgages during recessions.
@@ -133,7 +156,6 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             $provisionShock = abs($defaultZ) * self::LOSS_PROVISION_SCALAR;
         } elseif ($defaultZ > self::HEALTHY_CREDIT_Z_FLOOR) {
             // Scaled reserve release: replaces flat HEALTHY_CREDIT_BONUS.
-            // A very benign credit environment (defaultZ = 3.0) releases up to 4% of revenue in provisions.
             $provisionShock = -min(self::MAX_PROVISION_REVERSAL, ($defaultZ - self::HEALTHY_CREDIT_Z_FLOOR) * self::PROVISION_REVERSAL_SCALE);
         } else {
             $provisionShock = 0.0;
@@ -142,9 +164,8 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
 
         // CECL Forward Provisioning (Credit Spread Channel):
         // Unsecured credit companies are far more sensitive to spread widening than banks.
-        // Credit card ABS spreads widen immediately when credit deteriorates, forcing proactive reserve builds.
         $creditSpread = $macroState['macro_credit_spread_ema'] ?? ($macroState['macro_credit_spread'] ?? self::CECL_BASELINE_CREDIT_SPREAD);
-        $ceclDrag = max(0.0, ($creditSpread - self::CECL_BASELINE_CREDIT_SPREAD) * self::CECL_SPREAD_SENSITIVITY);
+        $ceclDrag = max(0.0, ($creditSpread - self::CECL_BASELINE_CREDIT_SPREAD) * $ceclSensitivity);
 
         // Net Interest Margin (NIM) Squeeze (1.5x more sensitive than banks due to wholesale funding dependency)
         $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['yield_10y'] ?? self::DEFAULT_10Y_YIELD_FALLBACK);
@@ -159,8 +180,11 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         }
 
         // Structural efficiency floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
+        // Crucially, unsecured default provisions, CECL reserve builds, and NIM squeeze apply proportionally
+        // to the Revolving Lending share ($lendingWeight), leaving Payment Network Swipe Interchange completely insulated.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
-        $rawMargin = $realizedVariableMargin + $lossProvisionShock + $nimSqueeze + $ceclDrag;
+        $lendingCostAddon = ($lossProvisionShock + $nimSqueeze + $ceclDrag) * $lendingWeight;
+        $rawMargin = $realizedVariableMargin + $lendingCostAddon;
         $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max($minVariableMargin, $rawMargin));
         $actualVariableCosts = $actualRevenue * $clampedMargin;
 
@@ -188,7 +212,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             'analyst_expected_revenue'        => $analystExpectedRevenue,
             'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
             'ebit'                            => $actualRevenue - $fixedCosts - $actualVariableCosts,
-            'primary_shock_z'                 => abs($defaultZ) > abs($revenueZ) ? $defaultZ : $revenueZ,
+            'primary_shock_z'                 => abs($defaultZ) > abs($lendingZ) ? $defaultZ : $lendingZ,
             'event_lore'                      => $eventLore,
         ];
     }

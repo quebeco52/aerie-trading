@@ -19,6 +19,12 @@ use App\Service\Event\ShockEvent;
  */
 class CommercialBankBusinessModel extends AbstractBusinessModel
 {
+    // --- Dual-Stream Banking Architecture ---
+    /** Baseline fraction of bank revenue derived from Net Interest Income (NII). */
+    public const NII_REVENUE_WEIGHT      = 0.75;
+    /** Baseline fraction of bank revenue derived from Non-Interest / Fee Income (Custodial, Wealth, Payments). */
+    public const FEE_REVENUE_WEIGHT      = 0.25;
+
     // --- Revenue & Shock Physics ---
     /** Baseline volatility multiplier for loan origination and fee revenue shocks. */
     public const REVENUE_VARIANCE_SCALAR = 0.15;
@@ -200,14 +206,33 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
      */
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
-        $revenueZ = $mathUtility->generateStandardNormal();
-        $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
+        // Resolve company-specific tuned commercial bank parameters
+        $params = $this->resolveModelParameters($stock, [
+            'nii_revenue_weight'        => self::NII_REVENUE_WEIGHT,
+            'fee_revenue_weight'        => self::FEE_REVENUE_WEIGHT,
+            'nim_inversion_sensitivity' => self::NIM_INVERSION_SENSITIVITY,
+        ]);
 
-        $defaultZ = $mathUtility->generateStandardNormal();
+        $niiWeight            = $params['nii_revenue_weight'];
+        $feeWeight            = $params['fee_revenue_weight'];
+        $inversionSensitivity = $params['nim_inversion_sensitivity'];
+
+        // Independent stream Z-scores
+        $revenueZ = $mathUtility->generateStandardNormal(); // NII loan origination volume
+        $feeZ     = $mathUtility->generateStandardNormal(); // Non-interest custodial / payment fee volume
+        $defaultZ = $mathUtility->generateStandardNormal(); // Idiosyncratic credit default
+
+        $outputGap = $macroState['output_gap_ema'] ?? ($macroState['output_gap'] ?? 0.0);
+
+        // Blended dual-stream revenue (NII vs. Non-Interest Fee Income)
+        $niiRevenue = $expectedRevenue * $niiWeight
+            * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
+        $feeRevenue = $expectedRevenue * $feeWeight
+            * (1.0 + ($feeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + ($outputGap * 0.35));
+        $actualRevenue = max(0.0, $niiRevenue + $feeRevenue);
 
         // Loan Loss Provisions (Idiosyncratic Credit Cycle):
         // Collateralized loans (prime mortgages, corporate debt) have lower LGD than unsecured credit.
-        $outputGap = $macroState['output_gap_ema'] ?? ($macroState['output_gap'] ?? 0.0);
         $macroDefaultDrag = $outputGap < 0.0 ? abs($outputGap) * self::MACRO_DEFAULT_LGD_DRAG : 0.0;
 
         if ($defaultZ < -1.5) {
@@ -224,28 +249,29 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
         // CECL Forward Provisioning (Credit Spread Channel):
         // Under CECL accounting, banks must provision against EXPECTED future losses.
         // When corporate credit spreads widen, banks build reserves proactively — before loans actually default.
-        // This is a distinct, forward-looking channel orthogonal to the idiosyncratic defaultZ.
         $creditSpread = $macroState['macro_credit_spread_ema'] ?? ($macroState['macro_credit_spread'] ?? self::CECL_BASELINE_CREDIT_SPREAD);
         $ceclDrag = max(0.0, ($creditSpread - self::CECL_BASELINE_CREDIT_SPREAD) * self::CECL_SPREAD_SENSITIVITY);
 
         // Net Interest Margin (NIM) Squeeze:
         // Banks borrow short-term (deposits) and lend long-term (mortgages/commercial).
         // A steep yield curve is highly profitable. An inversion collapses the spread.
-        // The quadratic term amplifies the pain during severe inversions (e.g., 2022-23 cycle).
         $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['yield_10y'] ?? 0.04);
         $yield2y  = $macroState['yield_2y_ema']  ?? ($macroState['yield_2y']  ?? 0.03);
         $bankSpread = $yield10y - $yield2y;
 
         if ($bankSpread < 0) {
             $nimSqueeze = (self::NIM_BASE_SPREAD_BUFFER - $bankSpread)
-                + pow(abs($bankSpread) * self::NIM_INVERSION_SENSITIVITY, 2) * self::NIM_QUADRATIC_COEFF;
+                + pow(abs($bankSpread) * $inversionSensitivity, 2) * self::NIM_QUADRATIC_COEFF;
         } else {
             $nimSqueeze = self::NIM_BASE_SPREAD_BUFFER - $bankSpread;
         }
 
         // Physics-grounded Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
+        // Crucially, NIM squeeze and CECL provision charges apply proportionally to the NII revenue share ($niiWeight),
+        // leaving Non-Interest custodial / wealth / transaction fee income completely insulated.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
-        $rawMargin = $realizedVariableMargin + $lossProvisionShock + $nimSqueeze + $ceclDrag;
+        $niiCostAddon = ($lossProvisionShock + $nimSqueeze + $ceclDrag) * $niiWeight;
+        $rawMargin = $realizedVariableMargin + $niiCostAddon;
         $clampedMargin = min(1.50, max($minVariableMargin, $rawMargin));
         $actualVariableCosts = $actualRevenue * $clampedMargin;
 

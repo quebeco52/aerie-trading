@@ -19,6 +19,12 @@ use App\Service\Macro\MacroEngine;
  */
 class ShippingBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Dual-Stream Maritime Charter Architecture ---
+    /** Baseline fraction of revenue derived from volatile spot market freight and short-term voyage charters. */
+    public const SPOT_CHARTER_WEIGHT     = 0.50;
+    /** Baseline fraction of revenue derived from long-term contracted time charters and dedicated logistics. */
+    public const CONTRACT_CHARTER_WEIGHT = 0.50;
+
     // --- Hyper-Cyclical Spot Rate Physics ---
     /** Macroeconomic demand shift sensitivity to global trade output gaps. */
     public const MACRO_DEMAND_SCALAR       = 1.80;
@@ -76,32 +82,40 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
 
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
-        $revenueZ = $mathUtility->generateStandardNormal();
-        
-        // Shipping experiences extreme top-line spot rate volatility
-        $revenueShock = $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
-        
+        $params = $this->resolveModelParameters($stock, [
+            'spot_charter_weight'     => self::SPOT_CHARTER_WEIGHT,
+            'contract_charter_weight' => self::CONTRACT_CHARTER_WEIGHT,
+        ]);
+
+        $spotWeight     = $params['spot_charter_weight'];
+        $contractWeight = $params['contract_charter_weight'];
+
+        // Independent stream Z-scores
+        $spotZ     = $mathUtility->generateStandardNormal(); // Spot ocean freight / Baltic Dry variance
+        $contractZ = $mathUtility->generateStandardNormal(); // Multi-year contracted logistics lines
+
         // Spot Rate Super-Cycle vs. Capacity Glut
+        // Crucially, spot rate boom/glut multipliers apply specifically to spot charter revenue ($spotWeight).
         $outputGap = $macroState['output_gap_ema'] ?? ($macroState['output_gap'] ?? 0.0);
         $spotRateMultiplier = 0.0;
         $eventLore = null;
 
         if ($outputGap > self::SPOT_BOOM_GAP_THRESHOLD) {
-            // Global trade boom creates port congestion and vessel shortages, causing spot rates to skyrocket
             $spotRateMultiplier = $outputGap * self::SPOT_BOOM_RATE_MULT;
-            if ($revenueZ > self::LORE_CONGESTION_Z_SCORE) {
+            if ($spotZ > self::LORE_CONGESTION_Z_SCORE) {
                 $eventLore = "Capitalized on severe global port congestion with record-breaking container spot rates.";
             }
         } elseif ($outputGap < self::SPOT_GLUT_GAP_THRESHOLD) {
-            // Trade slowdown creates a massive vessel capacity glut
             $spotRateMultiplier = $outputGap * self::SPOT_GLUT_RATE_MULT;
-            if ($revenueZ < self::LORE_GLUT_Z_SCORE) {
+            if ($spotZ < self::LORE_GLUT_Z_SCORE) {
                 $eventLore = "Suffered operating losses due to a severe global vessel capacity glut and collapsing freight rates.";
             }
         }
 
-        $actualRevenue = $expectedRevenue * (1.0 + $revenueShock + $spotRateMultiplier);
-        
+        $spotRevenue     = $expectedRevenue * $spotWeight * (1.0 + ($spotZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $spotRateMultiplier);
+        $contractRevenue = $expectedRevenue * $contractWeight * (1.0 + ($contractZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
+        $actualRevenue   = max(0.0, $spotRevenue + $contractRevenue);
+
         // Fuel and Bunker Cost Inflation:
         // Shipping is directly exposed to crude oil and commodity inflation.
         $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
@@ -111,20 +125,22 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
         // Analyst Visibility
-        // Global shipping spot indices (e.g., Baltic Dry Index, Harpex) are public, daily data (~75% visibility).
+        // Global shipping spot indices (e.g., Baltic Dry Index, Harpex) are public daily data (~75% visibility).
         $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
         $dynamicVisibility = min(1.0, max(self::MIN_ANALYST_VISIBILITY, self::ANALYST_BASE_VISIBILITY + $analystError));
-        $analystExpectedRevenue = $expectedRevenue * (1.0 + (($revenueShock + $spotRateMultiplier) * $dynamicVisibility));
+        $analystExpectedRevenue = $expectedRevenue * (1.0 + (($spotZ * $spotWeight + $spotRateMultiplier * $spotWeight) * $dynamicVisibility));
         $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + ($bunkerInflationPenalty * $dynamicVisibility)));
 
+        $primaryShockZ = abs($spotZ) > abs($contractZ) ? $spotZ : $contractZ;
+
         return [
-            'actual_revenue' => $actualRevenue,
-            'actual_variable_costs' => $actualVariableCosts,
-            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'actual_revenue'                  => $actualRevenue,
+            'actual_variable_costs'           => $actualVariableCosts,
+            'analyst_expected_revenue'        => $analystExpectedRevenue,
             'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit' => $ebit,
-            'primary_shock_z' => $revenueZ,
-            'event_lore' => $eventLore
+            'ebit'                            => $ebit,
+            'primary_shock_z'                 => $primaryShockZ,
+            'event_lore'                      => $eventLore
         ];
     }
 

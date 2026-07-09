@@ -17,6 +17,12 @@ use App\Service\Math\MathUtility;
  */
 class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Dual-Stream Consumer Staples Architecture ---
+    /** Baseline fraction of revenue derived from premium packaged branded staples and inelastic consumer goods. */
+    public const BRANDED_STAPLES_WEIGHT  = 0.65;
+    /** Baseline fraction of revenue derived from bulk commodity food processing and agricultural volume. */
+    public const VOLUME_COMMODITY_WEIGHT = 0.35;
+
     // --- Inelastic Demand & Shock Physics ---
     /** Volatility multiplier for top-line revenue shocks in stable consumer staples models. */
     public const REVENUE_VARIANCE_SCALAR   = 0.05;
@@ -51,30 +57,36 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
 
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
-        $revenueZ = $mathUtility->generateStandardNormal();
-        
-        // Inelastic Demand:
-        // Top-line variance is heavily muted because people always buy groceries and tobacco.
-        // Volatility impact is sliced to just 5% of standard variance.
-        $revenueShock = $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR); 
-        $actualRevenue = $expectedRevenue * (1.0 + $revenueShock);
-        
-        // Absolute Pricing Power:
-        // Unlike standard corporates, consumer staples do not suffer an inflation penalty.
-        // They simply raise prices at the grocery store, preserving their margins perfectly.
-        
+        $params = $this->resolveModelParameters($stock, [
+            'branded_staples_weight'  => self::BRANDED_STAPLES_WEIGHT,
+            'volume_commodity_weight' => self::VOLUME_COMMODITY_WEIGHT,
+        ]);
+
+        $brandedWeight = $params['branded_staples_weight'];
+        $volumeWeight  = $params['volume_commodity_weight'];
+
+        // Independent stream Z-scores
+        $brandedZ = $mathUtility->generateStandardNormal(); // Packaged consumer staples demand
+        $volumeZ  = $mathUtility->generateStandardNormal(); // Bulk agricultural processing throughput
+
+        $brandedRevenue = $expectedRevenue * $brandedWeight * (1.0 + ($brandedZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
+        $volumeRevenue  = $expectedRevenue * $volumeWeight * (1.0 + ($volumeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
+
         // Tail Risk: Product Recalls and Health Regulations
+        // Scaled proportionally to packaged branded consumer staples ($brandedWeight).
         $eventZ = $mathUtility->generateStandardNormal();
         $eventLore = null;
         $recallPenalty = 0.0;
-        
+
         if ($eventZ < self::RECALL_SEVERE_Z_SCORE) {
-            $recallPenalty = self::RECALL_SEVERE_PENALTY; // 8% margin hit for massive product recall and write-offs
+            $recallPenalty = self::RECALL_SEVERE_PENALTY * $brandedWeight;
             $eventLore = "Suffered a massive product recall due to severe supply chain contamination.";
         } elseif ($eventZ < self::RECALL_MODERATE_Z_SCORE) {
-            $recallPenalty = self::RECALL_MODERATE_PENALTY; // 3% margin hit for fines and legal fees
+            $recallPenalty = self::RECALL_MODERATE_PENALTY * $brandedWeight;
             $eventLore = "Faced sudden regulatory scrutiny and fines over product health concerns.";
         }
+
+        $actualRevenue = max(0.0, $brandedRevenue + $volumeRevenue);
 
         $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $recallPenalty));
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
@@ -83,20 +95,22 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         // Recalls and regulatory fines are massive public news events (~80% visibility).
         $revenueAnalystError = $mathUtility->generateStandardNormal() * self::REV_ERROR_STD_DEV;
         $revenueVisibility = min(1.0, max(0.0, self::REV_VISIBILITY_BASE + $revenueAnalystError));
-        $analystExpectedRevenue = $expectedRevenue * (1.0 + ($revenueShock * $revenueVisibility));
-        
+        $analystExpectedRevenue = $expectedRevenue * (1.0 + (($brandedZ * $brandedWeight + $volumeZ * $volumeWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR) * $revenueVisibility));
+
         $recallAnalystError = $mathUtility->generateStandardNormal() * self::RECALL_ERROR_STD_DEV;
         $recallVisibility = min(1.0, max(0.0, self::RECALL_VISIBILITY_BASE + $recallAnalystError));
         $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + ($recallPenalty * $recallVisibility)));
 
+        $primaryShockZ = abs($eventZ) > abs($brandedZ) ? $eventZ : $brandedZ;
+
         return [
-            'actual_revenue' => $actualRevenue, 
-            'actual_variable_costs' => $actualVariableCosts, 
-            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'actual_revenue'                  => $actualRevenue,
+            'actual_variable_costs'           => $actualVariableCosts,
+            'analyst_expected_revenue'        => $analystExpectedRevenue,
             'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit' => $ebit, 
-            'primary_shock_z' => abs($eventZ) > abs($revenueZ) ? $eventZ : $revenueZ,
-            'event_lore' => $eventLore
+            'ebit'                            => $ebit,
+            'primary_shock_z'                 => $primaryShockZ,
+            'event_lore'                      => $eventLore
         ];
     }
 

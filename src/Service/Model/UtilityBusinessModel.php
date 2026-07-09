@@ -19,6 +19,12 @@ use App\Service\Macro\MacroEngine;
  */
 class UtilityBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Dual-Stream Utility Rate Architecture ---
+    /** Baseline fraction of revenue derived from regulated rate-base monopoly tariff distribution. */
+    public const REGULATED_BASE_WEIGHT       = 0.85;
+    /** Baseline fraction of revenue derived from unregulated merchant power generation and renewable PPAs. */
+    public const UNREGULATED_MERCHANT_WEIGHT = 0.15;
+
     // --- Regulatory Lag & Macro Physics ---
     /** Macroeconomic demand shift sensitivity to output gap for essential utility monopolies. */
     public const MACRO_DEMAND_SCALAR       = 0.25;
@@ -71,37 +77,46 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
      */
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
-        $revenueZ = $mathUtility->generateStandardNormal();
+        $params = $this->resolveModelParameters($stock, [
+            'regulated_base_weight'       => self::REGULATED_BASE_WEIGHT,
+            'unregulated_merchant_weight' => self::UNREGULATED_MERCHANT_WEIGHT,
+        ]);
 
-        // Volatility impact is sliced to just 3% of standard variance. (Highly stable)
-        $revenueShock = $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
-        $actualRevenue = $expectedRevenue * (1.0 + $revenueShock);
+        $regulatedWeight   = $params['regulated_base_weight'];
+        $unregulatedWeight = $params['unregulated_merchant_weight'];
 
-        // Regulatory Lag: 
-        // It takes months/years to get rate hikes approved. During high inflation, their margins get temporarily compressed.
+        // Independent stream Z-scores
+        $regulatedZ   = $mathUtility->generateStandardNormal(); // Regulated tariff distribution volume (weather / seasonal)
+        $unregulatedZ = $mathUtility->generateStandardNormal(); // Merchant wholesale electricity & PPA trading
+
+        $regulatedRevenue   = $expectedRevenue * $regulatedWeight * (1.0 + ($regulatedZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
+        $unregulatedRevenue = $expectedRevenue * $unregulatedWeight * (1.0 + ($unregulatedZ * ($baselineVol * (self::REVENUE_VARIANCE_SCALAR * 3.0))));
+        $actualRevenue      = max(0.0, $regulatedRevenue + $unregulatedRevenue);
+
+        // Regulatory Lag:
+        // Applies specifically to regulated tariff distribution ($regulatedWeight).
         $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
-        // Utilities lag slightly, so penalty kicks in slightly above target
         $lagThreshold = MacroEngine::TARGET_INFLATION + self::REGULATORY_LAG_BUFFER;
-        $regulatoryLagPenalty = $inflation > $lagThreshold ? ($inflation - $lagThreshold) * self::REGULATORY_LAG_PENALTY : 0.0;
+        $regulatoryLagPenalty = $inflation > $lagThreshold ? ($inflation - $lagThreshold) * self::REGULATORY_LAG_PENALTY * $regulatedWeight : 0.0;
 
         $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $regulatoryLagPenalty));
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
         // Analyst Visibility
-        // Utility performance is largely known via weather and regulatory data (~20% visibility on minor shocks).
-        // The regulatory lag penalty is 100% visible due to public CPI numbers.
         $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
         $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
-        $analystExpectedRevenue = $expectedRevenue * (1.0 + ($revenueShock * $dynamicVisibility));
+        $analystExpectedRevenue = $expectedRevenue * (1.0 + (($regulatedZ * $regulatedWeight + $unregulatedZ * $unregulatedWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR) * $dynamicVisibility));
         $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $regulatoryLagPenalty));
 
+        $primaryShockZ = abs($unregulatedZ) > abs($regulatedZ) ? $unregulatedZ : $regulatedZ;
+
         return [
-            'actual_revenue' => $actualRevenue,
-            'actual_variable_costs' => $actualVariableCosts,
-            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'actual_revenue'                  => $actualRevenue,
+            'actual_variable_costs'           => $actualVariableCosts,
+            'analyst_expected_revenue'        => $analystExpectedRevenue,
             'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit' => $ebit,
-            'primary_shock_z' => $revenueZ
+            'ebit'                            => $ebit,
+            'primary_shock_z'                 => $primaryShockZ
         ];
     }
 

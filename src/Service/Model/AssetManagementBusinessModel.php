@@ -44,6 +44,12 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
     /** Lower clamp for realized variable margin. */
     public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
+    // --- Dual-Stream Fee Architecture ---
+    /** Baseline fraction of revenue derived from sticky recurring AUM management fees. */
+    public const BASE_FEE_WEIGHT           = 0.80;
+    /** Baseline fraction of revenue derived from volatile performance fees / carried interest. */
+    public const PERFORMANCE_FEE_WEIGHT    = 0.20;
+
     // --- AUM Market Beta & Performance Fees ---
     /** Sensitivity of AUM management fee base to macroeconomic output gap (market appreciation/depreciation). */
     public const AUM_MARKET_BETA_SCALAR    = 0.40;
@@ -232,27 +238,46 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
      */
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
-        $revenueZ = $mathUtility->generateStandardNormal();
+        // Resolve company-specific tuned asset management parameters
+        $params = $this->resolveModelParameters($stock, [
+            'base_fee_weight'         => self::BASE_FEE_WEIGHT,
+            'performance_fee_weight'  => self::PERFORMANCE_FEE_WEIGHT,
+            'aum_market_beta_scalar'  => self::AUM_MARKET_BETA_SCALAR,
+            'performance_fee_z_floor' => self::PERFORMANCE_FEE_Z_FLOOR,
+            'performance_fee_scalar'  => self::PERFORMANCE_FEE_SCALAR,
+        ]);
 
-        // 1. AUM Mark-to-Market Beta:
-        // Asset managers earn fees as a percentage of AUM. When equity/credit markets rise or fall,
-        // base management fee revenue expands or contracts with macroeconomic asset values.
+        $baseWeight      = $params['base_fee_weight'];
+        $perfWeight      = $params['performance_fee_weight'];
+        $aumBetaScalar   = $params['aum_market_beta_scalar'];
+        $perfZFloor      = $params['performance_fee_z_floor'];
+        $perfScalar      = $params['performance_fee_scalar'];
+
+        // Independent stream Z-scores
+        $baseFeeZ = $mathUtility->generateStandardNormal(); // Sticky recurring AUM management fees
+        $alphaZ   = $mathUtility->generateStandardNormal(); // Fund alpha / activist execution
+
+        // 1. AUM Mark-to-Market Beta (Base Management Fee Stream):
+        // When equity/credit markets rise or fall, base AUM fee revenue expands or contracts.
         $outputGap = $macroState['output_gap_ema'] ?? ($macroState['output_gap'] ?? 0.0);
-        $aumMarketBeta = $outputGap * abs((float) $stock->getBeta()) * self::AUM_MARKET_BETA_SCALAR;
+        $aumMarketBeta = $outputGap * abs((float) $stock->getBeta()) * $aumBetaScalar;
 
-        // 2. Asymmetric Performance Fees & Redemption Tail Shocks:
+        // 2. Asymmetric Performance Fees & Activist Execution (Incentive Fee Stream):
         // Strong alpha quarters crystallize outsized performance fees / carried interest.
-        // Tail drawdowns trigger net institutional outflows and fee compression.
-        if ($revenueZ > self::PERFORMANCE_FEE_Z_FLOOR) {
-            $alphaFeeBonus = ($revenueZ - self::PERFORMANCE_FEE_Z_FLOOR) * self::PERFORMANCE_FEE_SCALAR;
-        } elseif ($revenueZ < self::REDEMPTION_SHOCK_Z_FLOOR) {
-            $alphaFeeBonus = -abs($revenueZ - self::REDEMPTION_SHOCK_Z_FLOOR) * self::REDEMPTION_SHOCK_SCALAR;
+        if ($alphaZ > $perfZFloor) {
+            $alphaFeeBonus = ($alphaZ - $perfZFloor) * $perfScalar;
+        } elseif ($alphaZ < self::REDEMPTION_SHOCK_Z_FLOOR) {
+            $alphaFeeBonus = -abs($alphaZ - self::REDEMPTION_SHOCK_Z_FLOOR) * self::REDEMPTION_SHOCK_SCALAR;
         } else {
             $alphaFeeBonus = 0.0;
         }
 
-        $totalRevenueShock = ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $aumMarketBeta + $alphaFeeBonus;
-        $actualRevenue = max(0.0, $expectedRevenue * (1.0 + $totalRevenueShock));
+        // Blended dual-stream revenue
+        $baseRevenue = $expectedRevenue * $baseWeight
+            * (1.0 + ($baseFeeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $aumMarketBeta);
+        $perfRevenue = $expectedRevenue * $perfWeight
+            * (1.0 + ($alphaZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $alphaFeeBonus);
+        $actualRevenue = max(0.0, $baseRevenue + $perfRevenue);
 
         // 3. Structural Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
@@ -261,9 +286,9 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
 
         // 4. Dynamic Event Lore:
         $eventLore = null;
-        if ($revenueZ > self::LORE_PERFORMANCE_SURGE_Z) {
+        if ($alphaZ > self::LORE_PERFORMANCE_SURGE_Z) {
             $eventLore = "Crystallized outsized performance fees and carried interest following strong fund alpha.";
-        } elseif ($revenueZ < self::LORE_FUND_OUTFLOWS_Z) {
+        } elseif ($alphaZ < self::LORE_FUND_OUTFLOWS_Z) {
             $eventLore = "Suffered net institutional outflows and fee compression amid risk-off market sentiment.";
         }
 
@@ -271,7 +296,8 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         // Standard AUM fee base trends are partially visible, but performance fees and sudden redemptions are opaque until filings.
         $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
         $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
-        $analystExpectedRevenue = max(0.0, $expectedRevenue * (1.0 + $aumMarketBeta + (($totalRevenueShock - $aumMarketBeta) * $dynamicVisibility)));
+        $unanticipatedRevenueDelta = $actualRevenue - ($expectedRevenue * (1.0 + $aumMarketBeta));
+        $analystExpectedRevenue = max(0.0, ($expectedRevenue * (1.0 + $aumMarketBeta)) + ($unanticipatedRevenueDelta * $dynamicVisibility));
         $analystExpectedVariableCosts = $analystExpectedRevenue * $clampedMargin;
 
         return [
@@ -280,7 +306,7 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
             'analyst_expected_revenue'        => $analystExpectedRevenue,
             'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
             'ebit'                            => $actualRevenue - $fixedCosts - $actualVariableCosts,
-            'primary_shock_z'                 => $revenueZ,
+            'primary_shock_z'                 => abs($alphaZ) > abs($baseFeeZ) ? $alphaZ : $baseFeeZ,
             'event_lore'                      => $eventLore,
         ];
     }

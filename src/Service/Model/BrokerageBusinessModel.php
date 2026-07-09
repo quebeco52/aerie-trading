@@ -19,6 +19,12 @@ use App\Service\Math\FinancialConstants;
  */
 class BrokerageBusinessModel extends AssetManagementBusinessModel
 {
+    // --- Dual-Stream Brokerage Architecture ---
+    /** Baseline fraction of revenue derived from trading desks, market making, and execution commissions. */
+    public const TRADING_REVENUE_WEIGHT  = 0.60;
+    /** Baseline fraction of revenue derived from capital markets advisory, placement, and wealth services. */
+    public const ADVISORY_REVENUE_WEIGHT = 0.40;
+
     // --- VIX & Trading Volume Bonus ---
     /** Baseline VIX threshold above which market volatility boosts trading volume and fee revenue. */
     public const VIX_BASELINE_THRESHOLD = 0.20;
@@ -75,15 +81,28 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
      */
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
-        $revenueZ = $mathUtility->generateStandardNormal();
+        $params = $this->resolveModelParameters($stock, [
+            'trading_revenue_weight'  => self::TRADING_REVENUE_WEIGHT,
+            'advisory_revenue_weight' => self::ADVISORY_REVENUE_WEIGHT,
+        ]);
+
+        $tradingWeight  = $params['trading_revenue_weight'];
+        $advisoryWeight = $params['advisory_revenue_weight'];
+
+        // Independent stream Z-scores
+        $tradingZ  = $mathUtility->generateStandardNormal(); // Trading volume, flow capture, prop desk P&L
+        $advisoryZ = $mathUtility->generateStandardNormal(); // Advisory mandates, prime brokerage balances
 
         // The Volatility Bonus (Trading Volume):
-        // Brokerage revenues are hyper-sensitive to the VIX (Systemic Market Volatility). 
+        // Brokerage trading revenues are hyper-sensitive to the VIX (Systemic Market Volatility).
         // High Volatility = Massive trading volume (panic selling or euphoria buying) which generates massive fees.
+        // Crucially, this VIX bonus applies ONLY to the trading revenue stream ($tradingWeight).
         $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? self::VIX_BASELINE_THRESHOLD);
         $volatilityBonus = max(0.0, ($vixEma - self::VIX_BASELINE_THRESHOLD) * self::VIX_REVENUE_SCALAR);
 
-        $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $volatilityBonus);
+        $tradingRevenue  = $expectedRevenue * $tradingWeight * (1.0 + ($tradingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $volatilityBonus);
+        $advisoryRevenue = $expectedRevenue * $advisoryWeight * (1.0 + ($advisoryZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
+        $actualRevenue   = max(0.0, $tradingRevenue + $advisoryRevenue);
 
         // Structural Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
@@ -93,15 +112,16 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
         $eventLore = null;
         if ($vixEma > self::VIX_EXTREME_THRESHOLD) {
             $eventLore = "Record trading volumes driven by extreme market volatility resulted in massive fee generation.";
-        } elseif ($revenueZ < self::ADVISORY_CRASH_Z_THRESHOLD) {
+        } elseif ($advisoryZ < self::ADVISORY_CRASH_Z_THRESHOLD) {
             $eventLore = "Suffered a steep decline in investment banking deal flow and advisory fees.";
         }
 
         // Analyst Visibility
-        // The Volatility Bonus is completely public. Analysts track the VIX daily and know exactly how much 
-        // trading volume spiked. However, internal advisory flow ($revenueZ) is hidden.
-        $analystExpectedRevenue = $expectedRevenue * (1.0 + $volatilityBonus);
+        // The Volatility Bonus is completely public via daily VIX tracking.
+        $analystExpectedRevenue = $expectedRevenue * (1.0 + ($volatilityBonus * $tradingWeight));
         $analystExpectedVariableCosts = $analystExpectedRevenue * $clampedMargin;
+
+        $primaryShockZ = abs($tradingZ) > abs($advisoryZ) ? $tradingZ : $advisoryZ;
 
         return [
             'actual_revenue'                  => $actualRevenue,
@@ -109,7 +129,7 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
             'analyst_expected_revenue'        => $analystExpectedRevenue,
             'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
             'ebit'                            => $actualRevenue - $fixedCosts - $actualVariableCosts,
-            'primary_shock_z'                 => $revenueZ,
+            'primary_shock_z'                 => $primaryShockZ,
             'event_lore'                      => $eventLore
         ];
     }

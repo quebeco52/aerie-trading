@@ -20,6 +20,14 @@ use App\Service\Event\ShockEvent;
  */
 class TechBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Dual-Stream Tech & Software Architecture ---
+    /** Baseline fraction of revenue derived from recurring SaaS subscription & cloud infrastructure. */
+    public const SUBSCRIPTION_REVENUE_WEIGHT    = 0.60;
+    /** Baseline fraction of revenue derived from digital advertising networks & platform usage fees. */
+    public const ADVERTISING_REVENUE_WEIGHT     = 0.40;
+    /** Sensitivity of digital advertising revenue to macroeconomic output gap cycles. */
+    public const ADVERTISING_CYCLICALITY_SCALAR = 0.15;
+
     // --- Revenue Volatility & Wage Inflation Rails ---
     /** Volatility multiplier for top-line revenue shocks reflecting rapid software user scaling and churn. */
     public const REVENUE_VARIANCE_SCALAR   = 0.20;
@@ -64,56 +72,93 @@ class TechBusinessModel extends StandardCorporateBusinessModel
 
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
-        $revenueZ = $mathUtility->generateStandardNormal();
-        
-        // Tech revenues are inherently more volatile (rapid scaling / user churn cycles)
-        // We increase the variance multiplier from 15% (standard) to 20%
-        $revenueShock = $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
-        $actualRevenue = $expectedRevenue * (1.0 + $revenueShock);
-        
-        // Supply Chain Immunity vs. Talent Inflation:
-        // Tech companies don't buy steel or oil, they pay for engineers and cloud compute.
-        // We dramatically reduce the standard supply chain inflation penalty, kicking in only at very high inflation.
-        $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
-        // Tech is immune to standard supply chain inflation, so penalty only kicks in at 2x Target Inflation
-        $wageInflationThreshold = MacroEngine::TARGET_INFLATION * self::WAGE_INFLATION_THRESHOLD;
-        $wageInflationPenalty = $inflation > $wageInflationThreshold ? ($inflation - $wageInflationThreshold) * abs((float) $stock->getBeta()) * self::WAGE_INFLATION_SCALAR : 0.0;
-        
+        // Resolve company-specific tuned tech and software parameters
+        $params = $this->resolveModelParameters($stock, [
+            'subscription_revenue_weight' => self::SUBSCRIPTION_REVENUE_WEIGHT,
+            'advertising_revenue_weight'  => self::ADVERTISING_REVENUE_WEIGHT,
+            'advertising_cyclicality'     => self::ADVERTISING_CYCLICALITY_SCALAR,
+        ]);
+
+        $subWeight           = $params['subscription_revenue_weight'];
+        $adWeight            = $params['advertising_revenue_weight'];
+        $adCyclicalityScalar = $params['advertising_cyclicality'];
+
+        // Independent stream Z-scores
+        $subscriptionZ = $mathUtility->generateStandardNormal(); // Enterprise SaaS ARR & Cloud compute contract volume
+        $adZ           = $mathUtility->generateStandardNormal(); // Digital advertising auction demand & impression volume
+        $eventZ        = $mathUtility->generateStandardNormal(); // Fat-tail regulatory antitrust / data breach Z-score
+
+        // Macro advertising cyclicality (marketing budgets expand with positive output gap, collapse in recessions)
+        $outputGap = $macroState['output_gap_ema'] ?? ($macroState['output_gap'] ?? 0.0);
+        $adCyclicality = $outputGap * $adCyclicalityScalar;
+
         // Fat Tail Risk: Data Breaches, Anti-Trust, and Viral Breakthroughs
-        $eventZ = $mathUtility->generateStandardNormal();
         $regulatoryShock = 0.0;
-        $eventType = null;
-        
+        $eventType       = null;
+
         if ($eventZ < self::REGULATORY_FINE_Z_SCORE) {
-            $regulatoryShock = self::REGULATORY_FINE_PENALTY; // Massive fixed cost fine / margin hit
+            $regulatoryShock = self::REGULATORY_FINE_PENALTY; // Massive antitrust / surveillance fine
             $eventType = ShockEvent::REGULATORY_FINE;
         } elseif ($eventZ < self::SEVERE_CHURN_Z_SCORE) {
             $regulatoryShock = self::SEVERE_CHURN_PENALTY;
             $eventType = ShockEvent::SEVERE_CHURN;
         } elseif ($eventZ > self::VIRAL_GROWTH_Z_SCORE) {
-            $actualRevenue *= self::VIRAL_GROWTH_REV_MULT; // 10% instant revenue bump
             $eventType = ShockEvent::VIRAL_GROWTH;
         }
 
-        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $wageInflationPenalty + $regulatoryShock));
+        // Blended dual-stream revenue (SaaS Subscription vs. Digital Advertising & Platform Usage)
+        // Subscription ARR has lower baseline volatility (0.6x scalar), whereas Ads take the full swing plus cyclicality
+        $subscriptionRevenue = $expectedRevenue * $subWeight
+            * (1.0 + ($subscriptionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.6)));
+
+        $viralMultiplier = ($eventType === ShockEvent::VIRAL_GROWTH) ? self::VIRAL_GROWTH_REV_MULT : 1.0;
+        $adRevenue = $expectedRevenue * $adWeight
+            * (1.0 + ($adZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $adCyclicality)
+            * $viralMultiplier;
+
+        $actualRevenue = max(0.0, $subscriptionRevenue + $adRevenue);
+
+        // Supply Chain Immunity vs. Talent Inflation:
+        // Tech companies don't buy steel or oil, they pay for engineers and cloud compute.
+        $inflation = $macroState['inflation_ema'] ?? ($macroState['inflation'] ?? MacroEngine::TARGET_INFLATION);
+        $wageInflationThreshold = MacroEngine::TARGET_INFLATION * self::WAGE_INFLATION_THRESHOLD;
+        $wageInflationPenalty = $inflation > $wageInflationThreshold
+            ? ($inflation - $wageInflationThreshold) * abs((float) $stock->getBeta()) * self::WAGE_INFLATION_SCALAR
+            : 0.0;
+
+        // Crucially, antitrust and data privacy regulatory penalties apply proportionally to the Advertising
+        // & Platform data-harvesting stream ($adWeight), insulating enterprise subscription margins.
+        $adCostAddon = $regulatoryShock * $adWeight;
+        $rawMargin = $realizedVariableMargin + $wageInflationPenalty + $adCostAddon;
+        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $rawMargin));
+        $actualVariableCosts = $actualRevenue * $clampedMargin;
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
         // Analyst Visibility
         // Tech usage/engagement data is partially public via 3rd party trackers (~20% visibility).
-        // Fat tail regulatory events are mostly surprises.
         $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
         $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
-        $analystExpectedRevenue = $expectedRevenue * (1.0 + ($revenueShock * $dynamicVisibility));
+        $blendedRevenueShock = (($subscriptionZ * $subWeight) + ($adZ * $adWeight)) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
+        $analystExpectedRevenue = $expectedRevenue * (1.0 + ($blendedRevenueShock * $dynamicVisibility));
         $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $wageInflationPenalty));
 
+        // Primary shock Z-score selects the most extreme driver across streams
+        $primaryShockZ = $subscriptionZ;
+        if (abs($adZ) > abs($primaryShockZ)) {
+            $primaryShockZ = $adZ;
+        }
+        if (abs($eventZ) > abs($primaryShockZ)) {
+            $primaryShockZ = $eventZ;
+        }
+
         return [
-            'actual_revenue' => $actualRevenue, 
-            'actual_variable_costs' => $actualVariableCosts, 
-            'analyst_expected_revenue' => $analystExpectedRevenue,
+            'actual_revenue'                  => $actualRevenue,
+            'actual_variable_costs'           => $actualVariableCosts,
+            'analyst_expected_revenue'        => $analystExpectedRevenue,
             'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit' => $ebit, 
-            'primary_shock_z' => abs($eventZ) > abs($revenueZ) ? $eventZ : $revenueZ,
-            'event_type' => $eventType
+            'ebit'                            => $ebit,
+            'primary_shock_z'                 => $primaryShockZ,
+            'event_type'                      => $eventType,
         ];
     }
 
