@@ -1,0 +1,59 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Service\Model;
+
+use App\Entity\Stock;
+use App\Service\Math\MathUtility;
+use App\Service\Model\LuxuryBusinessModel;
+use PHPUnit\Framework\TestCase;
+
+class LuxuryBusinessModelTest extends TestCase
+{
+    public function testVeblenBrandCachetElasticityImprovesMargin(): void
+    {
+        $model = new LuxuryBusinessModel();
+        $stock = new Stock();
+        $stock->setBeta('1.2');
+
+        $mathUtilityMock = $this->createMock(MathUtility::class);
+        // sequence: hauteZ=2.0 (strong haute couture desirability), accessibleZ=0, eventZ=0, analystError=0
+        $mathUtilityMock->method('generateStandardNormal')
+            ->willReturnOnConsecutiveCalls(2.0, 0.0, 0.0, 0.0);
+
+        $macroState = ['inflation_ema' => 0.02];
+        $result = $model->generateIdiosyncraticShock(
+            $stock,
+            1000.0,
+            0.35,
+            50.0,
+            0.15,
+            $macroState,
+            $mathUtilityMock
+        );
+
+        // Veblen pricing cachet reduces variable cost percentage below 35%
+        $this->assertLessThan(1000.0 * 0.35, $result['actual_variable_costs']);
+    }
+
+    public function testBoutiqueCraftsmanshipAndHeritageExclusivityReinvestment(): void
+    {
+        $model = new LuxuryBusinessModel();
+
+        // R = 0.5 -> Boutique craftsmanship decay
+        $stock = new Stock();
+        $stock->setOperatingMargin('0.28');
+        $model->applyAssetDepreciationDecay($stock, 0.5, 0.25);
+        $decayed = (float) $stock->getOperatingMargin();
+        $this->assertLessThan(0.28, $decayed);
+        $this->assertGreaterThanOrEqual(LuxuryBusinessModel::MIN_OPERATING_MARGIN_FLOOR, $decayed);
+
+        // R = 1.5 -> Heritage exclusivity overinvestment
+        $stock->setOperatingMargin('0.28');
+        $model->applyAssetDepreciationDecay($stock, 1.5, 0.25);
+        $expanded = (float) $stock->getOperatingMargin();
+        $this->assertGreaterThan(0.28, $expanded);
+        $this->assertLessThanOrEqual(LuxuryBusinessModel::MAX_OPERATING_MARGIN_CEILING, $expanded);
+    }
+}

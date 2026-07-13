@@ -55,6 +55,20 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     /** Operating margin mean reversion speed: fast speed reflects intense retail price competition. */
     public const STAPLES_REVERSION_SPEED   = 5.0;
 
+    // --- Agricultural & Packaging Commodity Input Elasticity ---
+    /** Variable margin sensitivity to agricultural and packaging commodity input cost shocks. */
+    public const COMMODITY_INPUT_ELASTICITY   = 0.015;
+
+    // --- Brand Equity Amortization & Marketing Reinvestment Physics ---
+    /** Quarterly margin decay rate per unit of underinvestment below brand maintenance CapEx. */
+    public const BRAND_EQUITY_DECAY_RATE      = 0.020;
+    /** Quarterly margin gain scalar per unit of logarithmic brand marketing super-cycle investment. */
+    public const BRAND_MARKETING_GAIN_RATE    = 0.010;
+    /** Structural minimum operating margin floor under private-label generic retail competition. */
+    public const MIN_OPERATING_MARGIN_FLOOR   = 0.10;
+    /** Structural maximum operating margin ceiling for dominant global consumer staple brands. */
+    public const MAX_OPERATING_MARGIN_CEILING = 0.35;
+
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
         $params = $this->resolveModelParameters($stock, [
@@ -88,7 +102,11 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
 
         $actualRevenue = max(0.0, $brandedRevenue + $volumeRevenue);
 
-        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $recallPenalty));
+        // Agricultural & Packaging Commodity Input Cost Elasticity:
+        // Fluctuations in bulk agricultural processing ($volumeZ) smoothly shift variable input costs.
+        $commodityInputShift = self::COMMODITY_INPUT_ELASTICITY * $volumeZ * $volumeWeight;
+
+        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $recallPenalty + $commodityInputShift));
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
         // Analyst Visibility
@@ -99,7 +117,7 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
 
         $recallAnalystError = $mathUtility->generateStandardNormal() * self::RECALL_ERROR_STD_DEV;
         $recallVisibility = min(1.0, max(0.0, self::RECALL_VISIBILITY_BASE + $recallAnalystError));
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + ($recallPenalty * $recallVisibility)));
+        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + (($recallPenalty + $commodityInputShift) * $recallVisibility)));
 
         $primaryShockZ = abs($eventZ) > abs($brandedZ) ? $eventZ : $brandedZ;
 
@@ -117,6 +135,32 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     public function getMarginReversionSpeed(): float
     {
         return self::STAPLES_REVERSION_SPEED; // High retail competition and consumer price sensitivity cause rapid margin mean reversion
+    }
+
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return -0.05; // Negative working capital cycle (supermarket customer upfront payment vs 60-day vendor payables float)
+    }
+
+    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    {
+        $timeScale = $dt / 0.25;
+        $currentMargin = (float) $stock->getOperatingMargin();
+
+        if ($reinvestmentRatio < 1.0) {
+            // Brand equity erosion toward private-label floor
+            $decayRate = self::BRAND_EQUITY_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
+            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
+            $stock->setOperatingMargin((string) $updatedMargin);
+        } elseif ($reinvestmentRatio > 1.0) {
+            // Brand marketing super-cycle expands pricing power
+            $modGain = self::BRAND_MARKETING_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
+            $updatedMargin = min(
+                self::MAX_OPERATING_MARGIN_CEILING,
+                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
+            );
+            $stock->setOperatingMargin((string) $updatedMargin);
+        }
     }
 }
 

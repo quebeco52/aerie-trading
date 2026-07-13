@@ -383,7 +383,7 @@ class DebtEngine
             $costOfEquity += $distressPremium;
         }
 
-        $yieldOnCash = $strategy->calculateCashYield($macroState, $policyRate);
+        $yieldOnCash = $strategy->calculateCashYield($macroState);
 
 
         // Fetch the CFO's target Debt-to-Equity limit

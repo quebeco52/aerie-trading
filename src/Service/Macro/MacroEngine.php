@@ -23,6 +23,20 @@ class MacroEngine
     public const KALDOR_CAPACITY = 150.0;
     public const KALDOR_MONETARY_DRAG = 1.5;
 
+    // --- GARCH-MIDAS Macroeconomic Volatility Constants (Engle, Ghysels, & Sohn 2013 Eq. 5) ---
+    /** Long-run equilibrium baseline volatility (~15% VIX) during neutral economic conditions. */
+    public const MACRO_VOL_BASE_ANCHOR            = 0.15;
+    /** Sensitivity of exponential baseline volatility to output gap fluctuations (countercyclical). */
+    public const MACRO_VOL_OUTPUT_GAP_SENSITIVITY = 10.0;
+    /** Sensitivity of exponential baseline volatility to corporate credit spread deviations from baseline. */
+    public const MACRO_VOL_CREDIT_SENSITIVITY     = 20.0;
+    /** Sensitivity of exponential baseline volatility to yield curve slope (flattening/inversion increases vol). */
+    public const MACRO_VOL_SLOPE_SENSITIVITY      = 8.0;
+    /** Lower clamp for baseline volatility during extreme Goldilocks expansions (~10% VIX floor). */
+    public const MACRO_VOL_MIN_BASELINE           = 0.10;
+    /** Upper clamp for macro-driven baseline volatility to prevent infinite variance explosion. */
+    public const MACRO_VOL_MAX_BASELINE           = 0.45;
+
     // SVJJ JUMP DIFFUSION CONSTANTS
     public const SVJJ_LAMBDA = 0.80;
     public const SVJJ_P_UP = 0.10;
@@ -294,7 +308,17 @@ class MacroEngine
     private function calculateMarketVolatility(MacroState $state, float $dt): float
     {
         $currentMarketVol = $state->marketVolatility;
-        $longTermVol = 0.20;
+
+        // Continuous exponential macroeconomic link (Engle, Ghysels, & Sohn 2013 Eq. 5):
+        // Long-run volatility smoothly scales across all economic states without piecewise kinks.
+        $macroDriver = (-$state->outputGap * self::MACRO_VOL_OUTPUT_GAP_SENSITIVITY)
+                     + (($state->macroCreditSpread - self::BASE_CREDIT_SPREAD) * self::MACRO_VOL_CREDIT_SENSITIVITY)
+                     + (-$state->nsSlope * self::MACRO_VOL_SLOPE_SENSITIVITY);
+
+        $longTermVol = min(
+            self::MACRO_VOL_MAX_BASELINE,
+            max(self::MACRO_VOL_MIN_BASELINE, self::MACRO_VOL_BASE_ANCHOR * exp($macroDriver))
+        );
 
         $currentVar = $currentMarketVol * $currentMarketVol;
         $longTermVar = $longTermVol * $longTermVol;

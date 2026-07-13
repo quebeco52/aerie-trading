@@ -40,6 +40,8 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     public const SPOT_GLUT_GAP_THRESHOLD   = -0.015;
     /** Output gap multiplier scaling rate collapses during trade slowdowns and capacity gluts. */
     public const SPOT_GLUT_RATE_MULT       = 3.00;
+    /** Continuous global trade elasticity scalar scaling spot freight rates smoothly with output gap. */
+    public const CONTINUOUS_SPOT_RATE_SCALAR = 3.50;
 
     // --- Fuel & Bunker Inflation Rails ---
     /** Variable cost penalty multiplier scaling bunker fuel inflation with stock beta. */
@@ -66,6 +68,16 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     // --- Spot Cycle Reversion Moat ---
     /** Operating margin mean reversion speed: fast speed reflects rapid shipbuilding order responses. */
     public const SPOT_REVERSION_SPEED      = 4.0;
+
+    // --- Vessel Fleet Aging & Eco-Fleet Reinvestment Physics ---
+    /** Quarterly efficiency decay rate per unit of underinvestment below fleet replacement CapEx. */
+    public const VESSEL_AGING_DECAY_RATE      = 0.025;
+    /** Quarterly efficiency gain scalar per unit of eco-fleet modernization above replacement CapEx. */
+    public const ECO_FLEET_MODERNIZATION_RATE = 0.012;
+    /** Structural minimum operating margin floor under severe vessel aging and bunker fuel drag. */
+    public const MIN_OPERATING_MARGIN_FLOOR   = 0.05;
+    /** Structural maximum operating margin ceiling for state-of-the-art eco-fuel vessel fleets. */
+    public const MAX_OPERATING_MARGIN_CEILING = 0.38;
 
     public function getMacroPhysics(Stock $stock, array &$macroState): array
     {
@@ -95,33 +107,30 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         $contractZ = $mathUtility->generateStandardNormal(); // Multi-year contracted logistics lines
 
         // Spot Rate Super-Cycle vs. Capacity Glut
-        // Crucially, spot rate boom/glut multipliers apply specifically to spot charter revenue ($spotWeight).
+        // Crucially, spot rate elasticity applies continuously to spot charter revenue ($spotWeight).
         $outputGap = $macroState['output_gap_ema'] ?? ($macroState['output_gap'] ?? 0.0);
-        $spotRateMultiplier = 0.0;
+        $spotRateMultiplier = $outputGap * self::CONTINUOUS_SPOT_RATE_SCALAR;
         $eventLore = null;
 
-        if ($outputGap > self::SPOT_BOOM_GAP_THRESHOLD) {
-            $spotRateMultiplier = $outputGap * self::SPOT_BOOM_RATE_MULT;
-            if ($spotZ > self::LORE_CONGESTION_Z_SCORE) {
-                $eventLore = "Capitalized on severe global port congestion with record-breaking container spot rates.";
-            }
-        } elseif ($outputGap < self::SPOT_GLUT_GAP_THRESHOLD) {
-            $spotRateMultiplier = $outputGap * self::SPOT_GLUT_RATE_MULT;
-            if ($spotZ < self::LORE_GLUT_Z_SCORE) {
-                $eventLore = "Suffered operating losses due to a severe global vessel capacity glut and collapsing freight rates.";
-            }
+        if ($outputGap > self::SPOT_BOOM_GAP_THRESHOLD && $spotZ > self::LORE_CONGESTION_Z_SCORE) {
+            $eventLore = "Capitalized on severe global port congestion with record-breaking container spot rates.";
+        } elseif ($outputGap < self::SPOT_GLUT_GAP_THRESHOLD && $spotZ < self::LORE_GLUT_Z_SCORE) {
+            $eventLore = "Suffered operating losses due to a severe global vessel capacity glut and collapsing freight rates.";
         }
 
         $spotRevenue     = $expectedRevenue * $spotWeight * (1.0 + ($spotZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $spotRateMultiplier);
         $contractRevenue = $expectedRevenue * $contractWeight * (1.0 + ($contractZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
         $actualRevenue   = max(0.0, $spotRevenue + $contractRevenue);
 
-        // Fuel and Bunker Cost Inflation:
-        // Shipping is directly exposed to crude oil and commodity inflation.
+        // Fuel and Bunker Cost Inflation / Deflation:
+        // Shipping is directly exposed to crude oil and commodity inflation, capturing savings during deflationary/falling fuel regimes.
         $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
-        $bunkerInflationPenalty = $inflation > MacroEngine::TARGET_INFLATION ? ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::BUNKER_INFLATION_SCALAR : 0.0;
+        $bunkerInflationAdjustment = max(
+            -0.05,
+            min(0.15, ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::BUNKER_INFLATION_SCALAR)
+        );
 
-        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $bunkerInflationPenalty));
+        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $bunkerInflationAdjustment));
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
         // Analyst Visibility
@@ -129,7 +138,7 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
         $dynamicVisibility = min(1.0, max(self::MIN_ANALYST_VISIBILITY, self::ANALYST_BASE_VISIBILITY + $analystError));
         $analystExpectedRevenue = $expectedRevenue * (1.0 + (($spotZ * $spotWeight + $spotRateMultiplier * $spotWeight) * $dynamicVisibility));
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + ($bunkerInflationPenalty * $dynamicVisibility)));
+        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + ($bunkerInflationAdjustment * $dynamicVisibility)));
 
         $primaryShockZ = abs($spotZ) > abs($contractZ) ? $spotZ : $contractZ;
 
@@ -148,6 +157,27 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     {
         // Spot rate booms attract new shipbuilding orders, causing margins to mean-revert aggressively once new vessels launch
         return self::SPOT_REVERSION_SPEED;
+    }
+
+    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    {
+        $timeScale = $dt / 0.25;
+        $currentMargin = (float) $stock->getOperatingMargin();
+
+        if ($reinvestmentRatio < 1.0) {
+            // Vessel aging & bunker fuel drag toward floor
+            $decayRate = self::VESSEL_AGING_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
+            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
+            $stock->setOperatingMargin((string) $updatedMargin);
+        } elseif ($reinvestmentRatio > 1.0) {
+            // Eco-fleet modernization expands margin ceiling
+            $modGain = self::ECO_FLEET_MODERNIZATION_RATE * log($reinvestmentRatio) * $timeScale;
+            $updatedMargin = min(
+                self::MAX_OPERATING_MARGIN_CEILING,
+                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
+            );
+            $stock->setOperatingMargin((string) $updatedMargin);
+        }
     }
 }
 

@@ -51,6 +51,15 @@ class StockModelTuning
             'vix_arbitrage_scalar'    => 1.80,
         ],
 
+        // --- Corvid Strategic Arbitrage (CORV) ---
+        // Ultra-exclusive boutique investment bank and weaponized information arbitrage apparatus.
+        // Uncorrelated to traditional cycles; thrives on high-frequency arbitrage and institutional volatility.
+        'CORV' => [
+            'advisory_revenue_weight' => 0.25,
+            'trading_revenue_weight'  => 0.75,
+            'vix_arbitrage_scalar'    => 2.00,
+        ],
+
         // =====================================================================
         // INSURANCE & REINSURANCE ARCHETYPES
         // =====================================================================
@@ -71,6 +80,49 @@ class StockModelTuning
             'catastrophe_loss_scalar' => 0.08,
             'float_equity_weight'     => 0.10,
             'equity_portfolio_vol'    => 0.10,
+        ],
+
+        // =====================================================================
+        // PRIVATE EQUITY & DISTRESSED DEBT ARCHETYPES
+        // =====================================================================
+
+        // --- Black Swan Capital (SWAN) ---
+        // Mega-cap alternative asset manager specializing in leveraged buyouts and carried interest.
+        'SWAN' => [
+            'management_fee_weight'   => 0.35,
+            'carried_interest_weight' => 0.65,
+        ],
+
+        // --- Vulture Capital Recovery (VULT) ---
+        // Specialist distressed debt restructuring and turnaround equity sponsor.
+        'VULT' => [
+            'advisory_fee_weight'   => 0.40,
+            'asset_recovery_weight' => 0.60,
+        ],
+
+        // =====================================================================
+        // REAL ESTATE INVESTMENT TRUST (REIT) ARCHETYPES
+        // =====================================================================
+
+        // --- Lakeshore Living (SHOR) ---
+        // Residential multi-family apartment REIT with ultra-stable annual leases.
+        'SHOR' => [
+            'sticky_lease_weight'         => 0.90,
+            'variable_hospitality_weight' => 0.10,
+        ],
+
+        // --- Plaza Civic River Trust (PLZA) ---
+        // Commercial & Class-A office REIT with mix of corporate leases and amenity parking/retail.
+        'PLZA' => [
+            'sticky_lease_weight'         => 0.80,
+            'variable_hospitality_weight' => 0.20,
+        ],
+
+        // --- Elderbird Retirement Services (ELDE) ---
+        // Healthcare & assisted living property REIT with long-duration institutional leases.
+        'ELDE' => [
+            'sticky_lease_weight'         => 0.95,
+            'variable_hospitality_weight' => 0.05,
         ],
 
         // =====================================================================

@@ -31,7 +31,7 @@ interface BusinessModelInterface
 
     public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array;
     public function getInterestCoverage(float $ebit, float $interestExpense, float $depreciation = 0.0): float;
-    public function calculateCashYield(array &$macroState, float $policyRate): float;
+    public function calculateCashYield(array &$macroState): float;
     public function getDebtExpansionAggressiveness(float $spreadMultiplier): array;
     public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float;
     public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float;
@@ -41,4 +41,6 @@ interface BusinessModelInterface
     public function getMarginReversionSpeed(): float;
     public function processPassiveLiabilityGrowth(Stock $stock, array &$macroState, array &$state, MathUtility $mathUtility): void;
     public function isUnderLeveraged(bool $isFinancial, float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool;
+    public function getWorkingCapitalIntensity(Stock $stock): float;
+    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void;
 }

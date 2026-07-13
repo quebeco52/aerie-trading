@@ -42,6 +42,28 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     /** Operating margin mean reversion speed: slower speed reflects high switching costs and data monopoly moat. */
     public const MONOPOLY_REVERSION_SPEED  = 2.0;
 
+    // --- Rating Issuance Operating Leverage ---
+    /** Variable margin sensitivity to incremental debt rating & API transaction feed volume. */
+    public const TRANSACTION_LEVERAGE_SENSITIVITY = 0.020;
+
+    // --- Data Platform Reinvestment & Monopoly Moat Physics ---
+    /** Quarterly margin decay rate per unit of software/platform underinvestment below replacement. */
+    public const PLATFORM_DECAY_RATE          = 0.015;
+    /** Quarterly margin gain scalar per unit of logarithmic data platform modernization. */
+    public const DATA_MONOPOLY_GAIN_RATE      = 0.008;
+    /** Structural minimum operating margin floor under severe platform tech debt. */
+    public const MIN_OPERATING_MARGIN_FLOOR   = 0.20;
+    /** Structural maximum operating margin ceiling for proprietary financial data monopolies. */
+    public const MAX_OPERATING_MARGIN_CEILING = 0.65;
+
+    // --- Asset-Light Subscription Capital Structure Rails ---
+    /** Minimum WACC arbitrage spread required before under-leveraged recapitalization is permitted. */
+    public const WACC_ARBITRAGE_THRESHOLD     = 0.02;
+    /** Minimum interest coverage ratio required to permit recapitalization for subscription monopolies. */
+    public const MIN_RECAP_ICR_FLOOR          = 6.0;
+    /** Maximum debt tolerance threshold fraction triggering under-leveraged status. */
+    public const UNDERLEVERAGED_DEBT_RATIO    = 0.60;
+
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
         $params = $this->resolveModelParameters($stock, [
@@ -60,7 +82,11 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         $transactionRevenue  = $expectedRevenue * $transactionWeight * (1.0 + ($transactionZ * ($baselineVol * (self::REVENUE_VARIANCE_SCALAR * 5.0))));
         $actualRevenue       = max(0.0, $subscriptionRevenue + $transactionRevenue);
 
-        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin));
+        // Rating Issuance Operating Leverage:
+        // High transaction/rating volume ($transactionZ) provides strong positive operating leverage because incremental debt ratings have near-zero marginal cost.
+        $operatingLeverageShift = -self::TRANSACTION_LEVERAGE_SENSITIVITY * $transactionZ * $transactionWeight;
+
+        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $operatingLeverageShift));
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
         // Analyst Visibility
@@ -68,7 +94,7 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
         $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
         $analystExpectedRevenue = $expectedRevenue * (1.0 + (($subscriptionZ * $subscriptionWeight + $transactionZ * $transactionWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR) * $dynamicVisibility));
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin));
+        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + ($operatingLeverageShift * $dynamicVisibility)));
 
         $primaryShockZ = abs($transactionZ) > abs($subscriptionZ) ? $transactionZ : $subscriptionZ;
 
@@ -85,5 +111,37 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     public function getMarginReversionSpeed(): float
     {
         return self::MONOPOLY_REVERSION_SPEED; // High switching costs and data monopoly moat
+    }
+
+    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    {
+        $timeScale = $dt / 0.25;
+        $currentMargin = (float) $stock->getOperatingMargin();
+
+        if ($reinvestmentRatio < 1.0) {
+            // Tech debt & feed latency decay toward software baseline
+            $decayRate = self::PLATFORM_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
+            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
+            $stock->setOperatingMargin((string) $updatedMargin);
+        } elseif ($reinvestmentRatio > 1.0) {
+            // Platform modernization expands data monopoly margin ceiling
+            $modGain = self::DATA_MONOPOLY_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
+            $updatedMargin = min(
+                self::MAX_OPERATING_MARGIN_CEILING,
+                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
+            );
+            $stock->setOperatingMargin((string) $updatedMargin);
+        }
+    }
+
+    public function isUnderLeveraged(bool $isFinancial, float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
+    {
+        if ($costOfEquity <= ($effectiveCostOfDebt + self::WACC_ARBITRAGE_THRESHOLD)) {
+            return false;
+        }
+        if ($interestCoverage < self::MIN_RECAP_ICR_FLOOR) {
+            return false;
+        }
+        return $currentDebtRatio < ($targetDebtTolerance * self::UNDERLEVERAGED_DEBT_RATIO);
     }
 }

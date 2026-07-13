@@ -39,13 +39,17 @@ class InsuranceBusinessModel extends AbstractBusinessModel
     /** Maximum allowable ROE ceiling to prevent unrealistic hyperinflation. */
     public const MAX_ROE_CLAMP            = 1.00;
     /** Weight given to current quarter ROE when updating trailing twelve-month ROE EMA. */
-    public const ROE_TTM_EMA_WEIGHT       = 0.15;
+    public const ROE_TTM_EMA_WEIGHT       = 0.05;
     /** Weight given to historical trailing twelve-month ROE when updating ROE EMA. */
-    public const ROE_TTM_HIST_WEIGHT      = 0.85;
+    public const ROE_TTM_HIST_WEIGHT      = 0.95;
+    /** Minimum structural through-the-cycle ROE floor for TTM valuation to prevent catastrophe whipsaw. */
+    public const MIN_STRUCTURAL_ROE_FLOOR = 0.03;
 
     // --- Underwriting & Catastrophe Shock Physics ---
     /** Macroeconomic demand shift sensitivity to output gap. */
     public const MACRO_DEMAND_SCALAR      = 0.25;
+    /** Underwriting operating margin mean reversion speed (quarters). Insurance policies renew annually with rapid competitive repricing. */
+    public const INSURANCE_REVERSION_SPEED = 8.0;
     /** Volatility multiplier for top-line premium revenue shocks in sticky insurance markets. */
     public const REVENUE_VARIANCE_SCALAR  = 0.05;
     /** Catastrophe claim z-score threshold triggering severe underwriting combined ratio penalties. */
@@ -56,6 +60,8 @@ class InsuranceBusinessModel extends AbstractBusinessModel
     public const BENIGN_CLAIM_Z_FLOOR     = 1.00;
     /** Minor variable cost reduction during exceptionally benign underwriting environments. */
     public const BENIGN_CLAIM_BONUS       = -0.05;
+    /** Cummins & Danzon (1997) soft-market underwriting combined ratio compression sensitivity to high float yields. */
+    public const SOFT_MARKET_CYCLE_BETA   = 1.50;
     /** Upper clamp for realized variable margin. */
     public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
     /** Lower clamp for realized variable margin. */
@@ -93,7 +99,7 @@ class InsuranceBusinessModel extends AbstractBusinessModel
     /** Fraction of excess cash allocated to buybacks for standard insurers. */
     public const STANDARD_BUYBACK_SHARE   = 0.15;
     /** Maximum buyback spend multiplier relative to quarterly retained earnings. */
-    public const MAX_RETAINED_BUYBACK_MULT = 1.50;
+    public const MAX_RETAINED_BUYBACK_MULT = 0.90;
     /** Infinite interest coverage fallback for insurance companies without operating debt. */
     public const INFINITE_ICR_FALLBACK    = 999.0;
     /** Minimum fraction of newly issued debt that must be deployed into organic capex or platform growth. */
@@ -254,12 +260,34 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         // 2. The Combined Ratio Shock (Catastrophes/Underwriting Cycle)
         $claimZ = $mathUtility->generateStandardNormal();
 
-        // Catastrophes are asymmetric. A hurricane causes massive losses, but a lack of hurricanes only mildly boosts profits.
+        // Catastrophe Risk Beta: high-catastrophe insurers earn higher premium margins in benign years.
+        // Combines both Frequency ($catThreshold) and Severity ($catScalar) to price expected tail risk.
+        $frequencyBeta = self::CATASTROPHE_Z_THRESHOLD / min(-0.1, $catThreshold);
+        $severityBeta  = $catScalar / self::CATASTROPHE_LOSS_SCALAR;
+        $catRiskBeta   = $frequencyBeta * $severityBeta;
+        $benignBonus   = self::BENIGN_CLAIM_BONUS * $catRiskBeta;
         $underwritingShock = $claimZ < $catThreshold
             ? abs($claimZ) * $catScalar
-            : ($claimZ > self::BENIGN_CLAIM_Z_FLOOR ? self::BENIGN_CLAIM_BONUS : 0.0);
+            : ($claimZ > self::BENIGN_CLAIM_Z_FLOOR ? $benignBonus : 0.0);
 
-        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $underwritingShock));
+        // 3. Cummins & Danzon (1997) Soft-Market Underwriting Offset:
+        // When interest rates and float yields boom above baseline, price competition intensifies across the industry
+        // as insurers discount premium rates to capture market share and gather float (The Soft Underwriting Cycle).
+        $policyRate = $macroState['policy_rate_ema'] ?? self::DEFAULT_POLICY_RATE_FALLBACK;
+        $softMarketRateDiscount = max(0.0, ($policyRate - self::DEFAULT_POLICY_RATE_FALLBACK) * self::SOFT_MARKET_CYCLE_BETA);
+
+        // 4. Cummins & Danzon (1997) Hard-Market Capital Recovery:
+        // When an insurer's capital surplus drops below its Kenney target (Equity < Target Surplus),
+        // the insurer enters a Hard Market—raising premium rates and tightening underwriting criteria
+        // to rebuild surplus capital.
+        $equity = (float) $stock->getTotalEquity();
+        $targetSurplus = $expectedRevenue / self::KENNEY_CAPACITY_RATIO;
+        $surplusDeficitRatio = $targetSurplus > 0.0 ? max(0.0, ($targetSurplus - $equity) / $targetSurplus) : 0.0;
+        // Strengthened Hard-Market pricing power scaled by company catastrophe exposure ($catRiskBeta):
+        // Reinsurers absorbing higher frequency ($catThreshold) & severity ($catScalar) gain stronger post-disaster pricing power.
+        $hardMarketRecoveryDiscount = min(0.30, $surplusDeficitRatio * 0.35 * $catRiskBeta);
+
+        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $underwritingShock + $softMarketRateDiscount - $hardMarketRecoveryDiscount));
 
         $eventLore = null;
         if ($claimZ < self::LORE_SYSTEMIC_DISASTER_Z) {
@@ -288,6 +316,12 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         ];
     }
 
+    public function getMarginReversionSpeed(): float
+    {
+        // 12-month annual policy contracts face rapid competitive repricing at each renewal cycle
+        return self::INSURANCE_REVERSION_SPEED;
+    }
+
     /**
      * Insurance companies invest their massive Float in long-duration bonds.
      * The 10% equity tranche introduces stochastic quarterly returns and correlates with
@@ -312,8 +346,18 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         $cash = (float) $stock->getCorporateTreasury();
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
 
-        // Base yield: 15% liquidity + 75% long-duration bonds (deterministic, from override below).
-        $baseYield = $this->calculateCashYield($macroState, $policyRate);
+        // Normalized Base Fixed-Income Yield:
+        // Ensure total portfolio weights (Liquidity + Long Bonds + Equities) sum strictly to 1.00
+        // regardless of company-tuned float_equity_weight.
+        $fixedIncomeWeight = max(0.0, 1.0 - $floatEquityWeight);
+        $totalFixedWeight  = self::FLOAT_LIQUIDITY_WEIGHT + self::FLOAT_BOND_WEIGHT;
+        $liquidityShare    = $totalFixedWeight > 0.0 ? self::FLOAT_LIQUIDITY_WEIGHT / $totalFixedWeight : 0.1667;
+        $bondShare         = $totalFixedWeight > 0.0 ? self::FLOAT_BOND_WEIGHT / $totalFixedWeight : 0.8333;
+
+        $yield10y        = $macroState['yield_10y_ema'] ?? ($policyRate + self::DEFAULT_10Y_SPREAD);
+        $liquidityReturn = $policyRate - MacroEngine::CASH_YIELD_SPREAD;
+        $bondReturn      = $yield10y;
+        $baseYield       = $fixedIncomeWeight * (($liquidityShare * $liquidityReturn) + ($bondShare * $bondReturn));
 
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
         $erp = $macroState['equity_risk_premium'] ?? self::DEFAULT_ERP_FALLBACK;
@@ -350,15 +394,19 @@ class InsuranceBusinessModel extends AbstractBusinessModel
     public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate): float
     {
         $equity = (float) $stock->getTotalEquity();
-        $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * self::ROE_ANNUALIZATION_MULT : 0.0;
+        // Statutory Surplus Floor: Anchor ROE denominator to at least implied regulatory minimum capital (25% of policy float/liabilities)
+        // so temporary catastrophe equity drawdowns never create artificial small-denominator ROE whip-saws (-450% or +200%).
+        $statutorySurplusFloor = (float) $stock->getCustomerDeposits() * self::IMPLIED_RUNOFF_EQUITY;
+        $evaluationEquity = max(max(1.0, $statutorySurplusFloor), $equity);
+        $truePostTaxReturn = ($actualTotalNetIncome / $evaluationEquity) * self::ROE_ANNUALIZATION_MULT;
 
         $stock->setCurrentRoe((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $truePostTaxReturn)));
 
-        // Insurance earnings are extremely lumpy due to catastrophes. Use a 0.15 smoothing factor (85% historical weight)
-        // to prevent the P/E multiple and stock price from violently whipsawing every time a hurricane hits.
+        // Insurance earnings are extremely lumpy due to catastrophes. Use a 0.05 smoothing factor (95% historical weight)
+        // and a 5% structural floor on ROE TTM to prevent the P/E multiple and stock price from violently whipsawing when a hurricane hits.
         $oldTtm = (float) $stock->getRoeTtm();
-        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::ROE_TTM_EMA_WEIGHT) + ($oldTtm * self::ROE_TTM_HIST_WEIGHT);
-        $stock->setRoeTtm((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $newTtm)));
+        $newTtm = $oldTtm === 0.0 ? max(self::MIN_STRUCTURAL_ROE_FLOOR, $truePostTaxReturn) : ($truePostTaxReturn * self::ROE_TTM_EMA_WEIGHT) + ($oldTtm * self::ROE_TTM_HIST_WEIGHT);
+        $stock->setRoeTtm((string) max(self::MIN_STRUCTURAL_ROE_FLOOR, min(self::MAX_ROE_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;
     }
@@ -430,9 +478,10 @@ class InsuranceBusinessModel extends AbstractBusinessModel
      * @param float $policyRate Current policy interest rate.
      * @return float Blended base yield from the fixed-income portion of the float portfolio.
      */
-    public function calculateCashYield(array &$macroState, float $policyRate): float
+    public function calculateCashYield(array &$macroState): float
     {
-        $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['policy_rate_ema'] ?? self::DEFAULT_POLICY_RATE_FALLBACK) + self::DEFAULT_10Y_SPREAD;
+        $policyRate = $macroState['policy_rate_ema'] ?? ($macroState['policy_rate'] ?? self::DEFAULT_POLICY_RATE_FALLBACK);
+        $yield10y = $macroState['yield_10y_ema'] ?? ($policyRate + self::DEFAULT_10Y_SPREAD);
 
         // 1. Liquidity Reserve (15% T-Bills/Cash)
         $liquidityReturn = $policyRate - MacroEngine::CASH_YIELD_SPREAD;
@@ -440,8 +489,13 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         // 2. Core Fixed Income (75% Long-Duration Bonds)
         $bondReturn = $yield10y;
 
-        // The 10% equity tranche is excluded here — it is computed stochastically in calculateInterestIncome().
-        return (self::FLOAT_LIQUIDITY_WEIGHT * $liquidityReturn) + (self::FLOAT_BOND_WEIGHT * $bondReturn);
+        // Normalized fixed-income yield (assuming baseline 10% equity tranche)
+        $fixedIncomeWeight = max(0.0, 1.0 - self::FLOAT_EQUITY_WEIGHT);
+        $totalFixedWeight  = self::FLOAT_LIQUIDITY_WEIGHT + self::FLOAT_BOND_WEIGHT;
+        $liquidityShare    = $totalFixedWeight > 0.0 ? self::FLOAT_LIQUIDITY_WEIGHT / $totalFixedWeight : 0.1667;
+        $bondShare         = $totalFixedWeight > 0.0 ? self::FLOAT_BOND_WEIGHT / $totalFixedWeight : 0.8333;
+
+        return $fixedIncomeWeight * (($liquidityShare * $liquidityReturn) + ($bondShare * $bondReturn));
     }
 
     public function getDebtExpansionAggressiveness(float $spreadMultiplier): array
@@ -449,9 +503,13 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         return ['probability' => self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT), 'aggressiveness' => self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier)];
     }
 
+    /**
+     * Insurance companies do not deploy physical CapEx. Underwriting capacity is governed by Surplus Equity
+     * (Kenney Rule) and float yield is earned on Corporate Treasury cash, so organic expansion spend is 0.0.
+     */
     public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float
     {
-        return max($organicSpend, $debtIssued * self::DEBT_CAPEX_DEPLOYMENT);
+        return 0.0;
     }
 
     public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float
@@ -502,5 +560,14 @@ class InsuranceBusinessModel extends AbstractBusinessModel
             if (($liabilityChange / $currentLiabilities) < self::LORE_ROLLOFF_THRESHOLD) $state['events'][] = ['description' => "Suffered \$" . number_format(abs($liabilityChange) / 1_000_000_000, 2) . "B in policy roll-offs.", 'shock' => self::EVENT_SHOCK_ROLLOFF];
             elseif (($liabilityChange / $currentLiabilities) > self::LORE_CAPTURE_THRESHOLD) $state['events'][] = ['description' => "Captured \$" . number_format($liabilityChange / 1_000_000_000, 2) . "B in new premium Float.", 'shock' => self::EVENT_SHOCK_CAPTURE];
         }
+    }
+
+    public function isUnderLeveraged(bool $isFinancial, float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
+    {
+        // For Insurance companies, Customer Deposits represent policyholder reserves ("The Float").
+        // Float scales with underwriting policy volume and claim payout schedules, not discretionary capital
+        // structure financing. An insurer should never trigger forced "underleveraged" share buyback spirals
+        // simply because its float-to-equity ratio fluctuates.
+        return false;
     }
 }

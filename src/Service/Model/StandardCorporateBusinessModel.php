@@ -52,6 +52,16 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
     /** Valuation discount applied when FCF is negative due to heavy capex or burn. */
     public const NEGATIVE_FCF_VAL_DISCOUNT = 0.75;
 
+    // --- Capital Reinvestment & Asset Depreciation Physics ---
+    /** Quarterly efficiency decay rate per unit of underinvestment below replacement CapEx. */
+    public const DEPRECIATION_DECAY_RATE      = 0.020;
+    /** Quarterly efficiency gain scalar per unit of logarithmic overinvestment above replacement CapEx. */
+    public const MODERNIZATION_GAIN_RATE      = 0.010;
+    /** Structural minimum operating margin floor under severe physical plant aging. */
+    public const MIN_OPERATING_MARGIN_FLOOR   = 0.015;
+    /** Structural maximum operating margin ceiling for modernized industrial plants. */
+    public const MAX_OPERATING_MARGIN_CEILING = 0.28;
+
     /**
      * Physical businesses evaluate their true structural scale based on Invested Capital 
      * (Total Equity + Debt - Cash), requiring physical assets to turn a profit.
@@ -164,6 +174,25 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
             return ($peFairValue + $dcfFairValue) / 2.0;
         }
         return $fcfPerShare !== null ? max($revenueFloorValue, $peFairValue) * self::NEGATIVE_FCF_VAL_DISCOUNT : max($revenueFloorValue, $peFairValue);
+    }
+
+    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    {
+        $timeScale = $dt / 0.25;
+        $currentMargin = (float) $stock->getOperatingMargin();
+
+        if ($reinvestmentRatio < 1.0) {
+            $decayRate = self::DEPRECIATION_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
+            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
+            $stock->setOperatingMargin((string) $updatedMargin);
+        } elseif ($reinvestmentRatio > 1.0) {
+            $modGain = self::MODERNIZATION_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
+            $updatedMargin = min(
+                self::MAX_OPERATING_MARGIN_CEILING,
+                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
+            );
+            $stock->setOperatingMargin((string) $updatedMargin);
+        }
     }
 }
 

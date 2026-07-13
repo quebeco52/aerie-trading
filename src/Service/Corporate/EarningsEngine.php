@@ -209,6 +209,7 @@ class EarningsEngine
         $expectedInterestExpense = $expectedDebtMetrics['interest_expense'];
 
         // Calculate ACTUAL Interest Expense (Post-Shock, Advancing Maturity)
+        $previousQuarterlyRevenue = (float) $stock->getTotalRevenue();
         $stock->setTotalRevenue((string) $actualRevenue);
         // The dynamic margin is passed directly to DebtEngine
         $trueOperatingMargin = $ebit / max(1.0, $actualRevenue);
@@ -316,9 +317,13 @@ class EarningsEngine
         $this->applyVolatilityShock($stock, $primaryShockZ, $baselineVol);
 
         // Calculate Free Cash Flow (Dividend Support). The inputs are Quarterly, so we must multiply by 4.0
-        $fcfData = $this->calculateFreeCashFlowPerShare($actualQuarterlyNetIncome, $sharesOutstanding, $stock, $macroState, $quarterlyDepreciation, $isFinancial);
+        $fcfData = $this->calculateFreeCashFlowPerShare($actualQuarterlyNetIncome, $sharesOutstanding, $stock, $macroState, $quarterlyDepreciation, $isFinancial, $strategy, $actualRevenue, $previousQuarterlyRevenue);
         $annualFcfPerShare = $fcfData['fcf_per_share'] * 4.0;
         $actualAnnualCapEx = $fcfData['capex'] * 4.0;
+
+        // Opportunity B: Maintenance CapEx Reinvestment Ratio vs Asset Depreciation Decay
+        $reinvestmentRatio = $quarterlyDepreciation > 0 ? ($fcfData['capex'] / $quarterlyDepreciation) : 1.0;
+        $strategy->applyAssetDepreciationDecay($stock, $reinvestmentRatio, 0.25);
 
         $currentPrice = (float) $stock->getPrice();
 
@@ -351,8 +356,9 @@ class EarningsEngine
         // Subtract the Growth CapEx (Organic CapEx) spent by the CEO to find True FCF
         $organicCapex = $allocation['organic_capex'] ?? 0.0;
 
-        // For banks and brokerages, balance sheet expansion (Cash -> Loans/Trading Assets) is not physical CapEx
-        $reportedOrganicCapex = in_array($businessModel, ['commercial_bank', 'credit_services', 'shadow_bank', 'brokerage']) ? 0.0 : $organicCapex;
+        // For all financial companies, balance sheet deployment (Cash -> Loans/Underwriting Float/Trading Assets/Fund Assets) is financial investment, not physical CapEx
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
+        $reportedOrganicCapex = $isFinancial ? 0.0 : $organicCapex;
 
         // Convert quarterly organic CapEx to an annualized per-share impact
         $annualizedOrganicCapex = $reportedOrganicCapex * 4.0;
@@ -605,7 +611,10 @@ class EarningsEngine
         Stock $stock,
         array &$macroState,
         float $absoluteDepreciation,
-        bool $isLeveraged
+        bool $isLeveraged,
+        \App\Service\Model\BusinessModelInterface $strategy,
+        float $actualRevenue,
+        float $previousQuarterlyRevenue
     ): array {
         if ($sharesOutstanding <= 0) {
             return ['fcf_per_share' => 0.0, 'capex' => 0.0];
@@ -617,12 +626,15 @@ class EarningsEngine
         $cycleCapExModifier = max(0.85, min(1.15, 1.00 + ($outputGap * 1.5)));
 
         $physicalCapital = $isLeveraged ? (float) $stock->getTotalEquity() : $stock->getInvestedCapital();
-        // FLORED AT 0.0: Companies cannot have 'negative CapEx' just because they are losing money and have negative equity
         $baselineIncomeForCapEx = max(0.0, max($actualTotalNetIncome, $physicalCapital * 0.02));
         $actualCapEx = $baselineIncomeForCapEx * ($capExRatio * $cycleCapExModifier);
 
-        // Add back absolute depreciation (non-cash expense) to find True FCF
-        $fcff = $actualTotalNetIncome + $absoluteDepreciation - $actualCapEx;
+        // Opportunity A: Working Capital & Cash Conversion Cycle physics
+        $workingCapitalIntensity = $strategy->getWorkingCapitalIntensity($stock);
+        $deltaNwc = $workingCapitalIntensity * ($actualRevenue - $previousQuarterlyRevenue);
+
+        // True FCF accounts for Net Income, non-cash Depreciation, Delta NWC, and CapEx
+        $fcff = $actualTotalNetIncome + $absoluteDepreciation - $deltaNwc - $actualCapEx;
 
         return [
             'fcf_per_share' => $fcff / $sharesOutstanding,

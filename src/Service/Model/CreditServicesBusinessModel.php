@@ -164,8 +164,14 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
 
         // CECL Forward Provisioning (Credit Spread Channel):
         // Unsecured credit companies are far more sensitive to spread widening than banks.
+        // Subprime Spread Beta: lenders taking on higher credit spread risk earn a higher spread
+        // yield margin in benign credit environments, eliminating low-sensitivity free-money exploits.
         $creditSpread = $macroState['macro_credit_spread_ema'] ?? ($macroState['macro_credit_spread'] ?? self::CECL_BASELINE_CREDIT_SPREAD);
-        $ceclDrag = max(0.0, ($creditSpread - self::CECL_BASELINE_CREDIT_SPREAD) * $ceclSensitivity);
+        $spreadBeta = $ceclSensitivity / self::CECL_SPREAD_SENSITIVITY;
+        $spreadGap = $creditSpread - self::CECL_BASELINE_CREDIT_SPREAD;
+        $ceclDrag = $spreadGap > 0.0
+            ? $spreadGap * $ceclSensitivity
+            : max(-0.03, $spreadGap * ($spreadBeta - 1.0));
 
         // Net Interest Margin (NIM) Squeeze (1.5x more sensitive than banks due to wholesale funding dependency)
         $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['yield_10y'] ?? self::DEFAULT_10Y_YIELD_FALLBACK);
@@ -295,7 +301,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $operatingBase = $this->getOperatingBase($stock);
         $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - ($operatingBase * self::TARGET_OPERATING_BUFFER));
 
-        return $excessCash * $this->calculateCashYield($macroState, $policyRate);
+        return $excessCash * $this->calculateCashYield($macroState);
     }
 
     public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array

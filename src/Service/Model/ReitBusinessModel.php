@@ -91,6 +91,16 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     /** Infinite negative interest coverage fallback when interest expense is zero and FFO is negative. */
     public const INFINITE_ICR_NEG_FALLBACK  = -999.0;
 
+    // --- Capital Reinvestment & Asset Depreciation Physics ---
+    /** Quarterly efficiency decay rate per unit of underinvestment below replacement CapEx. */
+    public const DEPRECIATION_DECAY_RATE      = 0.015;
+    /** Quarterly efficiency gain scalar per unit of logarithmic overinvestment above replacement CapEx. */
+    public const MODERNIZATION_GAIN_RATE      = 0.008;
+    /** Structural minimum NOI operating margin floor under deferred property maintenance. */
+    public const MIN_OPERATING_MARGIN_FLOOR   = 0.05;
+    /** Structural maximum NOI operating margin ceiling for fully modernized Class-A real estate properties. */
+    public const MAX_OPERATING_MARGIN_CEILING = 0.45;
+
     // --- Aggressive Property Acquisition Borrowing ---
     /** Baseline probability of initiating debt expansion to acquire new commercial properties. */
     public const DEBT_EXPANSION_BASE_PROB   = 0.80;
@@ -169,18 +179,26 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     {
         $revenueZ = $mathUtility->generateStandardNormal();
 
-        // REIT revenues are incredibly stable due to multi-year binding leases.
-        // Volatility impact is sliced to just 5% of standard variance.
-        $revenueShock = $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
+        $params = $this->resolveModelParameters($stock, [
+            'sticky_lease_weight'         => 0.85,
+            'variable_hospitality_weight' => 0.15,
+        ]);
+        $leaseWeight      = $params['sticky_lease_weight'];
+        $hospitalityWeight = $params['variable_hospitality_weight'];
+
+        // REIT sticky lease revenues are incredibly stable due to multi-year binding contracts
+        $leaseShock = $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
+        // Variable hospitality/parking revenues experience full cyclical variance
+        $hospitalityShock = $revenueZ * ($baselineVol * 1.5);
 
         // The Inflation Hedge (CPI Rent Escalators):
-        // Commercial real estate leases almost universally contain automatic annual rent increases tied to inflation.
-        // Rent Escalators only provide an Earnings Surprise if inflation spikes above the expected baseline.
         $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
         $excessInflation = max(0.0, $inflation - MacroEngine::TARGET_INFLATION);
-        $rentEscalator = $excessInflation * self::RENT_ESCALATOR_CAPTURE; // Capture 80% of excess inflation directly into top-line revenue
+        $rentEscalator = $excessInflation * self::RENT_ESCALATOR_CAPTURE;
 
-        $actualRevenue = $expectedRevenue * (1.0 + $revenueShock + $rentEscalator);
+        $leaseRevenue        = $expectedRevenue * $leaseWeight * (1.0 + $leaseShock + $rentEscalator);
+        $hospitalityRevenue  = $expectedRevenue * $hospitalityWeight * (1.0 + $hospitalityShock);
+        $actualRevenue       = max(0.0, $leaseRevenue + $hospitalityRevenue);
 
         // The Tenant Default Shock (Vacancy) & Refinancing Wall:
         // Deep recessions cause anchor tenants to break leases.
@@ -317,6 +335,25 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public function getMarginReversionSpeed(): float
     {
         return self::LEASE_REVERSION_SPEED; // Multi-year commercial leases resist short-term margin erosion
+    }
+
+    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    {
+        $timeScale = $dt / 0.25;
+        $currentMargin = (float) $stock->getOperatingMargin();
+
+        if ($reinvestmentRatio < 1.0) {
+            $decayRate = self::DEPRECIATION_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
+            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
+            $stock->setOperatingMargin((string) $updatedMargin);
+        } elseif ($reinvestmentRatio > 1.0) {
+            $modGain = self::MODERNIZATION_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
+            $updatedMargin = min(
+                self::MAX_OPERATING_MARGIN_CEILING,
+                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
+            );
+            $stock->setOperatingMargin((string) $updatedMargin);
+        }
     }
 }
 

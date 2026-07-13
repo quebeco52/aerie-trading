@@ -17,17 +17,14 @@ use App\Service\Math\FinancialConstants;
  * - Holds massive "Initial Margin" deposits from members, earning overnight repo rates.
  * - Carries extreme apocalyptic tail risk: if members default simultaneously, the CCP must cover the trades.
  */
-class ClearingHouseBusinessModel extends InsuranceBusinessModel
+class ClearingHouseBusinessModel extends AbstractBusinessModel
 {
-    // --- ROE & Target Architecture ---
-    /** Weight given to historical baseline ROE when blending with TTM ROE. */
-    public const BASELINE_ROE_WEIGHT = 0.70;
-    /** Weight given to TTM ROE when blending with historical baseline ROE. */
-    public const TTM_ROE_WEIGHT      = 0.30;
-    /** Default 5Y Treasury spread over policy rate when yield curve data is absent. */
-    public const DEFAULT_5Y_YIELD_PREMIUM = 0.005;
-    /** Minimum structural operating EBIT floor as a fraction of equity. */
-    public const MIN_EQUITY_EBIT_YIELD    = 0.05;
+    // --- Fee Revenue Floor ---
+    /** Minimum structural EBIT floor as a fraction of equity. Prevents degenerate zero-revenue states. */
+    public const MIN_EQUITY_EBIT_YIELD = 0.05;
+
+    /** Net custody interest spread (15 bps) earned on member initial margin deposits. */
+    public const MARGIN_POOL_CUSTODY_SPREAD = 0.0015;
 
     // --- VIX & Transaction Volume Bonus ---
     /** Baseline VIX threshold above which volatility expands clearing transaction volume. */
@@ -85,77 +82,83 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
     /** Threshold percentage change in customer deposits required to trigger margin pool lore. */
     public const LORE_POOL_CHANGE_THRESHOLD = 0.01;
 
+    // --- Buybacks & Capital Deployment ---
+    /** Fraction of excess cash allocated to buybacks for mega-hoarder insurers. */
+    public const MEGA_BUYBACK_CASH_SHARE  = 0.30;
+    /** Fraction of excess cash allocated to buybacks for standard insurers. */
+    public const STANDARD_BUYBACK_SHARE   = 0.15;
+    /** Maximum buyback spend multiplier relative to quarterly retained earnings. */
+    public const MAX_RETAINED_BUYBACK_MULT = 0.90;
+
     // --- Monopoly Valuation Moat ---
     /** Operating margin mean reversion speed: slower speed reflects toll-booth monopoly pricing power. */
     public const MONOPOLY_REVERSION_SPEED = 2.0;
-
     public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array
     {
         $equity = (float) $stock->getTotalEquity();
-        $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
+        $effectiveEquity = max(1.0, $equity);
+        $marginPool = (float) $stock->getCustomerDeposits();
 
+        // Earning assets represent physical capital deployed into clearing operations and margin pool custody
+        $earningAssets = max($effectiveEquity, $effectiveEquity + $marginPool);
+
+        $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
         $ttmRoe = (float) $stock->getRoeTtm();
         if ($ttmRoe !== 0.0) {
-            $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
+            $baselineRoe = ($baselineRoe * 0.70) + ($ttmRoe * 0.30);
         }
+
+        $taxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
-        // Clearinghouses don't use massive wholesale debt for leverage; their leverage is the margin pool.
-        $effectiveEquity = max(1.0, $equity);
-        $taxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
-
-        // 1. Calculate Required EBT to hit Target ROE
+        // 1. Target Net Income and EBT required to achieve ROE
         $optimalNetIncome = $effectiveEquity * $baselineRoe;
         $optimalEbt = $optimalNetIncome / (1.0 - $taxRate);
 
-        // 2. Calculate Net Interest Income from the Margin Pool
+        // 2. Non-operating corporate treasury interest and debt expense
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
-        $marginPool = (float) $stock->getCustomerDeposits();
+        $ownCashIncome = $this->calculateInterestIncome($stock, $macroState, $mathUtility);
+
         $corporateDebt = (float) $stock->getWholesaleDebt();
-
-        $yield2y = $macroState['yield_2y_ema'] ?? ($macroState['yield_2y'] ?? $policyRate);
-        $earnedYield = max(0.0, $yield2y - MacroEngine::CASH_YIELD_SPREAD);
-        $rebateRate = max(0.001, $earnedYield - FinancialConstants::CUSTODY_CLEARING_SPREAD); // Pass back the yield they actually earn, minus spread
-
-        $optimalInterestIncome = ($marginPool + $effectiveEquity + $corporateDebt) * $earnedYield;
-
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
-        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + self::DEFAULT_5Y_YIELD_PREMIUM);
+        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + 0.005);
         $structuralSpread = (float) $stock->getCreditSpread();
         $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
-        $corporateInterest = $corporateDebt * $blendedWholesaleRate;
-        $marginInterest = $marginPool * $rebateRate;
+        $optimalInterestExpense = $corporateDebt * $blendedWholesaleRate;
 
-        $optimalInterestExpense = $corporateInterest + $marginInterest;
-
-        // 3. Determine Required Operating EBIT
-        $optimalEbit = $optimalEbt + $optimalInterestExpense - $optimalInterestIncome;
-
-        // Clearinghouses must maintain a baseline transaction volume
+        // 3. Operating EBIT required from core clearing and custody operations
+        $optimalEbit = $optimalEbt + $optimalInterestExpense - $ownCashIncome;
         $minEbit = $effectiveEquity * self::MIN_EQUITY_EBIT_YIELD;
         $targetEbit = max($minEbit, $optimalEbit);
 
-        // 4. Reverse-engineer Revenue
-        $targetRevenue = $targetEbit / $stableMargin; // Removed the arbitrary 2.0x cap which caused systemic under-earning death spirals
-
-        $impliedTurnover = $targetRevenue / $effectiveEquity;
+        // 4. Derive total structural operating revenue (clearing fees + custody spread)
+        $targetRevenue = $targetEbit / $stableMargin;
+        $grossYield = $targetRevenue / max(1.0, abs($earningAssets));
 
         return [
-            'invested_capital' => $effectiveEquity,
-            'baseline_roic' => ($impliedTurnover * $stableMargin) * (1.0 - $taxRate)
+            'invested_capital' => $earningAssets,
+            'baseline_roic'    => ($grossYield * $stableMargin) * (1.0 - $taxRate)
         ];
     }
 
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
+        $params = $this->resolveModelParameters($stock, [
+            'clearing_fee_weight' => 0.65,
+            'custody_data_weight' => 0.35,
+        ]);
+        $clearingWeight = $params['clearing_fee_weight'];
+        $custodyWeight  = $params['custody_data_weight'];
 
         // The Volatility Bonus (Transaction Volume):
         // Clearinghouses thrive on sheer volume. Market panics = massive liquidations = massive fees.
         $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? self::VIX_BASELINE_THRESHOLD);
         $volatilityBonus = max(0.0, ($vixEma - self::VIX_BASELINE_THRESHOLD) * self::VIX_REVENUE_SCALAR);
 
-        $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $volatilityBonus);
+        $clearingRevenue = $expectedRevenue * $clearingWeight * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $volatilityBonus);
+        $custodyRevenue  = $expectedRevenue * $custodyWeight * (1.0 + ($revenueZ * ($baselineVol * 0.3)));
+        $actualRevenue   = max(0.0, $clearingRevenue + $custodyRevenue);
 
         // The Default Fund Shock (Catastrophic Tail Risk)
         $defaultZ = $mathUtility->generateStandardNormal();
@@ -205,14 +208,16 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
 
     public function calculateInterestIncome(Stock $stock, array &$macroState, MathUtility $mathUtility): float
     {
-        // Clearinghouses earn interest on their entire liquid treasury, which is primarily composed of the margin pool.
+        // Non-operating interest income is earned on surplus corporate cash ($ownCash).
+        // Additionally, the clearinghouse earns a reliable 15 bps custody net spread on member initial margin deposits ($marginPool).
         $cash = (float) $stock->getCorporateTreasury();
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        $marginPool = (float) $stock->getCustomerDeposits();
+        $ownCash = max(0.0, $cash - $marginPool);
 
-        // They do not take equity risk with the margin pool. They park cash in overnight repo and short-duration bonds.
-        $repoYield = $this->calculateCashYield($macroState, $policyRate);
+        $ownCashYield = $ownCash * $this->calculateCashYield($macroState);
+        $marginPoolYield = $marginPool * self::MARGIN_POOL_CUSTODY_SPREAD;
 
-        return $cash * $repoYield;
+        return $ownCashYield + $marginPoolYield;
     }
 
     public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array
@@ -222,33 +227,33 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
 
         // Corporate debt interest
         $corporateInterest = ($corporateDebt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($corporateDebt * $floatingRatio * $floatingInterestRate);
-
-        // Margin Pool Rebate (Customer Deposits)
-        // Clearinghouses MUST pay interest back to clearing members on their initial margin, keeping a small spread.
-        $marginPool = (float) $stock->getCustomerDeposits();
-
-        $yield2y = $macroState['yield_2y_ema'] ?? ($macroState['yield_2y'] ?? $policyRate);
-        $earnedYield = max(0.0, $yield2y - MacroEngine::CASH_YIELD_SPREAD);
-        $rebateRate = max(0.001, $earnedYield - FinancialConstants::CUSTODY_CLEARING_SPREAD); // Pass back the yield they actually earn, minus spread
-
-        $marginInterest = $marginPool * $rebateRate;
-
-        $totalInterestExpense = $corporateInterest + $marginInterest;
         $wholesaleRate = $corporateDebt > 0 ? ($corporateInterest / $corporateDebt) : $currentMarketFixedRate;
 
+        // Note: Margin pool custody rebates are pass-through distributions netted against custody yield in calculateInterestIncome.
+        // Returning only corporate debt interest ensures ICR and solvency metrics measure true corporate debt servicing capacity.
         return [
-            'interest_expense' => $totalInterestExpense,
+            'interest_expense' => $corporateInterest,
             'wholesale_rate' => $wholesaleRate
         ];
     }
 
-    public function calculateCashYield(array &$macroState, float $policyRate): float
+    public function calculateCashYield(array &$macroState): float
     {
         // Clearinghouses cannot take equity risk, but they do park margin in short-duration 
         // government bonds (up to 2 years) to capture slight duration premiums over overnight rates.
+        $policyRate = $macroState['policy_rate_ema'] ?? ($macroState['policy_rate'] ?? 0.04);
         $yield2y = $macroState['yield_2y_ema'] ?? ($macroState['yield_2y'] ?? $policyRate);
 
         return max(0.0, $yield2y - MacroEngine::CASH_YIELD_SPREAD);
+    }
+
+    /**
+     * Clearinghouses do not deploy physical CapEx. Clearing capacity is governed by Clearing Equity
+     * and margin pool collateral is held in Corporate Treasury reserves, so organic capex spend is 0.0.
+     */
+    public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float
+    {
+        return 0.0;
     }
 
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
@@ -267,41 +272,51 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
     public function processPassiveLiabilityGrowth(Stock $stock, array &$macroState, array &$state, MathUtility $mathUtility): void
     {
         $currentLiabilities = $state['customerDeposits'];
-        if ($currentLiabilities <= 0) return;
+        if ($currentLiabilities <= 0.0) {
+            return;
+        }
 
-        // Nominal Systemic Growth: The baseline market grows over time.
+        // 1. Annualized Systemic Growth quarterized
         $inflation = $macroState['inflation_ema'] ?? 0.02;
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
         $realGdpGrowth = self::BASE_GDP_GROWTH_RATE + ($outputGap > 0.0 ? $outputGap * self::EXPANSION_GDP_MULT : $outputGap * self::RECESSION_GDP_MULT);
         $systemicGrowthQuarterly = ($inflation + $realGdpGrowth) / 4.0;
 
-        // Volatility Driver: When markets get chaotic, clearinghouses demand higher initial margins.
-        // If VIX is above 20%, margins expand. If below, margins contract.
+        // 2. Volatility Elasticity (Quarterized so calm markets don't cause annual double-digit drain)
         $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? self::VIX_BASELINE_THRESHOLD);
-        $volatilityShift = ($vixEma - self::VIX_BASELINE_THRESHOLD) * self::VIX_POOL_GROWTH_SCALAR;
+        $volatilityShiftQuarterly = (($vixEma - self::VIX_BASELINE_THRESHOLD) * self::VIX_POOL_GROWTH_SCALAR) / 4.0;
 
-        $baseGrowth = $systemicGrowthQuarterly + $volatilityShift;
-        $liabilityChange = $currentLiabilities * max(-self::MAX_POOL_CHANGE_CLAMP, min(self::MAX_POOL_CHANGE_CLAMP, $baseGrowth + ($mathUtility->generateStandardNormal() * self::POOL_GROWTH_NOISE_STD)));
+        $baseGrowth = $systemicGrowthQuarterly + $volatilityShiftQuarterly;
+        $noise = $mathUtility->generateStandardNormal() * self::POOL_GROWTH_NOISE_STD;
+        $growthRate = max(-self::MAX_POOL_CHANGE_CLAMP, min(self::MAX_POOL_CHANGE_CLAMP, $baseGrowth + $noise));
 
-        if (abs($liabilityChange) > 0) {
+        $liabilityChange = $currentLiabilities * $growthRate;
+
+        if (abs($liabilityChange) > 0.0) {
+            // Segregated margin accounting: outflows cannot exceed available deposits
+            if ($liabilityChange < 0.0 && abs($liabilityChange) > $currentLiabilities) {
+                $liabilityChange = -$currentLiabilities;
+            }
+
             $state['treasury'] += $liabilityChange;
             $state['customerDeposits'] += $liabilityChange;
 
-            if ($state['treasury'] < 0.0) {
-                $liquidityShortfall = abs($state['treasury']);
-                $state['treasury'] = 0.0;
-                $state['wholesaleDebt'] += $liquidityShortfall;
-                $amtB = number_format($liquidityShortfall / 1_000_000_000, 2);
-                $state['events'][] = ['description' => "Severe liquidity drain forced emergency borrowing of \${$amtB}B.", 'shock' => -5.0];
-            }
-
             $stock->setCustomerDeposits((string) max(0.0, $state['customerDeposits']));
 
+            // Only generate lore for significant margin pool movements (>5% quarterly shift)
             $changePct = $liabilityChange / $currentLiabilities;
             if ($changePct < -self::LORE_POOL_CHANGE_THRESHOLD) {
-                $state['events'][] = ['description' => "Margin pool contracted by \$" . number_format(abs($liabilityChange) / 1_000_000_000, 2) . "B.", 'shock' => -1.0];
+                $amtB = number_format(abs($liabilityChange) / 1_000_000_000, 2);
+                $state['events'][] = [
+                    'description' => "Initial margin pool contracted by \${$amtB}B amid declining market volatility.",
+                    'shock' => -0.5
+                ];
             } elseif ($changePct > self::LORE_POOL_CHANGE_THRESHOLD) {
-                $state['events'][] = ['description' => "Collected \$" . number_format($liabilityChange / 1_000_000_000, 2) . "B in additional Initial Margin.", 'shock' => 0.5];
+                $amtB = number_format($liabilityChange / 1_000_000_000, 2);
+                $state['events'][] = [
+                    'description' => "Collected \${$amtB}B in additional Initial Margin deposits due to elevated market volatility.",
+                    'shock' => 0.5
+                ];
             }
         }
     }
@@ -310,5 +325,35 @@ class ClearingHouseBusinessModel extends InsuranceBusinessModel
     {
         return self::MONOPOLY_REVERSION_SPEED; // Toll-booth monopoly moat resists margin compression
     }
-}
 
+    public function isUnderLeveraged(bool $isFinancial, float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
+    {
+        // For a Central Counterparty Clearing House (CCP), Customer Deposits represent member initial margin collateral.
+        // These deposits scale exogenously with clearing member trading volume and open interest rather than discretionary
+        // balance sheet recapitalization. A clearinghouse should never trigger "underleveraged" buyback/debt spirals
+        // just because its customer margin pool ratio fluctuates.
+        return false;
+    }
+
+    public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float
+    {
+        return max($revenueFloorValue, $peFairValue);
+    }
+
+    public function calculateMaxBuybackSpend(float $excessCash, float $retainedEarningsThisQuarter, bool $isMegaHoarder): float
+    {
+        return $isMegaHoarder ? $excessCash * self::MEGA_BUYBACK_CASH_SHARE : min($excessCash * self::STANDARD_BUYBACK_SHARE, $retainedEarningsThisQuarter * self::MAX_RETAINED_BUYBACK_MULT);
+    }
+
+    public function evaluateHoardingStatus(float $treasury, float $targetCashReserves, float $operatingBase, float $totalDebt): array
+    {
+        $excessCash = max(0.0, $treasury - $targetCashReserves);
+        return [
+            'excess_cash'     => $excessCash,
+            // A clearinghouse holds massive member margin liabilities ($totalDebt). Comparing excess cash against operatingBase
+            // falsely triggers hoarder buyback flags. We evaluate hoarding status relative to total liabilities.
+            'is_hoarder'      => $excessCash > ($totalDebt * 0.25),
+            'is_mega_hoarder' => $excessCash > ($totalDebt * 0.40),
+        ];
+    }
+}

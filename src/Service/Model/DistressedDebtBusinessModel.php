@@ -75,7 +75,17 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
             $distressMultiplier = self::BULL_MARKET_REVENUE_DRAG;
         }
 
-        $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $distressMultiplier);
+        $params = $this->resolveModelParameters($stock, [
+            'advisory_fee_weight'   => 0.40,
+            'asset_recovery_weight' => 0.60,
+        ]);
+        $advisoryWeight = $params['advisory_fee_weight'];
+        $recoveryWeight = $params['asset_recovery_weight'];
+
+        $advisoryRevenue = $expectedRevenue * $advisoryWeight * (1.0 + ($revenueZ * ($baselineVol * 0.5)));
+        $recoveryRevenue = $expectedRevenue * $recoveryWeight * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $distressMultiplier);
+        $actualRevenue   = max(0.0, $advisoryRevenue + $recoveryRevenue);
+
         $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin));
 
         // Analyst Visibility

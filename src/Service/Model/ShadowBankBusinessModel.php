@@ -111,7 +111,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
 
         $operatingBase = $this->getOperatingBase($stock);
         $excessCash = max(0.0, $treasury - ($operatingBase * self::TARGET_OPERATING_BUFFER));
-        $expectedTreasuryIncome = $excessCash * $this->calculateCashYield($macroState, $policyRate);
+        $expectedTreasuryIncome = $excessCash * $this->calculateCashYield($macroState);
 
         $optimalEbit = $optimalEbt + $optimalInterestExpense - $expectedTreasuryIncome;
         $targetEbit = max(0.0, $optimalEbit);
@@ -130,7 +130,16 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
         $revenueZ = $mathUtility->generateStandardNormal();
-        $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))); // Slightly higher baseline vol than deposit-backed banks
+        $params = $this->resolveModelParameters($stock, [
+            'mortgage_origination_weight' => 0.60,
+            'direct_lending_weight'       => 0.40,
+        ]);
+        $mortgageWeight  = $params['mortgage_origination_weight'];
+        $lendingWeight   = $params['direct_lending_weight'];
+
+        $mortgageRevenue = $expectedRevenue * $mortgageWeight * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
+        $lendingRevenue  = $expectedRevenue * $lendingWeight * (1.0 + ($revenueZ * ($baselineVol * 0.8)));
+        $actualRevenue   = max(0.0, $mortgageRevenue + $lendingRevenue);
 
         $creditZ = $mathUtility->generateStandardNormal();
 

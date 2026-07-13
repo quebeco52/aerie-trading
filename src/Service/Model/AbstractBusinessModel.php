@@ -129,8 +129,7 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
         $targetCash = $this->calculateTargetOperatingCash($operatingBase, 0.0, (float) $stock->getWholesaleDebt());
         $excessCash = max(0.0, $cash - $targetCash);
 
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
-        return $excessCash * $this->calculateCashYield($macroState, $policyRate);
+        return $excessCash * $this->calculateCashYield($macroState);
     }
 
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
@@ -173,8 +172,9 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
         return $interestExpense > 0 ? ($ebit / $interestExpense) : ($ebit > 0 ? 999.0 : -999.0);
     }
 
-    public function calculateCashYield(array &$macroState, float $policyRate): float
+    public function calculateCashYield(array &$macroState): float
     {
+        $policyRate = $macroState['policy_rate_ema'] ?? ($macroState['policy_rate'] ?? 0.04);
         return max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
     }
 
@@ -246,6 +246,17 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
         // 3. Target Capital Structure Deficit Principle:
         // A firm is under-leveraged when its Debt/Equity ratio is below 75% of its CFO-modified target tolerance.
         return $currentDebtRatio < ($targetDebtTolerance * self::CORPORATE_UNDERLEVERAGED_RATIO);
+    }
+
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return 0.05; // Standard baseline net working capital intensity (5% of incremental revenue)
+    }
+
+    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    {
+        // By default, standard service/corporate businesses experience minimal asset capacity decay.
+        // Capital-intensive heavy industries override this method with physical plant decay physics.
     }
 }
 

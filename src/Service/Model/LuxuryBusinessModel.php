@@ -62,6 +62,18 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     /** Operating margin mean reversion speed: slower speed reflects sticky multi-decade brand equity. */
     public const LUXURY_REVERSION_SPEED    = 2.0;
 
+    // --- Veblen Brand Cachet & Boutique Reinvestment Physics ---
+    /** Variable margin sensitivity to haute couture brand desirability and Veblen pricing cachet. */
+    public const BRAND_CACHET_ELASTICITY   = 0.018;
+    /** Quarterly margin decay rate per unit of underinvestment below boutique craftsmanship replacement. */
+    public const BOUTIQUE_CRAFT_DECAY_RATE    = 0.018;
+    /** Quarterly margin gain scalar per unit of heritage exclusivity overinvestment. */
+    public const HERITAGE_EXCLUSIVITY_GAIN_RATE = 0.009;
+    /** Structural minimum operating margin floor under accessible apparel dilution. */
+    public const MIN_OPERATING_MARGIN_FLOOR   = 0.15;
+    /** Structural maximum operating margin ceiling for ultra-exclusive Veblen leather monopolies. */
+    public const MAX_OPERATING_MARGIN_CEILING = 0.45;
+
     public function getMacroPhysics(Stock $stock, array &$macroState): array
     {
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
@@ -114,7 +126,11 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
 
         $actualRevenue = max(0.0, $hauteRevenue + $accessibleRevenue);
 
-        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $veblenMarginBenefit + $brandModifier));
+        // Continuous Veblen Brand Cachet Elasticity:
+        // Strong haute couture desirability ($hauteZ > 0) continuously expands pricing cachet and improves gross margin.
+        $brandCachetShift = -self::BRAND_CACHET_ELASTICITY * $hauteZ * $hauteWeight;
+
+        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $veblenMarginBenefit + $brandModifier + $brandCachetShift));
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
         // Analyst Visibility
@@ -122,7 +138,7 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
         $dynamicVisibility = min(1.0, max(self::MIN_ANALYST_VISIBILITY, self::ANALYST_BASE_VISIBILITY + $analystError));
         $analystExpectedRevenue = $expectedRevenue * (1.0 + (($hauteZ * $hauteWeight + $accessibleZ * $accessibleWeight) * $dynamicVisibility));
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + (($veblenMarginBenefit + $brandModifier) * $dynamicVisibility)));
+        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + (($veblenMarginBenefit + $brandModifier + $brandCachetShift) * $dynamicVisibility)));
 
         $primaryShockZ = abs($eventZ) > abs($hauteZ) ? $eventZ : $hauteZ;
 
@@ -141,6 +157,32 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     {
         // Brand equity is highly sticky over decades
         return self::LUXURY_REVERSION_SPEED;
+    }
+
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return 0.14; // Haute couture finished leather goods & boutique inventory holding
+    }
+
+    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    {
+        $timeScale = $dt / 0.25;
+        $currentMargin = (float) $stock->getOperatingMargin();
+
+        if ($reinvestmentRatio < 1.0) {
+            // Boutique craftsmanship decay toward accessible apparel floor
+            $decayRate = self::BOUTIQUE_CRAFT_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
+            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
+            $stock->setOperatingMargin((string) $updatedMargin);
+        } elseif ($reinvestmentRatio > 1.0) {
+            // Heritage exclusivity overinvestment expands Veblen pricing cachet
+            $modGain = self::HERITAGE_EXCLUSIVITY_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
+            $updatedMargin = min(
+                self::MAX_OPERATING_MARGIN_CEILING,
+                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
+            );
+            $stock->setOperatingMargin((string) $updatedMargin);
+        }
     }
 }
 

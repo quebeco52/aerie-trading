@@ -19,6 +19,12 @@ use App\Service\Event\ShockEvent;
  */
 class CommercialBankBusinessModel extends AbstractBusinessModel
 {
+    // --- ROE & Target Metrics ---
+    /** Weight given to historical baseline ROE when blending with TTM ROE. */
+    public const BASELINE_ROE_WEIGHT = 0.70;
+    /** Weight given to TTM ROE when blending with historical baseline ROE. */
+    public const TTM_ROE_WEIGHT      = 0.30;
+
     // --- Dual-Stream Banking Architecture ---
     /** Baseline fraction of bank revenue derived from Net Interest Income (NII). */
     public const NII_REVENUE_WEIGHT      = 0.75;
@@ -117,7 +123,7 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
 
         $ttmRoe = (float) $stock->getRoeTtm();
         if ($ttmRoe !== 0.0) {
-            $baselineRoe = ($baselineRoe * 0.70) + ($ttmRoe * 0.30);
+            $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
         }
 
         $industry = $stock->getIndustry() ?: 'General';
@@ -263,7 +269,11 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
             $nimSqueeze = (self::NIM_BASE_SPREAD_BUFFER - $bankSpread)
                 + pow(abs($bankSpread) * $inversionSensitivity, 2) * self::NIM_QUADRATIC_COEFF;
         } else {
-            $nimSqueeze = self::NIM_BASE_SPREAD_BUFFER - $bankSpread;
+            // Duration Beta: scales steep-curve term premium gain by duration risk exposure.
+            // Eliminates "free money parameter" exploit where low inversionSensitivity had no upside trade-off.
+            $durationBeta = $inversionSensitivity / self::NIM_INVERSION_SENSITIVITY;
+            $spreadGain = max(0.0, $bankSpread - self::NIM_BASE_SPREAD_BUFFER);
+            $nimSqueeze = self::NIM_BASE_SPREAD_BUFFER - ($bankSpread + ($spreadGain * ($durationBeta - 1.0)));
         }
 
         // Physics-grounded Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
@@ -315,7 +325,7 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
 
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
 
-        return $excessCash * $this->calculateCashYield($macroState, $policyRate);
+        return $excessCash * $this->calculateCashYield($macroState);
     }
 
     /**
@@ -368,7 +378,7 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
 
     public function calculateMaxBuybackSpend(float $excessCash, float $retainedEarningsThisQuarter, bool $isMegaHoarder): float
     {
-        return $isMegaHoarder ? $excessCash * 0.30 : min($excessCash * 0.10, $retainedEarningsThisQuarter);
+        return $isMegaHoarder ? $excessCash * 0.30 : max(0.0, min($excessCash * 0.10, $retainedEarningsThisQuarter));
     }
 
     public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array

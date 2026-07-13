@@ -62,7 +62,8 @@ class TreasuryEngine
             'events' => $state['events'],
             'organic_capex' => $state['organicCapex'],
             'bank_apy' => $state['bank_apy'],
-            'new_treasury' => $state['treasury']
+            'new_treasury' => $state['treasury'],
+            'debt_action_taken' => $state['debtActionTaken']
         ];
     }
 
@@ -80,7 +81,8 @@ class TreasuryEngine
         float $finalTreasury,
         array &$macroState,
         array $health,
-        float $realEstateAppreciation = 0.0
+        float $realEstateAppreciation = 0.0,
+        bool $debtActionTaken = false
     ): array {
         $totalCashSpent = $totalDividendsPaid + $totalBuybackCash;
 
@@ -103,7 +105,7 @@ class TreasuryEngine
             'treasury' => $finalTreasury,
             'wholesaleDebt' => (float) $stock->getWholesaleDebt(),
             'customerDeposits' => (float) $stock->getCustomerDeposits(),
-            'debtActionTaken' => false,
+            'debtActionTaken' => $debtActionTaken,
             'failed_emergency_borrow' => false,
             'events' => []
         ];
@@ -169,14 +171,14 @@ class TreasuryEngine
 
                 $ebit = $health['raw_metrics']['ebit'] ?? 0.0;
                 $depreciation = $health['raw_metrics']['depreciation'] ?? 0.0;
-                
+
                 // REITs use FFO (EBIT + Depreciation) to cover interest, as depreciation is non-cash.
                 $operatingIncome = $businessModel === 'reit' ? ($ebit + $depreciation) : $ebit;
-                
+
                 // Highly stable businesses (like REITs and Utilities) can safely borrow at much lower ICR thresholds.
                 $modelThresholds = \App\Data\Sectors::getModelThresholds($businessModel);
                 $minimumIcr = ($modelThresholds['buyback_min_icr'] ?? 3.0) + 0.5;
-                
+
                 $maxTolerableInterest = max(0.0, $operatingIncome / $minimumIcr);
                 $currentInterestExpense = $health['raw_metrics']['interest_expense'] ?? 0.0;
                 $availableInterestCapacity = max(0.0, $maxTolerableInterest - $currentInterestExpense);
@@ -312,9 +314,11 @@ class TreasuryEngine
                     $amtB = number_format($expansionSpend / 1_000_000_000, 2);
                     $actionText = match ($businessModel) {
                         'commercial_bank', 'credit_services', 'shadow_bank' => 'loan book expansion',
-                        'insurance' => 'underwriting infrastructure',
-                        'brokerage' => 'platform expansion',
-                        'asset_manager' => 'fund seeding and platform expansion',
+                        'insurance' => 'underwriting infrastructure and float expansion',
+                        'brokerage', 'investment_bank' => 'trading desk and market-making capacity',
+                        'asset_manager', 'private_equity' => 'fund seeding and AUM deployment',
+                        'clearing_house' => 'clearing collateral and exchange margin reserves',
+                        'distressed_debt' => 'distressed credit and turnaround equity acquisitions',
                         'reit' => 'property acquisitions and development',
                         default => 'organic expansion'
                     };
@@ -504,7 +508,7 @@ class TreasuryEngine
 
             $evalDebt = $isFinancial ? $state['wholesaleDebt'] : $totalDebt;
             $modelThresholds = \App\Data\Sectors::getModelThresholds($businessModel);
-            
+
             if ($isFinancial && isset($modelThresholds['wholesale_leverage_limit'])) {
                 $effectiveCostOfDebt = $health['effective_cost'] ?? 0.05;
                 $evalLimit = $archetypeStrategy->modifyDebtToleranceLimit($modelThresholds['wholesale_leverage_limit'], $effectiveCostOfDebt);
@@ -570,6 +574,6 @@ class TreasuryEngine
         if (is_numeric($val) && !is_finite((float) $val)) {
             return '0.' . str_repeat('0', $scale);
         }
-        return sprintf('%.'.$scale.'F', (float) $val);
+        return sprintf('%.' . $scale . 'F', (float) $val);
     }
 }

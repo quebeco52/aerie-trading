@@ -63,6 +63,18 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     /** Weight given to historical trailing twelve-month ROIC when updating ROIC EMA. */
     public const ROIC_TTM_HIST_WEIGHT      = 0.80;
 
+    // --- Program Execution & Classified R&D Tooling Physics ---
+    /** Variable margin sensitivity to sovereign defense contract execution efficiency. */
+    public const PROGRAM_EXECUTION_ELASTICITY = 0.015;
+    /** Quarterly margin decay rate per unit of underinvestment below classified tooling & R&D replacement. */
+    public const DEFENSE_TOOLING_DECAY_RATE   = 0.018;
+    /** Quarterly margin gain scalar per unit of next-gen defense platform modernization. */
+    public const CLASSIFIED_PLATFORM_GAIN_RATE = 0.009;
+    /** Structural minimum operating margin floor under severe defense tooling tech debt. */
+    public const MIN_OPERATING_MARGIN_FLOOR   = 0.06;
+    /** Structural maximum operating margin ceiling for next-generation defense platform monopolies. */
+    public const MAX_OPERATING_MARGIN_CEILING = 0.22;
+
     public function getMacroPhysics(Stock $stock, array &$macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
@@ -108,7 +120,11 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 
         $actualRevenue = max(0.0, $govtRevenue + $commercialRevenue);
 
-        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin));
+        // Program Execution Efficiency Elasticity:
+        // Strong sovereign defense contract readouts ($contractZ > 0) reduce cost overruns and improve variable operating margin.
+        $executionEfficiencyShift = -self::PROGRAM_EXECUTION_ELASTICITY * $contractZ * $govtWeight;
+
+        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $executionEfficiencyShift));
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
         // Analyst Visibility
@@ -116,7 +132,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
         $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
         $analystExpectedRevenue = max(0.0, $expectedRevenue * (1.0 + (($contractZ * $govtWeight + $commercialZ * $commercialWeight) * $dynamicVisibility) + ($costPlusBonus * $govtWeight)));
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin));
+        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + ($executionEfficiencyShift * $dynamicVisibility)));
 
         $primaryShockZ = abs($eventZ) > abs($contractZ) ? $eventZ : $contractZ;
 
@@ -148,6 +164,27 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $stock->setRoicTtm((string) max(self::MIN_ROIC_CLAMP, min(self::MAX_ROIC_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;
+    }
+
+    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    {
+        $timeScale = $dt / 0.25;
+        $currentMargin = (float) $stock->getOperatingMargin();
+
+        if ($reinvestmentRatio < 1.0) {
+            // Classified tooling tech debt toward floor
+            $decayRate = self::DEFENSE_TOOLING_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
+            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
+            $stock->setOperatingMargin((string) $updatedMargin);
+        } elseif ($reinvestmentRatio > 1.0) {
+            // Next-gen defense platform modernization expands margin ceiling
+            $modGain = self::CLASSIFIED_PLATFORM_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
+            $updatedMargin = min(
+                self::MAX_OPERATING_MARGIN_CEILING,
+                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
+            );
+            $stock->setOperatingMargin((string) $updatedMargin);
+        }
     }
 }
 

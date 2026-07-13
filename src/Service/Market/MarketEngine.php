@@ -290,8 +290,8 @@ class MarketEngine
 
         // 1. MACRO FORWARD GUIDANCE & FUNDAMENTAL P/E
         // We use the Gordon Growth Model derivation for Fair Value P/E.
-        // Expected perpetual growth rate is tied to inflation and output gap, capped at 2.5% (long-run nominal GDP growth).
-        $expectedGrowth = max(0.0, min(0.025, $inflation + ($outputGap * 0.5)));
+        // Expected perpetual growth rate is tied to inflation and beta-adjusted output gap, capped at 2.5% (long-run nominal GDP growth).
+        $expectedGrowth = max(0.0, min(0.025, $inflation + ($outputGap * 0.5 * abs($beta))));
 
         $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $structuralRoic, $expectedGrowth);
 

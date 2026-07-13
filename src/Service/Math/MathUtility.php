@@ -181,7 +181,8 @@ class MathUtility
     public function calculateCIR(float $currentValue, float $kappa, float $theta, float $sigma, float $dt, float $dW): float
     {
         $currentValue = max(0.0001, $currentValue);
-        $drift = $kappa * ($theta - $currentValue) * $dt;
+        // Exact exponential discretization for mean-reversion drift prevents Euler overshooting when kappa * dt > 1.0
+        $drift = ($theta - $currentValue) * (1.0 - exp(-$kappa * $dt));
         $diffusion = $sigma * sqrt($currentValue) * sqrt($dt) * $dW;
         
         return max(0.0001, $currentValue + $drift + $diffusion);

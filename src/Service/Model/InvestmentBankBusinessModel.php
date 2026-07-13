@@ -140,14 +140,21 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
         $yield5y    = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + self::DEFAULT_5Y_YIELD_PREMIUM);
         $curveSlope = $yield5y - $policyRate;
-        $dcmBonus   = min(
-            self::DCM_STEEPNESS_CLAMP,
-            max(0.0, ($curveSlope - self::DCM_STEEPNESS_FLOOR) * self::DCM_STEEPNESS_SCALAR)
+        // DCM underwriting expands during steep yield curves (+40% clamp) and contracts during
+        // inverted/flat yield curves (-20% drought floor) when corporate debt refinancing dries up.
+        $dcmBonus   = max(
+            -0.20,
+            min(self::DCM_STEEPNESS_CLAMP, ($curveSlope - self::DCM_STEEPNESS_FLOOR) * self::DCM_STEEPNESS_SCALAR)
         );
 
         //  S&T Volatility Arbitrage (VIX spike revenue on trading desk)
         $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? self::DEFAULT_VIX_FALLBACK);
-        $volatilityArbitrage = max(0.0, ($vixEma - self::VIX_ARBITRAGE_FLOOR) * $vixScalar);
+        $vixGap = $vixEma - self::VIX_ARBITRAGE_FLOOR;
+        // High VIX (>0.18) = Surge market-making arbitrage profits.
+        // Low VIX (<0.18)  = Trading volume famine & infrastructure carry drag (-15% max drag).
+        $volatilityArbitrage = $vixGap >= 0.0
+            ? $vixGap * $vixScalar
+            : max(-0.15, $vixGap * ($vixScalar * 0.5));
 
         //  Blended dual-desk revenue (using resolved company model parameters)
         $advisoryRevenue = $expectedRevenue * $advisoryWeight

@@ -188,21 +188,19 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         $optimalInterestIncome = $optimalYieldingCash * max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
 
         $optimalEbit = $optimalEbt + $optimalInterestExpense - $optimalInterestIncome;
-        $structuralOperatingYield = $optimalEbit / max(1.0, $effectiveEquity);
+        $optimalEarningAssets = $effectiveEquity + $optimalDebt;
+        $structuralOperatingYield = $optimalEbit / max(1.0, $optimalEarningAssets);
 
-        // Apply the pure structural yield to the ACTUAL active operating equity
-        $targetOperatingCash = $this->calculateTargetOperatingCash($operatingBase, 0.0, $wholesaleDebt);
-        $excessCash = max(0.0, $treasury - $targetOperatingCash);
-        $operatingEquity = max(1.0, $equity - $excessCash);
+        $earningAssets = max($effectiveEquity, $effectiveEquity + $wholesaleDebt - $treasury);
 
-        $targetEbit = $operatingEquity * $structuralOperatingYield;
+        $targetEbit = $earningAssets * $structuralOperatingYield;
         // ------------------------------------
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
         // The Fee Revenue Floor:
         // Asset-light financials don't have massive balance sheets, but they must maintain 
         // structural fee revenue (AUM / Advisory) to survive.
-        $minOperatingEbit = $operatingEquity * self::MIN_OPERATING_EBIT_YIELD;
+        $minOperatingEbit = $earningAssets * self::MIN_OPERATING_EBIT_YIELD;
 
         $targetEbit = max($minOperatingEbit, $targetEbit);
 
@@ -210,12 +208,12 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         // but we MUST cap the turnover. If margins compress due to market saturation, 
         // uncapped reverse-engineering will cause top-line revenue hyperinflation!
         $unboundedRevenue = max(0.0, $targetEbit) / $stableMargin;
-        $targetRevenue = min($unboundedRevenue, $operatingEquity * self::MAX_TURNOVER_CAP); // Hard cap turnover at 2.0x annually
+        $targetRevenue = min($unboundedRevenue, $earningAssets * self::MAX_TURNOVER_CAP); // Hard cap turnover at 2.0x annually
 
-        $impliedTurnover = $targetRevenue / max(1.0, $operatingEquity);
+        $impliedTurnover = $targetRevenue / max(1.0, $earningAssets);
 
         return [
-            'invested_capital' => $operatingEquity,
+            'invested_capital' => $earningAssets,
             'baseline_roic' => ($impliedTurnover * $stableMargin) * (1.0 - $taxRate)
         ];
     }
@@ -324,7 +322,7 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
 
         // Base deterministic yield (60% bonds + 40% deterministic CAPM equity return)
-        $baseYield = $this->calculateCashYield($macroState, $policyRate);
+        $baseYield = $this->calculateCashYield($macroState);
 
         // Stochastic seed capital tranche: quarterly equity volatility + VIX market panic drag
         $seedZ = $mathUtility->generateStandardNormal();
@@ -382,9 +380,10 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         return ['interest_expense' => $interestExpense, 'wholesale_rate' => $wholesaleRate];
     }
 
-    public function calculateCashYield(array &$macroState, float $policyRate): float
+    public function calculateCashYield(array &$macroState): float
     {
-        $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['policy_rate_ema'] ?? self::DEFAULT_POLICY_RATE_FALLBACK) + self::DEFAULT_10Y_SPREAD;
+        $policyRate = $macroState['policy_rate_ema'] ?? ($macroState['policy_rate'] ?? self::DEFAULT_POLICY_RATE_FALLBACK);
+        $yield10y = $macroState['yield_10y_ema'] ?? ($policyRate + self::DEFAULT_10Y_SPREAD);
         $outputGap = $macroState['output_gap_ema'] ?? 0.0;
 
         $bondReturn = $yield10y;

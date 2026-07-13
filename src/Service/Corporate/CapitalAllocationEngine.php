@@ -130,6 +130,7 @@ class CapitalAllocationEngine
         $newTreasury -= $buybackData['total_cash_spent'];
 
         // FINALIZE LIQUIDITY & EQUITY
+        $debtActionTaken = $strategyEvents['debt_action_taken'] ?? false;
         $liquidityEvents = $this->treasuryEngine->finalizeLiquidity(
             $stock,
             $quarterlyNetIncome,
@@ -139,7 +140,8 @@ class CapitalAllocationEngine
             $newTreasury,
             $macroState,
             $health,
-            $realEstateAppreciation
+            $realEstateAppreciation,
+            $debtActionTaken
         );
 
         if (!empty($liquidityEvents['events'])) {

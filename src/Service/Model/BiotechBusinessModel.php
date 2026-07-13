@@ -49,6 +49,8 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public const TRIAL_FAILURE_REV_MULT    = 0.85;
     /** Variable margin compression penalty from generic drug competition after patent expiration. */
     public const TRIAL_FAILURE_MARGIN_PENALTY = 0.10;
+    /** Continuous variable margin sensitivity to interim Phase II/III clinical trial readouts. */
+    public const CONTINUOUS_PIPELINE_MARGIN_SENSITIVITY = 0.015;
     /** Upper clamp for realized variable margin. */
     public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
     /** Lower clamp for realized variable margin. */
@@ -75,6 +77,20 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public const MIN_RECAP_ICR_FLOOR       = 15.0;
     /** Maximum debt tolerance threshold fraction triggering under-leveraged status. */
     public const UNDERLEVERAGED_DEBT_RATIO = 0.50;
+
+    // --- Patent Cliff & Blockbuster Capital Reinvestment Physics ---
+    /** Quarterly margin decay rate per unit of R&D underinvestment below patent replacement rate. */
+    public const PATENT_CLIFF_DECAY_RATE      = 0.025;
+    /** Quarterly margin gain scalar per unit of logarithmic R&D overinvestment above replacement rate. */
+    public const BLOCKBUSTER_GAIN_RATE        = 0.012;
+    /** Structural minimum operating margin floor under severe generic drug competition (off-patent). */
+    public const MIN_OPERATING_MARGIN_FLOOR   = 0.08;
+    /** Structural maximum operating margin ceiling for proprietary patented biologic blockbusters. */
+    public const MAX_OPERATING_MARGIN_CEILING = 0.50;
+
+    // --- R&D Pipeline Valuation Rails ---
+    /** Valuation discount applied when FCF is negative due to heavy clinical trial funding. */
+    public const BIOTECH_RESEARCH_BURN_DISCOUNT = 0.88;
 
     public function getMacroPhysics(Stock $stock, array &$macroState): array
     {
@@ -108,17 +124,19 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
 
         // Patent Cliff vs. Blockbuster R&D Super-Cycle
         // Applies directly to the high-risk pipeline drug stream ($pipelineWeight).
-        $patentModifier = 0.0;
+        // Continuous pipeline clinical progress ($pipelineZ) smoothly adjusts variable margin.
+        $continuousPipelineShift = -self::CONTINUOUS_PIPELINE_MARGIN_SENSITIVITY * $pipelineZ * $pipelineWeight;
+        $patentModifier = $continuousPipelineShift;
         $eventLore = null;
 
         $trialZ = $mathUtility->generateStandardNormal();
         if ($trialZ > self::TRIAL_APPROVAL_Z_SCORE) {
             $pipelineRevenue *= self::TRIAL_APPROVAL_REV_MULT;
-            $patentModifier = self::TRIAL_APPROVAL_MARGIN_BONUS * $pipelineWeight;
+            $patentModifier += self::TRIAL_APPROVAL_MARGIN_BONUS * $pipelineWeight;
             $eventLore = "Received landmark regulatory approval for a blockbuster specialty drug pipeline.";
         } elseif ($trialZ < self::TRIAL_FAILURE_Z_SCORE) {
             $pipelineRevenue *= self::TRIAL_FAILURE_REV_MULT;
-            $patentModifier = self::TRIAL_FAILURE_MARGIN_PENALTY * $pipelineWeight;
+            $patentModifier += self::TRIAL_FAILURE_MARGIN_PENALTY * $pipelineWeight;
             $eventLore = "Suffered a major clinical trial setback and patent cliff generic erosion.";
         }
 
@@ -165,6 +183,44 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
             return false;
         }
         return $currentDebtRatio < ($targetDebtTolerance * self::UNDERLEVERAGED_DEBT_RATIO);
+    }
+
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return 0.10; // Clinical drug inventory and specialized biologic materials buffer
+    }
+
+    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    {
+        $timeScale = $dt / 0.25;
+        $currentMargin = (float) $stock->getOperatingMargin();
+
+        if ($reinvestmentRatio < 1.0) {
+            // Patent Cliff Amortization: underinvestment causes patents to expire without replacement
+            $decayRate = self::PATENT_CLIFF_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
+            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
+            $stock->setOperatingMargin((string) $updatedMargin);
+        } elseif ($reinvestmentRatio > 1.0) {
+            // Blockbuster Pipeline Expansion: R&D overinvestment creates proprietary biologic monopolies
+            $modGain = self::BLOCKBUSTER_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
+            $updatedMargin = min(
+                self::MAX_OPERATING_MARGIN_CEILING,
+                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
+            );
+            $stock->setOperatingMargin((string) $updatedMargin);
+        }
+    }
+
+    public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float
+    {
+        if ($fcfPerShare !== null && $fcfPerShare > 0.0) {
+            $multiplier = $mathUtility->calculateDcfMultiplier($liveWacc, self::DCF_TERMINAL_GROWTH_RATE);
+            $annualFcf = $fcfPerShare * 4.0;
+            $dcfFairValue = min(max(0.01, $annualFcf * $multiplier), $peFairValue * self::MAX_DCF_TO_PE_CAP_MULT);
+            return ($peFairValue + $dcfFairValue) / 2.0;
+        }
+        // During clinical R&D cash burn cycles, value biotech firms on their clinical revenue pipeline
+        return $fcfPerShare !== null ? max($revenueFloorValue, $peFairValue * self::BIOTECH_RESEARCH_BURN_DISCOUNT) : max($revenueFloorValue, $peFairValue);
     }
 }
 

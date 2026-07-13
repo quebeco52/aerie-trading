@@ -102,6 +102,13 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     {
         $revenueZ = $mathUtility->generateStandardNormal();
 
+        $params = $this->resolveModelParameters($stock, [
+            'management_fee_weight'   => 0.35,
+            'carried_interest_weight' => 0.65,
+        ]);
+        $mgmtWeight  = $params['management_fee_weight'];
+        $carryWeight = $params['carried_interest_weight'];
+
         // 1. GDP Deal Flow Multiplier:
         $outputGap = $macroState['output_gap_ema'] ?? ($macroState['output_gap'] ?? 0.0);
         $dealFlowMultiplier = $outputGap > 0.0 ? ($outputGap * self::DEAL_FLOW_BOOM_MULT) : ($outputGap * self::DEAL_FLOW_BUST_MULT);
@@ -115,8 +122,9 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $rateFreezeDrag = max(0.0, ($policyRate - self::LBO_RATE_FREEZE_THRESHOLD) * self::LBO_RATE_FREEZE_SCALAR);
         $lboFinancingDrag = $spreadFreezeDrag + $rateFreezeDrag;
 
-        $totalRevenueMultiplier = 1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $dealFlowMultiplier - $lboFinancingDrag;
-        $actualRevenue = max(0.0, $expectedRevenue * $totalRevenueMultiplier);
+        $managementRevenue = $expectedRevenue * $mgmtWeight * (1.0 + ($revenueZ * ($baselineVol * 0.5)));
+        $carryRevenue      = $expectedRevenue * $carryWeight * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $dealFlowMultiplier - $lboFinancingDrag);
+        $actualRevenue     = max(0.0, $managementRevenue + max(0.0, $carryRevenue));
 
         // 3. Structural Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
@@ -151,7 +159,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     public function calculateMaxBuybackSpend(float $excessCash, float $retainedEarningsThisQuarter, bool $isMegaHoarder): float
     {
         // Private Equity uses extreme leverage. We must cap normal buybacks to recent earnings to prevent them from hollowing out their equity base.
-        return $isMegaHoarder ? $excessCash * self::MEGA_BUYBACK_CASH_SHARE : min($excessCash * self::STANDARD_BUYBACK_SHARE, $retainedEarningsThisQuarter);
+        return $isMegaHoarder ? $excessCash * self::MEGA_BUYBACK_CASH_SHARE : max(0.0, min($excessCash * self::STANDARD_BUYBACK_SHARE, $retainedEarningsThisQuarter));
     }
 
     public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float

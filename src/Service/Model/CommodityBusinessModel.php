@@ -39,6 +39,16 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
     /** Standard deviation of analyst estimation error for quarterly extraction volumes. */
     public const ANALYST_ERROR_STD_DEV     = 0.05;
 
+    // --- Capital Reinvestment & Asset Depreciation Physics ---
+    /** Quarterly efficiency decay rate per unit of underinvestment below replacement CapEx. */
+    public const DEPRECIATION_DECAY_RATE      = 0.025;
+    /** Quarterly efficiency gain scalar per unit of logarithmic overinvestment above replacement CapEx. */
+    public const MODERNIZATION_GAIN_RATE      = 0.012;
+    /** Structural minimum operating margin floor under extreme mining/drilling equipment aging. */
+    public const MIN_OPERATING_MARGIN_FLOOR   = 0.02;
+    /** Structural maximum operating margin ceiling for state-of-the-art mining/drilling operations. */
+    public const MAX_OPERATING_MARGIN_CEILING = 0.32;
+
     public function getMacroPhysics(Stock $stock, array &$macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
@@ -86,9 +96,11 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         // CRITICAL FINANCIAL FIX:
         // Variable extraction costs (labor, diesel, equipment) scale with the physical volume stream produced ($extractionRevenue),
         // NOT the wildly fluctuating global spot price of the refined commodity.
-        // By decoupling variable costs from the spot price stream, operating margins properly explode
-        // during a commodity supercycle, just like real life.
-        $actualVariableCosts = $extractionRevenue * $realizedVariableMargin;
+        // However, because $realizedVariableMargin is calculated by the Engine as a percentage of TOTAL structural revenue,
+        // we must normalize it against the extraction weight. Otherwise, commodities with a 50% extraction weight
+        // would magically see their variable costs cut in half, resulting in 200%+ ROIC explosions (e.g. CASC).
+        $extractionVariableMargin = $extractionWeight > 0 ? ($realizedVariableMargin / $extractionWeight) : $realizedVariableMargin;
+        $actualVariableCosts = $extractionRevenue * $extractionVariableMargin;
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
         // Analyst Visibility
@@ -98,7 +110,7 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         $analystExpectedExtraction = $expectedRevenue * $extractionWeight * (1.0 + ($extractionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR) * $dynamicVisibility));
         $analystExpectedSpot       = $expectedRevenue * $spotWeight * (1.0 + $inflationBonus);
         $analystExpectedRevenue    = max(0.0, $analystExpectedExtraction + $analystExpectedSpot);
-        $analystExpectedVariableCosts = $analystExpectedExtraction * $realizedVariableMargin;
+        $analystExpectedVariableCosts = $analystExpectedExtraction * $extractionVariableMargin;
 
         $primaryShockZ = abs($extractionZ) > abs($spotZ) ? $extractionZ : $spotZ;
 
@@ -110,5 +122,29 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
             'ebit'                            => $ebit,
             'primary_shock_z'                 => $primaryShockZ
         ];
+    }
+
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        return 0.15; // Physical mining inventory holding & bulk refining working capital
+    }
+
+    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    {
+        $timeScale = $dt / 0.25;
+        $currentMargin = (float) $stock->getOperatingMargin();
+
+        if ($reinvestmentRatio < 1.0) {
+            $decayRate = self::DEPRECIATION_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
+            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
+            $stock->setOperatingMargin((string) $updatedMargin);
+        } elseif ($reinvestmentRatio > 1.0) {
+            $modGain = self::MODERNIZATION_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
+            $updatedMargin = min(
+                self::MAX_OPERATING_MARGIN_CEILING,
+                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
+            );
+            $stock->setOperatingMargin((string) $updatedMargin);
+        }
     }
 }

@@ -179,10 +179,7 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
         $optimalEarningAssets = $effectiveEquity + $optimalDebt;
         $structuralAssetYield = $optimalEbit / max(1.0, $optimalEarningAssets);
 
-        $operatingBase = $this->getOperatingBase($stock);
-        $targetOperatingCash = $this->calculateTargetOperatingCash($operatingBase, 0.0, $wholesaleDebt);
-        $excessCash = max(0.0, $treasury - $targetOperatingCash);
-        $earningAssets = max(1.0, ($equity + $wholesaleDebt) - $excessCash);
+        $earningAssets = max($effectiveEquity, $effectiveEquity + $wholesaleDebt - $treasury);
 
         $targetEbit = $earningAssets * $structuralAssetYield;
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
@@ -224,7 +221,7 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
         // 3. Excess Corporate Treasury Yield
         $minCash = $this->calculateMinOperatingCash($operatingBase, 0.0, (float) $stock->getWholesaleDebt());
         $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - $minCash);
-        $cashYield = $this->calculateCashYield($macroState, $policyRate);
+        $cashYield = $this->calculateCashYield($macroState);
         $cashInterest = $excessCash * $cashYield;
 
         return $marginInterest + $sweepInterest + $cashInterest;
@@ -249,8 +246,9 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
      * Their excess cash must remain highly liquid to satisfy clearinghouse margin requirements 
      * and strict regulatory capital constraints. They earn standard risk-free money market yields.
      */
-    public function calculateCashYield(array &$macroState, float $policyRate): float
+    public function calculateCashYield(array &$macroState): float
     {
+        $policyRate = $macroState['policy_rate_ema'] ?? ($macroState['policy_rate'] ?? 0.04);
         return max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
     }
 

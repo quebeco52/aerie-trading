@@ -70,6 +70,18 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     /** Maximum debt tolerance threshold fraction triggering under-leveraged status. */
     public const UNDERLEVERAGED_DEBT_RATIO = 0.50;
 
+    // --- SaaS ARR Operating Leverage & Software Platform Reinvestment Physics ---
+    /** Variable margin sensitivity to SaaS ARR expansion (zero marginal cost of software delivery). */
+    public const SAAS_OPERATING_LEVERAGE      = 0.022;
+    /** Quarterly margin decay rate per unit of underinvestment below software maintenance CapEx. */
+    public const TECH_DEBT_DECAY_RATE         = 0.020;
+    /** Quarterly margin gain scalar per unit of logarithmic cloud platform modernization. */
+    public const PLATFORM_MODERNIZATION_GAIN_RATE = 0.012;
+    /** Structural minimum operating margin floor under severe software tech debt and customer churn. */
+    public const MIN_OPERATING_MARGIN_FLOOR   = 0.15;
+    /** Structural maximum operating margin ceiling for cloud software monopolies. */
+    public const MAX_OPERATING_MARGIN_CEILING = 0.55;
+
     public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
     {
         // Resolve company-specific tuned tech and software parameters
@@ -118,18 +130,19 @@ class TechBusinessModel extends StandardCorporateBusinessModel
 
         $actualRevenue = max(0.0, $subscriptionRevenue + $adRevenue);
 
-        // Supply Chain Immunity vs. Talent Inflation:
+        // Supply Chain Immunity vs. Continuous Talent Inflation:
         // Tech companies don't buy steel or oil, they pay for engineers and cloud compute.
         $inflation = $macroState['inflation_ema'] ?? ($macroState['inflation'] ?? MacroEngine::TARGET_INFLATION);
-        $wageInflationThreshold = MacroEngine::TARGET_INFLATION * self::WAGE_INFLATION_THRESHOLD;
-        $wageInflationPenalty = $inflation > $wageInflationThreshold
-            ? ($inflation - $wageInflationThreshold) * abs((float) $stock->getBeta()) * self::WAGE_INFLATION_SCALAR
-            : 0.0;
+        $wageInflationPenalty = max(0.0, ($inflation - MacroEngine::TARGET_INFLATION)) * abs((float) $stock->getBeta()) * self::WAGE_INFLATION_SCALAR;
+
+        // SaaS ARR Operating Leverage:
+        // ARR expansion ($subscriptionZ > 0) creates positive operating leverage due to zero marginal cost of software delivery.
+        $saasOperatingLeverageShift = -self::SAAS_OPERATING_LEVERAGE * $subscriptionZ * $subWeight;
 
         // Crucially, antitrust and data privacy regulatory penalties apply proportionally to the Advertising
         // & Platform data-harvesting stream ($adWeight), insulating enterprise subscription margins.
         $adCostAddon = $regulatoryShock * $adWeight;
-        $rawMargin = $realizedVariableMargin + $wageInflationPenalty + $adCostAddon;
+        $rawMargin = $realizedVariableMargin + $wageInflationPenalty + $saasOperatingLeverageShift + $adCostAddon;
         $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $rawMargin));
         $actualVariableCosts = $actualRevenue * $clampedMargin;
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
@@ -140,7 +153,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
         $blendedRevenueShock = (($subscriptionZ * $subWeight) + ($adZ * $adWeight)) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
         $analystExpectedRevenue = $expectedRevenue * (1.0 + ($blendedRevenueShock * $dynamicVisibility));
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $wageInflationPenalty));
+        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + (($wageInflationPenalty + $saasOperatingLeverageShift) * $dynamicVisibility)));
 
         // Primary shock Z-score selects the most extreme driver across streams
         $primaryShockZ = $subscriptionZ;
@@ -179,5 +192,26 @@ class TechBusinessModel extends StandardCorporateBusinessModel
             return false;
         }
         return $currentDebtRatio < ($targetDebtTolerance * self::UNDERLEVERAGED_DEBT_RATIO);
+    }
+
+    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    {
+        $timeScale = $dt / 0.25;
+        $currentMargin = (float) $stock->getOperatingMargin();
+
+        if ($reinvestmentRatio < 1.0) {
+            // Software tech debt & customer churn decay toward floor
+            $decayRate = self::TECH_DEBT_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
+            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
+            $stock->setOperatingMargin((string) $updatedMargin);
+        } elseif ($reinvestmentRatio > 1.0) {
+            // Cloud ARR platform modernization expands SaaS margin ceiling
+            $modGain = self::PLATFORM_MODERNIZATION_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
+            $updatedMargin = min(
+                self::MAX_OPERATING_MARGIN_CEILING,
+                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
+            );
+            $stock->setOperatingMargin((string) $updatedMargin);
+        }
     }
 }
