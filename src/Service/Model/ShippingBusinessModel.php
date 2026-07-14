@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 
 /**
@@ -58,14 +60,9 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     public const LORE_GLUT_Z_SCORE         = -1.50;
 
     // --- Analyst Visibility & Error ---
-    /** Base analyst visibility into daily public maritime freight indices like Baltic Dry or Harpex. */
-    public const ANALYST_BASE_VISIBILITY   = 0.75;
-    /** Minimum allowable analyst visibility floor for public shipping spot rate indices. */
-    public const MIN_ANALYST_VISIBILITY    = 0.50;
-    /** Standard deviation of analyst estimation error for quarterly shipping freight revenues. */
-    public const ANALYST_ERROR_STD_DEV     = 0.05;
+    // Moved to getCoverageProfile() — see MarketConsensusEngine.
 
-    // --- Spot Cycle Reversion Moat ---
+    // --- Spot Rate Cycle & Output Gap Physics ---
     /** Operating margin mean reversion speed: fast speed reflects rapid shipbuilding order responses. */
     public const SPOT_REVERSION_SPEED      = 4.0;
 
@@ -79,10 +76,10 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     /** Structural maximum operating margin ceiling for state-of-the-art eco-fuel vessel fleets. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.38;
 
-    public function getMacroPhysics(Stock $stock, array &$macroState): array
+    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
-        $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
+        $outputGap = $macroState->outputGapEma;
+        $inflation = $macroState->inflationEma;
         $beta = (float) $stock->getBeta();
 
         // Extreme sensitivity to global economic momentum and trade volume
@@ -92,7 +89,7 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         ];
     }
 
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
             'spot_charter_weight'     => self::SPOT_CHARTER_WEIGHT,
@@ -108,14 +105,14 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
 
         // Spot Rate Super-Cycle vs. Capacity Glut
         // Crucially, spot rate elasticity applies continuously to spot charter revenue ($spotWeight).
-        $outputGap = $macroState['output_gap_ema'] ?? ($macroState['output_gap'] ?? 0.0);
+        $outputGap = $macroState->outputGapEma;
         $spotRateMultiplier = $outputGap * self::CONTINUOUS_SPOT_RATE_SCALAR;
-        $eventLore = null;
+        $eventType = null;
 
         if ($outputGap > self::SPOT_BOOM_GAP_THRESHOLD && $spotZ > self::LORE_CONGESTION_Z_SCORE) {
-            $eventLore = "Capitalized on severe global port congestion with record-breaking container spot rates.";
+            $eventType = ShockEvent::SHIPPING_PORT_CONGESTION;
         } elseif ($outputGap < self::SPOT_GLUT_GAP_THRESHOLD && $spotZ < self::LORE_GLUT_Z_SCORE) {
-            $eventLore = "Suffered operating losses due to a severe global vessel capacity glut and collapsing freight rates.";
+            $eventType = ShockEvent::SHIPPING_CAPACITY_GLUT;
         }
 
         $spotRevenue     = $expectedRevenue * $spotWeight * (1.0 + ($spotZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $spotRateMultiplier);
@@ -124,33 +121,31 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
 
         // Fuel and Bunker Cost Inflation / Deflation:
         // Shipping is directly exposed to crude oil and commodity inflation, capturing savings during deflationary/falling fuel regimes.
-        $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
+        $inflation = $macroState->inflationEma;
         $bunkerInflationAdjustment = max(
             -0.05,
             min(0.15, ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::BUNKER_INFLATION_SCALAR)
         );
 
-        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $bunkerInflationAdjustment));
-        $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
-
-        // Analyst Visibility
-        // Global shipping spot indices (e.g., Baltic Dry Index, Harpex) are public daily data (~75% visibility).
-        $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
-        $dynamicVisibility = min(1.0, max(self::MIN_ANALYST_VISIBILITY, self::ANALYST_BASE_VISIBILITY + $analystError));
-        $analystExpectedRevenue = $expectedRevenue * (1.0 + (($spotZ * $spotWeight + $spotRateMultiplier * $spotWeight) * $dynamicVisibility));
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + ($bunkerInflationAdjustment * $dynamicVisibility)));
+        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $bunkerInflationAdjustment));
 
         $primaryShockZ = abs($spotZ) > abs($contractZ) ? $spotZ : $contractZ;
+        // observableShockZ: Baltic Dry Index and Harpex are public daily data (~75% visibility via getCoverageProfile)
+        $observableShockZ = ($spotZ * $spotWeight + $spotRateMultiplier * $spotWeight);
 
-        return [
-            'actual_revenue'                  => $actualRevenue,
-            'actual_variable_costs'           => $actualVariableCosts,
-            'analyst_expected_revenue'        => $analystExpectedRevenue,
-            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit'                            => $ebit,
-            'primary_shock_z'                 => $primaryShockZ,
-            'event_lore'                      => $eventLore
-        ];
+        return new SectorPhysicsResult(
+            actualRevenue: $actualRevenue,
+            rawVariableMargin: $clampedMargin,
+            primaryShockZ: $primaryShockZ,
+            observableShockZ: $observableShockZ,
+            eventType: $eventType,
+        );
+    }
+
+    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    {
+        // Baltic Dry Index and Harpex give analysts ~75% visibility (50% floor).
+        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.75, errorStdDev: 0.05, minVisibility: 0.50);
     }
 
     public function getMarginReversionSpeed(): float

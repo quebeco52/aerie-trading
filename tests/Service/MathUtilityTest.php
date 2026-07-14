@@ -156,4 +156,23 @@ class MathUtilityTest extends TestCase
 
         $this->assertEqualsWithDelta(40.0, $fairValue, 0.001, 'DDM fair value calculation failed.');
     }
+
+    public function testCalculateIntrinsicFairValuePEWithExtremeDistressAndNegativeGrowth(): void
+    {
+        // Extreme negative growth (-20%) and extreme low COE (1%) should be floored
+        // to MIN_COST_OF_EQUITY (0.04) and MIN_PERPETUAL_GROWTH_RATE (-0.05)
+        $pe = $this->mathUtility->calculateIntrinsicFairValuePE(0.01, 0.10, -0.20);
+
+        $this->assertGreaterThanOrEqual(FinancialConstants::MIN_INTRINSIC_PE, $pe);
+        $this->assertLessThanOrEqual(FinancialConstants::MAX_INTRINSIC_PE, $pe);
+    }
+
+    public function testCalculateDcfMultiplierAbsoluteBounds(): void
+    {
+        // WACC below 4% should be floored to MIN_COST_OF_EQUITY (0.04)
+        $multiplier = $this->mathUtility->calculateDcfMultiplier(0.02, 0.02);
+
+        $this->assertGreaterThanOrEqual(1.0, $multiplier);
+        $this->assertLessThanOrEqual(FinancialConstants::MAX_DCF_MULTIPLIER, $multiplier);
+    }
 }

@@ -97,11 +97,11 @@ class MarketSimulateCommand extends Command
             $result = $this->stockTracker->updateStocks($stocks, $dt, $isHistoryTick, $macroState, $tick, self::TICKS_PER_YEAR);
             $this->etfTracker->updateIndex($result['total_cap'], $isHistoryTick);
 
-            if (isset($macroState['event_type'])) {
+            if ($macroState->eventType !== null) {
                 $lbi = $this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
                 if ($lbi) {
-                    $desc = $this->narrativeEngine->generateLore($macroState['event_type']);
-                    $shockPct = in_array($macroState['event_type'], [ShockEvent::TITAN_INTERVENTION, ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT]) ? 5.0 : -5.0;
+                    $desc = $this->narrativeEngine->generateLore($macroState->eventType);
+                    $shockPct = in_array($macroState->eventType, [ShockEvent::TITAN_INTERVENTION, ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT]) ? 5.0 : -5.0;
                     $this->marketEvent->publish($lbi, 'SHOCK', $desc, $shockPct);
                 }
             }

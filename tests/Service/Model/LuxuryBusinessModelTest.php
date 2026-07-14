@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model;
 
 use App\Entity\Stock;
+use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
 use App\Service\Model\LuxuryBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -23,7 +24,7 @@ class LuxuryBusinessModelTest extends TestCase
             ->willReturnOnConsecutiveCalls(2.0, 0.0, 0.0, 0.0);
 
         $macroState = ['inflation_ema' => 0.02];
-        $result = $model->generateIdiosyncraticShock(
+        $result = $model->computeActualFinancials(
             $stock,
             1000.0,
             0.35,
@@ -34,7 +35,7 @@ class LuxuryBusinessModelTest extends TestCase
         );
 
         // Veblen pricing cachet reduces variable cost percentage below 35%
-        $this->assertLessThan(1000.0 * 0.35, $result['actual_variable_costs']);
+        $this->assertLessThan(1000.0 * 0.35, $result->actualVariableCosts);
     }
 
     public function testBoutiqueCraftsmanshipAndHeritageExclusivityReinvestment(): void
@@ -56,4 +57,30 @@ class LuxuryBusinessModelTest extends TestCase
         $this->assertGreaterThan(0.28, $expanded);
         $this->assertLessThanOrEqual(LuxuryBusinessModel::MAX_OPERATING_MARGIN_CEILING, $expanded);
     }
+
+    public function testCulturalDominanceShockEventIsAssigned(): void
+    {
+        $model = new LuxuryBusinessModel();
+        $stock = new Stock();
+        $stock->setBeta('1.0');
+
+        $mathUtilityMock = $this->createMock(MathUtility::class);
+        // sequence: hauteZ=0.0, accessibleZ=0.0, eventZ=2.6 (> BRAND_BOOM_Z_SCORE), analystError=0.0
+        $mathUtilityMock->method('generateStandardNormal')
+            ->willReturnOnConsecutiveCalls(0.0, 0.0, 2.6, 0.0);
+
+        $macroState = ['inflation_ema' => 0.02];
+        $result = $model->computeActualFinancials(
+            $stock,
+            1000.0,
+            0.35,
+            50.0,
+            0.15,
+            $macroState,
+            $mathUtilityMock
+        );
+
+        $this->assertSame(ShockEvent::LUXURY_CULTURAL_DOMINANCE, $result->eventType);
+    }
 }
+

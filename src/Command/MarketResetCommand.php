@@ -5,6 +5,7 @@ namespace App\Command;
 use App\Entity\User;
 use App\Data\InitialMarket;
 use App\Entity\Stock;
+use App\DTO\MacroStateDTO;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -45,10 +46,10 @@ class MarketResetCommand extends Command
         $conn->executeStatement('TRUNCATE TABLE etf_events');
         $conn->executeStatement('TRUNCATE TABLE user_stocks');
         $conn->executeStatement('TRUNCATE TABLE user_etfs');
-        $conn->executeStatement('TRUNCATE TABLE portfolio_history'); 
+        $conn->executeStatement('TRUNCATE TABLE portfolio_history');
         $conn->executeStatement('TRUNCATE TABLE corporate_report');
         $conn->executeStatement('TRUNCATE TABLE macro_report');
-        
+
         // Delete any procedurally generated stocks
         $initialTickers = array_column(InitialMarket::STOCKS, 'ticker');
         $placeholders = implode(',', array_fill(0, count($initialTickers), '?'));
@@ -74,7 +75,7 @@ class MarketResetCommand extends Command
         $testUser->setIsVerified(true);
         $this->entityManager->flush();
 
-        $conn->executeStatement('UPDATE users SET cash_balance = 10000.00'); 
+        $conn->executeStatement('UPDATE users SET cash_balance = 10000.00');
         $conn->executeStatement('SET FOREIGN_KEY_CHECKS = 1');
 
         $io->text('2. Flushing Redis cache...');
@@ -82,24 +83,31 @@ class MarketResetCommand extends Command
 
         $io->text('3. Resetting Stock Prices & Absolute Values...');
 
-        $dummyMacro = [
-            'policy_rate_ema' => 0.04,
-            'yield_5y_ema' => 0.045,
-            'yield_10y_ema' => 0.05,
-            'output_gap_ema' => 0.0,
-            'corporate_tax_rate' => MacroEngine::BASE_CORPORATE_TAX_RATE,
-        ];
+        $dummyMacro = new MacroStateDTO(
+            outputGapEma: 0.0,
+            inflationEma: 0.02,
+            policyRateEma: 0.04,
+            yield5yEma: 0.045,
+            yield10yEma: 0.05,
+            yield30yEma: 0.055,
+            yield2yEma: 0.04,
+            macroCreditSpreadEma: 0.02,
+            marketVolatilityEma: 0.15,
+            corporateTaxRate: MacroEngine::BASE_CORPORATE_TAX_RATE,
+            equityRiskPremium: 0.045
+
+        );
 
         foreach (InitialMarket::STOCKS as $stockData) {
-            
+
             $netIncome = $stockData['total_net_income'] ?? 0.00;
             $margin = $stockData['operating_margin'] ?? 0.15;
-            
+
             $historicalRate = $stockData['historical_fixed_rate'] ?? 0.04;
             $wholesaleDebt = $stockData['wholesale_debt'] ?? 0.0;
             $customerDeposits = $stockData['customer_deposits'] ?? 0.0;
             $treasury = $stockData['corporate_treasury'] ?? 0.0;
-            
+
             $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['business_model'] ?? 'none';
             $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
             $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
@@ -116,16 +124,16 @@ class MarketResetCommand extends Command
             $tempStock->setIndustry($stockData['industry'] ?? 'General');
             $tempStock->setBaselineRoe((string) ($isFinancial ? ($stockData['baseline_roe'] ?? $stockData['baseline_roic'] ?? 0.10) : 0.10));
             $tempStock->setBaselineRoic((string) ($isFinancial ? 0.10 : ($stockData['baseline_roic'] ?? 0.10)));
-            
+
 
             // Query the exact structural metrics the engine uses to prevent massive gravity explosions on tick 1
             $targetMetrics = $strategy->getTargetMetrics($tempStock, $dummyMacro, $this->mathUtility);
             $investedCapital = $targetMetrics['invested_capital'];
             $impliedRoic = max(0.01, (float) $targetMetrics['baseline_roic']);
-            $taxRate = $dummyMacro['corporate_tax_rate'] ?? 0.21;
+            $taxRate = $dummyMacro->corporateTaxRate ?? 0.21;
             $preTaxRoic = $impliedRoic / (1.0 - $taxRate);
             $revenue = $margin > 0 ? ($investedCapital * ($preTaxRoic / $margin)) : 0.0;
-            
+
             $shares = $stockData['shares_outstanding'] ?? 1_000_000_000;
             $annualEps = $shares > 0 ? ($netIncome / $shares) : 0.0;
             $targetPayout = $stockData['target_payout_ratio'] ?? 0.30;
@@ -231,7 +239,7 @@ class MarketResetCommand extends Command
         }
 
         $io->text('5. Generating new $50B procedural corporations for every industry...');
-        
+
         /*
         $industryList = array_keys(\App\Data\Sectors::INDUSTRY_METRICS);
         $prefixes = ['Apex', 'Horizon', 'Vertex', 'Quantum', 'Aegis', 'Omni', 'Vanguard', 'Pinnacle', 'Meridian', 'Zenith', 'Nova', 'Crest', 'Echo', 'Atlas', 'Helios'];

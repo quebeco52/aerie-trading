@@ -3,6 +3,7 @@
 namespace App\Service\Corporate;
 
 use App\Entity\Stock;
+use App\DTO\MacroStateDTO;
 use Doctrine\ORM\EntityManagerInterface;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Math\MathUtility;
@@ -26,11 +27,11 @@ class MergerAndAcquisitionEngine
      * Evaluates if a stock is in a position to acquire a private company.
      * 
      * @param Stock $acquirer   The potential acquiring stock.
-     * @param array $macroState The macroeconomic state.
+     * @param MacroStateDTO $macroState The macroeconomic state.
      * @param float $dt         The time step (in years).
      * @return array{event: array<string, mixed>, shock: float, spent: float}|null Returns an array with the M&A event details, or null if no deal occurred.
      */
-    public function evaluatePrivateAcquisition(Stock $acquirer, array $macroState, float $dt): ?array
+    public function evaluatePrivateAcquisition(Stock $acquirer, MacroStateDTO $macroState, float $dt): ?array
     {
         $treasury = (float) $acquirer->getCorporateTreasury();
         $price = (float) $acquirer->getPrice();
@@ -40,8 +41,8 @@ class MergerAndAcquisitionEngine
         $operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $acquirer->getTotalRevenue(), (float) $acquirer->getTotalEquity());
         $equity = (float) $acquirer->getTotalEquity();
         $currentDebt = (float) $acquirer->getTotalDebt();
-        $policyRate = $macroState['policy_rate'] ?? 0.04;
-        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + 0.005);
+        $policyRate = $macroState->policyRate;
+        $yield5y = $macroState->yield5yEma;
 
        // THE NEGATIVE CARRY BLOCK (Calling the Centralized Brain)
         $health = $this->debtEngine->analyzeDebtHealth($acquirer, $macroState);
@@ -287,7 +288,7 @@ class MergerAndAcquisitionEngine
         $newInterestExpense = 0.0;
         if ($debtIssued > 0) {
             // Calculate interest drag, factoring in the standard 21% corporate tax shield
-            $newInterestExpense = $debtIssued * $costOfNewDebt * (1.0 - $macroState['corporate_tax_rate']);
+            $newInterestExpense = $debtIssued * $costOfNewDebt * (1.0 - $macroState->corporateTaxRate);
         }
         
         $trueAcquiredNetIncome = $acquiredOperatingIncome - $newInterestExpense;
@@ -322,11 +323,11 @@ class MergerAndAcquisitionEngine
      * Triggers either to raise cash at a premium (High P/E) or to shed bloat to survive (Negative ROIC).
      *
      * @param Stock $seller     The potential selling stock.
-     * @param array $macroState The macroeconomic state.
+     * @param MacroStateDTO $macroState The macroeconomic state.
      * @param float $dt         The time step (in years).
      * @return array{event: array<string, mixed>, shock: float}|null Returns an array with the divestiture event details, or null if no deal occurred.
      */
-    public function evaluateCorporateDivestiture(Stock $seller, array $macroState, float $dt): ?array
+    public function evaluateCorporateDivestiture(Stock $seller, MacroStateDTO $macroState, float $dt): ?array
     {
         $eps = (float) $seller->getEarningsPerShare();
         $price = (float) $seller->getPrice();
@@ -377,7 +378,7 @@ class MergerAndAcquisitionEngine
             return null; // Hoarders must BUY or DELEVERAGE, never sell!
         }
         
-        $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
+        $nominalGdpIndex = $macroState->nominalGdpIndex;
         $samRatio = (float) $seller->getSamRatio();
         $marketShare = $this->corporateMetrics->calculateMarketShare($evaluationCapital, $nominalGdpIndex, $samRatio);
 

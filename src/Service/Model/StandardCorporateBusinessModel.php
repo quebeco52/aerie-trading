@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
@@ -20,9 +21,9 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
 {
     // --- ROIC & Target Metrics ---
     /** Weight given to historical baseline ROIC when blending with TTM ROIC. */
-    public const BASELINE_ROIC_WEIGHT = 0.70;
+    public const BASELINE_ROIC_WEIGHT = 0.50;
     /** Weight given to TTM ROIC when blending with historical baseline ROIC. */
-    public const TTM_ROIC_WEIGHT      = 0.30;
+    public const TTM_ROIC_WEIGHT      = 0.50;
 
     // --- Pricing Power & Macro Physics ---
     /** Minimum beta floor applied when calculating pricing power resistance to inflation. */
@@ -39,10 +40,7 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
     public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
     // --- Analyst Visibility & Error ---
-    /** Base analyst visibility into product demand shocks via high-frequency retail foot traffic. */
-    public const ANALYST_BASE_VISIBILITY = 0.20;
-    /** Standard deviation of analyst estimation error for volume shocks. */
-    public const ANALYST_ERROR_STD_DEV   = 0.05;
+    // Moved to getCoverageProfile() — see MarketConsensusEngine.
 
     // --- DCF & Valuation Rails ---
     /** Assumed perpetual terminal growth rate for DCF fair value estimation. */
@@ -66,7 +64,7 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
      * Physical businesses evaluate their true structural scale based on Invested Capital 
      * (Total Equity + Debt - Cash), requiring physical assets to turn a profit.
      */
-    public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array
+    public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
         $baselineRoic = max(0.01, (float) $stock->getBaselineRoic());
 
@@ -81,10 +79,10 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
         ];
     }
 
-    public function getMacroPhysics(Stock $stock, array &$macroState): array
+    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
-        $inflation = $macroState['inflation_ema'] ?? 0.02;
+        $outputGap = $macroState->outputGapEma;
+        $inflation = $macroState->inflationEma;
         $beta = (float) $stock->getBeta();
 
         return [
@@ -96,7 +94,7 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
     /**
      * Idiosyncratic variance is applied directly to sales volume.
      */
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $revenueZ = $mathUtility->generateStandardNormal();
         $revenueShock = $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
@@ -105,38 +103,37 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
         // Supply Chain Inflation Penalty:
         // Physical companies get squeezed by inflation because raw material and labor costs rise 
         // faster than they can safely raise prices on consumers without destroying demand.
-        $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
+        $inflation = $macroState->inflationEma;
         $inflationPenalty = $inflation > MacroEngine::TARGET_INFLATION ? ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0;
 
-        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $inflationPenalty));
-        $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
+        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $inflationPenalty));
 
-        // Analyst Visibility
-        // Supply chain inflation is fully visible via CPI/PPI reports. 
-        // Individual product demand shocks are partially visible via retail foot traffic (~20% visibility).
-        $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
-        $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
-        $analystExpectedRevenue = $expectedRevenue * (1.0 + ($revenueShock * $dynamicVisibility));
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $inflationPenalty));
+        return new SectorPhysicsResult(
+            actualRevenue: $actualRevenue,
+            rawVariableMargin: $clampedMargin,
+            primaryShockZ: $revenueZ,
+            observableShockZ: $revenueShock,
+            eventType: null,
+        );
+    }
 
-        return [
-            'actual_revenue' => $actualRevenue,
-            'actual_variable_costs' => $actualVariableCosts,
-            'analyst_expected_revenue' => $analystExpectedRevenue,
-            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit' => $ebit,
-            'primary_shock_z' => $revenueZ
-        ];
+    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    {
+        // Supply chain inflation is fully visible via CPI/PPI reports.
+        // Individual product demand shocks are partially visible via retail foot traffic (~20%).
+        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.20, errorStdDev: 0.05);
     }
 
 
     /**
      * Normal physical companies are evaluated on NOPAT / Invested Capital (ROIC).
      */
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate): float
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08): float
     {
-        // NOPAT (Net Operating Profit After Tax) strips out interest expense to measure 
-        // the pure operating efficiency of the physical business assets.
+        $industry = $stock->getIndustry() ?: 'General';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $kappa = \App\Data\Sectors::getModelThresholds($businessModel)['reversion_speed'] ?? 0.20;
+
         $nopatProxy = $ebit > 0 ? $ebit * (1.0 - $corporateTaxRate) : $ebit;
 
         $effectiveCapital = max(1.0, abs($investedCapital));
@@ -146,6 +143,7 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
 
         $oldTtm = (float) $stock->getRoicTtm();
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::TTM_SMOOTHING_NEW_WEIGHT) + ($oldTtm * self::TTM_SMOOTHING_OLD_WEIGHT);
+        $newTtm += $kappa * ($wacc - $newTtm) * 0.25;
         $stock->setRoicTtm((string) max(-0.50, min(1.0, $newTtm)));
 
         return $truePostTaxReturn;

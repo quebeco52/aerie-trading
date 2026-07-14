@@ -23,7 +23,7 @@ class ConsumerStaplesBusinessModelTest extends TestCase
             ->willReturnOnConsecutiveCalls(0.0, 2.0, 0.0, 0.0, 0.0);
 
         $macroState = [];
-        $result = $model->generateIdiosyncraticShock(
+        $result = $model->computeActualFinancials(
             $stock,
             1000.0,
             0.60,
@@ -34,7 +34,7 @@ class ConsumerStaplesBusinessModelTest extends TestCase
         );
 
         // Commodity input cost shift increases realized variable cost percentage
-        $this->assertGreaterThan(1000.0 * 0.60, $result['actual_variable_costs']);
+        $this->assertGreaterThan(1000.0 * 0.60, $result->actualVariableCosts);
     }
 
     public function testBrandEquityAmortizationAndMarketingSuperCycle(): void

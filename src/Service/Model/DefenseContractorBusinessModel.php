@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 
 /**
@@ -45,13 +47,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     /** Top-line revenue multiplier applied when a major defense contract is won. */
     public const CONTRACT_WIN_MULT         = 1.10;
 
-    // --- Analyst Visibility & Error ---
-    /** Base analyst visibility into opaque government defense contract profitability. */
-    public const ANALYST_BASE_VISIBILITY   = 0.50;
-    /** Standard deviation of analyst estimation error for quarterly defense revenues. */
-    public const ANALYST_ERROR_STD_DEV     = 0.10;
-
-    // --- ROIC Annualization & Smoothing ---
+    // --- Event Lore Thresholds ---
     /** Annualization multiplier applied to quarterly NOPAT. */
     public const ROIC_ANNUALIZATION_MULT   = 4.00;
     /** Minimum allowable ROIC floor to prevent catastrophic negative overflow. */
@@ -75,7 +71,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     /** Structural maximum operating margin ceiling for next-generation defense platform monopolies. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.22;
 
-    public function getMacroPhysics(Stock $stock, array &$macroState): array
+    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
         // Cost-plus contracts perfectly capture inflation dynamically. 
@@ -84,7 +80,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         return $physics;
     }
 
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
             'government_contract_weight' => self::GOVERNMENT_CONTRACT_WEIGHT,
@@ -100,7 +96,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 
         // Cost-Plus Contracting (The Inflation Blessing):
         // Applies specifically to long-term sovereign government defense contracts ($govtWeight).
-        $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
+        $inflation = $macroState->inflationEma;
         $costPlusBonus = ($inflation - MacroEngine::TARGET_INFLATION) * self::COST_PLUS_BONUS_SCALAR;
 
         $govtRevenue       = $expectedRevenue * $govtWeight * (1.0 + ($contractZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $costPlusBonus);
@@ -108,14 +104,14 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 
         // Tail Risk: Geopolitical Contract Wins/Losses impact the sovereign government contract stream directly
         $eventZ = $mathUtility->generateStandardNormal();
-        $eventLore = null;
+        $eventType = null;
 
         if ($eventZ < self::CONTRACT_LOSS_Z_SCORE) {
             $govtRevenue *= self::CONTRACT_LOSS_MULT;
-            $eventLore = "Lost a multi-billion dollar next-generation government defense contract to a rival.";
+            $eventType = ShockEvent::DEFENSE_CONTRACT_LOSS;
         } elseif ($eventZ > self::CONTRACT_WIN_Z_SCORE) {
             $govtRevenue *= self::CONTRACT_WIN_MULT;
-            $eventLore = "Secured a massive, multi-decade international defense contract.";
+            $eventType = ShockEvent::DEFENSE_CONTRACT_WIN;
         }
 
         $actualRevenue = max(0.0, $govtRevenue + $commercialRevenue);
@@ -124,31 +120,33 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         // Strong sovereign defense contract readouts ($contractZ > 0) reduce cost overruns and improve variable operating margin.
         $executionEfficiencyShift = -self::PROGRAM_EXECUTION_ELASTICITY * $contractZ * $govtWeight;
 
-        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $executionEfficiencyShift));
-        $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
-
-        // Analyst Visibility
-        // Cost-plus inflation is 100% public. Defense contracts are mostly public (~50% visibility).
-        $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
-        $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
-        $analystExpectedRevenue = max(0.0, $expectedRevenue * (1.0 + (($contractZ * $govtWeight + $commercialZ * $commercialWeight) * $dynamicVisibility) + ($costPlusBonus * $govtWeight)));
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + ($executionEfficiencyShift * $dynamicVisibility)));
+        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $executionEfficiencyShift));
 
         $primaryShockZ = abs($eventZ) > abs($contractZ) ? $eventZ : $contractZ;
+        // observableShockZ: cost-plus bonus is fully public; contract shocks ~50% visible via getCoverageProfile
+        $observableShockZ = ($contractZ * $govtWeight + $commercialZ * $commercialWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR) + $costPlusBonus * $govtWeight;
 
-        return [
-            'actual_revenue'                  => $actualRevenue,
-            'actual_variable_costs'           => $actualVariableCosts,
-            'analyst_expected_revenue'        => $analystExpectedRevenue,
-            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit'                            => $ebit,
-            'primary_shock_z'                 => $primaryShockZ,
-            'event_lore'                      => $eventLore
-        ];
+        return new SectorPhysicsResult(
+            actualRevenue: $actualRevenue,
+            rawVariableMargin: $clampedMargin,
+            primaryShockZ: $primaryShockZ,
+            observableShockZ: $observableShockZ,
+            eventType: $eventType,
+        );
     }
 
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate): float
+    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
     {
+        // Cost-plus inflation is 100% public. Defense contracts are mostly public (~50% visibility).
+        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.10);
+    }
+
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08): float
+    {
+        $industry = $stock->getIndustry() ?: 'General';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $kappa = \App\Data\Sectors::getModelThresholds($businessModel)['reversion_speed'] ?? 0.12;
+
         // NOPAT (Net Operating Profit After Tax)
         $nopatProxy = $ebit > 0 ? $ebit * (1.0 - $corporateTaxRate) : $ebit;
 
@@ -161,6 +159,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         // Use a 0.20 smoothing factor to prevent violent P/E whipsaws when a single contract is won or lost.
         $oldTtm = (float) $stock->getRoicTtm();
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::ROIC_TTM_EMA_WEIGHT) + ($oldTtm * self::ROIC_TTM_HIST_WEIGHT);
+        $newTtm += $kappa * ($wacc - $newTtm) * 0.25;
         $stock->setRoicTtm((string) max(self::MIN_ROIC_CLAMP, min(self::MAX_ROIC_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;

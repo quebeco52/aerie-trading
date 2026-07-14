@@ -521,6 +521,15 @@
 							</dt>
 							<dd class="text-sm font-semibold text-on-surface" id="stat-debt-ratio">{{ asset.debtToEquityRatio|number_format(2) }}x</dd>
 						</div>
+						{% if not isEtf and asset.creditRating is defined %}
+							<div class="py-3 flex justify-between items-center">
+								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Credit Rating</span>
+									{{ _self.tooltip('Discrete credit rating bracket (AAA through D) evaluated from Merton structural distance-to-default.') }}
+								</dt>
+								<dd class="text-sm font-semibold text-on-surface" id="stat-credit-rating">{{ asset.creditRating }}</dd>
+							</div>
+						{% endif %}
 						<div class="py-3 flex justify-between items-center">
 							<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
 								<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Market Share</span>

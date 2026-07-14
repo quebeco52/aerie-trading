@@ -112,7 +112,7 @@ class MacroEngine
      * Advances the macroeconomic state by one tick.
      * Calculates Inflation, Output Gap, Taylor Rule (Short Rate), and the Yield Curve.
      */
-    public function updateMacroState(float $dt): array
+    public function updateMacroState(float $dt): \App\DTO\MacroStateDTO
     {
         $rawState = $this->redis->get(self::REDIS_MACRO_STATE);
         $state = $rawState ? MacroState::fromArray(json_decode($rawState, true)) : new MacroState();
@@ -150,10 +150,10 @@ class MacroEngine
 
         $payload = $state->toArray();
         $this->redis->set(self::REDIS_MACRO_STATE, json_encode($payload));
-        return $payload;
+        return \App\DTO\MacroStateDTO::fromMacroState($state);
     }
 
-    public function recordMacroSnapshot(array $macroState, \Doctrine\DBAL\Connection $conn): void
+    public function recordMacroSnapshot(\App\DTO\MacroStateDTO $macroState, \Doctrine\DBAL\Connection $conn): void
     {
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
         $conn->executeStatement(
@@ -161,26 +161,26 @@ class MacroEngine
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 $now,
-                $macroState['inflation'],
-                $macroState['inflation_ema'] ?? $macroState['inflation'],
-                $macroState['output_gap'],
-                $macroState['output_gap_ema'] ?? $macroState['output_gap'],
-                $macroState['policy_rate'],
-                $macroState['policy_rate_ema'] ?? $macroState['policy_rate'],
-                $macroState['yield_2y'],
-                $macroState['yield_2y_ema'] ?? $macroState['yield_2y'],
-                $macroState['yield_5y'],
-                $macroState['yield_5y_ema'] ?? $macroState['yield_5y'],
-                $macroState['yield_10y'],
-                $macroState['yield_10y_ema'] ?? $macroState['yield_10y'],
-                $macroState['yield_30y'],
-                $macroState['yield_30y_ema'] ?? $macroState['yield_30y'],
-                $macroState['corporate_tax_rate'] ?? self::BASE_CORPORATE_TAX_RATE,
-                $macroState['equity_risk_premium'],
-                $macroState['nominal_gdp_index'],
-                $macroState['market_volatility'],
-                $macroState['macro_credit_spread'] ?? 0.02,
-                $macroState['macro_credit_spread_ema'] ?? 0.02
+                $macroState->inflation,
+                $macroState->inflationEma,
+                $macroState->outputGap,
+                $macroState->outputGapEma,
+                $macroState->policyRate,
+                $macroState->policyRateEma,
+                $macroState->yield2y,
+                $macroState->yield2yEma,
+                $macroState->yield5y,
+                $macroState->yield5yEma,
+                $macroState->yield10y,
+                $macroState->yield10yEma,
+                $macroState->yield30y,
+                $macroState->yield30yEma,
+                $macroState->corporateTaxRate,
+                $macroState->equityRiskPremium,
+                $macroState->nominalGdpIndex,
+                $macroState->marketVolatility,
+                $macroState->macroCreditSpread,
+                $macroState->macroCreditSpreadEma,
             ]
         );
     }

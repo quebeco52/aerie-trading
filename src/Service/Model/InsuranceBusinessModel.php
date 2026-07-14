@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\DTO\MacroStateDTO;
+use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 
 /**
@@ -29,9 +32,9 @@ class InsuranceBusinessModel extends AbstractBusinessModel
 
     // --- ROIC & ROE Target Architecture ---
     /** Weight given to historical baseline ROIC when blending with TTM ROE. */
-    public const BASELINE_ROIC_WEIGHT     = 0.70;
+    public const BASELINE_ROIC_WEIGHT     = 0.50;
     /** Weight given to TTM ROE when blending with historical baseline ROIC. */
-    public const TTM_ROIC_WEIGHT          = 0.30;
+    public const TTM_ROIC_WEIGHT          = 0.50;
     /** Annualization multiplier applied to quarterly net income to derive annualized ROE. */
     public const ROE_ANNUALIZATION_MULT   = 4.00;
     /** Minimum allowable ROE floor to prevent catastrophic negative overflow. */
@@ -73,13 +76,7 @@ class InsuranceBusinessModel extends AbstractBusinessModel
     /** Severe claim z-score threshold indicating elevated claim payouts and underwriting margin pressure. */
     public const LORE_ELEVATED_CLAIMS_Z   = -1.50;
 
-    // --- Analyst Visibility & Error ---
-    /** Base analyst visibility into hurricane and catastrophe underwriting shocks. */
-    public const ANALYST_BASE_VISIBILITY  = 0.80;
-    /** Standard deviation of analyst estimation error for quarterly underwriting claims. */
-    public const ANALYST_ERROR_STD_DEV    = 0.10;
-
-    // --- Liquidity & Surplus Cash Reserves ---
+    // --- Loss Reserve & Investment Portfolio Physics ---
     /** Target operating cash reserve ratio applied to corporate operating base. */
     public const TARGET_OPERATING_BUFFER  = 0.05;
     /** Target operating cash reserve ratio applied to customer deposit float. */
@@ -178,11 +175,11 @@ class InsuranceBusinessModel extends AbstractBusinessModel
      * Insurance revenue (Premiums) is strictly constrained by Surplus Equity (The Kenney Rule).
      *
      * @param Stock       $stock       The insurance stock entity being evaluated.
-     * @param array       $macroState  The current macroeconomic state.
+     * @param MacroStateDTO $macroState  The current macroeconomic state.
      * @param MathUtility $mathUtility Mathematical utility for engine operations.
      * @return array{invested_capital: float, baseline_roic: float} Target operating metrics.
      */
-    public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array
+    public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
         $equity = (float) $stock->getTotalEquity();
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
@@ -197,7 +194,7 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         $impliedRunoffEquity = (float) $stock->getCustomerDeposits() * self::IMPLIED_RUNOFF_EQUITY;
         $operatingEquity = max($impliedRunoffEquity, max(1.0, $equity));
 
-        $taxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $taxRate = $macroState->corporateTaxRate;
 
         // 2. Structural Revenue is anchored strictly to their capacity limit.
         $targetRevenue = $operatingEquity * $capacityRatio;
@@ -218,9 +215,9 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         ];
     }
 
-    public function getMacroPhysics(Stock $stock, array &$macroState): array
+    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
+        $outputGap = $macroState->outputGapEma;
         $beta = (float) $stock->getBeta();
 
         return [
@@ -238,11 +235,11 @@ class InsuranceBusinessModel extends AbstractBusinessModel
      * @param float       $realizedVariableMargin The expected variable cost margin.
      * @param float       $fixedCosts             The absolute fixed costs of operations.
      * @param float       $baselineVol            The stock's historical volatility.
-     * @param array       $macroState             The current macroeconomic state.
+     * @param MacroStateDTO $macroState             The current macroeconomic state.
      * @param MathUtility $mathUtility            Mathematical utility for Z-score generation.
      * @return array{actual_revenue: float, actual_variable_costs: float, ebit: float, primary_shock_z: float, event_lore: string|null}
      */
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         // Resolve company-specific tuned underwriting parameters
         $params = $this->resolveModelParameters($stock, [
@@ -273,7 +270,7 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         // 3. Cummins & Danzon (1997) Soft-Market Underwriting Offset:
         // When interest rates and float yields boom above baseline, price competition intensifies across the industry
         // as insurers discount premium rates to capture market share and gather float (The Soft Underwriting Cycle).
-        $policyRate = $macroState['policy_rate_ema'] ?? self::DEFAULT_POLICY_RATE_FALLBACK;
+        $policyRate = $macroState->policyRateEma;
         $softMarketRateDiscount = max(0.0, ($policyRate - self::DEFAULT_POLICY_RATE_FALLBACK) * self::SOFT_MARKET_CYCLE_BETA);
 
         // 4. Cummins & Danzon (1997) Hard-Market Capital Recovery:
@@ -287,33 +284,29 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         // Reinsurers absorbing higher frequency ($catThreshold) & severity ($catScalar) gain stronger post-disaster pricing power.
         $hardMarketRecoveryDiscount = min(0.30, $surplusDeficitRatio * 0.35 * $catRiskBeta);
 
-        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $underwritingShock + $softMarketRateDiscount - $hardMarketRecoveryDiscount));
+        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $underwritingShock + $softMarketRateDiscount - $hardMarketRecoveryDiscount));
 
-        $eventLore = null;
+        $eventType = null;
         if ($claimZ < self::LORE_SYSTEMIC_DISASTER_Z) {
-            $eventLore = "Suffered catastrophic claim losses from a major systemic disaster.";
+            $eventType = ShockEvent::CATASTROPHIC_CLAIM_LOSSES;
         } elseif ($claimZ < self::LORE_ELEVATED_CLAIMS_Z) {
-            $eventLore = "Elevated claim payouts negatively impacted quarterly underwriting margins.";
+            $eventType = ShockEvent::ELEVATED_CLAIM_PAYOUTS;
         }
 
-        // Analyst Visibility (Forward Guidance)
-        // Insurance catastrophes are highly visible (hurricanes, etc). Analysts see 80% of the shock on average.
-        $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
-        $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
-        $expectedUnderwritingShock = $underwritingShock * $dynamicVisibility;
-        $analystExpectedVariableCosts = $expectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $expectedUnderwritingShock));
-        // Revenue shock is mostly opaque premium variance, 0% visibility.
-        $analystExpectedRevenue = $expectedRevenue;
+        return new SectorPhysicsResult(
+            actualRevenue: $actualRevenue,
+            rawVariableMargin: $clampedMargin,
+            primaryShockZ: abs($claimZ) > abs($revenueZ) ? $claimZ : $revenueZ,
+            // Revenue is premium volume — fully opaque until filings. Analysts assume no revenue deviation.
+            observableShockZ: 0.0,
+            eventType: $eventType,
+        );
+    }
 
-        return [
-            'actual_revenue' => $actualRevenue,
-            'actual_variable_costs' => $actualVariableCosts,
-            'analyst_expected_revenue' => $analystExpectedRevenue,
-            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit' => $actualRevenue - $fixedCosts - $actualVariableCosts,
-            'primary_shock_z' => abs($claimZ) > abs($revenueZ) ? $claimZ : $revenueZ,
-            'event_lore' => $eventLore
-        ];
+    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    {
+        // Catastrophe events are highly visible via industry cat models (~80%). Revenue is opaque (observableShockZ=0).
+        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.80, errorStdDev: 0.10);
     }
 
     public function getMarginReversionSpeed(): float
@@ -328,11 +321,11 @@ class InsuranceBusinessModel extends AbstractBusinessModel
      * catastrophe events via VIX: major disasters cause concurrent market crashes (9\/11, COVID).
      *
      * @param Stock       $stock       The insurance stock entity.
-     * @param array       $macroState  The current macroeconomic state.
+     * @param MacroStateDTO $macroState  The current macroeconomic state.
      * @param MathUtility $mathUtility Mathematical utility.
      * @return float The total absolute interest income generated by the portfolio.
      */
-    public function calculateInterestIncome(Stock $stock, array &$macroState, MathUtility $mathUtility): float
+    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): float
     {
         // Resolve company-specific tuned float allocation parameters
         $params = $this->resolveModelParameters($stock, [
@@ -344,7 +337,7 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         $equityVol         = $params['equity_portfolio_vol'];
 
         $cash = (float) $stock->getCorporateTreasury();
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        $policyRate = $macroState->policyRateEma;
 
         // Normalized Base Fixed-Income Yield:
         // Ensure total portfolio weights (Liquidity + Long Bonds + Equities) sum strictly to 1.00
@@ -354,13 +347,13 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         $liquidityShare    = $totalFixedWeight > 0.0 ? self::FLOAT_LIQUIDITY_WEIGHT / $totalFixedWeight : 0.1667;
         $bondShare         = $totalFixedWeight > 0.0 ? self::FLOAT_BOND_WEIGHT / $totalFixedWeight : 0.8333;
 
-        $yield10y        = $macroState['yield_10y_ema'] ?? ($policyRate + self::DEFAULT_10Y_SPREAD);
+        $yield10y        = $macroState->yield10yEma;
         $liquidityReturn = $policyRate - MacroEngine::CASH_YIELD_SPREAD;
         $bondReturn      = $yield10y;
         $baseYield       = $fixedIncomeWeight * (($liquidityShare * $liquidityReturn) + ($bondShare * $bondReturn));
 
-        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
-        $erp = $macroState['equity_risk_premium'] ?? self::DEFAULT_ERP_FALLBACK;
+        $outputGap = $macroState->outputGapEma;
+        $erp = $macroState->equityRiskPremium;
 
         // Stochastic equity tranche: equities have ~20% annual vol → ~10% quarterly vol.
         // This makes insurance float income meaningfully volatile during equity market crashes.
@@ -372,7 +365,7 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         // Major disasters (9/11, COVID, GFC) simultaneously cause high claims AND equity market crashes.
         // VIX is a reliable real-time proxy: panic-level VIX (>25%) reliably accompanies both catastrophes
         // and broad equity drawdowns. This correlation is the channel the model exploits.
-        $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? 0.15);
+        $vixEma = $macroState->marketVolatilityEma;
         $catastropheEquityPenalty = max(0.0, ($vixEma - self::CATASTROPHE_VIX_THRESHOLD) * self::CATASTROPHE_EQUITY_CORRELATION);
         $stochasticEquityReturn -= $catastropheEquityPenalty;
 
@@ -391,8 +384,12 @@ class InsuranceBusinessModel extends AbstractBusinessModel
      * @param float $corporateTaxRate     The effective corporate tax rate.
      * @return float The true post-tax return on equity.
      */
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate): float
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08): float
     {
+        $industry = $stock->getIndustry() ?: 'General';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $kappa = \App\Data\Sectors::getModelThresholds($businessModel)['reversion_speed'] ?? 0.18;
+
         $equity = (float) $stock->getTotalEquity();
         // Statutory Surplus Floor: Anchor ROE denominator to at least implied regulatory minimum capital (25% of policy float/liabilities)
         // so temporary catastrophe equity drawdowns never create artificial small-denominator ROE whip-saws (-450% or +200%).
@@ -406,6 +403,7 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         // and a 5% structural floor on ROE TTM to prevent the P/E multiple and stock price from violently whipsawing when a hurricane hits.
         $oldTtm = (float) $stock->getRoeTtm();
         $newTtm = $oldTtm === 0.0 ? max(self::MIN_STRUCTURAL_ROE_FLOOR, $truePostTaxReturn) : ($truePostTaxReturn * self::ROE_TTM_EMA_WEIGHT) + ($oldTtm * self::ROE_TTM_HIST_WEIGHT);
+        $newTtm += $kappa * ($wacc - $newTtm) * 0.25;
         $stock->setRoeTtm((string) max(self::MIN_STRUCTURAL_ROE_FLOOR, min(self::MAX_ROE_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;
@@ -474,14 +472,14 @@ class InsuranceBusinessModel extends AbstractBusinessModel
      * Returns the base float yield for the 15% liquidity + 75% long-duration bond tranches only.
      * The 10% equity tranche is handled stochastically in calculateInterestIncome().
      *
-     * @param array $macroState Current macroeconomic state.
+     * @param MacroStateDTO $macroState Current macroeconomic state.
      * @param float $policyRate Current policy interest rate.
      * @return float Blended base yield from the fixed-income portion of the float portfolio.
      */
-    public function calculateCashYield(array &$macroState): float
+    public function calculateCashYield(MacroStateDTO $macroState): float
     {
-        $policyRate = $macroState['policy_rate_ema'] ?? ($macroState['policy_rate'] ?? self::DEFAULT_POLICY_RATE_FALLBACK);
-        $yield10y = $macroState['yield_10y_ema'] ?? ($policyRate + self::DEFAULT_10Y_SPREAD);
+        $policyRate = $macroState->policyRateEma;
+        $yield10y = $macroState->yield10yEma;
 
         // 1. Liquidity Reserve (15% T-Bills/Cash)
         $liquidityReturn = $policyRate - MacroEngine::CASH_YIELD_SPREAD;
@@ -528,7 +526,7 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         return ($earningsValue * (1.0 - $bookWeight)) + ($pbFairValue * $bookWeight);
     }
 
-    public function processPassiveLiabilityGrowth(Stock $stock, array &$macroState, array &$state, MathUtility $mathUtility): void
+    public function processPassiveLiabilityGrowth(Stock $stock, MacroStateDTO $macroState, array &$state, MathUtility $mathUtility): void
     {
         $currentLiabilities = $state['customerDeposits'];
         if ($currentLiabilities <= 0) return;
@@ -538,7 +536,7 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?: 'General']['equity_limit'] ?? self::DEFAULT_EQUITY_LIMIT;
 
         // Nominal Systemic Growth: The Float grows naturally alongside the M2 Money Supply.
-        $systemicGrowthQuarterly = (($macroState['inflation_ema'] ?? self::DEFAULT_INFLATION_FALLBACK) + self::BASE_ECONOMIC_GROWTH_ADD + ((($macroState['output_gap_ema'] ?? 0.0) > 0.0 ? ($macroState['output_gap_ema'] ?? 0.0) * self::EXPANSION_GAP_MULT : ($macroState['output_gap_ema'] ?? 0.0) * self::RECESSION_GAP_MULT))) / self::QUARTERLY_GROWTH_DIVISOR;
+        $systemicGrowthQuarterly = ($macroState->inflationEma + self::BASE_ECONOMIC_GROWTH_ADD + (($macroState->outputGapEma > 0.0 ? $macroState->outputGapEma * self::EXPANSION_GAP_MULT : $macroState->outputGapEma * self::RECESSION_GAP_MULT))) / self::QUARTERLY_GROWTH_DIVISOR;
 
         // Premium-to-Surplus Capacity constraint (Kenney Rule) throttles growth if they don't have enough equity to back the policies.
         $baseGrowth = $systemicGrowthQuarterly * max(self::MIN_BETA_GROWTH_CLAMP, min(self::MAX_BETA_GROWTH_CLAMP, abs((float) $stock->getBeta()))) * $this->calculateCapacityModifier($totalDebt, $equity, $equityLimit, $currentLiabilities);

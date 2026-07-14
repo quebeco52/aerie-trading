@@ -11,6 +11,7 @@ use App\Service\Math\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use App\Service\Event\NarrativeEngine;
 use App\Service\Math\FinancialConstants;
+use App\Service\Market\MarketConsensusEngine;
 
 /**
  * Handles the simulation of quarterly earnings reports.
@@ -31,7 +32,8 @@ class EarningsEngine
         private DebtEngine $debtEngine,
         private MathUtility $mathUtility,
         private CorporateMetrics $corporateMetrics,
-        private NarrativeEngine $narrativeEngine
+        private NarrativeEngine $narrativeEngine,
+        private MarketConsensusEngine $marketConsensusEngine
     ) {}
 
     /**
@@ -44,12 +46,12 @@ class EarningsEngine
      * (Z-Score) of the revenue shift (e.g., punishing or rewarding surprise reports).
      *
      * @param Stock $stock The stock entity to process earnings for.
-     * @param array &$macroState The current state of the macroeconomic cycle.
+     * @param \App\DTO\MacroStateDTO $macroState The current state of the macroeconomic cycle.
      * @param int $tickCount The current simulation tick, used to determine if it is earnings season.
      * @param int $ticksPerYear The total number of ticks in a simulated year.
      * @return array<string, mixed>|null  Returns the generated market event array if an earnings report occurred, otherwise null.
      */
-    public function calculate(Stock $stock, array &$macroState = [], int $tickCount = 0, int $ticksPerYear = 252): ?array
+    public function calculate(Stock $stock, \App\DTO\MacroStateDTO $macroState, int $tickCount = 0, int $ticksPerYear = 252): ?array
     {
 
         $ticksPerQuarter = (int) ($ticksPerYear / 4);
@@ -93,7 +95,7 @@ class EarningsEngine
 
 
 
-        $macroTaxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $macroTaxRate = $macroState->corporateTaxRate;
         $corporateTaxRate = $strategy->getEffectiveTaxRate($macroTaxRate);
 
         // STOCHASTIC FUNDAMENTAL PROCESSES (Paradigm 2: The Bottom-Up Approach)
@@ -159,7 +161,7 @@ class EarningsEngine
         $kappa = $strategy->getMarginReversionSpeed();
 
 
-        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
+        $outputGap = $macroState->outputGapEma;
         $beta = (float) $stock->getBeta();
 
         // The Bloat Penalty (Diseconomies of Scale): As a company saturates its market, administrative friction increases costs.
@@ -181,15 +183,17 @@ class EarningsEngine
         $realizedVariableMargin = $this->mathUtility->calculateCIR($currentVariableMargin, $kappa, $dynamicVariableTheta, $marginVol, $dt, $z2);
         $realizedVariableMargin = min(0.99, max(0.01, $realizedVariableMargin));
 
-        // APPLY THE IDIOSYNCRATIC Z-SCORE SHOCK
-        $shockData = $strategy->generateIdiosyncraticShock($stock, $expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol, $macroState, $this->mathUtility);
-        $actualRevenue = $shockData['actual_revenue'];
-        $actualVariableCosts = $shockData['actual_variable_costs'];
+        // APPLY THE IDIOSYNCRATIC Z-SCORE SHOCK (Physical Bottom-Up Outcomes)
+        $actuals = $strategy->computeActualFinancials($stock, $expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol, $macroState, $this->mathUtility);
+        $actualRevenue = $actuals->actualRevenue;
+        $actualVariableCosts = $actuals->actualVariableCosts;
 
         // ANALYST VISIBILITY (FORWARD GUIDANCE)
-        // Analysts see part of the shock depending on the Business Model (e.g. hurricanes are public, server failures are opaque).
-        $analystExpectedRevenue = $shockData['analyst_expected_revenue'] ?? $expectedRevenue;
-        $analystExpectedVariableCosts = $shockData['analyst_expected_variable_costs'] ?? ($analystExpectedRevenue * $realizedVariableMargin);
+        // Decoupled consensus generation via MarketConsensusEngine and sector coverage profile
+        $coverage = $strategy->getCoverageProfile();
+        $consensus = $this->marketConsensusEngine->generateConsensus($actuals, $coverage, $expectedRevenue, $this->mathUtility);
+        $analystExpectedRevenue = $consensus->analystExpectedRevenue;
+        $analystExpectedVariableCosts = $consensus->analystExpectedVariableCosts;
 
         // Calculate Expected EBIT natively using the Analyst's updated forward guidance
         $expectedEbit = $analystExpectedRevenue - $fixedCosts - $analystExpectedVariableCosts;
@@ -199,9 +203,9 @@ class EarningsEngine
         // Recalculate EBIT (If demand collapsed, they still paid the variable costs for unsold goods, causing a massive loss!)
         $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
-        $primaryShockZ = $shockData['primary_shock_z'];
-        $eventType = $shockData['event_type'] ?? null;
-        $customEventLore = $eventType ? $this->narrativeEngine->generateLore($eventType, $shockData['context'] ?? []) : ($shockData['event_lore'] ?? null);
+        $primaryShockZ = $actuals->primaryShockZ;
+        $eventType = $actuals->eventType;
+        $customEventLore = $eventType !== null ? $this->narrativeEngine->generateLore($eventType, $actuals->eventContext) : null;
 
         // Calculate EXPECTED Interest Expense (Pre-Shock)
         $expectedOperatingMargin = $expectedEbit / max(1.0, $expectedRevenue);
@@ -275,8 +279,11 @@ class EarningsEngine
             $reportedActualNetIncome += $quarterlyDepreciation;
         }
 
+        $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState, $actualRevenue, $trueOperatingMargin);
+        $waccBaseline = $isFinancial ? ($health['cost_of_equity'] ?? 0.10) : ($health['wacc'] ?? 0.08);
+
         // UPDATE DYNAMIC ROIC AS AN OUTCOME
-        $truePostTaxReturn = $strategy->updateDynamicRoic($stock, $actualQuarterlyNetIncome, $investedCapital, $ebit, $corporateTaxRate);
+        $truePostTaxReturn = $strategy->updateDynamicRoic($stock, $actualQuarterlyNetIncome, $investedCapital, $ebit, $corporateTaxRate, $waccBaseline);
 
         // EPS relies on ANNUAL metrics. We must multiply the Quarterly Net Income by 4.0
         $expectedAnnualEps = ($reportedExpectedNetIncome * 4.0) / max(1.0, $sharesOutstanding);
@@ -407,7 +414,6 @@ class EarningsEngine
         $formattedSurprise = '$' . number_format(abs($surpriseAmountQuarterly), 2);
 
         // Calculate Economic Value Added (EVA)
-        $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState, $actualRevenue, $trueOperatingMargin);
         $equity = (float) $stock->getTotalEquity();
 
         if ($isFinancial) {
@@ -417,7 +423,7 @@ class EarningsEngine
             $wacc = $costOfEquity; // Fallback for reporting purposes
         } else {
             // Normal companies create EVA when ROIC > WACC
-            $wacc = $health['wacc'];
+            $wacc = $health['wacc'] ?? 0.08;
             $annualEconomicProfit = $investedCapital * ($truePostTaxReturn - $wacc);
         }
 
@@ -600,7 +606,7 @@ class EarningsEngine
      * @param float $actualTotalNetIncome The total net income generated this quarter.
      * @param float $sharesOutstanding    The total shares currently outstanding.
      * @param Stock $stock                The stock entity.
-     * @param array &$macroState           The current macroeconomic state.
+     * @param MacroStateDTO $macroState           The current macroeconomic state.
      * @param float $absoluteDepreciation The absolute depreciation amount (non-cash expense).
      * @param bool  $isLeveraged          Whether the company is a leveraged financial institution.
      * @return array{fcf_per_share: float, capex: float}
@@ -609,7 +615,7 @@ class EarningsEngine
         float $actualTotalNetIncome,
         float $sharesOutstanding,
         Stock $stock,
-        array &$macroState,
+        \App\DTO\MacroStateDTO $macroState,
         float $absoluteDepreciation,
         bool $isLeveraged,
         \App\Service\Model\BusinessModelInterface $strategy,
@@ -622,7 +628,7 @@ class EarningsEngine
 
         $capExRatio = (float) $stock->getCapexRatio();
 
-        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
+        $outputGap = $macroState->outputGapEma;
         $cycleCapExModifier = max(0.85, min(1.15, 1.00 + ($outputGap * 1.5)));
 
         $physicalCapital = $isLeveraged ? (float) $stock->getTotalEquity() : $stock->getInvestedCapital();

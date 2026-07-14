@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 
@@ -33,12 +34,9 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
     // --- Analyst Visibility & Error ---
-    /** Base analyst visibility into recurring subscription revenues prior to quarterly earnings. */
-    public const ANALYST_BASE_VISIBILITY   = 0.80;
-    /** Standard deviation of analyst estimation error for subscription additions and churn. */
-    public const ANALYST_ERROR_STD_DEV     = 0.10;
+    // Moved to getCoverageProfile() — see MarketConsensusEngine.
 
-    // --- Monopoly Valuation Moat ---
+    // --- Subscription & Transaction Revenue Streams ---
     /** Operating margin mean reversion speed: slower speed reflects high switching costs and data monopoly moat. */
     public const MONOPOLY_REVERSION_SPEED  = 2.0;
 
@@ -64,7 +62,7 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     /** Maximum debt tolerance threshold fraction triggering under-leveraged status. */
     public const UNDERLEVERAGED_DEBT_RATIO    = 0.60;
 
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
             'subscription_revenue_weight' => self::SUBSCRIPTION_REVENUE_WEIGHT,
@@ -86,26 +84,24 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         // High transaction/rating volume ($transactionZ) provides strong positive operating leverage because incremental debt ratings have near-zero marginal cost.
         $operatingLeverageShift = -self::TRANSACTION_LEVERAGE_SENSITIVITY * $transactionZ * $transactionWeight;
 
-        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $operatingLeverageShift));
-        $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
-
-        // Analyst Visibility
-        // Financial Data subscriptions are highly visible via quarterly subscriber count reporting (~80% visibility).
-        $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
-        $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
-        $analystExpectedRevenue = $expectedRevenue * (1.0 + (($subscriptionZ * $subscriptionWeight + $transactionZ * $transactionWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR) * $dynamicVisibility));
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + ($operatingLeverageShift * $dynamicVisibility)));
+        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $operatingLeverageShift));
 
         $primaryShockZ = abs($transactionZ) > abs($subscriptionZ) ? $transactionZ : $subscriptionZ;
+        $observableShockZ = ($subscriptionZ * $subscriptionWeight + $transactionZ * $transactionWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
 
-        return [
-            'actual_revenue'                  => $actualRevenue,
-            'actual_variable_costs'           => $actualVariableCosts,
-            'analyst_expected_revenue'        => $analystExpectedRevenue,
-            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit'                            => $ebit,
-            'primary_shock_z'                 => $primaryShockZ
-        ];
+        return new SectorPhysicsResult(
+            actualRevenue: $actualRevenue,
+            rawVariableMargin: $clampedMargin,
+            primaryShockZ: $primaryShockZ,
+            observableShockZ: $observableShockZ,
+            eventType: null,
+        );
+    }
+
+    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    {
+        // Subscriber count reporting gives analysts high visibility (~80%).
+        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.80, errorStdDev: 0.10);
     }
 
     public function getMarginReversionSpeed(): float

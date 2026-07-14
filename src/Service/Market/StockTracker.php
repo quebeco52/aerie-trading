@@ -56,11 +56,11 @@ class StockTracker
      * @param Stock[] $stocks        Array of Stock entities to update.
      * @param float   $dt            The time step delta (e.g., in years).
      * @param bool    $recordHistory Whether to persist the new prices to the stock history table.
-     * @param array   $macroState    The current state of the macroeconomic cycle.
+     * @param MacroStateDTO|array $macroState    The current state of the macroeconomic cycle.
      * 
      * @return array{updates: array<mixed>, total_cap: float, events: array<mixed>, market_vol: float, history: array<mixed>}
      */
-    public function updateStocks(array $stocks, float $dt, bool $recordHistory, array &$macroState = [], int $tickCount = 0, int $ticksPerYear = 252): array
+    public function updateStocks(array $stocks, float $dt, bool $recordHistory, \App\DTO\MacroStateDTO|array $macroState = [], int $tickCount = 0, int $ticksPerYear = 252): array
     {
 
         $stockUpdates = [];
@@ -69,8 +69,9 @@ class StockTracker
         $events = [];
 
         // Pull systemic variables from the Macro Engine
-        $marketZ = $macroState['market_z'] ?? $this->mathUtility->generateStandardNormal();
-        $marketVol = $macroState['market_volatility'] ?? 0.15;
+        $macroDTO = $macroState instanceof \App\DTO\MacroStateDTO ? $macroState : \App\DTO\MacroStateDTO::fromArray($macroState);
+        $marketZ = $macroDTO->marketZ;
+        $marketVol = $macroDTO->marketVolatility;
 
         foreach ($stocks as $stock) {
 
@@ -81,7 +82,7 @@ class StockTracker
             $currentVol = (float) ($stock->getCurrentVolatility() ?? $baselineVol);
 
             // M&A
-            $maResult = $this->maEngine->evaluatePrivateAcquisition($stock, $macroState, $dt);
+            $maResult = $this->maEngine->evaluatePrivateAcquisition($stock, $macroDTO, $dt);
             $maShock = 0.0;
             if ($maResult) {
                 $events[] = $maResult['event'];
@@ -91,7 +92,7 @@ class StockTracker
             // DIVESTITURE (Spin-offs)
             // A company won't acquire and divest in the exact same tick
             if (!$maResult) {
-                $divestResult = $this->maEngine->evaluateCorporateDivestiture($stock, $macroState, $dt);
+                $divestResult = $this->maEngine->evaluateCorporateDivestiture($stock, $macroDTO, $dt);
                 if ($divestResult) {
                     $events[] = $divestResult['event'];
                     $maShock = $divestResult['shock'];
@@ -99,7 +100,7 @@ class StockTracker
             }
 
             // Fetch true, dynamic WACC from the DebtEngine
-            $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState);
+            $health = $this->debtEngine->analyzeDebtHealth($stock, $macroDTO);
 
             $sharesOutstanding = (float) $stock->getSharesOutstanding();
             $shares = max(1.0, $sharesOutstanding);
@@ -134,7 +135,7 @@ class StockTracker
                 beta: (float) $stock->getBeta(),
                 marketZ: $marketZ,
                 marketVol: $marketVol,
-                macroState: $macroState,
+                macroState: $macroDTO,
                 fcfPerShare: $stock->getFreeCashFlowPerShare() !== null ? (float) $stock->getFreeCashFlowPerShare() : null,
                 bookValuePerShare: (float) $stock->getBookValuePerShare(),
                 maShock: $maShock,
@@ -158,7 +159,7 @@ class StockTracker
             $stock->setCurrentVolatility((string) $nextVolatility);
 
             // Earnings Engine
-            $generatedEvents = $this->earningsEngine->calculate($stock, $macroState, $tickCount, $ticksPerYear);
+            $generatedEvents = $this->earningsEngine->calculate($stock, $macroDTO, $tickCount, $ticksPerYear);
             if (!empty($generatedEvents)) {
                 $events = array_merge($events, $generatedEvents);
             }
@@ -223,7 +224,7 @@ class StockTracker
             if ($isFundamentalTick) {
                 $investedCapital = $stock->getInvestedCapital();
                 $equity = (float) $stock->getTotalEquity();
-                $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
+                $nominalGdpIndex = $macroDTO->nominalGdpIndex;
                 $samRatio = (float) $stock->getSamRatio();
 
                 $evaluationCapital = $isFinancial ? $equity : $investedCapital;

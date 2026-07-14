@@ -33,4 +33,40 @@ class ClearingHouseBusinessModelTest extends TestCase
         $val2 = $this->model->calculateEarningsValue(200.0, 150.0, 5.0, 0.08, $mathMock);
         $this->assertSame(200.0, $val2);
     }
+
+    public function testCalculateInterestIncomeScalesWithPolicyRateAndZirpTrap(): void
+    {
+        $stockMock = $this->createMock(\App\Entity\Stock::class);
+        $stockMock->method('getCorporateTreasury')->willReturn(100_000_000_000.0);
+        $stockMock->method('getCustomerDeposits')->willReturn(100_000_000_000.0); // 100% margin pool
+
+        $mathMock = $this->createMock(MathUtility::class);
+
+        // Low interest rate ZIRP regime (< 1%)
+        $lowRateState = new \App\DTO\MacroStateDTO(
+            policyRateEma: 0.005,
+            yield2yEma: 0.005
+        );
+        $incomeLow = $this->model->calculateInterestIncome($stockMock, $lowRateState, $mathMock);
+
+        // High interest rate regime
+        $highRateState = new \App\DTO\MacroStateDTO(
+            policyRateEma: 0.05,
+            yield2yEma: 0.06
+        );
+        $incomeHigh = $this->model->calculateInterestIncome($stockMock, $highRateState, $mathMock);
+
+        $this->assertGreaterThan($incomeLow, $incomeHigh, 'Clearinghouse margin pool yield must scale upward during high-rate regimes.');
+    }
+
+    public function testCalculateCashYieldUsesPolicyRate(): void
+    {
+        $macroState = new \App\DTO\MacroStateDTO(
+            policyRateEma: 0.0525,
+            yield2yEma: 0.0400
+        );
+        $yield = $this->model->calculateCashYield($macroState);
+
+        $this->assertSame(0.0525, $yield);
+    }
 }

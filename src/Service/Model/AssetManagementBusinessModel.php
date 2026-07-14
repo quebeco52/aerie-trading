@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 
 /**
@@ -20,9 +22,9 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
 {
     // --- ROE & Target Architecture ---
     /** Weight given to historical baseline ROE when blending with TTM ROE. */
-    public const BASELINE_ROE_WEIGHT = 0.70;
+    public const BASELINE_ROE_WEIGHT = 0.50;
     /** Weight given to TTM ROE when blending with historical baseline ROE. */
-    public const TTM_ROE_WEIGHT      = 0.30;
+    public const TTM_ROE_WEIGHT      = 0.50;
     /** Default 5Y Treasury spread over policy rate when yield curve data is absent. */
     public const DEFAULT_5Y_YIELD_PREMIUM = 0.005;
     /** Default maximum financial leverage (Debt/Equity) limit if sector configuration is absent. */
@@ -81,12 +83,9 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
     public const LORE_FUND_OUTFLOWS_Z      = -1.80;
 
     // --- Analyst Visibility & Error ---
-    /** Base analyst visibility into opaque asset management fund flows prior to 13F filings. */
-    public const ANALYST_BASE_VISIBILITY  = 0.10;
-    /** Standard deviation of analyst estimation error for quarterly AUM fee revenue. */
-    public const ANALYST_ERROR_STD_DEV    = 0.05;
+    // Moved to getCoverageProfile() — see MarketConsensusEngine.
 
-    // --- Dynamic ROIC & ROE Clamping ---
+    // --- AUM Market Beta & Performance Fee Physics ---
     /** Annualization multiplier applied to quarterly net income to derive annualized ROE. */
     public const ROE_ANNUALIZATION_MULT   = 4.00;
     /** Minimum allowable ROE floor to prevent catastrophic negative overflow. */
@@ -140,7 +139,7 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
      * Asset Managers scale EBIT to cover their target ROE and any operational wholesale debt.
      * They do not use fractional customer deposits or float to generate leverage.
      */
-    public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array
+    public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
         $equity = (float) $stock->getTotalEquity();
         $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
@@ -150,12 +149,12 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
             $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
         }
 
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
-        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + self::DEFAULT_5Y_YIELD_PREMIUM);
+        $policyRate = $macroState->policyRateEma;
+        $yield5y = $macroState->yield5yEma;
         $structuralSpread = (float) $stock->getCreditSpread();
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
 
-        $taxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $taxRate = $macroState->corporateTaxRate;
 
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
         $treasury = (float) $stock->getCorporateTreasury();
@@ -218,9 +217,9 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         ];
     }
 
-    public function getMacroPhysics(Stock $stock, array &$macroState): array
+    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
+        $outputGap = $macroState->outputGapEma;
         $beta = (float) $stock->getBeta();
 
         return [
@@ -234,7 +233,7 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
      * asymmetric performance fee / carried interest surges during strong fund alpha quarters,
      * institutional redemption shocks during severe market drawdowns, and structural efficiency floors.
      */
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         // Resolve company-specific tuned asset management parameters
         $params = $this->resolveModelParameters($stock, [
@@ -257,7 +256,7 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
 
         // 1. AUM Mark-to-Market Beta (Base Management Fee Stream):
         // When equity/credit markets rise or fall, base AUM fee revenue expands or contracts.
-        $outputGap = $macroState['output_gap_ema'] ?? ($macroState['output_gap'] ?? 0.0);
+        $outputGap = $macroState->outputGapEma;
         $aumMarketBeta = $outputGap * abs((float) $stock->getBeta()) * $aumBetaScalar;
 
         // 2. Asymmetric Performance Fees & Activist Execution (Incentive Fee Stream):
@@ -280,53 +279,53 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         // 3. Structural Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
         $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max($minVariableMargin, $realizedVariableMargin));
-        $actualVariableCosts = $actualRevenue * $clampedMargin;
 
-        // 4. Dynamic Event Lore:
-        $eventLore = null;
+        // 4. Dynamic Event Type:
+        $eventType = null;
         if ($alphaZ > self::LORE_PERFORMANCE_SURGE_Z) {
-            $eventLore = "Crystallized outsized performance fees and carried interest following strong fund alpha.";
+            $eventType = ShockEvent::PERFORMANCE_FEE_SURGE;
         } elseif ($alphaZ < self::LORE_FUND_OUTFLOWS_Z) {
-            $eventLore = "Suffered net institutional outflows and fee compression amid risk-off market sentiment.";
+            $eventType = ShockEvent::FUND_OUTFLOWS;
         }
 
-        // 5. Analyst Visibility:
-        // Standard AUM fee base trends are partially visible, but performance fees and sudden redemptions are opaque until filings.
-        $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
-        $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
+        // observableShockZ: AUM market beta component is fully public; alpha/performance fees are ~10% visible
+        // We encode the relative deviation from the macro-expected revenue as the observable shock.
         $unanticipatedRevenueDelta = $actualRevenue - ($expectedRevenue * (1.0 + $aumMarketBeta));
-        $analystExpectedRevenue = max(0.0, ($expectedRevenue * (1.0 + $aumMarketBeta)) + ($unanticipatedRevenueDelta * $dynamicVisibility));
-        $analystExpectedVariableCosts = $analystExpectedRevenue * $clampedMargin;
+        $observableShockZ = $expectedRevenue > 0 ? ($unanticipatedRevenueDelta / $expectedRevenue) : 0.0;
 
-        return [
-            'actual_revenue'                  => $actualRevenue,
-            'actual_variable_costs'           => $actualVariableCosts,
-            'analyst_expected_revenue'        => $analystExpectedRevenue,
-            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit'                            => $actualRevenue - $fixedCosts - $actualVariableCosts,
-            'primary_shock_z'                 => abs($alphaZ) > abs($baseFeeZ) ? $alphaZ : $baseFeeZ,
-            'event_lore'                      => $eventLore,
-        ];
+        return new SectorPhysicsResult(
+            actualRevenue: $actualRevenue,
+            rawVariableMargin: $clampedMargin,
+            primaryShockZ: abs($alphaZ) > abs($baseFeeZ) ? $alphaZ : $baseFeeZ,
+            observableShockZ: $observableShockZ,
+            eventType: $eventType,
+        );
+    }
+
+    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    {
+        // AUM flows partially visible via 13F filings and industry AUM trackers (~10%).
+        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.10, errorStdDev: 0.05);
     }
 
     /**
      * Asset Managers invest excess corporate treasury in seed capital co-investment portfolios (60/40).
      * The 40% equity seed tranche experiences quarterly stochastic mark-to-market volatility and VIX tail risk.
      */
-    public function calculateInterestIncome(Stock $stock, array &$macroState, MathUtility $mathUtility): float
+    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): float
     {
         $operatingBase = $this->getOperatingBase($stock);
         $minCash = $this->calculateMinOperatingCash($operatingBase, 0.0, (float) $stock->getWholesaleDebt());
         $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - $minCash);
 
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        $policyRate = $macroState->policyRateEma;
 
         // Base deterministic yield (60% bonds + 40% deterministic CAPM equity return)
         $baseYield = $this->calculateCashYield($macroState);
 
         // Stochastic seed capital tranche: quarterly equity volatility + VIX market panic drag
         $seedZ = $mathUtility->generateStandardNormal();
-        $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? 0.15);
+        $vixEma = $macroState->marketVolatilityEma;
         $vixDrag = max(0.0, ($vixEma - self::SEED_VIX_THRESHOLD) * self::SEED_VIX_SENSITIVITY);
 
         $stochasticEquityAdjustment = ($seedZ * self::SEED_EQUITY_VOL) - $vixDrag;
@@ -338,8 +337,12 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
     /**
      * Financial companies are evaluated strictly on Return on Equity (ROE), not ROIC.
      */
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate): float
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08): float
     {
+        $industry = $stock->getIndustry() ?: 'General';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $kappa = \App\Data\Sectors::getModelThresholds($businessModel)['reversion_speed'] ?? 0.18;
+
         $equity = (float) $stock->getTotalEquity();
         $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * self::ROE_ANNUALIZATION_MULT : 0.0;
 
@@ -347,6 +350,7 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
 
         $oldTtm = (float) $stock->getRoeTtm();
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::ROE_TTM_EMA_WEIGHT) + ($oldTtm * self::ROE_TTM_HIST_WEIGHT);
+        $newTtm += $kappa * ($wacc - $newTtm) * 0.25;
         $stock->setRoeTtm((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;
@@ -380,11 +384,11 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         return ['interest_expense' => $interestExpense, 'wholesale_rate' => $wholesaleRate];
     }
 
-    public function calculateCashYield(array &$macroState): float
+    public function calculateCashYield(\App\DTO\MacroStateDTO $macroState): float
     {
-        $policyRate = $macroState['policy_rate_ema'] ?? ($macroState['policy_rate'] ?? self::DEFAULT_POLICY_RATE_FALLBACK);
-        $yield10y = $macroState['yield_10y_ema'] ?? ($policyRate + self::DEFAULT_10Y_SPREAD);
-        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
+        $policyRate = $macroState->policyRateEma;
+        $yield10y = $macroState->yield10yEma;
+        $outputGap = $macroState->outputGapEma;
 
         $bondReturn = $yield10y;
         $equityReturn = self::BASE_EQUITY_RETURN + ($outputGap * self::EQUITY_RETURN_GAP_MULT);

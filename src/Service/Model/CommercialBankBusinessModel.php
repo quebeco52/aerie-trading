@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\DTO\MacroStateDTO;
+use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
@@ -21,9 +23,9 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
 {
     // --- ROE & Target Metrics ---
     /** Weight given to historical baseline ROE when blending with TTM ROE. */
-    public const BASELINE_ROE_WEIGHT = 0.70;
+    public const BASELINE_ROE_WEIGHT = 0.50;
     /** Weight given to TTM ROE when blending with historical baseline ROE. */
-    public const TTM_ROE_WEIGHT      = 0.30;
+    public const TTM_ROE_WEIGHT      = 0.50;
 
     // --- Dual-Stream Banking Architecture ---
     /** Baseline fraction of bank revenue derived from Net Interest Income (NII). */
@@ -68,8 +70,7 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
     // --- Analyst Visibility ---
     /** Fraction of quarterly revenue variance visible to analysts via NIM guidance and Fed H.8 balance sheet data. */
     public const REVENUE_ANALYST_VISIBILITY    = 0.65;
-    /** Standard deviation of analyst estimation noise on bank revenue. */
-    public const ANALYST_ERROR_STD_DEV         = 0.06;
+    // Analyst error std dev moved to getCoverageProfile() — see MarketConsensusEngine.
 
     // --- Yield Safety Rails ---
     /** Hard ceiling on gross asset yield: prevents hyperinflated loan yields during margin compression. */
@@ -101,14 +102,14 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
 
     /**
      * Returns a stable structural ROIC proxy to keep top-line loan revenue rock solid.
-     * Dynamic NIM (Net Interest Margin) expansion/compression is handled strictly in generateIdiosyncraticShock.
+     * Dynamic NIM (Net Interest Margin) expansion/compression is handled strictly in computeActualFinancials.
      *
      * @param Stock       $stock       The bank stock entity.
-     * @param array       $macroState  The macroeconomic state.
+     * @param MacroStateDTO $macroState  The macroeconomic state.
      * @param MathUtility $mathUtility Mathematical utility.
      * @return array{invested_capital: float, baseline_roic: float}
      */
-    public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array
+    public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
         $equity = (float) $stock->getTotalEquity();
         $totalDebt = (float) $stock->getTotalDebt();
@@ -129,12 +130,12 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
         $industry = $stock->getIndustry() ?: 'General';
         $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 10.0;
 
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
-        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + 0.005);
+        $policyRate = $macroState->policyRateEma;
+        $yield5y = $macroState->yield5yEma;
         $structuralSpread = (float) $stock->getCreditSpread();
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
 
-        $taxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $taxRate = $macroState->corporateTaxRate;
 
         $customerDeposits = (float) $stock->getCustomerDeposits();
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
@@ -195,9 +196,9 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
         ];
     }
 
-    public function getMacroPhysics(Stock $stock, array &$macroState): array
+    public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
-        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
+        $outputGap = $macroState->outputGapEma;
         $beta = (float) $stock->getBeta();
 
         return [
@@ -210,7 +211,7 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
      * Idiosyncratic shock applied directly to loan origination volume and fee revenue.
      * Introduces massive Loss Provision write-offs during economic downturns.
      */
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         // Resolve company-specific tuned commercial bank parameters
         $params = $this->resolveModelParameters($stock, [
@@ -228,7 +229,7 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
         $feeZ     = $mathUtility->generateStandardNormal(); // Non-interest custodial / payment fee volume
         $defaultZ = $mathUtility->generateStandardNormal(); // Idiosyncratic credit default
 
-        $outputGap = $macroState['output_gap_ema'] ?? ($macroState['output_gap'] ?? 0.0);
+        $outputGap = $macroState->outputGapEma;
 
         // Blended dual-stream revenue (NII vs. Non-Interest Fee Income)
         $niiRevenue = $expectedRevenue * $niiWeight
@@ -255,14 +256,14 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
         // CECL Forward Provisioning (Credit Spread Channel):
         // Under CECL accounting, banks must provision against EXPECTED future losses.
         // When corporate credit spreads widen, banks build reserves proactively — before loans actually default.
-        $creditSpread = $macroState['macro_credit_spread_ema'] ?? ($macroState['macro_credit_spread'] ?? self::CECL_BASELINE_CREDIT_SPREAD);
+        $creditSpread = $macroState->macroCreditSpreadEma;
         $ceclDrag = max(0.0, ($creditSpread - self::CECL_BASELINE_CREDIT_SPREAD) * self::CECL_SPREAD_SENSITIVITY);
 
         // Net Interest Margin (NIM) Squeeze:
         // Banks borrow short-term (deposits) and lend long-term (mortgages/commercial).
         // A steep yield curve is highly profitable. An inversion collapses the spread.
-        $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['yield_10y'] ?? 0.04);
-        $yield2y  = $macroState['yield_2y_ema']  ?? ($macroState['yield_2y']  ?? 0.03);
+        $yield10y = $macroState->yield10yEma;
+        $yield2y  = $macroState->yield2yEma;
         $bankSpread = $yield10y - $yield2y;
 
         if ($bankSpread < 0) {
@@ -283,7 +284,6 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
         $niiCostAddon = ($lossProvisionShock + $nimSqueeze + $ceclDrag) * $niiWeight;
         $rawMargin = $realizedVariableMargin + $niiCostAddon;
         $clampedMargin = min(1.50, max($minVariableMargin, $rawMargin));
-        $actualVariableCosts = $actualRevenue * $clampedMargin;
 
         $eventType = null;
         if ($defaultZ < -2.0) {
@@ -294,36 +294,31 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
             $eventType = ShockEvent::RESERVE_RELEASE;
         }
 
-        // Analyst Visibility:
-        // Banks report quarterly NIM guidance and the Fed publishes weekly H.8 balance sheet data —
-        // analysts have reasonable visibility into revenue trends (~65%).
-        // Loan loss provisions and CECL reserve builds are completely opaque until earnings (0% visible).
-        $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
-        $analystExpectedRevenue = $expectedRevenue
-            * (1.0 + ($revenueZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::REVENUE_ANALYST_VISIBILITY))
-            * (1.0 + $analystError);
-        $analystExpectedVariableCosts = $analystExpectedRevenue * $realizedVariableMargin;
+        return new SectorPhysicsResult(
+            actualRevenue: $actualRevenue,
+            rawVariableMargin: $clampedMargin,
+            primaryShockZ: abs($defaultZ) > abs($revenueZ) ? $defaultZ : $revenueZ,
+            // observableShockZ: NIM guidance makes revenue trend ~65% visible (encoded in baseVisibility via getCoverageProfile)
+            observableShockZ: $revenueZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR,
+            eventType: $eventType,
+        );
+    }
 
-        return [
-            'actual_revenue'                  => $actualRevenue,
-            'actual_variable_costs'           => $actualVariableCosts,
-            'analyst_expected_revenue'        => $analystExpectedRevenue,
-            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit'                            => $actualRevenue - $fixedCosts - $actualVariableCosts,
-            'primary_shock_z'                 => abs($defaultZ) > abs($revenueZ) ? $defaultZ : $revenueZ,
-            'event_type'                      => $eventType,
-        ];
+    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    {
+        // NIM guidance and Fed H.8 data give analysts ~65% revenue visibility. CECL provisions are fully opaque.
+        return new \App\DTO\SectorCoverageProfile(baseVisibility: self::REVENUE_ANALYST_VISIBILITY, errorStdDev: 0.06);
     }
 
     /**
      * Banks earn standard money-market yields only on excess liquidity that isn't actively deployed.
      */
-    public function calculateInterestIncome(Stock $stock, array &$macroState, MathUtility $mathUtility): float
+    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): float
     {
         $operatingBase = $this->getOperatingBase($stock);
         $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - ($operatingBase * 0.05));
 
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        $policyRate = $macroState->policyRateEma;
 
         return $excessCash * $this->calculateCashYield($macroState);
     }
@@ -331,8 +326,12 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
     /**
      * Financial companies are evaluated strictly on Return on Equity (ROE), not ROIC.
      */
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate): float
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08): float
     {
+        $industry = $stock->getIndustry() ?: 'General';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $kappa = \App\Data\Sectors::getModelThresholds($businessModel)['reversion_speed'] ?? 0.18;
+
         $equity = (float) $stock->getTotalEquity();
         $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * 4.0 : 0.0;
 
@@ -340,6 +339,7 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
 
         $oldTtm = (float) $stock->getRoeTtm();
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * 0.25) + ($oldTtm * 0.75);
+        $newTtm += $kappa * ($wacc - $newTtm) * 0.25;
         $stock->setRoeTtm((string) max(-0.50, min(1.0, $newTtm)));
 
         return $truePostTaxReturn;
@@ -429,14 +429,14 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
         return ($earningsValue * $earningsWeight) + ($pbFairValue * $bookWeight);
     }
 
-    public function processPassiveLiabilityGrowth(Stock $stock, array &$macroState, array &$state, MathUtility $mathUtility): void
+    public function processPassiveLiabilityGrowth(Stock $stock, MacroStateDTO $macroState, array &$state, MathUtility $mathUtility): void
     {
         $currentLiabilities = $state['customerDeposits'];
         if ($currentLiabilities <= 0) return;
 
-        $inflation = $macroState['inflation_ema'] ?? 0.02;
-        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        $inflation = $macroState->inflationEma;
+        $outputGap = $macroState->outputGapEma;
+        $policyRate = $macroState->policyRateEma;
 
         $equity = (float) $stock->getTotalEquity();
         $totalDebt = $state['wholesaleDebt'] + $currentLiabilities;

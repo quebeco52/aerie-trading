@@ -35,7 +35,7 @@ class SemiconductorBusinessModelTest extends TestCase
         $baselineVol = 0.20;
         $macroState = ['output_gap_ema' => 0.0];
 
-        $result = $this->model->generateIdiosyncraticShock(
+        $result = $this->model->computeActualFinancials(
             $stock,
             $expectedRevenue,
             $realizedVariableMargin,
@@ -46,9 +46,9 @@ class SemiconductorBusinessModelTest extends TestCase
         );
 
         // With yieldModifier = 0.08, actualVariableCosts = 1000.0 * (0.30 + 0.08) = 380.0
-        $this->assertEquals(380.0, $result['actual_variable_costs']);
+        $this->assertEquals(380.0, $result->actualVariableCosts);
         // EBIT = 1000.0 - 200.0 - 380.0 = 420.0
-        $this->assertEquals(420.0, $result['ebit']);
+        $this->assertEquals(420.0, $result->ebit);
     }
 
     public function testMeetingCapexTableStakesResultsInNormalYields(): void
@@ -64,7 +64,7 @@ class SemiconductorBusinessModelTest extends TestCase
         $baselineVol = 0.20;
         $macroState = ['output_gap_ema' => 0.0];
 
-        $result = $this->model->generateIdiosyncraticShock(
+        $result = $this->model->computeActualFinancials(
             $stock,
             $expectedRevenue,
             $realizedVariableMargin,
@@ -75,8 +75,8 @@ class SemiconductorBusinessModelTest extends TestCase
         );
 
         // With yieldModifier = 0.00, actualVariableCosts = 1000.0 * 0.30 = 300.0
-        $this->assertEquals(300.0, $result['actual_variable_costs']);
+        $this->assertEquals(300.0, $result->actualVariableCosts);
         // EBIT = 1000.0 - 200.0 - 300.0 = 500.0
-        $this->assertEquals(500.0, $result['ebit']);
+        $this->assertEquals(500.0, $result->ebit);
     }
 }

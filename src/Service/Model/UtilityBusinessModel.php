@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
@@ -44,12 +45,9 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
     // --- Analyst Visibility & Error ---
-    /** Base analyst visibility into weather and minor regulatory earnings shocks. */
-    public const ANALYST_BASE_VISIBILITY   = 0.20;
-    /** Standard deviation of analyst estimation error for minor utility revenue shocks. */
-    public const ANALYST_ERROR_STD_DEV     = 0.05;
+    // Moved to getCoverageProfile() — see MarketConsensusEngine.
 
-    // --- Rate Base Moat ---
+    // --- Regulated Tariff & Merchant Power Capital Reinvestment Physics ---
     /** Operating margin mean reversion speed: slower speed reflects regulated rate of return structures. */
     public const REGULATED_REVERSION_SPEED = 2.0;
 
@@ -77,29 +75,26 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     /** Maximum debt tolerance threshold fraction triggering under-leveraged status. */
     public const UNDERLEVERAGED_DEBT_RATIO    = 0.70;
 
-    public function getMacroPhysics(Stock $stock, array &$macroState): array
+    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
 
         // Regulated Utilities are virtually immune to economic output gaps (people always need power/water)
-        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
+        $outputGap = $macroState->outputGapEma;
         $beta = (float) $stock->getBeta();
         $physics['macro_demand_shift'] = $outputGap * $beta * self::MACRO_DEMAND_SCALAR;
 
         // Regulatory Lag: Utilities do get rate hikes to cover inflation, but they are delayed.
-        // We give them a very small fraction of normal pricing power (0.25x vs the standard 0.5x minimum)
-        // so their nominal revenue grows slowly, but they still suffer the margin compression penalty 
-        // during inflationary spikes because costs rise much faster than this tiny revenue bump.
-        $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
+        $inflation = $macroState->inflationEma;
         $physics['pricing_power_multiplier'] = 1.0 + ($inflation * self::PRICING_POWER_LAG_SCALAR);
 
         return $physics;
     }
 
     /**
-     * Utility revenues are incredibly predictable. Weather causes minor fluctuations, but otherwise flat.
+     * Regulated Utilities trade explosive top-line revenue variance for extreme bottom-line ROIC certainty.
      */
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
             'regulated_base_weight'       => self::REGULATED_BASE_WEIGHT,
@@ -119,7 +114,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
 
         // Regulatory Lag:
         // Applies specifically to regulated tariff distribution ($regulatedWeight).
-        $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
+        $inflation = $macroState->inflationEma;
         $lagThreshold = MacroEngine::TARGET_INFLATION + self::REGULATORY_LAG_BUFFER;
         $regulatoryLagPenalty = $inflation > $lagThreshold ? ($inflation - $lagThreshold) * self::REGULATORY_LAG_PENALTY * $regulatedWeight : 0.0;
 
@@ -127,25 +122,24 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         // Unregulated merchant power and services experience wholesale margin volatility from power/fuel spread shifts.
         $merchantSpreadShift = -self::MERCHANT_MARGIN_SENSITIVITY * $unregulatedZ * $unregulatedWeight;
 
-        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $regulatoryLagPenalty + $merchantSpreadShift));
-        $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
-
-        // Analyst Visibility
-        $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
-        $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
-        $analystExpectedRevenue = $expectedRevenue * (1.0 + (($regulatedZ * $regulatedWeight + $unregulatedZ * $unregulatedWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR) * $dynamicVisibility));
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $regulatoryLagPenalty + ($merchantSpreadShift * $dynamicVisibility)));
+        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $regulatoryLagPenalty + $merchantSpreadShift));
 
         $primaryShockZ = abs($unregulatedZ) > abs($regulatedZ) ? $unregulatedZ : $regulatedZ;
+        $observableShockZ = ($regulatedZ * $regulatedWeight + $unregulatedZ * $unregulatedWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
 
-        return [
-            'actual_revenue'                  => $actualRevenue,
-            'actual_variable_costs'           => $actualVariableCosts,
-            'analyst_expected_revenue'        => $analystExpectedRevenue,
-            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit'                            => $ebit,
-            'primary_shock_z'                 => $primaryShockZ
-        ];
+        return new SectorPhysicsResult(
+            actualRevenue: $actualRevenue,
+            rawVariableMargin: $clampedMargin,
+            primaryShockZ: $primaryShockZ,
+            observableShockZ: $observableShockZ,
+            eventType: null,
+        );
+    }
+
+    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    {
+        // Regulated tariff schedules and EIA production data give analysts ~20% visibility.
+        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.20, errorStdDev: 0.05);
     }
 
     public function getMarginReversionSpeed(): float

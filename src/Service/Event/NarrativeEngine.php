@@ -67,6 +67,151 @@ class NarrativeEngine
                 "The Obsidian Desk at Black Swan initiates a coordinated liquidity squeeze on short sellers, triggering explosive market growth.",
                 "Black Swan forcefully recapitalizes distressed corporate assets, igniting a sudden and violent district-wide expansion."
             ]),
+            ShockEvent::VOLATILITY_SURGE => $this->getRandomPhrase([
+                "Record trading volumes driven by extreme market volatility resulted in massive fee generation.",
+                "Captured extraordinary commission and order-flow revenue amid heightened market volatility.",
+                "Trading desks surged as client volatility hedging drove record transaction volume."
+            ]),
+            ShockEvent::ADVISORY_CRASH => $this->getRandomPhrase([
+                "Suffered a steep decline in investment banking deal flow and advisory fees.",
+                "Experienced a severe advisory fee drought as corporate M&A activity ground to a halt.",
+                "Quarterly deal syndications dropped sharply amid tightening credit conditions."
+            ]),
+            ShockEvent::BIOTECH_DRUG_APPROVAL => $this->getRandomPhrase([
+                "Received landmark regulatory approval for a blockbuster specialty drug pipeline.",
+                "Secured accelerated regulatory clearance for a high-margin clinical therapeutic.",
+                "Phase III clinical success unlocked major commercial licensing milestones."
+            ]),
+            ShockEvent::BIOTECH_TRIAL_SETBACK => $this->getRandomPhrase([
+                "Suffered a major clinical trial setback and patent cliff generic erosion.",
+                "Lead pipeline therapeutic failed to meet efficacy endpoints, prompting asset write-downs.",
+                "Faced severe generic price competition following primary patent expiration."
+            ]),
+            ShockEvent::CLEARING_SYSTEMIC_DEFAULT => $this->getRandomPhrase([
+                "A massive systemic default breached the initial margin pool, forcing the clearinghouse to cover billions in toxic settlements.",
+                "Emergency default fund drawdowns were triggered after a member firm insolvency.",
+                "Absorbed significant member settlement losses during a violent liquidation cascade."
+            ]),
+            ShockEvent::CLEARING_PANIC_FEES => $this->getRandomPhrase([
+                "Record transaction volume driven by market panic generated massive clearing fees.",
+                "Heightened derivative clearing and margin re-hypothecation drove outsized fee income.",
+                "Capitalized on surge in intraday margin settlement volume across institutional desks."
+            ]),
+            ShockEvent::LUXURY_BRAND_DILUTION => $this->getRandomPhrase([
+                "Suffered brand dilution and inventory write-downs following a poorly received creative direction.",
+                "High-end retail foot traffic declined sharply, forcing promotional markdowns.",
+                "Experienced weakening pricing power across flagship luxury collections."
+            ]),
+            ShockEvent::LUXURY_CULTURAL_DOMINANCE => $this->getRandomPhrase([
+                "Captured immense global demand with a culturally dominant fashion collection.",
+                "Flagship luxury boutiques reported record full-price sell-through rates.",
+                "Brand desirability reached new highs, allowing aggressive price hikes across core lines."
+            ]),
+            ShockEvent::PRODUCT_RECALL => $this->getRandomPhrase([
+                "Suffered a massive product recall due to severe supply chain contamination.",
+                "Forced into a costly national product recall following quality inspection failures.",
+                "Faced sudden regulatory scrutiny and fines over product health concerns."
+            ]),
+            ShockEvent::SHIPPING_PORT_CONGESTION => $this->getRandomPhrase([
+                "Capitalized on severe global port congestion with record-breaking container spot rates.",
+                "Supply chain bottlenecks drove charter and freight spot yields to historical highs.",
+                "Captured massive premium surcharges amid global logistics constraints."
+            ]),
+            ShockEvent::SHIPPING_CAPACITY_GLUT => $this->getRandomPhrase([
+                "Suffered operating losses due to a severe global vessel capacity glut and collapsing freight rates.",
+                "Excess container tonnage pressured global spot charter rates lower.",
+                "Fleet utilization dropped as oversupply weighed on international shipping margins."
+            ]),
+            ShockEvent::SEMICONDUCTOR_FAB_SHORTAGE => $this->getRandomPhrase([
+                "Achieved 100% fab capacity utilization amid a global technological hardware shortage.",
+                "Soaring wafer pricing power and fully booked cleanroom lines drove record foundry margins.",
+                "High-performance compute demand triggered multi-year advanced node pre-orders."
+            ]),
+            ShockEvent::SEMICONDUCTOR_INVENTORY_CORRECTION => $this->getRandomPhrase([
+                "Suffered severe margin drag from underutilized cleanrooms during an industry inventory correction.",
+                "Customer destocking across consumer electronics reduced wafer shipment volumes.",
+                "Faced pricing pressure as downstream partners worked off excess chip inventories."
+            ]),
+            ShockEvent::REIT_TENANT_BANKRUPTCIES => $this->getRandomPhrase([
+                "Suffered a sudden wave of anchor tenant bankruptcies and commercial lease defaults.",
+                "Major commercial portfolio defaults required emergency lease restructurings.",
+                "Elevated tenant delinquencies and bad debt provisions weighed on quarterly NOI."
+            ]),
+            ShockEvent::REIT_ELEVATED_VACANCIES => $this->getRandomPhrase([
+                "Elevated commercial vacancies and unpaid rent impacted quarterly NOI.",
+                "Leasing velocity slowed as corporate occupiers downsized square footage.",
+                "Offering increased tenant improvement allowances squeezed net rental margins."
+            ]),
+            ShockEvent::CATASTROPHIC_CLAIM_LOSSES => $this->getRandomPhrase([
+                "Suffered catastrophic claim losses from a major systemic disaster.",
+                "Record weather and casualty claim events severely impacted quarterly combined ratio.",
+                "Reinsurance treaty attachments were triggered following severe insured catastrophe losses."
+            ]),
+            ShockEvent::ELEVATED_CLAIM_PAYOUTS => $this->getRandomPhrase([
+                "Elevated claim payouts negatively impacted quarterly underwriting margins.",
+                "Rising casualty claim severity frequency pressured underwriting profitability.",
+                "Saw higher-than-expected insurance loss reserves across commercial lines."
+            ]),
+            ShockEvent::PE_CARRIED_INTEREST_SURGE => $this->getRandomPhrase([
+                "Generated massive carried interest fees following a series of highly successful portfolio exits.",
+                "Landmark portfolio company IPO and strategic sales crystallized substantial carry.",
+                "Fund realizations exceeded hurdle rates, driving exceptional performance fee income."
+            ]),
+            ShockEvent::PE_DEAL_DROUGHT => $this->getRandomPhrase([
+                "Suffered a severe deal drought as frozen credit markets prevented portfolio exits.",
+                "Lack of debt financing stalled leveraged buyout deployment and exit realizations.",
+                "Extended portfolio holding periods delayed carried interest crystallization."
+            ]),
+            ShockEvent::DEFENSE_CONTRACT_LOSS => $this->getRandomPhrase([
+                "Lost a multi-billion dollar next-generation government defense contract to a rival.",
+                "Major aerospace program cancellation reduced forward backlog significantly.",
+                "Budgetary reallocation by defense procurement officials impacted quarterly order flow."
+            ]),
+            ShockEvent::DEFENSE_CONTRACT_WIN => $this->getRandomPhrase([
+                "Secured a massive, multi-decade international defense contract.",
+                "Awarded prime contractor status on a critical next-generation defense platform.",
+                "Surging geopolitical demand drove record order intake across munitions and systems."
+            ]),
+            ShockEvent::CREDIT_UNSECURED_PROVISIONS => $this->getRandomPhrase([
+                "Took massive provisions for unsecured credit defaults as consumer health deteriorated.",
+                "Rising consumer delinquency rates required substantial credit card loss reserves.",
+                "Wrote down unsecured loan balances amid deteriorating household cash flows."
+            ]),
+            ShockEvent::IB_REGULATORY_SETTLEMENT => $this->getRandomPhrase([
+                "Faced a major regulatory settlement, adding significant legal and compliance costs to the quarter.",
+                "Agreed to a high-profile compliance penalty, weighing heavily on non-interest expenses.",
+                "Incurred substantial litigation reserve charges following regulatory inquiries."
+            ]),
+            ShockEvent::IB_MNA_LANDMARK_MANDATE => $this->getRandomPhrase([
+                "Secured a landmark multi-billion dollar M&A advisory mandate, generating record quarterly fee income.",
+                "Led strategic M&A advisory on the quarter's largest megadeal, capturing outsized advisory retainers.",
+                "Top-ranked league table advisory performance drove exceptional fee generation."
+            ]),
+            ShockEvent::IB_MNA_MANDATE_LOSS => $this->getRandomPhrase([
+                "Lost a high-profile advisory mandate to a rival, triggering a sharp advisory revenue drought.",
+                "Key advisory clients postponed strategic transactions, depressing investment banking fees.",
+                "Experienced a sudden lull in completed advisory mandates."
+            ]),
+            ShockEvent::IB_MNA_SYNDICATION_BOOM => $this->getRandomPhrase([
+                "Orchestrated a massive wave of corporate mergers and IPO syndications, capturing record advisory fees.",
+                "Booming equity capital markets drove strong IPO underwriting and syndication revenue.",
+                "Coordinated landmark cross-border financing facilities for major enterprise clients."
+            ]),
+            ShockEvent::IB_DCM_UNDERWRITING_BOOM => $this->getRandomPhrase([
+                "A sharply steepening yield curve sparked a debt capital markets boom, driving record bond underwriting volumes.",
+                "Corporate refinancing wave boosted debt underwriting and origination fees.",
+                "Captured dominant market share in institutional bond issuance syndications."
+            ]),
+            ShockEvent::IB_PROP_TRADING_SURGE => $this->getRandomPhrase([
+                "Proprietary trading desks generated billions in market-making and arbitrage revenue during severe market panic.",
+                "Fixed income, currency, and commodities (FICC) trading desks captured record bid-ask spreads.",
+                "Macro trading desks capitalized on currency and interest rate volatility."
+            ]),
+            ShockEvent::DISTRESSED_DEBT_RESTRUCTURING => $this->getRandomPhrase([
+                "Executed massive restructuring deals on defaulted corporate debt, unlocking extraordinary turnaround gains.",
+                "Capitalized on corporate credit spread blowouts by acquiring senior debt at steep discounts.",
+                "Orchestrated successful debtor-in-possession restructurings across distressed assets."
+            ]),
             ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT => $this->getRandomPhrase([
                 "The Council unexpectedly deploys its Sovereign Wealth Fund, triggering a massive wave of frictionless economic expansion.",
                 "A sweeping new Council policy mandate drastically lowers corporate operating friction, accelerating growth across Glasswater Row.",

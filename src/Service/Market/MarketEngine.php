@@ -3,6 +3,7 @@
 namespace App\Service\Market;
 
 use App\Service\Macro\MacroEngine;
+use App\DTO\MacroStateDTO;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
@@ -59,7 +60,7 @@ class MarketEngine
      * @param float $reversionSpeed     The speed at which the price reverts to fair value.
      * @param float $kappa              The rate at which volatility reverts to the long-run mean.
      * @param float $volOfVol           The volatility of volatility (how much volatility fluctuates).
-     * @param array $macroState         The current macroeconomic state, which can influence the base drift.
+     * @param MacroStateDTO|null $macroState The current macroeconomic state, which can influence the base drift.
      * @param float $bookValuePerShare  The physical equity value per share.
      * @param float $totalDebt          The total debt on the balance sheet.
      * @param float $totalEquity        The total equity on the balance sheet.
@@ -83,7 +84,7 @@ class MarketEngine
         float $reversionSpeed = 0.25,
         float $kappa = 6.0,
         float $volOfVol = 0.3,
-        array $macroState = [],
+        ?MacroStateDTO $macroState = null,
         ?float $fcfPerShare = null,
         float $bookValuePerShare = 0.0,
         float $maShock = 0.0,
@@ -99,10 +100,10 @@ class MarketEngine
 
         // CAPM & MACRO TRANSMISSION MECHANISM
 
-        $riskFreeRate = $macroState['policy_rate'] ?? 0.04;
-        $outputGap = $macroState['output_gap'] ?? 0.0;
-        $inflation = $macroState['inflation'] ?? 0.02;
-        $erp = $macroState['equity_risk_premium'] ?? MacroEngine::BASE_EQUITY_RISK_PREMIUM;
+        $riskFreeRate = $macroState?->policyRate ?? 0.04;
+        $outputGap = $macroState?->outputGap ?? 0.0;
+        $inflation = $macroState?->inflation ?? 0.02;
+        $erp = $macroState?->equityRiskPremium ?? MacroEngine::BASE_EQUITY_RISK_PREMIUM;
 
         $finalDrift = $this->mathUtility->calculateCAPM($riskFreeRate, $beta, $erp);
 
@@ -127,9 +128,9 @@ class MarketEngine
         );
 
         $cycleVolModifier = 1.0;
-        if (!empty($macroState)) {
+        if ($macroState !== null) {
             // Positive output gap (boom) reduces vol slightly, negative gap (bust) increases vol
-            $cycleVolModifier = 1.0 - ($macroState['output_gap'] ?? 0.0);
+            $cycleVolModifier = 1.0 - $macroState->outputGap;
         }
 
         // Dynamically scale variance reversion speed (kappa) during jump diffusion regimes

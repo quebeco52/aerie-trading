@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Event\ShockEvent;
 
 /**
  * Earnings strategy for Consumer Staples (Food, Tobacco, Household Goods).
@@ -42,16 +44,9 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     public const RECALL_MODERATE_PENALTY   = 0.03;
 
     // --- Analyst Visibility & Error ---
-    /** Base analyst visibility into routine top-line consumer staples revenue shocks. */
-    public const REV_VISIBILITY_BASE       = 0.20;
-    /** Standard deviation of analyst estimation error for quarterly retail revenue shocks. */
-    public const REV_ERROR_STD_DEV         = 0.05;
-    /** Base analyst visibility into public product recalls and health regulatory scrutiny. */
-    public const RECALL_VISIBILITY_BASE    = 0.80;
-    /** Standard deviation of analyst estimation error for product recall financial impacts. */
-    public const RECALL_ERROR_STD_DEV      = 0.10;
+    // Moved to getCoverageProfile() — see MarketConsensusEngine.
 
-    // --- Retail Competition Moat ---
+    // --- Reversion & Working Capital ---
     /** Operating margin mean reversion speed: fast speed reflects intense retail price competition. */
     public const STAPLES_REVERSION_SPEED   = 5.0;
 
@@ -69,7 +64,7 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     /** Structural maximum operating margin ceiling for dominant global consumer staple brands. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.35;
 
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
             'branded_staples_weight'  => self::BRANDED_STAPLES_WEIGHT,
@@ -89,15 +84,15 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         // Tail Risk: Product Recalls and Health Regulations
         // Scaled proportionally to packaged branded consumer staples ($brandedWeight).
         $eventZ = $mathUtility->generateStandardNormal();
-        $eventLore = null;
+        $eventType = null;
         $recallPenalty = 0.0;
 
         if ($eventZ < self::RECALL_SEVERE_Z_SCORE) {
             $recallPenalty = self::RECALL_SEVERE_PENALTY * $brandedWeight;
-            $eventLore = "Suffered a massive product recall due to severe supply chain contamination.";
+            $eventType = ShockEvent::PRODUCT_RECALL;
         } elseif ($eventZ < self::RECALL_MODERATE_Z_SCORE) {
             $recallPenalty = self::RECALL_MODERATE_PENALTY * $brandedWeight;
-            $eventLore = "Faced sudden regulatory scrutiny and fines over product health concerns.";
+            $eventType = ShockEvent::REGULATORY_FINE;
         }
 
         $actualRevenue = max(0.0, $brandedRevenue + $volumeRevenue);
@@ -106,30 +101,31 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         // Fluctuations in bulk agricultural processing ($volumeZ) smoothly shift variable input costs.
         $commodityInputShift = self::COMMODITY_INPUT_ELASTICITY * $volumeZ * $volumeWeight;
 
-        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $recallPenalty + $commodityInputShift));
-        $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
-
-        // Analyst Visibility
-        // Recalls and regulatory fines are massive public news events (~80% visibility).
-        $revenueAnalystError = $mathUtility->generateStandardNormal() * self::REV_ERROR_STD_DEV;
-        $revenueVisibility = min(1.0, max(0.0, self::REV_VISIBILITY_BASE + $revenueAnalystError));
-        $analystExpectedRevenue = $expectedRevenue * (1.0 + (($brandedZ * $brandedWeight + $volumeZ * $volumeWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR) * $revenueVisibility));
-
-        $recallAnalystError = $mathUtility->generateStandardNormal() * self::RECALL_ERROR_STD_DEV;
-        $recallVisibility = min(1.0, max(0.0, self::RECALL_VISIBILITY_BASE + $recallAnalystError));
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + (($recallPenalty + $commodityInputShift) * $recallVisibility)));
+        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $recallPenalty + $commodityInputShift));
 
         $primaryShockZ = abs($eventZ) > abs($brandedZ) ? $eventZ : $brandedZ;
+        $observableShockZ = ($brandedZ * $brandedWeight + $volumeZ * $volumeWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
 
-        return [
-            'actual_revenue'                  => $actualRevenue,
-            'actual_variable_costs'           => $actualVariableCosts,
-            'analyst_expected_revenue'        => $analystExpectedRevenue,
-            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit'                            => $ebit,
-            'primary_shock_z'                 => $primaryShockZ,
-            'event_lore'                      => $eventLore
-        ];
+        return new SectorPhysicsResult(
+            actualRevenue: $actualRevenue,
+            rawVariableMargin: $clampedMargin,
+            primaryShockZ: $primaryShockZ,
+            observableShockZ: $observableShockZ,
+            eventType: $eventType,
+            isPublicEvent: $eventType !== null ? true : null,
+        );
+    }
+
+    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    {
+        // Retail scanner data: ~20% revenue visibility. Recalls are public events: ~80% cost visibility.
+        return new \App\DTO\SectorCoverageProfile(
+            baseVisibility:      0.20,
+            errorStdDev:         0.05,
+            minVisibility:       0.0,
+            eventBaseVisibility: 0.80,
+            eventMinVisibility:  0.0,
+        );
     }
 
     public function getMarginReversionSpeed(): float

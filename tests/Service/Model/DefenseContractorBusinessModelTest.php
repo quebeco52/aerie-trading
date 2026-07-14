@@ -23,7 +23,7 @@ class DefenseContractorBusinessModelTest extends TestCase
             ->willReturnOnConsecutiveCalls(2.0, 0.0, 0.0, 0.0);
 
         $macroState = ['inflation_ema' => 0.02];
-        $result = $model->generateIdiosyncraticShock(
+        $result = $model->computeActualFinancials(
             $stock,
             1000.0,
             0.65,
@@ -34,7 +34,7 @@ class DefenseContractorBusinessModelTest extends TestCase
         );
 
         // Strong contract performance reduces cost overruns -> actual variable costs lower than baseline 65%
-        $this->assertLessThan(1000.0 * 0.65, $result['actual_variable_costs']);
+        $this->assertLessThan(1000.0 * 0.65, $result->actualVariableCosts);
     }
 
     public function testClassifiedToolingAndNextGenPlatformReinvestment(): void

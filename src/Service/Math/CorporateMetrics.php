@@ -30,9 +30,10 @@ class CorporateMetrics
         return max(1.0, max($equity * 0.50, ($equity + $debt - $treasury)));
     }
 
-    public function calculateMarketSaturationPenalty(Stock $stock, float $investedCapital, array $macroState): float
+    public function calculateMarketSaturationPenalty(Stock $stock, float $investedCapital, \App\DTO\MacroStateDTO|array $macroState): float
     {
-        $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
+        $dto = $macroState instanceof \App\DTO\MacroStateDTO ? $macroState : \App\DTO\MacroStateDTO::fromArray($macroState);
+        $nominalGdpIndex = $dto->nominalGdpIndex;
         $samRatio = (float) $stock->getSamRatio();
         $marketShare = $this->calculateMarketShare($investedCapital, $nominalGdpIndex, $samRatio);
 

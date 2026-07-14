@@ -118,6 +118,12 @@ class Stock
     private string $creditSpread = '0.0100';
 
     /**
+     * @var string Alphanumeric credit rating assigned by CreditRatingAgency (e.g. AAA, BBB, CCC, D).
+     */
+    #[ORM\Column(type: Types::STRING, length: 4, options: ['default' => 'BBB'])]
+    private string $creditRating = 'BBB';
+
+    /**
      * @var string The percentage of Total Debt that is subject to variable/floating interest rates.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.3000'])]
@@ -609,6 +615,18 @@ class Stock
     public function setCreditSpread(string $creditSpread): static
     {
         $this->creditSpread = self::cleanBcStr($creditSpread, 4);
+
+        return $this;
+    }
+
+    public function getCreditRating(): string
+    {
+        return $this->creditRating;
+    }
+
+    public function setCreditRating(string $creditRating): static
+    {
+        $this->creditRating = $creditRating;
 
         return $this;
     }

@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
+use App\Service\Event\ShockEvent;
 use App\Service\Math\FinancialConstants;
 
 /**
@@ -14,8 +16,10 @@ use App\Service\Math\FinancialConstants;
  * 
  * Financial Physics:
  * - Revenue scales off transaction volume (benefiting from high VIX / Market Panics).
- * - Holds massive "Initial Margin" deposits from members, earning overnight repo rates.
- * - Carries extreme apocalyptic tail risk: if members default simultaneously, the CCP must cover the trades.
+ * - Holds segregated Initial Margin deposits from members, earning net custody spreads.
+ * - Unlike insurers, margin inflows/outflows are pass-through custody movements and do not impact equity.
+ * - Carries extreme tail risk governed by a statutory Default Waterfall: routine member defaults are absorbed
+ *   by member collateral/guaranty funds ($0 loss to CCP), while systemic defaults pierce Skin-in-the-Game (SITG) capital.
  */
 class ClearingHouseBusinessModel extends AbstractBusinessModel
 {
@@ -25,6 +29,8 @@ class ClearingHouseBusinessModel extends AbstractBusinessModel
 
     /** Net custody interest spread (15 bps) earned on member initial margin deposits. */
     public const MARGIN_POOL_CUSTODY_SPREAD = 0.0015;
+    /** Share of prevailing money-market yield retained by clearinghouse on member margin float (15%). */
+    public const MARGIN_POOL_YIELD_RETENTION_SHARE = 0.15;
 
     // --- VIX & Transaction Volume Bonus ---
     /** Baseline VIX threshold above which volatility expands clearing transaction volume. */
@@ -53,12 +59,9 @@ class ClearingHouseBusinessModel extends AbstractBusinessModel
     public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
     // --- Analyst Visibility & Error ---
-    /** Base analyst visibility into systemic clearing defaults prior to quarterly earnings. */
-    public const ANALYST_BASE_VISIBILITY = 0.10;
-    /** Standard deviation of analyst estimation error for catastrophe losses. */
-    public const ANALYST_ERROR_STD_DEV   = 0.05;
+    // Moved to getCoverageProfile() — see MarketConsensusEngine.
 
-    // --- Clearinghouse Liquidity Rules ---
+    // --- Clearing Pool & Margin Physics ---
     /** Required cash backing fraction for customer margin liabilities. */
     public const LIABILITY_CASH_BACKING  = 1.00;
     /** Target operating cash reserve ratio applied to corporate operating base. */
@@ -93,7 +96,7 @@ class ClearingHouseBusinessModel extends AbstractBusinessModel
     // --- Monopoly Valuation Moat ---
     /** Operating margin mean reversion speed: slower speed reflects toll-booth monopoly pricing power. */
     public const MONOPOLY_REVERSION_SPEED = 2.0;
-    public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array
+    public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
         $equity = (float) $stock->getTotalEquity();
         $effectiveEquity = max(1.0, $equity);
@@ -108,7 +111,7 @@ class ClearingHouseBusinessModel extends AbstractBusinessModel
             $baselineRoe = ($baselineRoe * 0.70) + ($ttmRoe * 0.30);
         }
 
-        $taxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $taxRate = $macroState->corporateTaxRate;
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
         // 1. Target Net Income and EBT required to achieve ROE
@@ -116,12 +119,12 @@ class ClearingHouseBusinessModel extends AbstractBusinessModel
         $optimalEbt = $optimalNetIncome / (1.0 - $taxRate);
 
         // 2. Non-operating corporate treasury interest and debt expense
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        $policyRate = $macroState->policyRateEma;
         $ownCashIncome = $this->calculateInterestIncome($stock, $macroState, $mathUtility);
 
         $corporateDebt = (float) $stock->getWholesaleDebt();
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
-        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + 0.005);
+        $yield5y = $macroState->yield5yEma;
         $structuralSpread = (float) $stock->getCreditSpread();
         $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
         $optimalInterestExpense = $corporateDebt * $blendedWholesaleRate;
@@ -141,63 +144,79 @@ class ClearingHouseBusinessModel extends AbstractBusinessModel
         ];
     }
 
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $revenueZ = $mathUtility->generateStandardNormal();
+        $dataZ    = $mathUtility->generateStandardNormal(); // Separate Z-score for sticky data subscriptions
+
         $params = $this->resolveModelParameters($stock, [
-            'clearing_fee_weight' => 0.65,
-            'custody_data_weight' => 0.35,
+            'clearing_fee_weight' => 0.55,
+            'custody_float_weight' => 0.20,
+            'data_subscription_weight' => 0.25,
         ]);
         $clearingWeight = $params['clearing_fee_weight'];
-        $custodyWeight  = $params['custody_data_weight'];
+        $custodyWeight  = $params['custody_float_weight'];
+        $dataWeight     = $params['data_subscription_weight'];
 
         // The Volatility Bonus (Transaction Volume):
         // Clearinghouses thrive on sheer volume. Market panics = massive liquidations = massive fees.
-        $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? self::VIX_BASELINE_THRESHOLD);
+        $vixEma = $macroState->marketVolatilityEma;
         $volatilityBonus = max(0.0, ($vixEma - self::VIX_BASELINE_THRESHOLD) * self::VIX_REVENUE_SCALAR);
 
-        $clearingRevenue = $expectedRevenue * $clearingWeight * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $volatilityBonus);
-        $custodyRevenue  = $expectedRevenue * $custodyWeight * (1.0 + ($revenueZ * ($baselineVol * 0.3)));
-        $actualRevenue   = max(0.0, $clearingRevenue + $custodyRevenue);
+        // NEW: Interest Rate Volatility Bonus. If the yield curve is violently steepening or inverting, IRS clearing volumes spike.
+        $yieldCurveSlope = abs($macroState->yield10yEma - $macroState->yield2yEma);
+        $ratesVolBonus = $yieldCurveSlope > 0.005 ? ($yieldCurveSlope - 0.005) * 2.0 : 0.0;
 
-        // The Default Fund Shock (Catastrophic Tail Risk)
+        $totalMacroBonus = $volatilityBonus + $ratesVolBonus;
+
+        // 1. Clearing Revenue (Highly cyclical, gets the Vol and Rates bonus)
+        $clearingRevenue = $expectedRevenue * $clearingWeight * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $totalMacroBonus);
+        // 2. Custody Revenue (Tied somewhat to volume/Z-score but no macro bonus)
+        $custodyRevenue  = $expectedRevenue * $custodyWeight * (1.0 + ($revenueZ * ($baselineVol * 0.3)));
+        // 3. NEW: Data & Analytics Revenue (Highly sticky SaaS revenue, immune to trading panics)
+        $dataRevenue     = $expectedRevenue * $dataWeight * (1.0 + ($dataZ * ($baselineVol * 0.05)));
+
+        $actualRevenue   = max(0.0, $clearingRevenue + $custodyRevenue + $dataRevenue);
+
+        // The CCP Default Waterfall (Catastrophic Tail Risk)
         $defaultZ = $mathUtility->generateStandardNormal();
 
-        // Tail risk: if multiple titans default simultaneously, the clearinghouse eats the loss.
-        $catastropheShock = $defaultZ < self::CATASTROPHE_Z_THRESHOLD ? abs($defaultZ) * self::CATASTROPHE_LOSS_SCALAR : ($defaultZ > self::HEALTHY_CREDIT_Z_FLOOR ? self::HEALTHY_CREDIT_BONUS : 0.0);
+        // Under the Default Waterfall, routine member defaults ($defaultZ >= CATASTROPHE_Z_THRESHOLD) are fully absorbed
+        // by the defaulting member's posted Initial Margin and Guaranty Fund contribution ($0 loss to CCP equity).
+        // Only a severe systemic failure pierces the waterfall to hit the CCP's Skin-in-the-Game (SITG) capital tranche.
+        $catastropheShock = $defaultZ < self::CATASTROPHE_Z_THRESHOLD
+            ? abs($defaultZ - self::CATASTROPHE_Z_THRESHOLD) * self::CATASTROPHE_LOSS_SCALAR
+            : ($defaultZ > self::HEALTHY_CREDIT_Z_FLOOR ? self::HEALTHY_CREDIT_BONUS : 0.0);
 
-        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $catastropheShock));
+        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $catastropheShock));
 
-        $eventLore = null;
+        $eventType = null;
         if ($defaultZ < self::LORE_DEFAULT_Z_THRESHOLD) {
-            $eventLore = "A massive systemic default breached the initial margin pool, forcing the clearinghouse to cover billions in toxic settlements.";
+            $eventType = ShockEvent::CLEARING_SYSTEMIC_DEFAULT;
         } elseif ($vixEma > self::VIX_EXTREME_THRESHOLD) {
-            $eventLore = "Record transaction volume driven by market panic generated massive clearing fees.";
+            $eventType = ShockEvent::VOLATILITY_SURGE;
         }
 
-        // Analyst Visibility
-        // Volatility is fully public. Systemic clearing defaults are partially rumored before earnings (10% visibility).
-        $analystExpectedRevenue = $expectedRevenue * (1.0 + $volatilityBonus);
-        $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
-        $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
-        $expectedCatastropheShock = $catastropheShock * $dynamicVisibility;
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $expectedCatastropheShock));
-
-        return [
-            'actual_revenue' => $actualRevenue,
-            'actual_variable_costs' => $actualVariableCosts,
-            'analyst_expected_revenue' => $analystExpectedRevenue,
-            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit' => $actualRevenue - $fixedCosts - $actualVariableCosts,
-            'primary_shock_z' => abs($defaultZ) > abs($revenueZ) ? $defaultZ : $revenueZ,
-            'event_lore' => $eventLore
-        ];
+        return new SectorPhysicsResult(
+            actualRevenue: $actualRevenue,
+            rawVariableMargin: $clampedMargin,
+            primaryShockZ: abs($defaultZ) > abs($revenueZ) ? $defaultZ : $revenueZ,
+            // Systemic defaults are largely opaque until they occur; analysts see only macro stress signals.
+            observableShockZ: 0.0,
+            eventType: $eventType,
+        );
     }
 
-    public function getMacroPhysics(Stock $stock, array &$macroState): array
+    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    {
+        // Systemic defaults partially rumored before earnings (~10% visibility).
+        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.10, errorStdDev: 0.05);
+    }
+
+    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         // Volatility is the primary macro driver for clearinghouses.
-        $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? self::VIX_BASELINE_THRESHOLD);
+        $vixEma = $macroState->marketVolatilityEma;
         $volatilityShift = ($vixEma - self::VIX_BASELINE_THRESHOLD) * self::VIX_POOL_GROWTH_SCALAR; // High VIX = Higher Demand for clearing
 
         return [
@@ -206,16 +225,26 @@ class ClearingHouseBusinessModel extends AbstractBusinessModel
         ];
     }
 
-    public function calculateInterestIncome(Stock $stock, array &$macroState, MathUtility $mathUtility): float
+    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): float
     {
         // Non-operating interest income is earned on surplus corporate cash ($ownCash).
-        // Additionally, the clearinghouse earns a reliable 15 bps custody net spread on member initial margin deposits ($marginPool).
+        // Additionally, the clearinghouse earns a 15 bps base custody spread plus a dynamic retention
+        // share of prevailing short-term yields on member initial margin deposits ($marginPool).
         $cash = (float) $stock->getCorporateTreasury();
         $marginPool = (float) $stock->getCustomerDeposits();
         $ownCash = max(0.0, $cash - $marginPool);
 
-        $ownCashYield = $ownCash * $this->calculateCashYield($macroState);
-        $marginPoolYield = $marginPool * self::MARGIN_POOL_CUSTODY_SPREAD;
+        $cashYield = $this->calculateCashYield($macroState);
+        $ownCashYield = $ownCash * $cashYield;
+
+        // NEW: The ZIRP Trap. If policy rates are near zero (< 1%), the CCP waives yield retention
+        // to prevent member cash drag. If rates are high, they capture their full 15% share.
+        $policyRate = $macroState->policyRateEma;
+        $retentionMultiplier = min(1.0, max(0.0, ($policyRate - 0.01) / 0.03));
+        $dynamicRetentionShare = self::MARGIN_POOL_YIELD_RETENTION_SHARE * $retentionMultiplier;
+
+        $effectiveCustodySpread = self::MARGIN_POOL_CUSTODY_SPREAD + ($cashYield * $dynamicRetentionShare);
+        $marginPoolYield = $marginPool * $effectiveCustodySpread;
 
         return $ownCashYield + $marginPoolYield;
     }
@@ -237,14 +266,13 @@ class ClearingHouseBusinessModel extends AbstractBusinessModel
         ];
     }
 
-    public function calculateCashYield(array &$macroState): float
+    public function calculateCashYield(\App\DTO\MacroStateDTO $macroState): float
     {
-        // Clearinghouses cannot take equity risk, but they do park margin in short-duration 
-        // government bonds (up to 2 years) to capture slight duration premiums over overnight rates.
-        $policyRate = $macroState['policy_rate_ema'] ?? ($macroState['policy_rate'] ?? 0.04);
-        $yield2y = $macroState['yield_2y_ema'] ?? ($macroState['yield_2y'] ?? $policyRate);
+        // Clearinghouses park member margin and operating reserves in overnight Central Bank deposit accounts
+        // (IORB / Fed RRP) due to daily margin liquidity requirements, earning the overnight policy rate.
+        $policyRate = $macroState->policyRateEma;
 
-        return max(0.0, $yield2y - MacroEngine::CASH_YIELD_SPREAD);
+        return max(0.0, $policyRate);
     }
 
     /**
@@ -269,7 +297,7 @@ class ClearingHouseBusinessModel extends AbstractBusinessModel
         return ($currentLiability * self::LIABILITY_CASH_BACKING) + ($operatingBase * self::MIN_OPERATING_BUFFER);
     }
 
-    public function processPassiveLiabilityGrowth(Stock $stock, array &$macroState, array &$state, MathUtility $mathUtility): void
+    public function processPassiveLiabilityGrowth(Stock $stock, \App\DTO\MacroStateDTO $macroState, array &$state, MathUtility $mathUtility): void
     {
         $currentLiabilities = $state['customerDeposits'];
         if ($currentLiabilities <= 0.0) {
@@ -277,18 +305,27 @@ class ClearingHouseBusinessModel extends AbstractBusinessModel
         }
 
         // 1. Annualized Systemic Growth quarterized
-        $inflation = $macroState['inflation_ema'] ?? 0.02;
-        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
+        $inflation = $macroState->inflationEma;
+        $outputGap = $macroState->outputGapEma;
         $realGdpGrowth = self::BASE_GDP_GROWTH_RATE + ($outputGap > 0.0 ? $outputGap * self::EXPANSION_GDP_MULT : $outputGap * self::RECESSION_GDP_MULT);
         $systemicGrowthQuarterly = ($inflation + $realGdpGrowth) / 4.0;
 
-        // 2. Volatility Elasticity (Quarterized so calm markets don't cause annual double-digit drain)
-        $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? self::VIX_BASELINE_THRESHOLD);
-        $volatilityShiftQuarterly = (($vixEma - self::VIX_BASELINE_THRESHOLD) * self::VIX_POOL_GROWTH_SCALAR) / 4.0;
+        // 2. Procyclical Asymmetric Margin Calls
+        // If VIX is high, CCPs issue aggressive, rapid margin calls (causing massive deposit inflows).
+        // If VIX drops, they release margin collateral very slowly to remain cautious.
+        $vixEma = $macroState->marketVolatilityEma;
+        $vixDelta = $vixEma - self::VIX_BASELINE_THRESHOLD;
+        if ($vixDelta > 0) {
+            $volatilityShiftQuarterly = $vixDelta * self::VIX_POOL_GROWTH_SCALAR;
+        } else {
+            $volatilityShiftQuarterly = ($vixDelta * self::VIX_POOL_GROWTH_SCALAR) / 4.0;
+        }
 
         $baseGrowth = $systemicGrowthQuarterly + $volatilityShiftQuarterly;
         $noise = $mathUtility->generateStandardNormal() * self::POOL_GROWTH_NOISE_STD;
-        $growthRate = max(-self::MAX_POOL_CHANGE_CLAMP, min(self::MAX_POOL_CHANGE_CLAMP, $baseGrowth + $noise));
+
+        // Allow higher upward clamps for panic margin calls, but restrict downward clamps
+        $growthRate = max(-self::MAX_POOL_CHANGE_CLAMP, min(self::MAX_POOL_CHANGE_CLAMP * 1.5, $baseGrowth + $noise));
 
         $liabilityChange = $currentLiabilities * $growthRate;
 
@@ -303,7 +340,6 @@ class ClearingHouseBusinessModel extends AbstractBusinessModel
 
             $stock->setCustomerDeposits((string) max(0.0, $state['customerDeposits']));
 
-            // Only generate lore for significant margin pool movements (>5% quarterly shift)
             $changePct = $liabilityChange / $currentLiabilities;
             if ($changePct < -self::LORE_POOL_CHANGE_THRESHOLD) {
                 $amtB = number_format(abs($liabilityChange) / 1_000_000_000, 2);
@@ -350,10 +386,10 @@ class ClearingHouseBusinessModel extends AbstractBusinessModel
         $excessCash = max(0.0, $treasury - $targetCashReserves);
         return [
             'excess_cash'     => $excessCash,
-            // A clearinghouse holds massive member margin liabilities ($totalDebt). Comparing excess cash against operatingBase
-            // falsely triggers hoarder buyback flags. We evaluate hoarding status relative to total liabilities.
-            'is_hoarder'      => $excessCash > ($totalDebt * 0.25),
-            'is_mega_hoarder' => $excessCash > ($totalDebt * 0.40),
+            // A clearinghouse holds segregated member margin liabilities and statutory liquidity buffer.
+            // It should never be flagged as a corporate cash hoarder for buyback or aggressive deleveraging sweeps.
+            'is_hoarder'      => false,
+            'is_mega_hoarder' => false,
         ];
     }
 }

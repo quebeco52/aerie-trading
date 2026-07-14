@@ -42,6 +42,14 @@ class FinancialConstants
     public const HOARDER_THRESHOLD_RATIO = 0.25;
     public const MEGA_HOARDER_THRESHOLD_RATIO = 0.40;
 
+    // --- Gordon Growth & Perpetual Valuation Bounds ---
+    /** Absolute minimum hurdle rate (~4% COE) to prevent Gordon Growth divergence under extreme distress. */
+    public const MIN_COST_OF_EQUITY = 0.04;
+    /** Absolute perpetual growth floor (-5%) for contracting or liquidation-stage firms. */
+    public const MIN_PERPETUAL_GROWTH_RATE = -0.05;
+    /** Absolute perpetual growth ceiling (6%) to prevent exceeding long-term nominal GDP growth. */
+    public const MAX_PERPETUAL_GROWTH_RATE = 0.06;
+
     // --- Valuations ---
     public const BASELINE_MARKET_PE = 15.0;
     public const NEGATIVE_EPS_FALLBACK_PE = 35.0; // Legacy fallback, transitioning to P/S

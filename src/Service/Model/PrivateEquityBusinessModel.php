@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Event\ShockEvent;
 
 /**
  * Earnings strategy for Private Equity & Alternative Asset Managers.
@@ -53,12 +55,9 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     public const LORE_BUST_Z_SCORE         = -1.50;
 
     // --- Analyst Visibility & Error ---
-    /** Base analyst visibility into opaque portfolio exits and carried interest fees. */
-    public const ANALYST_BASE_VISIBILITY   = 0.20;
-    /** Standard deviation of analyst estimation error for quarterly carried interest revenue. */
-    public const ANALYST_ERROR_STD_DEV     = 0.05;
+    // Moved to getCoverageProfile() — see MarketConsensusEngine.
 
-    // --- Buybacks & Capital Deployment ---
+    // --- PE Deal Flow & LBO Drag Physics ---
     /** Fraction of excess cash allocated to buybacks for mega-hoarder private equity firms. */
     public const MEGA_BUYBACK_CASH_SHARE   = 0.30;
     /** Fraction of excess cash allocated to buybacks for standard private equity firms. */
@@ -98,7 +97,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     /** Weight given to historical trailing twelve-month ROE when updating ROE EMA. */
     public const ROE_TTM_HIST_WEIGHT       = 0.80;
 
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $revenueZ = $mathUtility->generateStandardNormal();
 
@@ -110,13 +109,13 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $carryWeight = $params['carried_interest_weight'];
 
         // 1. GDP Deal Flow Multiplier:
-        $outputGap = $macroState['output_gap_ema'] ?? ($macroState['output_gap'] ?? 0.0);
+        $outputGap = $macroState->outputGapEma;
         $dealFlowMultiplier = $outputGap > 0.0 ? ($outputGap * self::DEAL_FLOW_BOOM_MULT) : ($outputGap * self::DEAL_FLOW_BUST_MULT);
 
         // 2. LBO Financing Freeze Drag (Credit Spread & Policy Rate):
         // Carried interest crystallization freezes when leveraged debt markets widen or short rates spike.
-        $creditSpread = $macroState['macro_credit_spread_ema'] ?? ($macroState['macro_credit_spread'] ?? self::LBO_CREDIT_SPREAD_BASELINE);
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        $creditSpread = $macroState->macroCreditSpreadEma;
+        $policyRate = $macroState->policyRateEma;
 
         $spreadFreezeDrag = max(0.0, ($creditSpread - self::LBO_CREDIT_SPREAD_BASELINE) * self::LBO_SPREAD_FREEZE_SCALAR);
         $rateFreezeDrag = max(0.0, ($policyRate - self::LBO_RATE_FREEZE_THRESHOLD) * self::LBO_RATE_FREEZE_SCALAR);
@@ -129,31 +128,30 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         // 3. Structural Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
         $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max($minVariableMargin, $realizedVariableMargin));
-        $actualVariableCosts = $actualRevenue * $clampedMargin;
 
-        $eventLore = null;
+        $eventType = null;
         if ($outputGap > self::LORE_BOOM_GAP_THRESHOLD && $revenueZ > self::LORE_BOOM_Z_SCORE && $lboFinancingDrag === 0.0) {
-            $eventLore = "Generated massive carried interest fees following a series of highly successful portfolio exits.";
+            $eventType = ShockEvent::PE_CARRIED_INTEREST_SURGE;
         } elseif (($outputGap < self::LORE_BUST_GAP_THRESHOLD && $revenueZ < self::LORE_BUST_Z_SCORE) || $lboFinancingDrag > 0.10) {
-            $eventLore = "Suffered a severe deal drought as frozen credit markets prevented portfolio exits.";
+            $eventType = ShockEvent::PE_DEAL_DROUGHT;
         }
 
-        // Analyst Visibility
-        // Macro GDP and credit spread drags are public (~100% visible), individual exits are opaque (~20% visible).
-        $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
-        $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
-        $analystExpectedRevenue = max(0.0, $expectedRevenue * (1.0 + $dealFlowMultiplier - $lboFinancingDrag + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR) * $dynamicVisibility)));
-        $analystExpectedVariableCosts = $analystExpectedRevenue * $clampedMargin;
+        // observableShockZ: macro deal flow and LBO drag are public; idiosyncratic exit timing is ~20% visible
+        $observableShockZ = $dealFlowMultiplier - $lboFinancingDrag + $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
 
-        return [
-            'actual_revenue'                  => $actualRevenue,
-            'actual_variable_costs'           => $actualVariableCosts,
-            'analyst_expected_revenue'        => $analystExpectedRevenue,
-            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit'                            => $actualRevenue - $fixedCosts - $actualVariableCosts,
-            'primary_shock_z'                 => $revenueZ,
-            'event_lore'                      => $eventLore
-        ];
+        return new SectorPhysicsResult(
+            actualRevenue: $actualRevenue,
+            rawVariableMargin: $clampedMargin,
+            primaryShockZ: $revenueZ,
+            observableShockZ: $observableShockZ,
+            eventType: $eventType,
+        );
+    }
+
+    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    {
+        // Macro GDP and credit spread drags are public; individual exits are opaque (~20% visible).
+        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.20, errorStdDev: 0.05);
     }
 
     public function calculateMaxBuybackSpend(float $excessCash, float $retainedEarningsThisQuarter, bool $isMegaHoarder): float
@@ -199,8 +197,12 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         return max($operatingBase * self::MIN_OPERATING_BUFFER, $wholesaleDebt * self::MIN_OPERATING_BUFFER);
     }
 
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate): float
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08): float
     {
+        $industry = $stock->getIndustry() ?: 'General';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $kappa = \App\Data\Sectors::getModelThresholds($businessModel)['reversion_speed'] ?? 0.18;
+
         $equity = (float) $stock->getTotalEquity();
         $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * self::ROE_ANNUALIZATION_MULT : 0.0;
 
@@ -210,6 +212,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         // Use a 0.20 smoothing factor to prevent violent P/E whipsaws during deal droughts.
         $oldTtm = (float) $stock->getRoeTtm();
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::ROE_TTM_EMA_WEIGHT) + ($oldTtm * self::ROE_TTM_HIST_WEIGHT);
+        $newTtm += $kappa * ($wacc - $newTtm) * 0.25;
         $stock->setRoeTtm((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;

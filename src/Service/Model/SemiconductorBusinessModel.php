@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 
 /**
@@ -61,12 +63,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
     // --- Analyst Visibility & Error ---
-    /** Base analyst visibility into semiconductor lead times and wafer shipments. */
-    public const ANALYST_BASE_VISIBILITY   = 0.60;
-    /** Minimum allowable analyst visibility floor for global supply chain tracking. */
-    public const MIN_ANALYST_VISIBILITY    = 0.40;
-    /** Standard deviation of analyst estimation error for quarterly foundry sales. */
-    public const ANALYST_ERROR_STD_DEV     = 0.05;
+    // Moved to getCoverageProfile() — see MarketConsensusEngine.
 
     // --- Capital Intensity Moat & Capital Structure ---
     /** Operating margin mean reversion speed: slower speed reflects massive capital barriers to entry. */
@@ -88,10 +85,10 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     /** Structural maximum operating margin ceiling for state-of-the-art modernized fabs. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.38;
 
-    public function getMacroPhysics(Stock $stock, array &$macroState): array
+    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
-        $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
+        $outputGap = $macroState->outputGapEma;
+        $inflation = $macroState->inflationEma;
         $beta = (float) $stock->getBeta();
 
         // Semiconductors are highly cyclical and levered to global tech capital expenditure cycles
@@ -101,7 +98,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         ];
     }
 
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
             'foundry_revenue_weight' => self::FOUNDRY_REVENUE_WEIGHT,
@@ -118,17 +115,17 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         // Fab Utilization Leverage & Tech Super-Cycles
         // Crucially, capacity utilization leverage applies to physical fab manufacturing ($foundryWeight),
         // while fabless IP licensing scales independently with tech demand.
-        $outputGap = $macroState['output_gap_ema'] ?? ($macroState['output_gap'] ?? 0.0);
+        $outputGap = $macroState->outputGapEma;
         $utilizationMultiplier = 0.0;
-        $eventLore = null;
+        $eventType = null;
 
         $cycleZ = $mathUtility->generateStandardNormal();
         if ($outputGap > self::BOOM_GAP_THRESHOLD && $cycleZ > self::BOOM_Z_SCORE_THRESHOLD) {
             $utilizationMultiplier = $outputGap * self::BOOM_UTILIZATION_MULT;
-            $eventLore = "Achieved 100% fab capacity utilization amid a global technological hardware shortage.";
+            $eventType = ShockEvent::SEMICONDUCTOR_FAB_SHORTAGE;
         } elseif ($outputGap < self::GLUT_GAP_THRESHOLD && $cycleZ < self::GLUT_Z_SCORE_THRESHOLD) {
             $utilizationMultiplier = $outputGap * self::GLUT_UTILIZATION_MULT;
-            $eventLore = "Suffered severe margin drag from underutilized cleanrooms during an industry inventory correction.";
+            $eventType = ShockEvent::SEMICONDUCTOR_INVENTORY_CORRECTION;
         }
 
         $foundryRevenue = $expectedRevenue * $foundryWeight * (1.0 + ($foundryZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $utilizationMultiplier);
@@ -144,27 +141,25 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
             $yieldModifier = self::WAFER_SCRAP_PENALTY * $foundryWeight; // Scaled by foundry weight
         }
 
-        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $yieldModifier));
-        $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
-
-        // Analyst Visibility
-        // Semiconductor lead times and wafer shipments are closely monitored by supply chain analysts (~60% visibility).
-        $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
-        $dynamicVisibility = min(1.0, max(self::MIN_ANALYST_VISIBILITY, self::ANALYST_BASE_VISIBILITY + $analystError));
-        $analystExpectedRevenue = $expectedRevenue * (1.0 + (($foundryZ * $foundryWeight + $utilizationMultiplier * $foundryWeight) * $dynamicVisibility));
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + ($yieldModifier * $dynamicVisibility)));
+        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $yieldModifier));
 
         $primaryShockZ = abs($cycleZ) > abs($foundryZ) ? $cycleZ : $foundryZ;
+        // observableShockZ: foundry demand visible via wafer shipment lead times and supply chain checks
+        $observableShockZ = $foundryZ * $foundryWeight + $utilizationMultiplier * $foundryWeight;
 
-        return [
-            'actual_revenue'                  => $actualRevenue,
-            'actual_variable_costs'           => $actualVariableCosts,
-            'analyst_expected_revenue'        => $analystExpectedRevenue,
-            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit'                            => $ebit,
-            'primary_shock_z'                 => $primaryShockZ,
-            'event_lore'                      => $eventLore
-        ];
+        return new SectorPhysicsResult(
+            actualRevenue: $actualRevenue,
+            rawVariableMargin: $clampedMargin,
+            primaryShockZ: $primaryShockZ,
+            observableShockZ: $observableShockZ,
+            eventType: $eventType,
+        );
+    }
+
+    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    {
+        // Wafer shipment lead times and supply chain checks give ~60% visibility (40% floor).
+        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.60, errorStdDev: 0.05, minVisibility: 0.40);
     }
 
     public function getMarginReversionSpeed(): float

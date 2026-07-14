@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 
 /**
@@ -33,9 +35,9 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
     // --- EBIT Yield & ROIC Blending ---
     /** Weight given to historical target EBIT yield when blending with TTM ROIC. */
-    public const TARGET_EBIT_WEIGHT         = 0.70;
+    public const TARGET_EBIT_WEIGHT         = 0.50;
     /** Weight given to TTM ROIC when blending with historical target EBIT yield. */
-    public const TTM_ROIC_WEIGHT            = 0.30;
+    public const TTM_ROIC_WEIGHT            = 0.50;
     /** Annualization multiplier applied to quarterly Net Operating Income (NOI). */
     public const ROIC_ANNUALIZATION_MULT    = 4.00;
     /** Minimum allowable ROIC floor to prevent catastrophic negative overflow. */
@@ -78,12 +80,9 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public const LORE_ELEVATED_VACANCY_Z    = -1.50;
 
     // --- Analyst Visibility & Error ---
-    /** Base analyst visibility into tenant vacancies and lease renewals prior to quarterly earnings. */
-    public const ANALYST_BASE_VISIBILITY    = 0.70;
-    /** Standard deviation of analyst estimation error for quarterly tenant occupancy and default rates. */
-    public const ANALYST_ERROR_STD_DEV      = 0.10;
+    // Moved to getCoverageProfile() — see MarketConsensusEngine.
 
-    // --- Tax & Interest Coverage Rails ---
+    // --- REIT Reversion & Valuation ---
     /** Effective entity-level corporate tax rate for pass-through Real Estate Investment Trusts. */
     public const PASS_THROUGH_TAX_RATE      = 0.00;
     /** Infinite positive interest coverage fallback when interest expense is zero. */
@@ -123,14 +122,14 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
      * Real Estate Cap Rates are deeply tied to the 10-Year Treasury Yield.
      * As rates rise, property values effectively drop, demanding a higher yield.
      */
-    public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array
+    public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
         $investedCapital = $stock->getInvestedCapital();
         $baselineRoic = max(0.01, (float) $stock->getBaselineRoic());
 
         // Real Estate Cap Rates are deeply tied to the 10-Year Treasury Yield plus a risk premium.
-        $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['yield_10y'] ?? self::DEFAULT_10Y_YIELD_FALLBACK);
-        $realEstateRiskPremium = $macroState['equity_risk_premium'] ?? MacroEngine::BASE_EQUITY_RISK_PREMIUM;
+        $yield10y = $macroState->yield10yEma;
+        $realEstateRiskPremium = $macroState->equityRiskPremium;
         $targetCapRate = $yield10y + $realEstateRiskPremium;
 
         // Baseline DNA change over time, but at a realistic physical rate.
@@ -138,7 +137,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         // This means a REIT only turns over about 2.5% of its portfolio per quarter.
         // If they do a bad M&A, they will be punished for YEARS before leases expire and reset to market rates!
         $portfolioTurnoverRate = self::PORTFOLIO_TURNOVER_RATE;
-        $maxCapRate = max(self::MAX_CAP_RATE_CLAMP, ($macroState['yield_10y_ema'] ?? self::DEFAULT_10Y_YIELD_FALLBACK) + self::CAP_RATE_CEILING_SPREAD);
+        $maxCapRate = max(self::MAX_CAP_RATE_CLAMP, $macroState->yield10yEma + self::CAP_RATE_CEILING_SPREAD);
         $blendedCapRate = min($maxCapRate, ($baselineRoic * (1.0 - $portfolioTurnoverRate)) + ($targetCapRate * $portfolioTurnoverRate));
         $stock->setBaselineRoic((string) max(0.01, $blendedCapRate));
 
@@ -166,7 +165,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     /**
      * REIT revenues are incredibly stable due to multi-year binding leases.
      */
-    public function getMacroPhysics(Stock $stock, array &$macroState): array
+    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
         // CPI Rent Escalators perfectly capture inflation dynamically.
@@ -175,7 +174,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         return $physics;
     }
 
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $revenueZ = $mathUtility->generateStandardNormal();
 
@@ -192,7 +191,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $hospitalityShock = $revenueZ * ($baselineVol * 1.5);
 
         // The Inflation Hedge (CPI Rent Escalators):
-        $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
+        $inflation = $macroState->inflationEma;
         $excessInflation = max(0.0, $inflation - MacroEngine::TARGET_INFLATION);
         $rentEscalator = $excessInflation * self::RENT_ESCALATOR_CAPTURE;
 
@@ -210,47 +209,45 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
                 ? -($tenantDefaultZ - self::BENIGN_LEASING_Z_FLOOR) * self::LEASING_BONUS_SCALE
                 : 0.0);
 
-        $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['yield_10y'] ?? self::DEFAULT_10Y_YIELD_FALLBACK);
+        $yield10y = $macroState->yield10yEma;
         $refinancingDrag = max(0.0, ($yield10y - self::DEFAULT_10Y_YIELD_FALLBACK) * self::REFINANCING_WALL_DRAG);
 
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
         $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max($minVariableMargin, $realizedVariableMargin + $vacancyShock + $refinancingDrag));
-        $actualVariableCosts = $actualRevenue * $clampedMargin;
-        $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
 
-        $eventLore = null;
+        $eventType = null;
         if ($tenantDefaultZ < self::LORE_ANCHOR_BANKRUPTCY_Z) {
-            $eventLore = "Suffered a sudden wave of anchor tenant bankruptcies and commercial lease defaults.";
+            $eventType = ShockEvent::REIT_TENANT_BANKRUPTCIES;
         } elseif ($tenantDefaultZ < self::LORE_ELEVATED_VACANCY_Z) {
-            $eventLore = "Elevated commercial vacancies and unpaid rent impacted quarterly NOI.";
+            $eventType = ShockEvent::REIT_ELEVATED_VACANCIES;
         }
 
-        // Analyst Visibility
-        // Rent escalators (inflation) and 10Y Treasury yields are 100% visible. Tenant vacancies are partially public (~70% visibility).
-        $analystExpectedRevenue = $expectedRevenue * (1.0 + $rentEscalator);
-        $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
-        $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
-        $expectedVacancyShock = $vacancyShock * $dynamicVisibility;
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max($minVariableMargin, $realizedVariableMargin + $expectedVacancyShock + $refinancingDrag));
+        return new SectorPhysicsResult(
+            actualRevenue: $actualRevenue,
+            rawVariableMargin: $clampedMargin,
+            primaryShockZ: abs($tenantDefaultZ) > abs($revenueZ) ? $tenantDefaultZ : $revenueZ,
+            // Rent escalators (inflation) and 10Y Treasury yields are 100% visible; vacancies ~70% visible
+            observableShockZ: $rentEscalator,
+            eventType: $eventType,
+        );
+    }
 
-        return [
-            'actual_revenue'                  => $actualRevenue,
-            'actual_variable_costs'           => $actualVariableCosts,
-            'analyst_expected_revenue'        => $analystExpectedRevenue,
-            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit'                            => $ebit,
-            'primary_shock_z'                 => abs($tenantDefaultZ) > abs($revenueZ) ? $tenantDefaultZ : $revenueZ,
-            'event_lore'                      => $eventLore
-        ];
+    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    {
+        // Rent escalators fully public; vacancy surveys give ~70% visibility.
+        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.70, errorStdDev: 0.10);
     }
 
     /**
      * Wall Street evaluates REITs on FFO (Funds From Operations), not GAAP Net Income.
      * FFO = Net Income + Depreciation (since real estate generally appreciates, depreciation is an accounting fiction).
      */
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate): float
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08): float
     {
         $industry = $stock->getIndustry() ?: 'General';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $kappa = \App\Data\Sectors::getModelThresholds($businessModel)['reversion_speed'] ?? 0.20;
+
         $customDepreciation = (float) $stock->getDepreciationRate();
         $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : (\App\Data\Sectors::INDUSTRY_METRICS[$industry]['depreciation'] ?? self::DEFAULT_DEPRECIATION_RATE);
 
@@ -268,6 +265,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
         $oldTtm = (float) $stock->getRoicTtm();
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::ROIC_TTM_EMA_WEIGHT) + ($oldTtm * self::ROIC_TTM_HIST_WEIGHT);
+        $newTtm += $kappa * ($wacc - $newTtm) * 0.25;
         $stock->setRoicTtm((string) max(self::MIN_ROIC_CLAMP, min(self::MAX_ROIC_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;

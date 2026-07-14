@@ -23,7 +23,7 @@ class TechBusinessModelTest extends TestCase
             ->willReturnOnConsecutiveCalls(2.0, 0.0, 0.0, 0.0);
 
         $macroState = ['inflation_ema' => 0.02];
-        $result = $model->generateIdiosyncraticShock(
+        $result = $model->computeActualFinancials(
             $stock,
             1000.0,
             0.30,
@@ -34,7 +34,7 @@ class TechBusinessModelTest extends TestCase
         );
 
         // SaaS ARR expansion lowers variable cost percentage below 30%
-        $this->assertLessThan(1000.0 * 0.30, $result['actual_variable_costs']);
+        $this->assertLessThan(1000.0 * 0.30, $result->actualVariableCosts);
     }
 
     public function testSoftwareTechDebtAndCloudPlatformModernization(): void

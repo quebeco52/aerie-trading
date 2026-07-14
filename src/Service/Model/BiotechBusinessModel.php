@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 
 /**
@@ -57,16 +59,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
     // --- Analyst Visibility & Error ---
-    /** Standard deviation of analyst estimation error for quarterly biotech revenues. */
-    public const ANALYST_ERROR_STD_DEV     = 0.05;
-    /** Base analyst visibility into binary public FDA decisions and trial results. */
-    public const EVENT_VISIBILITY_BASE     = 0.85;
-    /** Minimum allowable analyst visibility floor for major public clinical trial announcements. */
-    public const EVENT_VISIBILITY_MIN      = 0.70;
-    /** Base analyst visibility into routine, non-event biotech operational variance. */
-    public const ROUTINE_VISIBILITY_BASE   = 0.20;
-    /** Minimum allowable analyst visibility floor for routine non-event operational variance. */
-    public const ROUTINE_VISIBILITY_MIN    = 0.10;
+    // Moved to getCoverageProfile() — see MarketConsensusEngine.
 
     // --- Patent Moat & Capital Structure Rails ---
     /** Operating margin mean reversion speed: slower speed reflects multi-year patent monopoly protection. */
@@ -92,20 +85,20 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     /** Valuation discount applied when FCF is negative due to heavy clinical trial funding. */
     public const BIOTECH_RESEARCH_BURN_DISCOUNT = 0.88;
 
-    public function getMacroPhysics(Stock $stock, array &$macroState): array
+    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
-        $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
-        $beta = (float) $stock->getBeta();
-
-        // Inelastic healthcare demand: people require medical treatments regardless of the economic cycle.
+        // Biotechs are structural secular growth stories driven by R&D and demographics,
+        // making them largely decoupled from standard macro business cycles.
         return [
-            'macro_demand_shift' => $outputGap * $beta * self::MACRO_DEMAND_SCALAR,
-            'pricing_power_multiplier' => 1.0 + ($inflation * max(self::MIN_PRICING_BETA_FLOOR, $beta * self::PRICING_BETA_SCALAR)),
+            'macro_demand_shift' => 0.0,
+            'pricing_power_multiplier' => 1.0,
         ];
     }
 
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
+    /**
+     * Biotech is driven by high-margin commercialized drugs and massive binary R&D pipeline outcomes.
+     */
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
             'established_drug_weight' => self::ESTABLISHED_DRUG_WEIGHT,
@@ -127,42 +120,48 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         // Continuous pipeline clinical progress ($pipelineZ) smoothly adjusts variable margin.
         $continuousPipelineShift = -self::CONTINUOUS_PIPELINE_MARGIN_SENSITIVITY * $pipelineZ * $pipelineWeight;
         $patentModifier = $continuousPipelineShift;
-        $eventLore = null;
+        $eventType = null;
 
         $trialZ = $mathUtility->generateStandardNormal();
         if ($trialZ > self::TRIAL_APPROVAL_Z_SCORE) {
             $pipelineRevenue *= self::TRIAL_APPROVAL_REV_MULT;
             $patentModifier += self::TRIAL_APPROVAL_MARGIN_BONUS * $pipelineWeight;
-            $eventLore = "Received landmark regulatory approval for a blockbuster specialty drug pipeline.";
+            $eventType = ShockEvent::BIOTECH_DRUG_APPROVAL;
         } elseif ($trialZ < self::TRIAL_FAILURE_Z_SCORE) {
             $pipelineRevenue *= self::TRIAL_FAILURE_REV_MULT;
             $patentModifier += self::TRIAL_FAILURE_MARGIN_PENALTY * $pipelineWeight;
-            $eventLore = "Suffered a major clinical trial setback and patent cliff generic erosion.";
+            $eventType = ShockEvent::BIOTECH_TRIAL_SETBACK;
         }
 
         $actualRevenue = max(0.0, $establishedRevenue + $pipelineRevenue);
 
-        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $patentModifier));
-        $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
-
-        // Analyst Visibility
-        // Clinical trial results and FDA decisions are sudden, binary public news events (~85% visibility when they occur).
-        $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
-        $dynamicVisibility = $eventLore !== null ? min(1.0, max(self::EVENT_VISIBILITY_MIN, self::EVENT_VISIBILITY_BASE + $analystError)) : min(1.0, max(self::ROUTINE_VISIBILITY_MIN, self::ROUTINE_VISIBILITY_BASE + $analystError));
-        $analystExpectedRevenue = $expectedRevenue * (1.0 + (($establishedZ * $establishedWeight + $pipelineZ * $pipelineWeight) * $dynamicVisibility));
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + ($patentModifier * $dynamicVisibility)));
+        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $patentModifier));
 
         $primaryShockZ = abs($trialZ) > abs($establishedZ) ? $trialZ : $establishedZ;
+        // observableShockZ: blended stream shock visible to analysts
+        $observableShockZ = $establishedZ * $establishedWeight + $pipelineZ * $pipelineWeight;
 
-        return [
-            'actual_revenue'                  => $actualRevenue,
-            'actual_variable_costs'           => $actualVariableCosts,
-            'analyst_expected_revenue'        => $analystExpectedRevenue,
-            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit'                            => $ebit,
-            'primary_shock_z'                 => $primaryShockZ,
-            'event_lore'                      => $eventLore
-        ];
+        return new SectorPhysicsResult(
+            actualRevenue: $actualRevenue,
+            rawVariableMargin: $clampedMargin,
+            primaryShockZ: $primaryShockZ,
+            observableShockZ: $observableShockZ,
+            eventType: $eventType,
+            isPublicEvent: $eventType !== null ? true : null,
+        );
+    }
+
+    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    {
+        // Dual-mode: FDA/trial announcements are binary public events (85% visible, 70% floor).
+        // Routine operational variance is low-visibility (~20%, 10% floor).
+        return new \App\DTO\SectorCoverageProfile(
+            baseVisibility:      0.20,
+            errorStdDev:         0.05,
+            minVisibility:       0.10,
+            eventBaseVisibility: 0.85,
+            eventMinVisibility:  0.70,
+        );
     }
 
     public function getMarginReversionSpeed(): float

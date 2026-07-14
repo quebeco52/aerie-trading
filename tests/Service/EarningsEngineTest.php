@@ -10,6 +10,7 @@ use App\Service\Event\NarrativeEngine;
 use App\Service\Event\MarketEventPublisher;
 use App\Service\Corporate\CapitalAllocationEngine;
 use App\Service\Corporate\DebtEngine;
+use App\Service\Market\MarketConsensusEngine;
 use App\Data\EconomicCycle;
 use App\Entity\Stock;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -92,7 +93,8 @@ class EarningsEngineTest extends TestCase
             $this->debtEngineMock, 
             $this->mathUtilityMock,
             $this->corporateMetricsMock,
-            $this->narrativeEngineMock
+            $this->narrativeEngineMock,
+            new MarketConsensusEngine()
         );
     }
 

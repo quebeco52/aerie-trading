@@ -2,8 +2,11 @@
 
 namespace App\Service\Corporate;
 
+use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Event\MarketEventPublisher;
 use App\Service\Macro\MacroEngine;
+use App\Service\Market\CreditRatingAgency;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Math\MathUtility;
 
@@ -31,7 +34,9 @@ class DebtEngine
 
     public function __construct(
         private MathUtility $mathUtility,
-        private CorporateMetrics $corporateMetrics
+        private CorporateMetrics $corporateMetrics,
+        private ?CreditRatingAgency $creditRatingAgency = null,
+        private ?MarketEventPublisher $marketEventPublisher = null
     ) {}
 
     /**
@@ -41,7 +46,7 @@ class DebtEngine
      * leverage penalties (Junk Bond blowouts) to determine the true cost of debt.
      *
      * @param Stock $stock           The stock entity being analyzed.
-     * @param array &$macroState      The current macroeconomic state.
+     * @param MacroStateDTO $macroState      The current macroeconomic state.
      * @param bool  $advanceMaturity Whether to advance the maturity wall and lock in new blended rates.
      * @return array{
      *     interest_expense: float,
@@ -54,12 +59,12 @@ class DebtEngine
      *     revenue: float
      * }
      */
-    public function calculateInterestExpense(Stock $stock, array &$macroState, bool $advanceMaturity = false, ?float $overrideRevenue = null, ?float $overrideMargin = null): array
+    public function calculateInterestExpense(Stock $stock, \App\DTO\MacroStateDTO $macroState, bool $advanceMaturity = false, ?float $overrideRevenue = null, ?float $overrideMargin = null): array
     {
         $debt = (float) $stock->getTotalDebt();
         $treasury = (float) $stock->getCorporateTreasury();
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
-        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + 0.005);
+        $policyRate = $macroState->policyRateEma;
+        $yield5y = $macroState->yield5yEma;
 
         $rawCreditSpread = (float) $stock->getCreditSpread();
         $volatility = (float) $stock->getCurrentVolatility() ?: (float) $stock->getVolatility();
@@ -72,7 +77,7 @@ class DebtEngine
         $betaSensitivity = $rawBeta >= 0.0 ? max(0.5, $rawBeta) : min(-0.5, $rawBeta);
 
         // Use the aggregate Macro Credit Spread (excess over the 200bps baseline)
-        $aggregateCreditSpread = $macroState['macro_credit_spread_ema'] ?? 0.02;
+        $aggregateCreditSpread = $macroState->macroCreditSpreadEma;
         $macroCreditExcess = max(0.0, $aggregateCreditSpread - 0.02);
 
         // High beta stocks suffer the full brunt (or more) of credit market blowouts
@@ -163,7 +168,7 @@ class DebtEngine
         $assetVolatility = $equityVolatility * ($marketCap / $assetValue);
         $assetVolatility = max(0.02, $assetVolatility); // Minimum asset vol failsafe
 
-        $policyRate = $macroState['policy_rate_ema'] ?? $macroState['policy_rate'] ?? 0.04;
+        $policyRate = $macroState->policyRateEma;
         
         // Debt maturity is approximated at 5 years for standard corporate credit spreads
         $timeToMaturity = 5.0; 
@@ -184,6 +189,20 @@ class DebtEngine
             $timeToMaturity
         );
         
+        if ($this->creditRatingAgency !== null && $advanceMaturity) {
+            $oldRating = $stock->getCreditRating();
+            $newRating = $this->creditRatingAgency->evaluateRating($stock, $distanceToDefault);
+            if ($newRating !== null && $this->marketEventPublisher !== null) {
+                $isDowngrade = $this->creditRatingAgency->isDowngrade($oldRating, $newRating);
+                $eventType = $isDowngrade ? 'CREDIT_DOWNGRADE' : 'CREDIT_UPGRADE';
+                $desc = $isDowngrade
+                    ? sprintf('[CREDIT DOWNGRADE] %s: Credit rating downgraded from %s to %s due to deteriorating distance to default.', $stock->getTicker(), $oldRating, $newRating)
+                    : sprintf('[CREDIT UPGRADE] %s: Credit rating upgraded from %s to %s following balance sheet strengthening.', $stock->getTicker(), $oldRating, $newRating);
+                $changePct = $isDowngrade ? -3.0 : 2.0;
+                $this->marketEventPublisher->publish($stock, $eventType, $desc, $changePct);
+            }
+        }
+
         $mertonSpread = $this->mathUtility->calculateMertonCreditSpread(
             $distanceToDefault,
             $lossGivenDefault,
@@ -239,7 +258,7 @@ class DebtEngine
      * crisis or suffering from negative carry.
      *
      * @param Stock $stock      The stock entity being analyzed.
-     * @param array &$macroState The current macroeconomic state.
+     * @param MacroStateDTO $macroState The current macroeconomic state.
      * @return array{
      *     gross_cost: float,
      *     effective_cost: float,
@@ -255,14 +274,14 @@ class DebtEngine
      *     raw_metrics: array
      * }
      */
-    public function analyzeDebtHealth(Stock $stock, array &$macroState, ?float $overrideRevenue = null, ?float $overrideMargin = null): array
+    public function analyzeDebtHealth(Stock $stock, \App\DTO\MacroStateDTO $macroState, ?float $overrideRevenue = null, ?float $overrideMargin = null): array
     {
         $currentDebt = (float) $stock->getTotalDebt();
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
         $equity = (float) $stock->getTotalEquity();
         $marketCap = (float) $stock->getPrice() * max(1.0, (float) $stock->getSharesOutstanding());
-        $policyRate = $macroState['policy_rate_ema'] ?? $macroState['policy_rate'] ?? 0.04;
-        $corporateTaxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $policyRate = $macroState->policyRateEma;
+        $corporateTaxRate = $macroState->corporateTaxRate;
 
 
         $industry = $stock->getIndustry() ?: 'General';
@@ -335,7 +354,7 @@ class DebtEngine
         }
 
         // Cost of Equity (CAPM) - Unified to Policy Rate to perfectly match MarketEngine valuation physics
-        $equityRiskPremium = $macroState['equity_risk_premium'] ?? MacroEngine::BASE_EQUITY_RISK_PREMIUM;
+        $equityRiskPremium = $macroState->equityRiskPremium;
         $costOfEquity = $this->mathUtility->calculateCAPM($policyRate, $leveredBeta, $equityRiskPremium);
 
         // Weighted Average Cost of Capital (WACC)
@@ -528,7 +547,7 @@ class DebtEngine
             'z_score' => $zScore,
             'zone' => $zone,
             // A negative Z'' score is a near-mathematical certainty of insolvency
-            'is_bankrupt' => $zScore < 0.00
+            'is_bankrupt' => $zScore < 0.00,
         ];
     }
 

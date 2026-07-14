@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 
 /**
@@ -51,12 +53,7 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
     // --- Analyst Visibility & Error ---
-    /** Base analyst visibility into retail foot traffic and fashion cycle momentum. */
-    public const ANALYST_BASE_VISIBILITY   = 0.50;
-    /** Minimum allowable analyst visibility floor for retail luxury brand tracking. */
-    public const MIN_ANALYST_VISIBILITY    = 0.30;
-    /** Standard deviation of analyst estimation error for quarterly luxury sales. */
-    public const ANALYST_ERROR_STD_DEV     = 0.05;
+    // Moved to getCoverageProfile() — see MarketConsensusEngine.
 
     // --- Brand Equity Moat ---
     /** Operating margin mean reversion speed: slower speed reflects sticky multi-decade brand equity. */
@@ -74,10 +71,10 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     /** Structural maximum operating margin ceiling for ultra-exclusive Veblen leather monopolies. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.45;
 
-    public function getMacroPhysics(Stock $stock, array &$macroState): array
+    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        $outputGap = $macroState['output_gap_ema'] ?? 0.0;
-        $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
+        $outputGap = $macroState->outputGapEma;
+        $inflation = $macroState->inflationEma;
         $beta = (float) $stock->getBeta();
 
         // Luxury goods benefit from Veblen pricing power during inflation
@@ -89,7 +86,7 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         ];
     }
 
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
             'haute_couture_weight'     => self::HAUTE_COUTURE_WEIGHT,
@@ -107,21 +104,21 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         $accessibleRevenue = $expectedRevenue * $accessibleWeight * (1.0 + ($accessibleZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
 
         // Veblen Inflation Benefit vs. Standard Supply Chain Penalty:
-        $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
+        $inflation = $macroState->inflationEma;
         $veblenMarginBenefit = $inflation > MacroEngine::TARGET_INFLATION ? -($inflation - MacroEngine::TARGET_INFLATION) * self::VEBLEN_MARGIN_BENEFIT * $hauteWeight : 0.0;
 
         // Tail Risk: Brand Dilution vs. Viral Fashion Super-Cycle
         $eventZ = $mathUtility->generateStandardNormal();
-        $eventLore = null;
+        $eventType = null;
         $brandModifier = 0.0;
 
         if ($eventZ < self::BRAND_DILUTION_Z_SCORE) {
             $brandModifier = self::BRAND_DILUTION_PENALTY * $hauteWeight;
-            $eventLore = "Suffered brand dilution and inventory write-downs following a poorly received creative direction.";
+            $eventType = ShockEvent::LUXURY_BRAND_DILUTION;
         } elseif ($eventZ > self::BRAND_BOOM_Z_SCORE) {
             $hauteRevenue *= self::BRAND_BOOM_REV_MULT;
             $brandModifier = self::BRAND_BOOM_MARGIN_BONUS * $hauteWeight;
-            $eventLore = "Captured immense global demand with a culturally dominant fashion collection.";
+            $eventType = ShockEvent::LUXURY_CULTURAL_DOMINANCE;
         }
 
         $actualRevenue = max(0.0, $hauteRevenue + $accessibleRevenue);
@@ -130,27 +127,24 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         // Strong haute couture desirability ($hauteZ > 0) continuously expands pricing cachet and improves gross margin.
         $brandCachetShift = -self::BRAND_CACHET_ELASTICITY * $hauteZ * $hauteWeight;
 
-        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $veblenMarginBenefit + $brandModifier + $brandCachetShift));
-        $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
+        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $veblenMarginBenefit + $brandModifier + $brandCachetShift));
 
         // Analyst Visibility
-        // Fashion cycles and brand momentum are heavily tracked by retail data (~50% visibility).
-        $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
-        $dynamicVisibility = min(1.0, max(self::MIN_ANALYST_VISIBILITY, self::ANALYST_BASE_VISIBILITY + $analystError));
-        $analystExpectedRevenue = $expectedRevenue * (1.0 + (($hauteZ * $hauteWeight + $accessibleZ * $accessibleWeight) * $dynamicVisibility));
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + (($veblenMarginBenefit + $brandModifier + $brandCachetShift) * $dynamicVisibility)));
-
         $primaryShockZ = abs($eventZ) > abs($hauteZ) ? $eventZ : $hauteZ;
 
-        return [
-            'actual_revenue'                  => $actualRevenue,
-            'actual_variable_costs'           => $actualVariableCosts,
-            'analyst_expected_revenue'        => $analystExpectedRevenue,
-            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit'                            => $ebit,
-            'primary_shock_z'                 => $primaryShockZ,
-            'event_lore'                      => $eventLore
-        ];
+        return new SectorPhysicsResult(
+            actualRevenue: $actualRevenue,
+            rawVariableMargin: $clampedMargin,
+            primaryShockZ: $primaryShockZ,
+            observableShockZ: $hauteZ * $hauteWeight + $accessibleZ * $accessibleWeight,
+            eventType: $eventType,
+        );
+    }
+
+    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    {
+        // Fashion cycles tracked by retail data (~50% visibility, 30% floor).
+        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.05, minVisibility: 0.30);
     }
 
     public function getMarginReversionSpeed(): float

@@ -31,51 +31,51 @@ class CeoArchetypes
     /**
      * Returns a random CEO archetype, dynamically weighted based on the macroeconomic state.
      */
-    public static function getRandomArchetype(array $macroState = []): string
+    public static function getRandomArchetype(?\App\DTO\MacroStateDTO $macroState = null): string
     {
         $weights = [
-            self::OPPORTUNIST => 50,
-            self::CONSERVATIVE => 20,
-            self::CONGLOMERATE => 10,
+            self::OPPORTUNIST    => 50,
+            self::CONSERVATIVE   => 20,
+            self::CONGLOMERATE   => 10,
             self::EMPIRE_BUILDER => 10,
-            self::DEALMAKER => 10,
-            self::CANNIBAL => 5,
-            self::VISIONARY => 5,
-            self::YIELD_KING => 5,
-            self::TURNAROUND => 5,
-            self::COST_CUTTER => 5,
+            self::DEALMAKER      => 10,
+            self::CANNIBAL       => 5,
+            self::VISIONARY      => 5,
+            self::YIELD_KING     => 5,
+            self::TURNAROUND     => 5,
+            self::COST_CUTTER    => 5,
         ];
 
-        if (!empty($macroState)) {
-            $outputGap = $macroState['output_gap'] ?? 0.0;
-            $policyRate = $macroState['policy_rate'] ?? 0.04;
-            $marketVol = $macroState['market_volatility'] ?? 0.20;
+        if ($macroState !== null) {
+            $outputGap = $macroState->outputGap;
+            $policyRate = $macroState->policyRate;
+            $marketVol  = $macroState->marketVolatility;
 
             if ($outputGap < -0.02) {
                 // Recession: Board wants safety and restructuring
                 $weights[self::CONSERVATIVE] += 30;
-                $weights[self::TURNAROUND] += 20;
-                $weights[self::YIELD_KING] += 10;
-                $weights[self::COST_CUTTER] += 10;
+                $weights[self::TURNAROUND]   += 20;
+                $weights[self::YIELD_KING]   += 10;
+                $weights[self::COST_CUTTER]  += 10;
 
                 $weights[self::EMPIRE_BUILDER] = max(1, $weights[self::EMPIRE_BUILDER] - 8);
-                $weights[self::DEALMAKER] = max(1, $weights[self::DEALMAKER] - 8);
-                $weights[self::VISIONARY] = max(1, $weights[self::VISIONARY] - 4);
+                $weights[self::DEALMAKER]      = max(1, $weights[self::DEALMAKER] - 8);
+                $weights[self::VISIONARY]      = max(1, $weights[self::VISIONARY] - 4);
             } elseif ($outputGap > 0.02 && $policyRate < 0.03) {
                 // Boom & Low Rates: Board wants aggressive expansion
                 $weights[self::EMPIRE_BUILDER] += 25;
-                $weights[self::DEALMAKER] += 20;
-                $weights[self::VISIONARY] += 15;
+                $weights[self::DEALMAKER]      += 20;
+                $weights[self::VISIONARY]      += 15;
 
                 $weights[self::CONSERVATIVE] = max(1, $weights[self::CONSERVATIVE] - 10);
-                $weights[self::COST_CUTTER] = max(1, $weights[self::COST_CUTTER] - 4);
+                $weights[self::COST_CUTTER]  = max(1, $weights[self::COST_CUTTER] - 4);
             }
 
             if ($marketVol > 0.35) {
                 // High Volatility: Board wants efficiency and cash hoarding
-                $weights[self::COST_CUTTER] += 15;
+                $weights[self::COST_CUTTER]  += 15;
                 $weights[self::CONSERVATIVE] += 15;
-                $weights[self::TURNAROUND] += 10;
+                $weights[self::TURNAROUND]   += 10;
             }
         }
 

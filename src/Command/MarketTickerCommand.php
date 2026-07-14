@@ -135,10 +135,10 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $marketVol = $result['market_vol'];
                 $events = $result['events'];
 
-                if (isset($macroState['event_type'])) {
+                if ($macroState->eventType !== null) {
                     if ($lbiEtf) {
-                        $desc = $this->narrativeEngine->generateLore($macroState['event_type']);
-                        $shockPct = in_array($macroState['event_type'], [\App\Service\Event\ShockEvent::TITAN_INTERVENTION, \App\Service\Event\ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT]) ? 5.0 : -5.0;
+                        $desc = $this->narrativeEngine->generateLore($macroState->eventType);
+                        $shockPct = in_array($macroState->eventType, [\App\Service\Event\ShockEvent::TITAN_INTERVENTION, \App\Service\Event\ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT]) ? 5.0 : -5.0;
                         $events[] = $this->marketEvent->publish($lbiEtf, 'SHOCK', $desc, $shockPct);
                     }
                 }
@@ -214,14 +214,14 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     'stocks' => $allUpdates,
                     'events' => $events,
                     'market_vol' => $marketVol,
-                    'economic_cycle' => ($macroState['output_gap'] ?? 0) > 0.01 ? 'Boom' : (($macroState['output_gap'] ?? 0) < -0.01 ? 'Bust' : 'Neutral'),
-                    'council_rate' => $macroState['policy_rate'] ?? 0.04,
-                    'macro' => $macroState,
+                    'economic_cycle' => $macroState->outputGap > 0.01 ? 'Boom' : ($macroState->outputGap < -0.01 ? 'Bust' : 'Neutral'),
+                    'council_rate' => $macroState->policyRate,
+                    'macro' => $macroState->toArray(),
                 ]));
 
                 $this->redis->set('stocks_live_data', json_encode($stockUpdates));
                 $this->redis->set('etf_live_data', json_encode([$etfUpdate]));
-                $this->redis->set(\App\Service\Macro\MacroEngine::REDIS_MACRO_STATE, json_encode($macroState));
+                $this->redis->set(\App\Service\Macro\MacroEngine::REDIS_MACRO_STATE, json_encode($macroState->toArray()));
 
                 // Save Portfolio Snapshots once a "Simulation Week"
                 if ($tickCount % $snapshotInterval === 0) {

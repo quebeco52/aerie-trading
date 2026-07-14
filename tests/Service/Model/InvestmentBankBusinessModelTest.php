@@ -56,7 +56,7 @@ class InvestmentBankBusinessModelTest extends TestCase
             'market_volatility_ema' => 0.28, // 10% above VIX_ARBITRAGE_FLOOR (0.18)
         ];
 
-        $result = $this->model->generateIdiosyncraticShock(
+        $result = $this->model->computeActualFinancials(
             $stock,
             1000.0,
             0.50,
@@ -71,6 +71,6 @@ class InvestmentBankBusinessModelTest extends TestCase
         // advisoryRevenue = 1000.0 * 0.25 * 1.0 = 250.0
         // tradingRevenue  = 1000.0 * 0.75 * (1.0 + 0.20) = 900.0
         // actual_revenue  = 250.0 + 900.0 = 1150.0
-        $this->assertEqualsWithDelta(1150.0, $result['actual_revenue'], 0.001);
+        $this->assertEqualsWithDelta(1150.0, $result->actualRevenue, 0.001);
     }
 }

@@ -21,13 +21,12 @@ class FinancialDataBusinessModelTest extends TestCase
         // Sequence of generateStandardNormal calls:
         // 1. subscriptionZ = 0.0
         // 2. transactionZ = 2.0 (Boom in debt issuance & credit rating mandates)
-        // 3. analystError = 0.0
-        $mathUtilityMock->expects($this->exactly(3))
+        $mathUtilityMock->expects($this->exactly(2))
             ->method('generateStandardNormal')
-            ->willReturnOnConsecutiveCalls(0.0, 2.0, 0.0);
+            ->willReturnOnConsecutiveCalls(0.0, 2.0);
 
         $macroState = [];
-        $result = $model->generateIdiosyncraticShock(
+        $result = $model->computeActualFinancials(
             $stock,
             1000.0,
             0.35,
@@ -39,7 +38,7 @@ class FinancialDataBusinessModelTest extends TestCase
 
         // Operating leverage shift = -0.020 * 2.0 * 0.15 = -0.006
         // Variable cost realized = 1000 * (0.35 - 0.006) = 344.0
-        $this->assertLessThan(1000.0 * 0.35, $result['actual_variable_costs']);
+        $this->assertLessThan(1000.0 * 0.35, $result->actualVariableCosts);
     }
 
     public function testDataPlatformReinvestmentAndMonopolyMoat(): void

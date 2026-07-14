@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Service\Model;
 
 use App\Data\StockModelTuning;
+use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Event\ShockEvent;
 
 /**
  * Earnings strategy for Pure-Play Investment Banks and M&A Advisory Syndicates.
@@ -85,8 +87,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     public const ADVISORY_ANALYST_VISIBILITY = 0.20;
     /** Fraction of S&T shock visible to analysts: trading volumes are semi-public via FINRA/industry data. */
     public const TRADING_ANALYST_VISIBILITY  = 0.55;
-    /** Standard deviation of analyst estimation noise on total IB revenue. */
-    public const ANALYST_ERROR_STD_DEV      = 0.08;
+    // Analyst error std dev moved to getCoverageProfile() — see MarketConsensusEngine.
 
     // --- Event Lore Thresholds ---
     /** Positive output gap required to trigger M&A boom event lore. */
@@ -109,7 +110,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
      * reflecting their structural decorrelation. The yield curve drives DCM volumes;
      * VIX spikes drive S&T revenues counter-cyclically.
      */
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         // Resolve company-specific tuned parameters (or fallback to sector defaults)
         $params = $this->resolveModelParameters($stock, [
@@ -128,7 +129,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         $eventZ    = $mathUtility->generateStandardNormal(); // Mega-deal / regulatory tail
 
         // Pro-Cyclical M&A Deal Flow
-        $outputGap = $macroState['output_gap_ema'] ?? ($macroState['output_gap'] ?? 0.0);
+        $outputGap = $macroState->outputGapEma;
         $dealFlowMultiplier = $outputGap > 0.0
             ? ($outputGap * self::DEAL_FLOW_BOOM_MULT)
             : ($outputGap * self::DEAL_FLOW_BUST_MULT);
@@ -137,8 +138,8 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         // Corporate bond issuance concentrates in the 3-7Y belly of the curve. When the 5Y Treasury
         // yields significantly more than overnight (policy rate), corporates rush to lock in cheap
         // medium-term debt — generating record underwriting fees for IB DCM desks.
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
-        $yield5y    = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + self::DEFAULT_5Y_YIELD_PREMIUM);
+        $policyRate = $macroState->policyRateEma;
+        $yield5y    = $macroState->yield5yEma;
         $curveSlope = $yield5y - $policyRate;
         // DCM underwriting expands during steep yield curves (+40% clamp) and contracts during
         // inverted/flat yield curves (-20% drought floor) when corporate debt refinancing dries up.
@@ -148,7 +149,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         );
 
         //  S&T Volatility Arbitrage (VIX spike revenue on trading desk)
-        $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? self::DEFAULT_VIX_FALLBACK);
+        $vixEma = $macroState->marketVolatilityEma;
         $vixGap = $vixEma - self::VIX_ARBITRAGE_FLOOR;
         // High VIX (>0.18) = Surge market-making arbitrage profits.
         // Low VIX (<0.18)  = Trading volume famine & infrastructure carry drag (-15% max drag).
@@ -166,61 +167,57 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         //  Compensation ratio floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_COMPENSATION_RATIO.
         $minCompRatio = max(0.01, self::MIN_COMPENSATION_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
         $clampedVariableMargin = min(self::MAX_COMPENSATION_RATIO, max($minCompRatio, $realizedVariableMargin));
-        $actualVariableCosts   = $actualRevenue * $clampedVariableMargin;
 
         // Regulatory tail risk (independent of market cycle)
-        $eventLore = null;
+        $eventType = null;
         if ($mathUtility->generateUniform() <= self::REGULATORY_FINE_PROBABILITY) {
-            $regulatoryFine = $actualRevenue * self::REGULATORY_FINE_SCALAR;
-            $actualVariableCosts += $regulatoryFine;
-            $eventLore = "Faced a major regulatory settlement, adding significant legal and compliance costs to the quarter.";
+            $eventType = ShockEvent::IB_REGULATORY_SETTLEMENT;
         }
 
         // Mega-deal tail events (eventZ overrides regulatory lore if triggered)
         if ($eventZ > self::MEGA_DEAL_WIN_Z_SCORE) {
             $actualRevenue *= self::MEGA_DEAL_WIN_MULT;
-            $eventLore = "Secured a landmark multi-billion dollar M&A advisory mandate, generating record quarterly fee income.";
+            $eventType = ShockEvent::IB_MNA_LANDMARK_MANDATE;
         } elseif ($eventZ < self::MEGA_DEAL_LOSS_Z_SCORE) {
             $actualRevenue *= self::MEGA_DEAL_LOSS_MULT;
-            $eventLore = "Lost a high-profile advisory mandate to a rival, triggering a sharp advisory revenue drought.";
+            $eventType = ShockEvent::IB_MNA_MANDATE_LOSS;
         }
 
         //  Standard macro event lore (only if no higher-priority event) ---
-        if ($eventLore === null) {
+        if ($eventType === null) {
             if ($outputGap > self::LORE_BOOM_OUTPUT_GAP && $advisoryZ > self::LORE_BOOM_Z_SCORE) {
-                $eventLore = "Orchestrated a massive wave of corporate mergers and IPO syndications, capturing record advisory fees.";
+                $eventType = ShockEvent::IB_MNA_SYNDICATION_BOOM;
             } elseif ($curveSlope > self::LORE_DCM_BOOM_CURVE && $dcmBonus > 0.05) {
-                $eventLore = "A sharply steepening yield curve sparked a debt capital markets boom, driving record bond underwriting volumes.";
+                $eventType = ShockEvent::IB_DCM_UNDERWRITING_BOOM;
             } elseif ($vixEma > self::LORE_PANIC_VIX) {
-                $eventLore = "Proprietary trading desks generated billions in market-making and arbitrage revenue during severe market panic.";
+                $eventType = ShockEvent::IB_PROP_TRADING_SURGE;
             } elseif ($outputGap < self::LORE_DROUGHT_OUTPUT_GAP && $advisoryZ < self::LORE_DROUGHT_Z_SCORE) {
-                $eventLore = "Suffered an advisory drought as frozen credit markets halted major corporate acquisitions.";
+                $eventType = ShockEvent::ADVISORY_CRASH;
             }
         }
-
-        // Analyst visibility with desk-level calibration
-        // Advisory pipeline is highly confidential (20% visible); S&T more observable via industry data (55% visible).
-        $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
-        $analystAdvisoryRevenue = $expectedRevenue * self::ADVISORY_REVENUE_WEIGHT
-            * (1.0 + ($advisoryZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::ADVISORY_ANALYST_VISIBILITY) + $dealFlowMultiplier + $dcmBonus);
-        $analystTradingRevenue  = $expectedRevenue * self::TRADING_REVENUE_WEIGHT
-            * (1.0 + ($tradingZ * $baselineVol * self::TRADING_VARIANCE_SCALAR * self::TRADING_ANALYST_VISIBILITY) + $volatilityArbitrage);
-        $analystExpectedRevenue = ($analystAdvisoryRevenue + $analystTradingRevenue) * (1.0 + $analystError);
-        $analystExpectedVariableCosts = $analystExpectedRevenue * $clampedVariableMargin;
 
         // Primary shock Z: whichever desk or tail event produced the largest absolute deviation
         $primaryZ = $advisoryZ;
         if (abs($tradingZ) > abs($primaryZ)) $primaryZ = $tradingZ;
         if (abs($eventZ)   > abs($primaryZ)) $primaryZ = $eventZ;
 
-        return [
-            'actual_revenue'                => $actualRevenue,
-            'actual_variable_costs'         => $actualVariableCosts,
-            'analyst_expected_revenue'      => $analystExpectedRevenue,
-            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit'                          => $actualRevenue - $fixedCosts - $actualVariableCosts,
-            'primary_shock_z'               => $primaryZ,
-            'event_lore'                    => $eventLore,
-        ];
+        // observableShockZ: scalar approximation — weighted per-desk visibility blend
+        $observableShockZ = ($advisoryZ * $advisoryWeight * self::ADVISORY_ANALYST_VISIBILITY
+            + $tradingZ * $tradingWeight * self::TRADING_ANALYST_VISIBILITY)
+            * $baselineVol * self::REVENUE_VARIANCE_SCALAR;
+
+        return new SectorPhysicsResult(
+            actualRevenue: $actualRevenue,
+            rawVariableMargin: $clampedVariableMargin,
+            primaryShockZ: $primaryZ,
+            observableShockZ: $observableShockZ,
+            eventType: $eventType,
+        );
+    }
+
+    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    {
+        // All per-desk visibility is pre-embedded in observableShockZ, so baseVisibility=1.0 (pass-through).
+        return new \App\DTO\SectorCoverageProfile(baseVisibility: 1.0, errorStdDev: 0.08);
     }
 }

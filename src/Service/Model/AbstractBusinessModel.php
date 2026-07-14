@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace App\Service\Model;
 
 use App\Data\StockModelTuning;
+use App\DTO\ActualFinancialsDTO;
+use App\DTO\MacroStateDTO;
+use App\DTO\SectorCoverageProfile;
+use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
@@ -15,6 +19,7 @@ use App\Service\Math\FinancialConstants;
  */
 abstract class AbstractBusinessModel implements BusinessModelInterface
 {
+
     // --- ROIC & Return Smoothing ---
     /** Weight for newly realized return when smoothing TTM metrics. */
     public const TTM_SMOOTHING_NEW_WEIGHT = 0.25;
@@ -57,7 +62,70 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
     /** Default operating margin mean reversion speed (quarters). */
     public const DEFAULT_MARGIN_REVERSION_SPEED = 4.0;
 
+    /**
+     * Template Method orchestrating sector physics execution and margin clamping.
+     * Analyst consensus is no longer computed here — it is the sole responsibility of MarketConsensusEngine.
+     */
+    public final function computeActualFinancials(
+        Stock $stock,
+        float $expectedRevenue,
+        float $realizedVariableMargin,
+        float $fixedCosts,
+        float $baselineVol,
+        MacroStateDTO $macroState,
+        MathUtility $mathUtility
+    ): ActualFinancialsDTO {
+        $physics = $this->calculateSectorPhysics(
+            $stock,
+            $expectedRevenue,
+            $realizedVariableMargin,
+            $fixedCosts,
+            $baselineVol,
+            $macroState,
+            $mathUtility
+        );
+
+        $clampedMargin       = min(1.50, max(0.01, $physics->rawVariableMargin));
+        $actualVariableCosts = $physics->actualRevenue * $clampedMargin;
+        $ebit                = $physics->actualRevenue - $fixedCosts - $actualVariableCosts;
+
+        return new ActualFinancialsDTO(
+            actualRevenue:        $physics->actualRevenue,
+            actualVariableCosts:  $actualVariableCosts,
+            clampedMargin:        $clampedMargin,
+            ebit:                 $ebit,
+            primaryShockZ:        $physics->primaryShockZ,
+            observableShockZ:     $physics->observableShockZ,
+            eventType:            $physics->eventType,
+            eventContext:         $physics->eventContext,
+            isPublicEvent:        $physics->isPublicEvent,
+        );
+    }
+
+    /**
+     * Returns the analyst coverage profile for this sector.
+     * Override in child classes to declare sector-specific visibility parameters.
+     */
+    public function getCoverageProfile(): SectorCoverageProfile
+    {
+        return new SectorCoverageProfile(
+            baseVisibility: 0.20,
+            errorStdDev:    0.06,
+        );
+    }
+
+    abstract protected function calculateSectorPhysics(
+        Stock $stock,
+        float $expectedRevenue,
+        float $realizedVariableMargin,
+        float $fixedCosts,
+        float $baselineVol,
+        MacroStateDTO $macroState,
+        MathUtility $mathUtility
+    ): SectorPhysicsResult;
+
     public function getEffectiveTaxRate(float $macroTaxRate): float
+
     {
         return $macroTaxRate;
     }
@@ -73,10 +141,11 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
         return $investedCapital > 0 ? ($nopat / $investedCapital) * 4.0 : 0.0;
     }
 
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate): float
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08): float
     {
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $kappa = \App\Data\Sectors::getModelThresholds($businessModel)['reversion_speed'] ?? 0.20;
 
         if (\App\Data\Sectors::isFinancial($businessModel)) {
             $equity = (float) $stock->getTotalEquity();
@@ -86,6 +155,7 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
 
             $oldTtm = (float) $stock->getRoeTtm();
             $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::TTM_SMOOTHING_NEW_WEIGHT) + ($oldTtm * self::TTM_SMOOTHING_OLD_WEIGHT);
+            $newTtm += $kappa * ($wacc - $newTtm) * 0.25;
             $stock->setRoeTtm((string) max(-0.50, min(1.0, $newTtm)));
 
             return $truePostTaxReturn;
@@ -99,6 +169,7 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
 
         $oldTtm = (float) $stock->getRoicTtm();
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::TTM_SMOOTHING_NEW_WEIGHT) + ($oldTtm * self::TTM_SMOOTHING_OLD_WEIGHT);
+        $newTtm += $kappa * ($wacc - $newTtm) * 0.25;
         $stock->setRoicTtm((string) max(-0.50, min(1.0, $newTtm)));
 
         return $truePostTaxReturn;
@@ -120,7 +191,7 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
         return StockModelTuning::resolve($stock->getTicker(), $defaults);
     }
 
-    public function calculateInterestIncome(Stock $stock, array &$macroState, MathUtility $mathUtility): float
+    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): float
     {
         $cash = (float) $stock->getCorporateTreasury();
         $operatingBase = $this->getOperatingBase($stock);
@@ -172,10 +243,9 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
         return $interestExpense > 0 ? ($ebit / $interestExpense) : ($ebit > 0 ? 999.0 : -999.0);
     }
 
-    public function calculateCashYield(array &$macroState): float
+    public function calculateCashYield(MacroStateDTO $macroState): float
     {
-        $policyRate = $macroState['policy_rate_ema'] ?? ($macroState['policy_rate'] ?? 0.04);
-        return max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+        return max(0.0, $macroState->policyRateEma - MacroEngine::CASH_YIELD_SPREAD);
     }
 
     public function getDebtExpansionAggressiveness(float $spreadMultiplier): array
@@ -214,7 +284,7 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
         return self::DEFAULT_MARGIN_REVERSION_SPEED;
     }
 
-    public function processPassiveLiabilityGrowth(Stock $stock, array &$macroState, array &$state, MathUtility $mathUtility): void
+    public function processPassiveLiabilityGrowth(Stock $stock, MacroStateDTO $macroState, array &$state, MathUtility $mathUtility): void
     {
         // No-op by default
     }

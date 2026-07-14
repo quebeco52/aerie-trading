@@ -21,13 +21,12 @@ class UtilityBusinessModelTest extends TestCase
         // Sequence of generateStandardNormal calls:
         // 1. regulatedZ = 0.0
         // 2. unregulatedZ = 2.0 (Positive merchant wholesale spark spread readout)
-        // 3. analystError = 0.0
-        $mathUtilityMock->expects($this->exactly(3))
+        $mathUtilityMock->expects($this->exactly(2))
             ->method('generateStandardNormal')
-            ->willReturnOnConsecutiveCalls(0.0, 2.0, 0.0);
+            ->willReturnOnConsecutiveCalls(0.0, 2.0);
 
         $macroState = ['inflation_ema' => 0.02];
-        $result = $model->generateIdiosyncraticShock(
+        $result = $model->computeActualFinancials(
             $stock,
             1000.0,
             0.40,
@@ -39,7 +38,7 @@ class UtilityBusinessModelTest extends TestCase
 
         // Merchant spread shift = -0.015 * 2.0 * 0.15 = -0.0045
         // Variable cost realized = 1000 * (0.40 - 0.0045) = 395.5
-        $this->assertLessThan(1000.0 * 0.40, $result['actual_variable_costs']);
+        $this->assertLessThan(1000.0 * 0.40, $result->actualVariableCosts);
     }
 
     public function testRateBaseCapexBurnValuation(): void

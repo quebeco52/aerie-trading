@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
+use App\Service\Event\ShockEvent;
 use App\Service\Math\FinancialConstants;
 
 /**
@@ -28,9 +30,9 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
 
     // --- ROE & Target Architecture ---
     /** Weight given to historical baseline ROE when blending with TTM ROE. */
-    public const BASELINE_ROE_WEIGHT = 0.70;
+    public const BASELINE_ROE_WEIGHT = 0.50;
     /** Weight given to TTM ROE when blending with historical baseline ROE. */
-    public const TTM_ROE_WEIGHT      = 0.30;
+    public const TTM_ROE_WEIGHT      = 0.50;
     /** Default 5Y Treasury spread over policy rate when yield curve data is absent. */
     public const DEFAULT_5Y_YIELD_PREMIUM = 0.005;
     /** Default maximum financial leverage (Debt/Equity) limit if sector configuration is absent. */
@@ -102,13 +104,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     /** Benign z-score threshold triggering reserve release event lore. */
     public const LORE_RESERVE_RELEASE_Z     = 2.00;
 
-    // --- Analyst Visibility & Error ---
-    /** Base analyst visibility into credit card default spikes via macro delinquency data. */
-    public const ANALYST_BASE_VISIBILITY    = 0.50;
-    /** Standard deviation of analyst estimation error for unsecured loss provisions. */
-    public const ANALYST_ERROR_STD_DEV      = 0.10;
-
-    public function getMacroPhysics(Stock $stock, array &$macroState): array
+    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
         // Swipe fees perfectly capture nominal inflation dynamically.
@@ -117,7 +113,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         return $physics;
     }
 
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         // Resolve company-specific tuned credit services parameters
         $params = $this->resolveModelParameters($stock, [
@@ -137,7 +133,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
 
         // Inflation Bonus (Interchange Swipe Fees):
         // Swipe fees (Visa/MC network) are a percentage of transaction value — higher prices = higher revenue.
-        $inflation = $macroState['inflation_ema'] ?? ($macroState['inflation'] ?? MacroEngine::TARGET_INFLATION);
+        $inflation = $macroState->inflationEma;
         $inflationBonus = ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta());
 
         // Blended dual-stream revenue (Lending vs. Payment Network Interchange)
@@ -149,7 +145,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
 
         // Unsecured Default Shock:
         // Credit card debt is unsecured. Consumers default on cards long before mortgages during recessions.
-        $outputGap = $macroState['output_gap_ema'] ?? ($macroState['output_gap'] ?? 0.0);
+        $outputGap = $macroState->outputGapEma;
         $macroDefaultDrag = $outputGap < 0.0 ? abs($outputGap) * self::MACRO_DEFAULT_SCALAR : 0.0;
 
         if ($defaultZ < self::CREDIT_STRESS_Z_THRESHOLD) {
@@ -166,7 +162,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         // Unsecured credit companies are far more sensitive to spread widening than banks.
         // Subprime Spread Beta: lenders taking on higher credit spread risk earn a higher spread
         // yield margin in benign credit environments, eliminating low-sensitivity free-money exploits.
-        $creditSpread = $macroState['macro_credit_spread_ema'] ?? ($macroState['macro_credit_spread'] ?? self::CECL_BASELINE_CREDIT_SPREAD);
+        $creditSpread = $macroState->macroCreditSpreadEma;
         $spreadBeta = $ceclSensitivity / self::CECL_SPREAD_SENSITIVITY;
         $spreadGap = $creditSpread - self::CECL_BASELINE_CREDIT_SPREAD;
         $ceclDrag = $spreadGap > 0.0
@@ -174,8 +170,8 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             : max(-0.03, $spreadGap * ($spreadBeta - 1.0));
 
         // Net Interest Margin (NIM) Squeeze (1.5x more sensitive than banks due to wholesale funding dependency)
-        $yield10y = $macroState['yield_10y_ema'] ?? ($macroState['yield_10y'] ?? self::DEFAULT_10Y_YIELD_FALLBACK);
-        $yield2y  = $macroState['yield_2y_ema']  ?? ($macroState['yield_2y']  ?? self::DEFAULT_2Y_YIELD_FALLBACK);
+        $yield10y = $macroState->yield10yEma;
+        $yield2y  = $macroState->yield2yEma;
         $bankSpread = $yield10y - $yield2y;
 
         if ($bankSpread < 0) {
@@ -192,38 +188,36 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $lendingCostAddon = ($lossProvisionShock + $nimSqueeze + $ceclDrag) * $lendingWeight;
         $rawMargin = $realizedVariableMargin + $lendingCostAddon;
         $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max($minVariableMargin, $rawMargin));
-        $actualVariableCosts = $actualRevenue * $clampedMargin;
 
-        $eventLore = null;
+        $eventType = null;
         if ($defaultZ < self::LORE_MASSIVE_PROVISION_Z) {
-            $eventLore = "Took massive provisions for unsecured credit defaults as consumer health deteriorated.";
+            $eventType = ShockEvent::MASSIVE_CREDIT_PROVISION;
         } elseif ($defaultZ < self::LORE_ELEVATED_DEFAULT_Z) {
-            $eventLore = "Elevated credit card defaults compressed quarterly margins.";
+            $eventType = ShockEvent::ELEVATED_LOAN_DEFAULTS;
         } elseif ($defaultZ > self::LORE_RESERVE_RELEASE_Z) {
-            $eventLore = "Released loan loss reserves on the back of pristine credit performance, boosting quarterly earnings.";
+            $eventType = ShockEvent::RESERVE_RELEASE;
         }
 
-        // Analyst Visibility:
-        // Credit card delinquency rates are publicly reported monthly — analysts see ~50% of the provision shock.
-        // Revenue is fully visible (inflation and swipe volume data are public).
-        $analystExpectedRevenue = $expectedRevenue * (1.0 + $inflationBonus);
-        $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
-        $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
-        $expectedLossProvision = $lossProvisionShock * $dynamicVisibility;
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_EFFICIENCY_RATIO, $realizedVariableMargin + $expectedLossProvision));
+        $primaryShockZ = abs($defaultZ) > abs($lendingZ) ? $defaultZ : $lendingZ;
+        // observableShockZ: inflation bonus is fully public via CPI; idiosyncratic lending shock is partially visible
+        $observableShockZ = $inflationBonus;
 
-        return [
-            'actual_revenue'                  => $actualRevenue,
-            'actual_variable_costs'           => $actualVariableCosts,
-            'analyst_expected_revenue'        => $analystExpectedRevenue,
-            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit'                            => $actualRevenue - $fixedCosts - $actualVariableCosts,
-            'primary_shock_z'                 => abs($defaultZ) > abs($lendingZ) ? $defaultZ : $lendingZ,
-            'event_lore'                      => $eventLore,
-        ];
+        return new SectorPhysicsResult(
+            actualRevenue: $actualRevenue,
+            rawVariableMargin: $clampedMargin,
+            primaryShockZ: $primaryShockZ,
+            observableShockZ: $observableShockZ,
+            eventType: $eventType,
+        );
     }
 
-    public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array
+    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    {
+        // Monthly delinquency reports give analysts ~50% visibility into loss provisions.
+        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.10);
+    }
+
+    public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
         $equity = (float) $stock->getTotalEquity();
         $totalDebt = (float) $stock->getTotalDebt();
@@ -238,9 +232,9 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
         }
 
-        $taxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
-        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + self::DEFAULT_5Y_YIELD_PREMIUM);
+        $taxRate = $macroState->corporateTaxRate;
+        $policyRate = $macroState->policyRateEma;
+        $yield5y = $macroState->yield5yEma;
         $structuralSpread = (float) $stock->getCreditSpread();
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
 
@@ -279,7 +273,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
         $unboundedRevenue = max(0.0, $targetEbit) / $stableMargin;
-        $maxApr = max(self::MIN_APR_YIELD_FLOOR, ($macroState['policy_rate_ema'] ?? 0.04) + self::POLICY_APR_SPREAD);
+        $maxApr = max(self::MIN_APR_YIELD_FLOOR, $macroState->policyRateEma + self::POLICY_APR_SPREAD);
         $targetRevenue = min($unboundedRevenue, $earningAssets * $maxApr); // Floating gross yield ceiling based on macro policy rate
 
         $grossYield = $targetRevenue / max(1.0, abs($earningAssets));
@@ -290,12 +284,12 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         ];
     }
 
-    public function calculateInterestIncome(Stock $stock, array &$macroState, MathUtility $mathUtility): float
+    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): float
     {
         // Credit services generate their interest income from their unsecured loan book.
         $earningAssets = max(1.0, (float) $stock->getTotalEquity() + (float) $stock->getTotalDebt() - (float) $stock->getCorporateTreasury());
 
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        $policyRate = $macroState->policyRateEma;
         // However, this is largely captured in Revenue (Gross Yield). 
         // We only return the supplemental interest from excess treasury cash to avoid double-counting.
         $operatingBase = $this->getOperatingBase($stock);

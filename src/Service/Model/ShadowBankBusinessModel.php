@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\DTO\MacroStateDTO;
+use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
+use App\Service\Event\ShockEvent;
 use App\Service\Math\FinancialConstants;
 
 /**
@@ -22,9 +25,9 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
 {
     // --- ROE & Target Architecture ---
     /** Weight given to historical baseline ROE when blending with TTM ROE. */
-    public const BASELINE_ROE_WEIGHT = 0.70;
+    public const BASELINE_ROE_WEIGHT = 0.50;
     /** Weight given to TTM ROE when blending with historical baseline ROE. */
-    public const TTM_ROE_WEIGHT      = 0.30;
+    public const TTM_ROE_WEIGHT      = 0.50;
     /** Default 5Y Treasury spread over policy rate when yield curve data is absent. */
     public const DEFAULT_5Y_YIELD_PREMIUM = 0.005;
     /** Target operating cash reserve ratio applied to corporate operating base. */
@@ -73,12 +76,9 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     public const LORE_ELEVATED_DEFAULT_Z = -1.50;
 
     // --- Analyst Visibility & Error ---
-    /** Base analyst visibility into mortgage default spikes via macro housing data. */
-    public const ANALYST_BASE_VISIBILITY = 0.50;
-    /** Standard deviation of analyst estimation error for mortgage loss provisions. */
-    public const ANALYST_ERROR_STD_DEV   = 0.10;
+    // Moved to getCoverageProfile() — see MarketConsensusEngine.
 
-    public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array
+    public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
         $equity = (float) $stock->getTotalEquity();
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
@@ -94,12 +94,12 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         }
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
-        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + self::DEFAULT_5Y_YIELD_PREMIUM);
+        $policyRate = $macroState->policyRateEma;
+        $yield5y = $macroState->yield5yEma;
         $structuralSpread = (float) $stock->getCreditSpread();
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
 
-        $taxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $taxRate = $macroState->corporateTaxRate;
 
         // Reverse-engineer the optimal EBIT needed to cover massive wholesale debt
         $optimalNetIncome = $equity * $baselineRoe;
@@ -127,7 +127,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         ];
     }
 
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $revenueZ = $mathUtility->generateStandardNormal();
         $params = $this->resolveModelParameters($stock, [
@@ -145,10 +145,10 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
 
         // CECL Forward Provisioning & Default Shock:
         // Shadow Banks primarily hold highly leveraged mortgages and direct loans.
-        $outputGap = $macroState['output_gap_ema'] ?? ($macroState['output_gap'] ?? 0.0);
+        $outputGap = $macroState->outputGapEma;
         $macroDefaultDrag = $outputGap < 0.0 ? abs($outputGap) * self::MACRO_DEFAULT_SCALAR : 0.0;
 
-        $creditSpread = $macroState['macro_credit_spread_ema'] ?? ($macroState['macro_credit_spread'] ?? 0.02);
+        $creditSpread = $macroState->macroCreditSpreadEma;
         $ceclForwardProvision = $creditSpread * self::CECL_FORWARD_SENSITIVITY;
 
         $lossProvisionShock = ($creditZ < self::CREDIT_STRESS_Z_THRESHOLD
@@ -158,8 +158,8 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
                 : 0.0)) + $macroDefaultDrag + $ceclForwardProvision;
 
         // Shadow Bank NIM Squeeze (high VULNERABILITY):
-        $yield30y = $macroState['yield_30y_ema'] ?? ($macroState['yield_30y'] ?? self::DEFAULT_30Y_YIELD_FALLBACK);
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        $yield30y = $macroState->yield30yEma;
+        $policyRate = $macroState->policyRateEma;
         $mortgageSpread = $yield30y - $policyRate;
 
         if ($mortgageSpread < 0) {
@@ -170,33 +170,30 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
 
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
         $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max($minVariableMargin, $realizedVariableMargin + $lossProvisionShock + $nimSqueeze));
-        $actualVariableCosts = $actualRevenue * $clampedMargin;
 
-        $eventLore = null;
+        $eventType = null;
         if ($creditZ < self::LORE_TOXIC_WRITE_DOWN_Z) {
-            $eventLore = "Took massive write-downs on toxic mortgage-backed securities and loan defaults.";
+            $eventType = ShockEvent::MASSIVE_CREDIT_PROVISION;
         } elseif ($creditZ < self::LORE_ELEVATED_DEFAULT_Z) {
-            $eventLore = "Elevated mortgage defaults negatively impacted quarterly margins.";
+            $eventType = ShockEvent::ELEVATED_LOAN_DEFAULTS;
         } elseif ($creditZ > 1.80) {
-            $eventLore = "Strong loan performance allowed significant reserve releases under CECL accounting models.";
+            $eventType = ShockEvent::RESERVE_RELEASE;
         }
 
-        // Analyst Visibility
-        $analystExpectedRevenue = $expectedRevenue;
-        $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
-        $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
-        $expectedLossProvision = $lossProvisionShock * $dynamicVisibility;
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max($minVariableMargin, $realizedVariableMargin + $expectedLossProvision + $nimSqueeze));
+        return new SectorPhysicsResult(
+            actualRevenue: $actualRevenue,
+            rawVariableMargin: $clampedMargin,
+            primaryShockZ: abs($creditZ) > abs($revenueZ) ? $creditZ : $revenueZ,
+            // Revenue is opaque; only macro loss provision signals are visible to analysts.
+            observableShockZ: 0.0,
+            eventType: $eventType,
+        );
+    }
 
-        return [
-            'actual_revenue'                  => $actualRevenue,
-            'actual_variable_costs'           => $actualVariableCosts,
-            'analyst_expected_revenue'        => $analystExpectedRevenue,
-            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit'                            => $actualRevenue - $fixedCosts - $actualVariableCosts,
-            'primary_shock_z'                 => abs($creditZ) > abs($revenueZ) ? $creditZ : $revenueZ,
-            'event_lore'                      => $eventLore
-        ];
+    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    {
+        // Private NIM structures partially visible via FRED/securitization data (~50%).
+        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.10);
     }
 }
 

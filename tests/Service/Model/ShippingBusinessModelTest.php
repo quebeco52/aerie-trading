@@ -22,7 +22,7 @@ class ShippingBusinessModelTest extends TestCase
 
         // Positive output gap -> continuous positive spot rate multiplier
         $macroStatePositive = ['output_gap_ema' => 0.010, 'inflation_ema' => 0.02];
-        $resultPositive = $model->generateIdiosyncraticShock(
+        $resultPositive = $model->computeActualFinancials(
             $stock,
             1000.0,
             0.40,
@@ -34,7 +34,7 @@ class ShippingBusinessModelTest extends TestCase
 
         // Negative output gap -> continuous negative spot rate multiplier
         $macroStateNegative = ['output_gap_ema' => -0.010, 'inflation_ema' => 0.02];
-        $resultNegative = $model->generateIdiosyncraticShock(
+        $resultNegative = $model->computeActualFinancials(
             $stock,
             1000.0,
             0.40,
@@ -44,7 +44,7 @@ class ShippingBusinessModelTest extends TestCase
             $mathUtilityMock
         );
 
-        $this->assertGreaterThan($resultNegative['actual_revenue'], $resultPositive['actual_revenue']);
+        $this->assertGreaterThan($resultNegative->actualRevenue, $resultPositive->actualRevenue);
     }
 
     public function testVesselAgingAndEcoFleetModernization(): void

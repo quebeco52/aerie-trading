@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
@@ -55,10 +56,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     public const VIRAL_GROWTH_REV_MULT     = 1.10;
 
     // --- Analyst Visibility & Error ---
-    /** Base analyst visibility into user engagement and app store download metrics. */
-    public const ANALYST_BASE_VISIBILITY   = 0.20;
-    /** Standard deviation of analyst estimation error for quarterly tech revenues. */
-    public const ANALYST_ERROR_STD_DEV     = 0.05;
+    // Moved to getCoverageProfile() — see MarketConsensusEngine.
 
     // --- Innovation Competition Moat & Capital Structure ---
     /** Operating margin mean reversion speed: fast speed reflects rapid technological disruption and competition. */
@@ -82,7 +80,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     /** Structural maximum operating margin ceiling for cloud software monopolies. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.55;
 
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         // Resolve company-specific tuned tech and software parameters
         $params = $this->resolveModelParameters($stock, [
@@ -101,7 +99,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         $eventZ        = $mathUtility->generateStandardNormal(); // Fat-tail regulatory antitrust / data breach Z-score
 
         // Macro advertising cyclicality (marketing budgets expand with positive output gap, collapse in recessions)
-        $outputGap = $macroState['output_gap_ema'] ?? ($macroState['output_gap'] ?? 0.0);
+        $outputGap = $macroState->outputGapEma;
         $adCyclicality = $outputGap * $adCyclicalityScalar;
 
         // Fat Tail Risk: Data Breaches, Anti-Trust, and Viral Breakthroughs
@@ -132,7 +130,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
 
         // Supply Chain Immunity vs. Continuous Talent Inflation:
         // Tech companies don't buy steel or oil, they pay for engineers and cloud compute.
-        $inflation = $macroState['inflation_ema'] ?? ($macroState['inflation'] ?? MacroEngine::TARGET_INFLATION);
+        $inflation = $macroState->inflationEma;
         $wageInflationPenalty = max(0.0, ($inflation - MacroEngine::TARGET_INFLATION)) * abs((float) $stock->getBeta()) * self::WAGE_INFLATION_SCALAR;
 
         // SaaS ARR Operating Leverage:
@@ -144,16 +142,6 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         $adCostAddon = $regulatoryShock * $adWeight;
         $rawMargin = $realizedVariableMargin + $wageInflationPenalty + $saasOperatingLeverageShift + $adCostAddon;
         $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $rawMargin));
-        $actualVariableCosts = $actualRevenue * $clampedMargin;
-        $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
-
-        // Analyst Visibility
-        // Tech usage/engagement data is partially public via 3rd party trackers (~20% visibility).
-        $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
-        $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
-        $blendedRevenueShock = (($subscriptionZ * $subWeight) + ($adZ * $adWeight)) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
-        $analystExpectedRevenue = $expectedRevenue * (1.0 + ($blendedRevenueShock * $dynamicVisibility));
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + (($wageInflationPenalty + $saasOperatingLeverageShift) * $dynamicVisibility)));
 
         // Primary shock Z-score selects the most extreme driver across streams
         $primaryShockZ = $subscriptionZ;
@@ -164,15 +152,21 @@ class TechBusinessModel extends StandardCorporateBusinessModel
             $primaryShockZ = $eventZ;
         }
 
-        return [
-            'actual_revenue'                  => $actualRevenue,
-            'actual_variable_costs'           => $actualVariableCosts,
-            'analyst_expected_revenue'        => $analystExpectedRevenue,
-            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit'                            => $ebit,
-            'primary_shock_z'                 => $primaryShockZ,
-            'event_type'                      => $eventType,
-        ];
+        $blendedRevenueShock = (($subscriptionZ * $subWeight) + ($adZ * $adWeight)) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
+
+        return new SectorPhysicsResult(
+            actualRevenue: $actualRevenue,
+            rawVariableMargin: $clampedMargin,
+            primaryShockZ: $primaryShockZ,
+            observableShockZ: $blendedRevenueShock,
+            eventType: $eventType,
+        );
+    }
+
+    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    {
+        // Tech usage/engagement is partially visible via 3rd party trackers (~20%).
+        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.20, errorStdDev: 0.05);
     }
 
     public function getMarginReversionSpeed(): float

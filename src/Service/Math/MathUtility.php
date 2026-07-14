@@ -367,27 +367,29 @@ class MathUtility
         float $roic,
         float $growthRate = FinancialConstants::DEFAULT_PERPETUAL_GROWTH_RATE
     ): float {
-        // 1. In perpetual valuation, steady-state growth cannot exceed or equal the hurdle rate.
-        // Constrain perpetual growth to at least 50 bps (0.005) below Cost of Equity to prevent divergence.
-        $maxPermissibleGrowth = $costOfEquity - 0.005;
-        $effectiveGrowth = min($growthRate, $maxPermissibleGrowth);
+        // 1. Enforce absolute structural floor on Cost of Equity to prevent divergence under extreme distress
+        $effectiveCostOfEquity = max(FinancialConstants::MIN_COST_OF_EQUITY, $costOfEquity);
 
-        // 2. Prevent division by zero or negative ROIC anomalies in perpetual calculations (floor at 0.01)
+        // 2. Enforce absolute structural bounds on perpetual growth rate [-5%, +6%]
+        $clampedGrowth = max(FinancialConstants::MIN_PERPETUAL_GROWTH_RATE, min(FinancialConstants::MAX_PERPETUAL_GROWTH_RATE, $growthRate));
+
+        // 3. In perpetual valuation, steady-state growth cannot exceed or equal the hurdle rate.
+        // Constrain perpetual growth to at least 50 bps (0.005) below Cost of Equity to prevent divergence.
+        $effectiveGrowth = min($clampedGrowth, $effectiveCostOfEquity - 0.005);
+
+        // 4. Prevent division by zero or negative ROIC anomalies in perpetual calculations (floor at 0.01)
         $effectiveRoic = max(0.01, $roic);
 
-        // 3. Reinvestment Rate = Growth / ROIC
-        $reinvestmentRate = $effectiveGrowth / $effectiveRoic;
-
-        // 4. If ROIC is structurally below growth, external financing is required (b > 1.0).
-        // Cap reinvestment at 100% (1.0) of earnings to prevent negative payout ratios in steady-state equity valuation.
-        $reinvestmentRate = min(1.0, $reinvestmentRate);
+        // 5. Reinvestment Rate = Growth / ROIC (bounded to [-1.0, 1.0] to prevent extreme negative payout distortions)
+        $reinvestmentRate = max(-1.0, min(1.0, $effectiveGrowth / $effectiveRoic));
 
         $payoutRatio = 1.0 - $reinvestmentRate;
 
-        // 5. Calculate Damodaran P/E multiple
-        $pe = $payoutRatio / ($costOfEquity - $effectiveGrowth);
+        // 6. Calculate Damodaran P/E multiple with safe spread denominator
+        $spread = max(0.005, $effectiveCostOfEquity - $effectiveGrowth);
+        $pe = $payoutRatio / $spread;
 
-        // 6. Enforce structural market boundaries for distressed (4x) and superstar (100x) equities
+        // 7. Enforce structural market boundaries for distressed (4x) and superstar (35x) equities
         return max(FinancialConstants::MIN_INTRINSIC_PE, min(FinancialConstants::MAX_INTRINSIC_PE, $pe));
     }
 
@@ -402,10 +404,14 @@ class MathUtility
         float $wacc,
         float $terminalGrowthRate = FinancialConstants::DEFAULT_PERPETUAL_GROWTH_RATE
     ): float {
-        $spread = $wacc - $terminalGrowthRate;
-        $multiplier = $spread > 0 ? (1.0 + $terminalGrowthRate) / $spread : FinancialConstants::DCF_FALLBACK_MULTIPLIER;
+        $effectiveWacc = max(FinancialConstants::MIN_COST_OF_EQUITY, $wacc);
+        $clampedGrowth = max(FinancialConstants::MIN_PERPETUAL_GROWTH_RATE, min(FinancialConstants::MAX_PERPETUAL_GROWTH_RATE, $terminalGrowthRate));
+        $effectiveGrowth = min($clampedGrowth, $effectiveWacc - 0.005);
 
-        return min(FinancialConstants::MAX_DCF_MULTIPLIER, $multiplier);
+        $spread = max(0.005, $effectiveWacc - $effectiveGrowth);
+        $multiplier = (1.0 + $effectiveGrowth) / $spread;
+
+        return max(1.0, min(FinancialConstants::MAX_DCF_MULTIPLIER, $multiplier));
     }
 
     /**
@@ -425,8 +431,12 @@ class MathUtility
             return 0.0;
         }
 
-        // Prevent Division by Zero. The denominator must be at least 1% (0.01)
-        $denominator = max(0.01, $discountRate - $growthRate);
+        $effectiveDiscountRate = max(FinancialConstants::MIN_COST_OF_EQUITY, $discountRate);
+        $clampedGrowthRate = max(FinancialConstants::MIN_PERPETUAL_GROWTH_RATE, min(FinancialConstants::MAX_PERPETUAL_GROWTH_RATE, $growthRate));
+        $effectiveGrowthRate = min($clampedGrowthRate, $effectiveDiscountRate - 0.005);
+
+        // Prevent Division by Zero. The denominator must be at least 50 bps (0.005)
+        $denominator = max(0.005, $effectiveDiscountRate - $effectiveGrowthRate);
 
         return $annualDividend / $denominator;
     }

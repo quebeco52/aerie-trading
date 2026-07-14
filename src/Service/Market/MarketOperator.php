@@ -2,6 +2,7 @@
 
 namespace App\Service\Market;
 
+use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
@@ -38,10 +39,10 @@ class MarketOperator
      * Wakes up periodically to enforce the laws of game-design physics.
      *
      * @param array<Stock> $stocks An array of stock entities to review.
-     * @param array $macroState Current macro state for context-aware decisions.
+     * @param MacroStateDTO $macroState Current macro state for context-aware decisions.
      * @return array<mixed> Generated market events resulting from restructuring actions.
      */
-    public function enforceMarketStability(array $stocks, array $macroState = []): array
+    public function enforceMarketStability(array $stocks, MacroStateDTO $macroState): array
     {
         $this->logger->info("The Market Operator is reviewing the district...");
         $generatedEvents = [];
@@ -91,10 +92,10 @@ class MarketOperator
      * @param Stock  $stock     The failing stock to restructure.
      * @param float  $marketCap The current market capitalization.
      * @param string $name      The name of the company.
-     * @param array  $macroState The current macroeconomic state.
+     * @param MacroStateDTO $macroState The current macroeconomic state.
      * @return array|null Returns generated market events if a restructuring occurred, otherwise null.
      */
-    private function applyRestructuringRule(Stock $stock, float $marketCap, string $name, array $macroState = []): ?array
+    private function applyRestructuringRule(Stock $stock, float $marketCap, string $name, MacroStateDTO $macroState): ?array
     {
         $revenue = (float) $stock->getTotalRevenue();
         $margin = (float) $stock->getOperatingMargin();
@@ -175,7 +176,7 @@ class MarketOperator
     /**
      * Evaluates whether the CEO should be fired for poor performance or naturally retire.
      */
-    private function evaluateCorporateGovernance(Stock $stock, array $macroState = []): ?array
+    private function evaluateCorporateGovernance(Stock $stock, MacroStateDTO $macroState): ?array
     {
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';

@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
+use App\Service\Event\ShockEvent;
 use App\Service\Math\FinancialConstants;
 
 /**
@@ -55,9 +57,9 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
 
     // --- ROE & Target Architecture ---
     /** Weight given to historical baseline ROE when blending with TTM ROE. */
-    public const BASELINE_ROE_WEIGHT = 0.70;
+    public const BASELINE_ROE_WEIGHT = 0.50;
     /** Weight given to TTM ROE when blending with historical baseline ROE. */
-    public const TTM_ROE_WEIGHT      = 0.30;
+    public const TTM_ROE_WEIGHT      = 0.50;
     /** Default 5Y Treasury spread over policy rate when yield curve data is absent. */
     public const DEFAULT_5Y_YIELD_PREMIUM = 0.005;
     /** Default maximum financial leverage (Debt/Equity) limit if sector configuration is absent. */
@@ -79,7 +81,7 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
      * Idiosyncratic shock applied to retail trading volume and institutional deal flow.
      * Capital Markets have higher top-line variance compared to sticky Asset Managers.
      */
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
             'trading_revenue_weight'  => self::TRADING_REVENUE_WEIGHT,
@@ -97,7 +99,7 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
         // Brokerage trading revenues are hyper-sensitive to the VIX (Systemic Market Volatility).
         // High Volatility = Massive trading volume (panic selling or euphoria buying) which generates massive fees.
         // Crucially, this VIX bonus applies ONLY to the trading revenue stream ($tradingWeight).
-        $vixEma = $macroState['market_volatility_ema'] ?? ($macroState['market_volatility'] ?? self::VIX_BASELINE_THRESHOLD);
+        $vixEma = $macroState->marketVolatilityEma;
         $volatilityBonus = max(0.0, ($vixEma - self::VIX_BASELINE_THRESHOLD) * self::VIX_REVENUE_SCALAR);
 
         $tradingRevenue  = $expectedRevenue * $tradingWeight * (1.0 + ($tradingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $volatilityBonus);
@@ -107,34 +109,33 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
         // Structural Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
         $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max($minVariableMargin, $realizedVariableMargin));
-        $actualVariableCosts = $actualRevenue * $clampedMargin;
 
-        $eventLore = null;
+        $eventType = null;
         if ($vixEma > self::VIX_EXTREME_THRESHOLD) {
-            $eventLore = "Record trading volumes driven by extreme market volatility resulted in massive fee generation.";
+            $eventType = ShockEvent::VOLATILITY_SURGE;
         } elseif ($advisoryZ < self::ADVISORY_CRASH_Z_THRESHOLD) {
-            $eventLore = "Suffered a steep decline in investment banking deal flow and advisory fees.";
+            $eventType = ShockEvent::ADVISORY_CRASH;
         }
 
-        // Analyst Visibility
-        // The Volatility Bonus is completely public via daily VIX tracking.
-        $analystExpectedRevenue = $expectedRevenue * (1.0 + ($volatilityBonus * $tradingWeight));
-        $analystExpectedVariableCosts = $analystExpectedRevenue * $clampedMargin;
-
+        // observableShockZ: the VIX bonus is completely public via daily VIX tracking — analysts can anticipate it fully.
         $primaryShockZ = abs($tradingZ) > abs($advisoryZ) ? $tradingZ : $advisoryZ;
 
-        return [
-            'actual_revenue'                  => $actualRevenue,
-            'actual_variable_costs'           => $actualVariableCosts,
-            'analyst_expected_revenue'        => $analystExpectedRevenue,
-            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit'                            => $actualRevenue - $fixedCosts - $actualVariableCosts,
-            'primary_shock_z'                 => $primaryShockZ,
-            'event_lore'                      => $eventLore
-        ];
+        return new SectorPhysicsResult(
+            actualRevenue: $actualRevenue,
+            rawVariableMargin: $clampedMargin,
+            primaryShockZ: $primaryShockZ,
+            observableShockZ: $volatilityBonus * $tradingWeight,
+            eventType: $eventType,
+        );
     }
 
-    public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array
+    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    {
+        // VIX bonus is 100% public; underlying trading/advisory shocks are opaque (~10% visible baseline).
+        return new \App\DTO\SectorCoverageProfile(baseVisibility: 1.0, errorStdDev: 0.06);
+    }
+
+    public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
         $equity = (float) $stock->getTotalEquity();
         $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
@@ -144,12 +145,12 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
             $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
         }
 
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
-        $yield5y = $macroState['yield_5y_ema'] ?? ($macroState['yield_5y'] ?? $policyRate + self::DEFAULT_5Y_YIELD_PREMIUM);
+        $policyRate = $macroState->policyRateEma;
+        $yield5y = $macroState->yield5yEma;
         $structuralSpread = (float) $stock->getCreditSpread();
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
 
-        $taxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $taxRate = $macroState->corporateTaxRate;
 
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
         $treasury = (float) $stock->getCorporateTreasury();
@@ -198,9 +199,9 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
         ];
     }
 
-    public function calculateInterestIncome(Stock $stock, array &$macroState, MathUtility $mathUtility): float
+    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): float
     {
-        $policyRate = $macroState['policy_rate_ema'] ?? 0.04;
+        $policyRate = $macroState->policyRateEma;
 
         // 1. Margin Loan Yield
         // Brokerages lend their wholesale debt to clients as margin loans.
@@ -246,9 +247,9 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
      * Their excess cash must remain highly liquid to satisfy clearinghouse margin requirements 
      * and strict regulatory capital constraints. They earn standard risk-free money market yields.
      */
-    public function calculateCashYield(array &$macroState): float
+    public function calculateCashYield(\App\DTO\MacroStateDTO $macroState): float
     {
-        $policyRate = $macroState['policy_rate_ema'] ?? ($macroState['policy_rate'] ?? 0.04);
+        $policyRate = $macroState->policyRateEma;
         return max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
     }
 

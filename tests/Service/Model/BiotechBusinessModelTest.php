@@ -47,13 +47,12 @@ class BiotechBusinessModelTest extends TestCase
         // 1. establishedZ = 0.0
         // 2. pipelineZ = 1.5 (Positive clinical pipeline progress)
         // 3. trialZ = 0.0 (No binary landmark tail event)
-        // 4. analystError = 0.0
-        $mathUtilityMock->expects($this->exactly(4))
+        $mathUtilityMock->expects($this->exactly(3))
             ->method('generateStandardNormal')
-            ->willReturnOnConsecutiveCalls(0.0, 1.5, 0.0, 0.0);
+            ->willReturnOnConsecutiveCalls(0.0, 1.5, 0.0);
 
         $macroState = ['output_gap_ema' => 0.0, 'inflation_ema' => 0.02];
-        $result = $model->generateIdiosyncraticShock(
+        $result = $model->computeActualFinancials(
             $stock,
             1000.0,
             0.30,
@@ -65,8 +64,8 @@ class BiotechBusinessModelTest extends TestCase
 
         // Continuous pipeline shift = -0.015 * 1.5 * 0.30 = -0.00675
         // Realized variable margin = 0.30 - 0.00675 = 0.29325
-        $this->assertLessThan(1000.0 * 0.30, $result['actual_variable_costs']);
-        $this->assertNull($result['event_lore']);
+        $this->assertLessThan(1000.0 * 0.30, $result->actualVariableCosts);
+        $this->assertNull($result->eventType);
     }
 
     public function testBiotechResearchBurnValuation(): void

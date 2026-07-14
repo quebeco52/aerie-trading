@@ -2,6 +2,7 @@
 
 namespace App\Service\Corporate;
 
+use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
@@ -31,7 +32,7 @@ class TreasuryEngine
         float $operatingBase,
         float $nopat,
         float $currentTreasury,
-        array &$macroState,
+        MacroStateDTO $macroState,
         array $health
     ): array {
         $state = [
@@ -79,7 +80,7 @@ class TreasuryEngine
         float $totalBuybackCash,
         float $operatingBase,
         float $finalTreasury,
-        array &$macroState,
+        MacroStateDTO $macroState,
         array $health,
         float $realEstateAppreciation = 0.0,
         bool $debtActionTaken = false
@@ -130,7 +131,7 @@ class TreasuryEngine
         ];
     }
 
-    private function processDebtExpansion(Stock $stock, float $newEquity, float $nopat, array &$macroState, array $health, array &$state): void
+    private function processDebtExpansion(Stock $stock, float $newEquity, float $nopat, MacroStateDTO $macroState, array $health, array &$state): void
     {
         $totalDebt = $state['wholesaleDebt'] + $state['customerDeposits'];
         $liveInvestedCapital = $this->corporateMetrics->calculateLiveInvestedCapital($newEquity, $totalDebt, $state['treasury']);
@@ -257,7 +258,7 @@ class TreasuryEngine
         }
     }
 
-    private function processOrganicCapex(Stock $stock, float $newEquity, float $nopat, float $operatingBase, array &$macroState, array $health, array &$state): void
+    private function processOrganicCapex(Stock $stock, float $newEquity, float $nopat, float $operatingBase, MacroStateDTO $macroState, array $health, array &$state): void
     {
         $totalDebt = $state['wholesaleDebt'] + $state['customerDeposits'];
         $industry = $stock->getIndustry() ?: 'General';
@@ -328,7 +329,7 @@ class TreasuryEngine
         }
     }
 
-    private function processEmergencyBorrowing(Stock $stock, float $operatingBase, array &$macroState, array $health, array &$state): void
+    private function processEmergencyBorrowing(Stock $stock, float $operatingBase, MacroStateDTO $macroState, array $health, array &$state): void
     {
         $industry = $stock->getIndustry() ?: 'General';
         $strategy = \App\Data\Sectors::getBusinessModelStrategy(\App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none');
@@ -339,7 +340,7 @@ class TreasuryEngine
 
             if ($health['can_issue_debt']) {
                 // Emergency debt is highly punitive (+200 bps penalty) but still anchors to the 5Y corporate fixed rate
-                $currentMarketRate = $health['raw_metrics']['current_market_rate'] ?? (($macroState['yield_5y_ema'] ?? 0.045) + (float) $stock->getCreditSpread());
+                $currentMarketRate = $health['raw_metrics']['current_market_rate'] ?? ($macroState->yield5yEma + (float) $stock->getCreditSpread());
                 $costOfEmergencyDebt = $currentMarketRate + FinancialConstants::EMERGENCY_DEBT_SPREAD_PENALTY;
 
                 $this->debtEngine->issueDebt($stock, $cashShortfall, $costOfEmergencyDebt);
@@ -358,7 +359,7 @@ class TreasuryEngine
         }
     }
 
-    private function processEquityIssuance(Stock $stock, float $operatingBase, array &$macroState, array $health, array &$state, float $totalBuybackCash): void
+    private function processEquityIssuance(Stock $stock, float $operatingBase, MacroStateDTO $macroState, array $health, array &$state, float $totalBuybackCash): void
     {
         $currentPrice = (float) $stock->getPrice();
         if ($currentPrice <= 0.0) return;
@@ -548,7 +549,7 @@ class TreasuryEngine
         }
     }
 
-    private function processPassiveLiabilityGrowth(Stock $stock, array &$macroState, array &$state): void
+    private function processPassiveLiabilityGrowth(Stock $stock, MacroStateDTO $macroState, array &$state): void
     {
         $industry = $stock->getIndustry() ?: 'General';
         $strategy = \App\Data\Sectors::getBusinessModelStrategy(\App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none');

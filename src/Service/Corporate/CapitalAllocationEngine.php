@@ -31,7 +31,7 @@ class CapitalAllocationEngine
         float $quarterlyFcfPerShare,
         float $currentPrice,
         float $sharesOutstanding,
-        array &$macroState,
+        \App\DTO\MacroStateDTO $macroState,
         float $actualTotalNetIncome = 0.0
     ): array {
         $events = [];
@@ -60,7 +60,7 @@ class CapitalAllocationEngine
         $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState);
 
         $ebit = $health['raw_metrics']['ebit'] ?? 0.0;
-        $corporateTaxRate = $macroState['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $corporateTaxRate = $macroState->corporateTaxRate;
         $nopat = $ebit > 0 ? $ebit * (1.0 - $corporateTaxRate) : $ebit;
 
         // CALCULATE BASELINE CASH CHANGES
@@ -276,7 +276,7 @@ class CapitalAllocationEngine
         return ['dividend_per_share' => $newDividend, 'total_paid' => $totalPaid, 'event' => $event];
     }
 
-    private function executeBuybacks(Stock $stock, float $treasury, float $targetOperatingCash, float $shares, float $currentPrice, float $currentPE, float $operatingBase, float $investedCapital, float $nopat, array $health, array &$macroState, float $actualTotalNetIncome = 0.0, float $retainedEarningsThisQuarter = 0.0): array
+    private function executeBuybacks(Stock $stock, float $treasury, float $targetOperatingCash, float $shares, float $currentPrice, float $currentPE, float $operatingBase, float $investedCapital, float $nopat, array $health, \App\DTO\MacroStateDTO $macroState, float $actualTotalNetIncome = 0.0, float $retainedEarningsThisQuarter = 0.0): array
     {
         $excessCash = max(0.0, $treasury - $targetOperatingCash);
         $canEasilyCoverDebt = $excessCash > ((float) $stock->getTotalDebt() * 2.0);

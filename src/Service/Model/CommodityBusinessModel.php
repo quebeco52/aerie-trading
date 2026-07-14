@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
@@ -34,10 +35,7 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
     public const INFLATION_BONUS_SCALAR    = 1.00;
 
     // --- Analyst Visibility & Error ---
-    /** Base analyst visibility into opaque physical extraction volumes and refinery yields. */
-    public const ANALYST_BASE_VISIBILITY   = 0.20;
-    /** Standard deviation of analyst estimation error for quarterly extraction volumes. */
-    public const ANALYST_ERROR_STD_DEV     = 0.05;
+    // Moved to getCoverageProfile() — see MarketConsensusEngine.
 
     // --- Capital Reinvestment & Asset Depreciation Physics ---
     /** Quarterly efficiency decay rate per unit of underinvestment below replacement CapEx. */
@@ -49,7 +47,7 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
     /** Structural maximum operating margin ceiling for state-of-the-art mining/drilling operations. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.32;
 
-    public function getMacroPhysics(Stock $stock, array &$macroState): array
+    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
         
@@ -65,7 +63,7 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
     /**
      * Commodity revenues are highly volatile due to wild swings in global spot prices.
      */
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
             'extraction_revenue_weight' => self::EXTRACTION_REVENUE_WEIGHT,
@@ -87,41 +85,33 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         // The Inflation Exposure:
         // While standard corporates get crushed by supply chain inflation, commodities *are* the supply chain.
         // Their margins explode upwards during inflationary spikes as spot prices rise, and violently contract during deflation.
-        $inflation = $macroState['inflation_ema'] ?? MacroEngine::TARGET_INFLATION;
+        $inflation = $macroState->inflationEma;
         $inflationBonus = ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_BONUS_SCALAR * $spotSensitivity;
 
         $spotRevenue   = $expectedRevenue * $spotWeight * (1.0 + ($spotZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $inflationBonus);
         $actualRevenue = max(0.0, $extractionRevenue + $spotRevenue);
 
-        // CRITICAL FINANCIAL FIX:
-        // Variable extraction costs (labor, diesel, equipment) scale with the physical volume stream produced ($extractionRevenue),
-        // NOT the wildly fluctuating global spot price of the refined commodity.
-        // However, because $realizedVariableMargin is calculated by the Engine as a percentage of TOTAL structural revenue,
-        // we must normalize it against the extraction weight. Otherwise, commodities with a 50% extraction weight
-        // would magically see their variable costs cut in half, resulting in 200%+ ROIC explosions (e.g. CASC).
         $extractionVariableMargin = $extractionWeight > 0 ? ($realizedVariableMargin / $extractionWeight) : $realizedVariableMargin;
         $actualVariableCosts = $extractionRevenue * $extractionVariableMargin;
-        $ebit = $actualRevenue - $fixedCosts - $actualVariableCosts;
-
-        // Analyst Visibility
-        // Commodity spot prices and inflation are public. Physical extraction volumes ($extractionZ) are ~20% visible.
-        $analystError = $mathUtility->generateStandardNormal() * self::ANALYST_ERROR_STD_DEV;
-        $dynamicVisibility = min(1.0, max(0.0, self::ANALYST_BASE_VISIBILITY + $analystError));
-        $analystExpectedExtraction = $expectedRevenue * $extractionWeight * (1.0 + ($extractionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR) * $dynamicVisibility));
-        $analystExpectedSpot       = $expectedRevenue * $spotWeight * (1.0 + $inflationBonus);
-        $analystExpectedRevenue    = max(0.0, $analystExpectedExtraction + $analystExpectedSpot);
-        $analystExpectedVariableCosts = $analystExpectedExtraction * $extractionVariableMargin;
+        $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
 
         $primaryShockZ = abs($extractionZ) > abs($spotZ) ? $extractionZ : $spotZ;
+        // observableShockZ: extraction volume drift is partially visible; spot is fully public
+        $observableShockZ = $extractionZ * $extractionWeight * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
 
-        return [
-            'actual_revenue'                  => $actualRevenue,
-            'actual_variable_costs'           => $actualVariableCosts,
-            'analyst_expected_revenue'        => $analystExpectedRevenue,
-            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit'                            => $ebit,
-            'primary_shock_z'                 => $primaryShockZ
-        ];
+        return new SectorPhysicsResult(
+            actualRevenue: $actualRevenue,
+            rawVariableMargin: $effectiveMargin,
+            primaryShockZ: $primaryShockZ,
+            observableShockZ: $observableShockZ,
+            eventType: null,
+        );
+    }
+
+    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    {
+        // Commodity spot prices and inflation are public. Physical extraction volumes are ~20% visible.
+        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.20, errorStdDev: 0.05);
     }
 
     public function getWorkingCapitalIntensity(Stock $stock): float

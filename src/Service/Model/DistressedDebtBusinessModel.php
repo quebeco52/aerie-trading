@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 
 /**
@@ -53,22 +55,22 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     /** Threshold ratio of excess cash over operating base triggering mega-hoarder status for dry powder funds. */
     public const DRY_POWDER_MEGA_THRESHOLD      = 0.70;
 
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $revenueZ = $mathUtility->generateStandardNormal();
 
         // Counter-Cyclical Credit Spread Trigger
-        $creditSpread = $macroState['macro_credit_spread'] ?? self::DEFAULT_CREDIT_SPREAD_FALLBACK;
-        $outputGap = $macroState['output_gap_ema'] ?? ($macroState['output_gap'] ?? 0.0);
+        $creditSpread = $macroState->macroCreditSpread;
+        $outputGap = $macroState->outputGapEma;
 
         $distressMultiplier = 0.0;
-        $eventLore = null;
+        $eventType = null;
 
         // When credit spreads exceed 2.5% or output gap is negative, distressed debt opportunities explode
         if ($creditSpread > self::SPREAD_BLOWOUT_THRESHOLD || $outputGap < self::RECESSION_GAP_THRESHOLD) {
             $distressMultiplier = ($creditSpread - self::DEFAULT_CREDIT_SPREAD_FALLBACK) * self::SPREAD_SURGE_SCALAR + abs(min(0.0, $outputGap)) * self::RECESSION_SURGE_SCALAR;
             if ($revenueZ > self::LORE_RESTRUCTURING_Z_SCORE) {
-                $eventLore = "Executed massive restructuring deals on defaulted corporate debt, unlocking extraordinary turnaround gains.";
+                $eventType = ShockEvent::DISTRESSED_DEBT_RESTRUCTURING;
             }
         } elseif ($outputGap > self::BULL_MARKET_GAP_THRESHOLD && $creditSpread < self::DEFAULT_CREDIT_SPREAD_FALLBACK) {
             // Tight credit spreads in roaring bull markets reduce distressed supply
@@ -86,22 +88,22 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
         $recoveryRevenue = $expectedRevenue * $recoveryWeight * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $distressMultiplier);
         $actualRevenue   = max(0.0, $advisoryRevenue + $recoveryRevenue);
 
-        $actualVariableCosts = $actualRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin));
+        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin));
 
-        // Analyst Visibility
-        // Macro credit spreads and corporate default rates are public data (~90% visibility).
-        $analystExpectedRevenue = $expectedRevenue * (1.0 + $distressMultiplier);
-        $analystExpectedVariableCosts = $analystExpectedRevenue * min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin));
+        // observableShockZ: macro credit spreads and corporate default rates are public data (~90% visibility).
+        return new SectorPhysicsResult(
+            actualRevenue: $actualRevenue,
+            rawVariableMargin: $clampedMargin,
+            primaryShockZ: $revenueZ,
+            observableShockZ: $distressMultiplier,
+            eventType: $eventType,
+        );
+    }
 
-        return [
-            'actual_revenue' => $actualRevenue,
-            'actual_variable_costs' => $actualVariableCosts,
-            'analyst_expected_revenue' => $analystExpectedRevenue,
-            'analyst_expected_variable_costs' => $analystExpectedVariableCosts,
-            'ebit' => $actualRevenue - $fixedCosts - $actualVariableCosts,
-            'primary_shock_z' => $revenueZ,
-            'event_lore' => $eventLore
-        ];
+    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    {
+        // Macro credit spreads and default rates are fully public (~90% visible, 80% floor).
+        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.90, errorStdDev: 0.05, minVisibility: 0.80);
     }
 
     public function evaluateHoardingStatus(float $treasury, float $targetCashReserves, float $operatingBase, float $totalDebt): array

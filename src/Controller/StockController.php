@@ -3,6 +3,7 @@
 namespace App\Controller;
 
 use App\Entity\Stock;
+use App\DTO\MacroStateDTO;
 use App\Entity\Etf;
 use App\Entity\User;
 use App\Entity\UserStock;
@@ -46,13 +47,16 @@ class StockController extends AbstractController
         $currentUser = $this->getUser();
 
         $macroStateJson = $redis->get('macroeconomic_state');
-        $macroState = $macroStateJson ? json_decode($macroStateJson, true) : [
+        $rawMacroState = $macroStateJson ? json_decode($macroStateJson, true) : [
             'inflation' => 0.02,
             'output_gap' => 0.00,
             'policy_rate' => 0.04,
             'yield_10y' => 0.045,
             'nominal_gdp_index' => 1.0
         ];
+
+        // Hydrate the raw array into your strongly-typed DTO!
+        $macroState = MacroStateDTO::fromArray($rawMacroState);
 
         $userQuantity = 0;
         if ($currentUser) {
@@ -79,13 +83,13 @@ class StockController extends AbstractController
             $eps = (float) $asset->getEarningsPerShare();
             $peRatio = ($eps > 0) ? ((float) $asset->getPrice() / $eps) : null;
 
-            $nominalGdpIndex = $macroState['nominal_gdp_index'] ?? 1.0;
+            $nominalGdpIndex = $macroState->nominalGdpIndex;
             $samRatio = (float) $asset->getSamRatio();
-            
+
             $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$asset->getIndustry() ?? 'General']['business_model'] ?? 'none';
             $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
             $evaluationCapital = $isFinancial ? (float) $asset->getTotalEquity() : $asset->getInvestedCapital();
-            
+
             $marketShare = min(0.9999, $corporateMetrics->calculateMarketShare($evaluationCapital, $nominalGdpIndex, $samRatio));
         }
 

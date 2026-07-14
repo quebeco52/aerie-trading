@@ -2,6 +2,9 @@
 
 namespace App\Service\Model;
 
+use App\DTO\ActualFinancialsDTO;
+use App\DTO\MacroStateDTO;
+use App\DTO\SectorCoverageProfile;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 
@@ -11,16 +14,17 @@ use App\Service\Math\MathUtility;
  */
 interface BusinessModelInterface
 {
-    public function getTargetMetrics(Stock $stock, array &$macroState, MathUtility $mathUtility): array;
-    /**
-     * @return array{actual_revenue: float, actual_variable_costs: float, analyst_expected_revenue: float, analyst_expected_variable_costs: float, ebit: float, primary_shock_z: float, event_lore: string|null}
-     */
-    public function generateIdiosyncraticShock(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, array &$macroState, MathUtility $mathUtility): array;
-    public function getMacroPhysics(Stock $stock, array &$macroState): array;
-    public function calculateInterestIncome(Stock $stock, array &$macroState, MathUtility $mathUtility): float;
+    public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array;
+    public function computeActualFinancials(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): ActualFinancialsDTO;
+
+    /** Returns the analyst coverage profile for this sector (consumed by MarketConsensusEngine). */
+    public function getCoverageProfile(): SectorCoverageProfile;
+
+    public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array;
+    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): float;
     public function getEffectiveTaxRate(float $macroTaxRate): float;
     public function calculateEconomicReturn(Stock $stock, float $nopat, float $investedCapital): float;
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate): float;
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08): float;
 
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float;
     public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float;
@@ -31,7 +35,7 @@ interface BusinessModelInterface
 
     public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array;
     public function getInterestCoverage(float $ebit, float $interestExpense, float $depreciation = 0.0): float;
-    public function calculateCashYield(array &$macroState): float;
+    public function calculateCashYield(MacroStateDTO $macroState): float;
     public function getDebtExpansionAggressiveness(float $spreadMultiplier): array;
     public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float;
     public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float;
@@ -39,7 +43,7 @@ interface BusinessModelInterface
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps): float;
     public function getSustainableDividendBase(Stock $stock, float $quarterlyEps, float $investedCapital, float $depRate): float;
     public function getMarginReversionSpeed(): float;
-    public function processPassiveLiabilityGrowth(Stock $stock, array &$macroState, array &$state, MathUtility $mathUtility): void;
+    public function processPassiveLiabilityGrowth(Stock $stock, MacroStateDTO $macroState, array &$state, MathUtility $mathUtility): void;
     public function isUnderLeveraged(bool $isFinancial, float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool;
     public function getWorkingCapitalIntensity(Stock $stock): float;
     public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void;

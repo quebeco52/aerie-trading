@@ -4,6 +4,7 @@ namespace App\Command;
 
 use App\Entity\Etf;
 use App\Entity\Stock;
+use App\DTO\MacroStateDTO;
 use App\Entity\User;
 use App\Data\InitialMarket;
 use App\Data\Sectors;
@@ -36,13 +37,20 @@ class MarketSeedCommand extends Command
         $io = new SymfonyStyle($input, $output);
         $io->title('Seeding the Lakebird Exchange (Production)');
 
-        $dummyMacro = [
-            'policy_rate_ema' => 0.04,
-            'yield_5y_ema' => 0.045,
-            'yield_10y_ema' => 0.05,
-            'output_gap_ema' => 0.0,
-            'corporate_tax_rate' => MacroEngine::BASE_CORPORATE_TAX_RATE,
-        ];
+        $dummyMacro = new MacroStateDTO(
+            outputGapEma: 0.0,
+            inflationEma: 0.02,
+            policyRateEma: 0.04,
+            yield5yEma: 0.045,
+            yield10yEma: 0.05,
+            yield30yEma: 0.055,
+            yield2yEma: 0.04,
+            macroCreditSpreadEma: 0.02,
+            marketVolatilityEma: 0.15,
+            corporateTaxRate: MacroEngine::BASE_CORPORATE_TAX_RATE,
+            equityRiskPremium: 0.045
+
+        );
 
         // Loop through ETFs
         foreach (InitialMarket::ETFS as $etfData) {
@@ -81,7 +89,7 @@ class MarketSeedCommand extends Command
 
                 $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['business_model'] ?? 'none';
                 $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
-                
+
                 if ($isFinancial) {
                     $roe = $stockData['baseline_roe'] ?? $stockData['baseline_roic'] ?? 0.10;
                     $stock->setBaselineRoe((string) $roe);
@@ -99,7 +107,7 @@ class MarketSeedCommand extends Command
                 $stock->setDividendSpeed((string) ($stockData['dividendSpeed'] ?? 0.20));
                 $stock->setFixedCostRatio((float) ($stockData['fixed_cost_ratio'] ?? 0.35));
                 $stock->setDepreciationRate((string) ($stockData['depreciation_rate'] ?? \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['depreciation'] ?? 0.05));
-                
+
                 $stock->setCorporateTreasury((string) ($stockData['corporate_treasury'] ?? 1000000000.00));
                 $stock->setFloatingDebtRatio((string) ($stockData['floating_debt_ratio'] ?? 0.30));
                 $stock->setOperatingMargin((string) ($stockData['operating_margin'] ?? 0.15));
@@ -110,7 +118,7 @@ class MarketSeedCommand extends Command
                 $stock->setCustomerDeposits((string) ($stockData['customer_deposits'] ?? 0.00));
                 $stock->setRetainedEarnings((string) ($stockData['retained_earnings'] ?? 0.00));
                 $stock->setSamRatio((string) ($stockData['sam_ratio'] ?? 1.00));
-                
+
                 $netIncome = $stockData['total_net_income'] ?? 0.00;
                 $margin = $stockData['operating_margin'] ?? 0.15;
 
@@ -123,7 +131,7 @@ class MarketSeedCommand extends Command
                 $taxRate = $dummyMacro['corporate_tax_rate'] ?? 0.21;
                 $preTaxRoic = $impliedRoic / (1.0 - $taxRate);
                 $revenue = $margin > 0 ? ($investedCapital * ($preTaxRoic / $margin)) : 0.0;
-                
+
                 $stock->setTotalRevenue((string) $revenue);
 
                 $shares = $stockData['shares_outstanding'] ?? 1_000_000_000;
@@ -154,7 +162,7 @@ class MarketSeedCommand extends Command
             $user->setPassword($this->passwordHasher->hashPassword($user, 'test'));
             $this->entityManager->persist($user);
         }
-        
+
         $user->setUsername('Test');
         $user->setIsVerified(true);
 
