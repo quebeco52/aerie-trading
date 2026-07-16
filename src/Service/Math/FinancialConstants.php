@@ -82,6 +82,7 @@ class FinancialConstants
     public const COURNOT_DEMAND_ELASTICITY = 1.25;
     public const DISECONOMY_OPTIMAL_SHARE_THRESHOLD = 0.50;
     public const DISECONOMY_FRICTION_COEFF = 0.20;
+    public const CAPITAL_MARGINAL_ELASTICITY = 0.50;
     public const SYSTEMIC_MOAT_FACTORS = [
         'titan'    => 0.30,
         'systemic' => 0.75,

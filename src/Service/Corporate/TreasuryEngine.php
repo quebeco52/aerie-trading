@@ -149,7 +149,7 @@ class TreasuryEngine
         $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
         $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
         $saturationPenalty = $archetypeStrategy->modifySaturationPenalty($saturationPenalty);
-        $marginalReturn = max(0.0, $trueReturn - $saturationPenalty);
+        $marginalReturn = $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $saturationPenalty, $evaluationCapital, $macroState);
 
         $isUnderLeveraged = $health['is_under_leveraged'] && !$health['is_severe_negative_carry'];
 
@@ -276,7 +276,7 @@ class TreasuryEngine
         $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
         $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
         $saturationPenalty = $archetypeStrategy->modifySaturationPenalty($saturationPenalty);
-        $marginalReturn = max(0.0, $trueReturn - $saturationPenalty);
+        $marginalReturn = $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $saturationPenalty, $evaluationCapital, $macroState);
 
         $investmentProbability = min(0.95, max(0.10, 0.20 + ($marginalReturn * 2.0)));
         $investmentProbability = $archetypeStrategy->modifyInvestmentProbability($investmentProbability, $marginalReturn);

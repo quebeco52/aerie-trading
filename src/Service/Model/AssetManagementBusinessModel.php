@@ -323,12 +323,13 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         // Base deterministic yield (60% bonds + 40% deterministic CAPM equity return)
         $baseYield = $this->calculateCashYield($macroState);
 
-        // Stochastic seed capital tranche: quarterly equity volatility + VIX market panic drag
-        $seedZ = $mathUtility->generateStandardNormal();
+        // Expected seed capital return: VIX market panic drag.
+        // We use the deterministic expected return ($seedZ = 0.0) during continuous tick valuation to prevent 
+        // high-frequency distress penalty whipsaws in analyzeDebtHealth().
         $vixEma = $macroState->marketVolatilityEma;
         $vixDrag = max(0.0, ($vixEma - self::SEED_VIX_THRESHOLD) * self::SEED_VIX_SENSITIVITY);
 
-        $stochasticEquityAdjustment = ($seedZ * self::SEED_EQUITY_VOL) - $vixDrag;
+        $stochasticEquityAdjustment = -$vixDrag;
         $effectiveYield = $baseYield + (self::TREASURY_EQUITY_WEIGHT * $stochasticEquityAdjustment);
 
         return $excessCash * $effectiveYield;

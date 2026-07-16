@@ -959,7 +959,7 @@ class InitialMarket
             'target_payout_ratio' => 0.25,
             'dividendSpeed' => 0.15,
             'fixed_cost_ratio' => 0.60,
-            'operating_margin' => 0.36,
+            'operating_margin' => 0.45,
             'public_float' => 0.85,
             'sam_ratio' => 0.30,
             'floating_debt_ratio' => 0.60,
@@ -969,7 +969,7 @@ class InitialMarket
             'corporate_treasury' => 135_000_000_000.00,
             'total_net_income' => 46_027_500_000.00,
             'total_equity' => 226_110_000_000.00,
-            'customer_deposits' => 615_000_000_000.00,
+            'customer_deposits' => 1_155_000_000_000.00,
             'wholesale_debt' => 63_859_500_000.00,
             'retained_earnings' => 67_500_000_000.00
         ],

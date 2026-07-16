@@ -355,11 +355,9 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         $outputGap = $macroState->outputGapEma;
         $erp = $macroState->equityRiskPremium;
 
-        // Stochastic equity tranche: equities have ~20% annual vol → ~10% quarterly vol.
-        // This makes insurance float income meaningfully volatile during equity market crashes.
-        $equityPortfolioZ = $mathUtility->generateStandardNormal();
-        $stochasticEquityReturn = ($policyRate + $erp) + ($outputGap * self::EQUITY_RETURN_GAP_MULT)
-            + ($equityPortfolioZ * $equityVol);
+        // Expected equity tranche return during continuous tick valuation ($equityPortfolioZ = 0.0).
+        // This prevents high-frequency distress penalty whipsaws when analyzeDebtHealth() evaluates float income.
+        $stochasticEquityReturn = ($policyRate + $erp) + ($outputGap * self::EQUITY_RETURN_GAP_MULT);
 
         // Catastrophe-Equity Correlation:
         // Major disasters (9/11, COVID, GFC) simultaneously cause high claims AND equity market crashes.

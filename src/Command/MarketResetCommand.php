@@ -168,6 +168,7 @@ class MarketResetCommand extends Command
                     wholesale_debt = :wholesale_debt,
                     customer_deposits = :customer_deposits,
                     operating_margin = :margin,
+                    structural_variable_margin = :structural_var_margin,
                     public_float_percentage = :float_pct,
                     total_net_income = :net_income,
                     total_equity = :equity,
@@ -206,6 +207,7 @@ class MarketResetCommand extends Command
                     'wholesale_debt' => $stockData['wholesale_debt'] ?? 0.00,
                     'customer_deposits' => $stockData['customer_deposits'] ?? 0.00,
                     'margin' => $stockData['operating_margin'] ?? 0.15,
+                    'structural_var_margin' => (1.0 - ($stockData['operating_margin'] ?? 0.15)) * (1.0 - ($stockData['fixed_cost_ratio'] ?? 0.50)),
                     'float_pct' => $stockData['public_float'] ?? 0.90,
                     'net_income' => $stockData['total_net_income'] ?? 0.00,
                     'equity' => $stockData['total_equity'] ?? 0.00,
@@ -306,6 +308,7 @@ class MarketResetCommand extends Command
             $stock->setWholesaleDebt('10000000000.00');
             $stock->setCustomerDeposits('0.00');
             $stock->setOperatingMargin('0.15');
+            $stock->setStructuralVariableMargin((1.0 - 0.15) * (1.0 - 0.35));
             $stock->setPublicFloatPercentage('0.85');
             $stock->setTotalNetIncome('5000000000.00');
             $stock->setTotalEquity('20000000000.00');

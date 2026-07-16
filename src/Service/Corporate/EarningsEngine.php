@@ -174,14 +174,19 @@ class EarningsEngine
         $z2 = $this->mathUtility->generateStandardNormal();
         $marginVol = $baselineVol * 0.15;
 
-        // Reverse-engineer current variable margin from stored operating margin
-        $currentMargin = max(0.01, (float) $stock->getOperatingMargin());
-        $currentTotalCosts = $structuralRevenue * (1.0 - $currentMargin);
-        $currentVariableMargin = max(0.01, ($currentTotalCosts - $fixedCosts) / $structuralRevenue);
+        // Use persisted structural CIR variable margin if available, otherwise initialize directly from structural baseline
+        if ($stock->getStructuralVariableMargin() !== null) {
+            $currentVariableMargin = max(0.01, min(0.99, (float) $stock->getStructuralVariableMargin()));
+        } else {
+            $currentVariableMargin = max(0.01, min(0.99, (1.0 - $stableMargin) * (1.0 - $fixedCostRatio)));
+        }
 
         // Drift the variable efficiency using CIR
         $realizedVariableMargin = $this->mathUtility->calculateCIR($currentVariableMargin, $kappa, $dynamicVariableTheta, $marginVol, $dt, $z2);
         $realizedVariableMargin = min(0.99, max(0.01, $realizedVariableMargin));
+
+        // Persist the pre-shock structural variable margin before transient sector physics are applied
+        $stock->setStructuralVariableMargin($realizedVariableMargin);
 
         // APPLY THE IDIOSYNCRATIC Z-SCORE SHOCK (Physical Bottom-Up Outcomes)
         $actuals = $strategy->computeActualFinancials($stock, $expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol, $macroState, $this->mathUtility);
@@ -209,16 +214,16 @@ class EarningsEngine
 
         // Calculate EXPECTED Interest Expense (Pre-Shock)
         $expectedOperatingMargin = $expectedEbit / max(1.0, $expectedRevenue);
-        $expectedDebtMetrics = $this->debtEngine->calculateInterestExpense($stock, $macroState, false, $expectedRevenue, $expectedOperatingMargin);
+        $expectedDebtMetrics = $this->debtEngine->calculateInterestExpense($stock, $macroState, false, $expectedRevenue * 4.0, $expectedOperatingMargin);
         $expectedInterestExpense = $expectedDebtMetrics['interest_expense'];
 
         // Calculate ACTUAL Interest Expense (Post-Shock, Advancing Maturity)
-        $previousQuarterlyRevenue = (float) $stock->getTotalRevenue();
-        $stock->setTotalRevenue((string) $actualRevenue);
+        $previousQuarterlyRevenue = (float) $stock->getTotalRevenue() / 4.0;
+        $stock->setTotalRevenue((string) ($actualRevenue * 4.0));
         // The dynamic margin is passed directly to DebtEngine
         $trueOperatingMargin = $ebit / max(1.0, $actualRevenue);
 
-        $debtMetrics = $this->debtEngine->calculateInterestExpense($stock, $macroState, true, $actualRevenue, $trueOperatingMargin);
+        $debtMetrics = $this->debtEngine->calculateInterestExpense($stock, $macroState, true, $actualRevenue * 4.0, $trueOperatingMargin);
 
         // DebtEngine returns ANNUAL interest expense. We must divide by 4 for the quarterly simulation.
         $annualInterestExpense = $debtMetrics['interest_expense'];

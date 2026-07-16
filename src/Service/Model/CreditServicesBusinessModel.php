@@ -44,9 +44,9 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     /** Maximum allowable deposit beta clamp for high-yield savings accounts. */
     public const MAX_DEPOSIT_BETA_CLAMP   = 0.90;
     /** Minimum allowable deposit beta clamp for high-yield savings accounts. */
-    public const MIN_DEPOSIT_BETA_CLAMP   = 0.30;
+    public const MIN_DEPOSIT_BETA_CLAMP   = 0.20;
     /** Supplemental deposit beta spread added to attract high-yield savings funding. */
-    public const HIGH_YIELD_BETA_SPREAD   = 0.20;
+    public const HIGH_YIELD_BETA_SPREAD   = 0.10;
     /** Target operating cash reserve ratio applied to corporate operating base. */
     public const TARGET_OPERATING_BUFFER  = 0.05;
 
@@ -60,7 +60,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     /** Volatility multiplier for top-line revenue shocks in transaction swipe markets. */
     public const REVENUE_VARIANCE_SCALAR   = 0.20;
     /** Macroeconomic default scalar translating negative output gaps into unsecured loan defaults. */
-    public const MACRO_DEFAULT_SCALAR      = 0.80;
+    public const MACRO_DEFAULT_SCALAR      = 0.35;
     /** Severe credit z-score threshold triggering elevated unsecured default provisions. */
     public const CREDIT_STRESS_Z_THRESHOLD = -1.50;
     /** Loss provision multiplier applied to credit stress severity. */
@@ -72,7 +72,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     /** Maximum quarterly reserve release clamp. Credit cycle is lumpier than bank loans: cap at 5%. */
     public const MAX_PROVISION_REVERSAL    = 0.05;
     /** Upper clamp for realized variable margin. */
-    public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
+    public const MAX_VARIABLE_MARGIN_CLAMP = 0.95;
 
     // --- CECL Forward Provisioning (Credit Spread Channel) ---
     /** Baseline investment-grade credit spread (~200bps). Widening above this triggers proactive reserve builds. */
@@ -273,8 +273,9 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
         $unboundedRevenue = max(0.0, $targetEbit) / $stableMargin;
-        $maxApr = max(self::MIN_APR_YIELD_FLOOR, $macroState->policyRateEma + self::POLICY_APR_SPREAD);
-        $targetRevenue = min($unboundedRevenue, $earningAssets * $maxApr); // Floating gross yield ceiling based on macro policy rate
+        $blendedCostOfFunds = ($depositRatio * $depositRate) + ((1.0 - $depositRatio) * $blendedWholesaleRate);
+        $maxApr = max(self::MIN_APR_YIELD_FLOOR, $blendedCostOfFunds + self::POLICY_APR_SPREAD);
+        $targetRevenue = min($unboundedRevenue, $earningAssets * $maxApr); // Floating gross yield ceiling based on blended cost of funds
 
         $grossYield = $targetRevenue / max(1.0, abs($earningAssets));
 

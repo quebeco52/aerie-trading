@@ -268,6 +268,9 @@ class Stock
     #[ORM\Column(type: 'float', nullable: true)]
     private ?float $fixedCostRatio = null;
 
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $structuralVariableMargin = null;
+
     /**
      * @var string|null The Serviceable Addressable Market (SAM) multiplier.
      */
@@ -703,6 +706,17 @@ class Stock
             'Consumer Discretionary', 'Consumer Staples' => 0.15,       // Buying and selling physical inventory
             default => 0.35,
         };
+    }
+
+    public function setStructuralVariableMargin(?float $structuralVariableMargin): static
+    {
+        $this->structuralVariableMargin = $structuralVariableMargin;
+        return $this;
+    }
+
+    public function getStructuralVariableMargin(): ?float
+    {
+        return $this->structuralVariableMargin;
     }
 
     public function getSamRatio(): ?string

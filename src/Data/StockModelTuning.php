@@ -172,17 +172,17 @@ class StockModelTuning
         // --- Talon Credit (TALN) ---
         // Prime credit card & digital merchant payment rail network. Substantial swipe interchange fee tollbooth (45%).
         'TALN' => [
-            'lending_revenue_weight'     => 0.55,
-            'interchange_revenue_weight' => 0.45,
-            'cecl_spread_sensitivity'    => 1.40,
+            'lending_revenue_weight'  => 0.55,
+            'network_revenue_weight'  => 0.45,
+            'cecl_spread_sensitivity' => 1.40,
         ],
 
         // --- Stork Consumer Credit (STRK) ---
         // Subprime consumer finance & installment loan originator. Highly exposed to credit spread widening.
         'STRK' => [
-            'lending_revenue_weight'     => 0.95,
-            'interchange_revenue_weight' => 0.05,
-            'cecl_spread_sensitivity'    => 2.20,
+            'lending_revenue_weight'  => 0.95,
+            'network_revenue_weight'  => 0.05,
+            'cecl_spread_sensitivity' => 2.20,
         ],
 
         // =====================================================================
