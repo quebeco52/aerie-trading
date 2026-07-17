@@ -284,7 +284,7 @@ class EarningsEngine
             $reportedActualNetIncome += $quarterlyDepreciation;
         }
 
-        $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState, $actualRevenue, $trueOperatingMargin);
+        $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState, $actualRevenue * 4.0, $trueOperatingMargin);
         $waccBaseline = $isFinancial ? ($health['cost_of_equity'] ?? 0.10) : ($health['wacc'] ?? 0.08);
 
         // UPDATE DYNAMIC ROIC AS AN OUTCOME
@@ -342,8 +342,8 @@ class EarningsEngine
         if ($actualAnnualEpsRaw > 0) {
             $currentPE = $currentPrice / $actualAnnualEpsRaw;
         } else {
-            // Fallback to Price-to-Sales (P/S) equivalent for unprofitable companies
-            $salesPerShare = $sharesOutstanding > 0 ? $actualRevenue / $sharesOutstanding : 1.0;
+            // Fallback to Price-to-Sales (P/S) equivalent for unprofitable companies (annualized sales)
+            $salesPerShare = $sharesOutstanding > 0 ? ($actualRevenue * 4.0) / $sharesOutstanding : 1.0;
             $priceToSales = $salesPerShare > 0 ? $currentPrice / $salesPerShare : 1.0;
             // Dynamic P/S equivalence: scales with structural after-tax operating margin
             $structuralAfterTaxMargin = max(0.01, (float) $stock->getOperatingMargin() * (1.0 - $corporateTaxRate));

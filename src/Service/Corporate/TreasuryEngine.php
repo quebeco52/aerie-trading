@@ -26,11 +26,15 @@ class TreasuryEngine
      * This must run BEFORE buybacks so that newly issued debt cash can fund Leveraged Buybacks,
      * and Growth CapEx takes priority over share repurchases.
      */
+    /**
+     * Handles M2 growth, debt issuance (recapitalization/expansion), and organic CapEx.
+     * @param float $quarterlyNopat Quarterly NOPAT (or quarterly net income for financials).
+     */
     public function executeCorporateStrategy(
         Stock $stock,
         float $preBuybackEquity,
         float $operatingBase,
-        float $nopat,
+        float $quarterlyNopat,
         float $currentTreasury,
         MacroStateDTO $macroState,
         array $health
@@ -51,10 +55,10 @@ class TreasuryEngine
         $this->processPassiveLiabilityGrowth($stock, $macroState, $state);
 
         // DEBT MANAGEMENT (MACRO TOLERANCE)
-        $this->processDebtExpansion($stock, $preBuybackEquity, $nopat, $macroState, $health, $state);
+        $this->processDebtExpansion($stock, $preBuybackEquity, $quarterlyNopat, $macroState, $health, $state);
 
         // ORGANIC BUSINESS EXPANSION (Internal CapEx)
-        $this->processOrganicCapex($stock, $preBuybackEquity, $nopat, $operatingBase, $macroState, $health, $state);
+        $this->processOrganicCapex($stock, $preBuybackEquity, $quarterlyNopat, $operatingBase, $macroState, $health, $state);
 
         // SAVE INTERMEDIATE TREASURY (so CapitalAllocationEngine can use it for buybacks)
         $stock->setCorporateTreasury((string) $state['treasury']);
@@ -131,7 +135,7 @@ class TreasuryEngine
         ];
     }
 
-    private function processDebtExpansion(Stock $stock, float $newEquity, float $nopat, MacroStateDTO $macroState, array $health, array &$state): void
+    private function processDebtExpansion(Stock $stock, float $newEquity, float $quarterlyNopat, MacroStateDTO $macroState, array $health, array &$state): void
     {
         $totalDebt = $state['wholesaleDebt'] + $state['customerDeposits'];
         $liveInvestedCapital = $this->corporateMetrics->calculateLiveInvestedCapital($newEquity, $totalDebt, $state['treasury']);
@@ -141,7 +145,7 @@ class TreasuryEngine
         $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
 
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
-        $trueReturn = $strategy->calculateEconomicReturn($stock, $nopat, $liveInvestedCapital);
+        $trueReturn = $strategy->calculateEconomicReturn($stock, $quarterlyNopat, $liveInvestedCapital);
         $hurdleRate = $isFinancial ? ($health['cost_of_equity'] ?? 0.10) : $health['wacc'];
 
         $evaluationCapital = $isFinancial ? $newEquity : $liveInvestedCapital;
@@ -258,7 +262,7 @@ class TreasuryEngine
         }
     }
 
-    private function processOrganicCapex(Stock $stock, float $newEquity, float $nopat, float $operatingBase, MacroStateDTO $macroState, array $health, array &$state): void
+    private function processOrganicCapex(Stock $stock, float $newEquity, float $quarterlyNopat, float $operatingBase, MacroStateDTO $macroState, array $health, array &$state): void
     {
         $totalDebt = $state['wholesaleDebt'] + $state['customerDeposits'];
         $industry = $stock->getIndustry() ?: 'General';
@@ -269,7 +273,7 @@ class TreasuryEngine
         $targetCashReserves = $strategy->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt']) * 1.20;
         $liveInvestedCapital = $this->corporateMetrics->calculateLiveInvestedCapital($newEquity, $totalDebt, $state['treasury']);
 
-        $trueReturn = $strategy->calculateEconomicReturn($stock, $nopat, $liveInvestedCapital);
+        $trueReturn = $strategy->calculateEconomicReturn($stock, $quarterlyNopat, $liveInvestedCapital);
         $hurdleRate = $isFinancial ? ($health['cost_of_equity'] ?? 0.10) : $health['wacc'];
         $evaluationCapital = $isFinancial ? $newEquity : $liveInvestedCapital;
 

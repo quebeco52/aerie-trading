@@ -277,7 +277,12 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         return self::PASS_THROUGH_TAX_RATE;
     }
 
-    public function calculateEconomicReturn(Stock $stock, float $nopat, float $investedCapital): float
+    /**
+     * Calculates the annualized economic return (ROIC) on NOI.
+     * @param float $quarterlyNopat Quarterly NOPAT (multiplied by 4.0 inside via ROIC_ANNUALIZATION_MULT).
+     * @param float $investedCapital Annual/structural invested capital.
+     */
+    public function calculateEconomicReturn(Stock $stock, float $quarterlyNopat, float $investedCapital): float
     {
         $industry = $stock->getIndustry() ?: 'General';
         $customDepreciation = (float) $stock->getDepreciationRate();
@@ -285,7 +290,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
         $absoluteDepreciation = $investedCapital * $depreciationRate;
         $quarterlyDepreciation = $absoluteDepreciation / 4.0;
-        $noi = $nopat + $quarterlyDepreciation;
+        $noi = $quarterlyNopat + $quarterlyDepreciation;
 
         return $investedCapital > 0 ? ($noi / $investedCapital) * self::ROIC_ANNUALIZATION_MULT : 0.0;
     }

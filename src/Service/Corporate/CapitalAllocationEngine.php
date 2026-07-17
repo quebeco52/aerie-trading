@@ -62,13 +62,14 @@ class CapitalAllocationEngine
         $ebit = $health['raw_metrics']['ebit'] ?? 0.0;
         $corporateTaxRate = $macroState->corporateTaxRate;
         $nopat = $ebit > 0 ? $ebit * (1.0 - $corporateTaxRate) : $ebit;
+        $quarterlyNopat = $nopat / 4.0;
 
         // CALCULATE BASELINE CASH CHANGES
         $totalFcfGenerated = $quarterlyFcfPerShare * $oldShares;
         $newTreasury = $currentTreasury + $totalFcfGenerated;
 
         // EXECUTE DIVIDENDS
-        $divData = $this->executeDividends($stock, $quarterlyEps, $oldShares, $currentPrice, $newTreasury, $operatingBase, $investedCapital, $nopat, $health, $actualTotalNetIncome);
+        $divData = $this->executeDividends($stock, $quarterlyEps, $oldShares, $currentPrice, $newTreasury, $operatingBase, $investedCapital, $quarterlyNopat, $health, $actualTotalNetIncome);
         if ($divData['event']) $events[] = $divData['event'];
 
         $newTreasury -= $divData['total_paid'];
@@ -82,7 +83,7 @@ class CapitalAllocationEngine
             $stock,
             $preBuybackEquity,
             $operatingBase,
-            $nopat,
+            $quarterlyNopat,
             $newTreasury,
             $macroState,
             $health
@@ -118,7 +119,7 @@ class CapitalAllocationEngine
                 $currentPE,
                 $operatingBase,
                 $investedCapital,
-                $nopat,
+                $quarterlyNopat,
                 $health,
                 $macroState,
                 $actualTotalNetIncome,
@@ -159,7 +160,7 @@ class CapitalAllocationEngine
         ];
     }
 
-    private function executeDividends(Stock $stock, float $quarterlyEps, float $shares, float $currentPrice, float $availableTreasury, float $operatingBase, float $investedCapital, float $nopat, array $health, float $actualTotalNetIncome = 0.0): array
+    private function executeDividends(Stock $stock, float $quarterlyEps, float $shares, float $currentPrice, float $availableTreasury, float $operatingBase, float $investedCapital, float $quarterlyNopat, array $health, float $actualTotalNetIncome = 0.0): array
     {
         $targetPayout = (float) $stock->getTargetPayoutRatio();
         $speed = (float) $stock->getDividendSpeed();
@@ -183,7 +184,7 @@ class CapitalAllocationEngine
         $targetDividend = $isAristocrat ? max($calculatedTarget, $lastDividend) : $calculatedTarget;
 
         $isRegulatoryDividendHalt = false;
-        $trueReturn = $strategy->calculateEconomicReturn($stock, $isFinancial ? $actualTotalNetIncome : $nopat, $investedCapital);
+        $trueReturn = $strategy->calculateEconomicReturn($stock, $isFinancial ? $actualTotalNetIncome : $quarterlyNopat, $investedCapital);
         if ($isFinancial) {
             $hurdleRate = $health['cost_of_equity'] ?? 0.10;
 
@@ -276,7 +277,7 @@ class CapitalAllocationEngine
         return ['dividend_per_share' => $newDividend, 'total_paid' => $totalPaid, 'event' => $event];
     }
 
-    private function executeBuybacks(Stock $stock, float $treasury, float $targetOperatingCash, float $shares, float $currentPrice, float $currentPE, float $operatingBase, float $investedCapital, float $nopat, array $health, \App\DTO\MacroStateDTO $macroState, float $actualTotalNetIncome = 0.0, float $retainedEarningsThisQuarter = 0.0): array
+    private function executeBuybacks(Stock $stock, float $treasury, float $targetOperatingCash, float $shares, float $currentPrice, float $currentPE, float $operatingBase, float $investedCapital, float $quarterlyNopat, array $health, \App\DTO\MacroStateDTO $macroState, float $actualTotalNetIncome = 0.0, float $retainedEarningsThisQuarter = 0.0): array
     {
         $excessCash = max(0.0, $treasury - $targetOperatingCash);
         $canEasilyCoverDebt = $excessCash > ((float) $stock->getTotalDebt() * 2.0);
@@ -316,7 +317,7 @@ class CapitalAllocationEngine
         $event = null;
 
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
-        $trueReturn = $strategy->calculateEconomicReturn($stock, $isFinancial ? $actualTotalNetIncome : $nopat, $investedCapital);
+        $trueReturn = $strategy->calculateEconomicReturn($stock, $isFinancial ? $actualTotalNetIncome : $quarterlyNopat, $investedCapital);
         $hurdleRate = $isFinancial ? ($health['cost_of_equity'] ?? 0.10) : $health['wacc'];
         $economicSpread = $trueReturn - $hurdleRate;
 

@@ -130,15 +130,20 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
         return $macroTaxRate;
     }
 
-    public function calculateEconomicReturn(Stock $stock, float $nopat, float $investedCapital): float
+    /**
+     * Calculates the annualized economic return (ROIC or ROE).
+     * @param float $quarterlyNopatOrIncome Quarterly NOPAT (for non-financials) or Quarterly Net Income (for financials).
+     * @param float $investedCapital Annual/structural invested capital or equity base.
+     */
+    public function calculateEconomicReturn(Stock $stock, float $quarterlyNopatOrIncome, float $investedCapital): float
     {
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
         if (\App\Data\Sectors::isFinancial($businessModel)) {
             $equity = (float) $stock->getTotalEquity();
-            return $equity > 0 ? ($nopat / $equity) * 4.0 : 0.0;
+            return $equity > 0 ? ($quarterlyNopatOrIncome / $equity) * 4.0 : 0.0;
         }
-        return $investedCapital > 0 ? ($nopat / $investedCapital) * 4.0 : 0.0;
+        return $investedCapital > 0 ? ($quarterlyNopatOrIncome / $investedCapital) * 4.0 : 0.0;
     }
 
     public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08): float
