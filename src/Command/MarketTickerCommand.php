@@ -115,7 +115,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $simDay = ($tickCount / $this->ticksPerYear) * 365;
                 $output->writeln("Updating Market Prices... (Day: " . number_format($simDay, 1) . ") [Tick: $tickCount]");
             }
-            
+
             $macroState = $this->macroEngine->updateMacroState($dt);
 
             if ($tickCount % $operatorInterval === 0) {
@@ -155,7 +155,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 foreach ($allUpdates as $update) {
                     $ticker = $update['ticker'];
                     $price = $update['price'];
-                    
+
                     $boundsJson = $this->redis->get("limit_bounds:$ticker");
                     if ($boundsJson) {
                         $bounds = json_decode($boundsJson, true);

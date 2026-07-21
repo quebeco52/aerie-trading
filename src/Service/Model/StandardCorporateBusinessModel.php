@@ -132,7 +132,9 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
     {
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $kappa = \App\Data\Sectors::getModelThresholds($businessModel)['reversion_speed'] ?? 0.20;
+        $thresholds = \App\Data\Sectors::getModelThresholds($businessModel);
+        $kappa = $thresholds['reversion_speed'] ?? 0.20;
+        $moatSpread = $thresholds['moat_spread'] ?? 0.00;
 
         $nopatProxy = $ebit > 0 ? $ebit * (1.0 - $corporateTaxRate) : $ebit;
 
@@ -144,8 +146,8 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
         $oldTtm = (float) $stock->getRoicTtm();
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::TTM_SMOOTHING_NEW_WEIGHT) + ($oldTtm * self::TTM_SMOOTHING_OLD_WEIGHT);
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
-        $effectiveKappa = $kappa / self::TTM_ROIC_WEIGHT;
-        $newTtm += $effectiveKappa * ($wacc - $newTtm) * 0.25;
+        $scaledKappa = $kappa / self::TTM_ROIC_WEIGHT;
+        $newTtm += $this->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
         $stock->setRoicTtm((string) max(-0.50, min(1.0, $newTtm)));
 
         return $truePostTaxReturn;

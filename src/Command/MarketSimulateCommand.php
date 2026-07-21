@@ -121,8 +121,6 @@ class MarketSimulateCommand extends Command
                 $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
 
                 $this->redis->set('stocks_live_data', json_encode($result['updates']));
-
-                
             }
 
             if ($tick % 100 === 0) {

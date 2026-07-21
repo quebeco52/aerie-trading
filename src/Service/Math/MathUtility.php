@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Service\Math;
 
 use App\Service\Macro\MacroEngine;
@@ -117,9 +118,9 @@ class MathUtility
      * @return array{multiplier: float, shock_pct: float|null, exponent: float|null}
      */
     public function calculateJumpDiffusion(
-        float $lambda, 
-        float $jumpMean, 
-        float $jumpVol, 
+        float $lambda,
+        float $jumpMean,
+        float $jumpVol,
         float $dt
     ): array {
         $jumpProb = $lambda * $dt;
@@ -203,7 +204,7 @@ class MathUtility
         // Exact exponential discretization for mean-reversion drift prevents Euler overshooting when kappa * dt > 1.0
         $drift = ($theta - $currentValue) * (1.0 - exp(-$kappa * $dt));
         $diffusion = $sigma * sqrt($currentValue) * sqrt($dt) * $dW;
-        
+
         return max(0.0001, $currentValue + $drift + $diffusion);
     }
 
@@ -239,10 +240,10 @@ class MathUtility
         float $dt
     ): float {
         $expKappaDt = exp(-$kappa * $dt);
-        
+
         // Calculate mean (m) and variance (s^2) of the next variance state
         $m = $theta + ($currentVar - $theta) * $expKappaDt;
-        $s2 = ($currentVar * $sigma * $sigma * $expKappaDt / $kappa) * (1 - $expKappaDt) 
+        $s2 = ($currentVar * $sigma * $sigma * $expKappaDt / $kappa) * (1 - $expKappaDt)
             + ($theta * $sigma * $sigma / (2 * $kappa)) * pow(1 - $expKappaDt, 2);
 
         // Psi determines whether to use Quadratic or Exponential approximation
@@ -262,7 +263,7 @@ class MathUtility
             $p = ($psi - 1) / ($psi + 1);
             $beta = (1 - $p) / $m;
             $U = $this->generateUniform();
-            
+
             if ($U > $p) {
                 // Prevent log(0) if U is extremely close to 1
                 $U = min($U, 0.9999999);
@@ -300,7 +301,7 @@ class MathUtility
         if ($this->checkProbability($jumpProb)) {
             // Price Jump (Kou Double-Exponential)
             $isUpJump = $this->generateUniform() < $pUp;
-            
+
             if ($isUpJump) {
                 $jumpSize = $this->generateExponential($etaUp);
                 // Failsafe: Cap individual upside jumps to ~+300% (log(4.0) ≈ 1.38) to prevent runaway inflation
@@ -318,7 +319,7 @@ class MathUtility
             // Market crashes usually spike volatility harder than market rallies
             $varianceJumpRate = $isUpJump ? (1.0 / ($muV * 0.5)) : (1.0 / $muV);
             $varJump = $this->generateExponential($varianceJumpRate);
-            
+
             // Failsafe: Cap the variance jump to 10x the mean to prevent permanent volatility corruption
             $varJump = min($varJump, $muV * 10.0);
 
@@ -351,23 +352,23 @@ class MathUtility
         // 1. Process Noise (Uncertainty in our Structural Prior)
         // In stable times, we trust our structural ROIC. During macro stress (recessions), our prior is less reliable.
         $priorErrorCovariance = max(0.01, $macroUncertainty);
-        
+
         // 2. Measurement Noise (Uncertainty in the Quarterly Print)
         // High-volatility companies (e.g., Tech startups) have very noisy quarterly earnings.
         // Low-volatility companies (e.g., Utilities) have stable prints.
         // We scale the variance based on asset volatility.
         $measurementVariance = max(0.01, $assetVolatility * 2.0);
-        
+
         // 3. Kalman Gain
         // How much should we trust the new quarterly print vs our structural prior?
         // If Measurement Noise is huge, K approaches 0 (we ignore the print).
         // If Prior Uncertainty is huge, K approaches 1 (we blindly trust the new print).
         $kalmanGain = $priorErrorCovariance / ($priorErrorCovariance + $measurementVariance);
-        
+
         // 4. Posterior Estimate
         // Update the structural prior with the new measurement, weighted by the Kalman Gain.
         $posteriorEps = $structuralEps + $kalmanGain * ($quarterlyEps - $structuralEps);
-        
+
         return $posteriorEps;
     }
 
@@ -563,9 +564,9 @@ class MathUtility
             return 10.0; // Effectively no default risk
         }
 
-        $d1 = (log($assetValue / $debtFaceValue) + ($riskFreeRate + 0.5 * pow($assetVolatility, 2.0)) * $timeToMaturity) 
-              / ($assetVolatility * sqrt($timeToMaturity));
-        
+        $d1 = (log($assetValue / $debtFaceValue) + ($riskFreeRate + 0.5 * pow($assetVolatility, 2.0)) * $timeToMaturity)
+            / ($assetVolatility * sqrt($timeToMaturity));
+
         // In the Merton model, the actual Distance to Default is d2
         $d2 = $d1 - ($assetVolatility * sqrt($timeToMaturity));
 
@@ -584,14 +585,13 @@ class MathUtility
     {
         // Probability of Default (PD) is N(-DD)
         $probabilityOfDefault = $this->calculateNormalCDF(-$distanceToDefault);
-        
+
         // Failsafe: Cap PD slightly below 1.0 to prevent log(0) in the spread formula
         $probabilityOfDefault = min(0.9999, $probabilityOfDefault);
-        
-        $spread = -(1.0 / $timeToMaturity) * log(1.0 - ($probabilityOfDefault * $lossGivenDefault));
-        
+
+        $spread = - (1.0 / $timeToMaturity) * log(1.0 - ($probabilityOfDefault * $lossGivenDefault));
+
         // Failsafe: Prevent negative spreads or astronomical blowout
         return max(0.0, min(1.0, $spread)); // Max spread capped at 10,000 bps
     }
-
 }

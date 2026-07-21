@@ -26,6 +26,14 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
     /** Weight for historical return when smoothing TTM metrics. */
     public const TTM_SMOOTHING_OLD_WEIGHT = 0.75;
 
+    // --- Asymmetric Mean Reversion Physics ---
+    /** Competitive-erosion sensitivity: each 1x WACC of excess return adds 50% to reversion speed (Fama-French 1999). */
+    public const REVERSION_COMPETITIVE_EROSION_ALPHA = 0.50;
+    /** Persistence factor for below-equilibrium firms: restructuring is slow, so reversion speed is dampened. */
+    public const REVERSION_DISTRESS_PERSISTENCE = 0.60;
+    /** Non-linear distress amplifier: deepens reversion speed proportionally to how far below zero returns fall (Merton 1974). */
+    public const REVERSION_DISTRESS_GAMMA = 1.00;
+
     // --- Capital Allocation & Buybacks ---
     /** Maximum fraction of excess cash spent on buybacks by normal cash hoarders. */
     public const BUYBACK_SPEND_NORMAL_RATIO       = 0.10;
@@ -169,7 +177,9 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
     {
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $kappa = \App\Data\Sectors::getModelThresholds($businessModel)['reversion_speed'] ?? 0.20;
+        $thresholds = \App\Data\Sectors::getModelThresholds($businessModel);
+        $kappa = $thresholds['reversion_speed'] ?? 0.20;
+        $moatSpread = $thresholds['moat_spread'] ?? 0.00;
 
         if (\App\Data\Sectors::isFinancial($businessModel)) {
             $equity = (float) $stock->getTotalEquity();
@@ -180,8 +190,8 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
             $oldTtm = (float) $stock->getRoeTtm();
             $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::TTM_SMOOTHING_NEW_WEIGHT) + ($oldTtm * self::TTM_SMOOTHING_OLD_WEIGHT);
             // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
-            $effectiveKappa = $kappa / (defined('static::TTM_ROE_WEIGHT') ? static::TTM_ROE_WEIGHT : 0.50);
-            $newTtm += $effectiveKappa * ($wacc - $newTtm) * 0.25;
+            $scaledKappa = $kappa / (defined('static::TTM_ROE_WEIGHT') ? static::TTM_ROE_WEIGHT : 0.50);
+            $newTtm += $this->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
             $stock->setRoeTtm((string) max(-0.50, min(1.0, $newTtm)));
 
             return $truePostTaxReturn;
@@ -196,11 +206,58 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
         $oldTtm = (float) $stock->getRoicTtm();
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::TTM_SMOOTHING_NEW_WEIGHT) + ($oldTtm * self::TTM_SMOOTHING_OLD_WEIGHT);
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
-        $effectiveKappa = $kappa / (defined('static::TTM_ROIC_WEIGHT') ? static::TTM_ROIC_WEIGHT : 0.50);
-        $newTtm += $effectiveKappa * ($wacc - $newTtm) * 0.25;
+        $scaledKappa = $kappa / (defined('static::TTM_ROIC_WEIGHT') ? static::TTM_ROIC_WEIGHT : 0.50);
+        $newTtm += $this->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
         $stock->setRoicTtm((string) max(-0.50, min(1.0, $newTtm)));
 
         return $truePostTaxReturn;
+    }
+
+    /**
+     * Computes a quarterly Ornstein-Uhlenbeck reversion pull with three real-world refinements:
+     *
+     * 1. Moat-adjusted equilibrium (Greenwald & Kahn): firms with structural barriers revert to
+     *    ($wacc + $moatSpread), not raw WACC. A clearing house earning a regulated premium above
+     *    its cost of capital is not "abnormal" — it is structurally justified.
+     *
+     * 2. Asymmetric speed above equilibrium (Fama-French 1999): excess returns attract capital
+     *    and competition, eroding the spread faster than the base kappa. The acceleration is
+     *    proportional to how far above equilibrium the return sits.
+     *
+     * 3. Non-linear distress below zero (Merton 1974): negative returns trigger accelerating
+     *    capital destruction (loan-loss spirals, deposit flight, asset fire-sales), modeled as
+     *    a gamma amplifier on the base kappa. Below-WACC-but-positive returns use a persistence
+     *    factor (<1) because restructuring takes time.
+     *
+     * @param float $currentReturn   Smoothed TTM return (ROIC or ROE, as a fraction).
+     * @param float $wacc            Cost of capital passed from DebtEngine (CAPM-derived).
+     * @param float $baseKappa       Sector reversion speed, pre-scaled for the TTM blending weight.
+     * @param float $moatSpread      Structural return premium above WACC this business model sustains.
+     * @return float                 Signed pull to add to the TTM metric this quarter.
+     */
+    protected function calculateReversionPull(
+        float $currentReturn,
+        float $wacc,
+        float $baseKappa,
+        float $moatSpread
+    ): float {
+        $equilibrium = $wacc + $moatSpread;
+
+        if ($currentReturn > $equilibrium) {
+            // Above equilibrium: competition erodes excess returns faster than base speed
+            $excessRatio = ($currentReturn - $equilibrium) / max(0.01, $equilibrium);
+            $effectiveKappa = $baseKappa * (1.0 + self::REVERSION_COMPETITIVE_EROSION_ALPHA * $excessRatio);
+        } elseif ($currentReturn < 0.0) {
+            // Deep distress: Merton-style non-linear capital destruction
+            $distressRatio = abs($currentReturn) / max(0.01, $wacc);
+            $effectiveKappa = $baseKappa * self::REVERSION_DISTRESS_PERSISTENCE
+                * (1.0 + self::REVERSION_DISTRESS_GAMMA * $distressRatio);
+        } else {
+            // Below equilibrium but positive: slow persistence, restructuring takes time
+            $effectiveKappa = $baseKappa * self::REVERSION_DISTRESS_PERSISTENCE;
+        }
+
+        return $effectiveKappa * ($equilibrium - $currentReturn) * 0.25;
     }
 
     protected function getOperatingBase(Stock $stock): float

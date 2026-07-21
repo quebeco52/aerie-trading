@@ -334,7 +334,9 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
     {
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $kappa = \App\Data\Sectors::getModelThresholds($businessModel)['reversion_speed'] ?? 0.18;
+        $thresholds = \App\Data\Sectors::getModelThresholds($businessModel);
+        $kappa = $thresholds['reversion_speed'] ?? 0.18;
+        $moatSpread = $thresholds['moat_spread'] ?? 0.01;
 
         $equity = (float) $stock->getTotalEquity();
         $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * 4.0 : 0.0;
@@ -344,8 +346,8 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
         $oldTtm = (float) $stock->getRoeTtm();
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * 0.25) + ($oldTtm * 0.75);
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
-        $effectiveKappa = $kappa / self::TTM_ROE_WEIGHT;
-        $newTtm += $effectiveKappa * ($wacc - $newTtm) * 0.25;
+        $scaledKappa = $kappa / self::TTM_ROE_WEIGHT;
+        $newTtm += $this->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
         $stock->setRoeTtm((string) max(-0.50, min(1.0, $newTtm)));
 
         return $truePostTaxReturn;

@@ -37,6 +37,8 @@ class InsuranceBusinessModel extends AbstractBusinessModel
     public const CAPACITY_INFLECTION_FLOAT_SHIFT = 0.10;
     /** Steepness (12.0) of NAIC statutory capital constraints and rating agency capacity clamping around real sector limits. */
     public const CAPACITY_LOGISTIC_STEEPNESS = 12.0;
+    /** Minimum fraction of prior revenue retained during hard market pricing (post-catastrophe capacity support). */
+    public const HARD_MARKET_REVENUE_FLOOR = 0.85;
 
     // --- ROIC & ROE Target Architecture ---
     /** Weight given to historical baseline ROIC when blending with TTM ROE. */
@@ -53,6 +55,8 @@ class InsuranceBusinessModel extends AbstractBusinessModel
     public const ROE_TTM_EMA_WEIGHT       = 0.05;
     /** Weight given to historical trailing twelve-month ROE when updating ROE EMA. */
     public const ROE_TTM_HIST_WEIGHT      = 0.95;
+    /** Weight given to current quarter ROE when recovering from below-equilibrium catastrophe drawdowns. */
+    public const ROE_TTM_RECOVERY_WEIGHT  = 0.25;
     /** Minimum structural through-the-cycle ROE floor for TTM valuation to prevent catastrophe whipsaw. */
     public const MIN_STRUCTURAL_ROE_FLOOR = 0.03;
 
@@ -226,6 +230,10 @@ class InsuranceBusinessModel extends AbstractBusinessModel
 
         // 2. Structural Revenue is anchored strictly to their capacity limit and required policy reserves.
         $targetRevenue = $operatingEquity * $capacityRatio;
+        // Hard Market Revenue Floor: post-catastrophe pricing power prevents revenue from collapsing
+        // proportionally with surplus. Industry-wide capacity depletion supports premium rates.
+        $priorRevenue = (float) $stock->getTotalRevenue();
+        $targetRevenue = max($targetRevenue, $priorRevenue * self::HARD_MARKET_REVENUE_FLOOR);
 
         // 3. The engine requires Baseline ROIC, which implies a specific Asset Turnover.
         // Turnover = Revenue / Invested Capital
@@ -234,7 +242,9 @@ class InsuranceBusinessModel extends AbstractBusinessModel
 
         $ttmRoe = (float) $stock->getRoeTtm();
         if ($ttmRoe !== 0.0) {
-            $baselineRoic = ($baselineRoic * self::BASELINE_ROIC_WEIGHT) + ($ttmRoe * self::TTM_ROIC_WEIGHT);
+            // Apply structural floor locally when deriving baseline capacity return so catastrophe losses do not collapse required underwriting turnover
+            $structuralRoe = max(self::MIN_STRUCTURAL_ROE_FLOOR, $ttmRoe);
+            $baselineRoic = ($baselineRoic * self::BASELINE_ROIC_WEIGHT) + ($structuralRoe * self::TTM_ROIC_WEIGHT);
         }
 
         return [
@@ -417,7 +427,9 @@ class InsuranceBusinessModel extends AbstractBusinessModel
     {
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $kappa = \App\Data\Sectors::getModelThresholds($businessModel)['reversion_speed'] ?? 0.18;
+        $thresholds = \App\Data\Sectors::getModelThresholds($businessModel);
+        $kappa = $thresholds['reversion_speed'] ?? 0.18;
+        $moatSpread = $thresholds['moat_spread'] ?? 0.01;
 
         $equity = (float) $stock->getTotalEquity();
         // Statutory Surplus Floor: Anchor ROE denominator to at least implied regulatory minimum capital (25% of policy float/liabilities)
@@ -429,15 +441,32 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         $stock->setCurrentRoe((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $truePostTaxReturn)));
 
         // Insurance earnings are extremely lumpy due to catastrophes. Use a 0.05 smoothing factor (95% historical weight)
-        // and a 5% structural floor on ROE TTM to prevent the P/E multiple and stock price from violently whipsawing when a hurricane hits.
+        // when absorbing catastrophe drawdowns to smooth volatility, but use faster recovery smoothing (25% weight)
+        // when recovering so the company heals quickly and does not stay locked in a negative-TTM death trap.
         $oldTtm = (float) $stock->getRoeTtm();
-        $newTtm = $oldTtm === 0.0 ? max(self::MIN_STRUCTURAL_ROE_FLOOR, $truePostTaxReturn) : ($truePostTaxReturn * self::ROE_TTM_EMA_WEIGHT) + ($oldTtm * self::ROE_TTM_HIST_WEIGHT);
+        $isRecovering = $truePostTaxReturn > $oldTtm && $oldTtm < ($wacc * 0.5);
+        $emaWeight = $isRecovering ? self::ROE_TTM_RECOVERY_WEIGHT : self::ROE_TTM_EMA_WEIGHT;
+        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * $emaWeight) + ($oldTtm * (1.0 - $emaWeight));
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
-        $effectiveKappa = $kappa / self::TTM_ROIC_WEIGHT;
-        $newTtm += $effectiveKappa * ($wacc - $newTtm) * 0.25;
-        $stock->setRoeTtm((string) max(self::MIN_STRUCTURAL_ROE_FLOOR, min(self::MAX_ROE_CLAMP, $newTtm)));
+        $scaledKappa = $kappa / self::TTM_ROIC_WEIGHT;
+        $newTtm += $this->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
+        $stock->setRoeTtm((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;
+    }
+
+    public function getSustainableDividendBase(Stock $stock, float $quarterlyEps, float $investedCapital, float $depRate): float
+    {
+        // Structural floor: float investment income provides a through-the-cycle baseline
+        // that catastrophe underwriting losses should not erase entirely.
+        $equity = (float) $stock->getTotalEquity();
+        $roeTtm = (float) $stock->getRoeTtm();
+        $shares = max(1.0, (float) $stock->getSharesOutstanding());
+        $structuralEps = $equity > 0 ? (($equity * max(0.0, $roeTtm)) / 4.0) / $shares : 0.0;
+
+        // Use the higher of actual EPS and structural through-cycle EPS,
+        // but NEVER exceed actual EPS when actual is positive (don't overpay)
+        return $quarterlyEps > 0 ? $quarterlyEps : max($quarterlyEps, $structuralEps * 0.50);
     }
 
     /**

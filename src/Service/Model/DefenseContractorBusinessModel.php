@@ -159,7 +159,9 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     {
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $kappa = \App\Data\Sectors::getModelThresholds($businessModel)['reversion_speed'] ?? 0.12;
+        $thresholds = \App\Data\Sectors::getModelThresholds($businessModel);
+        $kappa = $thresholds['reversion_speed'] ?? 0.12;
+        $moatSpread = $thresholds['moat_spread'] ?? 0.02;
 
         // NOPAT (Net Operating Profit After Tax)
         $nopatProxy = $ebit > 0 ? $ebit * (1.0 - $corporateTaxRate) : $ebit;
@@ -174,8 +176,8 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $oldTtm = (float) $stock->getRoicTtm();
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::ROIC_TTM_EMA_WEIGHT) + ($oldTtm * self::ROIC_TTM_HIST_WEIGHT);
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
-        $effectiveKappa = $kappa / self::TTM_ROIC_WEIGHT;
-        $newTtm += $effectiveKappa * ($wacc - $newTtm) * 0.25;
+        $scaledKappa = $kappa / self::TTM_ROIC_WEIGHT;
+        $newTtm += $this->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
         $stock->setRoicTtm((string) max(self::MIN_ROIC_CLAMP, min(self::MAX_ROIC_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;

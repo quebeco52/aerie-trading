@@ -342,7 +342,9 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
     {
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $kappa = \App\Data\Sectors::getModelThresholds($businessModel)['reversion_speed'] ?? 0.18;
+        $thresholds = \App\Data\Sectors::getModelThresholds($businessModel);
+        $kappa = $thresholds['reversion_speed'] ?? 0.18;
+        $moatSpread = $thresholds['moat_spread'] ?? 0.01;
 
         $equity = (float) $stock->getTotalEquity();
         $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * self::ROE_ANNUALIZATION_MULT : 0.0;
@@ -352,8 +354,8 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         $oldTtm = (float) $stock->getRoeTtm();
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::ROE_TTM_EMA_WEIGHT) + ($oldTtm * self::ROE_TTM_HIST_WEIGHT);
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
-        $effectiveKappa = $kappa / self::TTM_ROE_WEIGHT;
-        $newTtm += $effectiveKappa * ($wacc - $newTtm) * 0.25;
+        $scaledKappa = $kappa / self::TTM_ROE_WEIGHT;
+        $newTtm += $this->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
         $stock->setRoeTtm((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;

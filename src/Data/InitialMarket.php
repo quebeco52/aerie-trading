@@ -1752,7 +1752,7 @@ class InitialMarket
             'price' => 1_280.00,
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.28,
-            'beta' => 0.45,
+            'beta' => 0.35,
             'jump_intensity' => 0.80,
             'jump_mean' => 0.05,
             'jump_vol' => 0.15,
