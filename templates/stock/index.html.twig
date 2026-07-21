@@ -141,6 +141,22 @@
 
 				{# --- FUNDAMENTALS DASHBOARD --- #}
 				{% if not isEtf %}
+					<div id="fundamentaldashboard" class="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-surface-container-low/60 border border-outline-variant/20 rounded-2xl p-4 mb-4 gap-4">
+						<div>
+							<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+								<span class="material-symbols-outlined text-primary text-base">analytics</span>
+								Fundamental Financial Analytics
+							</h3>
+							<p class="text-[11px] text-on-surface-variant mt-0.5">Timeframe selection applies to all historical financial statement charts below.</p>
+						</div>
+						<div class="flex items-center gap-3 self-end sm:self-auto">
+							<div class="flex space-x-2 bg-surface-container-lowest p-1.5 rounded-xl border border-outline-variant/15 shadow-inner">
+								<button onclick="updateCharts('12Q')" id="btn-global-12Q" class="px-4 py-1.5 text-xs font-bold rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-all uppercase tracking-widest">12Q</button>
+								<button onclick="updateCharts('12Y')" id="btn-global-12Y" class="px-4 py-1.5 text-xs font-bold rounded-lg bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-all uppercase tracking-widest">12Y</button>
+							</div>
+						</div>
+					</div>
+
 					<div class="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 mt-2">
 
 						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
@@ -150,10 +166,6 @@
 									{{ _self.tooltip('Tracks the total Revenue and Net Income generated each quarter.', 'left', 'w-64') }}
 								</h3>
 								<div class="flex items-center gap-3">
-									<div class="flex space-x-2 bg-surface-container-lowest p-1 rounded-lg">
-										<button onclick="updateCharts('12Q')" id="btn-12Q" class="px-3 py-1 text-[10px] font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors uppercase tracking-widest">12Q</button>
-										<button onclick="updateCharts('12Y')" id="btn-12Y" class="px-3 py-1 text-[10px] font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors uppercase tracking-widest">12Y</button>
-									</div>
 									<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
 										<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
 									</button>
@@ -255,6 +267,138 @@
 								</div>
 								<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
 									<canvas id="regulatoryRatiosChart"></canvas>
+								</div>
+							</div>
+						{% endif %}
+
+						{# --- NEW UNIVERSAL CHARTS --- #}
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
+							<div class="flex justify-between items-center mb-6">
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Valuation Multiples</span>
+									{{ _self.tooltip('Displays historical Price-to-Earnings (P/E), Price-to-Book (P/B), and Price-to-Sales (P/S) multiples over time.', 'left', 'w-64') }}
+								</h3>
+								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
+								</button>
+							</div>
+							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
+								<canvas id="valuationMultiplesChart"></canvas>
+							</div>
+						</div>
+
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
+							<div class="flex justify-between items-center mb-6">
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Per-Share Value & Dilution</span>
+									{{ _self.tooltip('Tracks Earnings Per Share (EPS), Book Value Per Share (BVPS), and total Shares Outstanding (monitoring buyback retirement vs dilution).', 'right', 'w-64') }}
+								</h3>
+								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
+								</button>
+							</div>
+							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
+								<canvas id="shareholderValueChart"></canvas>
+							</div>
+						</div>
+
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
+							<div class="flex justify-between items-center mb-6">
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Free Cash Flow & Reinvestment</span>
+									{{ _self.tooltip('Compares Free Cash Flow (FCF = Net Income - CapEx) against FCF Conversion Rate (%) and Net Retained Cash after shareholder distributions.', 'left', 'w-64') }}
+								</h3>
+								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
+								</button>
+							</div>
+							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
+								<canvas id="cashFlowSummaryChart"></canvas>
+							</div>
+						</div>
+
+						{# --- SECTOR & BUSINESS MODEL TAILORED CHARTS --- #}
+						{% if businessModel|default('none') in ['commercial_bank', 'credit_services', 'shadow_bank'] %}
+							<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
+								<div class="flex justify-between items-center mb-6">
+									<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Net Interest Income & Spread</span>
+										{{ _self.tooltip('Plots Interest Income vs Interest Expense (bars) overlaid with the Net Interest Margin spread between Blended Rate and Deposit APY.', 'right', 'w-64') }}
+									</h3>
+									<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+										<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
+									</button>
+								</div>
+								<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
+									<canvas id="netInterestEngineChart"></canvas>
+								</div>
+							</div>
+						{% endif %}
+
+						{% if businessModel|default('none') == 'insurance' %}
+							<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
+								<div class="flex justify-between items-center mb-6">
+									<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Underwriting vs Float Income</span>
+										{{ _self.tooltip('Illustrates the dual-engine insurance model: Underwriting Profit vs Investment Float Income, overlaid with the Combined Ratio.', 'right', 'w-64') }}
+									</h3>
+									<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+										<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
+									</button>
+								</div>
+								<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
+									<canvas id="insuranceDualEngineChart"></canvas>
+								</div>
+							</div>
+						{% endif %}
+
+						{% if businessModel|default('none') == 'reit' %}
+							<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
+								<div class="flex justify-between items-center mb-6">
+									<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">REIT Coverage & LTV</span>
+										{{ _self.tooltip('Monitors Dividend Coverage/Payout Ratio (%) and Loan-to-Value (LTV) leverage ratio alongside the Cap Rate vs WACC spread.', 'right', 'w-64') }}
+									</h3>
+									<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+										<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
+									</button>
+								</div>
+								<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
+									<canvas id="reitCoverageChart"></canvas>
+								</div>
+							</div>
+						{% endif %}
+
+						{% if businessModel|default('none') in ['tech', 'semiconductor', 'biotech', 'defense_contractor'] %}
+							<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
+								<div class="flex justify-between items-center mb-6">
+									<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">R&D & Reinvestment Intensity</span>
+										{{ _self.tooltip('Tracks CapEx to Revenue ratio (%) and Operating Margin (%) to highlight capital reinvestment intensity and future compounding power.', 'right', 'w-64') }}
+									</h3>
+									<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+										<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
+									</button>
+								</div>
+								<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
+									<canvas id="reinvestmentIntensityChart"></canvas>
+								</div>
+							</div>
+						{% endif %}
+
+						{% if businessModel|default('none') in ['commodity', 'shipping'] %}
+							<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
+								<div class="flex justify-between items-center mb-6">
+									<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Cyclical Dynamics & Deleveraging</span>
+										{{ _self.tooltip('Visualizes commodity/shipping cycle peaks and troughs: Operating Margin (%) compared against Total Debt paydown and Treasury accumulation.', 'right', 'w-64') }}
+									</h3>
+									<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+										<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
+									</button>
+								</div>
+								<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
+									<canvas id="cyclicalDynamicsChart"></canvas>
 								</div>
 							</div>
 						{% endif %}
@@ -547,14 +691,27 @@
 					</dl>
 
 					{% if isFinancial|default(false) %}
-						{# DEDICATED ASSET BREAKDOWN VISUALIZATION FOR BANKS #}
+						{# DEDICATED ASSET BREAKDOWN VISUALIZATION FOR FINANCIAL INSTITUTIONS #}
 						<div class="mt-6 p-4 bg-surface-container-highest rounded-xl border border-outline-variant/20 shadow-inner">
-							<div class="flex justify-between items-center mb-3">
-								<h4 class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant flex items-center gap-1.5">
-									<span class="material-symbols-outlined text-[14px]">account_balance</span>
-									Asset Breakdown</h4>
-								<span class="text-[10px] font-bold text-on-surface-variant">Total Assets: $<span id="stat-total-assets">{{ (asset.corporateTreasury + investedCapital)|format_large }}</span>
-								</span>
+							<div class="flex flex-wrap justify-between items-center gap-2 mb-3">
+								<div class="flex items-center gap-3">
+									<h4 class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant flex items-center gap-1.5">
+										<span class="material-symbols-outlined text-[14px]">account_balance</span>
+										Asset & Balance Sheet Structure
+									</h4>
+									{% if businessModel|default('none') in ['commercial_bank', 'credit_services', 'shadow_bank'] %}
+										<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container text-[10px] font-bold border border-outline-variant/10" title="Net Interest Spread between Blended Rate and Deposit APY/Cash Yield">
+											<span class="text-on-surface-variant">Spread:</span>
+											<span id="stat-bank-spread" class="font-mono text-primary">--%</span>
+										</span>
+									{% endif %}
+								</div>
+								<div class="flex items-center gap-3 text-[10px] font-bold text-on-surface-variant">
+									<span>Total Assets: $<span id="stat-total-assets">{{ (asset.corporateTreasury + investedCapital)|format_large }}</span></span>
+									{% set totalEquityVal = asset.totalEquity|default(1) %}
+									{% set leverageMult = totalEquityVal > 0 ? ((asset.corporateTreasury + investedCapital) / totalEquityVal) : 1.0 %}
+									<span class="pl-2 border-l border-outline-variant/30">Leverage: <span id="stat-leverage-mult" class="text-primary font-mono">{{ leverageMult|number_format(1) }}x</span></span>
+								</div>
 							</div>
 
 							{% set totalAssets = asset.corporateTreasury + investedCapital %}
@@ -562,26 +719,37 @@
 							{% set cashPct = totalAssets > 0 ? (asset.corporateTreasury / totalAssets) * 100 : 0 %}
 
                             {% set assetTypeLabel = 'Invested Capital' %}
-                            {% set assetTypeTooltip = 'Capital deployed into operations.' %}
+                            {% set assetTypeTooltip = 'Capital deployed into earning operations and portfolio assets.' %}
+                            {% set cashLabel = 'Treasury Reserves' %}
+                            {% set cashTooltip = 'Liquid cash and reserve assets held on balance sheet.' %}
+
                             {% if businessModel|default('none') == 'commercial_bank' %}
                                 {% set assetTypeLabel = 'Loan Book' %}
                                 {% set assetTypeTooltip = 'The total value of active loans generating interest income.' %}
-                            {% elseif businessModel|default('none') == 'insurance' %}
-                                {% set assetTypeLabel = 'Investment Portfolio' %}
-                                {% set assetTypeTooltip = 'The total value of premium float invested in the market to generate yield.' %}
-                            {% elseif businessModel|default('none') == 'credit_services' %}
-                                {% set assetTypeLabel = 'Credit Receivables' %}
-                                {% set assetTypeTooltip = 'The total value of active credit card balances generating interest income.' %}
-                            {% endif %}
-
-                            {% set cashLabel = 'Treasury Reserves' %}
-                            {% set cashTooltip = 'Liquid cash held on the balance sheet.' %}
-                            {% if businessModel|default('none') == 'commercial_bank' %}
                                 {% set cashLabel = 'Vault Cash' %}
                                 {% set cashTooltip = 'Fractional reserve cash held at the Central Bank to safely cover customer deposit withdrawals.' %}
                             {% elseif businessModel|default('none') == 'insurance' %}
-                                {% set cashLabel = 'Cash Reserves' %}
-                                {% set cashTooltip = 'Liquid cash held to safely pay out insurance claims.' %}
+                                {% set assetTypeLabel = 'Investment Portfolio' %}
+                                {% set assetTypeTooltip = 'The total value of premium float invested across markets to generate yield.' %}
+                                {% set cashLabel = 'Claims Reserves' %}
+                                {% set cashTooltip = 'Liquid cash reserves held to safely pay out policyholder claims.' %}
+                            {% elseif businessModel|default('none') == 'credit_services' %}
+                                {% set assetTypeLabel = 'Credit Receivables' %}
+                                {% set assetTypeTooltip = 'The total value of revolving credit card balances generating interest income.' %}
+                            {% elseif businessModel|default('none') == 'shadow_bank' %}
+                                {% set assetTypeLabel = 'Wholesale & Mortgage Loans' %}
+                                {% set assetTypeTooltip = 'High-yield non-bank lending and structured credit assets.' %}
+                            {% elseif businessModel|default('none') == 'clearing_house' %}
+                                {% set assetTypeLabel = 'Margin & Custody Assets' %}
+                                {% set assetTypeTooltip = 'Initial margin deposits and collateral assets held from clearing members.' %}
+                                {% set cashLabel = 'Guaranty Fund Cash' %}
+                                {% set cashTooltip = 'Liquid reserves held to absorb counterparty default shocks.' %}
+                            {% elseif businessModel|default('none') in ['brokerage', 'investment_bank'] %}
+                                {% set assetTypeLabel = 'Trading & Capital Markets Assets' %}
+                                {% set assetTypeTooltip = 'Capital deployed in securities, underwriting, and market making inventory.' %}
+                            {% elseif businessModel|default('none') in ['asset_manager', 'private_equity', 'distressed_debt'] %}
+                                {% set assetTypeLabel = 'Deployed Capital' %}
+                                {% set assetTypeTooltip = 'Capital deployed into portfolio investments and fund operations.' %}
                             {% endif %}
 
 							<div class="w-full h-2.5 flex rounded-full overflow-hidden mb-3 bg-surface-container-low border border-outline-variant/10">

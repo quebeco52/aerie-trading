@@ -344,10 +344,10 @@ class MarketEngine
         // Dividend Yield Support (The Dividend Discount Model)
         $dividendSupportValue = 0.0;
         if ($dividendPerShare > 0.0) {
-            // Use Normalized EPS to determine if dividend is structurally sustainable, 
-            // rather than raw TTM cash flow which might be temporarily negative.
-            $cashFlowProxy = $isFinancial ? $normalizedEps : max($fcfPerShare ?? 0.0, $normalizedEps);
-            $sustainableDividend = min($dividendPerShare * 4.0, max(0.0, $cashFlowProxy));
+            // Forward annualized dividend run-rate discounted by Cost of Equity minus expected perpetual growth.
+            // If normalized EPS or FCF is temporarily negative, statutory distributable surplus and cash buffers 
+            // sustain the dividend unless structural solvency breaks.
+            $sustainableDividend = $dividendPerShare * 4.0;
 
             $assumedGrowth = FinancialConstants::DEFAULT_DDM_GROWTH_RATE;
             $requiredYield = max(0.02, $liveCostOfEquity);
@@ -365,9 +365,9 @@ class MarketEngine
         $pbFairValue = $bookValuePerShare * $pbMultiple;
 
         // PERFECTED WEIGHTED CONSENSUS MODEL
-        $fairValue = $strategy->calculateFairValue($earningsValue, $pbFairValue, $normalizedEps);
+        $fairValue = $strategy->calculateFairValue($earningsValue, $pbFairValue, $normalizedEps, $dividendSupportValue);
 
-        $perceivedFairValue = max(0.01, $fairValue, $dividendSupportValue);
+        $perceivedFairValue = max(0.01, $fairValue);
 
 
 

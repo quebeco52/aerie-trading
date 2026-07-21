@@ -59,8 +59,27 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
     public const FAIR_VALUE_EARNINGS_WEIGHT = 0.90;
     /** Weight given to book value in standard corporate fair value calculations. */
     public const FAIR_VALUE_BOOK_WEIGHT     = 0.10;
+    /** Weight given to Dividend Discount Model yield support when blending standard corporate fair value. */
+    public const FAIR_VALUE_DDM_WEIGHT      = 0.15;
     /** Default operating margin mean reversion speed (quarters). */
     public const DEFAULT_MARGIN_REVERSION_SPEED = 4.0;
+
+    // --- Margin Clamping ---
+    /** Upper bound ceiling clamp for variable operating margin. */
+    public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
+    /** Lower bound floor clamp for variable operating margin. */
+    public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
+
+    /**
+     * Clamps raw variable margin within allowable bounds.
+     */
+    public function clampMargin(
+        float $rawMargin,
+        float $minMargin = self::MIN_VARIABLE_MARGIN_CLAMP,
+        float $maxMargin = self::MAX_VARIABLE_MARGIN_CLAMP
+    ): float {
+        return min($maxMargin, max($minMargin, $rawMargin));
+    }
 
     /**
      * Template Method orchestrating sector physics execution and margin clamping.
@@ -85,20 +104,20 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
             $mathUtility
         );
 
-        $clampedMargin       = min(1.50, max(0.01, $physics->rawVariableMargin));
+        $clampedMargin       = $this->clampMargin($physics->rawVariableMargin);
         $actualVariableCosts = $physics->actualRevenue * $clampedMargin;
         $ebit                = $physics->actualRevenue - $fixedCosts - $actualVariableCosts;
 
         return new ActualFinancialsDTO(
-            actualRevenue:        $physics->actualRevenue,
-            actualVariableCosts:  $actualVariableCosts,
-            clampedMargin:        $clampedMargin,
-            ebit:                 $ebit,
-            primaryShockZ:        $physics->primaryShockZ,
-            observableShockZ:     $physics->observableShockZ,
-            eventType:            $physics->eventType,
-            eventContext:         $physics->eventContext,
-            isPublicEvent:        $physics->isPublicEvent,
+            actualRevenue: $physics->actualRevenue,
+            actualVariableCosts: $actualVariableCosts,
+            clampedMargin: $clampedMargin,
+            ebit: $ebit,
+            primaryShockZ: $physics->primaryShockZ,
+            observableShockZ: $physics->observableShockZ,
+            eventType: $physics->eventType,
+            eventContext: $physics->eventContext,
+            isPublicEvent: $physics->isPublicEvent,
         );
     }
 
@@ -110,7 +129,7 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
     {
         return new SectorCoverageProfile(
             baseVisibility: 0.20,
-            errorStdDev:    0.06,
+            errorStdDev: 0.06,
         );
     }
 
@@ -160,7 +179,9 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
 
             $oldTtm = (float) $stock->getRoeTtm();
             $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::TTM_SMOOTHING_NEW_WEIGHT) + ($oldTtm * self::TTM_SMOOTHING_OLD_WEIGHT);
-            $newTtm += $kappa * ($wacc - $newTtm) * 0.25;
+            // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
+            $effectiveKappa = $kappa / (defined('static::TTM_ROE_WEIGHT') ? static::TTM_ROE_WEIGHT : 0.50);
+            $newTtm += $effectiveKappa * ($wacc - $newTtm) * 0.25;
             $stock->setRoeTtm((string) max(-0.50, min(1.0, $newTtm)));
 
             return $truePostTaxReturn;
@@ -174,7 +195,9 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
 
         $oldTtm = (float) $stock->getRoicTtm();
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::TTM_SMOOTHING_NEW_WEIGHT) + ($oldTtm * self::TTM_SMOOTHING_OLD_WEIGHT);
-        $newTtm += $kappa * ($wacc - $newTtm) * 0.25;
+        // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
+        $effectiveKappa = $kappa / (defined('static::TTM_ROIC_WEIGHT') ? static::TTM_ROIC_WEIGHT : 0.50);
+        $newTtm += $effectiveKappa * ($wacc - $newTtm) * 0.25;
         $stock->setRoicTtm((string) max(-0.50, min(1.0, $newTtm)));
 
         return $truePostTaxReturn;
@@ -274,9 +297,12 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
         return $baseCapacity;
     }
 
-    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps): float
+    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
     {
-        return ($earningsValue * self::FAIR_VALUE_EARNINGS_WEIGHT) + ($pbFairValue * self::FAIR_VALUE_BOOK_WEIGHT);
+        $baseConsensus = ($earningsValue * self::FAIR_VALUE_EARNINGS_WEIGHT) + ($pbFairValue * self::FAIR_VALUE_BOOK_WEIGHT);
+        return $dividendSupportValue > 0.0
+            ? ($baseConsensus * (1.0 - self::FAIR_VALUE_DDM_WEIGHT)) + ($dividendSupportValue * self::FAIR_VALUE_DDM_WEIGHT)
+            : $baseConsensus;
     }
 
     public function getSustainableDividendBase(Stock $stock, float $quarterlyEps, float $investedCapital, float $depRate): float
@@ -334,4 +360,3 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
         // Capital-intensive heavy industries override this method with physical plant decay physics.
     }
 }
-

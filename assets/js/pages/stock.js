@@ -36,6 +36,14 @@ let capitalEfficiencyChartInstance = null;
 let capitalReturnChartInstance = null;
 let payoutRatioChartInstance = null;
 let regulatoryRatiosChartInstance = null;
+let valuationMultiplesChartInstance = null;
+let shareholderValueChartInstance = null;
+let cashFlowSummaryChartInstance = null;
+let netInterestEngineChartInstance = null;
+let insuranceDualEngineChartInstance = null;
+let reitCoverageChartInstance = null;
+let reinvestmentIntensityChartInstance = null;
+let cyclicalDynamicsChartInstance = null;
 let lwChart = null;
 let areaSeries = null;
 let etfPieChart = null;
@@ -114,6 +122,14 @@ function initStockPage() {
     capitalReturnChartInstance = destroyChart(capitalReturnChartInstance);
     payoutRatioChartInstance = destroyChart(payoutRatioChartInstance);
     regulatoryRatiosChartInstance = destroyChart(regulatoryRatiosChartInstance);
+    valuationMultiplesChartInstance = destroyChart(valuationMultiplesChartInstance);
+    shareholderValueChartInstance = destroyChart(shareholderValueChartInstance);
+    cashFlowSummaryChartInstance = destroyChart(cashFlowSummaryChartInstance);
+    netInterestEngineChartInstance = destroyChart(netInterestEngineChartInstance);
+    insuranceDualEngineChartInstance = destroyChart(insuranceDualEngineChartInstance);
+    reitCoverageChartInstance = destroyChart(reitCoverageChartInstance);
+    reinvestmentIntensityChartInstance = destroyChart(reinvestmentIntensityChartInstance);
+    cyclicalDynamicsChartInstance = destroyChart(cyclicalDynamicsChartInstance);
 
     container.innerHTML = '';
 
@@ -381,15 +397,33 @@ function initStockPage() {
                 if (document.getElementById('stat-total-assets')) document.getElementById('stat-total-assets').innerText = formatLarge(totalAssets);
                 if (document.getElementById('stat-loan-book')) document.getElementById('stat-loan-book').innerText = formatLarge(invCap);
                 if (document.getElementById('stat-vault-cash')) document.getElementById('stat-vault-cash').innerText = formatLarge(treasury);
+                if (document.getElementById('stat-leverage-mult')) {
+                    const eqVal = parseFloat(stockUpdate.equity) || 1.0;
+                    const lev = eqVal > 0 ? (totalAssets / eqVal) : 1.0;
+                    document.getElementById('stat-leverage-mult').innerText = lev.toFixed(1) + 'x';
+                }
                 
                 let assetTypeLabel = 'Invested Capital';
-                if (BUSINESS_MODEL === 'commercial_bank') assetTypeLabel = 'Loan Book';
-                else if (BUSINESS_MODEL === 'insurance') assetTypeLabel = 'Investment Portfolio';
-                else if (BUSINESS_MODEL === 'credit_services') assetTypeLabel = 'Credit Receivables';
-
                 let cashLabel = 'Treasury Reserves';
-                if (BUSINESS_MODEL === 'commercial_bank') cashLabel = 'Vault Cash';
-                else if (BUSINESS_MODEL === 'insurance') cashLabel = 'Cash Reserves';
+
+                if (BUSINESS_MODEL === 'commercial_bank') {
+                    assetTypeLabel = 'Loan Book';
+                    cashLabel = 'Vault Cash';
+                } else if (BUSINESS_MODEL === 'insurance') {
+                    assetTypeLabel = 'Investment Portfolio';
+                    cashLabel = 'Claims Reserves';
+                } else if (BUSINESS_MODEL === 'credit_services') {
+                    assetTypeLabel = 'Credit Receivables';
+                } else if (BUSINESS_MODEL === 'shadow_bank') {
+                    assetTypeLabel = 'Wholesale & Mortgage Loans';
+                } else if (BUSINESS_MODEL === 'clearing_house') {
+                    assetTypeLabel = 'Margin & Custody Assets';
+                    cashLabel = 'Guaranty Fund Cash';
+                } else if (BUSINESS_MODEL === 'brokerage' || BUSINESS_MODEL === 'investment_bank') {
+                    assetTypeLabel = 'Trading & Capital Markets Assets';
+                } else if (BUSINESS_MODEL === 'asset_manager' || BUSINESS_MODEL === 'private_equity' || BUSINESS_MODEL === 'distressed_debt') {
+                    assetTypeLabel = 'Deployed Capital';
+                }
 
                 const barLoan = document.getElementById('bar-loan-book');
                 if (barLoan) {
@@ -626,16 +660,37 @@ window.updateCharts = updateCharts;
 function updateCharts(timeframe) {
     if (!rawReports || rawReports.length === 0) return;
 
-    // Update button styles to match your UI
+    // Update button styles to match your UI across both local and global toolbars
     const btn12Q = document.getElementById('btn-12Q');
     const btn12Y = document.getElementById('btn-12Y') || document.getElementById('btn-5Y');
+    const btnGlobal12Q = document.getElementById('btn-global-12Q');
+    const btnGlobal12Y = document.getElementById('btn-global-12Y');
+
+    const activeClass = 'px-4 py-1.5 text-xs font-bold rounded-lg bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-all uppercase tracking-widest';
+    const inactiveClass = 'px-4 py-1.5 text-xs font-bold rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-all uppercase tracking-widest';
 
     if (timeframe === '12Q') {
-        if (btn12Q) btn12Q.className = 'px-3 py-1 text-[10px] font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors uppercase tracking-widest';
-        if (btn12Y) btn12Y.className = 'px-3 py-1 text-[10px] font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors uppercase tracking-widest';
+        if (btn12Q) btn12Q.className = activeClass;
+        if (btn12Y) btn12Y.className = inactiveClass;
+        if (btnGlobal12Q) btnGlobal12Q.className = activeClass;
+        if (btnGlobal12Y) btnGlobal12Y.className = inactiveClass;
     } else {
-        if (btn12Y) btn12Y.className = 'px-3 py-1 text-[10px] font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors uppercase tracking-widest';
-        if (btn12Q) btn12Q.className = 'px-3 py-1 text-[10px] font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors uppercase tracking-widest';
+        if (btn12Y) btn12Y.className = activeClass;
+        if (btn12Q) btn12Q.className = inactiveClass;
+        if (btnGlobal12Y) btnGlobal12Y.className = activeClass;
+        if (btnGlobal12Q) btnGlobal12Q.className = inactiveClass;
+    }
+
+    if (rawReports && rawReports.length > 0) {
+        const latest = rawReports[rawReports.length - 1];
+        const spreadEl = document.getElementById('stat-bank-spread');
+        if (spreadEl && latest) {
+            const bRate = parseFloat(latest.blended_rate || 0) * 100;
+            const depOrCash = parseFloat(latest.deposit_apy || latest.cash_yield || 0) * 100;
+            const spreadVal = bRate - depOrCash;
+            spreadEl.innerText = spreadVal.toFixed(2) + '%';
+            spreadEl.className = 'font-mono ' + (spreadVal >= 0 ? 'text-positive' : 'text-negative');
+        }
     }
 
     let labels = [];
@@ -673,6 +728,27 @@ function updateCharts(timeframe) {
     let coeData = [];
     let capitalRatioData = [];
     let customerDepositRatioData = [];
+
+    // Universal Arrays
+    let peData = [];
+    let pbData = [];
+    let psData = [];
+    let epsData = [];
+    let bvpsData = [];
+    let sharesData = [];
+    let fcfData = [];
+    let fcfConversionData = [];
+    let retainedCashData = [];
+
+    // Sector Arrays
+    let interestIncomeData = [];
+    let interestExpenseData = [];
+    let netInterestSpreadData = [];
+    let underwritingProfitData = [];
+    let reitPayoutRatioData = [];
+    let reitLtvData = [];
+    let reitSpreadData = [];
+    let capexRevenueRatioData = [];
 
     if (timeframe === '12Q') {
         const sliced = rawReports.slice(-12);
@@ -716,6 +792,47 @@ function updateCharts(timeframe) {
             coeData.push(parseFloat(report.cost_of_equity || 0) * 100);
             capitalRatioData.push(parseFloat(report.capital_ratio || 0) * 100);
             customerDepositRatioData.push(parseFloat(report.customer_deposit_ratio || 0) * 100);
+
+            let intInc = parseFloat(report.interest_income || 0);
+            let capExVal = parseFloat(report.capital_expenditures || 0);
+            let eqVal = parseFloat(report.equity || 0);
+            let totDebtVal = parseFloat(report.total_debt || 0);
+            let opMarginVal = parseFloat(report.operating_margin || 0);
+            let annRev = rev * 4.0;
+            let annInc = inc * 4.0;
+
+            peData.push(annInc > 0 ? (mktCap / annInc) : null);
+            pbData.push(eqVal > 0 ? (mktCap / eqVal) : null);
+            psData.push(annRev > 0 ? (mktCap / annRev) : null);
+
+            epsData.push(shs > 0 ? (inc / shs) : 0);
+            bvpsData.push(shs > 0 ? (eqVal / shs) : 0);
+            sharesData.push(shs);
+
+            let fcf = report.free_cash_flow !== undefined && report.free_cash_flow !== null
+                ? parseFloat(report.free_cash_flow)
+                : (inc - capExVal);
+            fcfData.push(fcf);
+            fcfConversionData.push(inc > 0 ? (fcf / inc) * 100 : (inc < 0 && fcf < 0 ? -100 : 0));
+            retainedCashData.push(fcf - divPaid - buybackData[buybackData.length - 1]);
+
+            interestIncomeData.push(intInc);
+            interestExpenseData.push(intExp);
+            let bRateVal = parseFloat(report.blended_rate || 0) * 100;
+            let depOrCashVal = parseFloat(report.deposit_apy || report.depositApy || report.cash_yield || report.cashYield || 0) * 100;
+            netInterestSpreadData.push(bRateVal - depOrCashVal);
+
+            let combRatioVal = (1.0 - opMarginVal);
+            underwritingProfitData.push(rev * combRatioVal);
+
+            reitPayoutRatioData.push(inc > 0 ? (divPaid / inc) * 100 : (divPaid > 0 ? 100 : 0));
+            let totAssetsVal = totDebtVal + eqVal;
+            reitLtvData.push(totAssetsVal > 0 ? (totDebtVal / totAssetsVal) * 100 : 0);
+            let rRoicVal = parseFloat(report.roic || 0) * 100;
+            let rWaccVal = parseFloat(report.wacc || 0) * 100;
+            reitSpreadData.push(rRoicVal - rWaccVal);
+
+            capexRevenueRatioData.push(rev > 0 ? (capExVal / rev) * 100 : 0);
         });
     }
     else if (timeframe === '12Y' || timeframe === '5Y') {
@@ -736,14 +853,20 @@ function updateCharts(timeframe) {
             let sumCapEx = 0;
             let sumDiv = 0;
             let sumBuy = 0;
+            let sumFcf = 0;
             for (let j = 0; j < 4; j++) {
                 if (i - j >= 0) {
-                    sumRev += parseFloat(rawReports[i - j].revenue || 0);
-                    sumInc += parseFloat(rawReports[i - j].net_income || 0);
-                    sumIntExp += parseFloat(rawReports[i - j].interest_expense || 0);
-                    sumCapEx += parseFloat(rawReports[i - j].capital_expenditures || 0);
-                    sumDiv += parseFloat(rawReports[i - j].dividend_paid || 0);
-                    sumBuy += parseFloat(rawReports[i - j].stock_buybacks || 0);
+                    let rep = rawReports[i - j];
+                    sumRev += parseFloat(rep.revenue || 0);
+                    sumInc += parseFloat(rep.net_income || 0);
+                    sumIntExp += parseFloat(rep.interest_expense || 0);
+                    sumCapEx += parseFloat(rep.capital_expenditures || 0);
+                    sumDiv += parseFloat(rep.dividend_paid || 0);
+                    sumBuy += parseFloat(rep.stock_buybacks || 0);
+                    let repFcf = rep.free_cash_flow !== undefined && rep.free_cash_flow !== null
+                        ? parseFloat(rep.free_cash_flow)
+                        : (parseFloat(rep.net_income || 0) - parseFloat(rep.capital_expenditures || 0));
+                    sumFcf += repFcf;
                 }
             }
 
@@ -780,6 +903,45 @@ function updateCharts(timeframe) {
             capitalRatioData.unshift(parseFloat(report.capital_ratio || 0) * 100);
             customerDepositRatioData.unshift(parseFloat(report.customer_deposit_ratio || 0) * 100);
 
+            let eqVal = parseFloat(report.equity || 0);
+            let totDebtVal = parseFloat(report.total_debt || 0);
+            let opMarginVal = parseFloat(report.operating_margin || 0);
+
+            peData.unshift(sumInc > 0 ? (mktCap / sumInc) : null);
+            pbData.unshift(eqVal > 0 ? (mktCap / eqVal) : null);
+            psData.unshift(sumRev > 0 ? (mktCap / sumRev) : null);
+
+            epsData.unshift(shs > 0 ? (sumInc / shs) : 0);
+            bvpsData.unshift(shs > 0 ? (eqVal / shs) : 0);
+            sharesData.unshift(shs);
+
+            let fcf = sumFcf;
+            fcfData.unshift(fcf);
+            fcfConversionData.unshift(sumInc > 0 ? (fcf / sumInc) * 100 : (sumInc < 0 && fcf < 0 ? -100 : 0));
+            retainedCashData.unshift(fcf - sumDiv - sumBuy);
+
+            let sumIntInc = 0;
+            for (let j = 0; j < 4; j++) {
+                if (i - j >= 0) sumIntInc += parseFloat(rawReports[i - j].interest_income || 0);
+            }
+            interestIncomeData.unshift(sumIntInc);
+            interestExpenseData.unshift(sumIntExp);
+            let bRateVal = parseFloat(report.blended_rate || 0) * 100;
+            let depOrCashVal = parseFloat(report.deposit_apy || report.depositApy || report.cash_yield || report.cashYield || 0) * 100;
+            netInterestSpreadData.unshift(bRateVal - depOrCashVal);
+
+            let combRatioVal = (1.0 - opMarginVal);
+            underwritingProfitData.unshift(sumRev * combRatioVal);
+
+            reitPayoutRatioData.unshift(sumInc > 0 ? (sumDiv / sumInc) * 100 : (sumDiv > 0 ? 100 : 0));
+            let totAssetsVal = totDebtVal + eqVal;
+            reitLtvData.unshift(totAssetsVal > 0 ? (totDebtVal / totAssetsVal) * 100 : 0);
+            let rRoicVal = parseFloat(report.roic || 0) * 100;
+            let rWaccVal = parseFloat(report.wacc || 0) * 100;
+            reitSpreadData.unshift(rRoicVal - rWaccVal);
+
+            capexRevenueRatioData.unshift(sumRev > 0 ? (sumCapEx / sumRev) * 100 : 0);
+
             yearCount++;
         }
     }
@@ -813,9 +975,14 @@ function updateCharts(timeframe) {
             renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData, 'Customer Deposit Ratio');
         } else if (BUSINESS_MODEL === 'insurance') {
             renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData, 'Float Ratio (0% Interest)');
-        } else if (BUSINESS_MODEL === 'brokerage') {
-            // Brokerages don't use deposits/float, so we only pass the Capital Ratio
-            renderRegulatoryRatiosChart(labels, capitalRatioData, null, null);
+        } else if (BUSINESS_MODEL === 'shadow_bank') {
+            renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData, 'Wholesale Funding / Deposit Ratio');
+        } else if (BUSINESS_MODEL === 'clearing_house') {
+            renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData, 'Member Initial Margin Ratio');
+        } else {
+            // Brokerage, Asset Management, Private Equity, Investment Bank, Distressed Debt, etc.
+            const hasDeposits = customerDepositRatioData && customerDepositRatioData.some(val => val !== 0 && val !== null && !isNaN(val));
+            renderRegulatoryRatiosChart(labels, capitalRatioData, hasDeposits ? customerDepositRatioData : null, hasDeposits ? 'Client Float / Funding Ratio' : null);
         }
     } else if (BUSINESS_MODEL === 'reit') {
         // REITs use FFO-adjusted ROIC, which is essentially the portfolio's Cap Rate
@@ -823,6 +990,24 @@ function updateCharts(timeframe) {
     } else {
         // Normal companies use ROIC
         renderCapitalEfficiencyChart(labels, roicData, waccData, evaData, 'ROIC', 'WACC');
+    }
+
+    // Render new universal charts
+    renderValuationMultiplesChart(labels, peData, pbData, psData);
+    renderShareholderValueChart(labels, epsData, bvpsData, sharesData);
+    renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retainedCashData);
+
+    // Render conditional sector & business-model charts
+    if (['commercial_bank', 'credit_services', 'shadow_bank'].includes(BUSINESS_MODEL)) {
+        renderNetInterestEngineChart(labels, interestIncomeData, interestExpenseData, netInterestSpreadData);
+    } else if (BUSINESS_MODEL === 'insurance') {
+        renderInsuranceDualEngineChart(labels, underwritingProfitData, interestIncomeData, displayMarginData);
+    } else if (BUSINESS_MODEL === 'reit') {
+        renderReitCoverageChart(labels, reitPayoutRatioData, reitLtvData, reitSpreadData);
+    } else if (['tech', 'semiconductor', 'biotech', 'defense_contractor'].includes(BUSINESS_MODEL)) {
+        renderReinvestmentIntensityChart(labels, capexRevenueRatioData, operatingMarginData, roicData);
+    } else if (['commodity', 'shipping'].includes(BUSINESS_MODEL)) {
+        renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, treasuryData);
     }
 }
 
@@ -1640,3 +1825,590 @@ function renderPayoutRatioChart(latestDiv, latestInc) {
 
 document.addEventListener('turbo:load', initStockPage);
 initStockPage();
+
+// =========================================================================
+// NEW UNIVERSAL & SECTOR CHART RENDERERS
+// =========================================================================
+
+function renderValuationMultiplesChart(labels, peData, pbData, psData) {
+    const canvas = document.getElementById('valuationMultiplesChart');
+    if (!canvas) return;
+    if (valuationMultiplesChartInstance) valuationMultiplesChartInstance.destroy();
+
+    const ctx = canvas.getContext('2d');
+    valuationMultiplesChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'P/E Ratio',
+                    data: peData,
+                    borderColor: '#7dd3fc',
+                    backgroundColor: 'rgba(125, 211, 252, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3
+                },
+                {
+                    label: 'P/B Ratio',
+                    data: pbData,
+                    borderColor: '#4ade80',
+                    backgroundColor: 'rgba(74, 222, 128, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3
+                },
+                {
+                    label: 'P/S Ratio',
+                    data: psData,
+                    borderColor: '#facc15',
+                    backgroundColor: 'rgba(250, 204, 21, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw !== null && ctx.raw !== undefined ? ctx.raw.toFixed(1) + 'x' : 'N/A'}`
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    ticks: { callback: (val) => val.toFixed(1) + 'x' }
+                }
+            }
+        }
+    });
+}
+
+function renderShareholderValueChart(labels, epsData, bvpsData, sharesData) {
+    const canvas = document.getElementById('shareholderValueChart');
+    if (!canvas) return;
+    if (shareholderValueChartInstance) shareholderValueChartInstance.destroy();
+
+    const ctx = canvas.getContext('2d');
+    shareholderValueChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    type: 'bar',
+                    label: 'Shares Outstanding',
+                    data: sharesData,
+                    backgroundColor: 'rgba(168, 85, 247, 0.35)',
+                    borderRadius: 4,
+                    yAxisID: 'y1',
+                    order: 1
+                },
+                {
+                    type: 'line',
+                    label: 'EPS ($)',
+                    data: epsData,
+                    borderColor: '#4ade80',
+                    backgroundColor: '#4ade80',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    yAxisID: 'y',
+                    order: 0
+                },
+                {
+                    type: 'line',
+                    label: 'BVPS ($)',
+                    data: bvpsData,
+                    borderColor: '#7dd3fc',
+                    backgroundColor: '#7dd3fc',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    yAxisID: 'y',
+                    order: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => {
+                            if (ctx.dataset.label === 'Shares Outstanding') {
+                                return `Shares: ${formatLarge(ctx.raw)}`;
+                            }
+                            return `${ctx.dataset.label}: $${ctx.raw !== null ? ctx.raw.toFixed(2) : '0.00'}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    position: 'left',
+                    ticks: { callback: (val) => '$' + val.toFixed(2) }
+                },
+                y1: {
+                    type: 'linear',
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    ticks: { callback: (val) => formatLarge(val) }
+                }
+            }
+        }
+    });
+}
+
+function renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retainedCashData) {
+    const canvas = document.getElementById('cashFlowSummaryChart');
+    if (!canvas) return;
+    if (cashFlowSummaryChartInstance) cashFlowSummaryChartInstance.destroy();
+
+    const ctx = canvas.getContext('2d');
+    cashFlowSummaryChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    type: 'bar',
+                    label: 'Free Cash Flow',
+                    data: fcfData,
+                    backgroundColor: fcfData.map(val => val < 0 ? COLORS.negative : COLORS.positive),
+                    borderRadius: 4,
+                    yAxisID: 'y',
+                    order: 1
+                },
+                {
+                    type: 'bar',
+                    label: 'Net Retained Cash',
+                    data: retainedCashData,
+                    backgroundColor: 'rgba(56, 189, 248, 0.6)',
+                    borderRadius: 4,
+                    yAxisID: 'y',
+                    order: 1
+                },
+                {
+                    type: 'line',
+                    label: 'FCF Conversion Rate',
+                    data: fcfConversionData,
+                    borderColor: '#facc15',
+                    backgroundColor: '#facc15',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    yAxisID: 'y1',
+                    order: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => {
+                            if (ctx.dataset.label === 'FCF Conversion Rate') {
+                                return `${ctx.dataset.label}: ${ctx.raw !== null ? ctx.raw.toFixed(1) + '%' : '0%'}`;
+                            }
+                            return `${ctx.dataset.label}: $${formatLarge(ctx.raw)}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    position: 'left',
+                    ticks: { callback: (val) => '$' + formatLarge(val) }
+                },
+                y1: {
+                    type: 'linear',
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    ticks: { callback: (val) => val.toFixed(0) + '%' }
+                }
+            }
+        }
+    });
+}
+
+function renderNetInterestEngineChart(labels, interestIncomeData, interestExpenseData, netInterestSpreadData) {
+    const canvas = document.getElementById('netInterestEngineChart');
+    if (!canvas) return;
+    if (netInterestEngineChartInstance) netInterestEngineChartInstance.destroy();
+
+    const ctx = canvas.getContext('2d');
+    netInterestEngineChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    type: 'bar',
+                    label: 'Interest Income',
+                    data: interestIncomeData,
+                    backgroundColor: COLORS.positive,
+                    borderRadius: 4,
+                    yAxisID: 'y',
+                    order: 1
+                },
+                {
+                    type: 'bar',
+                    label: 'Interest Expense',
+                    data: interestExpenseData,
+                    backgroundColor: COLORS.negative,
+                    borderRadius: 4,
+                    yAxisID: 'y',
+                    order: 1
+                },
+                {
+                    type: 'line',
+                    label: 'Net Interest Spread',
+                    data: netInterestSpreadData,
+                    borderColor: '#facc15',
+                    backgroundColor: '#facc15',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    yAxisID: 'y1',
+                    order: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => {
+                            if (ctx.dataset.label === 'Net Interest Spread') {
+                                return `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`;
+                            }
+                            return `${ctx.dataset.label}: $${formatLarge(ctx.raw)}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    position: 'left',
+                    ticks: { callback: (val) => '$' + formatLarge(val) }
+                },
+                y1: {
+                    type: 'linear',
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    ticks: { callback: (val) => val.toFixed(1) + '%' }
+                }
+            }
+        }
+    });
+}
+
+function renderInsuranceDualEngineChart(labels, underwritingProfitData, interestIncomeData, combinedRatioData) {
+    const canvas = document.getElementById('insuranceDualEngineChart');
+    if (!canvas) return;
+    if (insuranceDualEngineChartInstance) insuranceDualEngineChartInstance.destroy();
+
+    const ctx = canvas.getContext('2d');
+    insuranceDualEngineChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    type: 'bar',
+                    label: 'Underwriting Profit',
+                    data: underwritingProfitData,
+                    backgroundColor: underwritingProfitData.map(val => val < 0 ? COLORS.negative : COLORS.positive),
+                    borderRadius: 4,
+                    yAxisID: 'y',
+                    order: 1
+                },
+                {
+                    type: 'bar',
+                    label: 'Investment Float Income',
+                    data: interestIncomeData,
+                    backgroundColor: '#38bdf8',
+                    borderRadius: 4,
+                    yAxisID: 'y',
+                    order: 1
+                },
+                {
+                    type: 'line',
+                    label: 'Combined Ratio',
+                    data: combinedRatioData,
+                    borderColor: '#facc15',
+                    backgroundColor: '#facc15',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    yAxisID: 'y1',
+                    order: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => {
+                            if (ctx.dataset.label === 'Combined Ratio') {
+                                return `${ctx.dataset.label}: ${ctx.raw.toFixed(1)}%`;
+                            }
+                            return `${ctx.dataset.label}: $${formatLarge(ctx.raw)}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    position: 'left',
+                    ticks: { callback: (val) => '$' + formatLarge(val) }
+                },
+                y1: {
+                    type: 'linear',
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    ticks: { callback: (val) => val.toFixed(0) + '%' }
+                }
+            }
+        }
+    });
+}
+
+function renderReitCoverageChart(labels, payoutRatioData, ltvData, capRateSpreadData) {
+    const canvas = document.getElementById('reitCoverageChart');
+    if (!canvas) return;
+    if (reitCoverageChartInstance) reitCoverageChartInstance.destroy();
+
+    const ctx = canvas.getContext('2d');
+    reitCoverageChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    type: 'line',
+                    label: 'Dividend Payout Ratio',
+                    data: payoutRatioData,
+                    borderColor: '#facc15',
+                    backgroundColor: 'rgba(250, 204, 21, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    yAxisID: 'y'
+                },
+                {
+                    type: 'line',
+                    label: 'Leverage Ratio (LTV)',
+                    data: ltvData,
+                    borderColor: COLORS.negative,
+                    backgroundColor: 'rgba(248, 113, 113, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    yAxisID: 'y'
+                },
+                {
+                    type: 'bar',
+                    label: 'Cap Rate vs WACC Spread',
+                    data: capRateSpreadData,
+                    backgroundColor: capRateSpreadData.map(val => val < 0 ? 'rgba(248, 113, 113, 0.4)' : 'rgba(74, 222, 128, 0.4)'),
+                    borderRadius: 4,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    position: 'left',
+                    ticks: { callback: (val) => val.toFixed(0) + '%' }
+                },
+                y1: {
+                    type: 'linear',
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    ticks: { callback: (val) => val.toFixed(1) + '%' }
+                }
+            }
+        }
+    });
+}
+
+function renderReinvestmentIntensityChart(labels, capexRevenueRatioData, operatingMarginData, roicData) {
+    const canvas = document.getElementById('reinvestmentIntensityChart');
+    if (!canvas) return;
+    if (reinvestmentIntensityChartInstance) reinvestmentIntensityChartInstance.destroy();
+
+    const ctx = canvas.getContext('2d');
+    reinvestmentIntensityChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    type: 'bar',
+                    label: 'CapEx / Revenue Intensity',
+                    data: capexRevenueRatioData,
+                    backgroundColor: 'rgba(56, 189, 248, 0.45)',
+                    borderRadius: 4,
+                    yAxisID: 'y'
+                },
+                {
+                    type: 'line',
+                    label: 'Operating Margin',
+                    data: operatingMarginData,
+                    borderColor: '#facc15',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    yAxisID: 'y'
+                },
+                {
+                    type: 'line',
+                    label: 'ROIC',
+                    data: roicData,
+                    borderColor: '#4ade80',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    yAxisID: 'y'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    ticks: { callback: (val) => val.toFixed(0) + '%' }
+                }
+            }
+        }
+    });
+}
+
+function renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, treasuryData) {
+    const canvas = document.getElementById('cyclicalDynamicsChart');
+    if (!canvas) return;
+    if (cyclicalDynamicsChartInstance) cyclicalDynamicsChartInstance.destroy();
+
+    const ctx = canvas.getContext('2d');
+    cyclicalDynamicsChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    type: 'bar',
+                    label: 'Total Debt',
+                    data: debtData,
+                    backgroundColor: COLORS.negative,
+                    borderRadius: 4,
+                    yAxisID: 'y',
+                    order: 1
+                },
+                {
+                    type: 'bar',
+                    label: 'Treasury Reserves',
+                    data: treasuryData,
+                    backgroundColor: COLORS.positive,
+                    borderRadius: 4,
+                    yAxisID: 'y',
+                    order: 1
+                },
+                {
+                    type: 'line',
+                    label: 'Operating Margin (%)',
+                    data: operatingMarginData,
+                    borderColor: '#facc15',
+                    backgroundColor: '#facc15',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    yAxisID: 'y1',
+                    order: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => {
+                            if (ctx.dataset.label === 'Operating Margin (%)') {
+                                return `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`;
+                            }
+                            return `${ctx.dataset.label}: $${formatLarge(ctx.raw)}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    position: 'left',
+                    ticks: { callback: (val) => '$' + formatLarge(val) }
+                },
+                y1: {
+                    type: 'linear',
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    ticks: { callback: (val) => val.toFixed(0) + '%' }
+                }
+            }
+        }
+    });
+}

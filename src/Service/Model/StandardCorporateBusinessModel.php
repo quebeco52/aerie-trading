@@ -106,7 +106,7 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
         $inflation = $macroState->inflationEma;
         $inflationPenalty = $inflation > MacroEngine::TARGET_INFLATION ? ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0;
 
-        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $inflationPenalty));
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $inflationPenalty);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -143,7 +143,9 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
 
         $oldTtm = (float) $stock->getRoicTtm();
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::TTM_SMOOTHING_NEW_WEIGHT) + ($oldTtm * self::TTM_SMOOTHING_OLD_WEIGHT);
-        $newTtm += $kappa * ($wacc - $newTtm) * 0.25;
+        // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
+        $effectiveKappa = $kappa / self::TTM_ROIC_WEIGHT;
+        $newTtm += $effectiveKappa * ($wacc - $newTtm) * 0.25;
         $stock->setRoicTtm((string) max(-0.50, min(1.0, $newTtm)));
 
         return $truePostTaxReturn;
@@ -193,4 +195,3 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
         }
     }
 }
-

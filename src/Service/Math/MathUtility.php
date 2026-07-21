@@ -88,6 +88,25 @@ class MathUtility
     }
 
     /**
+     * Generates a random draw from a standardized Student's t-distribution with unit variance.
+     *
+     * @param int $df Degrees of freedom (must be > 2 for defined variance).
+     * @return float A standardized t-distributed random variable.
+     */
+    public function generateStudentsT(int $df = 4): float
+    {
+        $df = max(3, $df);
+        $chiSquare = 0.0;
+        for ($i = 0; $i < $df; $i++) {
+            $z = $this->generateStandardNormal();
+            $chiSquare += $z * $z;
+        }
+
+        $rawT = $this->generateStandardNormal() / sqrt($chiSquare / $df);
+        return $rawT * sqrt(($df - 2) / $df);
+    }
+
+    /**
      * Simulates the Merton Jump Diffusion process for sudden market shocks.
      * Returns the price multiplier and the raw components of the jump.
      *
@@ -285,11 +304,11 @@ class MathUtility
             if ($isUpJump) {
                 $jumpSize = $this->generateExponential($etaUp);
                 // Failsafe: Cap individual upside jumps to ~+300% (log(4.0) ≈ 1.38) to prevent runaway inflation
-                $jumpSize = min($jumpSize, 1.38);
+                $jumpSize = min($jumpSize, FinancialConstants::MAX_JUMP_LOG_RETURN);
             } else {
                 $jumpSize = -$this->generateExponential($etaDown);
                 // Failsafe: Cap individual downside crashes to ~-90% (log(0.10) ≈ -2.30) to prevent fractional penny wipeouts
-                $jumpSize = max($jumpSize, -2.30);
+                $jumpSize = max($jumpSize, FinancialConstants::MIN_JUMP_LOG_RETURN);
             }
 
             $priceMultiplier = exp($jumpSize);

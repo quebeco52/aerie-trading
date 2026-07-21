@@ -108,7 +108,7 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
 
         // Structural Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
-        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max($minVariableMargin, $realizedVariableMargin));
+        $clampedMargin = $this->clampMargin($realizedVariableMargin, $minVariableMargin);
 
         $eventType = null;
         if ($vixEma > self::VIX_EXTREME_THRESHOLD) {
@@ -270,4 +270,3 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
         return max($operatingBase * self::MIN_CASH_BACKING_RATIO, $wholesaleDebt * self::MIN_CASH_BACKING_RATIO);
     }
 }
-

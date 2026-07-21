@@ -51,6 +51,14 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     /** Operating margin mean reversion speed: slower speed reflects regulated rate of return structures. */
     public const REGULATED_REVERSION_SPEED = 2.0;
 
+    // --- Utility Valuation & Consensus Weights ---
+    /** Weight given to rate-base book value in regulated utility fair value consensus. */
+    public const FAIR_VALUE_BOOK_WEIGHT     = 0.30;
+    /** Weight given to earnings multiple in regulated utility fair value consensus. */
+    public const FAIR_VALUE_EARNINGS_WEIGHT = 0.40;
+    /** Weight given to Dividend Discount Model yield support in regulated utility fair value consensus. */
+    public const FAIR_VALUE_DDM_WEIGHT      = 0.30;
+
     // --- Capital Reinvestment & Asset Depreciation Physics ---
     /** Quarterly efficiency decay rate per unit of underinvestment below replacement CapEx. */
     public const DEPRECIATION_DECAY_RATE      = 0.020;
@@ -122,7 +130,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         // Unregulated merchant power and services experience wholesale margin volatility from power/fuel spread shifts.
         $merchantSpreadShift = -self::MERCHANT_MARGIN_SENSITIVITY * $unregulatedZ * $unregulatedWeight;
 
-        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $regulatoryLagPenalty + $merchantSpreadShift));
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $regulatoryLagPenalty + $merchantSpreadShift);
 
         $primaryShockZ = abs($unregulatedZ) > abs($regulatedZ) ? $unregulatedZ : $regulatedZ;
         $observableShockZ = ($regulatedZ * $regulatedWeight + $unregulatedZ * $unregulatedWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
@@ -176,6 +184,14 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         }
         // During rate-base infrastructure expansion cycles, value utilities on their expanded rate base potential
         return $fcfPerShare !== null ? max($revenueFloorValue, $peFairValue * self::UTILITY_CAPEX_BURN_DISCOUNT) : max($revenueFloorValue, $peFairValue);
+    }
+
+    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
+    {
+        if ($dividendSupportValue > 0.0) {
+            return ($pbFairValue * self::FAIR_VALUE_BOOK_WEIGHT) + ($earningsValue * self::FAIR_VALUE_EARNINGS_WEIGHT) + ($dividendSupportValue * self::FAIR_VALUE_DDM_WEIGHT);
+        }
+        return parent::calculateFairValue($earningsValue, $pbFairValue, $normalizedEps, 0.0);
     }
 
     public function isUnderLeveraged(bool $isFinancial, float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool

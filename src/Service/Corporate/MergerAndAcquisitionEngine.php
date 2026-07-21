@@ -342,7 +342,10 @@ class MergerAndAcquisitionEngine
         $industry = $seller->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
         $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
-        $currentReturn = $isFinancial ? (float) $seller->getCurrentRoe() : (float) $seller->getCurrentRoic();
+        $currentReturn = $isFinancial ? (float) $seller->getRoeTtm() : (float) $seller->getRoicTtm();
+        if ($currentReturn === 0.0) {
+            $currentReturn = $isFinancial ? (float) $seller->getCurrentRoe() : (float) $seller->getCurrentRoic();
+        }
         $hurdleRate = $isFinancial ? ($health['cost_of_equity'] ?? 0.10) : $wacc;
 
         $evaSpread = $currentReturn - $hurdleRate;

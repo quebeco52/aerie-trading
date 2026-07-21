@@ -54,8 +54,7 @@ class CorporateMetrics
 
         $saturationPenalty = $convexBloat * $moatFactor;
 
-        // Safety limit: cap variable cost penalty at 0.15 to reflect realistic SG&A friction without self-cannibalization
-        return min(0.15, $saturationPenalty);
+        return $saturationPenalty;
     }
 
     /**
@@ -90,4 +89,3 @@ class CorporateMetrics
         return max(0.0, $baseReturn * pow($capitalScale, -$effectiveElasticity));
     }
 }
-

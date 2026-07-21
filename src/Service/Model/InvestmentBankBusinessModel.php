@@ -166,7 +166,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
 
         //  Compensation ratio floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_COMPENSATION_RATIO.
         $minCompRatio = max(0.01, self::MIN_COMPENSATION_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
-        $clampedVariableMargin = min(self::MAX_COMPENSATION_RATIO, max($minCompRatio, $realizedVariableMargin));
+        $clampedVariableMargin = $this->clampMargin($realizedVariableMargin, $minCompRatio, self::MAX_COMPENSATION_RATIO);
 
         // Regulatory tail risk (independent of market cycle)
         $eventType = null;

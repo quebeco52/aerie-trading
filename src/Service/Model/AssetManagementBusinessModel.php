@@ -278,7 +278,7 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
 
         // 3. Structural Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
-        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max($minVariableMargin, $realizedVariableMargin));
+        $clampedMargin = $this->clampMargin($realizedVariableMargin, $minVariableMargin);
 
         // 4. Dynamic Event Type:
         $eventType = null;
@@ -351,7 +351,9 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
 
         $oldTtm = (float) $stock->getRoeTtm();
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::ROE_TTM_EMA_WEIGHT) + ($oldTtm * self::ROE_TTM_HIST_WEIGHT);
-        $newTtm += $kappa * ($wacc - $newTtm) * 0.25;
+        // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
+        $effectiveKappa = $kappa / self::TTM_ROE_WEIGHT;
+        $newTtm += $effectiveKappa * ($wacc - $newTtm) * 0.25;
         $stock->setRoeTtm((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;
@@ -421,4 +423,3 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         return max($revenueFloorValue, $peFairValue);
     }
 }
-

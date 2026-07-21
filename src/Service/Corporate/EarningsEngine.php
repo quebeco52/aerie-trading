@@ -453,6 +453,7 @@ class EarningsEngine
         $earningsEvent = $this->marketEvent->publish($stock, 'EARNINGS', $description, $totalShockPct * 100);
 
         $totalReportedCapex = ($actualAnnualCapEx / 4.0) + $reportedOrganicCapex;
+        $trueQuarterlyFcf = ($trueAnnualFcfPerShare * $sharesOutstanding) / 4.0;
 
         // Persist the comprehensive quarterly report
         $this->buildCorporateReport(
@@ -463,6 +464,7 @@ class EarningsEngine
             $debtMetrics,
             $quarterlyInterestIncome,
             $totalReportedCapex,
+            $trueQuarterlyFcf,
             $truePostTaxReturn,
             $wacc,
             $annualEconomicProfit,
@@ -485,6 +487,7 @@ class EarningsEngine
         array $debtMetrics,
         float $interestIncome,
         float $capex,
+        float $freeCashFlow,
         float $roic,
         float $wacc,
         float $eva,
@@ -509,6 +512,7 @@ class EarningsEngine
 
         // Cash Flow & Balance Sheet
         $report->setCapitalExpenditures((string) $capex);
+        $report->setFreeCashFlow((string) $freeCashFlow);
         $report->setEquity($stock->getTotalEquity());
         $report->setTotalDebt($stock->getTotalDebt());
         $report->setTreasury($stock->getCorporateTreasury());
@@ -534,7 +538,7 @@ class EarningsEngine
         $capitalRatio = ($finalEquity + $finalTotalDebt) > 0 ? ($finalEquity / ($finalEquity + $finalTotalDebt)) : 1.0;
         $report->setCapitalRatio((string) $capitalRatio);
 
-        if (in_array($businessModel, ['commercial_bank', 'insurance', 'credit_services', 'shadow_bank'])) {
+        if (\App\Data\Sectors::isFinancial($businessModel) || (float) $stock->getCustomerDeposits() > 0) {
             $customerDeposits = (float) $stock->getCustomerDeposits();
             $depositRatio = $finalTotalDebt > 0 ? ($customerDeposits / $finalTotalDebt) : 0.0;
             $report->setCustomerDepositRatio((string) $depositRatio);

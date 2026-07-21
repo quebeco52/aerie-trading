@@ -88,7 +88,7 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
         $recoveryRevenue = $expectedRevenue * $recoveryWeight * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $distressMultiplier);
         $actualRevenue   = max(0.0, $advisoryRevenue + $recoveryRevenue);
 
-        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin));
+        $clampedMargin = $this->clampMargin($realizedVariableMargin);
 
         // observableShockZ: macro credit spreads and corporate default rates are public data (~90% visibility).
         return new SectorPhysicsResult(

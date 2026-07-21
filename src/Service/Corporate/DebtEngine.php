@@ -159,28 +159,28 @@ class DebtEngine
         // Prices corporate credit spreads dynamically based on Default Probability
         $equityVolatility = (float) ($stock->getCurrentVolatility() ?? $stock->getVolatility());
         $equityVolatility = max(0.05, $equityVolatility); // Minimum vol failsafe
-        
+
         $marketCap = max(1.0, (float) $stock->getPrice() * max(1.0, (float) $stock->getSharesOutstanding()));
         // For default modeling, we evaluate Net Debt against Market Equity to approximate Firm Value
-        $assetValue = $marketCap + $netDebt; 
-        
+        $assetValue = $marketCap + $netDebt;
+
         // Asset Volatility approximation: sigma_V = sigma_E * (E / V)
         $assetVolatility = $equityVolatility * ($marketCap / $assetValue);
         $assetVolatility = max(0.02, $assetVolatility); // Minimum asset vol failsafe
 
         $policyRate = $macroState->policyRateEma;
-        
+
         // Debt maturity is approximated at 5 years for standard corporate credit spreads
-        $timeToMaturity = 5.0; 
+        $timeToMaturity = 5.0;
         // Standard Loss Given Default (LGD) is 40% (Historical recovery rate ~60%)
         $lossGivenDefault = 0.40;
-        
+
         if ($isFinancial) {
             // Financials carry highly leveraged balance sheets but have central bank support (discount window).
             // Their LGD is typically lower.
             $lossGivenDefault = 0.30;
         }
-        
+
         $distanceToDefault = $this->mathUtility->calculateDistanceToDefault(
             $assetValue,
             max(0.01, $netDebt),
@@ -188,7 +188,7 @@ class DebtEngine
             $policyRate,
             $timeToMaturity
         );
-        
+
         if ($this->creditRatingAgency !== null && $advanceMaturity) {
             $oldRating = $stock->getCreditRating();
             $newRating = $this->creditRatingAgency->evaluateRating($stock, $distanceToDefault);

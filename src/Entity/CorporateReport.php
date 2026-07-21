@@ -91,6 +91,9 @@ class CorporateReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $cashYield = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $freeCashFlow = null;
+
     public function __construct()
     {
         $this->recordedAt = new \DateTime();
@@ -389,6 +392,18 @@ class CorporateReport
     public function setCashYield(?string $cashYield): static
     {
         $this->cashYield = $cashYield;
+
+        return $this;
+    }
+
+    public function getFreeCashFlow(): ?string
+    {
+        return $this->freeCashFlow;
+    }
+
+    public function setFreeCashFlow(?string $freeCashFlow): static
+    {
+        $this->freeCashFlow = $freeCashFlow;
 
         return $this;
     }

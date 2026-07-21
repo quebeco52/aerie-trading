@@ -14,6 +14,40 @@ use App\Service\Math\MathUtility;
  */
 class CapitalAllocationEngine
 {
+    // --- Dividend Policy & Distress Thresholds ---
+    /** EVA spread floor (-800 bps) below which standard companies enter deep structural distress. */
+    private const DEEP_DISTRESS_EVA_SPREAD = -0.08;
+    /** EVA spread floor (-400 bps) for moderate distress when operating cash buffer is depleted. */
+    private const MODERATE_DISTRESS_EVA_SPREAD = -0.04;
+    /** Tolerance multiplier (1.5x) for Dividend Aristocrats to absorb negative economic spreads before distress. */
+    private const ARISTOCRAT_DISTRESS_MULTIPLIER = 1.5;
+    /** Standard distress multiplier (1.0x) for non-Aristocrat dividend payers. */
+    private const STANDARD_DISTRESS_MULTIPLIER = 1.0;
+    /** Operating cash buffer multiple (1.5x) required to avoid moderate distress cash penalties. */
+    private const CASH_BUFFER_SAFETY_MULT = 1.5;
+    /** Rebased dividend retention floor (30%) for Aristocrats undergoing deep structural distress without liquidity failure. */
+    private const ARISTOCRAT_DISTRESS_REBASE_RATIO = 0.30;
+    /** Rebased dividend retention floor (50%) for moderate structural distress or critical cash rebasing. */
+    private const MODERATE_DISTRESS_REBASE_RATIO = 0.50;
+
+    // --- Dividend Policy & Lintner Model ---
+    /** Maximum catch-up growth adjustment speed for Dividend Aristocrats when target payout exceeds current dividend. */
+    private const ARISTOCRAT_MAX_CATCHUP_SPEED = 0.15;
+    /** Catch-up ratio threshold (1.30x) where Aristocrats accelerate dividend adjustment speed. */
+    private const ARISTOCRAT_CATCHUP_THRESHOLD = 1.30;
+
+    // --- Regulatory Capital Conservation Buffer (Basel III / Solvency II) ---
+    /** Leverage overshoot ratio (1.05x) triggering Tier 1 Capital Conservation Buffer restriction (max 60% payout). */
+    private const REGULATORY_BUFFER_TIER_1_THRESHOLD = 1.05;
+    /** Maximum target payout ratio allowed when operating under Tier 1 capital buffer restrictions. */
+    private const REGULATORY_BUFFER_TIER_1_PAYOUT_CAP = 0.60;
+    /** Leverage overshoot ratio (1.15x) triggering Tier 2 Capital Conservation Buffer restriction (max 30% payout). */
+    private const REGULATORY_BUFFER_TIER_2_THRESHOLD = 1.15;
+    /** Maximum target payout ratio allowed when operating under Tier 2 capital buffer restrictions. */
+    private const REGULATORY_BUFFER_TIER_2_PAYOUT_CAP = 0.30;
+    /** Leverage overshoot ratio (1.25x) triggering severe Tier 3 regulatory dividend prohibition (0% payout). */
+    private const REGULATORY_BUFFER_TIER_3_THRESHOLD = 1.25;
+
     public function __construct(
         private EntityManagerInterface $entityManager,
         private CorporateMetrics $corporateMetrics,
@@ -69,7 +103,7 @@ class CapitalAllocationEngine
         $newTreasury = $currentTreasury + $totalFcfGenerated;
 
         // EXECUTE DIVIDENDS
-        $divData = $this->executeDividends($stock, $quarterlyEps, $oldShares, $currentPrice, $newTreasury, $operatingBase, $investedCapital, $quarterlyNopat, $health, $actualTotalNetIncome);
+        $divData = $this->executeDividends($stock, $quarterlyEps, $quarterlyFcfPerShare, $oldShares, $currentPrice, $newTreasury, $operatingBase, $investedCapital, $quarterlyNopat, $health, $actualTotalNetIncome);
         if ($divData['event']) $events[] = $divData['event'];
 
         $newTreasury -= $divData['total_paid'];
@@ -160,7 +194,7 @@ class CapitalAllocationEngine
         ];
     }
 
-    private function executeDividends(Stock $stock, float $quarterlyEps, float $shares, float $currentPrice, float $availableTreasury, float $operatingBase, float $investedCapital, float $quarterlyNopat, array $health, float $actualTotalNetIncome = 0.0): array
+    private function executeDividends(Stock $stock, float $quarterlyEps, float $quarterlyFcfPerShare, float $shares, float $currentPrice, float $availableTreasury, float $operatingBase, float $investedCapital, float $quarterlyNopat, array $health, float $actualTotalNetIncome = 0.0): array
     {
         $targetPayout = (float) $stock->getTargetPayoutRatio();
         $speed = (float) $stock->getDividendSpeed();
@@ -180,17 +214,30 @@ class CapitalAllocationEngine
         $depRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($industry);
 
         $sustainableBase = $strategy->getSustainableDividendBase($stock, $quarterlyEps, $investedCapital, $depRate);
+        if ($sustainableBase <= 0.0 && $quarterlyFcfPerShare > 0.0) {
+            $sustainableBase = min($quarterlyFcfPerShare, $lastDividend / max(0.01, $targetPayout));
+        }
         $calculatedTarget = $sustainableBase > 0 ? ($sustainableBase * $targetPayout) : 0.0;
         $targetDividend = $isAristocrat ? max($calculatedTarget, $lastDividend) : $calculatedTarget;
 
         $isRegulatoryDividendHalt = false;
-        $trueReturn = $strategy->calculateEconomicReturn($stock, $isFinancial ? $actualTotalNetIncome : $quarterlyNopat, $investedCapital);
+        $trueReturn = $isFinancial ? (float) $stock->getRoeTtm() : (float) $stock->getRoicTtm();
+        if ($trueReturn === 0.0) {
+            $trueReturn = $strategy->calculateEconomicReturn($stock, $isFinancial ? $actualTotalNetIncome : $quarterlyNopat, $investedCapital);
+        }
         if ($isFinancial) {
             $hurdleRate = $health['cost_of_equity'] ?? 0.10;
 
             $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$stock->getIndustry() ?? 'General']['equity_limit'] ?? 10.0;
-            if ((float)$stock->getDebtToEquityRatio() > $equityLimit * 1.1) {
+            $leverageRatio = (float) $stock->getDebtToEquityRatio();
+            $leverageOvershoot = $equityLimit > 0.0 ? ($leverageRatio / $equityLimit) : 1.0;
+
+            if ($leverageOvershoot >= self::REGULATORY_BUFFER_TIER_3_THRESHOLD) {
                 $isRegulatoryDividendHalt = true;
+            } elseif ($leverageOvershoot >= self::REGULATORY_BUFFER_TIER_2_THRESHOLD) {
+                $targetDividend = min($targetDividend, $sustainableBase * min($targetPayout, self::REGULATORY_BUFFER_TIER_2_PAYOUT_CAP));
+            } elseif ($leverageOvershoot >= self::REGULATORY_BUFFER_TIER_1_THRESHOLD) {
+                $targetDividend = min($targetDividend, $sustainableBase * min($targetPayout, self::REGULATORY_BUFFER_TIER_1_PAYOUT_CAP));
             }
         } else {
             $hurdleRate = $health['wacc'];
@@ -198,14 +245,14 @@ class CapitalAllocationEngine
 
         $evaSpread = $trueReturn - $hurdleRate;
 
-        $distressMultiplier = 1.0 + ($isAristocrat ? 0.2 : 0.0);
+        $distressMultiplier = $isAristocrat ? self::ARISTOCRAT_DISTRESS_MULTIPLIER : self::STANDARD_DISTRESS_MULTIPLIER;
 
         $minOperatingCash = $strategy->calculateMinOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
-        $hasCashBuffer = $availableTreasury > ($minOperatingCash * 1.5);
+        $hasCashBuffer = $availableTreasury > ($minOperatingCash * self::CASH_BUFFER_SAFETY_MULT);
         $isCriticalCash = $availableTreasury < $minOperatingCash;
 
-        $isDeepDistress = $evaSpread < (-0.08 * $distressMultiplier);
-        $isModerateDistressNoCash = ($evaSpread < (-0.04 * $distressMultiplier)) && !$hasCashBuffer;
+        $isDeepDistress = $evaSpread < (self::DEEP_DISTRESS_EVA_SPREAD * $distressMultiplier);
+        $isModerateDistressNoCash = ($evaSpread < (self::MODERATE_DISTRESS_EVA_SPREAD * $distressMultiplier)) && !$hasCashBuffer;
 
         $modelThresholds = \App\Data\Sectors::getModelThresholds($businessModel);
         $crisisThreshold = $modelThresholds['dividend_crisis_icr'];
@@ -217,35 +264,37 @@ class CapitalAllocationEngine
             // The CEO explicitly defends the payout: clamp target dividend to prevent silent erosion below last dividend
             $targetDividend = max($targetDividend, $lastDividend);
         } else {
-            if ($isDeepDistress || $isLiquidityCrisis || $isRegulatoryDividendHalt) {
+            if ($isLiquidityCrisis || $isRegulatoryDividendHalt) {
+                // Immediate liquidity failure or regulatory prohibition forces total elimination ($0.00)
                 $targetDividend = 0.0;
-                $speed = ($isLiquidityCrisis || $isRegulatoryDividendHalt) ? 1.0 : min(1.0, $speed + 0.25);
+                $speed = 1.0;
+            } elseif ($isDeepDistress) {
+                // Structural deep distress without immediate liquidity failure: Aristocrats rebase to preserve signaling rather than zeroing
+                $targetDividend = $isAristocrat ? min($calculatedTarget, $lastDividend * self::ARISTOCRAT_DISTRESS_REBASE_RATIO) : 0.0;
+                $speed = min(1.0, $speed + 0.25);
             } elseif ($isModerateDistressNoCash || ($isCriticalCash && $calculatedTarget < $lastDividend)) {
                 // Moderate distress or critical cash without CEO resistance: Rebase dividend to preserve capital without total elimination
-                $targetDividend = min($calculatedTarget, $lastDividend * 0.50);
+                $targetDividend = min($calculatedTarget, $lastDividend * self::MODERATE_DISTRESS_REBASE_RATIO);
                 $speed = min(1.0, $speed + 0.15);
             }
         }
 
         if ($lastDividend > 0 && $isAristocrat) {
             $catchUpRatio = $calculatedTarget / $lastDividend;
-            if ($catchUpRatio > 1.30) {
-                $speed = min(0.15, $speed + (($catchUpRatio - 1.30) * 0.10));
+            if ($catchUpRatio > self::ARISTOCRAT_CATCHUP_THRESHOLD) {
+                $speed = min(self::ARISTOCRAT_MAX_CATCHUP_SPEED, $speed + (($catchUpRatio - self::ARISTOCRAT_CATCHUP_THRESHOLD) * 0.10));
             }
         }
 
         $newDividend = max(0.0, $lastDividend + ($speed * ($targetDividend - $lastDividend)));
 
         $usableCash = max(0.0, $availableTreasury - $minOperatingCash);
+        $distributableSurplus = max(0.0, (float) $stock->getRetainedEarnings() + ($quarterlyEps * $shares));
 
-        $maxDividendPerShare = $shares > 0 ? ($usableCash / $shares) : 0.0;
-        $maxMarketDividend = max(0.0, $currentPrice * 0.10);
+        $maxCashDividendPerShare = $shares > 0 ? ($usableCash / $shares) : 0.0;
+        $maxLegalDividendPerShare = $shares > 0 ? ($distributableSurplus / $shares) : 0.0;
 
-        // SECURITY MEASURE: Do not allow dividends to drive Book Equity below 0.
-        $currentEquity = (float) $stock->getTotalEquity();
-        $maxEquityDividendPerShare = $shares > 0 ? (max(0.0, $currentEquity * 0.50) / $shares) : 0.0;
-
-        $newDividend = min($newDividend, $maxDividendPerShare, $maxMarketDividend, $maxEquityDividendPerShare);
+        $newDividend = min($newDividend, $maxCashDividendPerShare, $maxLegalDividendPerShare);
         $totalPaid = $newDividend * $shares;
         $event = null;
 
@@ -317,7 +366,10 @@ class CapitalAllocationEngine
         $event = null;
 
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
-        $trueReturn = $strategy->calculateEconomicReturn($stock, $isFinancial ? $actualTotalNetIncome : $quarterlyNopat, $investedCapital);
+        $trueReturn = $isFinancial ? (float) $stock->getRoeTtm() : (float) $stock->getRoicTtm();
+        if ($trueReturn === 0.0) {
+            $trueReturn = $strategy->calculateEconomicReturn($stock, $isFinancial ? $actualTotalNetIncome : $quarterlyNopat, $investedCapital);
+        }
         $hurdleRate = $isFinancial ? ($health['cost_of_equity'] ?? 0.10) : $health['wacc'];
         $economicSpread = $trueReturn - $hurdleRate;
 

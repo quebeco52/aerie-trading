@@ -289,7 +289,7 @@ class InitialMarket
             'fixed_cost_ratio' => 0.20,
             'operating_margin' => 0.13,
             'public_float' => 0.70,
-            'sam_ratio' => 1.00,
+            'sam_ratio' => 1.50,
             'floating_debt_ratio' => 0.05,
             'historical_fixed_rate' => 0.025,
             'credit_spread' => 0.0030,

@@ -48,6 +48,9 @@ class ShockEvent
     public const IB_DCM_UNDERWRITING_BOOM = 'ib_dcm_underwriting_boom';
     public const IB_PROP_TRADING_SURGE = 'ib_prop_trading_surge';
     public const DISTRESSED_DEBT_RESTRUCTURING = 'distressed_debt_restructuring';
+    public const GEOPOLITICAL_EXPORT_BAN = 'geopolitical_export_ban';
+    public const GEOPOLITICAL_SANCTIONS = 'geopolitical_sanctions';
+    public const REINSURANCE_ATTACHMENT_BREACH = 'reinsurance_attachment_breach';
 
     // District Lore Systemic Shocks
     public const COUNCIL_TIGHTENING = 'council_tightening';

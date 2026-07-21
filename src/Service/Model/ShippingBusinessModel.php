@@ -127,7 +127,7 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
             min(0.15, ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::BUNKER_INFLATION_SCALAR)
         );
 
-        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $bunkerInflationAdjustment));
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $bunkerInflationAdjustment);
 
         $primaryShockZ = abs($spotZ) > abs($contractZ) ? $spotZ : $contractZ;
         // observableShockZ: Baltic Dry Index and Harpex are public daily data (~75% visibility via getCoverageProfile)

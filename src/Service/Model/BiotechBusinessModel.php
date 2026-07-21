@@ -135,7 +135,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
 
         $actualRevenue = max(0.0, $establishedRevenue + $pipelineRevenue);
 
-        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $patentModifier));
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $patentModifier);
 
         $primaryShockZ = abs($trialZ) > abs($establishedZ) ? $trialZ : $establishedZ;
         // observableShockZ: blended stream shock visible to analysts
@@ -156,11 +156,11 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         // Dual-mode: FDA/trial announcements are binary public events (85% visible, 70% floor).
         // Routine operational variance is low-visibility (~20%, 10% floor).
         return new \App\DTO\SectorCoverageProfile(
-            baseVisibility:      0.20,
-            errorStdDev:         0.05,
-            minVisibility:       0.10,
+            baseVisibility: 0.20,
+            errorStdDev: 0.05,
+            minVisibility: 0.10,
             eventBaseVisibility: 0.85,
-            eventMinVisibility:  0.70,
+            eventMinVisibility: 0.70,
         );
     }
 
@@ -222,4 +222,3 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         return $fcfPerShare !== null ? max($revenueFloorValue, $peFairValue * self::BIOTECH_RESEARCH_BURN_DISCOUNT) : max($revenueFloorValue, $peFairValue);
     }
 }
-

@@ -21,10 +21,18 @@ class FinancialConstants
     public const NEGATIVE_SURPRISE_VOL_MULTIPLIER = 1.4;
 
     // --- Jump Diffusion (Fundamental vs Price) ---
-    // Fundamental shocks are less frequent and smaller than price-level panics
+    /** Scale factor for fundamental jump intensity relative to price jumps. */
     public const FUNDAMENTAL_JUMP_INTENSITY_SCALE = 0.25;
+    /** Scale factor for fundamental jump mean size relative to price jumps. */
     public const FUNDAMENTAL_JUMP_MEAN_SCALE = 0.50;
+    /** Scale factor for fundamental jump volatility relative to price jumps. */
     public const FUNDAMENTAL_JUMP_VOL_SCALE = 0.50;
+
+    // --- SVJJ & Jump Diffusion Limits ---
+    /** Maximum individual upside jump cap (~+300% or log(4.0)) to prevent runaway price spikes. */
+    public const MAX_JUMP_LOG_RETURN = 1.38;
+    /** Minimum individual downside jump floor (~-90% or log(0.10)) to prevent fractional penny wipeouts. */
+    public const MIN_JUMP_LOG_RETURN = -2.30;
 
     // --- EPS Smoothing ---
     public const EPS_TTM_SMOOTHING_OLD_WEIGHT = 0.60;

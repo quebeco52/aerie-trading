@@ -169,7 +169,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         }
 
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
-        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max($minVariableMargin, $realizedVariableMargin + $lossProvisionShock + $nimSqueeze));
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $lossProvisionShock + $nimSqueeze, $minVariableMargin);
 
         $eventType = null;
         if ($creditZ < self::LORE_TOXIC_WRITE_DOWN_Z) {

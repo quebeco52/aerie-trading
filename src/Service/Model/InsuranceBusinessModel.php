@@ -25,10 +25,18 @@ class InsuranceBusinessModel extends AbstractBusinessModel
     // --- The Kenney Rule & Capacity Limits ---
     /** Standard Premium-to-Surplus capacity ratio required to maintain strong credit ratings. */
     public const KENNEY_CAPACITY_RATIO    = 1.50;
+    /** Target surplus ratio relative to customer deposit float (25% regulatory/statutory baseline). */
+    public const TARGET_FLOAT_SURPLUS_RATIO = 0.25;
     /** Implied runoff equity fraction of customer deposit float allowed for insolvent insurers. */
     public const IMPLIED_RUNOFF_EQUITY    = 0.10;
     /** Default maximum financial leverage (Debt/Equity) limit if sector configuration is absent. */
     public const DEFAULT_EQUITY_LIMIT     = 10.00;
+    /** Baseline logistic inflection point (80% of equity limit) where capacity tightens for pure corporate debt. */
+    public const CAPACITY_INFLECTION_BASE = 0.80;
+    /** Inflection shift (10%) moving the regulatory midpoint to 80% for volatile policyholder float. */
+    public const CAPACITY_INFLECTION_FLOAT_SHIFT = 0.10;
+    /** Steepness (12.0) of NAIC statutory capital constraints and rating agency capacity clamping around real sector limits. */
+    public const CAPACITY_LOGISTIC_STEEPNESS = 12.0;
 
     // --- ROIC & ROE Target Architecture ---
     /** Weight given to historical baseline ROIC when blending with TTM ROE. */
@@ -76,6 +84,14 @@ class InsuranceBusinessModel extends AbstractBusinessModel
     /** Severe claim z-score threshold indicating elevated claim payouts and underwriting margin pressure. */
     public const LORE_ELEVATED_CLAIMS_Z   = -1.50;
 
+    // --- Reinsurance & Attachment Physics ---
+    /** Catastrophe z-score threshold where Excess of Loss (XOL) reinsurance treaties attach (`Z < -2.50`). */
+    public const REINSURANCE_ATTACHMENT_Z = -2.50;
+    /** Maximum net underwriting loss shock absorbed by primary insurer after reinsurance recovery cap. */
+    public const MAX_REINSURED_LOSS_SHOCK = 0.375;
+    /** Quarterly surcharge rate per unit of reinsurance recovery amortized during hard market renewals. */
+    public const REINSURANCE_HARD_MARKET_RATE = 0.04;
+
     // --- Loss Reserve & Investment Portfolio Physics ---
     /** Target operating cash reserve ratio applied to corporate operating base. */
     public const TARGET_OPERATING_BUFFER  = 0.05;
@@ -84,7 +100,7 @@ class InsuranceBusinessModel extends AbstractBusinessModel
     /** Minimum emergency operating cash reserve ratio applied to corporate operating base. */
     public const MIN_OPERATING_BUFFER     = 0.03;
     /** Minimum emergency operating cash reserve ratio applied to customer deposit float. */
-    public const MIN_FLOAT_BUFFER         = 0.50;
+    public const MIN_FLOAT_BUFFER         = 0.15;
     /** Threshold ratio of excess cash over total debt triggering hoarder status. */
     public const HOARDER_THRESHOLD        = 0.25;
     /** Threshold ratio of excess cash over total debt triggering mega-hoarder status. */
@@ -137,6 +153,8 @@ class InsuranceBusinessModel extends AbstractBusinessModel
     public const FAIR_VALUE_BOOK_POS_EPS  = 0.40;
     /** Weight given to book value in fair value calculations when normalized EPS is negative or zero. */
     public const FAIR_VALUE_BOOK_NEG_EPS  = 0.80;
+    /** Weight given to Dividend Discount Model yield support when blending insurance fair value. */
+    public const FAIR_VALUE_DDM_WEIGHT    = 0.15;
 
     // --- Passive Liability Growth & Float Expansion ---
     /** Default annual inflation rate fallback for systemic float growth calculations. */
@@ -170,6 +188,16 @@ class InsuranceBusinessModel extends AbstractBusinessModel
     /** Event shock bonus applied during significant quarterly new premium capture. */
     public const EVENT_SHOCK_CAPTURE      = 0.50;
 
+    // --- Balance Sheet Capacity & Leverage Decay ---
+    /** Baseline capacity modifier ceiling when wholesale debt leverage is near zero. */
+    public const CAPACITY_MODIFIER_CEILING    = 2.50;
+    /** Minimum allowable capacity modifier floor during severe wholesale debt distress. */
+    public const CAPACITY_MODIFIER_FLOOR      = 0.01;
+    /** Base exponential decay rate applied to wholesale leverage utilization. */
+    public const CAPACITY_BASE_DECAY_RATE     = 0.50;
+    /** Multiplier scaling capacity decay sensitivity to wholesale debt utilization. */
+    public const CAPACITY_UTIL_DECAY_MULT     = 1.50;
+
     /**
      * Reverse engineers the required operating metrics based on Balance Sheet Capacity.
      * Insurance revenue (Premiums) is strictly constrained by Surplus Equity (The Kenney Rule).
@@ -192,11 +220,11 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         $capacityRatio = self::KENNEY_CAPACITY_RATIO;
         // Prevent zombie state: Regulators allow insolvent insurers to operate in runoff using a fraction of their float as implied equity
         $impliedRunoffEquity = (float) $stock->getCustomerDeposits() * self::IMPLIED_RUNOFF_EQUITY;
-        $operatingEquity = max($impliedRunoffEquity, max(1.0, $equity));
+        $operatingEquity = max(max(1.0, $impliedRunoffEquity), $equity);
 
         $taxRate = $macroState->corporateTaxRate;
 
-        // 2. Structural Revenue is anchored strictly to their capacity limit.
+        // 2. Structural Revenue is anchored strictly to their capacity limit and required policy reserves.
         $targetRevenue = $operatingEquity * $capacityRatio;
 
         // 3. The engine requires Baseline ROIC, which implies a specific Asset Turnover.
@@ -284,10 +312,18 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         // Reinsurers absorbing higher frequency ($catThreshold) & severity ($catScalar) gain stronger post-disaster pricing power.
         $hardMarketRecoveryDiscount = min(0.30, $surplusDeficitRatio * 0.35 * $catRiskBeta);
 
-        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $underwritingShock + $softMarketRateDiscount - $hardMarketRecoveryDiscount));
+        $reinsuranceSurcharge = 0.0;
+        if ($claimZ < self::REINSURANCE_ATTACHMENT_Z) {
+            $underwritingShock = min($underwritingShock, self::MAX_REINSURED_LOSS_SHOCK);
+            $reinsuranceSurcharge = self::REINSURANCE_HARD_MARKET_RATE;
+        }
+
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $underwritingShock + $reinsuranceSurcharge + $softMarketRateDiscount - $hardMarketRecoveryDiscount);
 
         $eventType = null;
-        if ($claimZ < self::LORE_SYSTEMIC_DISASTER_Z) {
+        if ($claimZ < self::REINSURANCE_ATTACHMENT_Z) {
+            $eventType = ShockEvent::REINSURANCE_ATTACHMENT_BREACH;
+        } elseif ($claimZ < self::LORE_SYSTEMIC_DISASTER_Z) {
             $eventType = ShockEvent::CATASTROPHIC_CLAIM_LOSSES;
         } elseif ($claimZ < self::LORE_ELEVATED_CLAIMS_Z) {
             $eventType = ShockEvent::ELEVATED_CLAIM_PAYOUTS;
@@ -329,28 +365,23 @@ class InsuranceBusinessModel extends AbstractBusinessModel
     {
         // Resolve company-specific tuned float allocation parameters
         $params = $this->resolveModelParameters($stock, [
-            'float_equity_weight'  => self::FLOAT_EQUITY_WEIGHT,
-            'equity_portfolio_vol' => self::EQUITY_PORTFOLIO_VOL,
+            'float_equity_weight' => self::FLOAT_EQUITY_WEIGHT,
         ]);
 
         $floatEquityWeight = $params['float_equity_weight'];
-        $equityVol         = $params['equity_portfolio_vol'];
+        $cash              = (float) $stock->getCorporateTreasury();
+        $policyRate        = $macroState->policyRateEma;
+        $yield10y          = $macroState->yield10yEma;
 
-        $cash = (float) $stock->getCorporateTreasury();
-        $policyRate = $macroState->policyRateEma;
-
-        // Normalized Base Fixed-Income Yield:
-        // Ensure total portfolio weights (Liquidity + Long Bonds + Equities) sum strictly to 1.00
-        // regardless of company-tuned float_equity_weight.
+        // Normalized Base Fixed-Income Yield (Liquidity + Long Bonds scaled to sum to 1.0 - float_equity_weight)
         $fixedIncomeWeight = max(0.0, 1.0 - $floatEquityWeight);
-        $totalFixedWeight  = self::FLOAT_LIQUIDITY_WEIGHT + self::FLOAT_BOND_WEIGHT;
-        $liquidityShare    = $totalFixedWeight > 0.0 ? self::FLOAT_LIQUIDITY_WEIGHT / $totalFixedWeight : 0.1667;
-        $bondShare         = $totalFixedWeight > 0.0 ? self::FLOAT_BOND_WEIGHT / $totalFixedWeight : 0.8333;
+        $totalFixedWeight  = max(0.01, self::FLOAT_LIQUIDITY_WEIGHT + self::FLOAT_BOND_WEIGHT);
+        $liquidityShare    = self::FLOAT_LIQUIDITY_WEIGHT / $totalFixedWeight;
+        $bondShare         = self::FLOAT_BOND_WEIGHT / $totalFixedWeight;
 
-        $yield10y        = $macroState->yield10yEma;
-        $liquidityReturn = $policyRate - MacroEngine::CASH_YIELD_SPREAD;
-        $bondReturn      = $yield10y;
-        $baseYield       = $fixedIncomeWeight * (($liquidityShare * $liquidityReturn) + ($bondShare * $bondReturn));
+        $liquidityReturn   = $policyRate - MacroEngine::CASH_YIELD_SPREAD;
+        $bondReturn        = $yield10y;
+        $baseYield         = $fixedIncomeWeight * (($liquidityShare * $liquidityReturn) + ($bondShare * $bondReturn));
 
         $outputGap = $macroState->outputGapEma;
         $erp = $macroState->equityRiskPremium;
@@ -391,7 +422,7 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         $equity = (float) $stock->getTotalEquity();
         // Statutory Surplus Floor: Anchor ROE denominator to at least implied regulatory minimum capital (25% of policy float/liabilities)
         // so temporary catastrophe equity drawdowns never create artificial small-denominator ROE whip-saws (-450% or +200%).
-        $statutorySurplusFloor = (float) $stock->getCustomerDeposits() * self::IMPLIED_RUNOFF_EQUITY;
+        $statutorySurplusFloor = (float) $stock->getCustomerDeposits() * self::TARGET_FLOAT_SURPLUS_RATIO;
         $evaluationEquity = max(max(1.0, $statutorySurplusFloor), $equity);
         $truePostTaxReturn = ($actualTotalNetIncome / $evaluationEquity) * self::ROE_ANNUALIZATION_MULT;
 
@@ -401,7 +432,9 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         // and a 5% structural floor on ROE TTM to prevent the P/E multiple and stock price from violently whipsawing when a hurricane hits.
         $oldTtm = (float) $stock->getRoeTtm();
         $newTtm = $oldTtm === 0.0 ? max(self::MIN_STRUCTURAL_ROE_FLOOR, $truePostTaxReturn) : ($truePostTaxReturn * self::ROE_TTM_EMA_WEIGHT) + ($oldTtm * self::ROE_TTM_HIST_WEIGHT);
-        $newTtm += $kappa * ($wacc - $newTtm) * 0.25;
+        // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
+        $effectiveKappa = $kappa / self::TTM_ROIC_WEIGHT;
+        $newTtm += $effectiveKappa * ($wacc - $newTtm) * 0.25;
         $stock->setRoeTtm((string) max(self::MIN_STRUCTURAL_ROE_FLOOR, min(self::MAX_ROE_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;
@@ -437,15 +470,24 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         ];
     }
 
-    public function calculateCapacityModifier(float $totalDebt, float $equity, float $equityLimit, ?float $coreLiabilities = null): float
+    /**
+     * Winter-Cummins (1994/1997) Logistic Capacity Model.
+     * 
+     * Replaces exponential decay with sigmoidal statutory surplus elasticity: abundant capacity when surplus 
+     * is strong, inflecting smoothly at regulatory midpoints, and collapsing when statutory limits are breached.
+     */
+    public function calculateFloatCapacityMultiplier(float $totalDebt, float $equity, float $equityLimit, ?float $coreLiabilities = null): float
     {
         $utilization = $equity > 0.0 ? ($totalDebt / ($equity * $equityLimit)) : 1.0;
-        $floatRatio = $totalDebt > 0 ? ($coreLiabilities / $totalDebt) : 0.0;
+        $floatRatio = $totalDebt > 0 ? (($coreLiabilities ?? 0.0) / $totalDebt) : 0.0;
 
-        $decayRate = 0.50 + (1.50 * $floatRatio);
-        $capacityModifier = 1.50 * exp(-$decayRate * pow($utilization, 4.0));
+        $inflectionPoint = self::CAPACITY_INFLECTION_BASE - (self::CAPACITY_INFLECTION_FLOAT_SHIFT * $floatRatio);
+        $elasticity = self::CAPACITY_LOGISTIC_STEEPNESS;
 
-        return max(0.01, min(1.50, $capacityModifier));
+        $logisticSpread = self::CAPACITY_MODIFIER_CEILING - self::CAPACITY_MODIFIER_FLOOR;
+        $capacityModifier = self::CAPACITY_MODIFIER_FLOOR + ($logisticSpread / (1.0 + exp($elasticity * ($utilization - $inflectionPoint))));
+
+        return max(self::CAPACITY_MODIFIER_FLOOR, min(self::CAPACITY_MODIFIER_CEILING, $capacityModifier));
     }
 
     public function calculateMaxBuybackSpend(float $excessCash, float $retainedEarningsThisQuarter, bool $isMegaHoarder): float
@@ -463,7 +505,14 @@ class InsuranceBusinessModel extends AbstractBusinessModel
 
     public function getInterestCoverage(float $ebit, float $interestExpense, float $depreciation = 0.0): float
     {
-        return self::INFINITE_ICR_FALLBACK;
+        if ($interestExpense <= 0.0) {
+            return self::INFINITE_ICR_FALLBACK;
+        }
+
+        // For an insurer, quarterly underwriting claim payouts (EBIT < 0) do not constitute corporate debt default
+        // as long as investment/float yield and capital surplus service wholesale obligations.
+        // Floor EBIT at $0.0 so claim shocks do not trigger false insolvency / death-spiral dilution (failed_emergency_borrow).
+        return (max(0.0, $ebit) + $depreciation) / max(0.01, $interestExpense);
     }
 
     /**
@@ -487,9 +536,9 @@ class InsuranceBusinessModel extends AbstractBusinessModel
 
         // Normalized fixed-income yield (assuming baseline 10% equity tranche)
         $fixedIncomeWeight = max(0.0, 1.0 - self::FLOAT_EQUITY_WEIGHT);
-        $totalFixedWeight  = self::FLOAT_LIQUIDITY_WEIGHT + self::FLOAT_BOND_WEIGHT;
-        $liquidityShare    = $totalFixedWeight > 0.0 ? self::FLOAT_LIQUIDITY_WEIGHT / $totalFixedWeight : 0.1667;
-        $bondShare         = $totalFixedWeight > 0.0 ? self::FLOAT_BOND_WEIGHT / $totalFixedWeight : 0.8333;
+        $totalFixedWeight  = max(0.01, self::FLOAT_LIQUIDITY_WEIGHT + self::FLOAT_BOND_WEIGHT);
+        $liquidityShare    = self::FLOAT_LIQUIDITY_WEIGHT / $totalFixedWeight;
+        $bondShare         = self::FLOAT_BOND_WEIGHT / $totalFixedWeight;
 
         return $fixedIncomeWeight * (($liquidityShare * $liquidityReturn) + ($bondShare * $bondReturn));
     }
@@ -518,10 +567,13 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         return $peFairValue;
     }
 
-    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps): float
+    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
     {
         $bookWeight = $normalizedEps > 0 ? self::FAIR_VALUE_BOOK_POS_EPS : self::FAIR_VALUE_BOOK_NEG_EPS;
-        return ($earningsValue * (1.0 - $bookWeight)) + ($pbFairValue * $bookWeight);
+        $baseConsensus = ($earningsValue * (1.0 - $bookWeight)) + ($pbFairValue * $bookWeight);
+        return $dividendSupportValue > 0.0
+            ? ($baseConsensus * (1.0 - self::FAIR_VALUE_DDM_WEIGHT)) + ($dividendSupportValue * self::FAIR_VALUE_DDM_WEIGHT)
+            : $baseConsensus;
     }
 
     public function processPassiveLiabilityGrowth(Stock $stock, MacroStateDTO $macroState, array &$state, MathUtility $mathUtility): void
@@ -537,8 +589,10 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         $systemicGrowthQuarterly = ($macroState->inflationEma + self::BASE_ECONOMIC_GROWTH_ADD + (($macroState->outputGapEma > 0.0 ? $macroState->outputGapEma * self::EXPANSION_GAP_MULT : $macroState->outputGapEma * self::RECESSION_GAP_MULT))) / self::QUARTERLY_GROWTH_DIVISOR;
 
         // Premium-to-Surplus Capacity constraint (Kenney Rule) throttles growth if they don't have enough equity to back the policies.
-        $baseGrowth = $systemicGrowthQuarterly * max(self::MIN_BETA_GROWTH_CLAMP, min(self::MAX_BETA_GROWTH_CLAMP, abs((float) $stock->getBeta()))) * $this->calculateCapacityModifier($totalDebt, $equity, $equityLimit, $currentLiabilities);
-        $liabilityChange = $currentLiabilities * max(self::MIN_FLOAT_CHANGE_CLAMP, min(self::MAX_FLOAT_CHANGE_CLAMP, $baseGrowth + ($mathUtility->generateStandardNormal() * self::FLOAT_GROWTH_NOISE_STD)));
+        $capacityMultiplier = $this->calculateFloatCapacityMultiplier($totalDebt, $equity, $equityLimit, $currentLiabilities);
+        $baseGrowth = $systemicGrowthQuarterly * max(self::MIN_BETA_GROWTH_CLAMP, min(self::MAX_BETA_GROWTH_CLAMP, abs((float) $stock->getBeta()))) * $capacityMultiplier;
+        $effectiveNoise = ($mathUtility->generateStandardNormal() * self::FLOAT_GROWTH_NOISE_STD) * min(1.0, $capacityMultiplier);
+        $liabilityChange = $currentLiabilities * max(self::MIN_FLOAT_CHANGE_CLAMP, min(self::MAX_FLOAT_CHANGE_CLAMP, $baseGrowth + $effectiveNoise));
 
         if (abs($liabilityChange) > 0) {
             $state['treasury'] += $liabilityChange;

@@ -127,7 +127,7 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         // Strong haute couture desirability ($hauteZ > 0) continuously expands pricing cachet and improves gross margin.
         $brandCachetShift = -self::BRAND_CACHET_ELASTICITY * $hauteZ * $hauteWeight;
 
-        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $veblenMarginBenefit + $brandModifier + $brandCachetShift));
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $veblenMarginBenefit + $brandModifier + $brandCachetShift);
 
         // Analyst Visibility
         $primaryShockZ = abs($eventZ) > abs($hauteZ) ? $eventZ : $hauteZ;

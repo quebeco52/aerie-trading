@@ -62,6 +62,14 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     /** Lower clamp for realized variable margin. */
     public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
+    // --- Geopolitical & Export Ban Physics ---
+    /** Negative z-score threshold triggering geopolitical export restrictions (`Z < -2.20`). */
+    public const EXPORT_BAN_Z_THRESHOLD = -2.20;
+    /** Revenue haircut fraction applied to high-margin fabless IP and export revenue during trade bans. */
+    public const EXPORT_BAN_DESIGN_HAIRCUT = 0.45;
+    /** Revenue boost fraction applied to domestic foundry production from supply chain onshoring and subsidies. */
+    public const EXPORT_BAN_FOUNDRY_BOOST = 0.20;
+
     // --- Analyst Visibility & Error ---
     // Moved to getCoverageProfile() — see MarketConsensusEngine.
 
@@ -130,6 +138,13 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
 
         $foundryRevenue = $expectedRevenue * $foundryWeight * (1.0 + ($foundryZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $utilizationMultiplier);
         $designRevenue  = $expectedRevenue * $designWeight * (1.0 + ($designZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
+
+        if ($designZ < self::EXPORT_BAN_Z_THRESHOLD) {
+            $designRevenue *= (1.0 - self::EXPORT_BAN_DESIGN_HAIRCUT);
+            $foundryRevenue *= (1.0 + self::EXPORT_BAN_FOUNDRY_BOOST);
+            $eventType = ShockEvent::GEOPOLITICAL_EXPORT_BAN;
+        }
+
         $actualRevenue  = max(0.0, $foundryRevenue + $designRevenue);
 
         // CapEx Hurdle Rate & Yield Penalties
@@ -141,9 +156,12 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
             $yieldModifier = self::WAFER_SCRAP_PENALTY * $foundryWeight; // Scaled by foundry weight
         }
 
-        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $yieldModifier));
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $yieldModifier);
 
         $primaryShockZ = abs($cycleZ) > abs($foundryZ) ? $cycleZ : $foundryZ;
+        if (abs($designZ) > abs($primaryShockZ)) {
+            $primaryShockZ = $designZ;
+        }
         // observableShockZ: foundry demand visible via wafer shipment lead times and supply chain checks
         $observableShockZ = $foundryZ * $foundryWeight + $utilizationMultiplier * $foundryWeight;
 

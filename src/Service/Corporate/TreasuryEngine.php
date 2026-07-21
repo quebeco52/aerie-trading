@@ -145,7 +145,10 @@ class TreasuryEngine
         $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
 
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
-        $trueReturn = $strategy->calculateEconomicReturn($stock, $quarterlyNopat, $liveInvestedCapital);
+        $trueReturn = $isFinancial ? (float) $stock->getRoeTtm() : (float) $stock->getRoicTtm();
+        if ($trueReturn === 0.0) {
+            $trueReturn = $strategy->calculateEconomicReturn($stock, $quarterlyNopat, $liveInvestedCapital);
+        }
         $hurdleRate = $isFinancial ? ($health['cost_of_equity'] ?? 0.10) : $health['wacc'];
 
         $evaluationCapital = $isFinancial ? $newEquity : $liveInvestedCapital;
@@ -273,7 +276,10 @@ class TreasuryEngine
         $targetCashReserves = $strategy->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt']) * 1.20;
         $liveInvestedCapital = $this->corporateMetrics->calculateLiveInvestedCapital($newEquity, $totalDebt, $state['treasury']);
 
-        $trueReturn = $strategy->calculateEconomicReturn($stock, $quarterlyNopat, $liveInvestedCapital);
+        $trueReturn = $isFinancial ? (float) $stock->getRoeTtm() : (float) $stock->getRoicTtm();
+        if ($trueReturn === 0.0) {
+            $trueReturn = $strategy->calculateEconomicReturn($stock, $quarterlyNopat, $liveInvestedCapital);
+        }
         $hurdleRate = $isFinancial ? ($health['cost_of_equity'] ?? 0.10) : $health['wacc'];
         $evaluationCapital = $isFinancial ? $newEquity : $liveInvestedCapital;
 
@@ -310,6 +316,10 @@ class TreasuryEngine
             $maxGrowthSpeed = $isFinancial ? ($isMegaHoarder ? 0.35 : ($isHoarder ? 0.20 : 0.12)) : ($isHoarder ? 0.15 : 0.08);
             $expansionCapBasis = $isFinancial ? ($newEquity + $totalDebt) : $liveInvestedCapital;
             $expansionSpend = min($expansionSpend, $expansionCapBasis * $maxGrowthSpeed);
+
+            if ($marginalReturn <= 0.0 && !$forcedExpansion) {
+                $expansionSpend = 0.0;
+            }
 
             if ($expansionSpend > 0) {
                 $state['organicCapex'] = $expansionSpend;

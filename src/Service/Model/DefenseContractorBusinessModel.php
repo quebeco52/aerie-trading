@@ -71,6 +71,14 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     /** Structural maximum operating margin ceiling for next-generation defense platform monopolies. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.22;
 
+    // --- Geopolitical Sanctions & Conflict Physics ---
+    /** Positive z-score threshold triggering geopolitical conflict order backlog expansion (`Z > 2.20`). */
+    public const GEOPOLITICAL_CONFLICT_Z = 2.20;
+    /** Top-line sovereign defense contract revenue multiplier during major geopolitical conflicts. */
+    public const CONFLICT_BACKLOG_BOOST = 1.25;
+    /** Variable margin penalty from supply chain lead-time drag during geopolitical material sanctions. */
+    public const SANCTIONS_EXECUTION_DRAG = -0.035;
+
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
@@ -114,13 +122,19 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::DEFENSE_CONTRACT_WIN;
         }
 
-        $actualRevenue = max(0.0, $govtRevenue + $commercialRevenue);
-
         // Program Execution Efficiency Elasticity:
         // Strong sovereign defense contract readouts ($contractZ > 0) reduce cost overruns and improve variable operating margin.
         $executionEfficiencyShift = -self::PROGRAM_EXECUTION_ELASTICITY * $contractZ * $govtWeight;
 
-        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $executionEfficiencyShift));
+        if ($contractZ > self::GEOPOLITICAL_CONFLICT_Z) {
+            $govtRevenue *= self::CONFLICT_BACKLOG_BOOST;
+            $executionEfficiencyShift -= self::SANCTIONS_EXECUTION_DRAG;
+            $eventType = ShockEvent::GEOPOLITICAL_SANCTIONS;
+        }
+
+        $actualRevenue = max(0.0, $govtRevenue + $commercialRevenue);
+
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $executionEfficiencyShift);
 
         $primaryShockZ = abs($eventZ) > abs($contractZ) ? $eventZ : $contractZ;
         // observableShockZ: cost-plus bonus is fully public; contract shocks ~50% visible via getCoverageProfile
@@ -159,7 +173,9 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         // Use a 0.20 smoothing factor to prevent violent P/E whipsaws when a single contract is won or lost.
         $oldTtm = (float) $stock->getRoicTtm();
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::ROIC_TTM_EMA_WEIGHT) + ($oldTtm * self::ROIC_TTM_HIST_WEIGHT);
-        $newTtm += $kappa * ($wacc - $newTtm) * 0.25;
+        // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
+        $effectiveKappa = $kappa / self::TTM_ROIC_WEIGHT;
+        $newTtm += $effectiveKappa * ($wacc - $newTtm) * 0.25;
         $stock->setRoicTtm((string) max(self::MIN_ROIC_CLAMP, min(self::MAX_ROIC_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;

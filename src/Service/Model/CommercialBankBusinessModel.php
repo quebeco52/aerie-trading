@@ -100,6 +100,10 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
     /** Policy rate gap above which depositors flee to money-market funds (calibrated to 2022-23 cycle). */
     public const YIELD_FLIGHT_POLICY_RATE_OFFSET    = 0.01;
 
+    // --- Bank Valuation Weights ---
+    /** Weight given to Dividend Discount Model yield support when blending bank fair value. */
+    public const FAIR_VALUE_DDM_WEIGHT = 0.15;
+
     /**
      * Returns a stable structural ROIC proxy to keep top-line loan revenue rock solid.
      * Dynamic NIM (Net Interest Margin) expansion/compression is handled strictly in computeActualFinancials.
@@ -283,7 +287,7 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
         $niiCostAddon = ($lossProvisionShock + $nimSqueeze + $ceclDrag) * $niiWeight;
         $rawMargin = $realizedVariableMargin + $niiCostAddon;
-        $clampedMargin = min(1.50, max($minVariableMargin, $rawMargin));
+        $clampedMargin = $this->clampMargin($rawMargin, $minVariableMargin);
 
         $eventType = null;
         if ($defaultZ < -2.0) {
@@ -339,7 +343,9 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
 
         $oldTtm = (float) $stock->getRoeTtm();
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * 0.25) + ($oldTtm * 0.75);
-        $newTtm += $kappa * ($wacc - $newTtm) * 0.25;
+        // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
+        $effectiveKappa = $kappa / self::TTM_ROE_WEIGHT;
+        $newTtm += $effectiveKappa * ($wacc - $newTtm) * 0.25;
         $stock->setRoeTtm((string) max(-0.50, min(1.0, $newTtm)));
 
         return $truePostTaxReturn;
@@ -420,13 +426,16 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
         return $peFairValue;
     }
 
-    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps): float
+    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
     {
         // Balance Sheet Heavy: Banks trade heavily on their Book Value (Equity).
         // If earnings collapse, investors focus almost entirely (80% weight) on the liquidation value of the loan book.
         $bookWeight = $normalizedEps > 0 ? 0.40 : 0.80;
         $earningsWeight = 1.0 - $bookWeight;
-        return ($earningsValue * $earningsWeight) + ($pbFairValue * $bookWeight);
+        $baseConsensus = ($earningsValue * $earningsWeight) + ($pbFairValue * $bookWeight);
+        return $dividendSupportValue > 0.0
+            ? ($baseConsensus * (1.0 - self::FAIR_VALUE_DDM_WEIGHT)) + ($dividendSupportValue * self::FAIR_VALUE_DDM_WEIGHT)
+            : $baseConsensus;
     }
 
     public function processPassiveLiabilityGrowth(Stock $stock, MacroStateDTO $macroState, array &$state, MathUtility $mathUtility): void

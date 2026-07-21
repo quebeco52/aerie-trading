@@ -89,6 +89,7 @@ class StockController extends AbstractController
             $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$asset->getIndustry() ?? 'General']['business_model'] ?? 'none';
             $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
             $evaluationCapital = $isFinancial ? (float) $asset->getTotalEquity() : $asset->getInvestedCapital();
+            $investedCapital = (float) $asset->getInvestedCapital();
 
             $marketShare = min(0.9999, $corporateMetrics->calculateMarketShare($evaluationCapital, $nominalGdpIndex, $samRatio));
         }

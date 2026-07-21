@@ -52,7 +52,7 @@ interface BusinessModelInterface
     public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float;
     public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float;
     public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float;
-    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps): float;
+    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float;
     public function getSustainableDividendBase(Stock $stock, float $quarterlyEps, float $investedCapital, float $depRate): float;
     public function getMarginReversionSpeed(): float;
     public function processPassiveLiabilityGrowth(Stock $stock, MacroStateDTO $macroState, array &$state, MathUtility $mathUtility): void;

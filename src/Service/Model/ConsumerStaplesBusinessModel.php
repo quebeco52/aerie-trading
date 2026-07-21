@@ -101,7 +101,7 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         // Fluctuations in bulk agricultural processing ($volumeZ) smoothly shift variable input costs.
         $commodityInputShift = self::COMMODITY_INPUT_ELASTICITY * $volumeZ * $volumeWeight;
 
-        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $recallPenalty + $commodityInputShift));
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $recallPenalty + $commodityInputShift);
 
         $primaryShockZ = abs($eventZ) > abs($brandedZ) ? $eventZ : $brandedZ;
         $observableShockZ = ($brandedZ * $brandedWeight + $volumeZ * $volumeWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);

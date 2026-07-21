@@ -67,8 +67,8 @@ class StockModelTuning
         // --- Safe Harbor Reinsurance (SAFE) ---
         // Institutional reinsurance titan that absorbs extreme systemic and catastrophe tail risk.
         'SAFE' => [
-            'catastrophe_z_threshold' => -1.35,
-            'catastrophe_loss_scalar' => 0.25,
+            'catastrophe_z_threshold' => -1.45,
+            'catastrophe_loss_scalar' => 0.22,
             'float_equity_weight'     => 0.05,
             'equity_portfolio_vol'    => 0.08,
         ],
@@ -297,8 +297,8 @@ class StockModelTuning
         // --- Ibis Pharmaceuticals (IBIS) ---
         // Global biopharma giant. Skewed toward established commercial blockbuster portfolio (75%).
         'IBIS' => [
-            'established_drug_weight' => 0.75,
-            'pipeline_drug_weight'    => 0.25,
+            'established_drug_weight' => 0.90,
+            'pipeline_drug_weight'    => 0.10,
         ],
 
         // --- Crane Medical Network (CRAN) ---

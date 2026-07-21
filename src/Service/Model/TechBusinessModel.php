@@ -141,7 +141,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         // & Platform data-harvesting stream ($adWeight), insulating enterprise subscription margins.
         $adCostAddon = $regulatoryShock * $adWeight;
         $rawMargin = $realizedVariableMargin + $wageInflationPenalty + $saasOperatingLeverageShift + $adCostAddon;
-        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $rawMargin));
+        $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock Z-score selects the most extreme driver across streams
         $primaryShockZ = $subscriptionZ;

@@ -188,7 +188,7 @@ class ClearingHouseBusinessModel extends AbstractBusinessModel
             ? abs($defaultZ - self::CATASTROPHE_Z_THRESHOLD) * self::CATASTROPHE_LOSS_SCALAR
             : ($defaultZ > self::HEALTHY_CREDIT_Z_FLOOR ? self::HEALTHY_CREDIT_BONUS : 0.0);
 
-        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max(self::MIN_VARIABLE_MARGIN_CLAMP, $realizedVariableMargin + $catastropheShock));
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $catastropheShock);
 
         $eventType = null;
         if ($defaultZ < self::LORE_DEFAULT_Z_THRESHOLD) {

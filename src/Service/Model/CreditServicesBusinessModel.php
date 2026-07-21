@@ -187,7 +187,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
         $lendingCostAddon = ($lossProvisionShock + $nimSqueeze + $ceclDrag) * $lendingWeight;
         $rawMargin = $realizedVariableMargin + $lendingCostAddon;
-        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max($minVariableMargin, $rawMargin));
+        $clampedMargin = $this->clampMargin($rawMargin, $minVariableMargin);
 
         $eventType = null;
         if ($defaultZ < self::LORE_MASSIVE_PROVISION_Z) {
@@ -319,4 +319,3 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         ];
     }
 }
-

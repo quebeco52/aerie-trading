@@ -112,9 +112,11 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
     // --- Valuation & Lease Resistance Moat ---
     /** Weight given to capitalized earnings (FFO) in fair value calculations. */
-    public const FAIR_VALUE_EARNINGS_WEIGHT = 0.60;
+    public const FAIR_VALUE_EARNINGS_WEIGHT = 0.30;
     /** Weight given to property Net Asset Value (NAV / Book Value) in fair value calculations. */
     public const FAIR_VALUE_BOOK_WEIGHT     = 0.40;
+    /** Weight given to Dividend Discount Model (DDM yield) in REIT fair value calculations. */
+    public const FAIR_VALUE_DDM_WEIGHT      = 0.30;
     /** Operating margin mean reversion speed: slower speed reflects multi-year commercial leases. */
     public const LEASE_REVERSION_SPEED      = 2.0;
 
@@ -213,7 +215,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $refinancingDrag = max(0.0, ($yield10y - self::DEFAULT_10Y_YIELD_FALLBACK) * self::REFINANCING_WALL_DRAG);
 
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
-        $clampedMargin = min(self::MAX_VARIABLE_MARGIN_CLAMP, max($minVariableMargin, $realizedVariableMargin + $vacancyShock + $refinancingDrag));
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $vacancyShock + $refinancingDrag, $minVariableMargin);
 
         $eventType = null;
         if ($tenantDefaultZ < self::LORE_ANCHOR_BANKRUPTCY_Z) {
@@ -265,7 +267,9 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
         $oldTtm = (float) $stock->getRoicTtm();
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::ROIC_TTM_EMA_WEIGHT) + ($oldTtm * self::ROIC_TTM_HIST_WEIGHT);
-        $newTtm += $kappa * ($wacc - $newTtm) * 0.25;
+        // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
+        $effectiveKappa = $kappa / self::TTM_ROIC_WEIGHT;
+        $newTtm += $effectiveKappa * ($wacc - $newTtm) * 0.25;
         $stock->setRoicTtm((string) max(self::MIN_ROIC_CLAMP, min(self::MAX_ROIC_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;
@@ -319,9 +323,12 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     /**
      * REITs trade heavily on their Net Asset Value (NAV) / Book Value.
      */
-    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps): float
+    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
     {
-        return ($earningsValue * self::FAIR_VALUE_EARNINGS_WEIGHT) + ($pbFairValue * self::FAIR_VALUE_BOOK_WEIGHT);
+        if ($dividendSupportValue > 0.0) {
+            return ($pbFairValue * self::FAIR_VALUE_BOOK_WEIGHT) + ($earningsValue * self::FAIR_VALUE_EARNINGS_WEIGHT) + ($dividendSupportValue * self::FAIR_VALUE_DDM_WEIGHT);
+        }
+        return ($pbFairValue * 0.40) + ($earningsValue * 0.60);
     }
 
     /**
