@@ -26,6 +26,18 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
     /** Default EPS/Revenue surprise blend: 50/50. */
     public const DEFAULT_SURPRISE_EPS_WEIGHT = 0.50;
 
+    protected string $modelIdentifier = 'none';
+
+    public function setModelIdentifier(string $identifier): void
+    {
+        $this->modelIdentifier = $identifier;
+    }
+
+    public function getModelThresholds(): array
+    {
+        return \App\Data\Sectors::getModelThresholds($this->modelIdentifier);
+    }
+
     public function getSecularGrowthRate(Stock $stock): float
     {
         return self::DEFAULT_SECULAR_GROWTH_RATE;
@@ -355,7 +367,7 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
         return max(0.0, $macroState->policyRateEma - MacroEngine::CASH_YIELD_SPREAD);
     }
 
-    public function getDebtExpansionAggressiveness(float $spreadMultiplier): array
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0): array
     {
         return [
             'probability' => self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT),
@@ -399,20 +411,13 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
         // No-op by default
     }
 
-    public function isUnderLeveraged(bool $isFinancial, float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
+    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
     {
         // 1. WACC Arbitrage & Tax Shield Principle (Modigliani-Miller / Trade-Off Theory):
         // Leverage is only value-accretive if the after-tax Cost of Debt is cheaper than the Cost of Equity.
         // We require a minimum 1.0% (0.01) risk premium buffer between Ke and Kd(after-tax).
         if ($costOfEquity <= ($effectiveCostOfDebt + self::WACC_ARBITRAGE_BUFFER)) {
             return false;
-        }
-
-        if ($isFinancial) {
-            // For financial institutions, debt is raw material (deposits & wholesale borrowing).
-            // They are under-leveraged when their leverage ratio is safely below capital adequacy limits
-            // and equity optimization requires deploying cheaper wholesale debt.
-            return $currentDebtRatio < ($targetDebtTolerance * self::FINANCIAL_UNDERLEVERAGED_RATIO);
         }
 
         // 2. Operating Cash Flow Serviceability Principle (ICR Safety Buffer):
@@ -426,6 +431,148 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
         // 3. Target Capital Structure Deficit Principle:
         // A firm is under-leveraged when its Debt/Equity ratio is below 75% of its CFO-modified target tolerance.
         return $currentDebtRatio < ($targetDebtTolerance * self::CORPORATE_UNDERLEVERAGED_RATIO);
+    }
+
+    // --- GOD OBJECT STRATEGY REFACTOR: BASELINE CORPORATE PHYSICS ---
+
+    public function getTrueReturn(Stock $stock): float
+    {
+        return (float) $stock->getRoicTtm();
+    }
+
+    public function getHurdleRate(\App\DTO\DebtHealthDTO $health): float
+    {
+        return $health->wacc ?? 0.08;
+    }
+
+    public function getEvaluationCapital(float $equity, float $investedCapital): float
+    {
+        return $investedCapital;
+    }
+
+    public function getExpansionCapacityBasis(float $equity, float $totalDebt, float $investedCapital): float
+    {
+        return $investedCapital;
+    }
+
+    public function getMaxOrganicGrowthSpeed(bool $isHoarder, bool $isMegaHoarder): float
+    {
+        return $isHoarder ? 0.15 : 0.08;
+    }
+
+    public function calculateDebtExpansionCapacity(float $equity, float $totalDebt, float $wholesaleDebt, \App\DTO\DebtHealthDTO $health, float $newBorrowingRate, float $ebit, float $depreciation): float
+    {
+        $evalDebt = $totalDebt;
+        $evalTolerance = $health->debtTolerance;
+        $balanceSheetCapacity = max(0.0, ($equity * $evalTolerance) - $evalDebt);
+
+        $minimumIcr = ($this->getModelThresholds()['buyback_min_icr'] ?? 3.0) + 0.5;
+
+        $maxTolerableInterest = max(0.0, $ebit / $minimumIcr);
+        $currentInterestExpense = $health->rawMetrics->interestExpense ?? 0.0;
+        $availableInterestCapacity = max(0.0, $maxTolerableInterest - $currentInterestExpense);
+        $incomeStatementCapacity = $newBorrowingRate > 0 ? ($availableInterestCapacity / $newBorrowingRate) : 0.0;
+
+        return min($incomeStatementCapacity, $balanceSheetCapacity);
+    }
+
+    public function getLossGivenDefault(): float
+    {
+        return 0.40;
+    }
+
+    public function getRequiredIcrBuffer(): float
+    {
+        return 1.5;
+    }
+
+    public function getMaxFloatingDebtRatio(): float
+    {
+        return 0.30;
+    }
+
+    public function getDeleveragingEvaluationDebt(float $totalDebt, float $wholesaleDebt): float
+    {
+        return $totalDebt;
+    }
+
+    public function getDeleveragingEvaluationLimit(array $modelThresholds, float $macroDebtTolerance): float
+    {
+        return $macroDebtTolerance;
+    }
+
+    public function getDebtCostMetrics(\App\DTO\DebtMetricsDTO $debtMetrics, float $currentDebt, float $wholesaleDebt, float $interestExpense): array
+    {
+        $grossCostOfDebt = $currentDebt > 0 ? ($interestExpense / $currentDebt) : $debtMetrics->currentMarketRate;
+            
+        return [
+            'gross_cost_of_debt' => $grossCostOfDebt,
+            'total_interest_cost' => $interestExpense
+        ];
+    }
+
+    public function getNetDebtCapital(float $currentDebt, float $wholesaleDebt, float $treasury): float
+    {
+        return max(0.0, $currentDebt - $treasury);
+    }
+
+    public function calculateLeveredBeta(float $baseBeta, float $impliedTaxShieldRate, float $effectiveDebtToEquity, MathUtility $mathUtility): float
+    {
+        return $mathUtility->calculateLeveredBeta($baseBeta, $impliedTaxShieldRate, $effectiveDebtToEquity, 0.25);
+    }
+
+    public function requiresAlternativeZScore(): bool
+    {
+        return false;
+    }
+
+    public function getAcquisitionType(string $defaultType): string
+    {
+        return $defaultType;
+    }
+
+    public function applyMaSpendCap(float $purchasePrice, float $equity, bool $isMegaHoarder, bool $isEmpireBuilder): float
+    {
+        return $purchasePrice;
+    }
+
+    public function blendAcquisitionDNA(Stock $acquirer, float $oldCapitalBase, float $purchasePrice, float $effectiveTargetRoic, float $totalNewCapital): void
+    {
+        $oldBaselineRoic = (float) $acquirer->getBaselineRoic();
+        $blendedBaselineRoic = (($oldCapitalBase * $oldBaselineRoic) + ($purchasePrice * $effectiveTargetRoic)) / $totalNewCapital;
+        $acquirer->setBaselineRoic((string) max(0.01, $blendedBaselineRoic));
+    }
+
+    public function calculateDivestedEquity(Stock $seller, float $divestedFraction, float $currentEquity, float $currentDebt, float $treasury, float $investedCapital, float $lostDebt): float
+    {
+        $lostInvestedCapital = $investedCapital * $divestedFraction;
+        return $lostInvestedCapital - $lostDebt;
+    }
+
+    public function shedDivestedLiabilities(Stock $seller, float $divestedFraction, float $currentTreasury): void
+    {
+        // Default business models have no special liabilities to shed.
+    }
+
+    public function boostStructuralEfficiency(Stock $seller, float $divestedFraction, float $bumpMultiplier): void
+    {
+        $baselineRoic = (float) $seller->getBaselineRoic();
+        $roicBump = $baselineRoic * ($divestedFraction * $bumpMultiplier); // Up to a 25% relative improvement
+        $seller->setBaselineRoic((string) ($baselineRoic + $roicBump));
+    }
+
+    public function getMaArchetypeStrategy(string $archetype): array
+    {
+        if ($archetype === 'empire_builder') {
+            return ['prob' => 0.050, 'spend' => 0.80, 'type' => 'LEVERAGED BUYOUT', 'use_leverage' => true, 'use_stock' => false];
+        }
+        if ($archetype === 'mega_hoarder') {
+            return ['prob' => 0.015, 'spend' => 0.60, 'type' => 'CONGLOMERATE EXPANSION', 'use_leverage' => false, 'use_stock' => false];
+        }
+        if ($archetype === 'hoarder') {
+            return ['prob' => 0.020, 'spend' => 0.40, 'type' => 'CONGLOMERATE EXPANSION', 'use_leverage' => false, 'use_stock' => false];
+        }
+        return ['prob' => 0.035, 'spend' => 0.40, 'type' => 'LEVERAGED BUYOUT', 'use_leverage' => true, 'use_stock' => false];
     }
 
     public function getWorkingCapitalIntensity(Stock $stock): float

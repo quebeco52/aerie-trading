@@ -198,7 +198,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         return parent::calculateFairValue($earningsValue, $pbFairValue, $normalizedEps, 0.0);
     }
 
-    public function isUnderLeveraged(bool $isFinancial, float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
+    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
     {
         if ($costOfEquity <= ($effectiveCostOfDebt + self::WACC_ARBITRAGE_THRESHOLD)) {
             return false;

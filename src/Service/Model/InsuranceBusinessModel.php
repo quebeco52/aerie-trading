@@ -22,6 +22,8 @@ use App\Service\Macro\MacroEngine;
  */
 class InsuranceBusinessModel extends AbstractBusinessModel
 {
+    use FinancialPhysicsTrait;
+
     // --- The Kenney Rule & Capacity Limits ---
     /** Standard Premium-to-Surplus capacity ratio required to maintain strong credit ratings. */
     public const KENNEY_CAPACITY_RATIO    = 1.50;
@@ -586,7 +588,7 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         return $fixedIncomeWeight * (($liquidityShare * $liquidityReturn) + ($bondShare * $bondReturn));
     }
 
-    public function getDebtExpansionAggressiveness(float $spreadMultiplier): array
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0): array
     {
         return ['probability' => self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT), 'aggressiveness' => self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier)];
     }
@@ -655,7 +657,7 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         }
     }
 
-    public function isUnderLeveraged(bool $isFinancial, float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
+    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
     {
         // For Insurance companies, Customer Deposits represent policyholder reserves ("The Float").
         // Float scales with underwriting policy volume and claim payout schedules, not discretionary capital

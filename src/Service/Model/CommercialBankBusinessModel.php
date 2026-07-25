@@ -21,6 +21,8 @@ use App\Service\Event\ShockEvent;
  */
 class CommercialBankBusinessModel extends AbstractBusinessModel
 {
+    use FinancialPhysicsTrait;
+
     // --- ROE & Target Metrics ---
     /** Weight given to historical baseline ROE when blending with TTM ROE. */
     public const BASELINE_ROE_WEIGHT = 0.50;
@@ -407,10 +409,6 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
         return ['interest_expense' => $wholesaleInterest + $depositInterest, 'wholesale_rate' => $wholesaleRate];
     }
 
-    public function getDebtExpansionAggressiveness(float $spreadMultiplier): array
-    {
-        return ['probability' => 0.85 + ($spreadMultiplier * 0.15), 'aggressiveness' => 0.15 + (0.35 * $spreadMultiplier)];
-    }
 
     public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float
     {
@@ -484,5 +482,23 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
             if (($liabilityChange / $currentLiabilities) < -0.005) $state['events'][] = ['event_type' => ShockEvent::CUSTOMER_DEPOSIT_FLIGHT, 'context' => ['amount' => number_format(abs($liabilityChange) / 1_000_000_000, 2)], 'shock' => -2.0];
             elseif (($liabilityChange / $currentLiabilities) > 0.005) $state['events'][] = ['event_type' => ShockEvent::CAPTURED_NEW_DEPOSITS, 'context' => ['amount' => number_format($liabilityChange / 1_000_000_000, 2)], 'shock' => 0.5];
         }
+    }
+
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0): array
+    {
+        $probability = self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT);
+        $aggressiveness = self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier);
+
+        $depositRatio = $totalDebt > 0 ? ($customerDeposits / $totalDebt) : 0.0;
+        if ($depositRatio < 0.70) {
+            $depositConstraint = max(0.0, ($depositRatio - 0.40) / 0.30);
+            $probability *= $depositConstraint;
+            $aggressiveness *= $depositConstraint;
+        }
+
+        return [
+            'probability' => $probability,
+            'aggressiveness' => $aggressiveness
+        ];
     }
 }

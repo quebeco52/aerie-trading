@@ -23,6 +23,8 @@ use App\Service\Math\FinancialConstants;
  */
 class ClearingHouseBusinessModel extends AbstractBusinessModel
 {
+    use FinancialPhysicsTrait;
+
     // --- Fee Revenue Floor ---
     /** Minimum structural EBIT floor as a fraction of equity. Prevents degenerate zero-revenue states. */
     public const MIN_EQUITY_EBIT_YIELD = 0.05;
@@ -362,7 +364,7 @@ class ClearingHouseBusinessModel extends AbstractBusinessModel
         return self::MONOPOLY_REVERSION_SPEED; // Toll-booth monopoly moat resists margin compression
     }
 
-    public function isUnderLeveraged(bool $isFinancial, float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
+    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
     {
         // For a Central Counterparty Clearing House (CCP), Customer Deposits represent member initial margin collateral.
         // These deposits scale exogenously with clearing member trading volume and open interest rather than discretionary

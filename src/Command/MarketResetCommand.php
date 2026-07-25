@@ -153,14 +153,14 @@ class MarketResetCommand extends Command
             
             $debtHealth = $this->debtEngine->analyzeDebtHealth($tempStock, $dummyMacro, $revenue, $margin);
 
-            $marketCalc = $this->marketEngine->calculateNextPrice(
+            $pricingCtx = new \App\DTO\MarketPricingContext(
                 currentPrice: (float) $stockData['price'],
                 currentVolatility: (float) ($stockData['volatility'] ?? 0.15),
                 longTermVolatility: (float) ($stockData['volatility'] ?? 0.15),
                 earningsPerShare: $annualEps,
                 dt: 0.0,
                 lambda: (float) ($stockData['jump_intensity'] ?? 2.0),
-                jump_vol: (float) ($stockData['jump_vol'] ?? 0.05),
+                jumpVol: (float) ($stockData['jump_vol'] ?? 0.05),
                 beta: (float) ($stockData['beta'] ?? 1.0),
                 marketZ: 0.0,
                 marketVol: 0.15,
@@ -171,12 +171,14 @@ class MarketResetCommand extends Command
                 currentRoic: $impliedRoic,
                 roicTtm: $impliedRoic,
                 dividendPerShare: $startingDividend,
-                liveWacc: $debtHealth['wacc'],
+                liveWacc: $debtHealth->wacc ?? 0.08,
                 baselineIndustryPE: \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['pe'] ?? 20.0,
                 revenuePerShare: $shares > 0 ? $revenue / $shares : 0.0,
                 businessModel: $businessModel,
-                liveCostOfEquity: $debtHealth['cost_of_equity'] ?? 0.10
+                liveCostOfEquity: $debtHealth->costOfEquity ?? 0.10
             );
+
+            $marketCalc = $this->marketEngine->calculateNextPrice($pricingCtx);
 
             // Use the engine's perceived fair value as the neutral Analyst Consensus
             $neutralPrice = $marketCalc['perceived_fair_value'];

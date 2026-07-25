@@ -37,10 +37,9 @@ class CorporateMetrics
      * As a company pushes its capital footprint ($investedCapital) beyond optimal market share ($optimalThreshold),
      * administrative bloat, coordination friction, and SG&A costs increase quadratically above threshold ($excessRatio^2).
      */
-    public function calculateMarketSaturationPenalty(Stock $stock, float $investedCapital, \App\DTO\MacroStateDTO|array $macroState): float
+    public function calculateMarketSaturationPenalty(Stock $stock, float $investedCapital, \App\DTO\MacroStateDTO $macroState): float
     {
-        $dto = $macroState instanceof \App\DTO\MacroStateDTO ? $macroState : \App\DTO\MacroStateDTO::fromArray($macroState);
-        $nominalGdpIndex = $dto->nominalGdpIndex;
+        $nominalGdpIndex = $macroState->nominalGdpIndex;
         $samRatio = (float) $stock->getSamRatio();
         $marketShare = $this->calculateMarketShare($investedCapital, $nominalGdpIndex, $samRatio);
 
@@ -65,12 +64,11 @@ class CorporateMetrics
      * decays power-law asymptotically as capital accumulation (K) outpaces serviceable demand (K_optimal).
      * The elasticity parameter α is scaled by the firm's economic moat ($moatFactor) to reflect resistance to saturation.
      */
-    public function calculateMarginalReturn(Stock $stock, float $trueReturn, float $saturationPenalty, float $investedCapital, \App\DTO\MacroStateDTO|array $macroState): float
+    public function calculateMarginalReturn(Stock $stock, float $trueReturn, float $saturationPenalty, float $investedCapital, \App\DTO\MacroStateDTO $macroState): float
     {
         $baseReturn = max(0.0, $trueReturn - $saturationPenalty);
 
-        $dto = $macroState instanceof \App\DTO\MacroStateDTO ? $macroState : \App\DTO\MacroStateDTO::fromArray($macroState);
-        $nominalGdpIndex = $dto->nominalGdpIndex;
+        $nominalGdpIndex = $macroState->nominalGdpIndex;
         $samRatio = (float) $stock->getSamRatio();
         $marketShare = $this->calculateMarketShare($investedCapital, $nominalGdpIndex, $samRatio);
 

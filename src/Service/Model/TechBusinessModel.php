@@ -178,7 +178,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         return self::TECH_REVERSION_SPEED; // Rapid innovation cycles and intense technological competition erode excess margins quickly
     }
 
-    public function isUnderLeveraged(bool $isFinancial, float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
+    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
     {
         // Intangible asset-heavy businesses (Tech) have a natural optimal capital structure near zero debt
         // due to high financial distress costs. They should only recapitalize under extreme WACC arbitrage

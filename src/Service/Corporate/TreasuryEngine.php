@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Service\Corporate;
 
 use App\DTO\MacroStateDTO;
@@ -7,6 +9,7 @@ use App\Entity\Stock;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
+use App\DTO\CapitalAllocationContext;
 
 /**
  * Service responsible for managing the internal corporate balance sheet.
@@ -14,6 +17,19 @@ use App\Service\Math\MathUtility;
  */
 class TreasuryEngine
 {
+    // --- CapEx & Deployment Rates ---
+    /** Base organic spend rate (15%) for retained cash hoards. */
+    private const BASE_ORGANIC_SPEND_RATE = 0.15;
+    /** Additional variable spend rate (35%) scaled by economic spread (ROIC - WACC). */
+    private const VARIABLE_ORGANIC_SPEND_RATE = 0.35;
+
+    // --- Physical Capacity Limits (Growth Speed Limits) ---
+    private const FIN_MEGA_HOARDER_GROWTH_LIMIT = 0.35;
+    private const FIN_HOARDER_GROWTH_LIMIT = 0.20;
+    private const FIN_STANDARD_GROWTH_LIMIT = 0.12;
+    private const STD_HOARDER_GROWTH_LIMIT = 0.15;
+    private const STD_STANDARD_GROWTH_LIMIT = 0.08;
+
     public function __construct(
         private CorporateMetrics $corporateMetrics,
         private DebtEngine $debtEngine,
@@ -26,50 +42,19 @@ class TreasuryEngine
      * This must run BEFORE buybacks so that newly issued debt cash can fund Leveraged Buybacks,
      * and Growth CapEx takes priority over share repurchases.
      */
-    /**
-     * Handles M2 growth, debt issuance (recapitalization/expansion), and organic CapEx.
-     * @param float $quarterlyNopat Quarterly NOPAT (or quarterly net income for financials).
-     */
-    public function executeCorporateStrategy(
-        Stock $stock,
-        float $preBuybackEquity,
-        float $operatingBase,
-        float $quarterlyNopat,
-        float $currentTreasury,
-        MacroStateDTO $macroState,
-        array $health
-    ): array {
-        $state = [
-            'treasury' => $currentTreasury,
-            'wholesaleDebt' => (float) $stock->getWholesaleDebt(),
-            'customerDeposits' => (float) $stock->getCustomerDeposits(),
-            'debtIssued' => 0.0,
-            'organicCapex' => 0.0,
-            'debtActionTaken' => false,
-            'bank_apy' => null,
-            'failed_emergency_borrow' => false,
-            'events' => []
-        ];
-
+    public function executeCorporateStrategy(CapitalAllocationContext $ctx): void
+    {
         // SYSTEMIC M2 MONEY SUPPLY GROWTH
-        $this->processPassiveLiabilityGrowth($stock, $macroState, $state);
+        $this->processPassiveLiabilityGrowth($ctx);
 
         // DEBT MANAGEMENT (MACRO TOLERANCE)
-        $this->processDebtExpansion($stock, $preBuybackEquity, $quarterlyNopat, $macroState, $health, $state);
+        $this->processDebtExpansion($ctx);
 
         // ORGANIC BUSINESS EXPANSION (Internal CapEx)
-        $this->processOrganicCapex($stock, $preBuybackEquity, $quarterlyNopat, $operatingBase, $macroState, $health, $state);
+        $this->processOrganicCapex($ctx);
 
         // SAVE INTERMEDIATE TREASURY (so CapitalAllocationEngine can use it for buybacks)
-        $stock->setCorporateTreasury((string) $state['treasury']);
-
-        return [
-            'events' => $state['events'],
-            'organic_capex' => $state['organicCapex'],
-            'bank_apy' => $state['bank_apy'],
-            'new_treasury' => $state['treasury'],
-            'debt_action_taken' => $state['debtActionTaken']
-        ];
+        $ctx->stock->setCorporateTreasury((string) $ctx->newTreasury);
     }
 
     /**
@@ -77,164 +62,104 @@ class TreasuryEngine
      * Handles emergency borrowing, deleveraging, and clean surplus accounting.
      * This must run AFTER buybacks to capture the true final cash balance.
      */
-    public function finalizeLiquidity(
-        Stock $stock,
-        float $quarterlyNetIncome,
-        float $totalDividendsPaid,
-        float $totalBuybackCash,
-        float $operatingBase,
-        float $finalTreasury,
-        MacroStateDTO $macroState,
-        array $health,
-        float $realEstateAppreciation = 0.0,
-        bool $debtActionTaken = false
-    ): array {
-        $totalCashSpent = $totalDividendsPaid + $totalBuybackCash;
+    public function finalizeLiquidity(CapitalAllocationContext $ctx): void
+    {
+        $stock = $ctx->stock;
+        $totalCashSpent = $ctx->totalPaid + $ctx->totalCashSpent;
 
         // RETAINED EARNINGS
         $currentRetainedStr = $this->formatBc($stock->getRetainedEarnings());
-        $netIncomeStr = $this->formatBc($quarterlyNetIncome);
-        $divPaidStr = $this->formatBc($totalDividendsPaid);
+        $netIncomeStr = $this->formatBc($ctx->quarterlyNetIncome);
+        $divPaidStr = $this->formatBc($ctx->totalPaid);
         $newRetainedStr = \bcsub(\bcadd($currentRetainedStr, $netIncomeStr, 4), $divPaidStr, 4);
         $stock->setRetainedEarnings($newRetainedStr);
 
         // TOTAL EQUITY (Clean Surplus Accounting)
+        // physicalAssetAppreciation represents organic macro inflation scaling PLUS REIT depreciation offsets
         $currentEquityStr = $this->formatBc($stock->getTotalEquity());
-        $reApprecStr = $this->formatBc($realEstateAppreciation);
+        $reApprecStr = $this->formatBc($ctx->physicalAssetAppreciation);
         $totalCashSpentStr = $this->formatBc($totalCashSpent);
         $newEquityStr = \bcsub(\bcadd(\bcadd($currentEquityStr, $netIncomeStr, 4), $reApprecStr, 4), $totalCashSpentStr, 4);
         $stock->setTotalEquity($newEquityStr);
-        $newEquity = (float) $newEquityStr;
-
-        $state = [
-            'treasury' => $finalTreasury,
-            'wholesaleDebt' => (float) $stock->getWholesaleDebt(),
-            'customerDeposits' => (float) $stock->getCustomerDeposits(),
-            'debtActionTaken' => $debtActionTaken,
-            'failed_emergency_borrow' => false,
-            'events' => []
-        ];
 
         // THE DEBT TRAP (Liquidity Crisis)
-        $this->processEmergencyBorrowing($stock, $operatingBase, $macroState, $health, $state);
+        $this->processEmergencyBorrowing($ctx);
 
         // EQUITY ISSUANCE (Secondary Offerings / Death Spirals)
-        $this->processEquityIssuance($stock, $operatingBase, $macroState, $health, $state, $totalBuybackCash);
+        $this->processEquityIssuance($ctx);
 
         // ARBITRAGE PAYDOWN (Escape negative carry)
-        $this->processArbitragePaydown($stock, $operatingBase, $health, $state);
+        $this->processArbitragePaydown($ctx);
 
         // THE DELEVERAGING SWEEP (Macro-Driven Cash Management)
-        $this->processDeleveragingSweep($stock, $newEquity, $operatingBase, $health, $state);
+        $this->processDeleveragingSweep($ctx, (float) $newEquityStr);
 
         // SAVE FINAL TREASURY
-        $stock->setCorporateTreasury((string) $state['treasury']);
-
-        return [
-            'events' => $state['events']
-        ];
+        $stock->setCorporateTreasury((string) $ctx->newTreasury);
     }
 
-    private function processDebtExpansion(Stock $stock, float $newEquity, float $quarterlyNopat, MacroStateDTO $macroState, array $health, array &$state): void
+    private function processDebtExpansion(CapitalAllocationContext $ctx): void
     {
-        $totalDebt = $state['wholesaleDebt'] + $state['customerDeposits'];
-        $liveInvestedCapital = $this->corporateMetrics->calculateLiveInvestedCapital($newEquity, $totalDebt, $state['treasury']);
+        $stock = $ctx->stock;
+        
+        $currentEquity = (float) $stock->getTotalEquity();
+        $preBuybackEquity = $currentEquity + $ctx->quarterlyNetIncome + $ctx->physicalAssetAppreciation - $ctx->totalPaid;
 
-        $industry = $stock->getIndustry() ?: 'General';
-        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
+        $totalDebt = $ctx->wholesaleDebt + $ctx->customerDeposits;
+        $liveInvestedCapital = $this->corporateMetrics->calculateLiveInvestedCapital($preBuybackEquity, $totalDebt, $ctx->newTreasury);
 
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
-        $trueReturn = $isFinancial ? (float) $stock->getRoeTtm() : (float) $stock->getRoicTtm();
+        $trueReturn = $ctx->strategy->getTrueReturn($stock);
         if ($trueReturn === 0.0) {
-            $trueReturn = $strategy->calculateEconomicReturn($stock, $quarterlyNopat, $liveInvestedCapital);
+            $trueReturn = $ctx->strategy->calculateEconomicReturn($stock, $ctx->quarterlyNopat, $liveInvestedCapital);
         }
-        $hurdleRate = $isFinancial ? ($health['cost_of_equity'] ?? 0.10) : $health['wacc'];
+        $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
 
-        $evaluationCapital = $isFinancial ? $newEquity : $liveInvestedCapital;
+        $evaluationCapital = $ctx->strategy->getEvaluationCapital($preBuybackEquity, $liveInvestedCapital);
 
         $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
-        $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
+        $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $ctx->macroState);
         $saturationPenalty = $archetypeStrategy->modifySaturationPenalty($saturationPenalty);
-        $marginalReturn = $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $saturationPenalty, $evaluationCapital, $macroState);
+        $marginalReturn = $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $saturationPenalty, $evaluationCapital, $ctx->macroState);
 
-        $isUnderLeveraged = $health['is_under_leveraged'] && !$health['is_severe_negative_carry'];
+        $isUnderLeveraged = $ctx->health->isUnderLeveraged && !$ctx->health->isSevereNegativeCarry;
 
-        if (($marginalReturn > $hurdleRate || $isUnderLeveraged) && $health['can_issue_debt']) {
-            $newBorrowingRate = $health['raw_metrics']['current_market_rate'] ?? 0.05;
+        if (($marginalReturn > $hurdleRate || $isUnderLeveraged) && $ctx->health->canIssueDebt) {
+            $newBorrowingRate = $ctx->health->rawMetrics->currentMarketRate ?? 0.05;
 
-            if ($isFinancial) {
-                $modelThresholds = \App\Data\Sectors::getModelThresholds($businessModel);
-                $wholesaleTolerance = $modelThresholds['wholesale_leverage_limit'] ?? $health['debt_tolerance'];
+            $ebit = $ctx->health->rawMetrics->ebit ?? 0.0;
+            $depreciation = $ctx->health->rawMetrics->depreciation ?? 0.0;
 
-                $wholesaleCapacity = max(0.0, ($newEquity * $wholesaleTolerance) - $state['wholesaleDebt']);
-                $totalCapacity = max(0.0, ($newEquity * $health['debt_tolerance']) - $totalDebt);
+            $trueExpansionCapacity = $ctx->strategy->calculateDebtExpansionCapacity(
+                $preBuybackEquity,
+                $totalDebt,
+                $ctx->wholesaleDebt,
+                $ctx->health,
+                $newBorrowingRate,
+                $ebit,
+                $depreciation
+            );
 
-                $balanceSheetCapacity = min($wholesaleCapacity, $totalCapacity);
-                $incomeStatementCapacity = $balanceSheetCapacity;
-            } else {
-                $evalDebt = $totalDebt;
-                $evalTolerance = $health['debt_tolerance'];
-                $balanceSheetCapacity = max(0.0, ($newEquity * $evalTolerance) - $evalDebt);
-
-                $ebit = $health['raw_metrics']['ebit'] ?? 0.0;
-                $depreciation = $health['raw_metrics']['depreciation'] ?? 0.0;
-
-                // REITs use FFO (EBIT + Depreciation) to cover interest, as depreciation is non-cash.
-                $operatingIncome = $businessModel === 'reit' ? ($ebit + $depreciation) : $ebit;
-
-                // Highly stable businesses (like REITs and Utilities) can safely borrow at much lower ICR thresholds.
-                $modelThresholds = \App\Data\Sectors::getModelThresholds($businessModel);
-                $minimumIcr = ($modelThresholds['buyback_min_icr'] ?? 3.0) + 0.5;
-
-                $maxTolerableInterest = max(0.0, $operatingIncome / $minimumIcr);
-                $currentInterestExpense = $health['raw_metrics']['interest_expense'] ?? 0.0;
-                $availableInterestCapacity = max(0.0, $maxTolerableInterest - $currentInterestExpense);
-                $incomeStatementCapacity = $newBorrowingRate > 0 ? ($availableInterestCapacity / $newBorrowingRate) : 0.0;
-            }
-
-            $trueExpansionCapacity = min($incomeStatementCapacity, $balanceSheetCapacity);
-
-            // Allow specific business models to adjust capacity (e.g., Banks spending cheap deposits first)
             // Subtract excess cash from the TOTAL balance sheet capacity first
-            $operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity());
-            $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
-            $targetCashReserves = $strategy->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt']) * 1.20;
-            $excessCash = max(0.0, $state['treasury'] - $targetCashReserves);
+            $targetCashReserves = $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt) * 1.20;
+            $excessCash = max(0.0, $ctx->newTreasury - $targetCashReserves);
 
-            $trueExpansionCapacity = $strategy->getUnfundedExpansionCapacity($trueExpansionCapacity, $excessCash);
+            $trueExpansionCapacity = $ctx->strategy->getUnfundedExpansionCapacity($trueExpansionCapacity, $excessCash);
 
             // Max 25% of operations per quarter (Quarterly Flow Limit)
             $trueExpansionCapacity = min($trueExpansionCapacity, $liveInvestedCapital * 0.25);
 
             if ($trueExpansionCapacity > 0) {
-                $spreadMultiplier = min(1.0, max(0.0, ($marginalReturn - $hurdleRate) * 10.0));
-
-                if ($isFinancial) {
-                    $bankSpreadMultiplier = min(1.0, max(0.0, ($marginalReturn - $hurdleRate) * 20.0));
-                    $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
-                    $aggressionData = $strategy->getDebtExpansionAggressiveness($bankSpreadMultiplier);
-                    $borrowProbability = $aggressionData['probability'];
-                    $aggressiveness = $aggressionData['aggressiveness'];
-
-                    if (in_array($businessModel, ['commercial_bank', 'credit_services', 'clearing_house'])) {
-                        $depositRatio = $totalDebt > 0 ? ($state['customerDeposits'] / $totalDebt) : 0.0;
-                        if ($depositRatio < 0.70) {
-                            $depositConstraint = max(0.0, ($depositRatio - 0.40) / 0.30);
-                            $borrowProbability *= $depositConstraint;
-                            $aggressiveness *= $depositConstraint;
-                        }
-                    }
-                } else {
-                    $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
-                    $aggressionData = $strategy->getDebtExpansionAggressiveness($spreadMultiplier);
-                    $borrowProbability = $aggressionData['probability'];
-                    $aggressiveness = $aggressionData['aggressiveness'];
-                }
-
-                // CAPITAL STRUCTURE MAINTENANCE (Modigliani-Miller / Trade-Off Theory):
-                // If a company is structurally under-leveraged (positive WACC arbitrage where Ke > Kd, strong ICR cushion,
-                // and below CFO target leverage), it aggressively issues debt to optimize capital structure and recapitalize.
+                $rawSpread = max(0.0, $marginalReturn - $hurdleRate);
+                $spreadMultiplier = min(1.0, $rawSpread * 10.0);
+                
+                $aggressionData = $ctx->strategy->getDebtExpansionAggressiveness(
+                    $spreadMultiplier, 
+                    $totalDebt, 
+                    $ctx->customerDeposits
+                );
+                
+                $borrowProbability = $aggressionData['probability'];
+                $aggressiveness = $aggressionData['aggressiveness'];
 
                 if ($isUnderLeveraged) {
                     $aggressiveness = max($aggressiveness, 0.50);
@@ -244,96 +169,88 @@ class TreasuryEngine
                 if ((mt_rand() / mt_getrandmax()) < $borrowProbability) {
                     $newDebtIssued = $trueExpansionCapacity * $aggressiveness;
 
-                    // Issue the debt and calculate blended fixed rate
-                    // Uses $newBorrowingRate which is the current Market Fixed Rate (Yield 5Y + Spread)
                     $this->debtEngine->issueDebt($stock, $newDebtIssued, $newBorrowingRate);
 
-                    $state['wholesaleDebt'] = (float) $stock->getWholesaleDebt();
-                    $state['treasury'] += $newDebtIssued;
-                    $state['debtIssued'] = $newDebtIssued;
-                    $state['debtActionTaken'] = true;
+                    $ctx->wholesaleDebt = (float) $stock->getWholesaleDebt();
+                    $ctx->newTreasury += $newDebtIssued;
+                    $ctx->debtIssued = $newDebtIssued;
+                    $ctx->debtActionTaken = true;
                     if ($isUnderLeveraged) {
-                        $state['recapActionTaken'] = true;
+                        $ctx->recapActionTaken = true;
                     }
 
                     if ($newDebtIssued > 500_000_000.0) {
                         $amtB = number_format($newDebtIssued / 1_000_000_000, 2);
-                        $state['events'][] = ['description' => "Issued \${$amtB}B in bonds for " . ($isUnderLeveraged ? "recapitalization" : "expansion") . ".", 'shock' => 0.5];
+                        $ctx->events[] = ['description' => "Issued \${$amtB}B in bonds for " . ($isUnderLeveraged ? "recapitalization" : "expansion") . ".", 'shock' => 0.5];
                     }
                 }
             }
         }
     }
 
-    private function processOrganicCapex(Stock $stock, float $newEquity, float $quarterlyNopat, float $operatingBase, MacroStateDTO $macroState, array $health, array &$state): void
+    private function processOrganicCapex(CapitalAllocationContext $ctx): void
     {
-        $totalDebt = $state['wholesaleDebt'] + $state['customerDeposits'];
-        $industry = $stock->getIndustry() ?: 'General';
-        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $stock = $ctx->stock;
+        $currentEquity = (float) $stock->getTotalEquity();
+        $preBuybackEquity = $currentEquity + $ctx->quarterlyNetIncome + $ctx->physicalAssetAppreciation - $ctx->totalPaid;
 
-        $targetCashReserves = $strategy->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt']) * 1.20;
-        $liveInvestedCapital = $this->corporateMetrics->calculateLiveInvestedCapital($newEquity, $totalDebt, $state['treasury']);
-
-        $trueReturn = $isFinancial ? (float) $stock->getRoeTtm() : (float) $stock->getRoicTtm();
+        $totalDebt = $ctx->wholesaleDebt + $ctx->customerDeposits;
+        $liveInvestedCapital = $this->corporateMetrics->calculateLiveInvestedCapital($preBuybackEquity, $totalDebt, $ctx->newTreasury);
+        $trueReturn = $ctx->strategy->getTrueReturn($stock);
         if ($trueReturn === 0.0) {
-            $trueReturn = $strategy->calculateEconomicReturn($stock, $quarterlyNopat, $liveInvestedCapital);
+            $trueReturn = $ctx->strategy->calculateEconomicReturn($stock, $ctx->quarterlyNopat, $liveInvestedCapital);
         }
-        $hurdleRate = $isFinancial ? ($health['cost_of_equity'] ?? 0.10) : $health['wacc'];
-        $evaluationCapital = $isFinancial ? $newEquity : $liveInvestedCapital;
+        $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
+        $evaluationCapital = $ctx->strategy->getEvaluationCapital($preBuybackEquity, $liveInvestedCapital);
 
         $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
-        $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
+        $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $ctx->macroState);
         $saturationPenalty = $archetypeStrategy->modifySaturationPenalty($saturationPenalty);
-        $marginalReturn = $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $saturationPenalty, $evaluationCapital, $macroState);
+        $marginalReturn = $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $saturationPenalty, $evaluationCapital, $ctx->macroState);
 
         $investmentProbability = min(0.95, max(0.10, 0.20 + ($marginalReturn * 2.0)));
         $investmentProbability = $archetypeStrategy->modifyInvestmentProbability($investmentProbability, $marginalReturn);
 
-        $isRecap = !empty($state['recapActionTaken']);
-        $forcedExpansion = $state['debtActionTaken'] && !$isRecap;
+        $isRecap = $ctx->recapActionTaken;
+        $forcedExpansion = $ctx->debtActionTaken && !$isRecap;
 
         if (!$forcedExpansion && (mt_rand(1, 1000) / 1000.0) > $investmentProbability) {
-            return; // Management decided to hold onto cash instead of expanding
+            return;
         }
 
-        $hoardStatus = $strategy->evaluateHoardingStatus($state['treasury'], $targetCashReserves, $operatingBase, $totalDebt);
+        $targetCashReserves = $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt) * 1.20;
+        $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->newTreasury, $targetCashReserves, $ctx->operatingBase, $totalDebt);
         $excessCash = $hoardStatus['excess_cash'];
         $isHoarder = $hoardStatus['is_hoarder'];
         $isMegaHoarder = $hoardStatus['is_mega_hoarder'];
 
-        // Bypass the hurdle rate check if the company is hoarding cash. Sitting on excess cash is a mathematically guaranteed drag on ROE.
-        if ((($trueReturn > $hurdleRate || $isHoarder) && $excessCash > 0 && !$health['wants_to_paydown_debt']) || $forcedExpansion) {
+        if ((($trueReturn > $hurdleRate || $isHoarder) && $excessCash > 0 && !$ctx->health->wantsToPaydownDebt) || $forcedExpansion) {
             $spreadMultiplier = $isHoarder ? 1.0 : min(1.0, max(0.0, ($trueReturn - $hurdleRate) * 10.0));
             
-            // Newly issued debt is earmarked for immediate project deployment. We subtract it from excess cash
-            // to calculate the standard organic spend from retained cash hoards.
-            $baseExcessCash = max(0.0, $excessCash - $state['debtIssued']);
-            $organicSpend = $baseExcessCash * (0.15 + (0.35 * $spreadMultiplier));
+            $baseExcessCash = max(0.0, $excessCash - $ctx->debtIssued);
+            $organicSpend = $baseExcessCash * (self::BASE_ORGANIC_SPEND_RATE + (self::VARIABLE_ORGANIC_SPEND_RATE * $spreadMultiplier));
 
-            $expansionSpend = $strategy->calculateOrganicCapexSpend($organicSpend, $state['debtIssued']);
+            $expansionSpend = $ctx->strategy->calculateOrganicCapexSpend($organicSpend, $ctx->debtIssued);
             $expansionSpend = min($expansionSpend, $excessCash);
 
-            // Mega hoarders need massive physical capacity limits to flush the cash
-            $maxGrowthSpeed = $isFinancial ? ($isMegaHoarder ? 0.35 : ($isHoarder ? 0.20 : 0.12)) : ($isHoarder ? 0.15 : 0.08);
-            $expansionCapBasis = $isFinancial ? ($newEquity + $totalDebt) : $liveInvestedCapital;
+            $maxGrowthSpeed = $ctx->strategy->getMaxOrganicGrowthSpeed($isHoarder, $isMegaHoarder);
+            
+            $expansionCapBasis = $ctx->strategy->getExpansionCapacityBasis($preBuybackEquity, $totalDebt, $liveInvestedCapital);
             $maxOrganicCapacity = $expansionCapBasis * $maxGrowthSpeed;
             
-            // Allow them to fully deploy newly issued debt by bypassing the standard physical limit
-            $expansionSpend = min($expansionSpend, max($maxOrganicCapacity, $state['debtIssued']));
+            $expansionSpend = min($expansionSpend, max($maxOrganicCapacity, $ctx->debtIssued));
 
             if ($marginalReturn <= 0.0 && !$forcedExpansion) {
                 $expansionSpend = 0.0;
             }
 
             if ($expansionSpend > 0) {
-                $state['organicCapex'] = $expansionSpend;
-                $state['treasury'] -= $expansionSpend;
+                $ctx->organicCapex = $expansionSpend;
+                $ctx->newTreasury -= $expansionSpend;
 
                 if ($expansionSpend > 1_000_000_000.0) {
                     $amtB = number_format($expansionSpend / 1_000_000_000, 2);
-                    $actionText = match ($businessModel) {
+                    $actionText = match ($ctx->businessModel) {
                         'commercial_bank', 'credit_services', 'shadow_bank' => 'loan book expansion',
                         'insurance' => 'underwriting infrastructure and float expansion',
                         'brokerage', 'investment_bank' => 'trading desk and market-making capacity',
@@ -343,103 +260,87 @@ class TreasuryEngine
                         'reit' => 'property acquisitions and development',
                         default => 'organic expansion'
                     };
-                    $state['events'][] = ['description' => "Deployed \${$amtB}B in {$actionText}.", 'shock' => 0.5];
+                    $ctx->events[] = ['description' => "Deployed \${$amtB}B in {$actionText}.", 'shock' => 0.5];
                 }
             }
         }
     }
 
-    private function processEmergencyBorrowing(Stock $stock, float $operatingBase, MacroStateDTO $macroState, array $health, array &$state): void
+    private function processEmergencyBorrowing(CapitalAllocationContext $ctx): void
     {
-        $industry = $stock->getIndustry() ?: 'General';
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy(\App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none');
-        $minOperatingCash = $strategy->calculateMinOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt']);
+        $stock = $ctx->stock;
+        $minOperatingCash = $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt);
 
-        if ($state['treasury'] < $minOperatingCash) {
-            $cashShortfall = $minOperatingCash - $state['treasury'];
+        if ($ctx->newTreasury < $minOperatingCash) {
+            $cashShortfall = $minOperatingCash - $ctx->newTreasury;
 
-            if ($health['can_issue_debt']) {
-                // Emergency debt is highly punitive (+200 bps penalty) but still anchors to the 5Y corporate fixed rate
-                $currentMarketRate = $health['raw_metrics']['current_market_rate'] ?? ($macroState->yield5yEma + (float) $stock->getCreditSpread());
+            if ($ctx->health->canIssueDebt) {
+                $currentMarketRate = $ctx->health->rawMetrics->currentMarketRate ?? ($ctx->macroState->yield5yEma + (float) $stock->getCreditSpread());
                 $costOfEmergencyDebt = $currentMarketRate + FinancialConstants::EMERGENCY_DEBT_SPREAD_PENALTY;
 
                 $this->debtEngine->issueDebt($stock, $cashShortfall, $costOfEmergencyDebt);
 
-                $state['wholesaleDebt'] = (float) $stock->getWholesaleDebt();
-                $state['treasury'] = $minOperatingCash;
-                $state['debtActionTaken'] = true;
+                $ctx->wholesaleDebt = (float) $stock->getWholesaleDebt();
+                $ctx->newTreasury = $minOperatingCash;
+                $ctx->debtActionTaken = true;
 
                 if ($cashShortfall > 10_000_000.0) {
-                    $state['events'][] = ['description' => "Forced to borrow \$" . number_format($cashShortfall / 1_000_000_000, 2) . "B at penalty rates due to cash shortfall.", 'shock' => -5.0];
+                    $ctx->events[] = ['description' => "Forced to borrow \$" . number_format($cashShortfall / 1_000_000_000, 2) . "B at penalty rates due to cash shortfall.", 'shock' => -5.0];
                 }
             } else {
-                // Liquidity Crisis - Cannot issue debt, MUST liquidate assets or dilute
-                $state['failed_emergency_borrow'] = true;
+                $ctx->failedEmergencyBorrow = true;
             }
         }
     }
 
-    private function processEquityIssuance(Stock $stock, float $operatingBase, MacroStateDTO $macroState, array $health, array &$state, float $totalBuybackCash): void
+    private function processEquityIssuance(CapitalAllocationContext $ctx): void
     {
-        $currentPrice = (float) $stock->getPrice();
-        if ($currentPrice <= 0.0) return;
+        $stock = $ctx->stock;
+        if ($ctx->currentPrice <= 0.0) return;
 
-        // CONTRADICTION CHECK: A company should never buy back shares and issue new shares in the exact same quarter.
-        if ($totalBuybackCash > 0.0) return;
+        if ($ctx->totalCashSpent > 0.0) return;
 
-        $shares = (float) $stock->getSharesOutstanding();
-        $eps = (float) $stock->getEarningsPerShare();
-        $currentPE = $eps > 0 ? ($currentPrice / $eps) : 9999.0;
+        $currentPE = $ctx->quarterlyEps > 0 ? ($ctx->currentPrice / ($ctx->quarterlyEps * 4)) : 9999.0;
+        if ($ctx->actualAnnualEps > 0) {
+             $currentPE = $ctx->currentPrice / $ctx->actualAnnualEps;
+        }
 
-        $industry = $stock->getIndustry() ?: 'General';
-        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
-
-        $trueReturn = $isFinancial ? (float) $stock->getCurrentRoe() : (float) $stock->getCurrentRoic();
-        $hurdleRate = $isFinancial ? ($health['cost_of_equity'] ?? 0.10) : ($health['wacc'] ?? 0.08);
+        $trueReturn = $ctx->strategy->getTrueReturn($stock);
+        $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
         $economicSpread = $trueReturn - $hurdleRate;
 
         $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $trueReturn, 0.02);
 
-        $bookValuePerShare = max(0.01, $stock->getTotalEquity() / max(1, $shares));
-        $priceToBook = $currentPrice / $bookValuePerShare;
+        $bookValuePerShare = max(0.01, $stock->getTotalEquity() / max(1, $ctx->sharesOutstanding));
+        $priceToBook = $ctx->currentPrice / $bookValuePerShare;
 
-        // A true bubble requires the stock to trade at a massive premium to its actual physical footprint (P/B > 3.0).
-        // Otherwise, a company with high interest expense will have a near-zero EPS, creating a mathematically infinite P/E that triggers false bubbles.
         $isBubble = $economicSpread > 0.0 && $currentPE > ($fairValuePE * 2.5) && $currentPE > 40.0 && $priceToBook > 3.0;
-        $isDeathSpiral = $state['failed_emergency_borrow'] ?? false;
+        $isDeathSpiral = $ctx->failedEmergencyBorrow;
 
         $executeIssuance = false;
 
         if ($isDeathSpiral) {
-            // Death Spiral: Management is desperate. Very high chance they dilute to survive, 
-            // but some stubborn or incompetent management teams might freeze and do nothing.
-            $executeIssuance = $this->mathUtility->generateUniform() < 0.80; // 80% chance
+            $executeIssuance = $this->mathUtility->generateUniform() < 0.80;
         } elseif ($isBubble) {
-            // Bubble: Management exploits the premium valuation. The more extreme the bubble, the more likely they cash in.
             $bubbleSeverity = ($currentPE / max(1.0, $fairValuePE * 2.5)) - 1.0;
-            $probBubble = min(0.90, 0.05 + ($bubbleSeverity * 0.20)); // Scales from 5% to 90% chance
+            $probBubble = min(0.90, 0.05 + ($bubbleSeverity * 0.20));
             $executeIssuance = $this->mathUtility->generateUniform() < $probBubble;
         }
 
         if ($executeIssuance) {
-            $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
-            $minOperatingCash = $strategy->calculateMinOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt']);
+            $minOperatingCash = $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt);
 
             $targetRaise = 0.0;
             $reason = "";
             $shock = 0.0;
 
             if ($isDeathSpiral) {
-                // Raise enough to cover the shortfall + 50% buffer
-                $shortfall = max(0.0, $minOperatingCash - $state['treasury']);
+                $shortfall = max(0.0, $minOperatingCash - $ctx->newTreasury);
                 $targetRaise = $shortfall * 1.5;
                 $reason = "execute a highly dilutive emergency stock offering to stave off bankruptcy";
-                $shock = -15.0; // Market hates dilution, especially distressed dilution
+                $shock = -15.0;
             } elseif ($isBubble) {
-                // Exploit the bubble to raise 5% of their market cap in cash, but cap it against their physical reality.
-                // A company cannot raise more than 10% of its Invested Capital in a single offering without destroying its ROIC.
-                $marketCap = $shares * $currentPrice;
+                $marketCap = $ctx->sharesOutstanding * $ctx->currentPrice;
                 $investedCapital = (float) $stock->getInvestedCapital();
                 $maxRaise = abs($investedCapital) * 0.10;
                 $targetRaise = min($marketCap * 0.05, $maxRaise);
@@ -447,61 +348,54 @@ class TreasuryEngine
                 $shock = -5.0;
             }
 
-            // Only dilute if the raise is meaningful
             if ($targetRaise > 10_000_000.0) {
-                // Assume a 10% underpricing discount for the offering
-                $offeringPrice = $currentPrice * 0.90;
+                $offeringPrice = $ctx->currentPrice * 0.90;
                 $sharesIssued = $targetRaise / max(0.01, $offeringPrice);
 
-                $stock->setSharesOutstanding((string) ($shares + $sharesIssued));
-                $state['treasury'] += $targetRaise;
+                $stock->setSharesOutstanding((string) ($ctx->sharesOutstanding + $sharesIssued));
+                $ctx->newTreasury += $targetRaise;
 
-                // ACCOUNTING FIX: A stock issuance must increase Book Value (Paid-in Capital)
                 $currentEquityStr = $this->formatBc($stock->getTotalEquity());
                 $stock->setTotalEquity(\bcadd($currentEquityStr, $this->formatBc($targetRaise), 4));
 
                 $amtB = number_format($targetRaise / 1_000_000_000, 2);
-                $state['events'][] = [
+                $ctx->events[] = [
                     'description' => "Issued new shares to raise \${$amtB}B and {$reason}.",
                     'shock' => $shock
                 ];
 
-                $state['failed_emergency_borrow'] = false;
+                $ctx->failedEmergencyBorrow = false;
             }
         }
     }
 
-    private function processArbitragePaydown(Stock $stock, float $operatingBase, array $health, array &$state): void
+    private function processArbitragePaydown(CapitalAllocationContext $ctx): void
     {
-        $totalDebt = $state['wholesaleDebt'] + $state['customerDeposits'];
-        $industry = $stock->getIndustry() ?: 'General';
-        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
-        $targetOperatingCash = $strategy->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt']);
+        $stock = $ctx->stock;
+        $targetOperatingCash = $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt);
 
-        if (empty($state['debtActionTaken']) && $health['wants_to_paydown_debt'] && $state['wholesaleDebt'] > 0 && $state['treasury'] > $targetOperatingCash) {
-            $distressThreshold = $isFinancial ? 1.05 : 2.0;
-            $isLiquidityCrisis = $health['interest_coverage'] < 1.0;
-            $isDistressed = $health['interest_coverage'] < $distressThreshold;
+        if (!$ctx->debtActionTaken && $ctx->health->wantsToPaydownDebt && $ctx->wholesaleDebt > 0 && $ctx->newTreasury > $targetOperatingCash) {
+            $distressThreshold = 1.0 + $ctx->strategy->getRequiredIcrBuffer();
+            $isLiquidityCrisis = $ctx->health->interestCoverage < 1.0;
+            $isDistressed = $ctx->health->interestCoverage < $distressThreshold;
             $paydownProbability = $isLiquidityCrisis ? 1.0 : ($isDistressed ? 0.50 : 0.15);
 
             if ((mt_rand() / mt_getrandmax()) < $paydownProbability) {
                 $sweepPercentage = $isLiquidityCrisis ? 0.50 : 0.10;
-                $arbitragePaydown = ($state['treasury'] - $targetOperatingCash) * $sweepPercentage;
-                $maxRetireableDebt = $state['wholesaleDebt'] * ($isLiquidityCrisis ? 0.15 : 0.05);
-                $actualPaydown = min($arbitragePaydown, $state['wholesaleDebt'], $maxRetireableDebt);
+                $arbitragePaydown = ($ctx->newTreasury - $targetOperatingCash) * $sweepPercentage;
+                $maxRetireableDebt = $ctx->wholesaleDebt * ($isLiquidityCrisis ? 0.15 : 0.05);
+                $actualPaydown = min($arbitragePaydown, $ctx->wholesaleDebt, $maxRetireableDebt);
 
                 if ($actualPaydown > 0) {
-                    $state['wholesaleDebt'] -= $actualPaydown;
-                    $stock->setWholesaleDebt((string) $state['wholesaleDebt']);
-                    $state['treasury'] -= $actualPaydown;
-                    $state['debtActionTaken'] = true;
+                    $ctx->wholesaleDebt -= $actualPaydown;
+                    $stock->setWholesaleDebt((string) $ctx->wholesaleDebt);
+                    $ctx->newTreasury -= $actualPaydown;
+                    $ctx->debtActionTaken = true;
 
                     if ($actualPaydown > 500_000_000.0) {
                         $amtB = number_format($actualPaydown / 1_000_000_000, 2);
                         $reason = $isLiquidityCrisis ? "survive a liquidity crisis" : "reduce debt burden and escape negative carry";
-                        $state['events'][] = [
+                        $ctx->events[] = [
                             'description' => "Paid down \${$amtB}B of debt to {$reason}.",
                             'shock' => 1.0
                         ];
@@ -511,55 +405,51 @@ class TreasuryEngine
         }
     }
 
-    private function processDeleveragingSweep(Stock $stock, float $newEquity, float $operatingBase, array $health, array &$state): void
+    private function processDeleveragingSweep(CapitalAllocationContext $ctx, float $newEquity): void
     {
-        $totalDebt = $state['wholesaleDebt'] + $state['customerDeposits'];
-        $industry = $stock->getIndustry() ?: 'General';
-        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
-        $targetOperatingCash = $strategy->calculateTargetOperatingCash($operatingBase, $state['customerDeposits'], $state['wholesaleDebt']);
-
+        $stock = $ctx->stock;
+        $totalDebt = $ctx->wholesaleDebt + $ctx->customerDeposits;
+        
+        $targetOperatingCash = $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt);
         $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
         $targetOperatingCash = $archetypeStrategy->modifyTargetOperatingCash($targetOperatingCash);
 
-        if (empty($state['debtActionTaken']) && $state['wholesaleDebt'] > 0.0 && $state['treasury'] > $targetOperatingCash) {
-            $excessCash = $state['treasury'] - $targetOperatingCash;
-            $macroDebtTolerance = $health['debt_tolerance'];
+        if (!$ctx->debtActionTaken && $ctx->wholesaleDebt > 0.0 && $ctx->newTreasury > $targetOperatingCash) {
+            $excessCash = $ctx->newTreasury - $targetOperatingCash;
+            $macroDebtTolerance = $ctx->health->debtTolerance;
 
-            $evalDebt = $isFinancial ? $state['wholesaleDebt'] : $totalDebt;
-            $modelThresholds = \App\Data\Sectors::getModelThresholds($businessModel);
+            $evalDebt = $ctx->strategy->getDeleveragingEvaluationDebt($totalDebt, $ctx->wholesaleDebt);
+            $modelThresholds = \App\Data\Sectors::getModelThresholds($ctx->businessModel);
+            $evalLimit = $ctx->strategy->getDeleveragingEvaluationLimit($modelThresholds, $macroDebtTolerance);
 
-            if ($isFinancial && isset($modelThresholds['wholesale_leverage_limit'])) {
-                $effectiveCostOfDebt = $health['effective_cost'] ?? 0.05;
-                $evalLimit = $archetypeStrategy->modifyDebtToleranceLimit($modelThresholds['wholesale_leverage_limit'], $effectiveCostOfDebt);
-            } else {
-                $evalLimit = $macroDebtTolerance;
+            if (isset($modelThresholds['wholesale_leverage_limit'])) {
+                $effectiveCostOfDebt = $ctx->health->effectiveCost ?? 0.05;
+                $evalLimit = $archetypeStrategy->modifyDebtToleranceLimit($evalLimit, $effectiveCostOfDebt);
             }
 
             $currentDebtRatio = $evalDebt / max(1.0, $newEquity);
 
             $baselineSpread = (float) $stock->getCreditSpread();
-            $dynamicSpread = $health['raw_metrics']['dynamic_spread'] ?? $baselineSpread;
+            $dynamicSpread = $ctx->health->rawMetrics->dynamicSpread ?? $baselineSpread;
             $isJunkBondStatus = $dynamicSpread > ($baselineSpread + 0.0011);
 
-            $hoardStatus = $strategy->evaluateHoardingStatus($state['treasury'], $targetOperatingCash, $operatingBase, $totalDebt);
+            $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->newTreasury, $targetOperatingCash, $ctx->operatingBase, $totalDebt);
 
             if ($currentDebtRatio > $evalLimit || $isJunkBondStatus || $hoardStatus['is_hoarder']) {
                 $targetRatio = $isJunkBondStatus ? max(0.10, $evalLimit * 0.75) : max(0.10, $evalLimit - 0.05);
 
                 $targetTotalDebt = $newEquity * $targetRatio;
                 $debtToPayOff = min($excessCash, max(0.0, $evalDebt - $targetTotalDebt));
-                $debtToPayOff = min($debtToPayOff, $state['wholesaleDebt']);
+                $debtToPayOff = min($debtToPayOff, $ctx->wholesaleDebt);
 
                 if ($debtToPayOff > 0) {
-                    $state['wholesaleDebt'] -= $debtToPayOff;
-                    $stock->setWholesaleDebt((string) $state['wholesaleDebt']);
-                    $state['treasury'] -= $debtToPayOff;
+                    $ctx->wholesaleDebt -= $debtToPayOff;
+                    $stock->setWholesaleDebt((string) $ctx->wholesaleDebt);
+                    $ctx->newTreasury -= $debtToPayOff;
 
                     if ($debtToPayOff > 500_000_000.0) {
                         $amtB = number_format($debtToPayOff / 1_000_000_000, 2);
-                        $state['events'][] = [
+                        $ctx->events[] = [
                             'description' => "Swept \${$amtB}B cash to aggressively deleverage.",
                             'shock' => 2.0
                         ];
@@ -569,17 +459,35 @@ class TreasuryEngine
         }
     }
 
-    private function processPassiveLiabilityGrowth(Stock $stock, MacroStateDTO $macroState, array &$state): void
+    private function processPassiveLiabilityGrowth(CapitalAllocationContext $ctx): void
     {
-        $industry = $stock->getIndustry() ?: 'General';
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy(\App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none');
-        $strategy->processPassiveLiabilityGrowth($stock, $macroState, $state, $this->mathUtility);
+        // Pack state for interface call
+        $state = [
+            'treasury' => $ctx->newTreasury,
+            'wholesaleDebt' => $ctx->wholesaleDebt,
+            'customerDeposits' => $ctx->customerDeposits,
+            'debtIssued' => $ctx->debtIssued,
+            'organicCapex' => $ctx->organicCapex,
+            'debtActionTaken' => $ctx->debtActionTaken,
+            'bank_apy' => $ctx->bankApy,
+            'failed_emergency_borrow' => $ctx->failedEmergencyBorrow,
+            'events' => $ctx->events
+        ];
+
+        $ctx->strategy->processPassiveLiabilityGrowth($ctx->stock, $ctx->macroState, $state, $this->mathUtility);
+
+        // Unpack state
+        $ctx->newTreasury = $state['treasury'];
+        $ctx->wholesaleDebt = $state['wholesaleDebt'];
+        $ctx->customerDeposits = $state['customerDeposits'];
+        $ctx->debtIssued = $state['debtIssued'];
+        $ctx->organicCapex = $state['organicCapex'];
+        $ctx->debtActionTaken = $state['debtActionTaken'];
+        $ctx->bankApy = $state['bank_apy'];
+        $ctx->failedEmergencyBorrow = $state['failed_emergency_borrow'];
+        $ctx->events = $state['events'];
     }
 
-    /**
-     * Converts a float or string into a decimal string without scientific notation (e.g. E+11),
-     * required for safe PHP bcmath functions and database string columns.
-     */
     private function formatBc(int|float|string|null $val, int $scale = 4): string
     {
         if ($val === null || $val === '') {

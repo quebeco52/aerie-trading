@@ -173,7 +173,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         return self::PATENT_REVERSION_SPEED;
     }
 
-    public function isUnderLeveraged(bool $isFinancial, float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
+    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
     {
         // Biotech firms face binary R&D clinical trial outcomes and carry high financial distress costs.
         // Their optimal capital structure is near zero debt. They should only recapitalize under extreme

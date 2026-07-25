@@ -56,11 +56,11 @@ class StockTracker
      * @param Stock[] $stocks        Array of Stock entities to update.
      * @param float   $dt            The time step delta (e.g., in years).
      * @param bool    $recordHistory Whether to persist the new prices to the stock history table.
-     * @param MacroStateDTO|array $macroState    The current state of the macroeconomic cycle.
+     * @param MacroStateDTO|null $macroState    The current state of the macroeconomic cycle.
      * 
      * @return array{updates: array<mixed>, total_cap: float, events: array<mixed>, market_vol: float, history: array<mixed>}
      */
-    public function updateStocks(array $stocks, float $dt, bool $recordHistory, \App\DTO\MacroStateDTO|array $macroState = [], int $tickCount = 0, int $ticksPerYear = 252): array
+    public function updateStocks(array $stocks, float $dt, bool $recordHistory, ?\App\DTO\MacroStateDTO $macroState = null, int $tickCount = 0, int $ticksPerYear = 252): array
     {
 
         $stockUpdates = [];
@@ -69,7 +69,7 @@ class StockTracker
         $events = [];
 
         // Pull systemic variables from the Macro Engine
-        $macroDTO = $macroState instanceof \App\DTO\MacroStateDTO ? $macroState : \App\DTO\MacroStateDTO::fromArray($macroState);
+        $macroDTO = $macroState ?? new \App\DTO\MacroStateDTO();
         $marketZ = $macroDTO->marketZ;
         $marketVol = $macroDTO->marketVolatility;
 
@@ -123,15 +123,14 @@ class StockTracker
                 ? (float) $stock->getRoeTtm()
                 : (float) $stock->getRoicTtm();
 
-            // Calculate new price (GBM + SVJJ)
-            $calculation = $this->marketEngine->calculateNextPrice(
+            $pricingCtx = new \App\DTO\MarketPricingContext(
                 currentPrice: (float) $stock->getPrice(),
                 currentVolatility: $currentVol,
                 longTermVolatility: $baselineVol,
                 earningsPerShare: (float) $stock->getEarningsPerShare(),
                 dt: $dt,
                 lambda: (float) $stock->getJumpIntensity(),
-                jump_vol: (float) $stock->getJumpVol(),
+                jumpVol: (float) $stock->getJumpVol(),
                 beta: (float) $stock->getBeta(),
                 marketZ: $marketZ,
                 marketVol: $marketVol,
@@ -142,12 +141,15 @@ class StockTracker
                 currentRoic: $effectiveRoic,
                 roicTtm: $roicTtm,
                 dividendPerShare: (float) $stock->getLastDividend(),
-                liveWacc: $health['wacc'],
+                liveWacc: $health->wacc ?? 0.08,
                 baselineIndustryPE: $baselineIndustryPE,
                 revenuePerShare: $revenuePerShare,
                 businessModel: $businessModel,
-                liveCostOfEquity: $health['cost_of_equity'] ?? 0.10
+                liveCostOfEquity: $health->costOfEquity ?? 0.10
             );
+
+            // Calculate new price (GBM + SVJJ)
+            $calculation = $this->marketEngine->calculateNextPrice($pricingCtx);
 
             $newPrice = $calculation['price'];
             $nextVolatility = $calculation['next_volatility'];

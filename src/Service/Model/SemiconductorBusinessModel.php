@@ -189,7 +189,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         return self::FAB_REVERSION_SPEED;
     }
 
-    public function isUnderLeveraged(bool $isFinancial, float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
+    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
     {
         // Semiconductor foundries face severe capital cycles and high technological obsolescence risks.
         // Their optimal capital structure is lean on debt. They should only recapitalize under extreme

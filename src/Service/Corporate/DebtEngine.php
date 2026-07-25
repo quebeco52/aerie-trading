@@ -48,18 +48,9 @@ class DebtEngine
      * @param Stock $stock           The stock entity being analyzed.
      * @param MacroStateDTO $macroState      The current macroeconomic state.
      * @param bool  $advanceMaturity Whether to advance the maturity wall and lock in new blended rates.
-     * @return array{
-     *     interest_expense: float,
-     *     blended_rate: float,
-     *     historical_fixed_rate: float,
-     *     dynamic_spread: float,
-     *     current_market_rate: float,
-     *     wholesale_rate: float,
-     *     ebit: float,
-     *     revenue: float
-     * }
+     * @return \App\DTO\DebtMetricsDTO
      */
-    public function calculateInterestExpense(Stock $stock, \App\DTO\MacroStateDTO $macroState, bool $advanceMaturity = false, ?float $overrideRevenue = null, ?float $overrideMargin = null): array
+    public function calculateInterestExpense(Stock $stock, \App\DTO\MacroStateDTO $macroState, bool $advanceMaturity = false, ?float $overrideRevenue = null, ?float $overrideMargin = null): \App\DTO\DebtMetricsDTO
     {
         $debt = (float) $stock->getTotalDebt();
         $treasury = (float) $stock->getCorporateTreasury();
@@ -97,7 +88,7 @@ class DebtEngine
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
 
         $revenue = $overrideRevenue ?? (float) $stock->getTotalRevenue();
 
@@ -119,23 +110,23 @@ class DebtEngine
         $customDepreciation = (float) $stock->getDepreciationRate();
         $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($industry);
 
-        $physicalCapital = $isFinancial ? (float) $stock->getTotalEquity() : $stock->getInvestedCapital();
+        $physicalCapital = $strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital());
         $depreciation = $physicalCapital * $depreciationRate;
         $ebitda = $ebit + $depreciation;
 
         if ($debt <= 0.0) {
-            return [
-                'interest_expense' => 0.0,
-                'blended_rate' => 0.0,
-                'historical_fixed_rate' => (float) $stock->getHistoricalFixedRate(),
-                'dynamic_spread' => $baselineCreditSpread,
-                'current_market_rate' => $yield5y + $baselineCreditSpread,
-                'wholesale_rate' => $yield5y + $baselineCreditSpread,
-                'ebit' => $ebit,
-                'revenue' => $revenue,
-                'depreciation' => $depreciation,
-                'ebitda' => $ebitda
-            ];
+            return new \App\DTO\DebtMetricsDTO(
+                0.0,
+                0.0,
+                (float) $stock->getHistoricalFixedRate(),
+                $baselineCreditSpread,
+                $yield5y + $baselineCreditSpread,
+                $yield5y + $baselineCreditSpread,
+                $ebit,
+                $revenue,
+                $depreciation,
+                $ebitda
+            );
         }
 
         $netDebt = max(0.0, $debt - $treasury);
@@ -177,14 +168,8 @@ class DebtEngine
 
         // Debt maturity is approximated at 5 years for standard corporate credit spreads
         $timeToMaturity = 5.0;
-        // Standard Loss Given Default (LGD) is 40% (Historical recovery rate ~60%)
-        $lossGivenDefault = 0.40;
-
-        if ($isFinancial) {
-            // Financials carry highly leveraged balance sheets but have central bank support (discount window).
-            // Their LGD is typically lower.
-            $lossGivenDefault = 0.30;
-        }
+        
+        $lossGivenDefault = $strategy->getLossGivenDefault();
 
         $distanceToDefault = $this->mathUtility->calculateDistanceToDefault(
             $assetValue,
@@ -241,18 +226,18 @@ class DebtEngine
 
         $trueBlendedRate = $debt > 0 ? ($interestExpense / $debt) : 0.0;
 
-        return [
-            'interest_expense' => $interestExpense,
-            'blended_rate' => $trueBlendedRate,
-            'historical_fixed_rate' => $blendedFixedRate,
-            'dynamic_spread' => $dynamicSpread,
-            'current_market_rate' => $currentMarketFixedRate,
-            'wholesale_rate' => $wholesaleRate,
-            'ebit' => $ebit,
-            'revenue' => $revenue,
-            'depreciation' => $depreciation,
-            'ebitda' => $ebitda
-        ];
+        return new \App\DTO\DebtMetricsDTO(
+            $interestExpense,
+            $trueBlendedRate,
+            $blendedFixedRate,
+            $dynamicSpread,
+            $currentMarketFixedRate,
+            $wholesaleRate,
+            $ebit,
+            $revenue,
+            $depreciation,
+            $ebitda
+        );
     }
 
     /**
@@ -264,22 +249,9 @@ class DebtEngine
      *
      * @param Stock $stock      The stock entity being analyzed.
      * @param MacroStateDTO $macroState The current macroeconomic state.
-     * @return array{
-     *     gross_cost: float,
-     *     effective_cost: float,
-     *     cash_yield: float,
-     *     is_severe_negative_carry: bool,
-     *     interest_coverage: float,
-     *     wants_to_paydown_debt: bool,
-     *     can_issue_debt: bool,
-     *     debt_tolerance: float,
-     *     wacc: float,
-     *     cost_of_equity: float,
-     *     levered_beta: float,
-     *     raw_metrics: array
-     * }
+     * @return \App\DTO\DebtHealthDTO
      */
-    public function analyzeDebtHealth(Stock $stock, \App\DTO\MacroStateDTO $macroState, ?float $overrideRevenue = null, ?float $overrideMargin = null): array
+    public function analyzeDebtHealth(Stock $stock, \App\DTO\MacroStateDTO $macroState, ?float $overrideRevenue = null, ?float $overrideMargin = null): \App\DTO\DebtHealthDTO
     {
         $currentDebt = (float) $stock->getTotalDebt();
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
@@ -292,27 +264,18 @@ class DebtEngine
         $industry = $stock->getIndustry() ?: 'General';
         $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industry] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
         $businessModel = $metrics['business_model'] ?? 'none';
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
 
         $debtMetrics = $this->calculateInterestExpense($stock, $macroState, false, $overrideRevenue, $overrideMargin);
 
-        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
+        $ebit = $debtMetrics->ebit;
+        $interestExpense = $debtMetrics->interestExpense;
 
-        $ebit = $debtMetrics['ebit'];
-        $interestExpense = $debtMetrics['interest_expense'];
-
-        // Gross Cost
-        if ($isFinancial) {
-            // WACC and financial leverage should reflect the cost of wholesale capital markets, not checking accounts
-            $grossCostOfDebt = $debtMetrics['wholesale_rate'];
-            $totalInterestCost = $grossCostOfDebt * $wholesaleDebt;
-            $evalDebt = max(1.0, $wholesaleDebt);
-        } else {
-            $grossCostOfDebt = $currentDebt > 0
-                ? $interestExpense / $currentDebt
-                : $debtMetrics['current_market_rate'];
-            $totalInterestCost = $interestExpense;
-            $evalDebt = max(1.0, $currentDebt);
-        }
+        $costMetrics = $strategy->getDebtCostMetrics($debtMetrics, $currentDebt, $wholesaleDebt, $interestExpense);
+        $grossCostOfDebt = $costMetrics['gross_cost_of_debt'];
+        $totalInterestCost = $costMetrics['total_interest_cost'];
+        $evalDebt = max(1.0, $strategy->getDeleveragingEvaluationDebt($currentDebt, $wholesaleDebt));
 
         // 1. DYNAMIC TAX SHIELD (Phantom Tax Shield Fix)
         // A company only receives a tax shield on its debt if it actually pays taxes.
@@ -331,32 +294,20 @@ class DebtEngine
         // CALCULATE NET DEBT FIRST
         $treasury = (float) $stock->getCorporateTreasury();
 
-        // For financials, Customer Deposits are operating liabilities (inventory), not capital structure financing.
-        // We evaluate true financial leverage (for Beta and WACC) strictly using Wholesale Debt.
-        $netDebtCapital = $isFinancial ? $wholesaleDebt : max(0.0, $currentDebt - $treasury);
+        $netDebtCapital = $strategy->getNetDebtCapital($currentDebt, $wholesaleDebt, $treasury);
 
         // Levered Beta (The Penalty for Greed)
         // Use abs() to capture high inverse volatility, floored at 0.5 for baseline risk
         $baseBeta = max(0.5, abs((float) $stock->getBeta()));
 
-        if ($isFinancial) {
-            // Banks and Financials inherently price their massive structural leverage into their baseline Beta.
-            // Re-levering a bank using the Hamada equation creates a Cost of Equity death spiral!
-            $leveredBeta = $baseBeta;
-        } else {
-            // For Beta Levering and WACC weights, we MUST use Market Value of Equity, not Book Value!
-            // Use Net Debt Capital so Cash Hoarders aren't penalized with fake risk.
-            $debtToEquity = $marketCap > 0 ? ($netDebtCapital / $marketCap) : self::MAX_BETA_DEBT_TO_EQUITY;
+        // For Beta Levering and WACC weights, we MUST use Market Value of Equity, not Book Value!
+        // Use Net Debt Capital so Cash Hoarders aren't penalized with fake risk.
+        $debtToEquity = $marketCap > 0 ? ($netDebtCapital / $marketCap) : self::MAX_BETA_DEBT_TO_EQUITY;
 
-            // Standard CAPM breaks down during insolvency. Cap D/E to prevent runaway WACC.
-            $effectiveDebtToEquity = min(self::MAX_BETA_DEBT_TO_EQUITY, $debtToEquity);
+        // Standard CAPM breaks down during insolvency. Cap D/E to prevent runaway WACC.
+        $effectiveDebtToEquity = min(self::MAX_BETA_DEBT_TO_EQUITY, $debtToEquity);
 
-            // The $baseBeta from the DB already partially accounts for historical leverage. 
-            // Dampen the Hamada equation multiplier (* 0.25) so to not double-count the debt risk
-            // 2. HAMADA EQUATION RISK UN-DAMPENER
-            // Unprofitable companies get no tax dampening on their Beta!
-            $leveredBeta = $this->mathUtility->calculateLeveredBeta($baseBeta, $impliedTaxShieldRate, $effectiveDebtToEquity, self::HAMADA_DAMPENING_FACTOR);
-        }
+        $leveredBeta = $strategy->calculateLeveredBeta($baseBeta, $impliedTaxShieldRate, $effectiveDebtToEquity, $this->mathUtility);
 
         // Cost of Equity (CAPM) - Unified to Policy Rate to perfectly match MarketEngine valuation physics
         $equityRiskPremium = $macroState->equityRiskPremium;
@@ -380,7 +331,7 @@ class DebtEngine
         $interestIncome = $strategy->calculateInterestIncome($stock, $macroState, $this->mathUtility);
         $ebit += $interestIncome;
 
-        $depreciation = $debtMetrics['depreciation'] ?? 0.0;
+        $depreciation = $debtMetrics->depreciation;
         $interestCoverage = $strategy->getInterestCoverage($ebit, $interestExpense, $depreciation);
 
         // Check if the company has a massive cash hoard to weather the storm
@@ -429,7 +380,7 @@ class DebtEngine
         // They must hold the cash to weather the recession.
         $wantsToPaydownDebt = ($wholesaleDebt > 0) && $isSevereNegativeCarry;
 
-        $icrBuffer = $isFinancial ? 0.05 : 1.5;
+        $icrBuffer = $strategy->getRequiredIcrBuffer();
         $canIssueDebt = $interestCoverage >= ($minIcr + $icrBuffer);
 
         // Macro-Economic CFO Tolerance
@@ -439,7 +390,6 @@ class DebtEngine
 
         $currentDebtRatio = $currentDebt / max(1.0, $equity);
         $isUnderLeveraged = $strategy->isUnderLeveraged(
-            $isFinancial,
             $currentDebtRatio,
             $macroDebtTolerance,
             $interestCoverage,
@@ -451,24 +401,24 @@ class DebtEngine
         $isLiquidityCrisis = $interestCoverage < 0;
         $isLiquidityWarning = $interestCoverage >= 0 && $interestCoverage < $minIcr;
 
-        return [
-            'gross_cost' => $grossCostOfDebt,
-            'effective_cost' => $effectiveCostOfDebt,
-            'cash_yield' => $yieldOnCash,
-            'is_negative_carry' => $isNegativeCarry,
-            'is_severe_negative_carry' => $isSevereNegativeCarry,
-            'interest_coverage' => $interestCoverage,
-            'wants_to_paydown_debt' => $wantsToPaydownDebt,
-            'can_issue_debt' => $canIssueDebt,
-            'debt_tolerance' => $macroDebtTolerance,
-            'wacc' => $wacc,
-            'cost_of_equity' => $costOfEquity,
-            'levered_beta' => $leveredBeta,
-            'raw_metrics' => $debtMetrics,
-            'is_liquidity_crisis' => $isLiquidityCrisis,
-            'is_liquidity_warning' => $isLiquidityWarning,
-            'is_under_leveraged' => $isUnderLeveraged
-        ];
+        return new \App\DTO\DebtHealthDTO(
+            $grossCostOfDebt,
+            $effectiveCostOfDebt,
+            $yieldOnCash,
+            $isNegativeCarry,
+            $isSevereNegativeCarry,
+            $interestCoverage,
+            $wantsToPaydownDebt,
+            $canIssueDebt,
+            $macroDebtTolerance,
+            $wacc,
+            $costOfEquity,
+            $leveredBeta,
+            $debtMetrics,
+            $isLiquidityCrisis,
+            $isLiquidityWarning,
+            $isUnderLeveraged
+        );
     }
 
     /**
@@ -495,13 +445,11 @@ class DebtEngine
         $totalAssets = max(1.0, $equity + $debt);
         $marketCap = $currentPrice * $shares;
 
-        // The Altman Z-Score explicitly excludes Financials because customer deposits (debt) skew their working capital.
-        // Instead, evaluate Financials using a simplified Tier 1 Capital Ratio proxy (Equity / Total Assets).
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
 
-        if ($isFinancial || $businessModel === 'reit') {
+        if ($strategy->requiresAlternativeZScore()) {
             $capitalRatio = $equity / $totalAssets;
             $zScore = max(-100.0, min(100.0, $capitalRatio * 100.0)); // Convert to percentage points (e.g., 8% capital = 8.0 score)
 

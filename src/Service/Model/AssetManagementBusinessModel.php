@@ -20,6 +20,8 @@ use App\Service\Macro\MacroEngine;
  */
 class AssetManagementBusinessModel extends AbstractBusinessModel
 {
+    use FinancialPhysicsTrait;
+
     // --- ROE & Target Architecture ---
     /** Weight given to historical baseline ROE when blending with TTM ROE. */
     public const BASELINE_ROE_WEIGHT = 0.50;
@@ -403,7 +405,7 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         return max(0.0, (self::TREASURY_BOND_WEIGHT * $bondReturn) + (self::TREASURY_EQUITY_WEIGHT * $equityReturn));
     }
 
-    public function getDebtExpansionAggressiveness(float $spreadMultiplier): array
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0): array
     {
         return ['probability' => self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT), 'aggressiveness' => self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier)];
     }

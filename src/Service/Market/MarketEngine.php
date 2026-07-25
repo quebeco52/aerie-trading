@@ -69,34 +69,33 @@ class MarketEngine
      *
      * @return array{price: float, shock: float|null, next_volatility: float, analyst_targets: array, perceived_fair_value: float} The calculated next price, shock percentage, updated volatility, and analyst targets.
      */
-    public function calculateNextPrice(
-        float $currentPrice,
-        float $currentVolatility,
-        float $longTermVolatility,
-        float $earningsPerShare,
-        float $dt,
-        float $lambda = 2.0,
-        float $jump_vol = 0.05,
-        float $beta = 1.0,
-        float $marketZ = 0.0,
-        float $marketVol = 0.15,
-        float $drift = 0.08,
-        float $reversionSpeed = 0.25,
-        float $kappa = 6.0,
-        float $volOfVol = 0.3,
-        ?MacroStateDTO $macroState = null,
-        ?float $fcfPerShare = null,
-        float $bookValuePerShare = 0.0,
-        float $maShock = 0.0,
-        float $currentRoic = 0.10,
-        float $roicTtm = 0.10,
-        float $dividendPerShare = 0.0,
-        float $liveWacc = 0.08,
-        float $baselineIndustryPE = 20.0,
-        float $revenuePerShare = 0.0,
-        string $businessModel = 'none',
-        float $liveCostOfEquity = 0.10,
-    ): array {
+    public function calculateNextPrice(\App\DTO\MarketPricingContext $ctx): array {
+        $currentPrice = $ctx->currentPrice;
+        $currentVolatility = $ctx->currentVolatility;
+        $longTermVolatility = $ctx->longTermVolatility;
+        $earningsPerShare = $ctx->earningsPerShare;
+        $dt = $ctx->dt;
+        $lambda = $ctx->lambda;
+        $jump_vol = $ctx->jumpVol;
+        $beta = $ctx->beta;
+        $marketZ = $ctx->marketZ;
+        $marketVol = $ctx->marketVol;
+        $drift = $ctx->drift;
+        $reversionSpeed = $ctx->reversionSpeed;
+        $kappa = $ctx->kappa;
+        $volOfVol = $ctx->volOfVol;
+        $macroState = $ctx->macroState;
+        $fcfPerShare = $ctx->fcfPerShare;
+        $bookValuePerShare = $ctx->bookValuePerShare;
+        $maShock = $ctx->maShock;
+        $currentRoic = $ctx->currentRoic;
+        $roicTtm = $ctx->roicTtm;
+        $dividendPerShare = $ctx->dividendPerShare;
+        $liveWacc = $ctx->liveWacc;
+        $baselineIndustryPE = $ctx->baselineIndustryPE;
+        $revenuePerShare = $ctx->revenuePerShare;
+        $businessModel = $ctx->businessModel;
+        $liveCostOfEquity = $ctx->liveCostOfEquity;
 
         // CAPM & MACRO TRANSMISSION MECHANISM
 
@@ -368,8 +367,6 @@ class MarketEngine
         $fairValue = $strategy->calculateFairValue($earningsValue, $pbFairValue, $normalizedEps, $dividendSupportValue);
 
         $perceivedFairValue = max(0.01, $fairValue);
-
-
 
         // 1. ESTAR (Exponential Smooth Transition Autoregressive) Mean Reversion
         // Explains non-linear institutional arbitrage around a fundamental target (Taylor, Peel, & Sarno, 2001).

@@ -963,7 +963,7 @@ class Stock
 
     public function setLastAnalystRevenue(?string $lastAnalystRevenue): self
     {
-        $this->lastAnalystRevenue = $lastAnalystRevenue;
+        $this->lastAnalystRevenue = $lastAnalystRevenue !== null ? self::cleanBcStr($lastAnalystRevenue, 4) : null;
         return $this;
     }
 }

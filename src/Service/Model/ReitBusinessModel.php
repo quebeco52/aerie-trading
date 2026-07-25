@@ -314,12 +314,36 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
      * REITs pay out the vast majority of their income as dividends, leaving little retained earnings.
      * To grow their portfolio, they MUST aggressively issue debt to finance new property acquisitions.
      */
-    public function getDebtExpansionAggressiveness(float $spreadMultiplier): array
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0): array
     {
         return [
             'probability' => self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT), // Constantly hunting for property acquisitions
             'aggressiveness' => self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier) // High leverage tolerance for commercial real estate
         ];
+    }
+
+    public function calculateDebtExpansionCapacity(float $equity, float $totalDebt, float $wholesaleDebt, \App\DTO\DebtHealthDTO $health, float $newBorrowingRate, float $ebit, float $depreciation): float
+    {
+        $evalDebt = $totalDebt;
+        $evalTolerance = $health->debtTolerance;
+        $balanceSheetCapacity = max(0.0, ($equity * $evalTolerance) - $evalDebt);
+
+        $minimumIcr = ($this->getModelThresholds()['buyback_min_icr'] ?? 3.0) + 0.5;
+
+        // REITs use FFO (EBIT + Depreciation) to cover interest, as depreciation is non-cash.
+        $operatingIncome = $ebit + $depreciation;
+
+        $maxTolerableInterest = max(0.0, $operatingIncome / $minimumIcr);
+        $currentInterestExpense = $health->rawMetrics->interestExpense ?? 0.0;
+        $availableInterestCapacity = max(0.0, $maxTolerableInterest - $currentInterestExpense);
+        $incomeStatementCapacity = $newBorrowingRate > 0 ? ($availableInterestCapacity / $newBorrowingRate) : 0.0;
+
+        return min($incomeStatementCapacity, $balanceSheetCapacity);
+    }
+
+    public function getMaxFloatingDebtRatio(): float
+    {
+        return 0.50; // REITs use floating rate debt significantly to fund construction and bridge loans
     }
 
     /**
@@ -366,6 +390,10 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             );
             $stock->setOperatingMargin((string) $updatedMargin);
         }
+    }
+    public function requiresAlternativeZScore(): bool
+    {
+        return true;
     }
 }
 
