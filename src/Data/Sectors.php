@@ -222,6 +222,8 @@ class Sectors
         return in_array($businessModel, ['commercial_bank', 'insurance', 'brokerage', 'asset_manager', 'credit_services', 'shadow_bank', 'private_equity', 'clearing_house', 'investment_bank', 'distressed_debt']);
     }
 
+    private static array $strategyInstances = [];
+
     /**
      * Factory method to retrieve the financial physics model for a given business type.
      *
@@ -230,7 +232,11 @@ class Sectors
      */
     public static function getBusinessModelStrategy(string $businessModel): \App\Service\Model\BusinessModelInterface
     {
-        return match ($businessModel) {
+        if (isset(self::$strategyInstances[$businessModel])) {
+            return self::$strategyInstances[$businessModel];
+        }
+
+        $strategy = match ($businessModel) {
             'commercial_bank' => new \App\Service\Model\CommercialBankBusinessModel(),
             'insurance'       => new \App\Service\Model\InsuranceBusinessModel(),
             'brokerage'       => new \App\Service\Model\BrokerageBusinessModel(),
@@ -254,5 +260,8 @@ class Sectors
             'distressed_debt' => new \App\Service\Model\DistressedDebtBusinessModel(),
             default           => new \App\Service\Model\StandardCorporateBusinessModel(),
         };
+
+        self::$strategyInstances[$businessModel] = $strategy;
+        return $strategy;
     }
 }

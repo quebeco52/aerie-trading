@@ -50,6 +50,8 @@ export const BRAND_COLORS = {
     'BRKW': '#00674F',  // Emerald green
     'ELDE': '#fb923c',  // soft sunset orange
     'SWFT': '#FFBC0D',  // soft yellow/orange
+    'LARK': '#0d9488',  // Clean Teal
+    'CBIL': '#c2410c',  // Precision Orange
 };
 
 export const FALLBACK_PALETTE = [

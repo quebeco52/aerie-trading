@@ -15,6 +15,80 @@ use App\Service\Math\CorporateMetrics;
  */
 class MergerAndAcquisitionEngine
 {
+    // --- M&A Deal Parameters ---
+    public const MA_MIN_DEAL_SIZE = 1_000_000_000.0;
+    public const MA_OVERVALUED_PROB = 0.15;
+    public const MA_EMPIRE_BUILDER_PROB = 0.75;
+    public const MA_MEGA_HOARDER_PROB = 0.50;
+    public const MA_HOARDER_PROB = 0.25;
+    public const MA_LOW_LEVERAGE_PROB = 0.10;
+    public const MA_MOD_LEVERAGE_PROB = 0.05;
+    public const MA_CASH_FALLBACK_PROB = 0.05;
+    public const MA_CASH_FALLBACK_THRESHOLD = 15_000_000_000.0;
+    
+    public const MA_EMPIRE_BUILDER_MIN_POWER = 2_000_000_000.0;
+    public const MA_LBO_MIN_POWER = 5_000_000_000.0;
+    public const MA_LOW_UTIL_THRESHOLD = 0.30;
+    public const MA_MOD_UTIL_THRESHOLD = 0.80;
+    public const MA_LOW_RATE_CEILING = 0.07;
+    public const MA_MOD_RATE_CEILING = 0.08;
+    
+    public const MA_STOCK_DILUTION_FRACTION = 0.10;
+    public const MA_STOCK_UNDERPRICING = 0.10;
+    public const MA_FINANCIAL_EQUITY_CAP = 0.15;
+    public const MA_INDIGESTION_PENALTY = 0.10;
+    
+    public const MA_LGD_FINANCIAL = 0.30;
+    public const MA_LGD_CORPORATE = 0.40;
+    public const MA_MERTON_MATURITY = 5.0;
+
+    // --- M&A Synergy & Target Returns (Log-Normal) ---
+    /** Log-normal mean for synergy. (median synergy ≈ 0.98, slight value destruction) */
+    public const MA_SYNERGY_MU = -0.02;
+    /** Log-normal std dev (±10% dispersion around median) */
+    public const MA_SYNERGY_SIGMA = 0.10;
+    /** Log-normal mean for private target ROIC (median ~8%) */
+    public const MA_TARGET_ROIC_MU = -2.526;
+    /** Log-normal std dev for private target ROIC dispersion */
+    public const MA_TARGET_ROIC_SIGMA = 0.40;
+    /** Absolute floor to prevent sub-2% zombie targets */
+    public const MA_TARGET_ROIC_FLOOR = 0.02;
+    /** Absolute ceiling to prevent unrealistic returns */
+    public const MA_TARGET_ROIC_CEILING = 0.25;
+
+    // --- Divestiture Parameters ---
+    public const DIV_DYING_FRACTION_MIN = 0.30;
+    public const DIV_DYING_FRACTION_MAX = 0.50;
+    public const DIV_DYING_MULTIPLE_MIN = 3.0;
+    public const DIV_DYING_MULTIPLE_MAX = 5.0;
+    public const DIV_DYING_ANNUAL_PROB = 2.0;
+
+    public const DIV_DISTRESSED_FRACTION_MIN = 0.15;
+    public const DIV_DISTRESSED_FRACTION_MAX = 0.30;
+    public const DIV_DISTRESSED_MULTIPLE_MIN = 6.0;
+    public const DIV_DISTRESSED_MULTIPLE_MAX = 10.0;
+    public const DIV_DISTRESSED_ANNUAL_PROB = 0.30;
+
+    public const DIV_PREMIUM_FRACTION_MIN = 0.05;
+    public const DIV_PREMIUM_FRACTION_MAX = 0.10;
+    public const DIV_PREMIUM_MIN_MULTIPLE = 8.0;
+    public const DIV_PREMIUM_MAX_MULTIPLE = 18.0;
+    public const DIV_PREMIUM_ANNUAL_PROB = 0.05;
+
+    public const DIV_PE_THRESHOLD = 30.0;
+    public const DIV_MIN_NET_INCOME = 5_000_000_000.0;
+    public const DIV_DISTRESS_EVA_THRESHOLD = -0.02;
+    public const DIV_DYING_RETURN_THRESHOLD = 0.00;
+    public const DIV_DYING_EVA_THRESHOLD = -0.05;
+    public const DIV_DISTRESS_RETURN_FLOOR = 0.03;
+
+    public const DIV_CASH_FORTRESS_RATIO = 0.10;
+    public const DIV_DISTRESS_ROIC_BUMP = 0.50;
+    public const DIV_DISTRESS_MARGIN_BUMP = 0.30;
+
+    public const DIV_FIRE_SALE_MIN_CENTS = 0.40;
+    public const DIV_FIRE_SALE_MAX_CENTS = 0.80;
+
     public function __construct(
         private EntityManagerInterface $entityManager,
         private MarketEventPublisher $marketEvent,
@@ -97,24 +171,24 @@ class MergerAndAcquisitionEngine
         
         $config = match (true) {
             $isOvervalued => [
-                'prob' => 0.15, 'spend' => 0.50, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => 'STOCK-FOR-STOCK MERGER', 'use_leverage' => false, 'use_stock' => true
+                'prob' => self::MA_OVERVALUED_PROB, 'spend' => 0.50, 'type' => 'STOCK-FOR-STOCK MERGER', 'use_leverage' => false, 'use_stock' => true
             ],
             // Empire Builders aggressively execute M&A with massive leverage, ignoring standard utilization limits and personal borrowing costs
-            $isEmpireBuilder && $health['can_issue_debt'] && $totalBuyingPower > 2_000_000_000.0 => [
-                'prob' => 0.75, 'spend' => 0.80, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'LEVERAGED BUYOUT', 'use_leverage' => true, 'use_stock' => false
+            $isEmpireBuilder && $health['can_issue_debt'] && $totalBuyingPower > self::MA_EMPIRE_BUILDER_MIN_POWER => [
+                'prob' => self::MA_EMPIRE_BUILDER_PROB, 'spend' => 0.80, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'LEVERAGED BUYOUT', 'use_leverage' => true, 'use_stock' => false
             ],
             $isMegaHoarder => [
-                'prob' => 0.50, 'spend' => 0.60, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'CONGLOMERATE EXPANSION', 'use_leverage' => false, 'use_stock' => false
+                'prob' => self::MA_MEGA_HOARDER_PROB, 'spend' => 0.60, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'CONGLOMERATE EXPANSION', 'use_leverage' => false, 'use_stock' => false
             ],
             $isHoarder => [
-                'prob' => 0.25, 'spend' => 0.40, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'CONGLOMERATE EXPANSION', 'use_leverage' => false, 'use_stock' => false
+                'prob' => self::MA_HOARDER_PROB, 'spend' => 0.40, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'CONGLOMERATE EXPANSION', 'use_leverage' => false, 'use_stock' => false
             ],
-            $health['can_issue_debt'] && $normalizedDebtUtilization < 0.30 && $totalBuyingPower > 5_000_000_000.0 && $costOfNewBorrowing < 0.07 => [
-                'prob' => 0.10, 'spend' => 0.40, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'LEVERAGED BUYOUT', 'use_leverage' => true, 'use_stock' => false
+            $health['can_issue_debt'] && $normalizedDebtUtilization < self::MA_LOW_UTIL_THRESHOLD && $totalBuyingPower > self::MA_LBO_MIN_POWER && $costOfNewBorrowing < self::MA_LOW_RATE_CEILING => [
+                'prob' => self::MA_LOW_LEVERAGE_PROB, 'spend' => 0.40, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'LEVERAGED BUYOUT', 'use_leverage' => true, 'use_stock' => false
             ],
             // Secondary LBO tier: Allow up to 8% personal borrowing cost for moderate debt companies
-            $health['can_issue_debt'] && $normalizedDebtUtilization < 0.80 && $totalBuyingPower > 5_000_000_000.0 && $costOfNewBorrowing < 0.08 => [
-                'prob' => 0.05, 'spend' => 0.30, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'LEVERAGED BUYOUT', 'use_leverage' => true, 'use_stock' => false
+            $health['can_issue_debt'] && $normalizedDebtUtilization < self::MA_MOD_UTIL_THRESHOLD && $totalBuyingPower > self::MA_LBO_MIN_POWER && $costOfNewBorrowing < self::MA_MOD_RATE_CEILING => [
+                'prob' => self::MA_MOD_LEVERAGE_PROB, 'spend' => 0.30, 'type' => $isFinancial ? 'STRATEGIC ACQUISITION' : 'LEVERAGED BUYOUT', 'use_leverage' => true, 'use_stock' => false
             ],
 
             default => null,
@@ -128,9 +202,9 @@ class MergerAndAcquisitionEngine
         }
         
         // If no primary deal happened, test the standard cash fallback
-        if (!$dealExecuted && $excessCash > 15_000_000_000.0) {
+        if (!$dealExecuted && $excessCash > self::MA_CASH_FALLBACK_THRESHOLD) {
             $config = [
-                'prob' => 0.05, 'spend' => 0.20, 'syn_min' => 0.90, 'syn_max' => 1.10, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => false, 'use_stock' => false
+                'prob' => self::MA_CASH_FALLBACK_PROB, 'spend' => 0.20, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => false, 'use_stock' => false
             ];
             if ($this->mathUtility->checkProbability($config['prob'] * $dt)) {
                 $dealExecuted = true;
@@ -145,11 +219,21 @@ class MergerAndAcquisitionEngine
         // EXECUTE THE M&A DEAL
 
         $minOperatingCash = $strategy->calculateMinOperatingCash($operatingBase, (float) $acquirer->getCustomerDeposits(), (float) $acquirer->getWholesaleDebt());
-        $usableTreasury = max(0.0, $treasury - $minOperatingCash);
+        
+        $customerDeposits = (float) $acquirer->getCustomerDeposits();
+        if ($customerDeposits > 0.0) {
+            // Insurance/Deposit models: Float cash backs the investment portfolio.
+            // Only the surplus above 100% of policyholder liabilities is available for M&A.
+            $floatReserve = $customerDeposits;
+            $usableTreasury = max(0.0, $treasury - max($minOperatingCash, $floatReserve));
+        } else {
+            $usableTreasury = max(0.0, $treasury - $minOperatingCash);
+        }
 
         // Determine the Purchase Price based on their strategy (Cash vs Leverage vs Stock)
-        $availableCapital = $config['use_stock'] ? ($price * $shares * 0.10) : ($config['use_leverage'] ? ($usableTreasury + $borrowingCapacity) : $usableTreasury);
-        $purchasePrice = $availableCapital * (mt_rand(50, 100) / 100.0) * $config['spend'];
+        $availableCapital = $config['use_stock'] ? ($price * $shares * self::MA_STOCK_DILUTION_FRACTION) : ($config['use_leverage'] ? ($usableTreasury + $borrowingCapacity) : $usableTreasury);
+        $spendFraction = $this->mathUtility->generateUniformBetween(0.50, 1.0) * $config['spend'];
+        $purchasePrice = $availableCapital * $spendFraction;
         
 
         $maxPrivateCompanyValue = max((float) mt_rand(100, 500) * 1_000_000_000.0, $availableCapital * 0.50);
@@ -158,10 +242,10 @@ class MergerAndAcquisitionEngine
         // Financials must safely cap their M&A spend to a fraction of their Tier 1 Capital (Equity)
         // EXCEPT Mega Hoarders (who are desperate to flush cash) and Empire Builders (who don't care about safety limits)
         if ($isFinancial && !$isMegaHoarder && !$isEmpireBuilder) {
-            $purchasePrice = min($purchasePrice, $equity * 0.15);
+            $purchasePrice = min($purchasePrice, $equity * self::MA_FINANCIAL_EQUITY_CAP);
         }
         
-        if ($purchasePrice < 1_000_000_000.0) return null; 
+        if ($purchasePrice < self::MA_MIN_DEAL_SIZE) return null; 
 
         $target = $this->generateProceduralTarget();
 
@@ -171,7 +255,7 @@ class MergerAndAcquisitionEngine
         
         if ($config['use_stock']) {
             // Funded entirely with new shares
-            $offeringPrice = $price * 0.90; // Assume 10% underpricing for massive share issuance
+            $offeringPrice = $price * (1.0 - self::MA_STOCK_UNDERPRICING); // Assume 10% underpricing for massive share issuance
             $sharesIssued = $purchasePrice / max(0.01, $offeringPrice);
             $acquirer->setSharesOutstanding((string) ($shares + $sharesIssued));
         } elseif ($purchasePrice <= $usableTreasury) {
@@ -200,17 +284,17 @@ class MergerAndAcquisitionEngine
             $newAssetVolatility = $equityVolatility * ($marketCap / $newAssetValue);
             $newAssetVolatility = max(0.02, $newAssetVolatility);
             
-            $lossGivenDefault = $isFinancial ? 0.30 : 0.40;
+            $lossGivenDefault = $isFinancial ? self::MA_LGD_FINANCIAL : self::MA_LGD_CORPORATE;
             
             $distanceToDefault = $this->mathUtility->calculateDistanceToDefault(
                 $newAssetValue,
                 max(0.01, $newNetDebt),
                 $newAssetVolatility,
                 $policyRate,
-                5.0
+                self::MA_MERTON_MATURITY
             );
             
-            $projectedSpread = $this->mathUtility->calculateMertonCreditSpread($distanceToDefault, $lossGivenDefault, 5.0);
+            $projectedSpread = $this->mathUtility->calculateMertonCreditSpread($distanceToDefault, $lossGivenDefault, self::MA_MERTON_MATURITY);
             
             // Re-apply the baseline spread + the new projected Merton spread
             $tmpArchetype = \App\Data\CeoArchetypes::getStrategy($acquirer->getCeoArchetype());
@@ -224,12 +308,17 @@ class MergerAndAcquisitionEngine
         }
 
         $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($acquirer->getCeoArchetype());
-        $synergyRange = $archetypeStrategy->modifyMAndASynergyRange($config['syn_min'], $config['syn_max']);
+        $synergyRange = $archetypeStrategy->modifyMAndASynergyRange(1.0, 1.0); // Get the archetype's relative shift
         
-        //THE RANDOMIZED SYNERGY ROLL
-        $minInt = (int) ($synergyRange['min'] * 100);
-        $maxInt = (int) ($synergyRange['max'] * 100);
-        $synergyMultiplier = mt_rand(min($minInt, $maxInt), max($minInt, $maxInt)) / 100.0;
+        // Convert archetype min/max shifts into log-normal mu/sigma adjustments
+        $muShift = (($synergyRange['min'] + $synergyRange['max']) / 2.0) - 1.0;
+        $sigmaShift = ($synergyRange['max'] - $synergyRange['min']) / 2.0;
+
+        $mu = self::MA_SYNERGY_MU + $muShift;
+        $sigma = self::MA_SYNERGY_SIGMA + $sigmaShift;
+
+        // THE RANDOMIZED SYNERGY ROLL
+        $synergyMultiplier = $this->mathUtility->calculateLogNormalSynergy($mu, $sigma);
 
         //GOODWILL & CLEAN SURPLUS ACCOUNTING
         $synergyValueCreation = $purchasePrice * ($synergyMultiplier - 1.0);
@@ -250,7 +339,8 @@ class MergerAndAcquisitionEngine
         $oldCapitalBase = $isFinancial ? $equity : $oldInvestedCapital;
         
         // Private companies generally have average market returns (6% to 12%)
-        $targetRoic = mt_rand(60, 120) / 1000.0;
+        $targetRoicDraw = $this->mathUtility->calculateLogNormalSynergy(self::MA_TARGET_ROIC_MU, self::MA_TARGET_ROIC_SIGMA);
+        $targetRoic = max(self::MA_TARGET_ROIC_FLOOR, min(self::MA_TARGET_ROIC_CEILING, $targetRoicDraw));
         $effectiveTargetRoic = $targetRoic * $synergyMultiplier;
         
         // Assume the target has a slightly worse operating margin, but protect structural floors
@@ -272,7 +362,7 @@ class MergerAndAcquisitionEngine
         // Merging corporate hierarchies is chaotic. We apply a 10% penalty to the blended margin.
         // The EarningsEngine CIR mean-reversion will naturally heal this over the next 3-4 quarters.
         $blendedMargin = (($oldCapitalBase * $oldOperatingMargin) + ($purchasePrice * $targetMargin)) / $totalNewCapital;
-        $acquirer->setOperatingMargin((string) max(0.01, $blendedMargin * 0.90));
+        $acquirer->setOperatingMargin((string) max(0.01, $blendedMargin * (1.0 - self::MA_INDIGESTION_PENALTY)));
         
         // We no longer manually shift CurrentRoic. The EarningsEngine will naturally calculate 
         // the diluted, bottom-up ROIC next quarter using this new blended DNA!
@@ -350,12 +440,12 @@ class MergerAndAcquisitionEngine
 
         $evaSpread = $currentReturn - $hurdleRate;
 
-        $isDistressed = $evaSpread < -0.02 || $currentReturn < 0.03;
-        $isDying = $currentReturn < 0.00 || $evaSpread < -0.05;
+        $isDistressed = $evaSpread < self::DIV_DISTRESS_EVA_THRESHOLD || $currentReturn < self::DIV_DISTRESS_RETURN_FLOOR;
+        $isDying = $currentReturn < self::DIV_DYING_RETURN_THRESHOLD || $evaSpread < self::DIV_DYING_EVA_THRESHOLD;
 
         $treasury = (float) $seller->getCorporateTreasury();
         $operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $seller->getTotalRevenue(), (float) $seller->getTotalEquity());
-        $hasCashBuffer = $treasury > ($operatingBase * 0.10); // 10% buffer is a massive fortress
+        $hasCashBuffer = $treasury > ($operatingBase * self::DIV_CASH_FORTRESS_RATIO); // 10% buffer is a massive fortress
 
         $currentEquity = (float) $seller->getTotalEquity();
         $investedCapital = $seller->getInvestedCapital();
@@ -393,29 +483,29 @@ class MergerAndAcquisitionEngine
         }
 
         // Only sell if highly valued OR deeply distressed
-        if (!$isDistressed && ($currentPE < 30.0 || $normalizedNetIncome < 5_000_000_000.0)) {
+        if (!$isDistressed && ($currentPE < self::DIV_PE_THRESHOLD || $normalizedNetIncome < self::DIV_MIN_NET_INCOME)) {
             return null;
         }
 
         // Distressed companies are highly motivated to shed weight immediately Dying companies beg
         if ($isDying) {
             // Desperate fire sale: Sheds up to 50% of the company for a terrible 4x multiple
-            $divestedFraction = mt_rand(30, 50) / 100.0;
-            $saleMultiple = mt_rand(3, 5);
-            $annualProbability = 2.0;
+            $divestedFraction = $this->mathUtility->generateUniformBetween(self::DIV_DYING_FRACTION_MIN, self::DIV_DYING_FRACTION_MAX);
+            $saleMultiple = $this->mathUtility->generateUniformBetween(self::DIV_DYING_MULTIPLE_MIN, self::DIV_DYING_MULTIPLE_MAX);
+            $annualProbability = self::DIV_DYING_ANNUAL_PROB;
         } elseif ($isDistressed) {
             // Standard distress: Sheds 15-30% for an 8x multiple
-            $divestedFraction = mt_rand(15, 30) / 100.0;
-            $saleMultiple = mt_rand(6, 10);
-            $annualProbability = 0.30;
+            $divestedFraction = $this->mathUtility->generateUniformBetween(self::DIV_DISTRESSED_FRACTION_MIN, self::DIV_DISTRESSED_FRACTION_MAX);
+            $saleMultiple = $this->mathUtility->generateUniformBetween(self::DIV_DISTRESSED_MULTIPLE_MIN, self::DIV_DISTRESSED_MULTIPLE_MAX);
+            $annualProbability = self::DIV_DISTRESSED_ANNUAL_PROB;
         } else {
             // High P/E trimming (Taking advantage of an overvalued stock)
-            $divestedFraction = mt_rand(5, 10) / 100.0;
+            $divestedFraction = $this->mathUtility->generateUniformBetween(self::DIV_PREMIUM_FRACTION_MIN, self::DIV_PREMIUM_FRACTION_MAX);
             // Blend the company's inflated P/E with the sector average, and cap it at a realistic 18x.
             $sectorPE = \App\Data\Sectors::MACRO_SECTORS[$seller->getSector()] ?? 20.0;
             $blendedMultiple = ($currentPE + $sectorPE) / 2.0;
-            $saleMultiple = min(18.0, max(8.0, $blendedMultiple));
-            $annualProbability = 0.05;
+            $saleMultiple = min(self::DIV_PREMIUM_MAX_MULTIPLE, max(self::DIV_PREMIUM_MIN_MULTIPLE, $blendedMultiple));
+            $annualProbability = self::DIV_PREMIUM_ANNUAL_PROB;
         }
 
 
@@ -448,7 +538,7 @@ class MergerAndAcquisitionEngine
         } else {
             // Sell the toxic assets for 40 to 80 cents on the dollar
             $baseDistressValue = max($currentEquity, $investedCapital * 0.25);
-            $salePrice = ($baseDistressValue * $divestedFraction) * (mt_rand(40, 80) / 100.0);
+            $salePrice = ($baseDistressValue * $divestedFraction) * $this->mathUtility->generateUniformBetween(self::DIV_FIRE_SALE_MIN_CENTS, self::DIV_FIRE_SALE_MAX_CENTS);
         }
 
         // INJECT THE CASH FROM THE SALE
@@ -494,16 +584,16 @@ class MergerAndAcquisitionEngine
         if ($isDistressed || $isDying) {
             if ($isFinancial) {
                 $baselineRoe = (float) $seller->getBaselineRoe();
-                $roeBump = $baselineRoe * ($divestedFraction * 0.50);
+                $roeBump = $baselineRoe * ($divestedFraction * self::DIV_DISTRESS_ROIC_BUMP);
                 $seller->setBaselineRoe((string) ($baselineRoe + $roeBump));
             } else {
                 $baselineRoic = (float) $seller->getBaselineRoic();
-                $roicBump = $baselineRoic * ($divestedFraction * 0.50); // Up to a 25% relative improvement
+                $roicBump = $baselineRoic * ($divestedFraction * self::DIV_DISTRESS_ROIC_BUMP); // Up to a 25% relative improvement
                 $seller->setBaselineRoic((string) ($baselineRoic + $roicBump));
             }
             $operatingMargin = (float) $seller->getOperatingMargin();
             
-            $marginBump = $operatingMargin * ($divestedFraction * 0.30); 
+            $marginBump = $operatingMargin * ($divestedFraction * self::DIV_DISTRESS_MARGIN_BUMP); 
             
             $seller->setOperatingMargin((string) ($operatingMargin + $marginBump));
         }

@@ -50,13 +50,13 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
-        
+
         // CRITICAL FIX: Commodities are absolute price takers. They have zero traditional pricing power.
         // We set this to 1.0 because their top-line revenue is already dynamically forced up and down 
         // by global spot prices ($inflationBonus) during the Idiosyncratic Shock phase. 
         // Setting this higher would result in massive, compounded double-dipping on inflation.
         $physics['pricing_power_multiplier'] = 1.0;
-        
+
         return $physics;
     }
 

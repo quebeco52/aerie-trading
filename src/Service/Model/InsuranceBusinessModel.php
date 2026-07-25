@@ -52,11 +52,11 @@ class InsuranceBusinessModel extends AbstractBusinessModel
     /** Maximum allowable ROE ceiling to prevent unrealistic hyperinflation. */
     public const MAX_ROE_CLAMP            = 1.00;
     /** Weight given to current quarter ROE when updating trailing twelve-month ROE EMA. */
-    public const ROE_TTM_EMA_WEIGHT       = 0.05;
+    public const ROE_TTM_EMA_WEIGHT       = 0.10;
     /** Weight given to historical trailing twelve-month ROE when updating ROE EMA. */
-    public const ROE_TTM_HIST_WEIGHT      = 0.95;
+    public const ROE_TTM_HIST_WEIGHT      = 0.90;
     /** Weight given to current quarter ROE when recovering from below-equilibrium catastrophe drawdowns. */
-    public const ROE_TTM_RECOVERY_WEIGHT  = 0.25;
+    public const ROE_TTM_RECOVERY_WEIGHT  = 0.20;
     /** Minimum structural through-the-cycle ROE floor for TTM valuation to prevent catastrophe whipsaw. */
     public const MIN_STRUCTURAL_ROE_FLOOR = 0.03;
 
@@ -72,9 +72,9 @@ class InsuranceBusinessModel extends AbstractBusinessModel
     /** Underwriting loss multiplier applied to catastrophe claim severity. */
     public const CATASTROPHE_LOSS_SCALAR  = 0.15;
     /** Benign underwriting environment z-score threshold triggering minor margin bonuses. */
-    public const BENIGN_CLAIM_Z_FLOOR     = 1.00;
+    public const BENIGN_CLAIM_Z_FLOOR     = 1.50;
     /** Minor variable cost reduction during exceptionally benign underwriting environments. */
-    public const BENIGN_CLAIM_BONUS       = -0.05;
+    public const BENIGN_CLAIM_BONUS       = -0.08;
     /** Cummins & Danzon (1997) soft-market underwriting combined ratio compression sensitivity to high float yields. */
     public const SOFT_MARKET_CYCLE_BETA   = 1.50;
     /** Upper clamp for realized variable margin. */
@@ -106,9 +106,9 @@ class InsuranceBusinessModel extends AbstractBusinessModel
     /** Minimum emergency operating cash reserve ratio applied to customer deposit float. */
     public const MIN_FLOAT_BUFFER         = 0.15;
     /** Threshold ratio of excess cash over total debt triggering hoarder status. */
-    public const HOARDER_THRESHOLD        = 0.25;
+    public const HOARDER_THRESHOLD        = 0.50;
     /** Threshold ratio of excess cash over total debt triggering mega-hoarder status. */
-    public const MEGA_HOARDER_THRESHOLD   = 0.40;
+    public const MEGA_HOARDER_THRESHOLD   = 0.75;
 
     // --- Buybacks & Capital Deployment ---
     /** Fraction of excess cash allocated to buybacks for mega-hoarder insurers. */
@@ -116,7 +116,7 @@ class InsuranceBusinessModel extends AbstractBusinessModel
     /** Fraction of excess cash allocated to buybacks for standard insurers. */
     public const STANDARD_BUYBACK_SHARE   = 0.15;
     /** Maximum buyback spend multiplier relative to quarterly retained earnings. */
-    public const MAX_RETAINED_BUYBACK_MULT = 0.90;
+    public const MAX_RETAINED_BUYBACK_MULT = 0.40;
     /** Infinite interest coverage fallback for insurance companies without operating debt. */
     public const INFINITE_ICR_FALLBACK    = 999.0;
     /** Minimum fraction of newly issued debt that must be deployed into organic capex or platform growth. */
@@ -233,7 +233,9 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         // Hard Market Revenue Floor: post-catastrophe pricing power prevents revenue from collapsing
         // proportionally with surplus. Industry-wide capacity depletion supports premium rates.
         $priorRevenue = (float) $stock->getTotalRevenue();
-        $targetRevenue = max($targetRevenue, $priorRevenue * self::HARD_MARKET_REVENUE_FLOOR);
+        $targetSurplusForPriorRevenue = $priorRevenue / $capacityRatio;
+        $surplusAdequacy = $targetSurplusForPriorRevenue > 0.0 ? min(1.0, $operatingEquity / $targetSurplusForPriorRevenue) : 1.0;
+        $targetRevenue = max($targetRevenue, $priorRevenue * self::HARD_MARKET_REVENUE_FLOOR * $surplusAdequacy);
 
         // 3. The engine requires Baseline ROIC, which implies a specific Asset Turnover.
         // Turnover = Revenue / Invested Capital
@@ -310,6 +312,7 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         // as insurers discount premium rates to capture market share and gather float (The Soft Underwriting Cycle).
         $policyRate = $macroState->policyRateEma;
         $softMarketRateDiscount = max(0.0, ($policyRate - self::DEFAULT_POLICY_RATE_FALLBACK) * self::SOFT_MARKET_CYCLE_BETA);
+        $actualRevenue = $actualRevenue * (1.0 - min(0.50, $softMarketRateDiscount));
 
         // 4. Cummins & Danzon (1997) Hard-Market Capital Recovery:
         // When an insurer's capital surplus drops below its Kenney target (Equity < Target Surplus),
@@ -328,7 +331,7 @@ class InsuranceBusinessModel extends AbstractBusinessModel
             $reinsuranceSurcharge = self::REINSURANCE_HARD_MARKET_RATE;
         }
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $underwritingShock + $reinsuranceSurcharge + $softMarketRateDiscount - $hardMarketRecoveryDiscount);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $underwritingShock + $reinsuranceSurcharge - $hardMarketRecoveryDiscount);
 
         $eventType = null;
         if ($claimZ < self::REINSURANCE_ATTACHMENT_Z) {
@@ -339,10 +342,14 @@ class InsuranceBusinessModel extends AbstractBusinessModel
             $eventType = ShockEvent::ELEVATED_CLAIM_PAYOUTS;
         }
 
+        // Only trigger a structural volatility shock if the claim variance is an actual catastrophe.
+        $structuralClaimShock = abs($claimZ) > abs(self::CATASTROPHE_Z_THRESHOLD) ? $claimZ : 0.0;
+        $primaryShockZ = abs($structuralClaimShock) > abs($revenueZ) ? $structuralClaimShock : $revenueZ;
+
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: abs($claimZ) > abs($revenueZ) ? $claimZ : $revenueZ,
+            primaryShockZ: $primaryShockZ,
             // Revenue is premium volume — fully opaque until filings. Analysts assume no revenue deviation.
             observableShockZ: 0.0,
             eventType: $eventType,
@@ -409,8 +416,14 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         $stochasticEquityReturn -= $catastropheEquityPenalty;
 
         $floatYield = $baseYield + ($floatEquityWeight * $stochasticEquityReturn);
-
-        return $cash * $floatYield;
+        
+        $policyholderFloat = (float) $stock->getCustomerDeposits();
+        $investableFloat = min($cash, $policyholderFloat);
+        $excessCash = max(0.0, $cash - $investableFloat);
+        
+        $moneyMarketYield = max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
+        
+        return ($investableFloat * $floatYield) + ($excessCash * $moneyMarketYield);
     }
 
     /**
@@ -540,8 +553,9 @@ class InsuranceBusinessModel extends AbstractBusinessModel
 
         // For an insurer, quarterly underwriting claim payouts (EBIT < 0) do not constitute corporate debt default
         // as long as investment/float yield and capital surplus service wholesale obligations.
-        // Floor EBIT at $0.0 so claim shocks do not trigger false insolvency / death-spiral dilution (failed_emergency_borrow).
-        return (max(0.0, $ebit) + $depreciation) / max(0.01, $interestExpense);
+        // When underwriting claim payouts turn total EBIT negative, evaluate coverage using depreciation and serviceable income.
+        $serviceableIncome = $ebit < 0.0 ? max(0.0, $ebit + $interestExpense) : $ebit;
+        return ($serviceableIncome + $depreciation) / max(0.01, $interestExpense);
     }
 
     /**

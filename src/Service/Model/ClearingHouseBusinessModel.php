@@ -91,7 +91,7 @@ class ClearingHouseBusinessModel extends AbstractBusinessModel
     /** Fraction of excess cash allocated to buybacks for standard insurers. */
     public const STANDARD_BUYBACK_SHARE   = 0.15;
     /** Maximum buyback spend multiplier relative to quarterly retained earnings. */
-    public const MAX_RETAINED_BUYBACK_MULT = 0.90;
+    public const MAX_RETAINED_BUYBACK_MULT = 0.70;
 
     // --- Monopoly Valuation Moat ---
     /** Operating margin mean reversion speed: slower speed reflects toll-booth monopoly pricing power. */

@@ -89,6 +89,18 @@ class MathUtility
     }
 
     /**
+     * Calculates a log-normal random draw, used for right-skewed distributions like M&A synergy.
+     *
+     * @param float $mu The mean of the underlying normal distribution.
+     * @param float $sigma The standard deviation of the underlying normal distribution.
+     * @return float A log-normal distributed value.
+     */
+    public function calculateLogNormalSynergy(float $mu, float $sigma): float
+    {
+        return exp($mu + $sigma * $this->generateStandardNormal());
+    }
+
+    /**
      * Generates a random draw from a standardized Student's t-distribution with unit variance.
      *
      * @param int $df Degrees of freedom (must be > 2 for defined variance).

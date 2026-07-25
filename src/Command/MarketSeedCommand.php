@@ -128,7 +128,7 @@ class MarketSeedCommand extends Command
                 $targetMetrics = $strategy->getTargetMetrics($stock, $dummyMacro, $this->mathUtility);
                 $investedCapital = $targetMetrics['invested_capital'];
                 $impliedRoic = max(0.01, (float) $targetMetrics['baseline_roic']);
-                $taxRate = $dummyMacro['corporate_tax_rate'] ?? 0.21;
+                $taxRate = $dummyMacro->corporateTaxRate;
                 $preTaxRoic = $impliedRoic / (1.0 - $taxRate);
                 $revenue = $margin > 0 ? ($investedCapital * ($preTaxRoic / $margin)) : 0.0;
 

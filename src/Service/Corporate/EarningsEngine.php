@@ -75,7 +75,6 @@ class EarningsEngine
             return null;
         }
 
-        $oldAnnualEps = (float) $stock->getEarningsPerShare();
         $baselineVol = (float) $stock->getVolatility();
         $sharesOutstanding = (float) $stock->getSharesOutstanding();
 
@@ -272,7 +271,15 @@ class EarningsEngine
         }
 
         // Expected Net Income uses the same NOL-aware logic for accurate surprise calculation
-        $expectedQuarterlyNetIncome = $expectedEbt > 0 ? $expectedEbt * (1.0 - $corporateTaxRate) : $expectedEbt;
+        if ($expectedEbt > 0 && $nol > 0) {
+            $expectedShielded = min($expectedEbt, $nol);
+            $expectedTaxable = $expectedEbt - $expectedShielded;
+            $expectedQuarterlyNetIncome = $expectedEbt - ($expectedTaxable * $corporateTaxRate);
+        } elseif ($expectedEbt < 0) {
+            $expectedQuarterlyNetIncome = $expectedEbt;
+        } else {
+            $expectedQuarterlyNetIncome = $expectedEbt * (1.0 - $corporateTaxRate);
+        }
 
         $reportedExpectedNetIncome = $expectedQuarterlyNetIncome;
         $reportedActualNetIncome = $actualQuarterlyNetIncome;
@@ -321,9 +328,12 @@ class EarningsEngine
             ? ($actualRevenue - $analystExpectedRevenue) / abs($analystExpectedRevenue)
             : 0.0;
 
-        // Blended Surprise: 60% Revenue (Stable), 40% EPS (Volatile).
-        // This solves the "Small Denominator Problem" where a 2-cent EPS beat mathematically reads as a massive 200% jump.
-        $surprisePct = ($revenueSurprisePct * 0.60) + ($epsSurprisePct * 0.40);
+        // Sector-Sensitive Surprise Blend:
+        // Growth / High-Margin companies are punished more on EPS misses.
+        // Cyclical / Low-Margin companies are judged more on Top-Line (Revenue).
+        $epsWeight = 0.30 + min(0.40, $stableMargin * 2.0);
+        $revWeight = 1.0 - $epsWeight;
+        $surprisePct = ($revenueSurprisePct * $revWeight) + ($epsSurprisePct * $epsWeight);
 
         // VOLATILITY SHOCK
         $this->applyVolatilityShock($stock, $primaryShockZ, $baselineVol);
@@ -597,7 +607,7 @@ class EarningsEngine
         $valuationPremium = max(0.5, min(3.0, $peRatio / FinancialConstants::BASELINE_MARKET_PE));
 
         if ($surprisePct < 0) {
-            $priceGapPct = $surprisePct * FinancialConstants::PRICE_GAP_DAMPENING * $valuationPremium * max(0.8, $beta);
+            $priceGapPct = $surprisePct * FinancialConstants::PRICE_GAP_DAMPENING * sqrt($valuationPremium) * max(0.8, $beta);
         } else {
             // Dampen reward for high-fliers (it was already priced in)
             $priceGapPct = $surprisePct * FinancialConstants::PRICE_GAP_DAMPENING * (1.0 / sqrt($valuationPremium));
@@ -641,7 +651,7 @@ class EarningsEngine
         $cycleCapExModifier = max(0.85, min(1.15, 1.00 + ($outputGap * 1.5)));
 
         $physicalCapital = $isLeveraged ? (float) $stock->getTotalEquity() : $stock->getInvestedCapital();
-        $baselineIncomeForCapEx = max(0.0, max($actualTotalNetIncome, $physicalCapital * 0.02));
+        $baselineIncomeForCapEx = max($physicalCapital * 0.02, max(0.0, $actualTotalNetIncome));
         $actualCapEx = $baselineIncomeForCapEx * ($capExRatio * $cycleCapExModifier);
 
         // Opportunity A: Working Capital & Cash Conversion Cycle physics

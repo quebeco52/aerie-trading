@@ -26,7 +26,9 @@ class MarketResetCommand extends Command
         private EntityManagerInterface $entityManager,
         private \Redis $redis,
         private UserPasswordHasherInterface $passwordHasher,
-        private MathUtility $mathUtility
+        private MathUtility $mathUtility,
+        private \App\Service\Market\MarketEngine $marketEngine,
+        private \App\Service\Corporate\DebtEngine $debtEngine
     ) {
         parent::__construct();
     }
@@ -114,6 +116,8 @@ class MarketResetCommand extends Command
 
             // Create a temporary entity to leverage the proper business model physics
             $tempStock = new Stock();
+            $tempStock->setTicker($stockData['ticker']);
+            $tempStock->setName($stockData['name']);
             $tempStock->setTotalEquity((string) ($stockData['total_equity'] ?? 0.0));
             $tempStock->setWholesaleDebt((string) $wholesaleDebt);
             $tempStock->setCustomerDeposits((string) $customerDeposits);
@@ -140,6 +144,42 @@ class MarketResetCommand extends Command
             $startingDividend = ($annualEps / 4.0) * ($targetPayout * 0.50);
 
             $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
+            
+            // Set required temporary values for debt engine
+            $tempStock->setTotalRevenue((string)$revenue);
+            $tempStock->setEarningsPerShare((string)$annualEps);
+            $tempStock->setSharesOutstanding((string)$shares);
+            $tempStock->setPrice((string)$stockData['price']);
+            
+            $debtHealth = $this->debtEngine->analyzeDebtHealth($tempStock, $dummyMacro, $revenue, $margin);
+
+            $marketCalc = $this->marketEngine->calculateNextPrice(
+                currentPrice: (float) $stockData['price'],
+                currentVolatility: (float) ($stockData['volatility'] ?? 0.15),
+                longTermVolatility: (float) ($stockData['volatility'] ?? 0.15),
+                earningsPerShare: $annualEps,
+                dt: 0.0,
+                lambda: (float) ($stockData['jump_intensity'] ?? 2.0),
+                jump_vol: (float) ($stockData['jump_vol'] ?? 0.05),
+                beta: (float) ($stockData['beta'] ?? 1.0),
+                marketZ: 0.0,
+                marketVol: 0.15,
+                macroState: $dummyMacro,
+                fcfPerShare: null,
+                bookValuePerShare: $shares > 0 ? ($stockData['total_equity'] ?? 0.0) / $shares : 0.0,
+                maShock: 0.0,
+                currentRoic: $impliedRoic,
+                roicTtm: $impliedRoic,
+                dividendPerShare: $startingDividend,
+                liveWacc: $debtHealth['wacc'],
+                baselineIndustryPE: \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['pe'] ?? 20.0,
+                revenuePerShare: $shares > 0 ? $revenue / $shares : 0.0,
+                businessModel: $businessModel,
+                liveCostOfEquity: $debtHealth['cost_of_equity'] ?? 0.10
+            );
+
+            // Use the engine's perceived fair value as the neutral Analyst Consensus
+            $neutralPrice = $marketCalc['perceived_fair_value'];
 
             $conn->executeStatement(
                 'UPDATE stocks SET 
@@ -186,7 +226,7 @@ class MarketResetCommand extends Command
                     industry = :industry
                 WHERE ticker = :ticker',
                 [
-                    'price' => $stockData['price'],
+                    'price' => $neutralPrice,
                     'shares' => $stockData['shares_outstanding'],
                     'vol' => $stockData['volatility'],
                     'current_vol' => $stockData['volatility'],

@@ -67,8 +67,8 @@ class StockModelTuning
         // --- Safe Harbor Reinsurance (SAFE) ---
         // Institutional reinsurance titan that absorbs extreme systemic and catastrophe tail risk.
         'SAFE' => [
-            'catastrophe_z_threshold' => -1.45,
-            'catastrophe_loss_scalar' => 0.22,
+            'catastrophe_z_threshold' => -1.55,
+            'catastrophe_loss_scalar' => 0.20,
             'float_equity_weight'     => 0.05,
             'equity_portfolio_vol'    => 0.08,
         ],
@@ -349,6 +349,22 @@ class StockModelTuning
         'CROP' => [
             'branded_staples_weight'  => 0.30,
             'volume_commodity_weight' => 0.70,
+        ],
+
+        // --- Lark & Crest Brands (LARK) ---
+        // Household goods & personal hygiene giant (P&G / Kimberly-Clark archetype).
+        // Essential consumer staple with overwhelming brand dominance & pricing power (80% branded staples).
+        'LARK' => [
+            'branded_staples_weight'  => 0.80,
+            'volume_commodity_weight' => 0.20,
+        ],
+
+        // --- Crossbill Precision Tooling (CBIL) ---
+        // Operates as an industrial tollbooth with incredibly high margins and ROIC due to absolute quality control.
+        // Extremely insulated from typical manufacturing boom/bust.
+        'CBIL' => [
+            'capital_goods_weight'     => 0.90, // Unbreakable industrial fortress
+            'consumer_cyclical_weight' => 0.10, // Retail secondary market liquidations
         ],
 
         // =====================================================================

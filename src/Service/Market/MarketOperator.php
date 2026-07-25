@@ -182,7 +182,7 @@ class MarketOperator
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
         $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
 
-        $trueReturn = $isFinancial ? (float) $stock->getCurrentRoe() : (float) $stock->getCurrentRoic();
+        $trueReturn = $isFinancial ? (float) $stock->getRoeTtm() : (float) $stock->getRoicTtm();
         $baselineReturn = $isFinancial ? (float) $stock->getBaselineRoe() : (float) $stock->getBaselineRoic();
 
         // Performance versus their structural baseline
