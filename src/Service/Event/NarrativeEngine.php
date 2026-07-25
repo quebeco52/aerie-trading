@@ -47,26 +47,7 @@ class NarrativeEngine
                 "Attracted \$" . ($context['amount'] ?? '0.00') . "B in fresh deposit inflows from competitors.",
                 "Saw a surge in safety-seeking capital, adding \$" . ($context['amount'] ?? '0.00') . "B in deposits."
             ]),
-            ShockEvent::COUNCIL_TIGHTENING => $this->getRandomPhrase([
-                "The Council unexpectedly tightens the district money supply, triggering a sharp economic contraction.",
-                "A sudden regulatory crackdown by the Council chokes off credit, sending shockwaves through Glasswater Row.",
-                "The governing body forcibly halts municipal infrastructure spending, sparking a sudden localized recession."
-            ]),
-            ShockEvent::DISTRICT_OVERHEATING => $this->getRandomPhrase([
-                "A sudden supply chain bottleneck at Iron Beak Heavy Industries triggers a rapid spike in district inflation.",
-                "Massive labor shortages across the district's industrial zones drive up the cost of raw materials.",
-                "A severe grid failure at Bird Power Inc. forces energy prices to skyrocket across the autonomous zone."
-            ]),
-            ShockEvent::TITAN_INTERVENTION => $this->getRandomPhrase([
-                // Lakebird Strings
-                "Lakebird Bank forcibly injects massive subsidized liquidity into the market, rescuing failing institutions.",
-                "Lakebird executed an emergency bailout of municipal infrastructure, flooding the ecosystem with cheap capital.",
-                "Lakebird intentionally suppresses interbank lending rates, sparking a massive wave of frictionless corporate expansion.",
-                // Black Swan Strings
-                "Black Swan Capital deploys billions in predatory private equity, orchestrating a massive wave of leveraged buyouts.",
-                "The Obsidian Desk at Black Swan initiates a coordinated liquidity squeeze on short sellers, triggering explosive market growth.",
-                "Black Swan forcefully recapitalizes distressed corporate assets, igniting a sudden and violent district-wide expansion."
-            ]),
+
             ShockEvent::VOLATILITY_SURGE => $this->getRandomPhrase([
                 "Record trading volumes driven by extreme market volatility resulted in massive fee generation.",
                 "Captured extraordinary commission and order-flow revenue amid heightened market volatility.",
@@ -212,11 +193,7 @@ class NarrativeEngine
                 "Capitalized on corporate credit spread blowouts by acquiring senior debt at steep discounts.",
                 "Orchestrated successful debtor-in-possession restructurings across distressed assets."
             ]),
-            ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT => $this->getRandomPhrase([
-                "The Council unexpectedly deploys its Sovereign Wealth Fund, triggering a massive wave of frictionless economic expansion.",
-                "A sweeping new Council policy mandate drastically lowers corporate operating friction, accelerating growth across Glasswater Row.",
-                "The district's governing body injects billions from the Sovereign Wealth Fund into core infrastructure, sparking a golden era of high growth."
-            ]),
+
             default => "Experienced an unexpected market event."
         };
     }

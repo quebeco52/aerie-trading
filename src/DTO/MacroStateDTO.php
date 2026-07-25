@@ -37,6 +37,8 @@ readonly class MacroStateDTO
         public float $macroCreditSpread = 0.02,
         public float $macroCreditSpreadEma = 0.02,
         public bool $qeActive = false,
+        public float $qeIntensity = 0.0,
+        public float $inversionDuration = 0.0,
         public float $nsLevel = 0.0,
         public float $nsSlope = 0.0,
         public float $nsSlopeEma = 0.0,
@@ -78,6 +80,8 @@ readonly class MacroStateDTO
         $macroCreditSpreadEma = (float) ($data['macro_credit_spread_ema'] ?? $macroCreditSpread);
 
         $qeActive = (bool) ($data['qe_active'] ?? false);
+        $qeIntensity = (float) ($data['qe_intensity'] ?? 0.0);
+        $inversionDuration = (float) ($data['inversion_duration'] ?? 0.0);
         $nsLevel = (float) ($data['ns_level'] ?? 0.0);
         $nsSlope = (float) ($data['ns_slope'] ?? 0.0);
         $nsSlopeEma = (float) ($data['ns_slope_ema'] ?? $nsSlope);
@@ -111,6 +115,8 @@ readonly class MacroStateDTO
             macroCreditSpread: $macroCreditSpread,
             macroCreditSpreadEma: $macroCreditSpreadEma,
             qeActive: $qeActive,
+            qeIntensity: $qeIntensity,
+            inversionDuration: $inversionDuration,
             nsLevel: $nsLevel,
             nsSlope: $nsSlope,
             nsSlopeEma: $nsSlopeEma,
@@ -150,6 +156,8 @@ readonly class MacroStateDTO
             macroCreditSpread: $state->macroCreditSpread,
             macroCreditSpreadEma: $state->macroCreditSpreadEma,
             qeActive: $state->qeActive,
+            qeIntensity: $state->qeIntensity,
+            inversionDuration: $state->inversionDuration,
             nsLevel: $state->nsLevel,
             nsSlope: $state->nsSlope,
             nsSlopeEma: $state->nsSlopeEma,
@@ -189,6 +197,8 @@ readonly class MacroStateDTO
             'macro_credit_spread' => $this->macroCreditSpread,
             'macro_credit_spread_ema' => $this->macroCreditSpreadEma,
             'qe_active' => $this->qeActive,
+            'qe_intensity' => $this->qeIntensity,
+            'inversion_duration' => $this->inversionDuration,
             'ns_level' => $this->nsLevel,
             'ns_slope' => $this->nsSlope,
             'ns_slope_ema' => $this->nsSlopeEma,

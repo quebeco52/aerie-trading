@@ -28,6 +28,8 @@ class MacroState
     public float $yield30yEma = 0.0;
     
     public bool $qeActive = false;
+    public float $qeIntensity = 0.0;
+    public float $inversionDuration = 0.0;
     public float $corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
     public ?string $eventType = null;
     public float $equityRiskPremium = MacroEngine::BASE_EQUITY_RISK_PREMIUM;
@@ -73,6 +75,8 @@ class MacroState
         $state->yield30yEma = $data['yield_30y_ema'] ?? $state->yield30y;
         
         $state->qeActive = $data['qe_active'] ?? false;
+        $state->qeIntensity = $data['qe_intensity'] ?? 0.0;
+        $state->inversionDuration = $data['inversion_duration'] ?? 0.0;
         $state->corporateTaxRate = $data['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
         $state->eventType = $data['event_type'] ?? null;
         $state->equityRiskPremium = $data['equity_risk_premium'] ?? MacroEngine::BASE_EQUITY_RISK_PREMIUM;
@@ -116,6 +120,8 @@ class MacroState
             'yield_30y' => $this->yield30y,
             'yield_30y_ema' => $this->yield30yEma,
             'qe_active' => $this->qeActive,
+            'qe_intensity' => $this->qeIntensity,
+            'inversion_duration' => $this->inversionDuration,
             'corporate_tax_rate' => $this->corporateTaxRate,
             'event_type' => $this->eventType,
             'equity_risk_premium' => $this->equityRiskPremium,

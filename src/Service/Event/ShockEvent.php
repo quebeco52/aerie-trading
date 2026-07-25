@@ -52,10 +52,6 @@ class ShockEvent
     public const GEOPOLITICAL_SANCTIONS = 'geopolitical_sanctions';
     public const REINSURANCE_ATTACHMENT_BREACH = 'reinsurance_attachment_breach';
 
-    // District Lore Systemic Shocks
-    public const COUNCIL_TIGHTENING = 'council_tightening';
-    public const DISTRICT_OVERHEATING = 'district_overheating';
-    public const TITAN_INTERVENTION = 'titan_intervention';
-    public const SOVEREIGN_WEALTH_DEPLOYMENT = 'sovereign_wealth_deployment';
+
 }
 
