@@ -321,8 +321,11 @@ class MergerAndAcquisitionEngine
         $synergyMultiplier = $this->mathUtility->calculateLogNormalSynergy($mu, $sigma);
 
         //GOODWILL & CLEAN SURPLUS ACCOUNTING
+        // Physical Target Assets Added: If funded by stock issuance, paid-in capital increases Book Value
+        $equityAddedByStock = $config['use_stock'] ? $purchasePrice : 0.0;
+        
         $synergyValueCreation = $purchasePrice * ($synergyMultiplier - 1.0);
-        $newEquity = $equity + $synergyValueCreation;
+        $newEquity = $equity + $equityAddedByStock + $synergyValueCreation;
         $acquirer->setTotalEquity((string) max(10.0, $newEquity));
 
         // Clean Surplus Accounting: The synergy (premium/discount) must flow through Retained Earnings

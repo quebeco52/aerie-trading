@@ -21,6 +21,9 @@ use App\Service\Macro\MacroEngine;
  */
 class ShippingBusinessModel extends StandardCorporateBusinessModel
 {
+    public function getCapexCyclicality(): float { return 3.0; }
+    public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.20, 'revenue_weight' => 0.80]; }
+
     // --- Dual-Stream Maritime Charter Architecture ---
     /** Baseline fraction of revenue derived from volatile spot market freight and short-term voyage charters. */
     public const SPOT_CHARTER_WEIGHT     = 0.50;

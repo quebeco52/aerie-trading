@@ -46,7 +46,8 @@ class MarketConsensusEngine
         ActualFinancialsDTO $actuals,
         SectorCoverageProfile $coverage,
         float $expectedRevenue,
-        MathUtility $mathUtility
+        MathUtility $mathUtility,
+        \App\Entity\Stock $stock
     ): ConsensusDTO {
         $analystError = $mathUtility->generateStandardNormal() * $coverage->errorStdDev;
 
@@ -61,7 +62,16 @@ class MarketConsensusEngine
 
         $dynamicVisibility = min(1.0, max($minVisibility, $baseVisibility + $analystError));
 
-        $analystExpectedRevenue      = $expectedRevenue * (1.0 + $actuals->observableShockZ * $dynamicVisibility);
+        $freshEstimate = $expectedRevenue * (1.0 + $actuals->observableShockZ * $dynamicVisibility);
+
+        // Anchoring Bias: Analysts anchor to prior quarter's consensus
+        $lastEstimate = (float) $stock->getLastAnalystRevenue();
+        $analystExpectedRevenue = $lastEstimate > 0.0
+            ? ($lastEstimate * 0.40) + ($freshEstimate * 0.60)
+            : $freshEstimate;
+
+        $stock->setLastAnalystRevenue((string) $analystExpectedRevenue);
+
         $analystExpectedVariableCosts = $analystExpectedRevenue * $actuals->clampedMargin;
 
         return new ConsensusDTO(

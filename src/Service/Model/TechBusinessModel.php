@@ -21,6 +21,10 @@ use App\Service\Event\ShockEvent;
  */
 class TechBusinessModel extends StandardCorporateBusinessModel
 {
+    public function getSecularGrowthRate(Stock $stock): float { return 0.06; }
+    public function getCapexCyclicality(): float { return 1.0; }
+    public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.25, 'revenue_weight' => 0.75]; }
+
     // --- Dual-Stream Tech & Software Architecture ---
     /** Baseline fraction of revenue derived from recurring SaaS subscription & cloud infrastructure. */
     public const SUBSCRIPTION_REVENUE_WEIGHT    = 0.60;

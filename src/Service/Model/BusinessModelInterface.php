@@ -59,4 +59,13 @@ interface BusinessModelInterface
     public function isUnderLeveraged(bool $isFinancial, float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool;
     public function getWorkingCapitalIntensity(Stock $stock): float;
     public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void;
+
+    /** Annualized secular organic revenue growth rate (Solow Growth Model). */
+    public function getSecularGrowthRate(Stock $stock): float;
+
+    /** Multiplier for how violently CapEx responds to the output gap (Samuelson Accelerator). */
+    public function getCapexCyclicality(): float;
+
+    /** Sector-specific weights for EPS vs Revenue surprise blend. Returns ['eps_weight' => float, 'revenue_weight' => float] */
+    public function getSurpriseBlendWeights(): array;
 }

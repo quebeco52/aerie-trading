@@ -22,6 +22,9 @@ use App\Service\Macro\MacroEngine;
  */
 class BiotechBusinessModel extends StandardCorporateBusinessModel
 {
+    public function getSecularGrowthRate(Stock $stock): float { return 0.04; }
+    public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.20, 'revenue_weight' => 0.80]; }
+
     // --- Dual-Stream Biotech Portfolio Architecture ---
     /** Baseline fraction of revenue derived from commercially marketed, patent-protected established pharmaceuticals. */
     public const ESTABLISHED_DRUG_WEIGHT = 0.70;

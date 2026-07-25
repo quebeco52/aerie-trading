@@ -306,8 +306,11 @@ class TreasuryEngine
         // Bypass the hurdle rate check if the company is hoarding cash. Sitting on excess cash is a mathematically guaranteed drag on ROE.
         if ((($trueReturn > $hurdleRate || $isHoarder) && $excessCash > 0 && !$health['wants_to_paydown_debt']) || $forcedExpansion) {
             $spreadMultiplier = $isHoarder ? 1.0 : min(1.0, max(0.0, ($trueReturn - $hurdleRate) * 10.0));
-            // Boosted deployment rate so massive hoards can actually be cleared
-            $organicSpend = $excessCash * (0.15 + (0.35 * $spreadMultiplier));
+            
+            // Newly issued debt is earmarked for immediate project deployment. We subtract it from excess cash
+            // to calculate the standard organic spend from retained cash hoards.
+            $baseExcessCash = max(0.0, $excessCash - $state['debtIssued']);
+            $organicSpend = $baseExcessCash * (0.15 + (0.35 * $spreadMultiplier));
 
             $expansionSpend = $strategy->calculateOrganicCapexSpend($organicSpend, $state['debtIssued']);
             $expansionSpend = min($expansionSpend, $excessCash);
@@ -315,7 +318,10 @@ class TreasuryEngine
             // Mega hoarders need massive physical capacity limits to flush the cash
             $maxGrowthSpeed = $isFinancial ? ($isMegaHoarder ? 0.35 : ($isHoarder ? 0.20 : 0.12)) : ($isHoarder ? 0.15 : 0.08);
             $expansionCapBasis = $isFinancial ? ($newEquity + $totalDebt) : $liveInvestedCapital;
-            $expansionSpend = min($expansionSpend, $expansionCapBasis * $maxGrowthSpeed);
+            $maxOrganicCapacity = $expansionCapBasis * $maxGrowthSpeed;
+            
+            // Allow them to fully deploy newly issued debt by bypassing the standard physical limit
+            $expansionSpend = min($expansionSpend, max($maxOrganicCapacity, $state['debtIssued']));
 
             if ($marginalReturn <= 0.0 && !$forcedExpansion) {
                 $expansionSpend = 0.0;

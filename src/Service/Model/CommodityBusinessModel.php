@@ -20,6 +20,10 @@ use App\Service\Macro\MacroEngine;
  */
 class CommodityBusinessModel extends StandardCorporateBusinessModel
 {
+    public function getSecularGrowthRate(Stock $stock): float { return 0.01; }
+    public function getCapexCyclicality(): float { return 3.0; }
+    public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.30, 'revenue_weight' => 0.70]; }
+
     // --- Dual-Stream Commodity Architecture ---
     /** Baseline fraction of revenue tied to physical extraction and production volume. */
     public const EXTRACTION_REVENUE_WEIGHT = 0.50;

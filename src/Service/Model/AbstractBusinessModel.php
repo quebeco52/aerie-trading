@@ -19,6 +19,28 @@ use App\Service\Math\FinancialConstants;
  */
 abstract class AbstractBusinessModel implements BusinessModelInterface
 {
+    /** Default secular organic growth: 2% annualized (nominal GDP growth). */
+    public const DEFAULT_SECULAR_GROWTH_RATE = 0.02;
+    /** Default CapEx cyclicality: 1.5x output gap sensitivity. */
+    public const DEFAULT_CAPEX_CYCLICALITY = 1.5;
+    /** Default EPS/Revenue surprise blend: 50/50. */
+    public const DEFAULT_SURPRISE_EPS_WEIGHT = 0.50;
+
+    public function getSecularGrowthRate(Stock $stock): float
+    {
+        return self::DEFAULT_SECULAR_GROWTH_RATE;
+    }
+
+    public function getCapexCyclicality(): float
+    {
+        return self::DEFAULT_CAPEX_CYCLICALITY;
+    }
+
+    public function getSurpriseBlendWeights(): array
+    {
+        return ['eps_weight' => self::DEFAULT_SURPRISE_EPS_WEIGHT, 'revenue_weight' => 1.0 - self::DEFAULT_SURPRISE_EPS_WEIGHT];
+    }
+
 
     // --- ROIC & Return Smoothing ---
     /** Weight for newly realized return when smoothing TTM metrics. */

@@ -283,6 +283,12 @@ class Stock
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 2, nullable: true)]
     private ?string $customerDeposits = '0.00';
 
+    /**
+     * @var string|null Last quarter's analyst revenue consensus estimate, used for anchoring bias.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $lastAnalystRevenue = null;
+
 
     public static function cleanBcStr(int|float|string|null $val, int $scale = 4): string
     {
@@ -948,6 +954,16 @@ class Stock
     public function setRoeTtm(string $roeTtm): self
     {
         $this->roeTtm = self::cleanBcStr($roeTtm, 4);
+        return $this;
+    }
+    public function getLastAnalystRevenue(): ?string
+    {
+        return $this->lastAnalystRevenue;
+    }
+
+    public function setLastAnalystRevenue(?string $lastAnalystRevenue): self
+    {
+        $this->lastAnalystRevenue = $lastAnalystRevenue;
         return $this;
     }
 }

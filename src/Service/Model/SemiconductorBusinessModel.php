@@ -22,6 +22,9 @@ use App\Service\Macro\MacroEngine;
  */
 class SemiconductorBusinessModel extends StandardCorporateBusinessModel
 {
+    public function getSecularGrowthRate(Stock $stock): float { return 0.05; }
+    public function getCapexCyclicality(): float { return 3.5; }
+
     // --- Dual-Stream Semiconductor Architecture ---
     /** Baseline fraction of revenue derived from physical cleanroom fab manufacturing and wafer sales. */
     public const FOUNDRY_REVENUE_WEIGHT = 0.85;

@@ -57,7 +57,7 @@ class EarningsEngine
         $ticksPerQuarter = (int) ($ticksPerYear / 4);
 
         // Define the season length
-        $ticksPerSeason = (int) ($ticksPerQuarter * 0.15);
+        $ticksPerSeason = (int) ($ticksPerQuarter * 1.0);
 
         // Where are we currently within the 3-month quarter?
         $currentQuarterTick = $tickCount % $ticksPerQuarter;
@@ -136,8 +136,11 @@ class EarningsEngine
         // The idiosyncratic demand shock specific to this company's products
         $idiosyncraticDemandShock = $revenueVol * sqrt($dt) * $z1;
 
+        $secularGrowthRate = $strategy->getSecularGrowthRate($stock);
+        $secularDrift = $secularGrowthRate * $dt;
+
         // Total Capacity Utilization (floored at 10% to prevent negative revenue on dead companies)
-        $capacityUtilization = max(0.10, 1.0 + $macroDemandShift + $idiosyncraticDemandShock + $jumpMagnitude);
+        $capacityUtilization = max(0.10, 1.0 + $secularDrift + $macroDemandShift + $idiosyncraticDemandShock + $jumpMagnitude);
 
         // STRUCTURAL BASELINE (100% Capacity)
         $structuralRevenue = max(1.0, abs($investedCapital) * $assetTurnover * $pricingPowerMultiplier);
@@ -167,7 +170,8 @@ class EarningsEngine
         $evaluationCapital = $isFinancial ? (float)$stock->getTotalEquity() : $investedCapital;
         $saturationCostPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
 
-        $dynamicVariableTheta = min(0.99, max(0.01, $baselineVariableMargin + $saturationCostPenalty));
+        $cyclicalMarginShift = $outputGap * $beta * 0.15;
+        $dynamicVariableTheta = min(0.99, max(0.01, $baselineVariableMargin + $saturationCostPenalty - $cyclicalMarginShift));
         $dynamicVariableTheta = $archetypeStrategy->modifyVariableMarginTheta($dynamicVariableTheta);
 
         $z2 = $this->mathUtility->generateStandardNormal();
@@ -195,7 +199,7 @@ class EarningsEngine
         // ANALYST VISIBILITY (FORWARD GUIDANCE)
         // Decoupled consensus generation via MarketConsensusEngine and sector coverage profile
         $coverage = $strategy->getCoverageProfile();
-        $consensus = $this->marketConsensusEngine->generateConsensus($actuals, $coverage, $expectedRevenue, $this->mathUtility);
+        $consensus = $this->marketConsensusEngine->generateConsensus($actuals, $coverage, $expectedRevenue, $this->mathUtility, $stock);
         $analystExpectedRevenue = $consensus->analystExpectedRevenue;
         $analystExpectedVariableCosts = $consensus->analystExpectedVariableCosts;
 
@@ -303,7 +307,13 @@ class EarningsEngine
 
         // Smooth the EPS into a Trailing Twelve Months (TTM) metric to prevent wild P/E oscillations
         $oldEps = (float) $stock->getEarningsPerShare();
-        $ttmEps = $oldEps == 0.0 ? $actualAnnualEpsRaw : ($oldEps * FinancialConstants::EPS_TTM_SMOOTHING_OLD_WEIGHT) + ($actualAnnualEpsRaw * FinancialConstants::EPS_TTM_SMOOTHING_NEW_WEIGHT);
+        $structuralEps = $oldEps == 0.0 ? $actualAnnualEpsRaw : $oldEps;
+        $ttmEps = $this->mathUtility->calculateKalmanSmoothedEps(
+            $structuralEps,
+            $actualAnnualEpsRaw,
+            $baselineVol,
+            abs($macroState->outputGapEma)
+        );
 
         // Save the newly calculated Annual EPS back to the database
         $stock->setEarningsPerShare((string) $ttmEps);
@@ -331,8 +341,9 @@ class EarningsEngine
         // Sector-Sensitive Surprise Blend:
         // Growth / High-Margin companies are punished more on EPS misses.
         // Cyclical / Low-Margin companies are judged more on Top-Line (Revenue).
-        $epsWeight = 0.30 + min(0.40, $stableMargin * 2.0);
-        $revWeight = 1.0 - $epsWeight;
+        $blendWeights = $strategy->getSurpriseBlendWeights();
+        $epsWeight = $blendWeights['eps_weight'];
+        $revWeight = $blendWeights['revenue_weight'];
         $surprisePct = ($revenueSurprisePct * $revWeight) + ($epsSurprisePct * $epsWeight);
 
         // VOLATILITY SHOCK
@@ -434,12 +445,20 @@ class EarningsEngine
         if ($isFinancial) {
             // Financials create EVA when Return on Equity > Cost of Equity
             $costOfEquity = $health['cost_of_equity'] ?? 0.10;
-            $annualEconomicProfit = $equity * ($truePostTaxReturn - $costOfEquity);
+            $smoothedReturn = (float) $stock->getRoeTtm();
+            if ($smoothedReturn === 0.0) {
+                $smoothedReturn = $truePostTaxReturn;
+            }
+            $annualEconomicProfit = $equity * ($smoothedReturn - $costOfEquity);
             $wacc = $costOfEquity; // Fallback for reporting purposes
         } else {
             // Normal companies create EVA when ROIC > WACC
             $wacc = $health['wacc'] ?? 0.08;
-            $annualEconomicProfit = $investedCapital * ($truePostTaxReturn - $wacc);
+            $smoothedReturn = (float) $stock->getRoicTtm();
+            if ($smoothedReturn === 0.0) {
+                $smoothedReturn = $truePostTaxReturn;
+            }
+            $annualEconomicProfit = $investedCapital * ($smoothedReturn - $wacc);
         }
 
         $evaAbs = abs($annualEconomicProfit);
@@ -648,7 +667,8 @@ class EarningsEngine
         $capExRatio = (float) $stock->getCapexRatio();
 
         $outputGap = $macroState->outputGapEma;
-        $cycleCapExModifier = max(0.85, min(1.15, 1.00 + ($outputGap * 1.5)));
+        $capexCyclicality = $strategy->getCapexCyclicality();
+        $cycleCapExModifier = max(0.50, min(1.50, 1.00 + ($outputGap * $capexCyclicality)));
 
         $physicalCapital = $isLeveraged ? (float) $stock->getTotalEquity() : $stock->getInvestedCapital();
         $baselineIncomeForCapEx = max($physicalCapital * 0.02, max(0.0, $actualTotalNetIncome));

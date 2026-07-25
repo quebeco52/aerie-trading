@@ -21,6 +21,9 @@ use App\Service\Macro\MacroEngine;
  */
 class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 {
+    public function getCapexCyclicality(): float { return 0.3; }
+    public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.70, 'revenue_weight' => 0.30]; }
+
     // --- Dual-Stream Defense & Security Architecture ---
     /** Baseline fraction of revenue derived from long-term government defense contracts (Cost-Plus). */
     public const GOVERNMENT_CONTRACT_WEIGHT = 0.80;

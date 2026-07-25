@@ -19,6 +19,10 @@ use App\Service\Event\ShockEvent;
  */
 class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
 {
+    public function getSecularGrowthRate(Stock $stock): float { return 0.03; }
+    public function getCapexCyclicality(): float { return 0.8; }
+    public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.75, 'revenue_weight' => 0.25]; }
+
     // --- Dual-Stream Consumer Staples Architecture ---
     /** Baseline fraction of revenue derived from premium packaged branded staples and inelastic consumer goods. */
     public const BRANDED_STAPLES_WEIGHT  = 0.65;

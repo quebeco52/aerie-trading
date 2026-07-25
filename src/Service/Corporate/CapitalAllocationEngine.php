@@ -137,7 +137,17 @@ class CapitalAllocationEngine
         $targetOperatingCash = $strategy->calculateTargetOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
         $excessCash = max(0.0, $newTreasury - $targetOperatingCash);
 
-        $currentPE = $actualAnnualEps > 0 ? ($currentPrice / $actualAnnualEps) : 9999.0;
+        if ($actualAnnualEps > 0) {
+            $currentPE = $currentPrice / $actualAnnualEps;
+        } else {
+            // Dynamic Price-to-Sales (P/S) equivalence fallback for unprofitable companies
+            $actualRevenue = (float) $stock->getTotalRevenue();
+            $salesPerShare = $oldShares > 0 ? $actualRevenue / $oldShares : 1.0;
+            $priceToSales = $salesPerShare > 0 ? $currentPrice / $salesPerShare : 1.0;
+            $structuralAfterTaxMargin = max(0.01, (float) $stock->getOperatingMargin() * (1.0 - $macroState->corporateTaxRate));
+            $currentPE = $priceToSales * (1.0 / $structuralAfterTaxMargin);
+        }
+
         $retainedEarningsThisQuarter = max(0.0, $quarterlyNetIncome - $divData['total_paid']);
 
         // THE TRADING DESK: EXECUTE BUYBACKS

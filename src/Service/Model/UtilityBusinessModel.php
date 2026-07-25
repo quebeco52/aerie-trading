@@ -20,6 +20,10 @@ use App\Service\Macro\MacroEngine;
  */
 class UtilityBusinessModel extends StandardCorporateBusinessModel
 {
+    public function getSecularGrowthRate(Stock $stock): float { return 0.01; }
+    public function getCapexCyclicality(): float { return 0.5; }
+    public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.85, 'revenue_weight' => 0.15]; }
+
     // --- Dual-Stream Utility Rate Architecture ---
     /** Baseline fraction of revenue derived from regulated rate-base monopoly tariff distribution. */
     public const REGULATED_BASE_WEIGHT       = 0.85;

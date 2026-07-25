@@ -19,6 +19,10 @@ use App\Service\Math\MathUtility;
  */
 class FinancialDataBusinessModel extends StandardCorporateBusinessModel
 {
+    public function getSecularGrowthRate(Stock $stock): float { return 0.05; }
+    public function getCapexCyclicality(): float { return 0.5; }
+    public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.60, 'revenue_weight' => 0.40]; }
+
     // --- Dual-Stream Financial Data Architecture ---
     /** Baseline fraction of revenue derived from recurring multi-year terminal & rating subscriptions. */
     public const SUBSCRIPTION_REVENUE_WEIGHT = 0.85;

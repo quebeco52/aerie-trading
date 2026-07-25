@@ -20,6 +20,9 @@ use App\Service\Macro\MacroEngine;
  */
 class LuxuryBusinessModel extends StandardCorporateBusinessModel
 {
+    public function getSecularGrowthRate(Stock $stock): float { return 0.04; }
+    public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.55, 'revenue_weight' => 0.45]; }
+
     // --- Dual-Stream Luxury Brand Architecture ---
     /** Baseline fraction of revenue derived from ultra-high-net-worth Maison leather goods and haute couture. */
     public const HAUTE_COUTURE_WEIGHT     = 0.45;
