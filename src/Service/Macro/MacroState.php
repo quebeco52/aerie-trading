@@ -9,6 +9,12 @@ class MacroState
     public float $outputGap = 0.02;
     public float $outputGapEma = 0.02;
     
+    public float $unemploymentRate = 0.04;
+    public float $unemploymentRateEma = 0.04;
+    
+    public float $energyPriceIndex = 100.0;
+    public float $energyPriceShock = 0.0;
+    
     public float $targetRate = 0.02;
     public float $policyRate = 0.02;
     public float $policyRateEma = 0.02;
@@ -16,6 +22,7 @@ class MacroState
     public float $nsLevel = 0.0;
     public float $nsSlope = 0.0;
     public float $nsSlopeEma = 0.0;
+    public float $structuralSlope = 0.0;
     public float $nsCurvature = 0.0;
     
     public float $yield2y = 0.0;
@@ -56,6 +63,12 @@ class MacroState
         $state->outputGap = $data['output_gap'] ?? 0.02;
         $state->outputGapEma = $data['output_gap_ema'] ?? $state->outputGap;
         
+        $state->unemploymentRate = $data['unemployment_rate'] ?? 0.04;
+        $state->unemploymentRateEma = $data['unemployment_rate_ema'] ?? $state->unemploymentRate;
+        
+        $state->energyPriceIndex = $data['energy_price_index'] ?? 100.0;
+        $state->energyPriceShock = $data['energy_price_shock'] ?? 0.0;
+        
         $state->targetRate = $data['target_rate'] ?? 0.02;
         $state->policyRate = $data['policy_rate'] ?? 0.02;
         $state->policyRateEma = $data['policy_rate_ema'] ?? $state->policyRate;
@@ -63,6 +76,7 @@ class MacroState
         $state->nsLevel = $data['ns_level'] ?? 0.0;
         $state->nsSlope = $data['ns_slope'] ?? 0.0;
         $state->nsSlopeEma = $data['ns_slope_ema'] ?? $state->nsSlope;
+        $state->structuralSlope = $data['structural_slope'] ?? 0.0;
         $state->nsCurvature = $data['ns_curvature'] ?? 0.0;
         
         $state->yield2y = $data['yield_2y'] ?? 0.0;
@@ -104,12 +118,17 @@ class MacroState
             'inflation_ema' => $this->inflationEma,
             'output_gap' => $this->outputGap,
             'output_gap_ema' => $this->outputGapEma,
+            'unemployment_rate' => $this->unemploymentRate,
+            'unemployment_rate_ema' => $this->unemploymentRateEma,
+            'energy_price_index' => $this->energyPriceIndex,
+            'energy_price_shock' => $this->energyPriceShock,
             'target_rate' => $this->targetRate,
             'policy_rate' => $this->policyRate,
             'policy_rate_ema' => $this->policyRateEma,
             'ns_level' => $this->nsLevel,
             'ns_slope' => $this->nsSlope,
             'ns_slope_ema' => $this->nsSlopeEma,
+            'structural_slope' => $this->structuralSlope,
             'ns_curvature' => $this->nsCurvature,
             'yield_2y' => $this->yield2y,
             'yield_2y_ema' => $this->yield2yEma,

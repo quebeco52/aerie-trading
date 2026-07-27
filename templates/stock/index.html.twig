@@ -477,6 +477,35 @@
 								<canvas id="macroGdpChart"></canvas>
 							</div>
 						</div>
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
+							<div class="flex justify-between items-center mb-6">
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Labor Market</span>
+									{{ _self.tooltip('Tracks the unemployment rate relative to the natural rate.', 'right', 'w-64') }}
+								</h3>
+								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
+								</button>
+							</div>
+							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
+								<canvas id="macroLaborChart"></canvas>
+							</div>
+						</div>
+
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300 md:col-span-2">
+							<div class="flex justify-between items-center mb-6">
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Commodity & Energy Prices</span>
+									{{ _self.tooltip('Tracks the baseline energy price index for modeling exogenous cost-push inflation shocks.', 'right', 'w-64') }}
+								</h3>
+								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+									<span class="material-symbols-outlined text-[18px] expand-icon">close_fullscreen</span>
+								</button>
+							</div>
+							<div class="chart-canvas-container relative h-96 md:h-[500px] w-full transition-all duration-300">
+								<canvas id="macroEnergyChart"></canvas>
+							</div>
+						</div>
 					</div>
 				{% endif %}
 
@@ -890,9 +919,6 @@
 							<div>
 								<div class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help inline-flex items-center gap-1 focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">10-Yr Yield</span>
-									{% if macro.qe_active|default(false) %}
-										<span class="inline-flex w-2 h-2 rounded-full bg-secondary animate-pulse" title="Quantitative Easing Active"></span>
-									{% endif %}
 									{{ _self.tooltip("The interest rate on the District's 10-year bond. It serves as the benchmark for long-term corporate borrowing costs and heavily influences the broader business cycle.", 'right', 'w-64') }}
 								</div>
 								<p class="text-lg font-bold {% if macro.qe_active|default(false) %}text-secondary{% else %}text-on-surface{% endif %}" id="macro-yield">
@@ -901,8 +927,20 @@
 							</div>
 						</div>
 
+						{# QUANTITATIVE EASING STATUS #}
+						<div id="qe-status-container" class="mt-4 pt-3 border-t border-outline-variant/10 flex justify-between items-center transition-all duration-500 {% if not macro.qe_active|default(false) %}hidden{% endif %}">
+							<span class="text-[10px] font-bold text-secondary uppercase tracking-widest group relative cursor-help inline-flex items-center gap-2 focus-visible:outline-none" tabindex="0">
+								<span class="inline-flex w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+								<span class="border-b border-dotted border-secondary/70 pb-0.5">Quantitative Easing:</span>
+								{{ _self.tooltip('The Central Bank is actively expanding its balance sheet to artificially suppress long-term yields and stimulate the economy.') }}
+							</span>
+							<span id="macro-qe-intensity" class="text-xs font-bold text-secondary">
+								-{{ (macro.qe_intensity|default(0) * 100)|number_format(2) }}% Yield Suppression
+							</span>
+						</div>
+
 						{# THE ECONOMIC STATUS BADGE #}
-						<div class="mt-4 pt-3 border-t border-outline-variant/10 flex justify-between items-center">
+						<div class="mt-2 pt-2 border-t border-outline-variant/10 flex justify-between items-center">
 							<span class="text-[10px] text-on-surface-variant group relative cursor-help inline-block focus-visible:outline-none" tabindex="0">
 								<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">District GDP:</span>
 								{{ _self.tooltip('Gross Domestic Product. The total nominal value of all goods and services produced in the Aerie.') }}

@@ -115,6 +115,9 @@ function initStockPage() {
     }
     const destroyChart = (inst) => { if (inst) { try { inst.destroy(); } catch (e) { } } return null; };
     etfPieChart = destroyChart(etfPieChart);
+    macroLaborChartInstance = destroyChart(macroLaborChartInstance);
+    macroMoneyChartInstance = destroyChart(macroMoneyChartInstance);
+    macroEnergyChartInstance = destroyChart(macroEnergyChartInstance);
     profitEngineChartInstance = destroyChart(profitEngineChartInstance);
     debtEquityChartInstance = destroyChart(debtEquityChartInstance);
     creditHealthChartInstance = destroyChart(creditHealthChartInstance);
@@ -197,7 +200,21 @@ function initStockPage() {
 
             if (infEl) infEl.textContent = (payload.macro.inflation * 100).toFixed(2) + '%';
             if (rateEl) rateEl.textContent = (payload.macro.policy_rate * 100).toFixed(2) + '%';
-            if (yieldEl) yieldEl.textContent = (payload.macro.yield_10y * 100).toFixed(2) + '%';
+            if (yieldEl) {
+                yieldEl.textContent = (payload.macro.yield_10y * 100).toFixed(2) + '%';
+                yieldEl.className = payload.macro.qe_active ? 'text-lg font-bold text-secondary' : 'text-lg font-bold text-on-surface';
+            }
+
+            const qeContainer = document.getElementById('qe-status-container');
+            const qeIntensityEl = document.getElementById('macro-qe-intensity');
+            if (qeContainer && qeIntensityEl) {
+                if (payload.macro.qe_active && payload.macro.qe_intensity > 0.001) {
+                    qeContainer.classList.remove('hidden');
+                    qeIntensityEl.textContent = '-' + (payload.macro.qe_intensity * 100).toFixed(2) + '% Yield Suppression';
+                } else {
+                    qeContainer.classList.add('hidden');
+                }
+            }
 
             if (gapEl) {
                 const gapVal = payload.macro.output_gap * 100;
@@ -1107,6 +1124,9 @@ let macroRatesChartInstance = null;
 let macroMortgageChartInstance = null;
 let macroRiskChartInstance = null;
 let macroGdpChartInstance = null;
+let macroLaborChartInstance = null;
+let macroMoneyChartInstance = null;
+let macroEnergyChartInstance = null;
 
 function updateMacroCharts() {
     if (!rawReports || rawReports.length === 0) return;
@@ -1117,6 +1137,7 @@ function updateMacroCharts() {
     let spread2s10sData = [], spread30yData = [];
     let erpData = [], volData = [], taxData = [];
     let gdpData = [];
+    let unemploymentData = [], energyPriceData = [];
 
     // Expand and cap the macro charts to show exactly the last 100 quarters (25 years)
     const slicedReports = rawReports.slice(-100);
@@ -1161,6 +1182,9 @@ function updateMacroCharts() {
 
         // Base GDP in the system is $25 Trillion
         gdpData.push(parseFloat(report.nominal_gdp_index) * 25.0);
+
+        unemploymentData.push(parseFloat(report.unemployment_rate) * 100);
+        energyPriceData.push(parseFloat(report.energy_price_index));
     });
 
     renderMacroEconomyChart(labels, inflationData, outputGapData);
@@ -1168,6 +1192,8 @@ function updateMacroCharts() {
     renderMacroMortgageChart(labels, policyRateData, yield30yData, spread30yData);
     renderMacroRiskChart(labels, erpData, volData, taxData, corpBorrowingData);
     renderMacroGdpChart(labels, gdpData);
+    renderMacroLaborChart(labels, unemploymentData);
+    renderMacroEnergyChart(labels, energyPriceData);
 }
 
 function renderMacroEconomyChart(labels, inflationData, outputGapData) {
@@ -1407,6 +1433,65 @@ function renderMacroGdpChart(labels, gdpData) {
             interaction: { mode: 'index', intersect: false },
             plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `$${ctx.raw.toFixed(2)}T` } } },
             scales: { y: { ticks: { callback: (val) => '$' + val + 'T' } } }
+        }
+    });
+}
+
+function renderMacroLaborChart(labels, unemploymentData) {
+    if (macroLaborChartInstance) macroLaborChartInstance.destroy();
+    const ctx = document.getElementById('macroLaborChart').getContext('2d');
+    macroLaborChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Unemployment Rate',
+                    data: unemploymentData,
+                    borderColor: '#f43f5e',
+                    backgroundColor: 'rgba(244, 63, 94, 0.2)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: labels.length > 50 ? 0 : 2
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `${ctx.raw.toFixed(2)}%` } } },
+            scales: { y: { ticks: { callback: (val) => val + '%' } } }
+        }
+    });
+}
+
+
+function renderMacroEnergyChart(labels, energyPriceData) {
+    if (macroEnergyChartInstance) macroEnergyChartInstance.destroy();
+    const ctx = document.getElementById('macroEnergyChart').getContext('2d');
+    macroEnergyChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Energy Price Index',
+                    data: energyPriceData,
+                    borderColor: '#eab308',
+                    backgroundColor: 'rgba(234, 179, 8, 0.2)',
+                    borderWidth: 2,
+                    tension: 0.2,
+                    fill: true,
+                    pointRadius: labels.length > 50 ? 0 : 2
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `Index: ${ctx.raw.toFixed(2)}` } } },
+            scales: { y: { ticks: { callback: (val) => val } } }
         }
     });
 }

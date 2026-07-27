@@ -606,4 +606,37 @@ class MathUtility
         // Failsafe: Prevent negative spreads or astronomical blowout
         return max(0.0, min(1.0, $spread)); // Max spread capped at 10,000 bps
     }
+    /**
+     * Calculates a step in the Schwartz 1-Factor Model (1997) for commodity pricing.
+     * Uses an Ornstein-Uhlenbeck (OU) process on the natural logarithm of the price,
+     * ensuring strictly positive, right-skewed log-normal distributions.
+     *
+     * @param float $currentPrice The current commodity price (S).
+     * @param float $kappa        The speed of mean reversion.
+     * @param float $theta        The long-term equilibrium price level.
+     * @param float $sigma        The volatility of the log price.
+     * @param float $dt           The time step delta.
+     * @param float $dW           The Brownian motion Z-score.
+     * @return float The next commodity price.
+     */
+    public function calculateSchwartz1Factor(float $currentPrice, float $kappa, float $theta, float $sigma, float $dt, float $dW): float
+    {
+        $currentPrice = max(0.0001, $currentPrice);
+        $currentLogPrice = log($currentPrice);
+        
+        // The long term mean of the log-price needs an Ito correction to match the expected level of the spot price
+        $alpha = log($theta) - ($sigma * $sigma) / (2.0 * max(0.0001, $kappa));
+        
+        // Exact solution for OU process to prevent Euler discretization errors for large kappa * dt
+        $expKappaDt = exp(-$kappa * $dt);
+        $drift = $currentLogPrice * $expKappaDt + $alpha * (1.0 - $expKappaDt);
+        
+        // The exact variance of the OU process over dt
+        $variance = ($sigma * $sigma / (2.0 * max(0.0001, $kappa))) * (1.0 - exp(-2.0 * $kappa * $dt));
+        $diffusion = sqrt($variance) * $dW;
+        
+        $nextLogPrice = $drift + $diffusion;
+        
+        return exp($nextLogPrice);
+    }
 }

@@ -144,13 +144,13 @@ class MarketResetCommand extends Command
             $startingDividend = ($annualEps / 4.0) * ($targetPayout * 0.50);
 
             $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
-            
+
             // Set required temporary values for debt engine
             $tempStock->setTotalRevenue((string)$revenue);
             $tempStock->setEarningsPerShare((string)$annualEps);
             $tempStock->setSharesOutstanding((string)$shares);
             $tempStock->setPrice((string)$stockData['price']);
-            
+
             $debtHealth = $this->debtEngine->analyzeDebtHealth($tempStock, $dummyMacro, $revenue, $margin);
 
             $pricingCtx = new \App\DTO\MarketPricingContext(

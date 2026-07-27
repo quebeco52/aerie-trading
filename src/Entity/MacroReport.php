@@ -76,6 +76,17 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $macroCreditSpreadEma = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $unemploymentRate = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $unemploymentRateEma = null;
+
+
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $energyPriceIndex = null;
+
     // --- Standard Getters & Setters ---
 
     public function getId(): ?int { return $this->id; }
@@ -142,4 +153,15 @@ class MacroReport
 
     public function getMacroCreditSpreadEma(): ?string { return $this->macroCreditSpreadEma; }
     public function setMacroCreditSpreadEma(?string $macroCreditSpreadEma): self { $this->macroCreditSpreadEma = $macroCreditSpreadEma; return $this; }
+
+    public function getUnemploymentRate(): ?string { return $this->unemploymentRate; }
+    public function setUnemploymentRate(string $unemploymentRate): self { $this->unemploymentRate = $unemploymentRate; return $this; }
+
+    public function getUnemploymentRateEma(): ?string { return $this->unemploymentRateEma; }
+    public function setUnemploymentRateEma(string $unemploymentRateEma): self { $this->unemploymentRateEma = $unemploymentRateEma; return $this; }
+
+
+
+    public function getEnergyPriceIndex(): ?string { return $this->energyPriceIndex; }
+    public function setEnergyPriceIndex(string $energyPriceIndex): self { $this->energyPriceIndex = $energyPriceIndex; return $this; }
 }

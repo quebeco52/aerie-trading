@@ -16,6 +16,10 @@ readonly class MacroStateDTO
     public function __construct(
         public float $outputGap = 0.0,
         public float $outputGapEma = 0.0,
+        public float $unemploymentRate = 0.04,
+        public float $unemploymentRateEma = 0.04,
+        public float $energyPriceIndex = 100.0,
+        public float $energyPriceShock = 0.0,
         public float $inflation = 0.02,
         public float $inflationEma = 0.02,
         public float $policyRate = 0.02,
@@ -57,6 +61,13 @@ readonly class MacroStateDTO
         $inflationEma = (float) ($data['inflation_ema'] ?? $inflation);
         $outputGap = (float) ($data['output_gap'] ?? 0.02);
         $outputGapEma = (float) ($data['output_gap_ema'] ?? $outputGap);
+        
+        $unemploymentRate = (float) ($data['unemployment_rate'] ?? 0.04);
+        $unemploymentRateEma = (float) ($data['unemployment_rate_ema'] ?? $unemploymentRate);
+        
+        $energyPriceIndex = (float) ($data['energy_price_index'] ?? 100.0);
+        $energyPriceShock = (float) ($data['energy_price_shock'] ?? 0.0);
+        
         $policyRate = (float) ($data['policy_rate'] ?? 0.02);
         $policyRateEma = (float) ($data['policy_rate_ema'] ?? $policyRate);
         $targetRate = (float) ($data['target_rate'] ?? 0.02);
@@ -94,6 +105,10 @@ readonly class MacroStateDTO
         return new self(
             outputGap: $outputGap,
             outputGapEma: $outputGapEma,
+            unemploymentRate: $unemploymentRate,
+            unemploymentRateEma: $unemploymentRateEma,
+            energyPriceIndex: $energyPriceIndex,
+            energyPriceShock: $energyPriceShock,
             inflation: $inflation,
             inflationEma: $inflationEma,
             policyRate: $policyRate,
@@ -135,6 +150,10 @@ readonly class MacroStateDTO
         return new self(
             outputGap: $state->outputGap,
             outputGapEma: $state->outputGapEma,
+            unemploymentRate: $state->unemploymentRate,
+            unemploymentRateEma: $state->unemploymentRateEma,
+            energyPriceIndex: $state->energyPriceIndex,
+            energyPriceShock: $state->energyPriceShock,
             inflation: $state->inflation,
             inflationEma: $state->inflationEma,
             policyRate: $state->policyRate,
@@ -176,6 +195,10 @@ readonly class MacroStateDTO
         return [
             'output_gap' => $this->outputGap,
             'output_gap_ema' => $this->outputGapEma,
+            'unemployment_rate' => $this->unemploymentRate,
+            'unemployment_rate_ema' => $this->unemploymentRateEma,
+            'energy_price_index' => $this->energyPriceIndex,
+            'energy_price_shock' => $this->energyPriceShock,
             'inflation' => $this->inflation,
             'inflation_ema' => $this->inflationEma,
             'policy_rate' => $this->policyRate,
