@@ -34,7 +34,7 @@ class InitialMarket
             'total_net_income' => 387_900_000_000.00,
             'total_equity' => 2_568_125_000_000.00,
             'customer_deposits' => 23_500_000_000_000.00,
-            'wholesale_debt' => 375_000_000_000.00,
+            'wholesale_debt' => 2_500_000_000_000.00, // Increased from 375B
             'retained_earnings' => 1_750_000_000_000.00,
             'ceo_archetype' => \App\Data\CeoArchetypes::CONSERVATIVE
         ],
@@ -1874,6 +1874,39 @@ class InitialMarket
             'wholesale_debt' => 50_000_000_000.00,
             'retained_earnings' => 150_000_000_000.00,
             'ceo_archetype' => \App\Data\CeoArchetypes::CONSERVATIVE
+        ],
+        [
+            'ticker' => 'PINT',
+            'name' => 'Pintail Beverage Group',
+            'sector' => 'Consumer Staples',
+            'industry' => 'Beverages - Wineries & Distilleries',
+            'systemic_importance' => 'none',
+            'price' => 320.00,
+            'shares_outstanding' => 1_000_000_000,
+            'volatility' => 0.16,
+            'beta' => 0.50,
+            'jump_intensity' => 0.30,
+            'jump_mean' => -0.02,
+            'jump_vol' => 0.05,
+            'baseline_roic' => 0.20,
+            'capex_ratio' => 0.25,
+            'target_payout_ratio' => 0.50,
+            'dividendSpeed' => 0.05,
+            'fixed_cost_ratio' => 0.45,
+            'operating_margin' => 0.22,
+            'public_float' => 0.85,
+            'sam_ratio' => 0.50,
+            'floating_debt_ratio' => 0.20,
+            'historical_fixed_rate' => 0.045,
+            'credit_spread' => 0.0110,
+            'depreciation_rate' => 0.05,
+            'corporate_treasury' => 4_000_000_000.00,
+            'total_net_income' => 8_500_000_000.00,
+            'total_equity' => 30_000_000_000.00,
+            'customer_deposits' => 0.00,
+            'wholesale_debt' => 20_000_000_000.00,
+            'retained_earnings' => 12_000_000_000.00,
+            'ceo_archetype' => \App\Data\CeoArchetypes::YIELD_KING
         ],
     ];
 

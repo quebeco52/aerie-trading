@@ -367,6 +367,14 @@ class StockModelTuning
             'consumer_cyclical_weight' => 0.10, // Retail secondary market liquidations
         ],
 
+        // --- Pintail Beverage Group (PINT) ---
+        // Industrial ethanol syndicate & heritage alcohol cartel.
+        // Balances branded artisanal spirits with aggressive bulk ethanol/commodity trading via the 'Proof Desk'.
+        'PINT' => [
+            'branded_staples_weight'  => 0.60,
+            'volume_commodity_weight' => 0.40,
+        ],
+
         // =====================================================================
         // UTILITY & MUNICIPAL INFRASTRUCTURE ARCHETYPES
         // =====================================================================

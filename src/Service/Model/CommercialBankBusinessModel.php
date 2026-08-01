@@ -96,15 +96,83 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
 
     // --- Hoarding & Deposit Flight ---
     /** Fraction of total debt held as idle excess cash before the bank is flagged as a hoarder. */
-    public const HOARDING_THRESHOLD_DEBT_RATIO      = 0.05;
+    public const HOARDING_THRESHOLD_DEBT_RATIO      = 0.12;
     /** Higher idle cash fraction that triggers more aggressive capital return pressure. */
-    public const MEGA_HOARDING_THRESHOLD_DEBT_RATIO = 0.10;
+    public const MEGA_HOARDING_THRESHOLD_DEBT_RATIO = 0.18;
     /** Policy rate gap above which depositors flee to money-market funds (calibrated to 2022-23 cycle). */
     public const YIELD_FLIGHT_POLICY_RATE_OFFSET    = 0.01;
 
     // --- Bank Valuation Weights ---
     /** Weight given to Dividend Discount Model yield support when blending bank fair value. */
     public const FAIR_VALUE_DDM_WEIGHT = 0.15;
+    /** Weight given to Price-to-Book value when EPS is positive. */
+    public const FAIR_VALUE_BOOK_WEIGHT_PROFIT = 0.40;
+    /** Weight given to Price-to-Book value when EPS is negative (liquidation value focus). */
+    public const FAIR_VALUE_BOOK_WEIGHT_LOSS = 0.80;
+
+    // --- Liquidity & Cash Target Constants ---
+    /** Fraction of operating base held as cash. */
+    public const TARGET_CASH_OPERATING_MULT = 0.05;
+    /** Fraction of current liabilities held as target cash. */
+    public const TARGET_CASH_LIABILITY_MULT = 0.10;
+    /** Fraction of wholesale debt held as target cash. */
+    public const TARGET_CASH_WHOLESALE_MULT = 0.05;
+    /** Minimum fraction of operating base held as cash. */
+    public const MIN_CASH_OPERATING_MULT = 0.03;
+    /** Minimum fraction of current liabilities held as cash. */
+    public const MIN_CASH_LIABILITY_MULT = 0.05;
+    /** Minimum fraction of wholesale debt held as cash. */
+    public const MIN_CASH_WHOLESALE_MULT = 0.03;
+    /** Buffer for operating base when calculating interest income. */
+    public const INTEREST_INCOME_CASH_BUFFER = 0.05;
+
+    // --- Debt Expansion Constants ---
+    /** Structural baseline of wholesale debt banks target. */
+    public const WHOLESALE_TARGET_RATIO = 0.10;
+    /** Maximum probability boost for urgent wholesale funding. */
+    public const WHOLESALE_URGENCY_PROB_BOOST = 0.80;
+    /** Maximum aggressiveness boost for urgent wholesale funding. */
+    public const WHOLESALE_URGENCY_AGGR_BOOST = 0.45;
+    /** Deposit ratio where debt expansion throttle starts (was 0.80). */
+    public const DEPOSIT_THROTTLE_UPPER_BOUND = 0.50;
+    /** Deposit ratio where debt expansion throttle maximizes (was 0.40). */
+    public const DEPOSIT_THROTTLE_LOWER_BOUND = 0.20;
+    /** Minimum floor for debt expansion throttle (was 0.0). */
+    public const DEPOSIT_THROTTLE_FLOOR = 0.20;
+
+    // --- Capital Return & Expansion ---
+    /** Maximum buyback spend ratio of excess cash for mega hoarders. */
+    public const BUYBACK_MEGA_HOARDER_LIMIT = 0.30;
+    /** Maximum buyback spend ratio of excess cash for hoarders. */
+    public const BUYBACK_HOARDER_LIMIT = 0.10;
+    /** Minimum fraction of debt issued allocated to organic capex. */
+    public const ORGANIC_CAPEX_DEBT_MULT = 0.95;
+    /** Threshold ratio below target debt tolerance indicating under-leverage. */
+    public const UNDER_LEVERAGED_TOLERANCE = 0.75;
+
+    // --- Macro & Shock Thresholds ---
+    /** Output gap multiplier for fee revenue. */
+    public const SECTOR_SHOCK_FEE_OUTPUT_GAP_MULT = 0.35;
+    /** Z-score threshold for elevated defaults. */
+    public const SECTOR_SHOCK_ELEVATED_DEFAULT_Z = -1.5;
+    /** Z-score threshold for massive defaults. */
+    public const SECTOR_SHOCK_MASSIVE_DEFAULT_Z = -2.0;
+    /** Z-score threshold for reserve releases. */
+    public const SECTOR_SHOCK_RESERVE_RELEASE_Z = 2.0;
+
+    // --- Passive Liability Growth ---
+    /** Base real GDP growth for liability expansion. */
+    public const LIABILITY_BASE_GDP_GROWTH = 0.02;
+    /** Positive output gap multiplier for liability growth. */
+    public const LIABILITY_GDP_POSITIVE_GAP_MULT = 0.5;
+    /** Negative output gap multiplier for liability growth. */
+    public const LIABILITY_GDP_NEGATIVE_GAP_MULT = 2.0;
+    /** Absolute limit on quarterly liability change fraction. */
+    public const LIABILITY_MAX_CHANGE_LIMIT = 0.15;
+    /** Change fraction threshold to trigger deposit flight event. */
+    public const LIABILITY_FLIGHT_THRESHOLD = -0.005;
+    /** Change fraction threshold to trigger captured new deposits event. */
+    public const LIABILITY_CAPTURE_THRESHOLD = 0.005;
 
     /**
      * Returns a stable structural ROIC proxy to keep top-line loan revenue rock solid.
@@ -241,14 +309,14 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
         $niiRevenue = $expectedRevenue * $niiWeight
             * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
         $feeRevenue = $expectedRevenue * $feeWeight
-            * (1.0 + ($feeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + ($outputGap * 0.35));
+            * (1.0 + ($feeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + ($outputGap * self::SECTOR_SHOCK_FEE_OUTPUT_GAP_MULT));
         $actualRevenue = max(0.0, $niiRevenue + $feeRevenue);
 
         // Loan Loss Provisions (Idiosyncratic Credit Cycle):
         // Collateralized loans (prime mortgages, corporate debt) have lower LGD than unsecured credit.
         $macroDefaultDrag = $outputGap < 0.0 ? abs($outputGap) * self::MACRO_DEFAULT_LGD_DRAG : 0.0;
 
-        if ($defaultZ < -1.5) {
+        if ($defaultZ < self::SECTOR_SHOCK_ELEVATED_DEFAULT_Z) {
             $provisionShock = abs($defaultZ) * self::LOSS_PROVISION_Z_FACTOR;
         } elseif ($defaultZ > self::PROVISION_RELEASE_Z_FLOOR) {
             // Scaled reserve release: scales with how benign conditions are, not a flat 1%.
@@ -292,11 +360,11 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
         $clampedMargin = $this->clampMargin($rawMargin, $minVariableMargin);
 
         $eventType = null;
-        if ($defaultZ < -2.0) {
+        if ($defaultZ < self::SECTOR_SHOCK_MASSIVE_DEFAULT_Z) {
             $eventType = ShockEvent::MASSIVE_CREDIT_PROVISION;
-        } elseif ($defaultZ < -1.5) {
+        } elseif ($defaultZ < self::SECTOR_SHOCK_ELEVATED_DEFAULT_Z) {
             $eventType = ShockEvent::ELEVATED_LOAN_DEFAULTS;
-        } elseif ($defaultZ > 2.0) {
+        } elseif ($defaultZ > self::SECTOR_SHOCK_RESERVE_RELEASE_Z) {
             $eventType = ShockEvent::RESERVE_RELEASE;
         }
 
@@ -322,7 +390,7 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
     public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): float
     {
         $operatingBase = $this->getOperatingBase($stock);
-        $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - ($operatingBase * 0.05));
+        $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - ($operatingBase * self::INTEREST_INCOME_CASH_BUFFER));
 
         $policyRate = $macroState->policyRateEma;
 
@@ -357,12 +425,20 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
 
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
     {
-        return max($operatingBase * 0.05, $currentLiability * 0.10, $wholesaleDebt * 0.05);
+        return max(
+            $operatingBase * self::TARGET_CASH_OPERATING_MULT,
+            $currentLiability * self::TARGET_CASH_LIABILITY_MULT,
+            $wholesaleDebt * self::TARGET_CASH_WHOLESALE_MULT
+        );
     }
 
     public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
     {
-        return max($operatingBase * 0.03, $currentLiability * 0.05, $wholesaleDebt * 0.03);
+        return max(
+            $operatingBase * self::MIN_CASH_OPERATING_MULT,
+            $currentLiability * self::MIN_CASH_LIABILITY_MULT,
+            $wholesaleDebt * self::MIN_CASH_WHOLESALE_MULT
+        );
     }
 
     public function evaluateHoardingStatus(float $treasury, float $targetCashReserves, float $operatingBase, float $totalDebt): array
@@ -388,7 +464,9 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
 
     public function calculateMaxBuybackSpend(float $excessCash, float $retainedEarningsThisQuarter, bool $isMegaHoarder): float
     {
-        return $isMegaHoarder ? $excessCash * 0.30 : max(0.0, min($excessCash * 0.10, $retainedEarningsThisQuarter));
+        return $isMegaHoarder 
+            ? $excessCash * self::BUYBACK_MEGA_HOARDER_LIMIT 
+            : max(0.0, min($excessCash * self::BUYBACK_HOARDER_LIMIT, $retainedEarningsThisQuarter));
     }
 
     public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array
@@ -412,13 +490,14 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
 
     public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float
     {
-        return max($organicSpend, $debtIssued * 0.95);
+        return max($organicSpend, $debtIssued * self::ORGANIC_CAPEX_DEBT_MULT);
     }
 
     public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float
     {
-        // Banks must use their cheap deposit inflows (excess cash) before issuing expensive wholesale debt
-        return max(0.0, $baseCapacity - $excessCash);
+        // Banks maintain a structural mix of wholesale debt for regulatory liquidity metrics,
+        // so we do not subtract their deposit-driven excess cash from their expansion capacity.
+        return $baseCapacity;
     }
 
     public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float
@@ -430,7 +509,7 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
     {
         // Balance Sheet Heavy: Banks trade heavily on their Book Value (Equity).
         // If earnings collapse, investors focus almost entirely (80% weight) on the liquidation value of the loan book.
-        $bookWeight = $normalizedEps > 0 ? 0.40 : 0.80;
+        $bookWeight = $normalizedEps > 0 ? self::FAIR_VALUE_BOOK_WEIGHT_PROFIT : self::FAIR_VALUE_BOOK_WEIGHT_LOSS;
         $earningsWeight = 1.0 - $bookWeight;
         $baseConsensus = ($earningsValue * $earningsWeight) + ($pbFairValue * $bookWeight);
         return $dividendSupportValue > 0.0
@@ -452,7 +531,7 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
         $industry = $stock->getIndustry() ?: 'General';
         $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 10.0;
 
-        $realGdpGrowth = 0.02 + ($outputGap > 0.0 ? $outputGap * 0.5 : $outputGap * 2.0);
+        $realGdpGrowth = self::LIABILITY_BASE_GDP_GROWTH + ($outputGap > 0.0 ? $outputGap * self::LIABILITY_GDP_POSITIVE_GAP_MULT : $outputGap * self::LIABILITY_GDP_NEGATIVE_GAP_MULT);
         $depositApyBeta = $this->calculateDepositBeta($totalDebt, $equity, $equityLimit, $currentLiabilities);
         $state['bank_apy'] = max(0.001, $policyRate * $depositApyBeta);
 
@@ -467,7 +546,7 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
         $competitiveAdvantage = $depositApyBeta / self::DEPOSIT_BETA_NORMALIZATION_BASELINE;
 
         $baseGrowth = $systemicGrowthQuarterly > 0 ? $systemicGrowthQuarterly * $betaSensitivity * $competitiveAdvantage : $systemicGrowthQuarterly * $betaSensitivity / max(0.1, $competitiveAdvantage);
-        $liabilityChange = $currentLiabilities * max(-0.15, min(0.15, $baseGrowth + ($mathUtility->generateStandardNormal() * 0.005)));
+        $liabilityChange = $currentLiabilities * max(-self::LIABILITY_MAX_CHANGE_LIMIT, min(self::LIABILITY_MAX_CHANGE_LIMIT, $baseGrowth + ($mathUtility->generateStandardNormal() * 0.005)));
 
         if (abs($liabilityChange) > 0) {
             $state['treasury'] += $liabilityChange;
@@ -479,8 +558,8 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
                 $state['events'][] = ['event_type' => ShockEvent::BANK_RUN, 'context' => ['amount' => $amtB], 'shock' => -5.0];
             }
             $stock->setCustomerDeposits((string) max(0.0, $state['customerDeposits']));
-            if (($liabilityChange / $currentLiabilities) < -0.005) $state['events'][] = ['event_type' => ShockEvent::CUSTOMER_DEPOSIT_FLIGHT, 'context' => ['amount' => number_format(abs($liabilityChange) / 1_000_000_000, 2)], 'shock' => -2.0];
-            elseif (($liabilityChange / $currentLiabilities) > 0.005) $state['events'][] = ['event_type' => ShockEvent::CAPTURED_NEW_DEPOSITS, 'context' => ['amount' => number_format($liabilityChange / 1_000_000_000, 2)], 'shock' => 0.5];
+            if (($liabilityChange / $currentLiabilities) < self::LIABILITY_FLIGHT_THRESHOLD) $state['events'][] = ['event_type' => ShockEvent::CUSTOMER_DEPOSIT_FLIGHT, 'context' => ['amount' => number_format(abs($liabilityChange) / 1_000_000_000, 2)], 'shock' => -2.0];
+            elseif (($liabilityChange / $currentLiabilities) > self::LIABILITY_CAPTURE_THRESHOLD) $state['events'][] = ['event_type' => ShockEvent::CAPTURED_NEW_DEPOSITS, 'context' => ['amount' => number_format($liabilityChange / 1_000_000_000, 2)], 'shock' => 0.5];
         }
     }
 
@@ -489,9 +568,35 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
         $probability = self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT);
         $aggressiveness = self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier);
 
-        $depositRatio = $totalDebt > 0 ? ($customerDeposits / $totalDebt) : 0.0;
-        if ($depositRatio < 0.70) {
-            $depositConstraint = max(0.0, ($depositRatio - 0.40) / 0.30);
+        if ($totalDebt <= 0.0) {
+            return [
+                'probability' => $probability,
+                'aggressiveness' => $aggressiveness
+            ];
+        }
+
+        $depositRatio = $customerDeposits / $totalDebt;
+        $wholesaleRatio = 1.0 - $depositRatio;
+
+        // Continuous physics scaling: Banks target a structural baseline of wholesale debt.
+        // As wholesale funding drops below target, urgency to replenish it scales continuously up to a maximum boost.
+        $wholesaleShortfall = max(0.0, self::WHOLESALE_TARGET_RATIO - $wholesaleRatio);
+
+        if ($wholesaleShortfall > 0.0) {
+            // $urgency ranges from 0.0 (at target wholesale) to 1.0 (at 0% wholesale)
+            $urgency = $wholesaleShortfall / self::WHOLESALE_TARGET_RATIO;
+
+            $probability = min(1.0, $probability + (self::WHOLESALE_URGENCY_PROB_BOOST * $urgency));
+            $aggressiveness = min(1.0, $aggressiveness + (self::WHOLESALE_URGENCY_AGGR_BOOST * $urgency));
+        } else {
+            // If wholesale ratio is high (deposit ratio is low), continuously throttle further debt expansion.
+            // Throttle scales from 1.0 (at UPPER_BOUND) down to FLOOR (at LOWER_BOUND).
+            $throttleRange = self::DEPOSIT_THROTTLE_UPPER_BOUND - self::DEPOSIT_THROTTLE_LOWER_BOUND;
+            $depositConstraint = max(
+                self::DEPOSIT_THROTTLE_FLOOR,
+                min(1.0, ($depositRatio - self::DEPOSIT_THROTTLE_LOWER_BOUND) / $throttleRange)
+            );
+            
             $probability *= $depositConstraint;
             $aggressiveness *= $depositConstraint;
         }
@@ -500,5 +605,14 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
             'probability' => $probability,
             'aggressiveness' => $aggressiveness
         ];
+    }
+
+    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
+    {
+        // Commercial banks do not evaluate Interest Coverage (ICR) for under-leverage 
+        // because their interest expense is massive (it's their COGS).
+        // If they drop below 75% of their regulatory leverage target, they are destroying ROE
+        // and should aggressively return capital to shareholders via buybacks.
+        return $currentDebtRatio < ($targetDebtTolerance * self::UNDER_LEVERAGED_TOLERANCE);
     }
 }

@@ -314,22 +314,8 @@ class MacroEngine
     private function calculateInflation(MacroState $state, float $targetInflation, float $stressMultiplier, float $dt): float
     {
         $infZ = $this->mathUtility->generateStandardNormal();
-        $expectedInflation = $state->inflationEma;
-        // Central bank is "behind the curve" if inflation is high AND real rate is below the natural rate.
-        $realRate = $state->policyRate - $state->inflation;
-        $inflationExcess = max(0.0, $state->inflation - $targetInflation);
-
-        if ($inflationExcess > 0.0) {
-            $realRateShortfall = max(0.0, self::NATURAL_RATE - $realRate);
-            // Logistic credibility decay: 50% credibility when real rate is ~4% below r*
-            $cbCredibility = 1.0 / (1.0 + exp(200.0 * ($realRateShortfall - 0.04)));
-        } else {
-            $cbCredibility = 1.0;
-        }
-
-        $anchor = ($cbCredibility * $targetInflation) + ((1.0 - $cbCredibility) * $expectedInflation);
-
-        $inflationDrift = 0.5 * ($anchor - $state->inflation) * $dt;
+        // Inflation expectations are fully anchored. Revert structurally toward the target rate.
+        $inflationDrift = 0.5 * ($targetInflation - $state->inflation) * $dt;
 
         $phillipsSlope = $state->outputGap * self::PHILLIPS_SLOPE;
 

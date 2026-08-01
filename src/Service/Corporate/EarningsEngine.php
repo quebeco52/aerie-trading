@@ -13,6 +13,8 @@ use App\Service\Event\NarrativeEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Market\MarketConsensusEngine;
 use App\DTO\EarningsSimulationContext;
+use App\Service\Event\EarningsReportedEvent;
+use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
  * Handles the simulation of quarterly earnings reports.
@@ -43,6 +45,22 @@ class EarningsEngine
     /** Failsafe max expected EBIT loss relative to structural revenue. */
     public const MAX_EBIT_LOSS_RATIO = 0.50;
 
+    // --- Valuations & Bounds ---
+    /** Minimum valuation premium relative to market PE (floor). */
+    public const VALUATION_PREMIUM_MIN = 0.5;
+
+    /** Maximum valuation premium relative to market PE (ceiling). */
+    public const VALUATION_PREMIUM_MAX = 3.0;
+
+    /** Fallback surprise percentage when expected EPS is zero. */
+    public const ZERO_BASE_SURPRISE_PCT = 0.10;
+
+    /** Default time step in years for quarterly reports. */
+    public const QUARTERLY_TIME_STEP = 0.25;
+
+    /** Multiplier applied to baseline volatility to derive base idiosyncratic revenue volatility. */
+    public const IDIOSYNCRATIC_REV_VOL_RATIO = 0.25;
+
     /**
      * Constructor.
      *
@@ -50,7 +68,7 @@ class EarningsEngine
      * @param MathUtility $mathUtility Utility for advanced mathematical operations (e.g., generating standard normal distribution).
      */
     public function __construct(
-        private \Doctrine\ORM\EntityManagerInterface $entityManager,
+        private EventDispatcherInterface $eventDispatcher,
         private MarketEventPublisher $marketEvent,
         private CapitalAllocationEngine $capitalAllocationEngine,
         private DebtEngine $debtEngine,
@@ -77,7 +95,7 @@ class EarningsEngine
             $strategy,
             $businessModel,
             $isFinancial,
-            0.25
+            self::QUARTERLY_TIME_STEP
         );
 
         $this->initializeContext($ctx);
@@ -136,7 +154,7 @@ class EarningsEngine
         $macroDemandShift = $macroPhysics['macro_demand_shift'];
         $pricingPowerMultiplier = $macroPhysics['pricing_power_multiplier'];
 
-        $revenueVol = $ctx->baselineVol * 0.25;
+        $revenueVol = $ctx->baselineVol * self::IDIOSYNCRATIC_REV_VOL_RATIO;
         $revenueVol = $archetypeStrategy->modifyIdiosyncraticVol($revenueVol);
         $z1 = $this->mathUtility->generateStandardNormal();
 
@@ -336,7 +354,7 @@ class EarningsEngine
 
         $epsSurprisePct = abs($ctx->expectedQuarterlyEps) > 0.01
             ? $ctx->surpriseAmountQuarterly / abs($ctx->expectedQuarterlyEps)
-            : ($ctx->surpriseAmountQuarterly > 0 ? 0.10 : ($ctx->surpriseAmountQuarterly < 0 ? -0.10 : 0.0));
+            : ($ctx->surpriseAmountQuarterly > 0 ? self::ZERO_BASE_SURPRISE_PCT : ($ctx->surpriseAmountQuarterly < 0 ? -self::ZERO_BASE_SURPRISE_PCT : 0.0));
 
         $revenueSurprisePct = abs($ctx->analystExpectedRevenue) > 1.0
             ? ($ctx->actualRevenue - $ctx->analystExpectedRevenue) / abs($ctx->analystExpectedRevenue)
@@ -422,7 +440,7 @@ class EarningsEngine
             $currentPE = $priceToSales * (1.0 / $structuralAfterTaxMargin);
         }
 
-        $valuationPremium = max(0.5, min(3.0, $currentPE / FinancialConstants::BASELINE_MARKET_PE));
+        $valuationPremium = max(self::VALUATION_PREMIUM_MIN, min(self::VALUATION_PREMIUM_MAX, $currentPE / FinancialConstants::BASELINE_MARKET_PE));
         $beta = (float) $stock->getBeta();
 
         if ($ctx->surprisePct < 0) {
@@ -503,22 +521,7 @@ class EarningsEngine
 
         $earningsEvent = $this->marketEvent->publish($stock, 'EARNINGS', $description, $ctx->totalShockPct * 100);
 
-        $this->buildCorporateReport(
-            $stock,
-            $ctx->actualRevenue,
-            $ctx->reportedActualNetIncome,
-            $ctx->trueOperatingMargin,
-            $ctx->debtMetrics,
-            $ctx->quarterlyInterestIncome,
-            $ctx->totalReportedCapex,
-            $ctx->trueQuarterlyFcf,
-            $ctx->truePostTaxReturn,
-            $ctx->wacc,
-            $ctx->annualEconomicProfit,
-            $ctx->allocation,
-            $ctx->health,
-            $ctx->businessModel
-        );
+        $this->eventDispatcher->dispatch(new EarningsReportedEvent($ctx));
 
         return [$earningsEvent];
     }
@@ -540,68 +543,5 @@ class EarningsEngine
             $newVol = $currentVol - (($currentVol - $baselineVol) * FinancialConstants::VOLATILITY_COOLING_FACTOR);
             $stock->setCurrentVolatility((string) max($newVol, $baselineVol));
         }
-    }
-
-    private function buildCorporateReport(
-        Stock $stock,
-        float $revenue,
-        float $netIncome,
-        float $operatingMargin,
-        \App\DTO\DebtMetricsDTO $debtMetrics,
-        float $interestIncome,
-        float $capex,
-        float $freeCashFlow,
-        float $roic,
-        float $wacc,
-        float $eva,
-        array $allocation,
-        \App\DTO\DebtHealthDTO $health,
-        string $businessModel
-    ): void {
-        $report = new \App\Entity\CorporateReport();
-        $report->setStock($stock);
-        $report->setRecordedAt(new \DateTime());
-
-        $report->setRevenue((string) $revenue);
-        $report->setNetIncome((string) $netIncome);
-        $report->setOperatingMargin((string) $operatingMargin);
-
-        $report->setInterestExpense((string) ($debtMetrics->interestExpense / 4.0)); // Quarterly report
-        $report->setInterestIncome((string) $interestIncome);
-        $report->setBlendedRate((string) $debtMetrics->blendedRate);
-        $report->setDynamicSpread((string) $debtMetrics->dynamicSpread);
-
-        $report->setCapitalExpenditures((string) $capex);
-        $report->setFreeCashFlow((string) $freeCashFlow);
-        $report->setEquity($stock->getTotalEquity());
-        $report->setTotalDebt($stock->getTotalDebt());
-        $report->setTreasury($stock->getCorporateTreasury());
-
-        $report->setRoic((string) $roic);
-        $report->setShares((string) $stock->getSharesOutstanding());
-        $report->setWacc((string) $wacc);
-        $report->setEva((string) $eva);
-        $report->setDividendPaid((string) $allocation['total_paid']);
-        $report->setStockBuybacks((string) $allocation['total_cash_spent']);
-        $report->setCashYield((string) $health->cashYield);
-        $report->setDepositApy(isset($allocation['bank_apy']) ? (string) $allocation['bank_apy'] : null);
-
-        $finalEquity = (float) $stock->getTotalEquity();
-        $finalTotalDebt = (float) $stock->getTotalDebt();
-
-        $roe = $finalEquity > 0 ? ($netIncome / $finalEquity) * 4.0 : 0.0;
-        $report->setReturnOnEquity((string) $roe);
-        $report->setCostOfEquity((string) ($health->costOfEquity ?? 0.10));
-
-        $capitalRatio = ($finalEquity + $finalTotalDebt) > 0 ? ($finalEquity / ($finalEquity + $finalTotalDebt)) : 1.0;
-        $report->setCapitalRatio((string) $capitalRatio);
-
-        if (\App\Data\Sectors::isFinancial($businessModel) || (float) $stock->getCustomerDeposits() > 0) {
-            $customerDeposits = (float) $stock->getCustomerDeposits();
-            $depositRatio = $finalTotalDebt > 0 ? ($customerDeposits / $finalTotalDebt) : 0.0;
-            $report->setCustomerDepositRatio((string) $depositRatio);
-        }
-
-        $this->entityManager->persist($report);
     }
 }

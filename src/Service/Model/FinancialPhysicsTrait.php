@@ -133,7 +133,7 @@ trait FinancialPhysicsTrait
         $currentDeposits = (float) $seller->getCustomerDeposits();
         $lostDeposits = $currentDeposits * $divestedFraction;
         $seller->setCustomerDeposits((string) max(0.0, $currentDeposits - $lostDeposits));
-        
+
         // In fractional reserve banking, deposits are backed by the loan book, not pure cash.
         // We transfer the proportional share of the existing cash reserves, not the absolute deposit value.
         // Note: We use the pre-sale $currentTreasury to calculate the divested portion.

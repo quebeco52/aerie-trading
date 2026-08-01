@@ -423,19 +423,33 @@ class TreasuryEngine
             $evalLimit = $ctx->strategy->getDeleveragingEvaluationLimit($modelThresholds, $macroDebtTolerance);
 
             if (isset($modelThresholds['wholesale_leverage_limit'])) {
+                // Financial institutions: the wholesale_leverage_limit is a regulatory ceiling,
+                // not subject to CEO personality adjustments. Archetypes should not crush it.
+            } else {
                 $effectiveCostOfDebt = $ctx->health->effectiveCost ?? 0.05;
                 $evalLimit = $archetypeStrategy->modifyDebtToleranceLimit($evalLimit, $effectiveCostOfDebt);
             }
 
             $currentDebtRatio = $evalDebt / max(1.0, $newEquity);
 
+            $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->newTreasury, $targetOperatingCash, $ctx->operatingBase, $totalDebt);
+
             $baselineSpread = (float) $stock->getCreditSpread();
             $dynamicSpread = $ctx->health->rawMetrics->dynamicSpread ?? $baselineSpread;
             $isJunkBondStatus = $dynamicSpread > ($baselineSpread + 0.0011);
 
-            $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->newTreasury, $targetOperatingCash, $ctx->operatingBase, $totalDebt);
+            $shouldSweep = $currentDebtRatio > $evalLimit;
+            
+            // Commercial banks and insurers have structural, regulatory-driven balance sheets 
+            // where "cash hoarding" is just normal float/deposits, and junk status on marginal debt 
+            // shouldn't force them to liquidate their structural funding.
+            if (!in_array($ctx->businessModel, ['commercial_bank', 'insurance'])) {
+                if ($isJunkBondStatus || $hoardStatus['is_hoarder']) {
+                    $shouldSweep = true;
+                }
+            }
 
-            if ($currentDebtRatio > $evalLimit || $isJunkBondStatus || $hoardStatus['is_hoarder']) {
+            if ($shouldSweep) {
                 $targetRatio = $isJunkBondStatus ? max(0.10, $evalLimit * 0.75) : max(0.10, $evalLimit - 0.05);
 
                 $targetTotalDebt = $newEquity * $targetRatio;

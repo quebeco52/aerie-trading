@@ -15,12 +15,17 @@ use App\Service\Event\MarketEventPublisher;
  */
 class MarketOperator
 {
-    // Corporate Governance Constants
+    // --- Corporate Governance ---
+    /** Probability of a CEO naturally retiring per check. */
     private const GOVERNANCE_RETIRE_PROBABILITY = 0.002;
+    /** Probability of firing a CEO if returns are absolutely abysmal. */
     private const GOVERNANCE_FIRE_PROBABILITY_ABYSMAL = 0.028;
+    /** Probability of firing a CEO if returns are negative. */
     private const GOVERNANCE_FIRE_PROBABILITY_UNDERPERFORM = 0.005;
-    private const GOVERNANCE_PERFORMANCE_ABYSMAL_SPREAD = -0.05;
-    private const GOVERNANCE_PERFORMANCE_UNDERPERFORM_SPREAD = -0.02;
+    /** Performance spread vs Hurdle Rate (< -10%) where the Board considers performance abysmal. */
+    private const GOVERNANCE_PERFORMANCE_ABYSMAL_SPREAD = -0.10;
+    /** Performance spread vs Hurdle Rate (< -5%) where the Board considers performance underperforming. */
+    private const GOVERNANCE_PERFORMANCE_UNDERPERFORM_SPREAD = -0.05;
 
     private const SHOCK_FIRE_MIN = 2.0;
     private const SHOCK_FIRE_MAX = 5.0;
@@ -183,10 +188,11 @@ class MarketOperator
         $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
 
         $trueReturn = $isFinancial ? (float) $stock->getRoeTtm() : (float) $stock->getRoicTtm();
-        $baselineReturn = $isFinancial ? (float) $stock->getBaselineRoe() : (float) $stock->getBaselineRoic();
 
-        // Performance versus their structural baseline
-        $performanceSpread = $trueReturn - $baselineReturn;
+        $debtHealth = $this->debtEngine->analyzeDebtHealth($stock, $macroState);
+        $hurdleRate = $isFinancial ? $debtHealth->costOfEquity : $debtHealth->wacc;
+        
+        $performanceSpread = $trueReturn - $hurdleRate;
 
         $firingProbability = 0.0;
         $retireProbability = self::GOVERNANCE_RETIRE_PROBABILITY;
