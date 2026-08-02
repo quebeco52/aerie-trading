@@ -20,9 +20,16 @@ use App\Service\Macro\MacroEngine;
  * - Structural profits come from "The Float" (investing premium cash before it's paid out).
  * - Evaluated on Return on Equity (ROE) rather than ROIC.
  */
-class InsuranceBusinessModel extends AbstractBusinessModel
+class InsuranceBusinessModel implements BusinessModelInterface
 {
-    use FinancialPhysicsTrait;
+    use Trait\StandardBaseModelTrait;
+    use Trait\StandardTreasuryTrait;
+    use Trait\StandardValuationTrait;
+    use Trait\StandardOperatingPhysicsTrait, Trait\StandardCapitalAllocationTrait, FinancialPhysicsTrait {
+        FinancialPhysicsTrait::getTrueReturn insteadof Trait\StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::getEvaluationCapital insteadof Trait\StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::getMaxOrganicGrowthSpeed insteadof Trait\StandardCapitalAllocationTrait;
+    }
 
     // --- The Kenney Rule & Capacity Limits ---
     /** Standard Premium-to-Surplus capacity ratio required to maintain strong credit ratings. */
@@ -262,9 +269,13 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         $outputGap = $macroState->outputGapEma;
         $beta = (float) $stock->getBeta();
 
+        $policyRate = $macroState->policyRateEma;
+        $softMarketRateDiscount = max(0.0, ($policyRate - self::DEFAULT_POLICY_RATE_FALLBACK) * self::SOFT_MARKET_CYCLE_BETA);
+        $pricingPower = 1.0 - min(0.50, $softMarketRateDiscount);
+
         return [
             'macro_demand_shift' => $outputGap * $beta * self::MACRO_DEMAND_SCALAR, // Highly immune to macro demand
-            'pricing_power_multiplier' => 1.0,
+            'pricing_power_multiplier' => $pricingPower,
         ];
     }
 
@@ -312,9 +323,7 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         // 3. Cummins & Danzon (1997) Soft-Market Underwriting Offset:
         // When interest rates and float yields boom above baseline, price competition intensifies across the industry
         // as insurers discount premium rates to capture market share and gather float (The Soft Underwriting Cycle).
-        $policyRate = $macroState->policyRateEma;
-        $softMarketRateDiscount = max(0.0, ($policyRate - self::DEFAULT_POLICY_RATE_FALLBACK) * self::SOFT_MARKET_CYCLE_BETA);
-        $actualRevenue = $actualRevenue * (1.0 - min(0.50, $softMarketRateDiscount));
+        // (This effect is fully captured upstream in getMacroPhysics via pricing_power_multiplier to ensure accurate market expectations)
 
         // 4. Cummins & Danzon (1997) Hard-Market Capital Recovery:
         // When an insurer's capital surplus drops below its Kenney target (Equity < Target Surplus),
@@ -464,7 +473,8 @@ class InsuranceBusinessModel extends AbstractBusinessModel
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * $emaWeight) + ($oldTtm * (1.0 - $emaWeight));
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
         $scaledKappa = $kappa / self::TTM_ROIC_WEIGHT;
-        $newTtm += $this->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
+        $math = new MathUtility();
+        $newTtm += $math->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
         $stock->setRoeTtm((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;

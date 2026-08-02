@@ -271,7 +271,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::ROIC_TTM_EMA_WEIGHT) + ($oldTtm * self::ROIC_TTM_HIST_WEIGHT);
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
         $scaledKappa = $kappa / self::TTM_ROIC_WEIGHT;
-        $newTtm += $this->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
+        $math = new MathUtility();
+        $newTtm += $math->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
         $stock->setRoicTtm((string) max(self::MIN_ROIC_CLAMP, min(self::MAX_ROIC_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;

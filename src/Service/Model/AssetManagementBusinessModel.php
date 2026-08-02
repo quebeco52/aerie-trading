@@ -18,9 +18,16 @@ use App\Service\Macro\MacroEngine;
  * - Revenue scales off highly sticky, recurring Assets Under Management (AUM) fees.
  * - Evaluated on Return on Equity (ROE).
  */
-class AssetManagementBusinessModel extends AbstractBusinessModel
+class AssetManagementBusinessModel implements BusinessModelInterface
 {
-    use FinancialPhysicsTrait;
+    use Trait\StandardBaseModelTrait;
+    use Trait\StandardTreasuryTrait;
+    use Trait\StandardValuationTrait;
+    use Trait\StandardOperatingPhysicsTrait, Trait\StandardCapitalAllocationTrait, FinancialPhysicsTrait {
+        FinancialPhysicsTrait::getTrueReturn insteadof Trait\StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::getEvaluationCapital insteadof Trait\StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::getMaxOrganicGrowthSpeed insteadof Trait\StandardCapitalAllocationTrait;
+    }
 
     // --- ROE & Target Architecture ---
     /** Weight given to historical baseline ROE when blending with TTM ROE. */
@@ -189,7 +196,7 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         $optimalInterestIncome = $optimalYieldingCash * max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
 
         $optimalEbit = $optimalEbt + $optimalInterestExpense - $optimalInterestIncome;
-        $optimalEarningAssets = $effectiveEquity + $optimalDebt;
+        $optimalEarningAssets = $effectiveEquity + $optimalDebt - $optimalOperatingCash;
         $structuralOperatingYield = $optimalEbit / max(1.0, $optimalEarningAssets);
 
         $earningAssets = max($effectiveEquity, $effectiveEquity + $wholesaleDebt - $treasury);
@@ -357,7 +364,8 @@ class AssetManagementBusinessModel extends AbstractBusinessModel
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::ROE_TTM_EMA_WEIGHT) + ($oldTtm * self::ROE_TTM_HIST_WEIGHT);
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
         $scaledKappa = $kappa / self::TTM_ROE_WEIGHT;
-        $newTtm += $this->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
+        $math = new MathUtility();
+        $newTtm += $math->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
         $stock->setRoeTtm((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;

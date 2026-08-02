@@ -177,7 +177,9 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
         $optimalEbt = $optimalOperatingNetIncome / (1.0 - $taxRate);
 
         $optimalEbit = $optimalEbt + $optimalInterestExpense - $optimalInterestIncome;
-        $optimalEarningAssets = $effectiveEquity + $optimalDebt;
+        $operatingBase = $this->getOperatingBase($stock);
+        $targetCash = $this->calculateTargetOperatingCash($operatingBase, 0.0, $optimalDebt);
+        $optimalEarningAssets = $effectiveEquity + $optimalDebt - $targetCash;
         $structuralAssetYield = $optimalEbit / max(1.0, $optimalEarningAssets);
 
         $earningAssets = max($effectiveEquity, $effectiveEquity + $wholesaleDebt - $treasury);

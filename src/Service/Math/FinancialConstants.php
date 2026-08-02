@@ -97,4 +97,38 @@ class FinancialConstants
         'base'     => 0.90,
         'default'  => 1.00,
     ];
+
+    // --- Business Model / Strategy Baseline Constants ---
+    
+    // Operating Physics
+    public const TTM_SMOOTHING_NEW_WEIGHT = 0.25;
+    public const TTM_SMOOTHING_OLD_WEIGHT = 0.75;
+    public const REVERSION_COMPETITIVE_EROSION_ALPHA = 0.50;
+    public const REVERSION_DISTRESS_PERSISTENCE = 0.60;
+    public const REVERSION_DISTRESS_GAMMA = 1.00;
+
+    // Margin Clamping
+    public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
+    public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
+    
+    // Capital Allocation
+    public const BUYBACK_SPEND_NORMAL_RATIO = 0.10;
+    public const BUYBACK_SPEND_MEGA_HOARDER_RATIO = 0.30;
+    public const ORGANIC_CAPEX_DEBT_RATIO = 0.75;
+
+    // Debt Physics
+    public const DEBT_EXPANSION_BASE_PROB = 0.40;
+    public const DEBT_EXPANSION_PROB_MULT = 0.50;
+    public const DEBT_EXPANSION_BASE_AGGR = 0.05;
+    public const DEBT_EXPANSION_AGGR_MULT = 0.35;
+    public const WACC_ARBITRAGE_BUFFER = 0.01;
+    public const FINANCIAL_UNDERLEVERAGED_RATIO = 0.80;
+    public const CORPORATE_UNDERLEVERAGED_RATIO = 0.75;
+    public const REQUIRED_ICR_SAFETY_MULT = 1.50;
+    public const MIN_ABSOLUTE_ICR_BUFFER = 2.00;
+
+    // Valuation Weights
+    public const FAIR_VALUE_EARNINGS_WEIGHT = 0.90;
+    public const FAIR_VALUE_BOOK_WEIGHT = 0.10;
+    public const FAIR_VALUE_DDM_WEIGHT = 0.15;
 }

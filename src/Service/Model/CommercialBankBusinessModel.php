@@ -19,9 +19,16 @@ use App\Service\Event\ShockEvent;
  * - Evaluated strictly on Return on Equity (ROE) rather than ROIC.
  * - Customer deposits act as operating leverage (inventory), requiring an APY Beta to prevent capital flight.
  */
-class CommercialBankBusinessModel extends AbstractBusinessModel
+class CommercialBankBusinessModel implements BusinessModelInterface
 {
-    use FinancialPhysicsTrait;
+    use Trait\StandardBaseModelTrait;
+    use Trait\StandardTreasuryTrait;
+    use Trait\StandardValuationTrait;
+    use Trait\StandardOperatingPhysicsTrait, Trait\StandardCapitalAllocationTrait, FinancialPhysicsTrait {
+        FinancialPhysicsTrait::getTrueReturn insteadof Trait\StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::getEvaluationCapital insteadof Trait\StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::getMaxOrganicGrowthSpeed insteadof Trait\StandardCapitalAllocationTrait;
+    }
 
     // --- ROE & Target Metrics ---
     /** Weight given to historical baseline ROE when blending with TTM ROE. */
@@ -127,6 +134,10 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
     public const INTEREST_INCOME_CASH_BUFFER = 0.05;
 
     // --- Debt Expansion Constants ---
+    public const DEBT_EXPANSION_BASE_PROB = 0.40;
+    public const DEBT_EXPANSION_PROB_MULT = 0.50;
+    public const DEBT_EXPANSION_BASE_AGGR = 0.05;
+    public const DEBT_EXPANSION_AGGR_MULT = 0.35;
     /** Structural baseline of wholesale debt banks target. */
     public const WHOLESALE_TARGET_RATIO = 0.10;
     /** Maximum probability boost for urgent wholesale funding. */
@@ -147,8 +158,8 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
     public const BUYBACK_HOARDER_LIMIT = 0.10;
     /** Minimum fraction of debt issued allocated to organic capex. */
     public const ORGANIC_CAPEX_DEBT_MULT = 0.95;
-    /** Threshold ratio below target debt tolerance indicating under-leverage. */
-    public const UNDER_LEVERAGED_TOLERANCE = 0.75;
+    /** Minimum ratio of target leverage before the bank is considered under-leveraged and triggers aggressive buybacks to defend ROE. */
+    public const UNDER_LEVERAGED_TOLERANCE = 0.90;
 
     // --- Macro & Shock Thresholds ---
     /** Output gap multiplier for fee revenue. */
@@ -225,15 +236,21 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
         // We derive the structural asset yield using the bank's ACTUAL deployed leverage (capped at regulatory limits).
         // This prevents the "Phantom Debt" exploit, where banks operating below max leverage
         // pocket the theoretical interest expense as pure Net Income, causing ROE to hyper-inflate.
+        // Crucially, this cap ONLY applies to wholesale debt. Customer deposits are market-driven and unconstrained.
 
-        $actualLeverage = $effectiveEquity > 0 ? ($totalDebt / $effectiveEquity) : 0.0;
-        $allowedLeverage = min($actualLeverage, max(1.0, $equityLimit));
-        $optimalDebt = $effectiveEquity * $allowedLeverage;
+        $actualWholesaleLeverage = $effectiveEquity > 0 ? ($wholesaleDebt / $effectiveEquity) : 0.0;
+        $thresholds = $this->getModelThresholds();
+        $wholesaleLeverageLimit = $thresholds['wholesale_leverage_limit'] ?? 2.0;
 
-        $optimalEarningAssets = $effectiveEquity + $optimalDebt;
+        $allowedWholesaleLeverage = min($actualWholesaleLeverage, max(0.0, $wholesaleLeverageLimit));
+        $optimalWholesaleDebt = $effectiveEquity * $allowedWholesaleLeverage;
 
-        $optimalWholesaleDebt = $optimalDebt * (1.0 - $depositRatio);
-        $optimalDeposits = $optimalDebt * $depositRatio;
+        $optimalDeposits = $customerDeposits;
+        $optimalDebt = $optimalWholesaleDebt + $optimalDeposits;
+
+        $targetCash = $this->calculateTargetOperatingCash($effectiveEquity, $optimalDeposits, $optimalWholesaleDebt);
+        $optimalEarningAssets = $effectiveEquity + $optimalDebt - $targetCash;
+
         $optimalInterestExpense = ($optimalWholesaleDebt * $blendedWholesaleRate) + ($optimalDeposits * $depositRate);
 
         $optimalNetIncome = $effectiveEquity * $baselineRoe;
@@ -272,12 +289,23 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
+        $params = $this->resolveModelParameters($stock, [
+            'nii_revenue_weight'   => self::NII_REVENUE_WEIGHT,
+            'fee_revenue_weight'   => self::FEE_REVENUE_WEIGHT,
+            'credit_risk_appetite' => 0.5,
+        ]);
+        
+        $riskAppetite = max(0.0, min(1.0, $params['credit_risk_appetite']));
+        $niiMultiplier = 0.5 + $riskAppetite;
+
+        $blendedMultiplier = ($params['nii_revenue_weight'] * $niiMultiplier) + ($params['fee_revenue_weight'] * 1.0);
+
         $outputGap = $macroState->outputGapEma;
         $beta = (float) $stock->getBeta();
 
         return [
             'macro_demand_shift' => $outputGap * $beta * 0.50, // Less demand destruction than physical goods
-            'pricing_power_multiplier' => 1.0, // Top-line yields price off bond market natively
+            'pricing_power_multiplier' => $blendedMultiplier, // Passes structural yield adjustments to the expectation engine
         ];
     }
 
@@ -292,11 +320,16 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
             'nii_revenue_weight'        => self::NII_REVENUE_WEIGHT,
             'fee_revenue_weight'        => self::FEE_REVENUE_WEIGHT,
             'nim_inversion_sensitivity' => self::NIM_INVERSION_SENSITIVITY,
+            'credit_risk_appetite'      => 0.5,
         ]);
 
         $niiWeight            = $params['nii_revenue_weight'];
         $feeWeight            = $params['fee_revenue_weight'];
         $inversionSensitivity = $params['nim_inversion_sensitivity'];
+        
+        $riskAppetite = max(0.0, min(1.0, $params['credit_risk_appetite']));
+        $niiMultiplier = 0.5 + $riskAppetite; // Yield scales from 0.5x to 1.5x
+        $defaultMultiplier = $riskAppetite >= 0.5 ? 1.0 + (($riskAppetite - 0.5) * 2.0) : 0.5 + ($riskAppetite * 1.0); // Defaults scale from 0.5x to 2.0x
 
         // Independent stream Z-scores
         $revenueZ = $mathUtility->generateStandardNormal(); // NII loan origination volume
@@ -305,10 +338,13 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
 
         $outputGap = $macroState->outputGapEma;
 
+        $blendedMultiplier = ($niiWeight * $niiMultiplier) + ($feeWeight * 1.0);
+        $optimalRevenue = $blendedMultiplier > 0 ? $expectedRevenue / $blendedMultiplier : $expectedRevenue;
+
         // Blended dual-stream revenue (NII vs. Non-Interest Fee Income)
-        $niiRevenue = $expectedRevenue * $niiWeight
-            * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
-        $feeRevenue = $expectedRevenue * $feeWeight
+        $niiRevenue = $optimalRevenue * $niiWeight
+            * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))) * $niiMultiplier;
+        $feeRevenue = $optimalRevenue * $feeWeight
             * (1.0 + ($feeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + ($outputGap * self::SECTOR_SHOCK_FEE_OUTPUT_GAP_MULT));
         $actualRevenue = max(0.0, $niiRevenue + $feeRevenue);
 
@@ -325,7 +361,7 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
         } else {
             $provisionShock = 0.0;
         }
-        $lossProvisionShock = $provisionShock + $macroDefaultDrag;
+        $lossProvisionShock = ($provisionShock + $macroDefaultDrag) * $defaultMultiplier;
 
         // CECL Forward Provisioning (Credit Spread Channel):
         // Under CECL accounting, banks must provision against EXPECTED future losses.
@@ -417,7 +453,8 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * 0.25) + ($oldTtm * 0.75);
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
         $scaledKappa = $kappa / self::TTM_ROE_WEIGHT;
-        $newTtm += $this->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
+        $math = new MathUtility();
+        $newTtm += $math->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
         $stock->setRoeTtm((string) max(-0.50, min(1.0, $newTtm)));
 
         return $truePostTaxReturn;
@@ -611,7 +648,7 @@ class CommercialBankBusinessModel extends AbstractBusinessModel
     {
         // Commercial banks do not evaluate Interest Coverage (ICR) for under-leverage 
         // because their interest expense is massive (it's their COGS).
-        // If they drop below 75% of their regulatory leverage target, they are destroying ROE
+        // If they drop below 90% of their regulatory leverage target, they are destroying ROE
         // and should aggressively return capital to shareholders via buybacks.
         return $currentDebtRatio < ($targetDebtTolerance * self::UNDER_LEVERAGED_TOLERANCE);
     }

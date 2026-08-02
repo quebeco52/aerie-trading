@@ -89,8 +89,9 @@ class StockModelTuning
         // --- Black Swan Capital (SWAN) ---
         // Mega-cap alternative asset manager specializing in leveraged buyouts and carried interest.
         'SWAN' => [
-            'management_fee_weight'   => 0.35,
-            'carried_interest_weight' => 0.65,
+            'management_fee_weight'   => 0.20,
+            'carried_interest_weight' => 0.80,
+            'leverage_aggression'     => 0.80,
         ],
 
         // --- Vulture Capital Recovery (VULT) ---
@@ -154,11 +155,12 @@ class StockModelTuning
         // =====================================================================
 
         // --- Lakebird Bank (LAKE) ---
-        // Universal banking behemoth with subterranean Lake Vaults custodial monopoly (35% fee income).
+        // Universal banking behemoth.
         'LAKE' => [
             'nii_revenue_weight'        => 0.65,
             'fee_revenue_weight'        => 0.35,
             'nim_inversion_sensitivity' => 8.0,
+            'credit_risk_appetite'      => 0.40,
         ],
 
         // --- Riverstone Financial (RIVR) ---
@@ -167,6 +169,7 @@ class StockModelTuning
             'nii_revenue_weight'        => 0.90,
             'fee_revenue_weight'        => 0.10,
             'nim_inversion_sensitivity' => 12.0,
+            'credit_risk_appetite'      => 0.60,
         ],
 
         // --- Talon Credit (TALN) ---
@@ -192,9 +195,10 @@ class StockModelTuning
         // --- Hummingbird Interactive (HUMM) ---
         // Consumer mobile OS & advertising giant. Heavily ad-supported platform usage (65%).
         'HUMM' => [
-            'saas_subscription_weight' => 0.35,
-            'ad_usage_weight'          => 0.65,
-            'ad_cyclicality_scalar'    => 0.22,
+            'subscription_revenue_weight' => 0.35,
+            'advertising_revenue_weight'  => 0.65,
+            'advertising_cyclicality'     => 0.22,
+            'monopoly_aggression'         => 0.90, // Ruthless data monopoly, high margins, existential regulatory risk
         ],
 
         // =====================================================================
@@ -416,6 +420,52 @@ class StockModelTuning
         'TICK' => [
             'subscription_revenue_weight' => 0.90,
             'transaction_revenue_weight'  => 0.10,
+        ],
+
+        // =====================================================================
+        // STANDARD CORPORATE ARCHETYPES
+        // =====================================================================
+
+        // --- Silver Gull Resorts (GULL) ---
+        // VIP casino and resorts catering to oligarchs. Very high pricing power against inflation.
+        'GULL' => [
+            'pricing_power_index' => 0.70,
+        ],
+
+        // --- River Stream Industries (RIVE) ---
+        // Robotics and automation manufacturer. Long-term service contracts and essential margin-expanding tools.
+        'RIVE' => [
+            'pricing_power_index' => 0.85,
+        ],
+
+        // --- Three Rivers Manufacturing (TRIV) ---
+        // Unsinkable, diversified industrial conglomerate with ubiquitous products.
+        'TRIV' => [
+            'pricing_power_index' => 0.75,
+        ],
+
+        // --- Iron Beak Heavy Industries (IBHI) ---
+        // Massive physical architect. Captive builder with highly cyclical revenue and poor pricing power against inflation.
+        'IBHI' => [
+            'pricing_power_index' => 0.30,
+        ],
+
+        // --- Weaver Marketplace (WEAV) ---
+        // Internet retail giant. Logistics-heavy with thin margins that get squeezed by inflation.
+        'WEAV' => [
+            'pricing_power_index' => 0.40,
+        ],
+
+        // --- Golden Swift Holdings (SWFT) ---
+        // Restaurant chain. Moderate ability to pass on costs, but sensitive to consumer pushback.
+        'SWFT' => [
+            'pricing_power_index' => 0.60,
+        ],
+
+        // --- Penguin Computing (PENG) ---
+        // High performance supercomputers and liquid cooling. High tech margins.
+        'PENG' => [
+            'pricing_power_index' => 0.65,
         ],
     ];
 

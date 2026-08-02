@@ -91,11 +91,23 @@ class TechBusinessModel extends StandardCorporateBusinessModel
             'subscription_revenue_weight' => self::SUBSCRIPTION_REVENUE_WEIGHT,
             'advertising_revenue_weight'  => self::ADVERTISING_REVENUE_WEIGHT,
             'advertising_cyclicality'     => self::ADVERTISING_CYCLICALITY_SCALAR,
+            'monopoly_aggression'         => 0.5,
         ]);
 
         $subWeight           = $params['subscription_revenue_weight'];
         $adWeight            = $params['advertising_revenue_weight'];
         $adCyclicalityScalar = $params['advertising_cyclicality'];
+        
+        $aggression = max(0.0, min(1.0, $params['monopoly_aggression']));
+        // Risk vs Reward Trade-off:
+        // Reward: Lower variable costs (higher margins) via aggressive pricing and data harvesting
+        $marginBonus = $aggression * 0.10; // Up to 1000 bps baseline margin expansion
+        
+        // Risk: Massive amplification of regulatory scrutiny
+        // At aggression=1.0, Z-score threshold shifts from -2.5 to -1.25 (frequent fines), and penalty severity is 1.5x.
+        // At aggression=0.0, Z-score threshold shifts to -3.75 (nearly impossible), and penalty is 0.5x.
+        $regulatoryZThreshold = self::REGULATORY_FINE_Z_SCORE * (1.5 - $aggression);
+        $regulatorySeverity   = self::REGULATORY_FINE_PENALTY * (0.5 + $aggression);
 
         // Independent stream Z-scores
         $subscriptionZ = $mathUtility->generateStandardNormal(); // Enterprise SaaS ARR & Cloud compute contract volume
@@ -110,8 +122,8 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         $regulatoryShock = 0.0;
         $eventType       = null;
 
-        if ($eventZ < self::REGULATORY_FINE_Z_SCORE) {
-            $regulatoryShock = self::REGULATORY_FINE_PENALTY; // Massive antitrust / surveillance fine
+        if ($eventZ < $regulatoryZThreshold) {
+            $regulatoryShock = $regulatorySeverity; // Massive antitrust / surveillance fine
             $eventType = ShockEvent::REGULATORY_FINE;
         } elseif ($eventZ < self::SEVERE_CHURN_Z_SCORE) {
             $regulatoryShock = self::SEVERE_CHURN_PENALTY;
@@ -144,7 +156,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         // Crucially, antitrust and data privacy regulatory penalties apply proportionally to the Advertising
         // & Platform data-harvesting stream ($adWeight), insulating enterprise subscription margins.
         $adCostAddon = $regulatoryShock * $adWeight;
-        $rawMargin = $realizedVariableMargin + $wageInflationPenalty + $saasOperatingLeverageShift + $adCostAddon;
+        $rawMargin = $realizedVariableMargin + $wageInflationPenalty + $saasOperatingLeverageShift + $adCostAddon - $marginBonus;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock Z-score selects the most extreme driver across streams

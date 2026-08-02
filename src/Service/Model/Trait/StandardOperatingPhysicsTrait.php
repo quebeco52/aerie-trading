@@ -1,0 +1,131 @@
+<?php
+declare(strict_types=1);
+
+namespace App\Service\Model\Trait;
+
+use App\DTO\ActualFinancialsDTO;
+use App\DTO\MacroStateDTO;
+use App\DTO\SectorCoverageProfile;
+use App\DTO\SectorPhysicsResult;
+use App\Entity\Stock;
+use App\Service\Math\MathUtility;
+use App\Service\Math\FinancialConstants;
+
+trait StandardOperatingPhysicsTrait
+{
+    public function getSecularGrowthRate(Stock $stock): float {
+        return 0.02; // DEFAULT_SECULAR_GROWTH_RATE
+    }
+    
+    public function getCapexCyclicality(): float {
+        return 1.5; // DEFAULT_CAPEX_CYCLICALITY
+    }
+    
+    public function getSurpriseBlendWeights(): array {
+        return ['eps_weight' => 0.50, 'revenue_weight' => 0.50];
+    }
+    
+    public function getEffectiveTaxRate(float $macroTaxRate): float {
+        return $macroTaxRate;
+    }
+    
+    public function getCoverageProfile(): SectorCoverageProfile {
+        return new SectorCoverageProfile(baseVisibility: 0.20, errorStdDev: 0.06);
+    }
+    
+    public function getWorkingCapitalIntensity(Stock $stock): float {
+        return 0.05;
+    }
+    
+    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void {}
+    
+    public function getMarginReversionSpeed(): float {
+        return 4.0; // DEFAULT_MARGIN_REVERSION_SPEED
+    }
+
+    public function clampMargin(float $rawMargin, float $minMargin = 0.01, float $maxMargin = 1.50): float {
+        return min($maxMargin, max($minMargin, $rawMargin));
+    }
+    
+    public function computeActualFinancials(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): ActualFinancialsDTO {
+        $physics = $this->calculateSectorPhysics($stock, $expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol, $macroState, $mathUtility);
+
+        $clampedMargin = $this->clampMargin($physics->rawVariableMargin);
+        $actualVariableCosts = $physics->actualRevenue * $clampedMargin;
+        $ebit = $physics->actualRevenue - $fixedCosts - $actualVariableCosts;
+
+        return new ActualFinancialsDTO(
+            actualRevenue: $physics->actualRevenue,
+            actualVariableCosts: $actualVariableCosts,
+            clampedMargin: $clampedMargin,
+            ebit: $ebit,
+            primaryShockZ: $physics->primaryShockZ,
+            observableShockZ: $physics->observableShockZ,
+            eventType: $physics->eventType,
+            eventContext: $physics->eventContext,
+            isPublicEvent: $physics->isPublicEvent,
+        );
+    }
+    
+    abstract protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult;
+
+    public function calculateEconomicReturn(Stock $stock, float $quarterlyNopatOrIncome, float $investedCapital): float
+    {
+        $industry = $stock->getIndustry() ?: 'General';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        if (\App\Data\Sectors::isFinancial($businessModel)) {
+            $equity = (float) $stock->getTotalEquity();
+            return $equity > 0 ? ($quarterlyNopatOrIncome / $equity) * 4.0 : 0.0;
+        }
+        return $investedCapital > 0 ? ($quarterlyNopatOrIncome / $investedCapital) * 4.0 : 0.0;
+    }
+
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08): float
+    {
+        $industry = $stock->getIndustry() ?: 'General';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $thresholds = $this->getModelThresholds();
+        $kappa = $thresholds['reversion_speed'] ?? 0.20;
+        $moatSpread = $thresholds['moat_spread'] ?? 0.00;
+        
+        $math = new MathUtility();
+
+        if (\App\Data\Sectors::isFinancial($businessModel)) {
+            $equity = (float) $stock->getTotalEquity();
+            $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * 4.0 : 0.0;
+
+            $stock->setCurrentRoe((string) max(-0.50, min(1.0, $truePostTaxReturn)));
+
+            $oldTtm = (float) $stock->getRoeTtm();
+            // TTM_SMOOTHING_NEW_WEIGHT = 0.25, OLD_WEIGHT = 0.75
+            $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * 0.25) + ($oldTtm * 0.75);
+            $scaledKappa = $kappa / (defined('static::TTM_ROE_WEIGHT') ? static::TTM_ROE_WEIGHT : 0.50);
+            $newTtm += $math->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
+            $stock->setRoeTtm((string) max(-0.50, min(1.0, $newTtm)));
+
+            return $truePostTaxReturn;
+        }
+
+        $nopatProxy = $ebit > 0 ? $ebit * (1.0 - $corporateTaxRate) : $ebit;
+        $effectiveCapital = max(1.0, abs($investedCapital));
+        $truePostTaxReturn = ($nopatProxy / $effectiveCapital) * 4.0;
+
+        $stock->setCurrentRoic((string) max(-0.50, min(1.0, $truePostTaxReturn)));
+
+        $oldTtm = (float) $stock->getRoicTtm();
+        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * 0.25) + ($oldTtm * 0.75);
+        $scaledKappa = $kappa / (defined('static::TTM_ROIC_WEIGHT') ? static::TTM_ROIC_WEIGHT : 0.50);
+        $newTtm += $math->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
+        $stock->setRoicTtm((string) max(-0.50, min(1.0, $newTtm)));
+
+        return $truePostTaxReturn;
+    }
+    
+    public function getTrueReturn(Stock $stock): float {
+        return (float) $stock->getRoicTtm();
+    }
+    
+    public function getEvaluationCapital(float $equity, float $investedCapital): float {
+        return $investedCapital;
+    }
+}

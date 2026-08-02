@@ -47,8 +47,25 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public const MIN_DEPOSIT_BETA_CLAMP   = 0.20;
     /** Supplemental deposit beta spread added to attract high-yield savings funding. */
     public const HIGH_YIELD_BETA_SPREAD   = 0.10;
-    /** Target operating cash reserve ratio applied to corporate operating base. */
-    public const TARGET_OPERATING_BUFFER  = 0.05;
+    // --- Liquidity & Cash Target Constants ---
+    /** Fraction of operating base held as cash. */
+    public const TARGET_CASH_OPERATING_MULT = 0.05;
+    /** Fraction of current liabilities held as target cash. */
+    public const TARGET_CASH_LIABILITY_MULT = 0.10;
+    /** Fraction of wholesale debt held as target cash. */
+    public const TARGET_CASH_WHOLESALE_MULT = 0.05;
+    /** Minimum fraction of operating base held as cash. */
+    public const MIN_CASH_OPERATING_MULT = 0.03;
+    /** Minimum fraction of current liabilities held as cash. */
+    public const MIN_CASH_LIABILITY_MULT = 0.05;
+    /** Minimum fraction of wholesale debt held as cash. */
+    public const MIN_CASH_WHOLESALE_MULT = 0.03;
+
+    // --- Hoarding & Deposit Flight ---
+    /** Fraction of total debt held as idle excess cash before flagged as a hoarder. */
+    public const HOARDING_THRESHOLD_DEBT_RATIO      = 0.12;
+    /** Higher idle cash fraction that triggers aggressive capital return. */
+    public const MEGA_HOARDING_THRESHOLD_DEBT_RATIO = 0.18;
 
     // --- APR & Gross Yield Ceiling ---
     /** Absolute minimum APR gross yield ceiling floor. */
@@ -261,7 +278,9 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $optimalEbt = $optimalNetIncome / (1.0 - $taxRate);
 
         $optimalEbit = $optimalEbt + $optimalInterestExpense;
-        $structuralAssetYield = $optimalEbit / max(1.0, $effectiveEquity + $optimalDebt);
+        $targetCash = $this->calculateTargetOperatingCash($effectiveEquity, $optimalDeposits, $optimalWholesaleDebt);
+        $optimalEarningAssets = $effectiveEquity + $optimalDebt - $targetCash;
+        $structuralAssetYield = $optimalEbit / max(1.0, $optimalEarningAssets);
 
         $targetEbit = $earningAssets * $structuralAssetYield;
 
@@ -294,7 +313,8 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         // However, this is largely captured in Revenue (Gross Yield). 
         // We only return the supplemental interest from excess treasury cash to avoid double-counting.
         $operatingBase = $this->getOperatingBase($stock);
-        $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - ($operatingBase * self::TARGET_OPERATING_BUFFER));
+        // Credit services act like banks and use standard cash buffering
+        $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - ($operatingBase * self::TARGET_CASH_OPERATING_MULT));
 
         return $excessCash * $this->calculateCashYield($macroState);
     }
@@ -317,5 +337,40 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             'interest_expense' => $wholesaleInterest + $depositInterest,
             'wholesale_rate' => $wholesaleRate
         ];
+    }
+
+    public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
+    {
+        return max(
+            $operatingBase * self::TARGET_CASH_OPERATING_MULT,
+            $currentLiability * self::TARGET_CASH_LIABILITY_MULT,
+            $wholesaleDebt * self::TARGET_CASH_WHOLESALE_MULT
+        );
+    }
+
+    public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
+    {
+        return max(
+            $operatingBase * self::MIN_CASH_OPERATING_MULT,
+            $currentLiability * self::MIN_CASH_LIABILITY_MULT,
+            $wholesaleDebt * self::MIN_CASH_WHOLESALE_MULT
+        );
+    }
+
+    public function evaluateHoardingStatus(float $treasury, float $targetCashReserves, float $operatingBase, float $totalDebt): array
+    {
+        $excessCash = max(0.0, $treasury - $targetCashReserves);
+        return [
+            'excess_cash'     => $excessCash,
+            'is_hoarder'      => $excessCash > ($totalDebt * self::HOARDING_THRESHOLD_DEBT_RATIO),
+            'is_mega_hoarder' => $excessCash > ($totalDebt * self::MEGA_HOARDING_THRESHOLD_DEBT_RATIO),
+        ];
+    }
+
+    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
+    {
+        // Credit services act like banks. If they drop below 90% of their regulatory leverage target, 
+        // they are destroying ROE and should aggressively return capital to shareholders via buybacks.
+        return $currentDebtRatio < ($targetDebtTolerance * 0.90);
     }
 }

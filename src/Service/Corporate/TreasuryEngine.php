@@ -121,9 +121,12 @@ class TreasuryEngine
         $saturationPenalty = $archetypeStrategy->modifySaturationPenalty($saturationPenalty);
         $marginalReturn = $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $saturationPenalty, $evaluationCapital, $ctx->macroState);
 
-        $isUnderLeveraged = $ctx->health->isUnderLeveraged && !$ctx->health->isSevereNegativeCarry;
+        // Financials aggressively use isUnderLeveraged for stock buybacks to crush equity bloat, 
+        // but they should NEVER issue massive amounts of expensive wholesale bonds just to increase leverage.
+        $triggerWholesaleDebt = $ctx->isFinancial ? false : $ctx->health->isUnderLeveraged;
+        $isUnderLeveragedForDebt = $triggerWholesaleDebt && !$ctx->health->isSevereNegativeCarry;
 
-        if (($marginalReturn > $hurdleRate || $isUnderLeveraged) && $ctx->health->canIssueDebt) {
+        if (($marginalReturn > $hurdleRate || $isUnderLeveragedForDebt) && $ctx->health->canIssueDebt) {
             $newBorrowingRate = $ctx->health->rawMetrics->currentMarketRate ?? 0.05;
 
             $ebit = $ctx->health->rawMetrics->ebit ?? 0.0;
@@ -161,7 +164,7 @@ class TreasuryEngine
                 $borrowProbability = $aggressionData['probability'];
                 $aggressiveness = $aggressionData['aggressiveness'];
 
-                if ($isUnderLeveraged) {
+                if ($isUnderLeveragedForDebt) {
                     $aggressiveness = max($aggressiveness, 0.50);
                     $borrowProbability = max($borrowProbability, 0.90);
                 }
@@ -175,13 +178,13 @@ class TreasuryEngine
                     $ctx->newTreasury += $newDebtIssued;
                     $ctx->debtIssued = $newDebtIssued;
                     $ctx->debtActionTaken = true;
-                    if ($isUnderLeveraged) {
+                    if ($isUnderLeveragedForDebt) {
                         $ctx->recapActionTaken = true;
                     }
 
                     if ($newDebtIssued > 500_000_000.0) {
                         $amtB = number_format($newDebtIssued / 1_000_000_000, 2);
-                        $ctx->events[] = ['description' => "Issued \${$amtB}B in bonds for " . ($isUnderLeveraged ? "recapitalization" : "expansion") . ".", 'shock' => 0.5];
+                        $ctx->events[] = ['description' => "Issued \${$amtB}B in bonds for " . ($isUnderLeveragedForDebt ? "recapitalization" : "expansion") . ".", 'shock' => 0.5];
                     }
                 }
             }

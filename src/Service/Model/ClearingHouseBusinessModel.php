@@ -21,9 +21,16 @@ use App\Service\Math\FinancialConstants;
  * - Carries extreme tail risk governed by a statutory Default Waterfall: routine member defaults are absorbed
  *   by member collateral/guaranty funds ($0 loss to CCP), while systemic defaults pierce Skin-in-the-Game (SITG) capital.
  */
-class ClearingHouseBusinessModel extends AbstractBusinessModel
+class ClearingHouseBusinessModel implements BusinessModelInterface
 {
-    use FinancialPhysicsTrait;
+    use Trait\StandardBaseModelTrait;
+    use Trait\StandardTreasuryTrait;
+    use Trait\StandardValuationTrait;
+    use Trait\StandardOperatingPhysicsTrait, Trait\StandardCapitalAllocationTrait, FinancialPhysicsTrait {
+        FinancialPhysicsTrait::getTrueReturn insteadof Trait\StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::getEvaluationCapital insteadof Trait\StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::getMaxOrganicGrowthSpeed insteadof Trait\StandardCapitalAllocationTrait;
+    }
 
     // --- Fee Revenue Floor ---
     /** Minimum structural EBIT floor as a fraction of equity. Prevents degenerate zero-revenue states. */

@@ -262,7 +262,7 @@ class Sectors
             default           => new \App\Service\Model\StandardCorporateBusinessModel(),
         };
 
-        if ($strategy instanceof \App\Service\Model\AbstractBusinessModel) {
+        if ($strategy instanceof \App\Service\Model\BusinessModelInterface) {
             $strategy->setModelIdentifier($businessModel);
         }
 

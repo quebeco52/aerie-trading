@@ -44,6 +44,10 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     /** Structural minimum operating cost-to-revenue ratio for private equity platform overhead. */
     public const MIN_EFFICIENCY_RATIO       = 0.30;
 
+    // --- Carried Interest Hurdle ---
+    /** Z-score equivalent cliff: if economic conditions + idiosyncratic shock fall below this, carry is zeroed. */
+    public const HURDLE_RATE_Z_CLIFF = -0.50;
+
     // --- Event Lore Thresholds ---
     /** Positive output gap threshold triggering deal boom carried interest lore. */
     public const LORE_BOOM_GAP_THRESHOLD   = 0.020;
@@ -97,6 +101,23 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     /** Weight given to historical trailing twelve-month ROE when updating ROE EMA. */
     public const ROE_TTM_HIST_WEIGHT       = 0.80;
 
+    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    {
+        $params = $this->resolveModelParameters($stock, [
+            'management_fee_weight'   => 0.35,
+            'carried_interest_weight' => 0.65,
+            'leverage_aggression'     => 0.5,
+        ]);
+        
+        $carryMultiplier = 0.5 + max(0.0, min(1.0, $params['leverage_aggression']));
+        $blendedMultiplier = ($params['management_fee_weight'] * 1.0) + ($params['carried_interest_weight'] * $carryMultiplier);
+
+        return [
+            'macro_demand_shift' => 0.0,
+            'pricing_power_multiplier' => $blendedMultiplier,
+        ];
+    }
+
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $revenueZ = $mathUtility->generateStandardNormal();
@@ -104,9 +125,17 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $params = $this->resolveModelParameters($stock, [
             'management_fee_weight'   => 0.35,
             'carried_interest_weight' => 0.65,
+            'leverage_aggression'     => 0.5,
         ]);
         $mgmtWeight  = $params['management_fee_weight'];
         $carryWeight = $params['carried_interest_weight'];
+        $aggression  = max(0.0, min(1.0, $params['leverage_aggression']));
+        
+        // Risk vs Reward Trade-off:
+        // High leverage (1.0) = 1.5x carry returns, but Hurdle Rate Z Cliff is +0.5 (needs booming economy)
+        // Low leverage (0.0)  = 0.5x carry returns, but Hurdle Rate Z Cliff is -1.5 (almost never zeroes out)
+        $carryMultiplier = 0.5 + $aggression; 
+        $hurdleRateZCliff = -1.5 + ($aggression * 2.0);
 
         // 1. GDP Deal Flow Multiplier:
         $outputGap = $macroState->outputGapEma;
@@ -121,9 +150,33 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $rateFreezeDrag = max(0.0, ($policyRate - self::LBO_RATE_FREEZE_THRESHOLD) * self::LBO_RATE_FREEZE_SCALAR);
         $lboFinancingDrag = $spreadFreezeDrag + $rateFreezeDrag;
 
-        $managementRevenue = $expectedRevenue * $mgmtWeight * (1.0 + ($revenueZ * ($baselineVol * 0.5)));
-        $carryRevenue      = $expectedRevenue * $carryWeight * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $dealFlowMultiplier - $lboFinancingDrag);
-        $actualRevenue     = max(0.0, $managementRevenue + max(0.0, $carryRevenue));
+        // Multiple Compression: LBO drag acts as a multiplier compressing exits, max 1.0 (no drag), min 0.0 (total freeze)
+        $multipleCompression = max(0.0, 1.0 - $lboFinancingDrag);
+
+        // Economic condition for the hurdle
+        $economicCondition = $revenueZ + $dealFlowMultiplier;
+
+        $blendedMultiplier = ($mgmtWeight * 1.0) + ($carryWeight * $carryMultiplier);
+
+        // Because expectations are structurally scaled by blendedMultiplier via getMacroPhysics,
+        // we extract the 'optimal' revenue first to prevent double-counting the multiplier.
+        $optimalRevenue = $blendedMultiplier > 0 ? $expectedRevenue / $blendedMultiplier : $expectedRevenue;
+
+        // Blended dual-stream revenue
+        $mgmtRevenue = $optimalRevenue * $mgmtWeight
+            * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.5)));
+
+        $carriedInterestRevenue = $optimalRevenue * $carryWeight
+            * (1.0 + ($economicCondition * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5)))
+            * $multipleCompression
+            * $carryMultiplier;
+
+        // Binary Cliff: if we miss the hurdle, or if multiples are fully compressed, zero carry.
+        if ($economicCondition < $hurdleRateZCliff) {
+            $carriedInterestRevenue = 0.0;
+        }
+
+        $actualRevenue = max(0.0, $mgmtRevenue + $carriedInterestRevenue);
 
         // 3. Structural Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
@@ -136,8 +189,8 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
             $eventType = ShockEvent::PE_DEAL_DROUGHT;
         }
 
-        // observableShockZ: macro deal flow and LBO drag are public; idiosyncratic exit timing is ~20% visible
-        $observableShockZ = $dealFlowMultiplier - $lboFinancingDrag + $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
+        // observableShockZ represents the percentage deviation of actual revenue from expected revenue.
+        $observableShockZ = $expectedRevenue > 0.0 ? (($actualRevenue - $expectedRevenue) / $expectedRevenue) : 0.0;
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -216,10 +269,22 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::ROE_TTM_EMA_WEIGHT) + ($oldTtm * self::ROE_TTM_HIST_WEIGHT);
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
         $scaledKappa = $kappa / self::TTM_ROE_WEIGHT;
-        $newTtm += $this->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
+        $math = new MathUtility();
+        $newTtm += $math->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
         $stock->setRoeTtm((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;
+    }
+
+    public function getAcquisitionType(string $defaultType): string
+    {
+        return 'LEVERAGED BUYOUT';
+    }
+
+    public function getMaArchetypeStrategy(string $archetype): array
+    {
+        // PE firms are ultimate LBO sponsors. They deploy max leverage and high spend on targets.
+        return ['prob' => 0.080, 'spend' => 0.90, 'type' => 'LEVERAGED BUYOUT', 'use_leverage' => true, 'use_stock' => false];
     }
 }
 

@@ -8,6 +8,7 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for normal, non-financial companies.
@@ -17,8 +18,16 @@ use App\Service\Macro\MacroEngine;
  * - Subject to supply chain inflation and physical depreciation.
  * - Operating scale is based on physical assets, not financial leverage.
  */
-class StandardCorporateBusinessModel extends AbstractBusinessModel
+class StandardCorporateBusinessModel implements BusinessModelInterface
 {
+    use Trait\StandardBaseModelTrait;
+    use Trait\StandardOperatingPhysicsTrait;
+    use Trait\StandardTreasuryTrait;
+    use Trait\StandardCapitalAllocationTrait;
+    use Trait\StandardDebtPhysicsTrait;
+    use Trait\StandardMaTrait;
+    use Trait\StandardValuationTrait;
+
     // --- ROIC & Target Metrics ---
     /** Weight given to historical baseline ROIC when blending with TTM ROIC. */
     public const BASELINE_ROIC_WEIGHT = 0.50;
@@ -96,15 +105,30 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
      */
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
+        $params = $this->resolveModelParameters($stock, [
+            'pricing_power_index' => 0.5,
+        ]);
+        $pricingPower = max(0.0, min(1.0, $params['pricing_power_index']));
+
+        // Risk vs Reward:
+        // High pricing power (1.0) = 0x inflation penalty, but 1.5x macro volume sensitivity (highly elastic luxury/premium goods)
+        // Low pricing power (0.0)  = 2.0x inflation penalty, but 0.5x macro volume sensitivity (inelastic discount goods)
+        $inflationMultiplier = 2.0 - ($pricingPower * 2.0); 
+        $macroSensitivityMultiplier = 0.5 + $pricingPower;
+
         $revenueZ = $mathUtility->generateStandardNormal();
-        $revenueShock = $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
+        
+        // Macro Volume Sensitivity (Demand elasticity based on GDP)
+        $macroVolumeShock = $macroState->outputGapEma * $macroSensitivityMultiplier * abs((float) $stock->getBeta());
+        
+        $revenueShock = ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $macroVolumeShock;
         $actualRevenue = $expectedRevenue * (1.0 + $revenueShock);
 
-        // Supply Chain Inflation Penalty:
-        // Physical companies get squeezed by inflation because raw material and labor costs rise 
-        // faster than they can safely raise prices on consumers without destroying demand.
+        // Supply Chain Inflation Penalty
         $inflation = $macroState->inflationEma;
-        $inflationPenalty = $inflation > MacroEngine::TARGET_INFLATION ? ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0;
+        $baseInflationPenalty = $inflation > \App\Service\Macro\MacroEngine::TARGET_INFLATION ? ($inflation - \App\Service\Macro\MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0;
+        
+        $inflationPenalty = $baseInflationPenalty * $inflationMultiplier;
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $inflationPenalty);
 
@@ -144,10 +168,11 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
         $stock->setCurrentRoic((string) max(-0.50, min(1.0, $truePostTaxReturn)));
 
         $oldTtm = (float) $stock->getRoicTtm();
-        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::TTM_SMOOTHING_NEW_WEIGHT) + ($oldTtm * self::TTM_SMOOTHING_OLD_WEIGHT);
+        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * FinancialConstants::TTM_SMOOTHING_NEW_WEIGHT) + ($oldTtm * FinancialConstants::TTM_SMOOTHING_OLD_WEIGHT);
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
         $scaledKappa = $kappa / self::TTM_ROIC_WEIGHT;
-        $newTtm += $this->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
+        $math = new MathUtility();
+        $newTtm += $math->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
         $stock->setRoicTtm((string) max(-0.50, min(1.0, $newTtm)));
 
         return $truePostTaxReturn;

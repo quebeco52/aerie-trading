@@ -18,6 +18,38 @@ trait FinancialPhysicsTrait
         return (float) $stock->getRoeTtm();
     }
 
+    public function calculateCapacityModifier(float $totalDebt, float $equity, float $equityLimit, ?float $coreLiabilities = null): float {
+        return 1.0;
+    }
+    
+    public function getInterestCoverage(float $ebit, float $interestExpense, float $depreciation = 0.0): float {
+        return $interestExpense > 0 ? ($ebit / $interestExpense) : ($ebit > 0 ? 999.0 : -999.0);
+    }
+    
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0): array {
+        return [
+            'probability' => 0.40 + ($spreadMultiplier * 0.50),
+            'aggressiveness' => 0.05 + (0.35 * $spreadMultiplier)
+        ];
+    }
+    
+    public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float {
+        return $baseCapacity;
+    }
+    
+    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool {
+        return false; // Typically overridden by specific banks
+    }
+
+    public function processPassiveLiabilityGrowth(Stock $stock, \App\DTO\MacroStateDTO $macroState, array &$state, \App\Service\Math\MathUtility $mathUtility): void {}
+
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array {
+        $floatingRatio = (float) $stock->getFloatingDebtRatio();
+        $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingInterestRate);
+        $wholesaleRate = $debt > 0 ? ($interestExpense / $debt) : $currentMarketFixedRate;
+        return ['interest_expense' => $interestExpense, 'wholesale_rate' => $wholesaleRate];
+    }
+
     public function getHurdleRate(\App\DTO\DebtHealthDTO $health): float
     {
         return $health->costOfEquity ?? 0.10;

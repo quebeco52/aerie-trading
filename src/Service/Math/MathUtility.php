@@ -639,4 +639,34 @@ class MathUtility
         
         return exp($nextLogPrice);
     }
+
+    /**
+     * Computes a quarterly Ornstein-Uhlenbeck reversion pull with three real-world refinements:
+     * 1. Moat-adjusted equilibrium
+     * 2. Asymmetric speed above equilibrium
+     * 3. Non-linear distress below zero
+     */
+    public function calculateReversionPull(
+        float $currentReturn,
+        float $wacc,
+        float $baseKappa,
+        float $moatSpread,
+        float $erosionAlpha = 0.50,
+        float $distressPersistence = 0.60,
+        float $distressGamma = 1.00
+    ): float {
+        $equilibrium = $wacc + $moatSpread;
+
+        if ($currentReturn > $equilibrium) {
+            $excessRatio = ($currentReturn - $equilibrium) / max(0.01, $equilibrium);
+            $effectiveKappa = $baseKappa * (1.0 + $erosionAlpha * $excessRatio);
+        } elseif ($currentReturn < 0.0) {
+            $distressRatio = abs($currentReturn) / max(0.01, $wacc);
+            $effectiveKappa = $baseKappa * $distressPersistence * (1.0 + $distressGamma * $distressRatio);
+        } else {
+            $effectiveKappa = $baseKappa * $distressPersistence;
+        }
+
+        return $effectiveKappa * ($equilibrium - $currentReturn) * 0.25;
+    }
 }
