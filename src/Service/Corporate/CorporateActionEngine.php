@@ -13,12 +13,18 @@ use App\Service\Event\MarketEventPublisher;
  */
 class CorporateActionEngine
 {
-    // Split Physics Constants
+    // --- Split Physics ---
+    /** The price ceiling ($400) that triggers a forward stock split. */
     private const FORWARD_SPLIT_THRESHOLD = 400.0;
+    /** The multiplier (4x) for shares during a forward split. */
     private const FORWARD_SPLIT_FACTOR = 4.0;
+    /** The price floor ($2) that triggers a reverse stock split. */
     private const REVERSE_SPLIT_THRESHOLD = 2.0;
+    /** The divisor (10x) for shares during a reverse split. */
     private const REVERSE_SPLIT_FACTOR = 10.0;
+    /** The minimum shares required to execute a reverse split. */
     private const MIN_SHARES_REVERSE_SPLIT = 10.0;
+    /** The maximum absolute multiplier allowed in a single recursive split action. */
     private const MAX_SPLIT_MULTIPLIER = 1_000_000;
 
     /**
@@ -29,7 +35,7 @@ class CorporateActionEngine
      * @param \Redis                 $redis         The Redis connection for managing live chart buffers.
      */
     public function __construct(
-        private EntityManagerInterface $entityManager,
+        private CorporateLedgerService $corporateLedgerService,
         private MarketEventPublisher $marketEvent,
         private \Redis $redis
     ) {}
@@ -103,33 +109,7 @@ class CorporateActionEngine
         $desc = "{$stock->getName()} has executed a {$splitFactor}-for-1 stock split.";
         $splitEvent = $this->marketEvent->publish($stock, 'SPLIT', $desc, 0.00);
 
-        $conn = $this->entityManager->getConnection();
-        $conn->beginTransaction();
-        try {
-            $conn->executeStatement(
-                'UPDATE user_stocks SET quantity = quantity * :factor, version = version + 1 WHERE stock_id = :stock_id',
-                ['factor' => $splitFactor, 'stock_id' => $stock->getId()]
-            );
-
-            $conn->executeStatement(
-                'UPDATE stock_history SET price = GREATEST(price / :factor, 0.00000001) WHERE stock_id = :stock_id',
-                ['factor' => $splitFactor, 'stock_id' => $stock->getId()]
-            );
-
-            $conn->executeStatement(
-                'UPDATE corporate_report SET shares = shares * :factor WHERE stock_id = :stock_id',
-                ['factor' => $splitFactor, 'stock_id' => $stock->getId()]
-            );
-
-            $conn->executeStatement(
-                "UPDATE trade_orders SET quantity = quantity * :factor, limit_price = ROUND(limit_price / :factor, 8) WHERE ticker = :ticker AND status = 'OPEN'",
-                ['factor' => $splitFactor, 'ticker' => $stock->getTicker()]
-            );
-            $conn->commit();
-        } catch (\Exception $e) {
-            $conn->rollBack();
-            throw $e;
-        }
+        $this->corporateLedgerService->processStockSplit($stock, (float) $splitFactor, false);
 
         $this->adjustRedisBuffer($stock->getTicker(), $splitFactor, 'divide');
 
@@ -169,81 +149,7 @@ class CorporateActionEngine
         $desc = "{$stock->getName()} has executed a 1-for-{$reverseFactor} reverse stock split.";
         $splitEvent = $this->marketEvent->publish($stock, 'REVERSE_SPLIT', $desc, 0.00);
 
-        $conn = $this->entityManager->getConnection();
-        $conn->beginTransaction();
-        try {
-            // 1. Fetch all user stock holdings for this ticker before mutating
-            $holdings = $conn->fetchAllAssociative(
-                'SELECT id, user_id, quantity FROM user_stocks WHERE stock_id = :stock_id AND quantity > 0',
-                ['stock_id' => $stock->getId()]
-            );
-
-            // 2. Process cashouts for fractional remnants
-            foreach ($holdings as $holding) {
-                $qty = (float) $holding['quantity'];
-                $newQty = floor($qty / $reverseFactor);
-                $remnant = $qty - ($newQty * $reverseFactor);
-
-                if ($remnant > 0) {
-                    $cashoutValue = round($remnant * $oldPrice, 4);
-
-                    $conn->executeStatement(
-                        'UPDATE user SET cash_balance = cash_balance + :cashout WHERE id = :user_id',
-                        ['cashout' => $cashoutValue, 'user_id' => $holding['user_id']]
-                    );
-
-                    $conn->executeStatement(
-                        'INSERT INTO account_ledger (user_id, type, amount, description, created_at) VALUES (:user_id, :type, :amount, :desc, NOW())',
-                        [
-                            'user_id' => $holding['user_id'],
-                            'type'    => 'REVERSE_SPLIT_CASHOUT',
-                            'amount'  => $cashoutValue,
-                            'desc'    => "Cashout for {$remnant} fractional shares of {$stock->getTicker()} during 1-for-{$reverseFactor} reverse split."
-                        ]
-                    );
-                }
-            }
-
-            // 3. Perform bulk SQL updates for quantities and prices
-            $conn->executeStatement(
-                "UPDATE trade_orders SET limit_price = ROUND(limit_price * :factor, 8) WHERE ticker = :ticker AND status = 'OPEN'",
-                ['factor' => $reverseFactor, 'ticker' => $stock->getTicker()]
-            );
-
-            $conn->executeStatement(
-                'UPDATE user_stocks SET quantity = FLOOR(quantity / :factor), version = version + 1 WHERE stock_id = :stock_id',
-                ['factor' => $reverseFactor, 'stock_id' => $stock->getId()]
-            );
-
-            $conn->executeStatement(
-                'DELETE FROM user_stocks WHERE stock_id = :stock_id AND quantity = 0',
-                ['stock_id' => $stock->getId()]
-            );
-
-            $conn->executeStatement(
-                "UPDATE trade_orders SET quantity = FLOOR(quantity / :factor) WHERE ticker = :ticker AND status = 'OPEN'",
-                ['factor' => $reverseFactor, 'ticker' => $stock->getTicker()]
-            );
-
-            $conn->executeStatement(
-                "UPDATE trade_orders SET status = 'CANCELLED' WHERE ticker = :ticker AND status = 'OPEN' AND quantity = 0",
-                ['ticker' => $stock->getTicker()]
-            );
-
-            $conn->executeStatement(
-                'UPDATE stock_history SET price = LEAST(price * :factor, 900000000000.0) WHERE stock_id = :stock_id',
-                ['factor' => $reverseFactor, 'stock_id' => $stock->getId()]
-            );
-
-            $conn->executeStatement(
-                'UPDATE corporate_report SET shares = FLOOR(shares / :factor) WHERE stock_id = :stock_id',
-                ['factor' => $reverseFactor, 'stock_id' => $stock->getId()]
-            );
-            $conn->commit();
-        } catch (\Exception $e) {
-            $conn->rollBack();
-            throw $e;
-        }
+        $this->corporateLedgerService->processStockSplit($stock, (float) $reverseFactor, true, $oldPrice);
 
         $this->adjustRedisBuffer($stock->getTicker(), $reverseFactor, 'multiply');
 

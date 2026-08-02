@@ -20,71 +20,125 @@ use App\DTO\DivestitureContext;
 class MergerAndAcquisitionEngine
 {
     // --- M&A Deal Parameters ---
+    /** Minimum size for a deal to be executed. */
     public const MA_MIN_DEAL_SIZE = 1_000_000_000.0;
+    /** Probability for overvalued companies. */
     public const MA_OVERVALUED_PROB = 0.15;
+    /** Probability for empire builders. */
     public const MA_EMPIRE_BUILDER_PROB = 0.75;
+    /** Probability for mega hoarders. */
     public const MA_MEGA_HOARDER_PROB = 0.50;
+    /** Probability for standard hoarders. */
     public const MA_HOARDER_PROB = 0.25;
+    /** Probability for low leverage companies. */
     public const MA_LOW_LEVERAGE_PROB = 0.10;
+    /** Probability for moderate leverage companies. */
     public const MA_MOD_LEVERAGE_PROB = 0.05;
+    /** Fallback probability if using cash. */
     public const MA_CASH_FALLBACK_PROB = 0.05;
+    /** Threshold for cash fallback. */
     public const MA_CASH_FALLBACK_THRESHOLD = 15_000_000_000.0;
     
+    /** Minimum buying power for empire builders. */
     public const MA_EMPIRE_BUILDER_MIN_POWER = 2_000_000_000.0;
+    /** Minimum buying power for LBO. */
     public const MA_LBO_MIN_POWER = 5_000_000_000.0;
+    /** Low utilization threshold. */
     public const MA_LOW_UTIL_THRESHOLD = 0.30;
+    /** Moderate utilization threshold. */
     public const MA_MOD_UTIL_THRESHOLD = 0.80;
+    /** Low rate ceiling. */
     public const MA_LOW_RATE_CEILING = 0.07;
+    /** Moderate rate ceiling. */
     public const MA_MOD_RATE_CEILING = 0.08;
     
+    /** Stock dilution fraction during M&A. */
     public const MA_STOCK_DILUTION_FRACTION = 0.10;
+    /** Stock underpricing discount. */
     public const MA_STOCK_UNDERPRICING = 0.10;
+    /** Equity cap for financial M&A. */
     public const MA_FINANCIAL_EQUITY_CAP = 0.15;
+    /** Penalty to margin for indigestion. */
     public const MA_INDIGESTION_PENALTY = 0.10;
     
+    /** Loss given default for financials. */
     public const MA_LGD_FINANCIAL = 0.30;
+    /** Loss given default for corporates. */
     public const MA_LGD_CORPORATE = 0.40;
+    /** Maturity used in Merton's distance to default calculation. */
     public const MA_MERTON_MATURITY = 5.0;
 
     // --- M&A Synergy & Target Returns (Log-Normal) ---
+    /** Mean of log-normal synergy. */
     public const MA_SYNERGY_MU = -0.02;
+    /** Sigma of log-normal synergy. */
     public const MA_SYNERGY_SIGMA = 0.10;
+    /** Mean of log-normal target ROIC. */
     public const MA_TARGET_ROIC_MU = -2.526;
+    /** Sigma of log-normal target ROIC. */
     public const MA_TARGET_ROIC_SIGMA = 0.40;
+    /** Floor for target ROIC. */
     public const MA_TARGET_ROIC_FLOOR = 0.02;
+    /** Ceiling for target ROIC. */
     public const MA_TARGET_ROIC_CEILING = 0.25;
 
     // --- Divestiture Parameters ---
+    /** Minimum fraction for dying company divestiture. */
     public const DIV_DYING_FRACTION_MIN = 0.30;
+    /** Maximum fraction for dying company divestiture. */
     public const DIV_DYING_FRACTION_MAX = 0.50;
+    /** Minimum sale multiple for dying company. */
     public const DIV_DYING_MULTIPLE_MIN = 3.0;
+    /** Maximum sale multiple for dying company. */
     public const DIV_DYING_MULTIPLE_MAX = 5.0;
+    /** Annual probability for dying company divestiture. */
     public const DIV_DYING_ANNUAL_PROB = 2.0;
 
+    /** Minimum fraction for distressed company divestiture. */
     public const DIV_DISTRESSED_FRACTION_MIN = 0.15;
+    /** Maximum fraction for distressed company divestiture. */
     public const DIV_DISTRESSED_FRACTION_MAX = 0.30;
+    /** Minimum sale multiple for distressed company. */
     public const DIV_DISTRESSED_MULTIPLE_MIN = 6.0;
+    /** Maximum sale multiple for distressed company. */
     public const DIV_DISTRESSED_MULTIPLE_MAX = 10.0;
+    /** Annual probability for distressed company divestiture. */
     public const DIV_DISTRESSED_ANNUAL_PROB = 0.30;
 
+    /** Minimum fraction for premium company divestiture. */
     public const DIV_PREMIUM_FRACTION_MIN = 0.05;
+    /** Maximum fraction for premium company divestiture. */
     public const DIV_PREMIUM_FRACTION_MAX = 0.10;
+    /** Minimum sale multiple for premium company. */
     public const DIV_PREMIUM_MIN_MULTIPLE = 8.0;
+    /** Maximum sale multiple for premium company. */
     public const DIV_PREMIUM_MAX_MULTIPLE = 18.0;
+    /** Annual probability for premium company divestiture. */
     public const DIV_PREMIUM_ANNUAL_PROB = 0.05;
 
+    /** P/E threshold for divestiture consideration. */
     public const DIV_PE_THRESHOLD = 30.0;
+    /** Minimum net income for divestiture consideration. */
     public const DIV_MIN_NET_INCOME = 5_000_000_000.0;
+    /** EVA threshold for distressed divestiture. */
     public const DIV_DISTRESS_EVA_THRESHOLD = -0.02;
+    /** Return threshold for dying divestiture. */
     public const DIV_DYING_RETURN_THRESHOLD = 0.00;
+    /** EVA threshold for dying divestiture. */
     public const DIV_DYING_EVA_THRESHOLD = -0.05;
+    /** Return floor for distress. */
     public const DIV_DISTRESS_RETURN_FLOOR = 0.03;
 
+    /** Cash fortress ratio to prevent divestitures. */
     public const DIV_CASH_FORTRESS_RATIO = 0.10;
+    /** ROIC bump from distressed divestiture. */
     public const DIV_DISTRESS_ROIC_BUMP = 0.50;
+    /** Margin bump from distressed divestiture. */
     public const DIV_DISTRESS_MARGIN_BUMP = 0.30;
 
+    /** Minimum cents on the dollar for fire sale. */
     public const DIV_FIRE_SALE_MIN_CENTS = 0.40;
+    /** Maximum cents on the dollar for fire sale. */
     public const DIV_FIRE_SALE_MAX_CENTS = 0.80;
 
     public function __construct(

@@ -12,25 +12,35 @@ use App\Service\Math\MathUtility;
 
 class DebtEngine
 {
-    // Maturity Wall Constants
-    private const QUARTERLY_DEBT_TURNOVER = 0.05; // 5% of old debt expires every quarter (5-year average maturity)
+    // --- Maturity Wall ---
+    /** 5% of old debt expires every quarter (5-year average maturity). */
+    private const QUARTERLY_DEBT_TURNOVER = 0.05;
 
-    // Debt Analysis Constants
-    private const ARBITRAGE_HURDLE = 0.030; // 300 bps spread is severe
+    // --- Debt Analysis ---
+    /** 300 bps spread is severe threshold for arbitrage hurdle. */
+    private const ARBITRAGE_HURDLE = 0.030;
 
-    // Leverage Physics
-    private const MAX_LEVERAGE_RATIO = 15.0;     // Cap extreme D/E or D/EBITDA ratios
-    private const MAX_LEVERAGE_PENALTY = 0.25;   // 25% max Junk Bond penalty spread
+    // --- Leverage Physics ---
+    /** Cap extreme D/E or D/EBITDA ratios. */
+    private const MAX_LEVERAGE_RATIO = 15.0;
+    /** 25% max Junk Bond penalty spread. */
+    private const MAX_LEVERAGE_PENALTY = 0.25;
+    /** Penalty rate for high leverage. */
     private const LEVERAGE_PENALTY_RATE = 0.20;
+    /** Base penalty for high leverage. */
     private const LEVERAGE_PENALTY_BASE = 0.010;
 
-    // CAPM / Beta Limits
-    private const MAX_BETA_DEBT_TO_EQUITY = 2.5; // Prevent runaway WACC in standard CAPM
-    private const HAMADA_DAMPENING_FACTOR = 0.25; // Dampen double-counting of historical debt
+    // --- CAPM / Beta Limits ---
+    /** Prevent runaway WACC in standard CAPM by capping debt to equity ratio. */
+    private const MAX_BETA_DEBT_TO_EQUITY = 2.5;
+    /** Dampen double-counting of historical debt when calculating Levered Beta. */
+    private const HAMADA_DAMPENING_FACTOR = 0.25;
 
-    // Refinancing Hurdles
-    private const RATE_REFINANCE_THRESHOLD = 0.015; // 150 bps drop triggers early refinancing
-    private const ACCELERATED_DEBT_TURNOVER = 0.15; // 15% of debt retired per quarter if refinancing
+    // --- Refinancing Hurdles ---
+    /** 150 bps drop triggers early refinancing. */
+    private const RATE_REFINANCE_THRESHOLD = 0.015;
+    /** 15% of debt retired per quarter if early refinancing is triggered. */
+    private const ACCELERATED_DEBT_TURNOVER = 0.15;
 
     public function __construct(
         private MathUtility $mathUtility,

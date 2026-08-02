@@ -53,7 +53,7 @@ class CapitalAllocationEngine
     private const REGULATORY_BUFFER_TIER_3_THRESHOLD = 1.25;
 
     public function __construct(
-        private EntityManagerInterface $entityManager,
+        private CorporateLedgerService $corporateLedgerService,
         private CorporateMetrics $corporateMetrics,
         private DebtEngine $debtEngine,
         private MathUtility $mathUtility,
@@ -234,20 +234,7 @@ class CapitalAllocationEngine
         $ctx->totalPaid = $ctx->newDividend * $ctx->sharesOutstanding;
 
         if ($ctx->newDividend > 0.0) {
-            $this->entityManager->getConnection()->executeStatement(
-                "UPDATE users u
-                 INNER JOIN (
-                     SELECT user_id, SUM(total_qty) AS total_shares
-                     FROM (
-                         SELECT user_id, quantity AS total_qty FROM user_stocks WHERE stock_id = :stock_id
-                         UNION ALL
-                         SELECT user_id, quantity AS total_qty FROM trade_orders WHERE ticker = :ticker AND status = 'OPEN' AND action = 'SELL'
-                     ) combined_shares
-                     GROUP BY user_id
-                 ) holdings ON u.id = holdings.user_id
-                 SET u.cash_balance = u.cash_balance + (holdings.total_shares * :dividend)",
-                ['dividend' => $ctx->newDividend, 'stock_id' => $stock->getId(), 'ticker' => $stock->getTicker()]
-            );
+            $this->corporateLedgerService->processDividendPayment($stock, $ctx->newDividend);
 
             $stock->setLastDividend((string) $ctx->newDividend);
             $yield = (($ctx->newDividend * 4) / max($ctx->currentPrice, 0.01)) * 100;
