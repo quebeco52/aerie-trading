@@ -37,6 +37,7 @@ class ShockEvent
     public const CATASTROPHIC_CLAIM_LOSSES = 'catastrophic_claim_losses';
     public const ELEVATED_CLAIM_PAYOUTS = 'elevated_claim_payouts';
     public const PE_CARRIED_INTEREST_SURGE = 'pe_carried_interest_surge';
+    public const PE_HURDLE_RATE_MISSED = 'pe_hurdle_rate_missed';
     public const PE_DEAL_DROUGHT = 'pe_deal_drought';
     public const DEFENSE_CONTRACT_LOSS = 'defense_contract_loss';
     public const DEFENSE_CONTRACT_WIN = 'defense_contract_win';

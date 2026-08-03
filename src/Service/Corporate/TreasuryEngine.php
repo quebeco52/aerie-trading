@@ -33,6 +33,7 @@ class TreasuryEngine
     public function __construct(
         private CorporateMetrics $corporateMetrics,
         private DebtEngine $debtEngine,
+        private CapExEngine $capExEngine,
         private MathUtility $mathUtility
     ) {}
 
@@ -116,7 +117,7 @@ class TreasuryEngine
 
         $evaluationCapital = $ctx->strategy->getEvaluationCapital($preBuybackEquity, $liveInvestedCapital);
 
-        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
+        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
         $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $ctx->macroState);
         $saturationPenalty = $archetypeStrategy->modifySaturationPenalty($saturationPenalty);
         $marginalReturn = $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $saturationPenalty, $evaluationCapital, $ctx->macroState);
@@ -206,7 +207,7 @@ class TreasuryEngine
         $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
         $evaluationCapital = $ctx->strategy->getEvaluationCapital($preBuybackEquity, $liveInvestedCapital);
 
-        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
+        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
         $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $ctx->macroState);
         $saturationPenalty = $archetypeStrategy->modifySaturationPenalty($saturationPenalty);
         $marginalReturn = $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $saturationPenalty, $evaluationCapital, $ctx->macroState);
@@ -250,6 +251,8 @@ class TreasuryEngine
             if ($expansionSpend > 0) {
                 $ctx->organicCapex = $expansionSpend;
                 $ctx->newTreasury -= $expansionSpend;
+                
+                $this->capExEngine->allocateGrowthCapEx($stock, $expansionSpend);
 
                 if ($expansionSpend > 1_000_000_000.0) {
                     $amtB = number_format($expansionSpend / 1_000_000_000, 2);
@@ -414,7 +417,7 @@ class TreasuryEngine
         $totalDebt = $ctx->wholesaleDebt + $ctx->customerDeposits;
         
         $targetOperatingCash = $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt);
-        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
+        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
         $targetOperatingCash = $archetypeStrategy->modifyTargetOperatingCash($targetOperatingCash);
 
         if (!$ctx->debtActionTaken && $ctx->wholesaleDebt > 0.0 && $ctx->newTreasury > $targetOperatingCash) {

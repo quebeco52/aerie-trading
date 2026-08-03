@@ -85,6 +85,12 @@ class Stock
     private string $totalRevenue = '0.0000';
 
     /**
+     * @var string Quarter-over-quarter revenue tracker for calculating change in net working capital (ΔNWC).
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $previousRevenue = '0.0000';
+
+    /**
      * @var string|null Absolute total free cash flow (FCF). Used to mathematically derive FCF per share.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
@@ -137,6 +143,12 @@ class Stock
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
     private string $goodwill = '0.0000';
+
+    /**
+     * @var string Construction in Progress (CIP) Balance for continuous CapEx integration.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $cipBalance = '0.0000';
 
 
     // CORPORATE POLICY & MARKET PHYSICS
@@ -645,10 +657,25 @@ class Stock
         return $this->goodwill;
     }
 
-    public function setGoodwill(string $goodwill): static
+    public function setGoodwill(?string $goodwill): self
     {
-        $this->goodwill = self::cleanBcStr($goodwill, 4);
+        $this->goodwill = $goodwill === null ? '0.0000' : self::cleanBcStr($goodwill, 4);
+        return $this;
+    }
 
+    public function getCipBalance(): string
+    {
+        return $this->cipBalance;
+    }
+
+    public function getTotalCipAmount(): float
+    {
+        return (float) $this->cipBalance;
+    }
+
+    public function setCipBalance(string $cipBalance): self
+    {
+        $this->cipBalance = self::cleanBcStr($cipBalance, 4);
         return $this;
     }
 
@@ -841,6 +868,17 @@ class Stock
     public function setTotalRevenue(string $totalRevenue): static
     {
         $this->totalRevenue = self::cleanBcStr($totalRevenue, 4);
+        return $this;
+    }
+
+    public function getPreviousRevenue(): string
+    {
+        return $this->previousRevenue;
+    }
+
+    public function setPreviousRevenue(string $previousRevenue): static
+    {
+        $this->previousRevenue = self::cleanBcStr($previousRevenue, 4);
         return $this;
     }
 

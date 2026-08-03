@@ -26,12 +26,6 @@ class EarningsEngine
     /** Absolute minimum capacity utilization (10%) to prevent negative revenue on dead companies. */
     public const MIN_CAPACITY_UTILIZATION = 0.10;
 
-    /** Threshold (105%) beyond which assets suffer accelerated wear and tear. */
-    public const CAPACITY_STRAIN_THRESHOLD = 1.05;
-
-    /** Multiplier for accelerated depreciation when operating above the strain threshold. */
-    public const WEAR_AND_TEAR_STRAIN_MULTIPLIER = 1.5;
-
     // --- Margins & Volatility ---
     /** Max quarterly asset turnover to prevent revenue hyperinflation. */
     public const MAX_QUARTERLY_ASSET_TURNOVER = 3.0;
@@ -72,6 +66,7 @@ class EarningsEngine
         private MarketEventPublisher $marketEvent,
         private CapitalAllocationEngine $capitalAllocationEngine,
         private DebtEngine $debtEngine,
+        private CapExEngine $capExEngine,
         private MathUtility $mathUtility,
         private CorporateMetrics $corporateMetrics,
         private NarrativeEngine $narrativeEngine,
@@ -99,6 +94,7 @@ class EarningsEngine
         );
 
         $this->initializeContext($ctx);
+        $this->capExEngine->processCipQueue($ctx->stock);
         $this->generateCapacityAndRevenue($ctx);
         $this->processVariableMargins($ctx);
         $this->calculateExpectedVsActualFinancials($ctx);
@@ -145,7 +141,7 @@ class EarningsEngine
         $stock = $ctx->stock;
         $strategy = $ctx->strategy;
         $macroState = $ctx->macroState;
-        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
+        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
 
         $annualTurnover = max(0.01, $ctx->baselineRoic) / ($ctx->stableMargin * (1.0 - $ctx->corporateTaxRate));
         $assetTurnover = min(self::MAX_QUARTERLY_ASSET_TURNOVER, $annualTurnover / 4.0);
@@ -174,7 +170,8 @@ class EarningsEngine
         $secularDrift = $secularGrowthRate * $ctx->dt;
 
         $ctx->capacityUtilization = max(self::MIN_CAPACITY_UTILIZATION, 1.0 + $secularDrift + $macroDemandShift + $idiosyncraticDemandShock + $jumpMagnitude);
-        $ctx->structuralRevenue = max(1.0, abs($ctx->investedCapital) * $assetTurnover * $pricingPowerMultiplier);
+        $revenueGeneratingCapital = max(0.0, abs($ctx->investedCapital) - $stock->getTotalCipAmount());
+        $ctx->structuralRevenue = max(1.0, $revenueGeneratingCapital * $assetTurnover * $pricingPowerMultiplier);
         $ctx->expectedRevenue = $ctx->structuralRevenue * $ctx->capacityUtilization;
 
         $fixedCostRatio = (float) $stock->getFixedCostRatio();
@@ -190,7 +187,7 @@ class EarningsEngine
     {
         $stock = $ctx->stock;
         $strategy = $ctx->strategy;
-        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
+        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
 
         $kappa = $strategy->getMarginReversionSpeed();
         $outputGap = $ctx->macroState->outputGapEma;
@@ -235,7 +232,7 @@ class EarningsEngine
         $ctx->actualVariableCosts = $actuals->actualVariableCosts;
 
         $coverage = $ctx->strategy->getCoverageProfile();
-        $consensus = $this->marketConsensusEngine->generateConsensus($actuals, $coverage, $ctx->expectedRevenue, $this->mathUtility, $ctx->stock);
+        $consensus = $this->marketConsensusEngine->generateConsensus($actuals, $coverage, $ctx->expectedRevenue, $this->mathUtility, $ctx->stock, $ctx->macroState->marketVolatilityEma);
         $ctx->analystExpectedRevenue = $consensus->analystExpectedRevenue;
         $ctx->analystExpectedVariableCosts = $consensus->analystExpectedVariableCosts;
 
@@ -257,7 +254,7 @@ class EarningsEngine
         $expectedDebtMetrics = $this->debtEngine->calculateInterestExpense($stock, $ctx->macroState, false, $ctx->expectedRevenue * 4.0, $expectedOperatingMargin);
         $ctx->expectedInterestExpense = $expectedDebtMetrics->interestExpense / 4.0;
 
-        $ctx->previousQuarterlyRevenue = (float) $stock->getTotalRevenue() / 4.0;
+        $ctx->previousQuarterlyRevenue = (float) $stock->getPreviousRevenue();
         $stock->setTotalRevenue((string) ($ctx->actualRevenue * 4.0));
 
         $ctx->trueOperatingMargin = $ctx->ebit / max(1.0, $ctx->actualRevenue);
@@ -276,10 +273,11 @@ class EarningsEngine
         $customDepreciation = (float) $stock->getDepreciationRate();
         $baseDepreciationRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($industry);
 
-        $capacityStrain = max(0.0, $ctx->capacityUtilization - self::CAPACITY_STRAIN_THRESHOLD);
-        $wearAndTearMultiplier = 1.0 + ($capacityStrain * self::WEAR_AND_TEAR_STRAIN_MULTIPLIER);
+        // Units of Production Depreciation Method
+        // Depreciation scales directly with actual asset utilization. Extreme utilization naturally accelerates depreciation.
+        $productionDepreciationRate = $baseDepreciationRate * $ctx->capacityUtilization;
 
-        $annualDepreciation = $ctx->investedCapital * ($baseDepreciationRate * $wearAndTearMultiplier);
+        $annualDepreciation = $ctx->investedCapital * $productionDepreciationRate;
         $ctx->quarterlyDepreciation = $annualDepreciation / 4.0;
     }
 
@@ -443,11 +441,15 @@ class EarningsEngine
         $valuationPremium = max(self::VALUATION_PREMIUM_MIN, min(self::VALUATION_PREMIUM_MAX, $currentPE / FinancialConstants::BASELINE_MARKET_PE));
         $beta = (float) $stock->getBeta();
 
-        if ($ctx->surprisePct < 0) {
-            $priceGapPct = $ctx->surprisePct * FinancialConstants::PRICE_GAP_DAMPENING * sqrt($valuationPremium) * max(0.8, $beta);
-        } else {
-            $priceGapPct = $ctx->surprisePct * FinancialConstants::PRICE_GAP_DAMPENING * (1.0 / sqrt($valuationPremium));
-        }
+        // Growth premium proxy: valuationPremium - 1.0 (so 1.0 -> 0 growth premium, 2.0 -> +1.0 growth premium)
+        $growthPremium = max(0.0, $valuationPremium - 1.0);
+
+        // Calculate ERC-driven price gap
+        $priceGapPct = $this->mathUtility->calculateEarningsResponseCoefficient(
+            $ctx->surprisePct,
+            $beta,
+            $growthPremium
+        );
 
         $ctx->priceGapPct = max(-FinancialConstants::MAX_PRICE_GAP, min(FinancialConstants::MAX_PRICE_GAP, $priceGapPct));
         $ctx->totalShockPct = $ctx->priceGapPct;
@@ -520,6 +522,9 @@ class EarningsEngine
         $description .= $ctx->corporateActionDescriptions;
 
         $earningsEvent = $this->marketEvent->publish($stock, 'EARNINGS', $description, $ctx->totalShockPct * 100);
+
+        // Update previous revenue for next quarter's NWC calculation
+        $stock->setPreviousRevenue((string) $ctx->actualRevenue);
 
         $this->eventDispatcher->dispatch(new EarningsReportedEvent($ctx));
 

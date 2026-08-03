@@ -669,4 +669,43 @@ class MathUtility
 
         return $effectiveKappa * ($equilibrium - $currentReturn) * 0.25;
     }
+
+    /**
+     * Calculates the Earnings Response Coefficient (ERC) based on empirical models.
+     * The ERC determines how strongly a stock price reacts to an earnings surprise.
+     * 
+     * @param float $sue           Standardized Unexpected Earnings (Surprise %).
+     * @param float $beta          The stock's levered beta (risk).
+     * @param float $growthPremium The valuation premium or growth expectations.
+     * @return float The price drift percentage resulting from the earnings surprise.
+     */
+    public function calculateEarningsResponseCoefficient(float $sue, float $beta, float $growthPremium): float
+    {
+        // High beta (risk) means more noise, reducing the ERC
+        // High growth premium implies higher persistence of earnings, increasing the ERC
+        $ercBeta = max(0.1, 1.0 + (FinancialConstants::ERC_BETA_SENSITIVITY * $beta) + (FinancialConstants::ERC_GROWTH_SENSITIVITY * $growthPremium));
+        
+        return FinancialConstants::ERC_BASE_ALPHA + ($ercBeta * $sue);
+    }
+
+    /**
+     * Updates analyst consensus using a Bayesian Inference Model.
+     * 
+     * @param float $priorEstimate  The previous analyst consensus estimate.
+     * @param float $priorVariance  The uncertainty (variance) of the prior estimate.
+     * @param float $newSignal      The new fundamental signal (e.g., actual structural revenue).
+     * @param float $signalVariance The uncertainty (variance) of the new signal.
+     * @return float The posterior (updated) analyst consensus.
+     */
+    public function calculateBayesianAnalystUpdate(float $priorEstimate, float $priorVariance, float $newSignal, float $signalVariance): float
+    {
+        // Prevent division by zero
+        $priorPrecision = 1.0 / max(0.0001, $priorVariance);
+        $signalPrecision = 1.0 / max(0.0001, $signalVariance);
+        
+        // Posterior is the precision-weighted average of the prior and the new signal
+        $posteriorEstimate = (($priorEstimate * $priorPrecision) + ($newSignal * $signalPrecision)) / ($priorPrecision + $signalPrecision);
+        
+        return $posteriorEstimate;
+    }
 }

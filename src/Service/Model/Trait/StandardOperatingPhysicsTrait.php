@@ -34,7 +34,13 @@ trait StandardOperatingPhysicsTrait
     }
     
     public function getWorkingCapitalIntensity(Stock $stock): float {
-        return 0.05;
+        $thresholds = $this->getModelThresholds();
+        return $thresholds['nwc_intensity'] ?? 0.05;
+    }
+    
+    public function getCapExCompletionRate(Stock $stock): float {
+        $thresholds = $this->getModelThresholds();
+        return $thresholds['capex_completion_rate'] ?? 0.33;
     }
     
     public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void {}

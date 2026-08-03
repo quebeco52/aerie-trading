@@ -101,15 +101,83 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     /** Weight given to historical trailing twelve-month ROE when updating ROE EMA. */
     public const ROE_TTM_HIST_WEIGHT       = 0.80;
 
+    public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
+    {
+        $aggression = 0.5;
+
+        $equity = (float) $stock->getTotalEquity();
+        $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
+
+        $ttmRoe = (float) $stock->getRoeTtm();
+        if ($ttmRoe !== 0.0) {
+            $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
+        }
+
+        $policyRate = $macroState->policyRateEma;
+        $yield5y = $macroState->yield5yEma;
+        $structuralSpread = (float) $stock->getCreditSpread();
+        $floatingRatio = (float) $stock->getFloatingDebtRatio();
+
+        $taxRate = $macroState->corporateTaxRate;
+
+        $wholesaleDebt = (float) $stock->getWholesaleDebt();
+        $treasury = (float) $stock->getCorporateTreasury();
+
+        $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
+
+        $industry = $stock->getIndustry() ?: 'General';
+        $baseEquityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? self::DEFAULT_EQUITY_LIMIT;
+
+        $effectiveEquityLimit = $baseEquityLimit * (0.5 + ($aggression * 0.5));
+
+        $effectiveEquity = max(1.0, $equity);
+
+        $actualLeverage = $effectiveEquity > 0 ? ($wholesaleDebt / $effectiveEquity) : 0.0;
+        $allowedLeverage = min($actualLeverage, max(0.0, $effectiveEquityLimit));
+        $optimalDebt = $effectiveEquity * $allowedLeverage;
+
+        $optimalInterestExpense = $optimalDebt * $blendedWholesaleRate;
+
+        $optimalOperatingNetIncome = $effectiveEquity * $baselineRoe;
+        $optimalEbt = $optimalOperatingNetIncome / (1.0 - $taxRate);
+
+        $operatingBase = $this->getOperatingBase($stock);
+        $optimalOperatingCash = $this->calculateTargetOperatingCash($operatingBase, 0.0, $optimalDebt);
+        $minOperatingCash = $this->calculateMinOperatingCash($operatingBase, 0.0, $optimalDebt);
+        $optimalYieldingCash = max(0.0, $optimalOperatingCash - $minOperatingCash);
+        $optimalInterestIncome = $optimalYieldingCash * max(0.0, $policyRate - \App\Service\Macro\MacroEngine::CASH_YIELD_SPREAD);
+
+        $optimalEbit = $optimalEbt + $optimalInterestExpense - $optimalInterestIncome;
+        $optimalEarningAssets = $effectiveEquity + $optimalDebt - $optimalOperatingCash;
+        $structuralOperatingYield = $optimalEbit / max(1.0, $optimalEarningAssets);
+
+        $earningAssets = max($effectiveEquity, $effectiveEquity + $wholesaleDebt - $treasury);
+
+        $targetEbit = $earningAssets * $structuralOperatingYield;
+        $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
+
+        $minOperatingEbit = $earningAssets * self::MIN_OPERATING_EBIT_YIELD;
+        $targetEbit = max($minOperatingEbit, $targetEbit);
+
+        $unboundedRevenue = max(0.0, $targetEbit) / $stableMargin;
+        $targetRevenue = min($unboundedRevenue, $earningAssets * self::MAX_TURNOVER_CAP);
+
+        $impliedTurnover = $targetRevenue / max(1.0, $earningAssets);
+
+        return [
+            'invested_capital' => $earningAssets,
+            'baseline_roic' => ($impliedTurnover * $stableMargin) * (1.0 - $taxRate)
+        ];
+    }
+
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $params = $this->resolveModelParameters($stock, [
             'management_fee_weight'   => 0.35,
             'carried_interest_weight' => 0.65,
-            'leverage_aggression'     => 0.5,
         ]);
         
-        $carryMultiplier = 0.5 + max(0.0, min(1.0, $params['leverage_aggression']));
+        $carryMultiplier = 1.0; // 0.5 + 0.5 default aggression
         $blendedMultiplier = ($params['management_fee_weight'] * 1.0) + ($params['carried_interest_weight'] * $carryMultiplier);
 
         return [
@@ -125,11 +193,10 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $params = $this->resolveModelParameters($stock, [
             'management_fee_weight'   => 0.35,
             'carried_interest_weight' => 0.65,
-            'leverage_aggression'     => 0.5,
         ]);
         $mgmtWeight  = $params['management_fee_weight'];
         $carryWeight = $params['carried_interest_weight'];
-        $aggression  = max(0.0, min(1.0, $params['leverage_aggression']));
+        $aggression  = 0.5;
         
         // Risk vs Reward Trade-off:
         // High leverage (1.0) = 1.5x carry returns, but Hurdle Rate Z Cliff is +0.5 (needs booming economy)
@@ -148,7 +215,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
 
         $spreadFreezeDrag = max(0.0, ($creditSpread - self::LBO_CREDIT_SPREAD_BASELINE) * self::LBO_SPREAD_FREEZE_SCALAR);
         $rateFreezeDrag = max(0.0, ($policyRate - self::LBO_RATE_FREEZE_THRESHOLD) * self::LBO_RATE_FREEZE_SCALAR);
-        $lboFinancingDrag = $spreadFreezeDrag + $rateFreezeDrag;
+        $lboFinancingDrag = ($spreadFreezeDrag + $rateFreezeDrag) * (0.5 + $aggression);
 
         // Multiple Compression: LBO drag acts as a multiplier compressing exits, max 1.0 (no drag), min 0.0 (total freeze)
         $multipleCompression = max(0.0, 1.0 - $lboFinancingDrag);
@@ -172,8 +239,10 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
             * $carryMultiplier;
 
         // Binary Cliff: if we miss the hurdle, or if multiples are fully compressed, zero carry.
+        $missedHurdle = false;
         if ($economicCondition < $hurdleRateZCliff) {
             $carriedInterestRevenue = 0.0;
+            $missedHurdle = true;
         }
 
         $actualRevenue = max(0.0, $mgmtRevenue + $carriedInterestRevenue);
@@ -183,7 +252,9 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $clampedMargin = $this->clampMargin($realizedVariableMargin, $minVariableMargin);
 
         $eventType = null;
-        if ($outputGap > self::LORE_BOOM_GAP_THRESHOLD && $revenueZ > self::LORE_BOOM_Z_SCORE && $lboFinancingDrag === 0.0) {
+        if ($missedHurdle) {
+            $eventType = ShockEvent::PE_HURDLE_RATE_MISSED;
+        } elseif ($outputGap > self::LORE_BOOM_GAP_THRESHOLD && $revenueZ > self::LORE_BOOM_Z_SCORE && $lboFinancingDrag === 0.0) {
             $eventType = ShockEvent::PE_CARRIED_INTEREST_SURGE;
         } elseif (($outputGap < self::LORE_BUST_GAP_THRESHOLD && $revenueZ < self::LORE_BUST_Z_SCORE) || $lboFinancingDrag > 0.10) {
             $eventType = ShockEvent::PE_DEAL_DROUGHT;
@@ -285,6 +356,35 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     {
         // PE firms are ultimate LBO sponsors. They deploy max leverage and high spend on targets.
         return ['prob' => 0.080, 'spend' => 0.90, 'type' => 'LEVERAGED BUYOUT', 'use_leverage' => true, 'use_stock' => false];
+    }
+
+    public function calculateCashYield(\App\DTO\MacroStateDTO $macroState): float
+    {
+        $yield10y = $macroState->yield10yEma;
+        $outputGap = $macroState->outputGapEma;
+
+        $bondReturn = $yield10y;
+        $equityReturn = self::BASE_EQUITY_RETURN + ($outputGap * self::EQUITY_RETURN_GAP_MULT * 1.5); // Higher beta for PE co-investments
+
+        // PE firms deploy excess cash into highly levered sponsor commitments (20% Bonds / 80% Equities)
+        return max(0.0, (0.20 * $bondReturn) + (0.80 * $equityReturn));
+    }
+
+    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): float
+    {
+        $operatingBase = $this->getOperatingBase($stock);
+        $minCash = $this->calculateMinOperatingCash($operatingBase, 0.0, (float) $stock->getWholesaleDebt());
+        $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - $minCash);
+
+        $baseYield = $this->calculateCashYield($macroState);
+
+        // Severe VIX market panic drag on illiquid PE investments
+        $vixEma = $macroState->marketVolatilityEma;
+        $vixDrag = max(0.0, ($vixEma - self::SEED_VIX_THRESHOLD) * (self::SEED_VIX_SENSITIVITY * 2.0));
+
+        $effectiveYield = $baseYield - (0.80 * $vixDrag);
+
+        return $excessCash * $effectiveYield;
     }
 }
 

@@ -86,4 +86,27 @@ class CorporateMetrics
 
         return max(0.0, $baseReturn * pow($capitalScale, -$effectiveElasticity));
     }
+
+    public function calculateInterestCoverageRatio(float $ebit, float $interestExpense): float
+    {
+        if ($interestExpense <= 0.0) {
+            return 999.0;
+        }
+        return $ebit / $interestExpense;
+    }
+
+    public function calculateAltmanZScore(Stock $stock, float $ebit, float $annualSales): float
+    {
+        $totalAssets = max(1.0, (float) $stock->getTotalEquity() + (float) $stock->getTotalDebt());
+        $totalLiabilities = max(0.01, (float) $stock->getTotalDebt());
+
+        $workingCapital = (float) $stock->getCorporateTreasury(); // Proxy for WC
+        $t1 = $workingCapital / $totalAssets;
+        $t2 = (float) $stock->getRetainedEarnings() / $totalAssets;
+        $t3 = $ebit / $totalAssets;
+        $t4 = (float) $stock->getTotalEquity() / $totalLiabilities; // Equity is Book Value, but good enough proxy for Market Value
+        $t5 = $annualSales / $totalAssets;
+
+        return (1.2 * $t1) + (1.4 * $t2) + (3.3 * $t3) + (0.6 * $t4) + (0.999 * $t5);
+    }
 }

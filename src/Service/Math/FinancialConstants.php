@@ -16,6 +16,15 @@ class FinancialConstants
     public const MAX_VOLATILITY_MULTIPLIER = 3.0;
     public const MIN_OPERATING_BASE_CASH = 10000000.0;
 
+    // --- Earnings Response Coefficient (ERC) ---
+    public const ERC_BASE_ALPHA = 0.0;
+    public const ERC_BETA_SENSITIVITY = -0.15; // Higher beta = lower ERC (more noise/risk)
+    public const ERC_GROWTH_SENSITIVITY = 0.25; // Higher growth premium = higher ERC
+
+    // --- Bayesian Analyst Consensus ---
+    public const BAYESIAN_BASE_PRIOR_VARIANCE = 0.04;
+    public const BAYESIAN_VIX_SCALING_FACTOR = 0.50; // Scales prior uncertainty with VIX
+
     // --- Leverage Effect (Black, 1976) ---
     // Negative earnings surprises spike volatility harder than positive ones
     public const NEGATIVE_SURPRISE_VOL_MULTIPLIER = 1.4;

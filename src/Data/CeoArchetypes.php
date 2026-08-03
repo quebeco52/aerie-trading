@@ -131,9 +131,10 @@ class CeoArchetypes
     /**
      * Factory method to return the concrete strategy object for an archetype.
      */
-    public static function getStrategy(string $archetype): \App\Service\Archetype\ArchetypeInterface
+    public static function getStrategy(\App\Entity\Stock $stock): \App\Service\Archetype\ArchetypeInterface
     {
-        return match ($archetype) {
+        $archetype = $stock->getCeoArchetype();
+        $baseStrategy = match ($archetype) {
             self::OPPORTUNIST => new \App\Service\Archetype\OpportunistArchetype(),
             self::EMPIRE_BUILDER => new \App\Service\Archetype\EmpireBuilderArchetype(),
             self::CANNIBAL => new \App\Service\Archetype\CannibalArchetype(),
@@ -146,5 +147,19 @@ class CeoArchetypes
             self::COST_CUTTER => new \App\Service\Archetype\CostCutterArchetype(),
             default => new \App\Service\Archetype\OpportunistArchetype(),
         };
+
+        // If the company is in severe distress, the Board of Directors overrides the CEO
+        $metrics = new \App\Service\Math\CorporateMetrics();
+        // Use a simple proxy for EBIT and Sales for Z-score calculation if current quarterly data isn't perfectly available yet
+        $annualRevenue = max(1.0, (float) $stock->getTotalRevenue());
+        $estimatedEbit = $annualRevenue * (float) $stock->getOperatingMargin();
+        $zScore = $metrics->calculateAltmanZScore($stock, $estimatedEbit, $annualRevenue);
+        
+        // Z-Score < 1.81 is the classic Altman distress zone
+        if ($zScore < 1.81) {
+            return new \App\Service\Archetype\BoardGovernanceDecorator($baseStrategy);
+        }
+
+        return $baseStrategy;
     }
 }

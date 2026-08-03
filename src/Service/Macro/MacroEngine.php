@@ -20,12 +20,16 @@ class MacroEngine
 
     // KALDOR-KALECKI CONSTANTS
     public const KALDOR_MOMENTUM = 0.20;
-    public const KALDOR_CAPACITY = 180.0;
+    public const KALDOR_CAPACITY = 220.0;
     public const KALDOR_MONETARY_DRAG = 1.0;
+    public const KALDOR_FISCAL_MULTIPLIER = 0.50;
+    public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.010;
 
     // OKUN'S LAW (LABOR MARKET)
     public const NATURAL_UNEMPLOYMENT = 0.04;
     public const OKUNS_COEFFICIENT = 0.4;
+    public const OKUNS_HIRING_SPEED = 1.0;
+    public const OKUNS_FIRING_SPEED = 4.0;
 
 
 
@@ -35,6 +39,7 @@ class MacroEngine
     public const ENERGY_VOLATILITY = 0.25;       // Log-price volatility (Schwartz 1-factor sigma)
     public const ENERGY_JUMP_MEAN = 0.20;        // Mean log-return of energy shock (20% avg spike)
     public const ENERGY_JUMP_VOL = 0.10;         // Volatility of the jump size
+    public const ENERGY_COST_PUSH_TRANSMISSION = 0.025;
 
     // --- GARCH-MIDAS Macroeconomic Volatility Constants (Engle, Ghysels, & Sohn 2013 Eq. 5) ---
     /** Long-run equilibrium baseline volatility (~15% VIX) during neutral economic conditions. */
@@ -49,10 +54,12 @@ class MacroEngine
     public const MACRO_VOL_MIN_BASELINE           = 0.10;
     /** Upper clamp for macro-driven baseline volatility to prevent infinite variance explosion. */
     public const MACRO_VOL_MAX_BASELINE           = 0.45;
+    public const MACRO_VOL_KAPPA                  = 3.0;
+    public const MACRO_VOL_SIGMA                  = 0.30;
 
     // SVJJ JUMP DIFFUSION CONSTANTS
     public const SVJJ_LAMBDA = 0.80;
-    public const SVJJ_P_UP = 0.10;
+    public const SVJJ_P_UP = 0.35;
     public const SVJJ_ETA_UP = 10.0;
     public const SVJJ_ETA_DOWN = 5.0;
     public const SVJJ_MU_V = 0.05;
@@ -65,27 +72,30 @@ class MacroEngine
 
     // TAYLOR RULE & MONETARY POLICY CONSTANTS
     public const TAYLOR_INFLATION_WEIGHT = 0.50;
-    public const TAYLOR_BOOM_WEIGHT = 0.15;
+    public const TAYLOR_BOOM_WEIGHT = 0.30;
     public const TAYLOR_RECESSION_SCALE = 5.0;
     public const CB_SMOOTHING_SPEED = 1.0;
     public const CB_INFLATION_PANIC_SCALE = 50.0;
     public const CB_RECESSION_PANIC_SCALE = 100.0;
     public const CB_MAX_HIKE_PANIC_SPEED = 3.0; // Volcker-style inflation panic speed cap (enforces Taylor Principle during stagflation)
     public const CB_MAX_CUT_PANIC_SPEED = 10.0; // Emergency crisis cut speed cap (financial crises crash faster than booms build)
+    public const ZLB_PROXIMITY_THRESHOLD = 0.015;
 
     // NELSON-SIEGEL TERM PREMIUM CONSTANTS
     public const NS_BASE_TERM_PREMIUM = 0.015;
     public const NS_GAP_TERM_PREMIUM_SCALE = 0.15;
 
     // NEW KEYNESIAN PHILLIPS CURVE CONSTANTS
-    public const PHILLIPS_SLOPE = 0.50;
-    public const PHILLIPS_BOTTLENECK_COEFF = 0.30;
+    public const PHILLIPS_SLOPE = 0.30;
+    public const PHILLIPS_BOTTLENECK_COEFF = 0.25;
+    public const INFLATION_MEAN_REVERSION = 0.50;
 
     // MERTON STRUCTURAL CREDIT SPREAD CONSTANTS (Merton 1974)
     public const BASE_CREDIT_SPREAD = 0.020;        // 200 bps normal corporate spread
     public const MERTON_LEVERAGE_SENSITIVITY = 3.0; // Sensitivity of default risk to GDP contractions
     public const MERTON_VOL_SENSITIVITY = 0.20;     // Sensitivity of default spreads to excess market volatility
     public const MAX_CREDIT_SPREAD = 0.10;          // 1000 bps crisis spread cap
+    public const CREDIT_SPREAD_EXCESS_VOL_THRESHOLD = 0.20;
 
     // BARRO TAX-SMOOTHING & FISCAL STABILIZER CONSTANTS (Barro 1979)
     public const TARGET_CORPORATE_TAX_RATE = 0.20;     // 20% structural baseline corporate tax rate
@@ -139,8 +149,8 @@ class MacroEngine
 
         $state->marketZ = $this->mathUtility->generateStandardNormal();
 
-        $state->outputGap = $this->calculateOutputGap($state, $state->yield5y, self::NATURAL_RATE, $dt);
         $stressMultiplier = 1.0 + (abs($state->outputGap) * 10.0);
+        $state->outputGap = $this->calculateOutputGap($state, $state->yield5y, self::NATURAL_RATE, $dt, $stressMultiplier);
 
         $this->calculateUnemployment($state, $dt);
         $this->calculateEnergyShock($state, $dt);
@@ -154,7 +164,6 @@ class MacroEngine
         $this->calculatePotentialAndNominalGdp($state, self::NATURAL_RATE, $dt);
         $this->calculateDynamicFiscalPolicy($state, $dt);
         $this->calculateEquityRiskPremium($state);
-        $this->generateMacroShocks($state, $dt);
 
 
         $payload = $state->toArray();
@@ -229,9 +238,10 @@ class MacroEngine
         }
 
         $rawMove = $cbSpeed * ($targetRate - $currentPolicyRate);
-        $clampedMove = max(-0.05, min(0.04, $rawMove)); // Tightened max annual velocity to -500 bps to +400 bps/year
+        $clampedMove = max(-0.06, min(0.06, $rawMove)); // Tightened max annual velocity to -600 bps to +600 bps/year
 
         $newRate = $currentPolicyRate + $clampedMove * $dt;
+        $newRate = max(0.00, min(0.20, $newRate)); // Explicit bounds
 
         if ($targetRate > $currentPolicyRate) {
             return min($targetRate, $newRate);
@@ -242,9 +252,9 @@ class MacroEngine
 
     private function calculateYieldCurveAndQE(MacroState $state, float $targetInflation, float $naturalRate, float $dt): array
     {
-        $zlbProximity = min(1.0, max(0.0, (0.015 - $state->policyRate) / 0.015));
+        $zlbProximity = min(1.0, max(0.0, (self::ZLB_PROXIMITY_THRESHOLD - $state->policyRate) / self::ZLB_PROXIMITY_THRESHOLD));
         $recessionSeverity = max(0.0, -$state->outputGap);
-        
+
         if ($zlbProximity > 0.90 && $state->outputGap < -0.02) {
             $qeYieldSuppressionTarget = min(0.02, $zlbProximity * $recessionSeverity * 0.5);
         } else {
@@ -258,7 +268,7 @@ class MacroEngine
         $expectedInflation = $state->inflationEma;
         $level = $naturalRate + (0.5 * $targetInflation) + (0.5 * $expectedInflation);
         $nsBeta1 = $state->policyRate - $level;
-        $nsBeta2 = max(-0.01, 0.015 + ($state->outputGap * 0.25));
+        $nsBeta2 = max(-0.01, 0.015 + ($state->outputGapEma * 0.25));
 
         $yield2y  = $this->calculateNelsonSiegelTenor(2.0, $level, $nsBeta1, $nsBeta2, $state, $state->qeIntensity);
         $yield5y  = $this->calculateNelsonSiegelTenor(5.0, $level, $nsBeta1, $nsBeta2, $state, $state->qeIntensity);
@@ -280,7 +290,7 @@ class MacroEngine
     private function calculateNelsonSiegelTenor(float $t, float $level, float $nsBeta1, float $nsBeta2, MacroState $state, float $qeYieldSuppression): float
     {
         $timeScale = ($t / 10.0);
-        $termPremium = (self::NS_BASE_TERM_PREMIUM * $timeScale) + ($state->outputGap * self::NS_GAP_TERM_PREMIUM_SCALE * $timeScale);
+        $termPremium = (self::NS_BASE_TERM_PREMIUM * $timeScale) + ($state->outputGapEma * self::NS_GAP_TERM_PREMIUM_SCALE * $timeScale);
 
         $qeTimeScale = min(1.0, $timeScale);
         $qeTargetedSuppression = $qeYieldSuppression * $qeTimeScale;
@@ -289,11 +299,10 @@ class MacroEngine
         return $pureYield + $termPremium - $qeTargetedSuppression;
     }
 
-    private function calculateOutputGap(MacroState $state, float $yield5y, float $naturalRate, float $dt): float
+    private function calculateOutputGap(MacroState $state, float $yield5y, float $naturalRate, float $dt, float $stressMultiplier): float
     {
         $y = $state->outputGap;
         $outZ = $this->mathUtility->generateStandardNormal();
-        $stressMultiplier = 1.0 + (abs($y) * 10.0);
 
         $borrowingCost = (self::BORROWING_POLICY_WEIGHT * $state->policyRate) + (self::BORROWING_YIELD5Y_WEIGHT * $yield5y);
         $realRate = $borrowingCost - $state->inflation;
@@ -302,9 +311,12 @@ class MacroEngine
         $cubicConstraint = self::KALDOR_CAPACITY * pow($y, 3);
         $monetaryDrag = self::KALDOR_MONETARY_DRAG * ($realRate - $naturalRate);
 
+        // Fiscal stimulus: Tax cuts below the target rate boost aggregate demand.
+        $fiscalStimulus = self::KALDOR_FISCAL_MULTIPLIER * (self::TARGET_CORPORATE_TAX_RATE - $state->corporateTaxRate);
+
         // QE automatically lowers monetary drag through the reduced $yield5y in the borrowing cost calculation.
-        $drift = ($momentum - $cubicConstraint - $monetaryDrag) * $dt;
-        $volatility = 0.010 * $stressMultiplier * sqrt($dt) * $outZ;
+        $drift = ($momentum - $cubicConstraint - $monetaryDrag + $fiscalStimulus) * $dt;
+        $volatility = self::OUTPUT_GAP_DIFFUSION_SIGMA * $stressMultiplier * sqrt($dt) * $outZ;
 
         $newGap = $y + $drift + $volatility;
 
@@ -315,7 +327,7 @@ class MacroEngine
     {
         $infZ = $this->mathUtility->generateStandardNormal();
         // Inflation expectations are fully anchored. Revert structurally toward the target rate.
-        $inflationDrift = 0.5 * ($targetInflation - $state->inflation) * $dt;
+        $inflationDrift = self::INFLATION_MEAN_REVERSION * ($targetInflation - $state->inflation) * $dt;
 
         $phillipsSlope = $state->outputGap * self::PHILLIPS_SLOPE;
 
@@ -324,7 +336,7 @@ class MacroEngine
         }
 
         // Add energy cost-push inflation
-        $energyCostPush = ($state->energyPriceShock / 100.0) * 0.025; // Moderated transmission of energy shock
+        $energyCostPush = ($state->energyPriceShock / 100.0) * self::ENERGY_COST_PUSH_TRANSMISSION; // Moderated transmission of energy shock
 
         $phillipsEffect = ($phillipsSlope + $energyCostPush) * $dt;
 
@@ -364,7 +376,7 @@ class MacroEngine
         $jumpVarianceDrag = (self::SVJJ_LAMBDA * $expectedVarJump) / 3.0;
         $adjustedTheta = max(0.0001, $longTermVar - $jumpVarianceDrag);
 
-        $nextVar = $this->mathUtility->calculateQEVarianceStep($currentVar, $adjustedTheta, 3.0, 0.30, $dt);
+        $nextVar = $this->mathUtility->calculateQEVarianceStep($currentVar, $adjustedTheta, self::MACRO_VOL_KAPPA, self::MACRO_VOL_SIGMA, $dt);
         $nextVar += $jumpData['var_jump'];
 
         return max(0.08, min(0.80, sqrt($nextVar)));
@@ -419,11 +431,6 @@ class MacroEngine
         $state->equityRiskPremium = max(self::MIN_EQUITY_RISK_PREMIUM, min(0.12, $habitErp));
     }
 
-    private function generateMacroShocks(MacroState $state, float $dt): void
-    {
-        $state->eventType = null;
-    }
-
     private function calculateMacroCreditSpread(MacroState $state): void
     {
         // Merton (1974) Structural Credit Spread Model:
@@ -445,7 +452,7 @@ class MacroEngine
         $unemploymentGap = $targetUnemployment - $state->unemploymentRate;
 
         // Asymmetric speed of adjustment
-        $adjustmentSpeed = $unemploymentGap > 0 ? 4.0 : 1.0; // 4x faster to fire than to hire
+        $adjustmentSpeed = $unemploymentGap > 0 ? self::OKUNS_FIRING_SPEED : self::OKUNS_HIRING_SPEED; // 4x faster to fire than to hire
 
         $state->unemploymentRate += $adjustmentSpeed * $unemploymentGap * $dt;
     }

@@ -25,6 +25,7 @@ interface OperatingStrategyInterface
     public function getTrueReturn(Stock $stock): float;
     public function getEvaluationCapital(float $equity, float $investedCapital): float;
     public function getWorkingCapitalIntensity(Stock $stock): float;
+    public function getCapExCompletionRate(Stock $stock): float;
     public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void;
     public function getMarginReversionSpeed(): float;
 }

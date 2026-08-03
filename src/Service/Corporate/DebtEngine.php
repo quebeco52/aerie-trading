@@ -92,7 +92,7 @@ class DebtEngine
         // Floored at 15 bps (0.0015) so ultra-safe Titans don't get negative spreads during massive economic booms.
         $baselineCreditSpread = max(0.0015, $rawCreditSpread + $macroCreditAdjustment + $volatilityPremium);
 
-        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
+        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
         $baselineCreditSpread = $archetypeStrategy->modifyCreditSpread($baselineCreditSpread);
 
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
@@ -395,7 +395,7 @@ class DebtEngine
 
         // Macro-Economic CFO Tolerance
         // Pass the pure D/E target limit and effective cost of debt to the CFO to calculate their personalized elasticity
-        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
+        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
         $macroDebtTolerance = $archetypeStrategy->modifyDebtToleranceLimit($equityLimit, $effectiveCostOfDebt);
 
         $currentDebtRatio = $currentDebt / max(1.0, $equity);

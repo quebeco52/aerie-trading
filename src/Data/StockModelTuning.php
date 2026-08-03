@@ -89,9 +89,8 @@ class StockModelTuning
         // --- Black Swan Capital (SWAN) ---
         // Mega-cap alternative asset manager specializing in leveraged buyouts and carried interest.
         'SWAN' => [
-            'management_fee_weight'   => 0.20,
-            'carried_interest_weight' => 0.80,
-            'leverage_aggression'     => 0.80,
+            'management_fee_weight'   => 0.80,
+            'carried_interest_weight' => 0.20,
         ],
 
         // --- Vulture Capital Recovery (VULT) ---

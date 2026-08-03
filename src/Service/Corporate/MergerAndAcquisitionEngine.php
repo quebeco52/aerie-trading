@@ -235,7 +235,7 @@ class MergerAndAcquisitionEngine
         $ctx->priceToBook = $ctx->price / $ctx->bookValuePerShare;
         $ctx->isOvervalued = $ctx->economicSpread > 0.0 && $ctx->currentPE > ($ctx->fairValuePE * 1.5) && $ctx->currentPE > 25.0 && $ctx->priceToBook > 2.0;
         
-        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
+        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
         $ctx->aggression = $archetypeStrategy->modifyAcquisitionAggression(1.0);
         $ctx->isEmpireBuilder = $ctx->aggression >= 2.0;
         
@@ -347,7 +347,7 @@ class MergerAndAcquisitionEngine
             
             $projectedSpread = $this->mathUtility->calculateMertonCreditSpread($distanceToDefault, $lossGivenDefault, self::MA_MERTON_MATURITY);
             
-            $tmpArchetype = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
+            $tmpArchetype = \App\Data\CeoArchetypes::getStrategy($stock);
             $baselineCreditSpread = $tmpArchetype->modifyCreditSpread((float) $stock->getCreditSpread());
             $dynamicSpread = $baselineCreditSpread + $projectedSpread;
             
@@ -360,7 +360,7 @@ class MergerAndAcquisitionEngine
     private function applyAcquisitionSynergies(AcquisitionContext $ctx): void
     {
         $stock = $ctx->acquirer;
-        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
+        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
         $synergyRange = $archetypeStrategy->modifyMAndASynergyRange(1.0, 1.0);
         
         $muShift = (($synergyRange['min'] + $synergyRange['max']) / 2.0) - 1.0;

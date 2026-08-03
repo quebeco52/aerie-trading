@@ -138,6 +138,11 @@ class NarrativeEngine
                 "Landmark portfolio company IPO and strategic sales crystallized substantial carry.",
                 "Fund realizations exceeded hurdle rates, driving exceptional performance fee income."
             ]),
+            ShockEvent::PE_HURDLE_RATE_MISSED => $this->getRandomPhrase([
+                "Failed to clear the minimum hurdle rate, resulting in zero carried interest crystallization.",
+                "Missed performance targets triggered a complete wipeout of performance fees for the quarter.",
+                "Underperforming portfolio assets caused the firm to miss its preferred return hurdle, zeroing out carry."
+            ]),
             ShockEvent::PE_DEAL_DROUGHT => $this->getRandomPhrase([
                 "Suffered a severe deal drought as frozen credit markets prevented portfolio exits.",
                 "Lack of debt financing stalled leveraged buyout deployment and exit realizations.",

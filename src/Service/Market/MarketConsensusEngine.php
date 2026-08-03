@@ -47,7 +47,8 @@ class MarketConsensusEngine
         SectorCoverageProfile $coverage,
         float $expectedRevenue,
         MathUtility $mathUtility,
-        \App\Entity\Stock $stock
+        \App\Entity\Stock $stock,
+        float $marketVolatility = 0.15
     ): ConsensusDTO {
         $analystError = $mathUtility->generateStandardNormal() * $coverage->errorStdDev;
 
@@ -64,11 +65,24 @@ class MarketConsensusEngine
 
         $freshEstimate = $expectedRevenue * (1.0 + $actuals->observableShockZ * $dynamicVisibility);
 
-        // Anchoring Bias: Analysts anchor to prior quarter's consensus
+        // Bayesian Updating: Analysts anchor to prior quarter's consensus based on uncertainty
         $lastEstimate = (float) $stock->getLastAnalystRevenue();
-        $analystExpectedRevenue = $lastEstimate > 0.0
-            ? ($lastEstimate * 0.40) + ($freshEstimate * 0.60)
-            : $freshEstimate;
+        
+        if ($lastEstimate > 0.0) {
+            $priorVariance = \App\Service\Math\FinancialConstants::BAYESIAN_BASE_PRIOR_VARIANCE 
+                + ($marketVolatility * \App\Service\Math\FinancialConstants::BAYESIAN_VIX_SCALING_FACTOR);
+                
+            $signalVariance = max(0.01, $coverage->errorStdDev);
+            
+            $analystExpectedRevenue = $mathUtility->calculateBayesianAnalystUpdate(
+                $lastEstimate,
+                $priorVariance,
+                $freshEstimate,
+                $signalVariance
+            );
+        } else {
+            $analystExpectedRevenue = $freshEstimate;
+        }
 
         $stock->setLastAnalystRevenue((string) $analystExpectedRevenue);
 

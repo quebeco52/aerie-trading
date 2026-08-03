@@ -145,7 +145,7 @@ class CapitalAllocationEngine
         $targetPayout = (float) $stock->getTargetPayoutRatio();
         $speed = (float) $stock->getDividendSpeed();
         $lastDividend = (float) $stock->getLastDividend();
-        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
+        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
 
         $isAristocrat = $speed <= 0.03;
         $targetPayout = $archetypeStrategy->modifyTargetPayoutRatio($targetPayout);
@@ -294,7 +294,7 @@ class CapitalAllocationEngine
         $isHoarder = $hoardStatus['is_hoarder'];
         $isMegaHoarder = $hoardStatus['is_mega_hoarder'];
 
-        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock->getCeoArchetype());
+        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
 
         $isLiquidityCrisis = $ctx->health->interestCoverage < 1.0;
         $modelThresholds = \App\Data\Sectors::getModelThresholds($ctx->businessModel);
