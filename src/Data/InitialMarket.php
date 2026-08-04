@@ -30,11 +30,11 @@ class InitialMarket
             'historical_fixed_rate' => 0.025,
             'credit_spread' => 0.0015,
             'depreciation_rate' => 0.02,
-            'corporate_treasury' => 2_850_000_000_000.00,
+            'corporate_treasury' => 2_050_000_000_000.00,
             'total_net_income' => 387_900_000_000.00,
             'total_equity' => 2_568_125_000_000.00,
             'customer_deposits' => 23_500_000_000_000.00,
-            'wholesale_debt' => 2_500_000_000_000.00,
+            'wholesale_debt' => 500_000_000_000.00,
             'retained_earnings' => 1_750_000_000_000.00,
             'ceo_archetype' => \App\Data\CeoArchetypes::CONSERVATIVE
         ],

@@ -11,7 +11,7 @@ class MacroEngine
     public const REDIS_MACRO_STATE = 'macroeconomic_state';
 
     public const TARGET_INFLATION = 0.02;
-    public const NATURAL_RATE = 0.02;
+    public const NATURAL_RATE = 0.0125;
     public const BASE_CORPORATE_TAX_RATE = 0.21;
     public const BASE_EQUITY_RISK_PREMIUM = 0.045;
     public const HABIT_RISK_AVERSION_COEFF = 4.0; // Campbell-Cochrane (1999) habit formation risk aversion sensitivity
@@ -20,7 +20,7 @@ class MacroEngine
 
     // KALDOR-KALECKI CONSTANTS
     public const KALDOR_MOMENTUM = 0.20;
-    public const KALDOR_CAPACITY = 220.0;
+    public const KALDOR_CAPACITY = 200.0;
     public const KALDOR_MONETARY_DRAG = 1.0;
     public const KALDOR_FISCAL_MULTIPLIER = 0.50;
     public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.010;
@@ -35,7 +35,7 @@ class MacroEngine
 
     // ENERGY SHOCK JUMP DIFFUSION
     public const ENERGY_JUMP_PROBABILITY = 0.05; // 5% chance of severe shock per year
-    public const ENERGY_MEAN_REVERSION = 1.2;    // Speed of reversion to 100 baseline
+    public const ENERGY_MEAN_REVERSION = 0.8;    // Speed of reversion to 100 baseline
     public const ENERGY_VOLATILITY = 0.25;       // Log-price volatility (Schwartz 1-factor sigma)
     public const ENERGY_JUMP_MEAN = 0.20;        // Mean log-return of energy shock (20% avg spike)
     public const ENERGY_JUMP_VOL = 0.10;         // Volatility of the jump size
@@ -54,7 +54,7 @@ class MacroEngine
     public const MACRO_VOL_MIN_BASELINE           = 0.10;
     /** Upper clamp for macro-driven baseline volatility to prevent infinite variance explosion. */
     public const MACRO_VOL_MAX_BASELINE           = 0.45;
-    public const MACRO_VOL_KAPPA                  = 3.0;
+    public const MACRO_VOL_KAPPA                  = 2.0;
     public const MACRO_VOL_SIGMA                  = 0.30;
 
     // SVJJ JUMP DIFFUSION CONSTANTS
@@ -72,7 +72,7 @@ class MacroEngine
 
     // TAYLOR RULE & MONETARY POLICY CONSTANTS
     public const TAYLOR_INFLATION_WEIGHT = 0.50;
-    public const TAYLOR_BOOM_WEIGHT = 0.30;
+    public const TAYLOR_BOOM_WEIGHT = 0.50;
     public const TAYLOR_RECESSION_SCALE = 5.0;
     public const CB_SMOOTHING_SPEED = 1.0;
     public const CB_INFLATION_PANIC_SCALE = 50.0;
@@ -82,18 +82,18 @@ class MacroEngine
     public const ZLB_PROXIMITY_THRESHOLD = 0.015;
 
     // NELSON-SIEGEL TERM PREMIUM CONSTANTS
-    public const NS_BASE_TERM_PREMIUM = 0.015;
+    public const NS_BASE_TERM_PREMIUM = 0.0225;
     public const NS_GAP_TERM_PREMIUM_SCALE = 0.15;
 
     // NEW KEYNESIAN PHILLIPS CURVE CONSTANTS
-    public const PHILLIPS_SLOPE = 0.30;
+    public const PHILLIPS_SLOPE = 0.15;
     public const PHILLIPS_BOTTLENECK_COEFF = 0.25;
     public const INFLATION_MEAN_REVERSION = 0.50;
 
     // MERTON STRUCTURAL CREDIT SPREAD CONSTANTS (Merton 1974)
     public const BASE_CREDIT_SPREAD = 0.020;        // 200 bps normal corporate spread
-    public const MERTON_LEVERAGE_SENSITIVITY = 3.0; // Sensitivity of default risk to GDP contractions
-    public const MERTON_VOL_SENSITIVITY = 0.20;     // Sensitivity of default spreads to excess market volatility
+    public const MERTON_LEVERAGE_SENSITIVITY = 6.0; // Sensitivity of default risk to GDP contractions
+    public const MERTON_VOL_SENSITIVITY = 1.50;     // Sensitivity of default spreads to excess market volatility
     public const MAX_CREDIT_SPREAD = 0.10;          // 1000 bps crisis spread cap
     public const CREDIT_SPREAD_EXCESS_VOL_THRESHOLD = 0.20;
 
@@ -440,7 +440,7 @@ class MacroEngine
         $excessVol = max(0.0, $state->marketVolatilityEma - 0.20);
         $volSpread = self::MERTON_VOL_SENSITIVITY * $excessVol;
 
-        $state->macroCreditSpread = max(0.015, min(self::MAX_CREDIT_SPREAD, $cycleSpread + $volSpread));
+        $state->macroCreditSpread = max(0.008, min(self::MAX_CREDIT_SPREAD, $cycleSpread + $volSpread));
     }
 
     private function calculateUnemployment(MacroState $state, float $dt): void

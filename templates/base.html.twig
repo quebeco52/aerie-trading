@@ -1,87 +1,86 @@
 <!DOCTYPE html>
 <html class="dark">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Aerie Exchange{% endblock %}</title>
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<title>
+			{% block title %}Aerie Exchange
+			{% endblock %}
+		</title>
 
 
-    <script>
-        window.WS_TICKET = '{{ ws_ticket() }}';
-    </script>
+		<script>
+			window.WS_TICKET = '{{ ws_ticket() }}';
+		</script>
 
-    
-    {% block meta %}
-        <meta name="description" content="Aerie Exchange is a live, procedurally generated stock market simulation featuring real-time trading, clean surplus accounting, and dynamic macroeconomic cycles.">
-        <meta property="og:title" content="Aerie Exchange - Live Market Simulator">
-        <meta property="og:description" content="Trade live stocks and ETFs in a realistic, procedurally generated economic simulation.">
-        <meta property="og:type" content="website">
-        <meta name="twitter:card" content="summary_large_image">
-        <meta name="google-site-verification" content="zp-MWJxjqDD3nMcN7eRoM30TwI2oAY1I_IxP6EUYjSg" />
 
-        <script type="application/ld+json">
-        {
-            "@context": "https://schema.org",
-            "@type": "WebSite",
-            "name": "Aerie Exchange",
-            "url": "{{ app.request.getSchemeAndHttpHost() }}/",
-            "description": "Live, procedurally generated stock market simulation featuring clean surplus accounting."
-        }
-        </script>
+		{% block meta %}
+			<meta name="description" content="Aerie Exchange is a live, procedurally generated stock market simulation featuring real-time trading, clean surplus accounting, and dynamic macroeconomic cycles.">
+			<meta property="og:title" content="Aerie Exchange - Live Market Simulator">
+			<meta property="og:description" content="Trade live stocks and ETFs in a realistic, procedurally generated economic simulation.">
+			<meta property="og:type" content="website">
+			<meta name="twitter:card" content="summary_large_image">
+			<meta name="google-site-verification" content="zp-MWJxjqDD3nMcN7eRoM30TwI2oAY1I_IxP6EUYjSg"/>
 
-        {# Canonical URL to prevent duplicate content indexing #}
-        <link rel="canonical" href="{{ app.request.schemeAndHttpHost }}{{ app.request.pathInfo }}">
-    {% endblock %}
+			<script type="application/ld+json">
+				{
+								            "@context": "https://schema.org",
+								            "@type": "WebSite",
+								            "name": "Aerie Exchange",
+								            "url": "{{ app.request.getSchemeAndHttpHost() }}/",
+								            "description": "Live, procedurally generated stock market simulation featuring clean surplus accounting."
+								        }
+			</script>
 
-    {% block favicon %}
-        <link rel="icon" href="{{ asset('favicon.svg') }}">
-    {% endblock %}
+			{# Canonical URL to prevent duplicate content indexing #}
+			<link rel="canonical" href="{{ app.request.schemeAndHttpHost }}{{ app.request.pathInfo }}">
+		{% endblock %}
 
-    <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-    <link rel="stylesheet" href="{{ asset('styles/app.css') }}">
-    
-    {% block importmap %}{{ importmap('app') }}{% endblock %}
-    {% block stylesheets %}{% endblock %}
-</head>
+		{% block favicon %}
+			<link rel="icon" href="{{ asset('favicon.svg') }}">
+		{% endblock %}
 
-<body class="bg-surface text-on-surface font-body selection:bg-primary/30 antialiased min-h-screen flex flex-col">
+		<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+		<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+		<link rel="stylesheet" href="{{ asset('styles/app.css') }}">
 
-    {# Inject the Site-Wide Navbar #}
-    {% include 'partials/_navbar.html.twig' %}
+		{% block importmap %}
+			{{ importmap('app') }}
+		{% endblock %}
+		{% block stylesheets %}{% endblock %}
+	</head>
 
-    {# Flash Messages #}
-    <div class="fixed top-20 right-4 z-50 space-y-2">
-        {% for label, messages in app.flashes %}
-            {% for message in messages %}
-                <div class="p-4 rounded-lg flex items-center gap-3 shadow-lg shadow-black/40 {{ label == 'success' ? 'bg-secondary/10 text-secondary border border-secondary/20' : 'bg-tertiary/10 text-tertiary border border-tertiary/20' }}">
-                    <span class="material-symbols-outlined">{{ label == 'success' ? 'check_circle' : 'warning' }}</span>
-                    <span class="text-sm font-bold">{{ message }}</span>
-                </div>
-            {% endfor %}
-        {% endfor %}
-    </div>
-    
-    {# The Page Content #}
-    <main class="flex-grow">
-        {% block body %}{% endblock %}
-    </main>
+	<body
+		class="bg-surface text-on-surface font-body selection:bg-primary/30 antialiased min-h-screen flex flex-col">
 
-    {% include 'partials/_footer.html.twig' %}
+		{# Inject the Site-Wide Navbar #}
+		{% include 'partials/_navbar.html.twig' %}
 
-    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.1.0/dist/lightweight-charts.standalone.production.js"
-        integrity="sha256-dWsLqfWJMCJta4udR60xBEirhdeZ6h98LAIwR3fBC1I="
-        crossorigin="anonymous">
-    </script>
+		{# Flash Messages #}
+		<div class="fixed top-20 right-4 z-50 space-y-2">
+			{% for label, messages in app.flashes %}
+				{% for message in messages %}
+					<div class="p-4 rounded-lg flex items-center gap-3 shadow-lg shadow-black/40 {{ label == 'success' ? 'bg-secondary/10 text-secondary border border-secondary/20' : 'bg-tertiary/10 text-tertiary border border-tertiary/20' }}">
+						<span class="material-symbols-outlined">{{ label == 'success' ? 'check_circle' : 'warning' }}</span>
+						<span class="text-sm font-bold">{{ message }}</span>
+					</div>
+				{% endfor %}
+			{% endfor %}
+		</div>
 
-    <script
-        src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"
-        integrity="sha256-SERKgtTty1vsDxll+qzd4Y2cF9swY9BCq62i9wXJ9Uo="
-        crossorigin="anonymous">
-    </script>
+		{# The Page Content #}
+		<main class="flex-grow"> {% block body %}{% endblock %}
+			</main>
 
-    
-    {% block javascripts %}{% endblock %}
-    
-</body>
-</html>
+			{% include 'partials/_footer.html.twig' %}
+
+			<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.1.0/dist/lightweight-charts.standalone.production.js" integrity="sha256-dWsLqfWJMCJta4udR60xBEirhdeZ6h98LAIwR3fBC1I=" crossorigin="anonymous"></script>
+
+			<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js" integrity="sha256-SERKgtTty1vsDxll+qzd4Y2cF9swY9BCq62i9wXJ9Uo=" crossorigin="anonymous"></script>
+
+			<script src="https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js" integrity="sha256-tmslrrTfhOMxmdwhaUAU0zbSIsvZ3rDlp8FL1qoND9A=" crossorigin="anonymous"></script>
+
+			{% block javascripts %}{% endblock %}
+
+		</body>
+	</html>

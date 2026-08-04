@@ -288,4 +288,97 @@ class StockController extends AbstractController
 
         return $this->json($results);
     }
+
+    /**
+     * API endpoint to retrieve data for the Sankey earnings flow diagram.
+     */
+    #[Route('/api/earnings-flow', name: 'api_earnings_flow')]
+    public function earningsFlow(Request $request, EntityManagerInterface $entityManager): JsonResponse
+    {
+        $ticker = $request->query->get('ticker');
+        if (!$ticker) return $this->json([]);
+
+        $stock = $entityManager->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);
+        if (!$stock) return $this->json([]);
+
+        $conn = $entityManager->getConnection();
+
+        // Fetch latest corporate report
+        $sql = 'SELECT cr.* FROM corporate_report cr WHERE cr.stock_id = :id ORDER BY cr.recorded_at DESC LIMIT 1';
+        $stmt = $conn->executeQuery($sql, ['id' => $stock->getId()]);
+        $latestReport = $stmt->fetchAssociative();
+
+        if (!$latestReport) return $this->json([]);
+
+        // Ensure everything is numeric
+        $revenue = (float)$latestReport['revenue'];
+        $interestIncome = (float)$latestReport['interest_income'];
+        $totalRevenue = $revenue + $interestIncome;
+
+        if ($totalRevenue <= 0) {
+            // Can't draw a meaningful Sankey if there's no revenue
+            return $this->json(['nodes' => [], 'links' => []]);
+        }
+
+        // Fetch granular fields (fallback to 0 if migration hasn't run yet)
+        $operatingCostsRaw = max(0, (float)($latestReport['operating_costs'] ?? 0));
+        $capexRaw = max(0, (float)$latestReport['capital_expenditures']);
+        $interestExpenseRaw = max(0, (float)$latestReport['interest_expense']);
+        $taxPaidRaw = max(0, (float)($latestReport['tax_paid'] ?? 0));
+        $divPaidRaw = max(0, (float)$latestReport['dividend_paid']);
+        $buybacksRaw = max(0, (float)$latestReport['stock_buybacks']);
+
+        // Balance the flows so the Sankey diagram is perfectly aligned. 
+        // Sankey diagrams require flow in = flow out.
+        $actualOperatingCosts = min($totalRevenue, $operatingCostsRaw);
+        $opProfit = $totalRevenue - $actualOperatingCosts;
+        
+        $actualCapex = min($opProfit, $capexRaw);
+        $actualInterest = min($opProfit - $actualCapex, $interestExpenseRaw);
+        $preTax = $opProfit - $actualCapex - $actualInterest;
+        
+        $actualTax = min($preTax, $taxPaidRaw);
+        $netIncomeFlow = $preTax - $actualTax;
+        
+        $actualDiv = min($netIncomeFlow, $divPaidRaw);
+        $actualBuybacks = min($netIncomeFlow - $actualDiv, $buybacksRaw);
+        $retained = $netIncomeFlow - $actualDiv - $actualBuybacks;
+
+        $nodes = [
+            ['name' => 'Total Revenue', 'itemStyle' => ['color' => '#3b82f6']], // blue
+            ['name' => 'Operating Costs', 'itemStyle' => ['color' => '#ef4444']], // red
+            ['name' => 'Operating Profit', 'itemStyle' => ['color' => '#8b5cf6']], // purple
+            ['name' => 'Capital Expenditures', 'itemStyle' => ['color' => '#eab308']], // yellow
+            ['name' => 'Interest Expense', 'itemStyle' => ['color' => '#f97316']], // orange
+            ['name' => 'Pre-Tax Income', 'itemStyle' => ['color' => '#14b8a6']], // teal
+            ['name' => 'Taxes', 'itemStyle' => ['color' => '#f43f5e']], // rose
+            ['name' => 'Net Income', 'itemStyle' => ['color' => '#22c55e']], // green
+            ['name' => 'Dividends', 'itemStyle' => ['color' => '#0ea5e9']], // light blue
+            ['name' => 'Stock Buybacks', 'itemStyle' => ['color' => '#d946ef']], // fuchsia
+            ['name' => 'Retained Earnings', 'itemStyle' => ['color' => '#10b981']], // emerald
+        ];
+
+        $links = [];
+        $addLink = function(string $source, string $target, float $value) use (&$links) {
+            if ($value > 0.0001) {
+                $links[] = ['source' => $source, 'target' => $target, 'value' => round($value, 4)];
+            }
+        };
+
+        $addLink('Total Revenue', 'Operating Costs', $actualOperatingCosts);
+        $addLink('Total Revenue', 'Operating Profit', $opProfit);
+        
+        $addLink('Operating Profit', 'Capital Expenditures', $actualCapex);
+        $addLink('Operating Profit', 'Interest Expense', $actualInterest);
+        $addLink('Operating Profit', 'Pre-Tax Income', $preTax);
+        
+        $addLink('Pre-Tax Income', 'Taxes', $actualTax);
+        $addLink('Pre-Tax Income', 'Net Income', $netIncomeFlow);
+        
+        $addLink('Net Income', 'Dividends', $actualDiv);
+        $addLink('Net Income', 'Stock Buybacks', $actualBuybacks);
+        $addLink('Net Income', 'Retained Earnings', $retained);
+
+        return $this->json(['nodes' => $nodes, 'links' => $links]);
+    }
 }

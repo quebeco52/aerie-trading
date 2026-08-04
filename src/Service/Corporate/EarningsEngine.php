@@ -239,7 +239,8 @@ class EarningsEngine
         $expectedEbit = $ctx->analystExpectedRevenue - $ctx->fixedCosts - $ctx->analystExpectedVariableCosts;
         $ctx->expectedEbit = max(-$ctx->structuralRevenue * self::MAX_EBIT_LOSS_RATIO, $expectedEbit);
 
-        $ctx->ebit = $ctx->actualRevenue - $ctx->fixedCosts - $ctx->actualVariableCosts;
+        $ctx->operatingCosts = $ctx->actualVariableCosts + $ctx->fixedCosts;
+        $ctx->ebit = $ctx->actualRevenue - $ctx->operatingCosts;
 
         $ctx->primaryShockZ = $actuals->primaryShockZ;
         $ctx->eventType = $actuals->eventType;
@@ -310,6 +311,9 @@ class EarningsEngine
         } else {
             $ctx->expectedQuarterlyNetIncome = $expectedEbt * (1.0 - $ctx->corporateTaxRate);
         }
+
+        $ctx->preTaxIncome = $actualEbt;
+        $ctx->taxPaid = $actualEbt - $ctx->actualQuarterlyNetIncome;
 
         $ctx->reportedExpectedNetIncome = $ctx->expectedQuarterlyNetIncome;
         $ctx->reportedActualNetIncome = $ctx->actualQuarterlyNetIncome;

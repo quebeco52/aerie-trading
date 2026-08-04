@@ -170,7 +170,7 @@ class DebtEngine
         // We calculate their natural maximum leverage (EquityLimit) and prevent E/V from compressing below 50% of that natural limit.
         $naturalMinEVRatio = 1.0 / (1.0 + $equityLimit);
         $floorEV = $naturalMinEVRatio * 0.50;
-        
+
         $assetVolatility = $equityVolatility * max($floorEV, $marketCap / $assetValue);
         $assetVolatility = max(0.02, $assetVolatility); // Minimum asset vol failsafe
 
@@ -178,7 +178,7 @@ class DebtEngine
 
         // Debt maturity is approximated at 5 years for standard corporate credit spreads
         $timeToMaturity = 5.0;
-        
+
         $lossGivenDefault = $strategy->getLossGivenDefault();
 
         $distanceToDefault = $this->mathUtility->calculateDistanceToDefault(
@@ -396,7 +396,9 @@ class DebtEngine
         // Macro-Economic CFO Tolerance
         // Pass the pure D/E target limit and effective cost of debt to the CFO to calculate their personalized elasticity
         $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
-        $macroDebtTolerance = $archetypeStrategy->modifyDebtToleranceLimit($equityLimit, $effectiveCostOfDebt);
+
+        // Financial institutions have regulatory leverage limits that should not be crushed by CEO personality.
+        $macroDebtTolerance = $isFinancial ? $equityLimit : $archetypeStrategy->modifyDebtToleranceLimit($equityLimit, $effectiveCostOfDebt);
 
         $currentDebtRatio = $currentDebt / max(1.0, $equity);
         $isUnderLeveraged = $strategy->isUnderLeveraged(

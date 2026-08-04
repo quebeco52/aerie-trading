@@ -102,7 +102,7 @@ class TreasuryEngine
     private function processDebtExpansion(CapitalAllocationContext $ctx): void
     {
         $stock = $ctx->stock;
-        
+
         $currentEquity = (float) $stock->getTotalEquity();
         $preBuybackEquity = $currentEquity + $ctx->quarterlyNetIncome + $ctx->physicalAssetAppreciation - $ctx->totalPaid;
 
@@ -155,13 +155,15 @@ class TreasuryEngine
             if ($trueExpansionCapacity > 0) {
                 $rawSpread = max(0.0, $marginalReturn - $hurdleRate);
                 $spreadMultiplier = min(1.0, $rawSpread * 10.0);
-                
+
                 $aggressionData = $ctx->strategy->getDebtExpansionAggressiveness(
-                    $spreadMultiplier, 
-                    $totalDebt, 
-                    $ctx->customerDeposits
+                    $spreadMultiplier,
+                    $totalDebt,
+                    $ctx->customerDeposits,
+                    $targetCashReserves,
+                    $ctx->newTreasury
                 );
-                
+
                 $borrowProbability = $aggressionData['probability'];
                 $aggressiveness = $aggressionData['aggressiveness'];
 
@@ -218,6 +220,15 @@ class TreasuryEngine
         $isRecap = $ctx->recapActionTaken;
         $forcedExpansion = $ctx->debtActionTaken && !$isRecap;
 
+        // Under-leveraged financials must shrink equity via buybacks, not grow assets.
+        // Skipping organic capex entirely here ensures the FCF stays in treasury so
+        // CapitalAllocationEngine::executeBuybacks() can deploy it for recapitalization.
+        // Expanding the loan book when D/E is far below the regulatory target only worsens
+        // equity bloat and suppresses ROE further.
+        if (!$forcedExpansion && $ctx->isFinancial && ($ctx->health->isUnderLeveraged ?? false)) {
+            return;
+        }
+
         if (!$forcedExpansion && (mt_rand(1, 1000) / 1000.0) > $investmentProbability) {
             return;
         }
@@ -230,7 +241,7 @@ class TreasuryEngine
 
         if ((($trueReturn > $hurdleRate || $isHoarder) && $excessCash > 0 && !$ctx->health->wantsToPaydownDebt) || $forcedExpansion) {
             $spreadMultiplier = $isHoarder ? 1.0 : min(1.0, max(0.0, ($trueReturn - $hurdleRate) * 10.0));
-            
+
             $baseExcessCash = max(0.0, $excessCash - $ctx->debtIssued);
             $organicSpend = $baseExcessCash * (self::BASE_ORGANIC_SPEND_RATE + (self::VARIABLE_ORGANIC_SPEND_RATE * $spreadMultiplier));
 
@@ -238,10 +249,10 @@ class TreasuryEngine
             $expansionSpend = min($expansionSpend, $excessCash);
 
             $maxGrowthSpeed = $ctx->strategy->getMaxOrganicGrowthSpeed($isHoarder, $isMegaHoarder);
-            
+
             $expansionCapBasis = $ctx->strategy->getExpansionCapacityBasis($preBuybackEquity, $totalDebt, $liveInvestedCapital);
             $maxOrganicCapacity = $expansionCapBasis * $maxGrowthSpeed;
-            
+
             $expansionSpend = min($expansionSpend, max($maxOrganicCapacity, $ctx->debtIssued));
 
             if ($marginalReturn <= 0.0 && !$forcedExpansion) {
@@ -251,7 +262,7 @@ class TreasuryEngine
             if ($expansionSpend > 0) {
                 $ctx->organicCapex = $expansionSpend;
                 $ctx->newTreasury -= $expansionSpend;
-                
+
                 $this->capExEngine->allocateGrowthCapEx($stock, $expansionSpend);
 
                 if ($expansionSpend > 1_000_000_000.0) {
@@ -308,7 +319,7 @@ class TreasuryEngine
 
         $currentPE = $ctx->quarterlyEps > 0 ? ($ctx->currentPrice / ($ctx->quarterlyEps * 4)) : 9999.0;
         if ($ctx->actualAnnualEps > 0) {
-             $currentPE = $ctx->currentPrice / $ctx->actualAnnualEps;
+            $currentPE = $ctx->currentPrice / $ctx->actualAnnualEps;
         }
 
         $trueReturn = $ctx->strategy->getTrueReturn($stock);
@@ -415,7 +426,7 @@ class TreasuryEngine
     {
         $stock = $ctx->stock;
         $totalDebt = $ctx->wholesaleDebt + $ctx->customerDeposits;
-        
+
         $targetOperatingCash = $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt);
         $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
         $targetOperatingCash = $archetypeStrategy->modifyTargetOperatingCash($targetOperatingCash);
@@ -445,7 +456,7 @@ class TreasuryEngine
             $isJunkBondStatus = $dynamicSpread > ($baselineSpread + 0.0011);
 
             $shouldSweep = $currentDebtRatio > $evalLimit;
-            
+
             // Commercial banks and insurers have structural, regulatory-driven balance sheets 
             // where "cash hoarding" is just normal float/deposits, and junk status on marginal debt 
             // shouldn't force them to liquidate their structural funding.

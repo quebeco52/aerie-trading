@@ -15,9 +15,9 @@ class MacroState
     public float $energyPriceIndex = 100.0;
     public float $energyPriceShock = 0.0;
     
-    public float $targetRate = 0.02;
-    public float $policyRate = 0.02;
-    public float $policyRateEma = 0.02;
+    public float $targetRate = 0.0125;
+    public float $policyRate = 0.0125;
+    public float $policyRateEma = 0.0125;
     
     public float $nsLevel = 0.0;
     public float $nsSlope = 0.0;
@@ -69,8 +69,8 @@ class MacroState
         $state->energyPriceIndex = $data['energy_price_index'] ?? 100.0;
         $state->energyPriceShock = $data['energy_price_shock'] ?? 0.0;
         
-        $state->targetRate = $data['target_rate'] ?? 0.02;
-        $state->policyRate = $data['policy_rate'] ?? 0.02;
+        $state->targetRate = $data['target_rate'] ?? 0.0125;
+        $state->policyRate = $data['policy_rate'] ?? 0.0125;
         $state->policyRateEma = $data['policy_rate_ema'] ?? $state->policyRate;
         
         $state->nsLevel = $data['ns_level'] ?? 0.0;

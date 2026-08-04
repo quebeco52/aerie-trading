@@ -296,13 +296,17 @@ class CapitalAllocationEngine
 
         $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
 
+        $isUnderLeveraged = $ctx->health->isUnderLeveraged ?? false;
+
         $isLiquidityCrisis = $ctx->health->interestCoverage < 1.0;
         $modelThresholds = \App\Data\Sectors::getModelThresholds($ctx->businessModel);
         $minBuybackIcr = $modelThresholds['buyback_min_icr'];
 
         if ($isLiquidityCrisis || (!$isHoarder && (($ctx->health->wantsToPaydownDebt && !$canEasilyCoverDebt) || $ctx->health->interestCoverage < $minBuybackIcr))) {
-            $ctx->newShares = $ctx->sharesOutstanding;
-            return;
+            if (!($ctx->isFinancial && $isUnderLeveraged)) {
+                $ctx->newShares = $ctx->sharesOutstanding;
+                return;
+            }
         }
 
         $trueReturn = $ctx->isFinancial ? (float) $stock->getRoeTtm() : (float) $stock->getRoicTtm();
@@ -316,7 +320,7 @@ class CapitalAllocationEngine
 
         $ctx->newShares = $ctx->sharesOutstanding;
 
-        if (($economicSpread > 0.02 && $ctx->currentPE < ($fairValuePE + 3.0)) || $isHoarder) {
+        if (($economicSpread > 0.02 && $ctx->currentPE < ($fairValuePE + 3.0)) || $isHoarder || $isUnderLeveraged) {
             $maxWillingSpend = $ctx->strategy->calculateMaxBuybackSpend($excessCash, $ctx->retainedEarningsThisQuarter, $isMegaHoarder);
 
             $marketCap = $ctx->sharesOutstanding * max($ctx->currentPrice, 0.01);
@@ -324,8 +328,11 @@ class CapitalAllocationEngine
 
             $isUnderLeveraged = $ctx->health->isUnderLeveraged ?? false;
 
-            if ($isUnderLeveraged && $excessCash > 0) {
-                $maxWillingSpend = max($maxWillingSpend, $excessCash * 0.50);
+            if ($isUnderLeveraged) {
+                // Under-leveraged financials must crush equity bloat via buybacks to restore ROE.
+                // They can fund this from retained earnings even when idle excess cash is zero.
+                $recapBudget = max($excessCash, $ctx->retainedEarningsThisQuarter);
+                $maxWillingSpend = max($maxWillingSpend, $recapBudget);
                 $maxRegulatorySpend = max($maxRegulatorySpend, $marketCap * 0.05);
             }
 

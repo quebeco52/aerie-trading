@@ -290,7 +290,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         return max($organicSpend, $debtIssued * self::DEBT_CAPEX_DEPLOYMENT);
     }
 
-    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0): array
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): array
     {
         // Highly aggressive borrowing to fuel buyouts and portfolio injections
         return [

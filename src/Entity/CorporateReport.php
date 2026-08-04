@@ -58,6 +58,18 @@ class CorporateReport
     #[ORM\Column(type: 'decimal', precision: 20, scale: 4)]
     private string $capitalExpenditures = '0.0000';
 
+    #[ORM\Column(type: 'decimal', precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $operatingCosts = '0.0000';
+
+    #[ORM\Column(type: 'decimal', precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $ebit = '0.0000';
+
+    #[ORM\Column(type: 'decimal', precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $preTaxIncome = '0.0000';
+
+    #[ORM\Column(type: 'decimal', precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $taxPaid = '0.0000';
+
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $wacc = null;
 
@@ -404,7 +416,50 @@ class CorporateReport
     public function setFreeCashFlow(?string $freeCashFlow): static
     {
         $this->freeCashFlow = $freeCashFlow;
+        return $this;
+    }
 
+    public function getOperatingCosts(): string
+    {
+        return $this->operatingCosts;
+    }
+
+    public function setOperatingCosts(string $operatingCosts): static
+    {
+        $this->operatingCosts = $operatingCosts;
+        return $this;
+    }
+
+    public function getEbit(): string
+    {
+        return $this->ebit;
+    }
+
+    public function setEbit(string $ebit): static
+    {
+        $this->ebit = $ebit;
+        return $this;
+    }
+
+    public function getPreTaxIncome(): string
+    {
+        return $this->preTaxIncome;
+    }
+
+    public function setPreTaxIncome(string $preTaxIncome): static
+    {
+        $this->preTaxIncome = $preTaxIncome;
+        return $this;
+    }
+
+    public function getTaxPaid(): string
+    {
+        return $this->taxPaid;
+    }
+
+    public function setTaxPaid(string $taxPaid): static
+    {
+        $this->taxPaid = $taxPaid;
         return $this;
     }
 }

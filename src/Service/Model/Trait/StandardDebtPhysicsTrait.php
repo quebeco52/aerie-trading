@@ -19,7 +19,7 @@ trait StandardDebtPhysicsTrait
         return $interestExpense > 0 ? ($ebit / $interestExpense) : ($ebit > 0 ? 999.0 : -999.0);
     }
     
-    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0): array {
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): array {
         return [
             'probability' => 0.40 + ($spreadMultiplier * 0.50),
             'aggressiveness' => 0.05 + (0.35 * $spreadMultiplier)

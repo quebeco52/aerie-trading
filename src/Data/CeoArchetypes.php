@@ -155,8 +155,14 @@ class CeoArchetypes
         $estimatedEbit = $annualRevenue * (float) $stock->getOperatingMargin();
         $zScore = $metrics->calculateAltmanZScore($stock, $estimatedEbit, $annualRevenue);
         
-        // Z-Score < 1.81 is the classic Altman distress zone
-        if ($zScore < 1.81) {
+        $industry = $stock->getIndustry() ?: 'General';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
+        
+        // Z-Score < 1.81 is the classic Altman distress zone.
+        // Financial institutions operate with massive structural leverage (deposits as liabilities)
+        // making the standard Altman Z-Score mathematically invalid for them (it will almost always be < 1.0).
+        if (!$isFinancial && $zScore < 1.81) {
             return new \App\Service\Archetype\BoardGovernanceDecorator($baseStrategy);
         }
 

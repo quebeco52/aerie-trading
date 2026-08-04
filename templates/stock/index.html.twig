@@ -151,6 +151,10 @@
 						</div>
 						<div class="flex items-center gap-3 self-end sm:self-auto">
 							<div class="flex space-x-2 bg-surface-container-lowest p-1.5 rounded-xl border border-outline-variant/15 shadow-inner">
+								<button onclick="document.dispatchEvent(new CustomEvent('sankey:open'))" class="px-4 py-1.5 text-xs font-bold rounded-lg bg-surface-container text-primary border border-primary/20 hover:bg-primary/10 transition-all uppercase tracking-widest flex items-center gap-1">
+									<span class="material-symbols-outlined text-[14px]">account_tree</span>
+									Earnings Flow
+								</button>
 								<button onclick="updateCharts('12Q')" id="btn-global-12Q" class="px-4 py-1.5 text-xs font-bold rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-all uppercase tracking-widest">12Q</button>
 								<button onclick="updateCharts('12Y')" id="btn-global-12Y" class="px-4 py-1.5 text-xs font-bold rounded-lg bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-all uppercase tracking-widest">12Y</button>
 							</div>
@@ -1033,4 +1037,26 @@ ticksPerYear: {{ ticksPerYear }}
 
 <script type="module">
 	import 'pages/stock';
-</script>{% endblock %}
+</script>
+
+{% if not isEtf %}
+<dialog id="sankeyModal" class="backdrop:bg-surface-container-lowest/80 backdrop:backdrop-blur-sm bg-surface-container shadow-2xl rounded-2xl border border-outline-variant/20 p-6 w-[90vw] max-w-5xl open:animate-in open:fade-in open:zoom-in-95">
+    <div class="flex justify-between items-center mb-6">
+        <h3 class="text-lg font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+			<span class="material-symbols-outlined text-primary text-xl">account_tree</span>
+			{{ asset.name }} - Latest Earnings Flow
+		</h3>
+        <button onclick="document.getElementById('sankeyModal').close()" class="p-2 rounded-xl text-on-surface-variant hover:text-error hover:bg-error/10 transition-colors">
+            <span class="material-symbols-outlined">close</span>
+        </button>
+    </div>
+    <div id="sankeyContainer" data-controller="sankey" data-action="sankey:open@document->sankey#open" data-sankey-ticker-value="{{ asset.ticker }}" data-sankey-url-value="{{ path('api_earnings_flow') }}" class="w-full" style="height: 600px;"></div>
+	<script>
+		const modal = document.getElementById('sankeyModal');
+		modal.addEventListener('click', (e) => {
+			if (e.target === modal) modal.close();
+		});
+	</script>
+</dialog>
+{% endif %}
+{% endblock %}

@@ -369,8 +369,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
 
     public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
     {
-        // Credit services act like banks. If they drop below 90% of their regulatory leverage target, 
-        // they are destroying ROE and should aggressively return capital to shareholders via buybacks.
-        return $currentDebtRatio < ($targetDebtTolerance * 0.90);
+        $bankEquityLimit = $this->getModelThresholds()['equity_limit'] ?? 10.0;
+        return $currentDebtRatio < ($bankEquityLimit * 0.90);
     }
 }

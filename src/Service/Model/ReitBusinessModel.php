@@ -315,7 +315,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
      * REITs pay out the vast majority of their income as dividends, leaving little retained earnings.
      * To grow their portfolio, they MUST aggressively issue debt to finance new property acquisitions.
      */
-    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0): array
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): array
     {
         return [
             'probability' => self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT), // Constantly hunting for property acquisitions

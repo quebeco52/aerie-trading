@@ -135,9 +135,9 @@ class CommercialBankBusinessModel implements BusinessModelInterface
 
     // --- Debt Expansion Constants ---
     public const DEBT_EXPANSION_BASE_PROB = 0.40;
-    public const DEBT_EXPANSION_PROB_MULT = 0.50;
-    public const DEBT_EXPANSION_BASE_AGGR = 0.05;
-    public const DEBT_EXPANSION_AGGR_MULT = 0.35;
+    public const DEBT_EXPANSION_PROB_MULT = 0.40;
+    public const DEBT_EXPANSION_BASE_AGGR = 0.02;
+    public const DEBT_EXPANSION_AGGR_MULT = 0.20;
     /** Structural baseline of wholesale debt banks target. */
     public const WHOLESALE_TARGET_RATIO = 0.10;
     /** Maximum probability boost for urgent wholesale funding. */
@@ -159,7 +159,7 @@ class CommercialBankBusinessModel implements BusinessModelInterface
     /** Minimum fraction of debt issued allocated to organic capex. */
     public const ORGANIC_CAPEX_DEBT_MULT = 0.95;
     /** Minimum ratio of target leverage before the bank is considered under-leveraged and triggers aggressive buybacks to defend ROE. */
-    public const UNDER_LEVERAGED_TOLERANCE = 0.90;
+    public const UNDER_LEVERAGED_TOLERANCE = 0.80;
 
     // --- Macro & Shock Thresholds ---
     /** Output gap multiplier for fee revenue. */
@@ -294,7 +294,7 @@ class CommercialBankBusinessModel implements BusinessModelInterface
             'fee_revenue_weight'   => self::FEE_REVENUE_WEIGHT,
             'credit_risk_appetite' => 0.5,
         ]);
-        
+
         $riskAppetite = max(0.0, min(1.0, $params['credit_risk_appetite']));
         $niiMultiplier = 0.5 + $riskAppetite;
 
@@ -326,7 +326,7 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $niiWeight            = $params['nii_revenue_weight'];
         $feeWeight            = $params['fee_revenue_weight'];
         $inversionSensitivity = $params['nim_inversion_sensitivity'];
-        
+
         $riskAppetite = max(0.0, min(1.0, $params['credit_risk_appetite']));
         $niiMultiplier = 0.5 + $riskAppetite; // Yield scales from 0.5x to 1.5x
         $defaultMultiplier = $riskAppetite >= 0.5 ? 1.0 + (($riskAppetite - 0.5) * 2.0) : 0.5 + ($riskAppetite * 1.0); // Defaults scale from 0.5x to 2.0x
@@ -501,8 +501,8 @@ class CommercialBankBusinessModel implements BusinessModelInterface
 
     public function calculateMaxBuybackSpend(float $excessCash, float $retainedEarningsThisQuarter, bool $isMegaHoarder): float
     {
-        return $isMegaHoarder 
-            ? $excessCash * self::BUYBACK_MEGA_HOARDER_LIMIT 
+        return $isMegaHoarder
+            ? $excessCash * self::BUYBACK_MEGA_HOARDER_LIMIT
             : max(0.0, min($excessCash * self::BUYBACK_HOARDER_LIMIT, $retainedEarningsThisQuarter));
     }
 
@@ -527,7 +527,9 @@ class CommercialBankBusinessModel implements BusinessModelInterface
 
     public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float
     {
-        return max($organicSpend, $debtIssued * self::ORGANIC_CAPEX_DEBT_MULT);
+        // Commercial banks do not deploy wholesale debt into physical property or organic capex.
+        // Debt is deployed into Earning Assets (loans) or held in Treasury for liquidity.
+        return $organicSpend;
     }
 
     public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float
@@ -600,56 +602,30 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         }
     }
 
-    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0): array
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): array
     {
         $probability = self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT);
         $aggressiveness = self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier);
 
-        if ($totalDebt <= 0.0) {
-            return [
-                'probability' => $probability,
-                'aggressiveness' => $aggressiveness
-            ];
-        }
+        $leverage = $totalDebt > 0 ? $customerDeposits / $totalDebt : 0.0;
 
-        $depositRatio = $customerDeposits / $totalDebt;
-        $wholesaleRatio = 1.0 - $depositRatio;
-
-        // Continuous physics scaling: Banks target a structural baseline of wholesale debt.
-        // As wholesale funding drops below target, urgency to replenish it scales continuously up to a maximum boost.
-        $wholesaleShortfall = max(0.0, self::WHOLESALE_TARGET_RATIO - $wholesaleRatio);
-
-        if ($wholesaleShortfall > 0.0) {
-            // $urgency ranges from 0.0 (at target wholesale) to 1.0 (at 0% wholesale)
-            $urgency = $wholesaleShortfall / self::WHOLESALE_TARGET_RATIO;
-
-            $probability = min(1.0, $probability + (self::WHOLESALE_URGENCY_PROB_BOOST * $urgency));
-            $aggressiveness = min(1.0, $aggressiveness + (self::WHOLESALE_URGENCY_AGGR_BOOST * $urgency));
-        } else {
-            // If wholesale ratio is high (deposit ratio is low), continuously throttle further debt expansion.
-            // Throttle scales from 1.0 (at UPPER_BOUND) down to FLOOR (at LOWER_BOUND).
-            $throttleRange = self::DEPOSIT_THROTTLE_UPPER_BOUND - self::DEPOSIT_THROTTLE_LOWER_BOUND;
-            $depositConstraint = max(
-                self::DEPOSIT_THROTTLE_FLOOR,
-                min(1.0, ($depositRatio - self::DEPOSIT_THROTTLE_LOWER_BOUND) / $throttleRange)
-            );
-            
-            $probability *= $depositConstraint;
-            $aggressiveness *= $depositConstraint;
+        if ($currentTreasury < $targetOperatingCash && $targetOperatingCash > 0) {
+            $shortfallRatio = ($targetOperatingCash - $currentTreasury) / $targetOperatingCash;
+            $probability += (self::WHOLESALE_URGENCY_PROB_BOOST * $shortfallRatio);
+            $aggressiveness += (self::WHOLESALE_URGENCY_AGGR_BOOST * $shortfallRatio);
+        } elseif ($leverage > self::UNDER_LEVERAGED_TOLERANCE) {
+            $probability = 0.0;
+            $aggressiveness = 0.0;
         }
 
         return [
-            'probability' => $probability,
+            'probability' => min(1.0, $probability),
             'aggressiveness' => $aggressiveness
         ];
     }
 
     public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
     {
-        // Commercial banks do not evaluate Interest Coverage (ICR) for under-leverage 
-        // because their interest expense is massive (it's their COGS).
-        // If they drop below 90% of their regulatory leverage target, they are destroying ROE
-        // and should aggressively return capital to shareholders via buybacks.
         return $currentDebtRatio < ($targetDebtTolerance * self::UNDER_LEVERAGED_TOLERANCE);
     }
 }

@@ -59,9 +59,12 @@ class EarningsSimulationContext
     public float $quarterlyInterestIncome = 0.0;
     public float $quarterlyDepreciation = 0.0;
     public float $trueOperatingMargin = 0.0;
+    public float $operatingCosts = 0.0;
     public ?\App\DTO\DebtMetricsDTO $debtMetrics = null;
 
     // Net Income
+    public float $preTaxIncome = 0.0;
+    public float $taxPaid = 0.0;
     public float $expectedQuarterlyNetIncome = 0.0;
     public float $actualQuarterlyNetIncome = 0.0;
     public float $reportedExpectedNetIncome = 0.0;
