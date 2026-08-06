@@ -21,6 +21,10 @@ use App\Service\Macro\MacroEngine;
  */
 class DistressedDebtBusinessModel extends AssetManagementBusinessModel
 {
+    public function getModelThresholds(): array
+    {
+        return ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => 0.5,  'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.18, 'moat_spread' => 0.005, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 1.0];
+    }
     // --- Special Situations & Macro Triggers ---
     /** Baseline macro credit spread fallback when macroeconomic state data is absent. */
     public const DEFAULT_CREDIT_SPREAD_FALLBACK = 0.015;

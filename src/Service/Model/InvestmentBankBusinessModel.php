@@ -26,6 +26,10 @@ use App\Service\Event\ShockEvent;
  */
 class InvestmentBankBusinessModel extends BrokerageBusinessModel
 {
+    public function getModelThresholds(): array
+    {
+        return ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => null, 'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.18, 'moat_spread' => 0.005, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 1.0];
+    }
     // --- Dual-Desk Revenue Architecture ---
     /** Fraction of IB revenue sourced from Advisory (M&A, ECM, DCM underwriting). ~40% for bulge-brackets. */
     public const ADVISORY_REVENUE_WEIGHT    = 0.40;

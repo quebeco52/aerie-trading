@@ -10,17 +10,25 @@ class MacroEngine
 {
     public const REDIS_MACRO_STATE = 'macroeconomic_state';
 
+    // --- Central Bank & Structural Constraints ---
+    /** The Federal Reserve's long-term annual inflation target (2%). */
     public const TARGET_INFLATION = 0.02;
+    /** The natural real rate of interest (r*) representing neutral monetary policy. */
     public const NATURAL_RATE = 0.0125;
+    /** The baseline corporate tax rate for standard physical companies. */
     public const BASE_CORPORATE_TAX_RATE = 0.21;
+    /** The baseline historical equity risk premium expected over risk-free assets. */
     public const BASE_EQUITY_RISK_PREMIUM = 0.045;
-    public const HABIT_RISK_AVERSION_COEFF = 4.0; // Campbell-Cochrane (1999) habit formation risk aversion sensitivity
-    public const MIN_EQUITY_RISK_PREMIUM = 0.02;  // Structural floor: equities must yield more than risk-free T-bills
+    /** Campbell-Cochrane (1999) habit formation risk aversion sensitivity. */
+    public const HABIT_RISK_AVERSION_COEFF = 4.0;
+    /** Structural floor: equities must logically yield more than risk-free T-bills. */
+    public const MIN_EQUITY_RISK_PREMIUM = 0.02;
+    /** The discount to the policy rate representing the yield on corporate treasury cash. */
     public const CASH_YIELD_SPREAD = 0.0025;
 
     // KALDOR-KALECKI CONSTANTS
     public const KALDOR_MOMENTUM = 0.20;
-    public const KALDOR_CAPACITY = 200.0;
+    public const KALDOR_CAPACITY = 180.0;
     public const KALDOR_MONETARY_DRAG = 1.0;
     public const KALDOR_FISCAL_MULTIPLIER = 0.50;
     public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.010;
@@ -93,7 +101,7 @@ class MacroEngine
     // MERTON STRUCTURAL CREDIT SPREAD CONSTANTS (Merton 1974)
     public const BASE_CREDIT_SPREAD = 0.020;        // 200 bps normal corporate spread
     public const MERTON_LEVERAGE_SENSITIVITY = 6.0; // Sensitivity of default risk to GDP contractions
-    public const MERTON_VOL_SENSITIVITY = 1.50;     // Sensitivity of default spreads to excess market volatility
+    public const MERTON_VOL_SENSITIVITY = 0.15;     // Sensitivity of default spreads to excess market volatility
     public const MAX_CREDIT_SPREAD = 0.10;          // 1000 bps crisis spread cap
     public const CREDIT_SPREAD_EXCESS_VOL_THRESHOLD = 0.20;
 

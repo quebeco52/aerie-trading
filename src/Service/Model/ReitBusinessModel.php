@@ -21,6 +21,10 @@ use App\Service\Macro\MacroEngine;
  */
 class ReitBusinessModel extends StandardCorporateBusinessModel
 {
+    public function getModelThresholds(): array
+    {
+        return ['min_icr' => 1.05, 'bankrupt_equity' => 10.0, 'distress_equity' => 20.0, 'warning_equity' => 30.0, 'wholesale_leverage_limit' => 2.0,  'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.20, 'moat_spread' => 0.005, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 0.125];
+    }
     // --- Cap Rate & Portfolio Turnover Rails ---
     /** Quarterly portfolio turnover rate reflecting 7 to 10 year commercial leases. */
     public const PORTFOLIO_TURNOVER_RATE    = 0.025;
@@ -158,9 +162,14 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             $targetEbitYield = ($targetEbitYield * self::TARGET_EBIT_WEIGHT) + ($ttmRoic * self::TTM_ROIC_WEIGHT);
         }
 
+        $metrics = new \App\Service\Math\CorporateMetrics();
+        $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, $investedCapital, $macroState);
+        $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
+        $effectiveRoic = max($waccBase, $targetEbitYield - $saturationPenalty);
+
         return [
             'invested_capital' => $investedCapital,
-            'baseline_roic' => $targetEbitYield
+            'baseline_roic' => $effectiveRoic
         ];
     }
 
@@ -244,11 +253,11 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
      * Wall Street evaluates REITs on FFO (Funds From Operations), not GAAP Net Income.
      * FFO = Net Income + Depreciation (since real estate generally appreciates, depreciation is an accounting fiction).
      */
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08): float
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float
     {
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $thresholds = \App\Data\Sectors::getModelThresholds($businessModel);
+        $thresholds = $this->getModelThresholds();
         $kappa = $thresholds['reversion_speed'] ?? 0.20;
         $moatSpread = $thresholds['moat_spread'] ?? 0.005;
 
@@ -272,7 +281,14 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
         $scaledKappa = $kappa / self::TTM_ROIC_WEIGHT;
         $math = new MathUtility();
-        $newTtm += $math->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
+        
+        $saturationPenalty = 0.0;
+        if ($macroState !== null) {
+            $metrics = new \App\Service\Math\CorporateMetrics();
+            $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, abs($investedCapital), $macroState);
+        }
+        
+        $newTtm += $math->calculateReversionPull($newTtm, $wacc - $saturationPenalty, $scaledKappa, $moatSpread);
         $stock->setRoicTtm((string) max(self::MIN_ROIC_CLAMP, min(self::MAX_ROIC_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;

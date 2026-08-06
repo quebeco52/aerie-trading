@@ -436,7 +436,7 @@ class TreasuryEngine
             $macroDebtTolerance = $ctx->health->debtTolerance;
 
             $evalDebt = $ctx->strategy->getDeleveragingEvaluationDebt($totalDebt, $ctx->wholesaleDebt);
-            $modelThresholds = \App\Data\Sectors::getModelThresholds($ctx->businessModel);
+            $modelThresholds = $ctx->strategy->getModelThresholds();
             $evalLimit = $ctx->strategy->getDeleveragingEvaluationLimit($modelThresholds, $macroDebtTolerance);
 
             if (isset($modelThresholds['wholesale_leverage_limit'])) {

@@ -19,6 +19,10 @@ use App\Service\Macro\MacroEngine;
  */
 class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
 {
+    public function getModelThresholds(): array
+    {
+        return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.12, 'moat_spread' => 0.010, 'nwc_intensity' => 0.15, 'capex_completion_rate' => 0.125];
+    }
     // --- CapEx & Asset Physics ---
     public function getCapexCyclicality(): float { return 4.0; } // Much higher than standard 1.5
     public function getSecularGrowthRate(Stock $stock): float { return 0.015; } // Slightly lower secular growth, highly cyclical

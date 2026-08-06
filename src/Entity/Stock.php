@@ -202,8 +202,8 @@ class Stock
     /**
      * @var string Determines the bailout tier and market gravity strength (e.g., 'titan', 'systemic', 'none').
      */
-    #[ORM\Column(length: 255)]
-    private string $systemicImportance;
+    #[ORM\Column(length: 255, options: ['default' => 'none'])]
+    private string $systemicImportance = 'none';
 
     /**
      * @var string The target percentage of net income paid out as dividends.

@@ -23,6 +23,10 @@ use App\Service\Math\FinancialConstants;
  */
 class ClearingHouseBusinessModel implements BusinessModelInterface
 {
+    public function getModelThresholds(): array
+    {
+        return ['min_icr' => 1.05, 'bankrupt_equity' => 0.5,  'distress_equity' => 1.25, 'warning_equity' => 2.5,  'wholesale_leverage_limit' => null, 'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.10, 'moat_spread' => 0.030, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 1.0];
+    }
     use Trait\StandardBaseModelTrait;
     use Trait\StandardTreasuryTrait;
     use Trait\StandardValuationTrait;
@@ -119,6 +123,11 @@ class ClearingHouseBusinessModel implements BusinessModelInterface
         if ($ttmRoe !== 0.0) {
             $baselineRoe = ($baselineRoe * 0.70) + ($ttmRoe * 0.30);
         }
+
+        $metrics = new \App\Service\Math\CorporateMetrics();
+        $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, $effectiveEquity, $macroState);
+        $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
+        $baselineRoe = max($waccBase, $baselineRoe - $saturationPenalty);
 
         $taxRate = $macroState->corporateTaxRate;
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());

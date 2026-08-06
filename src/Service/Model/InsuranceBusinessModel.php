@@ -22,6 +22,10 @@ use App\Service\Macro\MacroEngine;
  */
 class InsuranceBusinessModel implements BusinessModelInterface
 {
+    public function getModelThresholds(): array
+    {
+        return ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.18, 'moat_spread' => 0.010, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 1.0];
+    }
     use Trait\StandardBaseModelTrait;
     use Trait\StandardTreasuryTrait;
     use Trait\StandardValuationTrait;
@@ -258,6 +262,11 @@ class InsuranceBusinessModel implements BusinessModelInterface
             $baselineRoic = ($baselineRoic * self::BASELINE_ROIC_WEIGHT) + ($structuralRoe * self::TTM_ROIC_WEIGHT);
         }
 
+        $metrics = new \App\Service\Math\CorporateMetrics();
+        $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
+        $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
+        $baselineRoic = max($waccBase, $baselineRoic - $saturationPenalty);
+
         return [
             'invested_capital' => $operatingEquity,
             'baseline_roic'    => $baselineRoic
@@ -447,11 +456,11 @@ class InsuranceBusinessModel implements BusinessModelInterface
      * @param float $corporateTaxRate     The effective corporate tax rate.
      * @return float The true post-tax return on equity.
      */
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08): float
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float
     {
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $thresholds = \App\Data\Sectors::getModelThresholds($businessModel);
+        $thresholds = $this->getModelThresholds();
         $kappa = $thresholds['reversion_speed'] ?? 0.18;
         $moatSpread = $thresholds['moat_spread'] ?? 0.01;
 
@@ -474,7 +483,14 @@ class InsuranceBusinessModel implements BusinessModelInterface
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
         $scaledKappa = $kappa / self::TTM_ROIC_WEIGHT;
         $math = new MathUtility();
-        $newTtm += $math->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
+        
+        $saturationPenalty = 0.0;
+        if ($macroState !== null) {
+            $metrics = new \App\Service\Math\CorporateMetrics();
+            $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
+        }
+        
+        $newTtm += $math->calculateReversionPull($newTtm, $costOfEquity - $saturationPenalty, $scaledKappa, $moatSpread);
         $stock->setRoeTtm((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;

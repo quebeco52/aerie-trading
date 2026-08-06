@@ -133,10 +133,14 @@ class MarketResetCommand extends Command
             // Query the exact structural metrics the engine uses to prevent massive gravity explosions on tick 1
             $targetMetrics = $strategy->getTargetMetrics($tempStock, $dummyMacro, $this->mathUtility);
             $investedCapital = $targetMetrics['invested_capital'];
-            $impliedRoic = max(0.01, (float) $targetMetrics['baseline_roic']);
+            $operatingYield = max(0.01, (float) $targetMetrics['baseline_roic']);
             $taxRate = $dummyMacro->corporateTaxRate ?? 0.21;
-            $preTaxRoic = $impliedRoic / (1.0 - $taxRate);
-            $revenue = $margin > 0 ? ($investedCapital * ($preTaxRoic / $margin)) : 0.0;
+            $preTaxYield = $operatingYield / (1.0 - $taxRate);
+            $revenue = $margin > 0 ? ($investedCapital * ($preTaxYield / $margin)) : 0.0;
+
+            $impliedPricingRoic = $isFinancial 
+                ? max(0.01, (float) $tempStock->getBaselineRoe())
+                : $operatingYield;
 
             $shares = $stockData['shares_outstanding'] ?? 1_000_000_000;
             $annualEps = $shares > 0 ? ($netIncome / $shares) : 0.0;
@@ -168,8 +172,8 @@ class MarketResetCommand extends Command
                 fcfPerShare: null,
                 bookValuePerShare: $shares > 0 ? ($stockData['total_equity'] ?? 0.0) / $shares : 0.0,
                 maShock: 0.0,
-                currentRoic: $impliedRoic,
-                roicTtm: $impliedRoic,
+                currentRoic: $impliedPricingRoic,
+                roicTtm: $impliedPricingRoic,
                 dividendPerShare: $startingDividend,
                 liveWacc: $debtHealth->wacc ?? 0.08,
                 baselineIndustryPE: \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['pe'] ?? 20.0,

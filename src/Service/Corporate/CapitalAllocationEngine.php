@@ -194,7 +194,7 @@ class CapitalAllocationEngine
         $isDeepDistress = $evaSpread < (self::DEEP_DISTRESS_EVA_SPREAD * $distressMultiplier);
         $isModerateDistressNoCash = ($evaSpread < (self::MODERATE_DISTRESS_EVA_SPREAD * $distressMultiplier)) && !$hasCashBuffer;
 
-        $modelThresholds = \App\Data\Sectors::getModelThresholds($ctx->businessModel);
+        $modelThresholds = $ctx->strategy->getModelThresholds();
         $crisisThreshold = $modelThresholds['dividend_crisis_icr'];
         $isLiquidityCrisis = $ctx->health->interestCoverage < 1.0 || ($ctx->health->interestCoverage < $crisisThreshold && !$hasCashBuffer);
 
@@ -299,7 +299,7 @@ class CapitalAllocationEngine
         $isUnderLeveraged = $ctx->health->isUnderLeveraged ?? false;
 
         $isLiquidityCrisis = $ctx->health->interestCoverage < 1.0;
-        $modelThresholds = \App\Data\Sectors::getModelThresholds($ctx->businessModel);
+        $modelThresholds = $ctx->strategy->getModelThresholds();
         $minBuybackIcr = $modelThresholds['buyback_min_icr'];
 
         if ($isLiquidityCrisis || (!$isHoarder && (($ctx->health->wantsToPaydownDebt && !$canEasilyCoverDebt) || $ctx->health->interestCoverage < $minBuybackIcr))) {

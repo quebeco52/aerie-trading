@@ -19,6 +19,10 @@ use App\Service\Event\ShockEvent;
  */
 class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
 {
+    public function getModelThresholds(): array
+    {
+        return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.15, 'moat_spread' => 0.015, 'nwc_intensity' => 0.05, 'capex_completion_rate' => 0.33];
+    }
     public function getSecularGrowthRate(Stock $stock): float { return 0.03; }
     public function getCapexCyclicality(): float { return 0.8; }
     public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.75, 'revenue_weight' => 0.25]; }

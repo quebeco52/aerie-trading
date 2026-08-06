@@ -21,6 +21,10 @@ use App\Service\Macro\MacroEngine;
  */
 class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 {
+    public function getModelThresholds(): array
+    {
+        return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.12, 'moat_spread' => 0.020, 'nwc_intensity' => 0.10, 'capex_completion_rate' => 0.20];
+    }
     public function getCapexCyclicality(): float { return 0.3; }
     public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.70, 'revenue_weight' => 0.30]; }
 
@@ -158,11 +162,11 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.10);
     }
 
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08): float
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float
     {
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $thresholds = \App\Data\Sectors::getModelThresholds($businessModel);
+        $thresholds = $this->getModelThresholds();
         $kappa = $thresholds['reversion_speed'] ?? 0.12;
         $moatSpread = $thresholds['moat_spread'] ?? 0.02;
 
@@ -181,7 +185,14 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
         $scaledKappa = $kappa / self::TTM_ROIC_WEIGHT;
         $math = new MathUtility();
-        $newTtm += $math->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
+        
+        $saturationPenalty = 0.0;
+        if ($macroState !== null) {
+            $metrics = new \App\Service\Math\CorporateMetrics();
+            $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, abs($investedCapital), $macroState);
+        }
+        
+        $newTtm += $math->calculateReversionPull($newTtm, $wacc - $saturationPenalty, $scaledKappa, $moatSpread);
         $stock->setRoicTtm((string) max(self::MIN_ROIC_CLAMP, min(self::MAX_ROIC_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;

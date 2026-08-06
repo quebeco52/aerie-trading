@@ -22,6 +22,10 @@ use App\Service\Math\FinancialConstants;
  */
 class CreditServicesBusinessModel extends CommercialBankBusinessModel
 {
+    public function getModelThresholds(): array
+    {
+        return ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => 2.0,  'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.18, 'moat_spread' => 0.005, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 1.0];
+    }
     // --- Dual-Stream Credit Services Architecture ---
     /** Baseline fraction of revenue derived from revolving consumer lending interest. */
     public const LENDING_REVENUE_WEIGHT  = 0.65;
@@ -248,6 +252,11 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         if ($ttmRoe !== 0.0) {
             $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
         }
+
+        $metrics = new \App\Service\Math\CorporateMetrics();
+        $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, $effectiveEquity, $macroState);
+        $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
+        $baselineRoe = max($waccBase, $baselineRoe - $saturationPenalty);
 
         $taxRate = $macroState->corporateTaxRate;
         $policyRate = $macroState->policyRateEma;

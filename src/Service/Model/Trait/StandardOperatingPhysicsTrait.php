@@ -86,7 +86,7 @@ trait StandardOperatingPhysicsTrait
         return $investedCapital > 0 ? ($quarterlyNopatOrIncome / $investedCapital) * 4.0 : 0.0;
     }
 
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08): float
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float
     {
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
@@ -106,7 +106,7 @@ trait StandardOperatingPhysicsTrait
             // TTM_SMOOTHING_NEW_WEIGHT = 0.25, OLD_WEIGHT = 0.75
             $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * 0.25) + ($oldTtm * 0.75);
             $scaledKappa = $kappa / (defined('static::TTM_ROE_WEIGHT') ? static::TTM_ROE_WEIGHT : 0.50);
-            $newTtm += $math->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
+            $newTtm += $math->calculateReversionPull($newTtm, $costOfEquity, $scaledKappa, $moatSpread);
             $stock->setRoeTtm((string) max(-0.50, min(1.0, $newTtm)));
 
             return $truePostTaxReturn;
@@ -121,7 +121,14 @@ trait StandardOperatingPhysicsTrait
         $oldTtm = (float) $stock->getRoicTtm();
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * 0.25) + ($oldTtm * 0.75);
         $scaledKappa = $kappa / (defined('static::TTM_ROIC_WEIGHT') ? static::TTM_ROIC_WEIGHT : 0.50);
-        $newTtm += $math->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
+        
+        $saturationPenalty = 0.0;
+        if ($macroState !== null) {
+            $metrics = new \App\Service\Math\CorporateMetrics();
+            $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, abs($investedCapital), $macroState);
+        }
+        
+        $newTtm += $math->calculateReversionPull($newTtm, $wacc - $saturationPenalty, $scaledKappa, $moatSpread);
         $stock->setRoicTtm((string) max(-0.50, min(1.0, $newTtm)));
 
         return $truePostTaxReturn;

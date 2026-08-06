@@ -23,6 +23,10 @@ use App\Service\Math\FinancialConstants;
  */
 class ShadowBankBusinessModel extends CommercialBankBusinessModel
 {
+    public function getModelThresholds(): array
+    {
+        return ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => null, 'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.18, 'moat_spread' => 0.005, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 1.0];
+    }
     // --- ROE & Target Architecture ---
     /** Weight given to historical baseline ROE when blending with TTM ROE. */
     public const BASELINE_ROE_WEIGHT = 0.50;
@@ -92,6 +96,11 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         if ($ttmRoe !== 0.0) {
             $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
         }
+        
+        $metrics = new \App\Service\Math\CorporateMetrics();
+        $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, $effectiveEquity, $macroState);
+        $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
+        $baselineRoe = max($waccBase, $baselineRoe - $saturationPenalty);
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
         $policyRate = $macroState->policyRateEma;

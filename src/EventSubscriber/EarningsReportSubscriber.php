@@ -53,7 +53,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $report->setRoic((string) $ctx->truePostTaxReturn);
         $report->setShares((string) $stock->getSharesOutstanding());
         $report->setWacc((string) $ctx->wacc);
-        $report->setEva((string) $ctx->annualEconomicProfit);
+        $report->setEva((string) $ctx->quarterlyEconomicProfit);
         $report->setDividendPaid((string) $ctx->allocation['total_paid']);
         $report->setStockBuybacks((string) $ctx->allocation['total_cash_spent']);
         

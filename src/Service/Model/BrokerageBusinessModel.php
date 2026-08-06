@@ -21,6 +21,10 @@ use App\Service\Math\FinancialConstants;
  */
 class BrokerageBusinessModel extends AssetManagementBusinessModel
 {
+    public function getModelThresholds(): array
+    {
+        return ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => null, 'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.18, 'moat_spread' => 0.005, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 1.0];
+    }
     // --- Dual-Stream Brokerage Architecture ---
     /** Baseline fraction of revenue derived from trading desks, market making, and execution commissions. */
     public const TRADING_REVENUE_WEIGHT  = 0.60;
@@ -144,6 +148,11 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
         if ($ttmRoe !== 0.0) {
             $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
         }
+
+        $metrics = new \App\Service\Math\CorporateMetrics();
+        $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
+        $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
+        $baselineRoe = max($waccBase, $baselineRoe - $saturationPenalty);
 
         $policyRate = $macroState->policyRateEma;
         $yield5y = $macroState->yield5yEma;

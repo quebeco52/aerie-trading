@@ -116,10 +116,14 @@ trait FinancialPhysicsTrait
 
     public function getDebtCostMetrics(\App\DTO\DebtMetricsDTO $debtMetrics, float $currentDebt, float $wholesaleDebt, float $interestExpense): array
     {
-        $grossCostOfDebt = $wholesaleDebt > 0 ? ($interestExpense / $wholesaleDebt) : $debtMetrics->wholesaleRate;
+        // Use the already-computed wholesale rate from the debt metrics DTO.
+        // DO NOT divide total interestExpense by wholesaleDebt — that attributes deposit interest to wholesale,
+        // inflating cost-of-debt to junk bond levels for deposit-heavy banks.
+        $wholesaleRate = $debtMetrics->wholesaleRate;
+        $wholesaleInterest = $wholesaleRate * $wholesaleDebt;
         return [
-            'gross_cost_of_debt' => $grossCostOfDebt,
-            'total_interest_cost' => $grossCostOfDebt * $wholesaleDebt
+            'gross_cost_of_debt' => $wholesaleRate,
+            'total_interest_cost' => $wholesaleInterest
         ];
     }
 

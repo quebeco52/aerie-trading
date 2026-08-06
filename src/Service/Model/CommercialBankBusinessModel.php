@@ -21,6 +21,10 @@ use App\Service\Event\ShockEvent;
  */
 class CommercialBankBusinessModel implements BusinessModelInterface
 {
+    public function getModelThresholds(): array
+    {
+        return ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => 2.0,  'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.18, 'moat_spread' => 0.010, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 1.0];
+    }
     use Trait\StandardBaseModelTrait;
     use Trait\StandardTreasuryTrait;
     use Trait\StandardValuationTrait;
@@ -212,6 +216,11 @@ class CommercialBankBusinessModel implements BusinessModelInterface
             $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
         }
 
+        $metrics = new \App\Service\Math\CorporateMetrics();
+        $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, $effectiveEquity, $macroState);
+        $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
+        $baselineRoe = max($waccBase, $baselineRoe - $saturationPenalty);
+
         $industry = $stock->getIndustry() ?: 'General';
         $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 10.0;
 
@@ -289,23 +298,12 @@ class CommercialBankBusinessModel implements BusinessModelInterface
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
-        $params = $this->resolveModelParameters($stock, [
-            'nii_revenue_weight'   => self::NII_REVENUE_WEIGHT,
-            'fee_revenue_weight'   => self::FEE_REVENUE_WEIGHT,
-            'credit_risk_appetite' => 0.5,
-        ]);
-
-        $riskAppetite = max(0.0, min(1.0, $params['credit_risk_appetite']));
-        $niiMultiplier = 0.5 + $riskAppetite;
-
-        $blendedMultiplier = ($params['nii_revenue_weight'] * $niiMultiplier) + ($params['fee_revenue_weight'] * 1.0);
-
         $outputGap = $macroState->outputGapEma;
         $beta = (float) $stock->getBeta();
 
         return [
             'macro_demand_shift' => $outputGap * $beta * 0.50, // Less demand destruction than physical goods
-            'pricing_power_multiplier' => $blendedMultiplier, // Passes structural yield adjustments to the expectation engine
+            'pricing_power_multiplier' => 1.0, // Passes structural yield adjustments to the expectation engine
         ];
     }
 
@@ -320,16 +318,11 @@ class CommercialBankBusinessModel implements BusinessModelInterface
             'nii_revenue_weight'        => self::NII_REVENUE_WEIGHT,
             'fee_revenue_weight'        => self::FEE_REVENUE_WEIGHT,
             'nim_inversion_sensitivity' => self::NIM_INVERSION_SENSITIVITY,
-            'credit_risk_appetite'      => 0.5,
         ]);
 
         $niiWeight            = $params['nii_revenue_weight'];
         $feeWeight            = $params['fee_revenue_weight'];
         $inversionSensitivity = $params['nim_inversion_sensitivity'];
-
-        $riskAppetite = max(0.0, min(1.0, $params['credit_risk_appetite']));
-        $niiMultiplier = 0.5 + $riskAppetite; // Yield scales from 0.5x to 1.5x
-        $defaultMultiplier = $riskAppetite >= 0.5 ? 1.0 + (($riskAppetite - 0.5) * 2.0) : 0.5 + ($riskAppetite * 1.0); // Defaults scale from 0.5x to 2.0x
 
         // Independent stream Z-scores
         $revenueZ = $mathUtility->generateStandardNormal(); // NII loan origination volume
@@ -338,13 +331,10 @@ class CommercialBankBusinessModel implements BusinessModelInterface
 
         $outputGap = $macroState->outputGapEma;
 
-        $blendedMultiplier = ($niiWeight * $niiMultiplier) + ($feeWeight * 1.0);
-        $optimalRevenue = $blendedMultiplier > 0 ? $expectedRevenue / $blendedMultiplier : $expectedRevenue;
-
         // Blended dual-stream revenue (NII vs. Non-Interest Fee Income)
-        $niiRevenue = $optimalRevenue * $niiWeight
-            * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))) * $niiMultiplier;
-        $feeRevenue = $optimalRevenue * $feeWeight
+        $niiRevenue = $expectedRevenue * $niiWeight
+            * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
+        $feeRevenue = $expectedRevenue * $feeWeight
             * (1.0 + ($feeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + ($outputGap * self::SECTOR_SHOCK_FEE_OUTPUT_GAP_MULT));
         $actualRevenue = max(0.0, $niiRevenue + $feeRevenue);
 
@@ -361,7 +351,7 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         } else {
             $provisionShock = 0.0;
         }
-        $lossProvisionShock = ($provisionShock + $macroDefaultDrag) * $defaultMultiplier;
+        $lossProvisionShock = ($provisionShock + $macroDefaultDrag);
 
         // CECL Forward Provisioning (Credit Spread Channel):
         // Under CECL accounting, banks must provision against EXPECTED future losses.
@@ -436,11 +426,11 @@ class CommercialBankBusinessModel implements BusinessModelInterface
     /**
      * Financial companies are evaluated strictly on Return on Equity (ROE), not ROIC.
      */
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08): float
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float
     {
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $thresholds = \App\Data\Sectors::getModelThresholds($businessModel);
+        $thresholds = $this->getModelThresholds();
         $kappa = $thresholds['reversion_speed'] ?? 0.18;
         $moatSpread = $thresholds['moat_spread'] ?? 0.01;
 
@@ -454,7 +444,14 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
         $scaledKappa = $kappa / self::TTM_ROE_WEIGHT;
         $math = new MathUtility();
-        $newTtm += $math->calculateReversionPull($newTtm, $wacc, $scaledKappa, $moatSpread);
+        
+        $saturationPenalty = 0.0;
+        if ($macroState !== null) {
+            $metrics = new \App\Service\Math\CorporateMetrics();
+            $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
+        }
+        
+        $newTtm += $math->calculateReversionPull($newTtm, $costOfEquity - $saturationPenalty, $scaledKappa, $moatSpread);
         $stock->setRoeTtm((string) max(-0.50, min(1.0, $newTtm)));
 
         return $truePostTaxReturn;

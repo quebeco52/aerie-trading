@@ -91,5 +91,5 @@ class EarningsSimulationContext
     // Health & Value
     public ?\App\DTO\DebtHealthDTO $health = null;
     public float $wacc = 0.0;
-    public float $annualEconomicProfit = 0.0;
+    public float $quarterlyEconomicProfit = 0.0;
 }

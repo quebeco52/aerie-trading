@@ -193,11 +193,8 @@ class EarningsEngine
         $outputGap = $ctx->macroState->outputGapEma;
         $beta = (float) $stock->getBeta();
 
-        $evaluationCapital = $ctx->isFinancial ? (float) $stock->getTotalEquity() : $ctx->investedCapital;
-        $saturationCostPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $ctx->macroState);
-
         $cyclicalMarginShift = $outputGap * $beta * self::CYCLICAL_MARGIN_SHIFT_COEFFICIENT;
-        $dynamicVariableTheta = min(0.99, max(0.01, $ctx->baselineVariableMargin + $saturationCostPenalty - $cyclicalMarginShift));
+        $dynamicVariableTheta = min(0.99, max(0.01, $ctx->baselineVariableMargin - $cyclicalMarginShift));
         $dynamicVariableTheta = $archetypeStrategy->modifyVariableMarginTheta($dynamicVariableTheta);
 
         $z2 = $this->mathUtility->generateStandardNormal();
@@ -324,9 +321,16 @@ class EarningsEngine
         }
 
         $ctx->health = $this->debtEngine->analyzeDebtHealth($stock, $ctx->macroState, $ctx->actualRevenue * 4.0, $ctx->trueOperatingMargin);
-        $waccBaseline = $ctx->isFinancial ? ($ctx->health->costOfEquity ?? 0.10) : ($ctx->health->wacc ?? 0.08);
-
-        $ctx->truePostTaxReturn = $ctx->strategy->updateDynamicRoic($stock, $ctx->actualQuarterlyNetIncome, $ctx->investedCapital, $ctx->ebit, $ctx->corporateTaxRate, $waccBaseline);
+        $ctx->truePostTaxReturn = $ctx->strategy->updateDynamicRoic(
+            $stock,
+            $ctx->actualQuarterlyNetIncome,
+            $ctx->investedCapital,
+            $ctx->ebit,
+            $ctx->corporateTaxRate,
+            $ctx->health->wacc ?? 0.08,
+            $ctx->health->costOfEquity ?? 0.10,
+            $ctx->macroState
+        );
     }
 
     private function calculateEPSAndSurprise(EarningsSimulationContext $ctx): void
@@ -494,7 +498,7 @@ class EarningsEngine
             if ($smoothedReturn === 0.0) {
                 $smoothedReturn = $ctx->truePostTaxReturn;
             }
-            $ctx->annualEconomicProfit = $equity * ($smoothedReturn - $costOfEquity);
+            $ctx->quarterlyEconomicProfit = ($equity * ($smoothedReturn - $costOfEquity)) / 4.0;
             $ctx->wacc = $costOfEquity;
         } else {
             $ctx->wacc = $ctx->health->wacc ?? 0.08;
@@ -502,15 +506,15 @@ class EarningsEngine
             if ($smoothedReturn === 0.0) {
                 $smoothedReturn = $ctx->truePostTaxReturn;
             }
-            $ctx->annualEconomicProfit = $ctx->investedCapital * ($smoothedReturn - $ctx->wacc);
+            $ctx->quarterlyEconomicProfit = ($ctx->investedCapital * ($smoothedReturn - $ctx->wacc)) / 4.0;
         }
 
-        $evaAbs = abs($ctx->annualEconomicProfit);
+        $evaAbs = abs($ctx->quarterlyEconomicProfit);
         $formattedEva = $evaAbs >= 1_000_000_000
             ? '$' . number_format($evaAbs / 1_000_000_000, 2) . 'B'
             : '$' . number_format($evaAbs / 1_000_000, 2) . 'M';
 
-        $evaString = $ctx->annualEconomicProfit >= 0 ? "+{$formattedEva} EVA" : "-{$formattedEva} EVA";
+        $evaString = $ctx->quarterlyEconomicProfit >= 0 ? "+{$formattedEva} EVA" : "-{$formattedEva} EVA";
 
         $formattedEps = $ctx->actualQuarterlyEps < 0 ? '-$' . number_format(abs($ctx->actualQuarterlyEps), 2) : '$' . number_format($ctx->actualQuarterlyEps, 2);
         $formattedSurprise = '$' . number_format(abs($ctx->surpriseAmountQuarterly), 2);

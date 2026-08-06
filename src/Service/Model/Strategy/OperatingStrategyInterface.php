@@ -18,7 +18,7 @@ interface OperatingStrategyInterface
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array;
     public function getEffectiveTaxRate(float $macroTaxRate): float;
     public function calculateEconomicReturn(Stock $stock, float $nopat, float $investedCapital): float;
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08): float;
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float;
     public function getSecularGrowthRate(Stock $stock): float;
     public function getCapexCyclicality(): float;
     public function getSurpriseBlendWeights(): array;
