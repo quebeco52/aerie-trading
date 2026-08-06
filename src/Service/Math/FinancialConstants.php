@@ -108,7 +108,7 @@ class FinancialConstants
     ];
 
     // --- Business Model / Strategy Baseline Constants ---
-    
+
     // Operating Physics
     public const TTM_SMOOTHING_NEW_WEIGHT = 0.25;
     public const TTM_SMOOTHING_OLD_WEIGHT = 0.75;
@@ -119,7 +119,7 @@ class FinancialConstants
     // Margin Clamping
     public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
     public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
-    
+
     // Capital Allocation
     public const BUYBACK_SPEND_NORMAL_RATIO = 0.10;
     public const BUYBACK_SPEND_MEGA_HOARDER_RATIO = 0.30;
@@ -140,4 +140,7 @@ class FinancialConstants
     public const FAIR_VALUE_EARNINGS_WEIGHT = 0.90;
     public const FAIR_VALUE_BOOK_WEIGHT = 0.10;
     public const FAIR_VALUE_DDM_WEIGHT = 0.15;
+
+    /** Max % of taxable income that can be shielded by NOLs (e.g. 80% post-TCJA). */
+    public const NOL_MAX_SHIELD_RATIO = 0.80;
 }

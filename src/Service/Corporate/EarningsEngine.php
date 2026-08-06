@@ -217,12 +217,12 @@ class EarningsEngine
     private function calculateExpectedVsActualFinancials(EarningsSimulationContext $ctx): void
     {
         $actuals = $ctx->strategy->computeActualFinancials(
-            $ctx->stock, 
-            $ctx->expectedRevenue, 
-            $ctx->realizedVariableMargin, 
-            $ctx->fixedCosts, 
-            $ctx->baselineVol, 
-            $ctx->macroState, 
+            $ctx->stock,
+            $ctx->expectedRevenue,
+            $ctx->realizedVariableMargin,
+            $ctx->fixedCosts,
+            $ctx->baselineVol,
+            $ctx->macroState,
             $this->mathUtility
         );
         $ctx->actualRevenue = $actuals->actualRevenue;
@@ -247,7 +247,7 @@ class EarningsEngine
     private function calculateInterestAndDepreciation(EarningsSimulationContext $ctx): void
     {
         $stock = $ctx->stock;
-        
+
         $expectedOperatingMargin = $ctx->expectedEbit / max(1.0, $ctx->expectedRevenue);
         $expectedDebtMetrics = $this->debtEngine->calculateInterestExpense($stock, $ctx->macroState, false, $ctx->expectedRevenue * 4.0, $expectedOperatingMargin);
         $ctx->expectedInterestExpense = $expectedDebtMetrics->interestExpense / 4.0;
@@ -288,7 +288,8 @@ class EarningsEngine
         $nol = (float) $stock->getNetOperatingLoss();
 
         if ($actualEbt > 0 && $nol > 0) {
-            $shielded = min($actualEbt, $nol);
+            $maxShield = $actualEbt * FinancialConstants::NOL_MAX_SHIELD_RATIO;
+            $shielded = min($maxShield, $nol);
             $taxableIncome = $actualEbt - $shielded;
             $stock->setNetOperatingLoss((string) ($nol - $shielded));
             $ctx->actualQuarterlyNetIncome = $actualEbt - ($taxableIncome * $ctx->corporateTaxRate);
@@ -300,7 +301,8 @@ class EarningsEngine
         }
 
         if ($expectedEbt > 0 && $nol > 0) {
-            $expectedShielded = min($expectedEbt, $nol);
+            $expectedMaxShield = $expectedEbt * FinancialConstants::NOL_MAX_SHIELD_RATIO;
+            $expectedShielded = min($expectedMaxShield, $nol);
             $expectedTaxable = $expectedEbt - $expectedShielded;
             $ctx->expectedQuarterlyNetIncome = $expectedEbt - ($expectedTaxable * $ctx->corporateTaxRate);
         } elseif ($expectedEbt < 0) {
@@ -481,7 +483,7 @@ class EarningsEngine
         }
 
         $ctx->totalShockPct = max(-FinancialConstants::MAX_QUARTERLY_PRICE_CIRCUIT_BREAKER, min(FinancialConstants::MAX_QUARTERLY_PRICE_CIRCUIT_BREAKER, $ctx->totalShockPct));
-        
+
         $exDivPrice = ($currentPrice * (1.0 + $ctx->totalShockPct)) - $ctx->allocation['dividend_paid'];
         $newPrice = max(0.01, $exDivPrice);
         $stock->setPrice(number_format($newPrice, 8, '.', ''));
