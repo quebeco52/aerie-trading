@@ -496,19 +496,11 @@ class EarningsEngine
 
         if ($ctx->isFinancial) {
             $costOfEquity = $ctx->health->costOfEquity ?? 0.10;
-            $smoothedReturn = (float) $stock->getRoeTtm();
-            if ($smoothedReturn === 0.0) {
-                $smoothedReturn = $ctx->truePostTaxReturn;
-            }
-            $ctx->quarterlyEconomicProfit = ($equity * ($smoothedReturn - $costOfEquity)) / 4.0;
+            $ctx->quarterlyEconomicProfit = ($equity * ($ctx->truePostTaxReturn - $costOfEquity)) / 4.0;
             $ctx->wacc = $costOfEquity;
         } else {
             $ctx->wacc = $ctx->health->wacc ?? 0.08;
-            $smoothedReturn = (float) $stock->getRoicTtm();
-            if ($smoothedReturn === 0.0) {
-                $smoothedReturn = $ctx->truePostTaxReturn;
-            }
-            $ctx->quarterlyEconomicProfit = ($ctx->investedCapital * ($smoothedReturn - $ctx->wacc)) / 4.0;
+            $ctx->quarterlyEconomicProfit = ($ctx->investedCapital * ($ctx->truePostTaxReturn - $ctx->wacc)) / 4.0;
         }
 
         $evaAbs = abs($ctx->quarterlyEconomicProfit);

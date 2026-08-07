@@ -28,7 +28,7 @@ class MacroEngine
 
     // KALDOR-KALECKI CONSTANTS
     public const KALDOR_MOMENTUM = 0.20;
-    public const KALDOR_CAPACITY = 180.0;
+    public const KALDOR_CAPACITY = 200.0;
     public const KALDOR_MONETARY_DRAG = 1.0;
     public const KALDOR_FISCAL_MULTIPLIER = 0.50;
     public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.010;
@@ -91,7 +91,7 @@ class MacroEngine
 
     // NELSON-SIEGEL TERM PREMIUM CONSTANTS
     public const NS_BASE_TERM_PREMIUM = 0.0225;
-    public const NS_GAP_TERM_PREMIUM_SCALE = 0.15;
+    public const NS_GAP_TERM_PREMIUM_SCALE = -0.25;
 
     // NEW KEYNESIAN PHILLIPS CURVE CONSTANTS
     public const PHILLIPS_SLOPE = 0.15;
@@ -111,6 +111,14 @@ class MacroEngine
     public const FISCAL_ADJUSTMENT_SPEED = 0.15;        // Institutional speed of tax legislation (~4-5 yr half-life)
     public const MIN_CORPORATE_TAX_RATE = 0.12;        // 12% statutory tax floor during deep recessions
     public const MAX_CORPORATE_TAX_RATE = 0.30;        // 30% statutory tax cap during overheating booms
+
+    // --- QE & Yield Curve Constants ---
+    public const QE_ACTIVATION_ZLB_THRESHOLD = 0.90;
+    public const QE_ACTIVATION_GAP_THRESHOLD = -0.02;
+    public const QE_MAX_SUPPRESSION = 0.02;
+    public const QE_SEVERITY_MULTIPLIER = 0.5;
+    public const QE_RAMP_SPEED = 1.0;
+    public const INFLATION_LEVEL_WEIGHT = 0.5;
 
     public function __construct(
         private MathUtility $mathUtility,
@@ -138,13 +146,15 @@ class MacroEngine
 
         $yieldData = $this->calculateYieldCurveAndQE($state, self::TARGET_INFLATION, self::NATURAL_RATE, $dt);
 
+        $state->qeIntensity = $yieldData['new_qe_intensity'];
+        $state->qeActive = $state->qeIntensity > 0.001;
+
         $state->yield2y = $yieldData['yield_2y'];
         $state->yield5y = $yieldData['yield_5y'];
         $state->yield10y = $yieldData['yield_10y'];
         $state->yield30y = $yieldData['yield_30y'];
         $state->nsLevel = $yieldData['level'];
         $state->nsCurvature = $yieldData['curvature'];
-        $state->qeActive = $yieldData['qe_suppression'] > 0.001;
 
         $state->nsSlope = $state->yield10y - $state->policyRate;
         $state->structuralSlope = $yieldData['structural_10y'] - $state->policyRate;
@@ -263,47 +273,54 @@ class MacroEngine
         $zlbProximity = min(1.0, max(0.0, (self::ZLB_PROXIMITY_THRESHOLD - $state->policyRate) / self::ZLB_PROXIMITY_THRESHOLD));
         $recessionSeverity = max(0.0, -$state->outputGap);
 
-        if ($zlbProximity > 0.90 && $state->outputGap < -0.02) {
-            $qeYieldSuppressionTarget = min(0.02, $zlbProximity * $recessionSeverity * 0.5);
+        // Determine target QE intensity based on zero-lower-bound proximity and recession severity
+        if ($zlbProximity > self::QE_ACTIVATION_ZLB_THRESHOLD && $state->outputGap < self::QE_ACTIVATION_GAP_THRESHOLD) {
+            $qeYieldSuppressionTarget = min(self::QE_MAX_SUPPRESSION, $zlbProximity * $recessionSeverity * self::QE_SEVERITY_MULTIPLIER);
         } else {
             $qeYieldSuppressionTarget = 0.0;
         }
 
-        // QE Intensity smoothly ramps toward target
-        $qeSpeed = 1.0;
-        $state->qeIntensity += $qeSpeed * ($qeYieldSuppressionTarget - $state->qeIntensity) * $dt;
+        // Exact exponential decay to prevent Euler integration overshoot. 
+        // We calculate the new value but DO NOT mutate $state->qeIntensity here to preserve CQS.
+        $newQeIntensity = $qeYieldSuppressionTarget + ($state->qeIntensity - $qeYieldSuppressionTarget) * exp(-self::QE_RAMP_SPEED * $dt);
 
         $expectedInflation = $state->inflationEma;
-        $level = $naturalRate + (0.5 * $targetInflation) + (0.5 * $expectedInflation);
-        $nsBeta1 = $state->policyRate - $level;
-        $nsBeta2 = max(-0.01, 0.015 + ($state->outputGapEma * 0.25));
 
-        $yield2y  = $this->calculateNelsonSiegelTenor(2.0, $level, $nsBeta1, $nsBeta2, $state, $state->qeIntensity);
-        $yield5y  = $this->calculateNelsonSiegelTenor(5.0, $level, $nsBeta1, $nsBeta2, $state, $state->qeIntensity);
-        $yield10y = $this->calculateNelsonSiegelTenor(10.0, $level, $nsBeta1, $nsBeta2, $state, $state->qeIntensity);
-        $yield30y = $this->calculateNelsonSiegelTenor(30.0, $level, $nsBeta1, $nsBeta2, $state, $state->qeIntensity);
+        $level = $naturalRate + (self::INFLATION_LEVEL_WEIGHT * $targetInflation) + (self::INFLATION_LEVEL_WEIGHT * $expectedInflation);
+        $nsBeta1 = $state->policyRate - $level;
+        $nsBeta2 = max(-0.01, 0.015 + ($state->outputGap * 0.25));
+
+        $yield2y  = $this->calculateNelsonSiegelTenor(2.0, $level, $nsBeta1, $nsBeta2, $state, $newQeIntensity);
+        $yield5y  = $this->calculateNelsonSiegelTenor(5.0, $level, $nsBeta1, $nsBeta2, $state, $newQeIntensity);
+        $yield10y = $this->calculateNelsonSiegelTenor(10.0, $level, $nsBeta1, $nsBeta2, $state, $newQeIntensity);
+        $yield30y = $this->calculateNelsonSiegelTenor(30.0, $level, $nsBeta1, $nsBeta2, $state, $newQeIntensity);
 
         return [
             'level' => $level,
             'curvature' => $nsBeta2,
-            'qe_suppression' => $state->qeIntensity,
-            'structural_10y' => max(0.00, $yield10y + $state->qeIntensity),
-            'yield_2y' => max(0.00, $yield2y),
-            'yield_5y' => max(0.00, $yield5y),
-            'yield_10y' => max(0.00, $yield10y),
-            'yield_30y' => max(0.00, $yield30y)
+            'new_qe_intensity' => $newQeIntensity, // Passed back to the caller to mutate state
+            'structural_10y' => $yield10y + $newQeIntensity, // Unclamped
+            'yield_2y'  => $yield2y,  // Unclamped, allowing negative yields
+            'yield_5y'  => $yield5y,
+            'yield_10y' => $yield10y,
+            'yield_30y' => $yield30y
         ];
     }
 
     private function calculateNelsonSiegelTenor(float $t, float $level, float $nsBeta1, float $nsBeta2, MacroState $state, float $qeYieldSuppression): float
     {
-        $timeScale = ($t / 10.0);
-        $termPremium = (self::NS_BASE_TERM_PREMIUM * $timeScale) + ($state->outputGapEma * self::NS_GAP_TERM_PREMIUM_SCALE * $timeScale);
+        // Concave duration scaling: anchors 10-year at ~1.0, and 30-year asymptotically flattens out around ~1.58
+        // This mirrors real-world term premium flattening at the long end and prevents linear explosion.
+        $durationScale = (1.0 - exp(-$t / 10.0)) / (1.0 - exp(-1.0));
 
-        $qeTimeScale = min(1.0, $timeScale);
-        $qeTargetedSuppression = $qeYieldSuppression * $qeTimeScale;
+        $termPremium = (self::NS_BASE_TERM_PREMIUM * $durationScale)
+            + ($state->outputGap * self::NS_GAP_TERM_PREMIUM_SCALE * $durationScale);
+
+        // Apply the same concave scaling to QE to suppress the entire long end properly
+        $qeTargetedSuppression = $qeYieldSuppression * $durationScale;
 
         $pureYield = $this->mathUtility->calculateNelsonSiegelYield($level, $nsBeta1, $nsBeta2, $t);
+
         return $pureYield + $termPremium - $qeTargetedSuppression;
     }
 

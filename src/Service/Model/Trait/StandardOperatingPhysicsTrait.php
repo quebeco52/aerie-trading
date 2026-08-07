@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace App\Service\Model\Trait;
@@ -13,47 +14,57 @@ use App\Service\Math\FinancialConstants;
 
 trait StandardOperatingPhysicsTrait
 {
-    public function getSecularGrowthRate(Stock $stock): float {
+    public function getSecularGrowthRate(Stock $stock): float
+    {
         return 0.02; // DEFAULT_SECULAR_GROWTH_RATE
     }
-    
-    public function getCapexCyclicality(): float {
+
+    public function getCapexCyclicality(): float
+    {
         return 1.5; // DEFAULT_CAPEX_CYCLICALITY
     }
-    
-    public function getSurpriseBlendWeights(): array {
+
+    public function getSurpriseBlendWeights(): array
+    {
         return ['eps_weight' => 0.50, 'revenue_weight' => 0.50];
     }
-    
-    public function getEffectiveTaxRate(float $macroTaxRate): float {
+
+    public function getEffectiveTaxRate(float $macroTaxRate): float
+    {
         return $macroTaxRate;
     }
-    
-    public function getCoverageProfile(): SectorCoverageProfile {
+
+    public function getCoverageProfile(): SectorCoverageProfile
+    {
         return new SectorCoverageProfile(baseVisibility: 0.20, errorStdDev: 0.06);
     }
-    
-    public function getWorkingCapitalIntensity(Stock $stock): float {
+
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
         $thresholds = $this->getModelThresholds();
         return $thresholds['nwc_intensity'] ?? 0.05;
     }
-    
-    public function getCapExCompletionRate(Stock $stock): float {
+
+    public function getCapExCompletionRate(Stock $stock): float
+    {
         $thresholds = $this->getModelThresholds();
         return $thresholds['capex_completion_rate'] ?? 0.33;
     }
-    
+
     public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void {}
-    
-    public function getMarginReversionSpeed(): float {
+
+    public function getMarginReversionSpeed(): float
+    {
         return 4.0; // DEFAULT_MARGIN_REVERSION_SPEED
     }
 
-    public function clampMargin(float $rawMargin, float $minMargin = 0.01, float $maxMargin = 1.50): float {
+    public function clampMargin(float $rawMargin, float $minMargin = 0.01, float $maxMargin = 1.50): float
+    {
         return min($maxMargin, max($minMargin, $rawMargin));
     }
-    
-    public function computeActualFinancials(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): ActualFinancialsDTO {
+
+    public function computeActualFinancials(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): ActualFinancialsDTO
+    {
         $physics = $this->calculateSectorPhysics($stock, $expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol, $macroState, $mathUtility);
 
         $clampedMargin = $this->clampMargin($physics->rawVariableMargin);
@@ -72,7 +83,7 @@ trait StandardOperatingPhysicsTrait
             isPublicEvent: $physics->isPublicEvent,
         );
     }
-    
+
     abstract protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult;
 
     public function calculateEconomicReturn(Stock $stock, float $quarterlyNopatOrIncome, float $investedCapital): float
@@ -93,7 +104,7 @@ trait StandardOperatingPhysicsTrait
         $thresholds = $this->getModelThresholds();
         $kappa = $thresholds['reversion_speed'] ?? 0.20;
         $moatSpread = $thresholds['moat_spread'] ?? 0.00;
-        
+
         $math = new MathUtility();
 
         if (\App\Data\Sectors::isFinancial($businessModel)) {
@@ -121,24 +132,26 @@ trait StandardOperatingPhysicsTrait
         $oldTtm = (float) $stock->getRoicTtm();
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * 0.25) + ($oldTtm * 0.75);
         $scaledKappa = $kappa / (defined('static::TTM_ROIC_WEIGHT') ? static::TTM_ROIC_WEIGHT : 0.50);
-        
+
         $saturationPenalty = 0.0;
         if ($macroState !== null) {
             $metrics = new \App\Service\Math\CorporateMetrics();
             $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, abs($investedCapital), $macroState);
         }
-        
+
         $newTtm += $math->calculateReversionPull($newTtm, $wacc - $saturationPenalty, $scaledKappa, $moatSpread);
         $stock->setRoicTtm((string) max(-0.50, min(1.0, $newTtm)));
 
         return $truePostTaxReturn;
     }
-    
-    public function getTrueReturn(Stock $stock): float {
+
+    public function getTrueReturn(Stock $stock): float
+    {
         return (float) $stock->getRoicTtm();
     }
-    
-    public function getEvaluationCapital(float $equity, float $investedCapital): float {
+
+    public function getEvaluationCapital(float $equity, float $investedCapital): float
+    {
         return $investedCapital;
     }
 }

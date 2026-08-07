@@ -39,6 +39,8 @@ class ShockEvent
     public const PE_CARRIED_INTEREST_SURGE = 'pe_carried_interest_surge';
     public const PE_HURDLE_RATE_MISSED = 'pe_hurdle_rate_missed';
     public const PE_DEAL_DROUGHT = 'pe_deal_drought';
+    public const PE_LEVERAGE_RECAPITALIZATION = 'pe_leverage_recapitalization';
+    public const PE_PORTFOLIO_MARKDOWN = 'pe_portfolio_markdown';
     public const DEFENSE_CONTRACT_LOSS = 'defense_contract_loss';
     public const DEFENSE_CONTRACT_WIN = 'defense_contract_win';
     public const CREDIT_UNSECURED_PROVISIONS = 'credit_unsecured_provisions';
