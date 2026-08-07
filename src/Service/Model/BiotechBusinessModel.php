@@ -115,9 +115,11 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $establishedWeight = $params['established_drug_weight'];
         $pipelineWeight    = $params['pipeline_drug_weight'];
 
-        // Independent stream Z-scores
-        $establishedZ = $mathUtility->generateStandardNormal(); // Commercial prescription volume variance
-        $pipelineZ    = $mathUtility->generateStandardNormal(); // Clinical trial milestone readouts
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+
+        // Independent stream Z-scores with AR(1) persistence
+        $establishedZ = $mathUtility->generatePersistentZ($momentum['established'] ?? 0.0, 0.40); // Commercial prescription volume variance
+        $pipelineZ    = $mathUtility->generatePersistentZ($momentum['pipeline'] ?? 0.0, 0.10); // Clinical trial milestone readouts
 
         $establishedRevenue = $expectedRevenue * $establishedWeight * (1.0 + ($establishedZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
         $pipelineRevenue    = $expectedRevenue * $pipelineWeight * (1.0 + ($pipelineZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
@@ -129,7 +131,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $patentModifier = $continuousPipelineShift;
         $eventType = null;
 
-        $trialZ = $mathUtility->generateStandardNormal();
+        $trialZ = $mathUtility->generatePersistentZ($momentum['trial'] ?? 0.0, 0.05);
         if ($trialZ > self::TRIAL_APPROVAL_Z_SCORE) {
             $pipelineRevenue *= self::TRIAL_APPROVAL_REV_MULT;
             $patentModifier += self::TRIAL_APPROVAL_MARGIN_BONUS * $pipelineWeight;
@@ -155,6 +157,15 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
+            streamZ: [
+                'established' => $establishedZ,
+                'pipeline'    => $pipelineZ,
+                'trial'       => $trialZ,
+            ],
+            streamRevenue: [
+                'established' => $establishedRevenue,
+                'pipeline'    => $pipelineRevenue,
+            ],
         );
     }
 

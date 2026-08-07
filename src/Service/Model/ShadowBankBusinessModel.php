@@ -138,7 +138,8 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
-        $revenueZ = $mathUtility->generateStandardNormal();
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.35);
         $params = $this->resolveModelParameters($stock, [
             'mortgage_origination_weight' => 0.60,
             'direct_lending_weight'       => 0.40,
@@ -150,7 +151,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         $lendingRevenue  = $expectedRevenue * $lendingWeight * (1.0 + ($revenueZ * ($baselineVol * 0.8)));
         $actualRevenue   = max(0.0, $mortgageRevenue + $lendingRevenue);
 
-        $creditZ = $mathUtility->generateStandardNormal();
+        $creditZ = $mathUtility->generatePersistentZ($momentum['credit'] ?? 0.0, 0.25);
 
         // CECL Forward Provisioning & Default Shock:
         // Shadow Banks primarily hold highly leveraged mortgages and direct loans.
@@ -193,9 +194,16 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: abs($creditZ) > abs($revenueZ) ? $creditZ : $revenueZ,
-            // Revenue is opaque; only macro loss provision signals are visible to analysts.
             observableShockZ: 0.0,
             eventType: $eventType,
+            streamZ: [
+                'revenue' => $revenueZ,
+                'credit'  => $creditZ,
+            ],
+            streamRevenue: [
+                'net_interest_income' => $niiRevenue,
+                'origination_fees'    => $feeRevenue,
+            ],
         );
     }
 

@@ -30,6 +30,7 @@ document.addEventListener('turbo:load', updateAerieData);
 
 let rawReports = [];
 let profitEngineChartInstance = null;
+let revenueStreamsChartInstance = null;
 let debtEquityChartInstance = null;
 let creditHealthChartInstance = null;
 let capitalEfficiencyChartInstance = null;
@@ -718,6 +719,11 @@ function updateCharts(timeframe) {
     let capexData = [];
     let operatingMarginData = [];
 
+    // Revenue Streams
+    let revenueStreamsKeys = new Set();
+    let revenueStreamsDataRaw = [];
+
+
     // Balance Sheet
     let debtData = [];
     let equityData = [];
@@ -775,6 +781,13 @@ function updateCharts(timeframe) {
             let rev = parseFloat(report.revenue || 0);
             let inc = parseFloat(report.net_income || 0);
             let intExp = parseFloat(report.interest_expense || 0);
+
+            let streams = {};
+            try {
+                streams = typeof report.revenue_streams === 'string' ? JSON.parse(report.revenue_streams) : (report.revenue_streams || {});
+            } catch (e) {}
+            Object.keys(streams).forEach(k => revenueStreamsKeys.add(k));
+            revenueStreamsDataRaw.push(streams);
 
             revenueData.push(rev);
             netIncomeData.push(inc);
@@ -887,6 +900,22 @@ function updateCharts(timeframe) {
                 }
             }
 
+            let sumStreams = {};
+            for (let j = 0; j < 4; j++) {
+                if (i - j >= 0) {
+                    let rep = rawReports[i - j];
+                    let s = {};
+                    try {
+                        s = typeof rep.revenue_streams === 'string' ? JSON.parse(rep.revenue_streams) : (rep.revenue_streams || {});
+                    } catch (e) {}
+                    for (const [k, v] of Object.entries(s)) {
+                        sumStreams[k] = (sumStreams[k] || 0) + parseFloat(v || 0);
+                        revenueStreamsKeys.add(k);
+                    }
+                }
+            }
+            revenueStreamsDataRaw.unshift(sumStreams);
+
             revenueData.unshift(sumRev);
             netIncomeData.unshift(sumInc);
             capexData.unshift(-sumCapEx);
@@ -978,6 +1007,7 @@ function updateCharts(timeframe) {
     });
 
     renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, displayMarginData, marginLabel);
+    renderRevenueStreamsChart(labels, revenueStreamsKeys, revenueStreamsDataRaw);
     renderDebtEquityChart(labels, debtData, equityData, treasuryData);
     renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData, cashYieldData, depositApyData);
     renderCapitalReturnChart(labels, dividendData, buybackData, dividendYieldData);
@@ -1109,6 +1139,74 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
                     position: 'right',
                     grid: { drawOnChartArea: false },
                     ticks: { callback: (val) => val.toFixed(0) + '%' }
+                }
+            }
+        }
+    });
+}
+
+function renderRevenueStreamsChart(labels, streamsKeysSet, rawStreamsData) {
+    if (revenueStreamsChartInstance) revenueStreamsChartInstance.destroy();
+
+    const ctx = document.getElementById('revenueStreamsChart');
+    if (!ctx) return;
+
+    const streamsKeys = Array.from(streamsKeysSet);
+    
+    // Fallback if there are no streams
+    if (streamsKeys.length === 0) {
+        revenueStreamsChartInstance = new Chart(ctx.getContext('2d'), { type: 'bar', data: { labels: labels, datasets: [] } });
+        return;
+    }
+
+    const palette = [
+        '#adc6ff', // primary blue
+        '#4edea3', // positive green
+        '#d8b4fe', // pastel purple
+        '#facc15', // yellow
+        '#67e8f9', // cyan
+        '#ffb3ad', // pastel red
+        '#fdba74', // pastel orange
+        '#a7f3d0', // mint
+        '#fbcfe8', // pink
+        '#e2e8f0'  // slate
+    ];
+
+    const datasets = streamsKeys.map((key, index) => {
+        const color = palette[index % palette.length];
+        
+        return {
+            type: 'bar',
+            label: key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+            data: rawStreamsData.map(d => parseFloat(d[key] || 0)),
+            backgroundColor: color,
+            borderRadius: 2,
+            stacked: true
+        };
+    });
+
+    revenueStreamsChartInstance = new Chart(ctx.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { stacked: true },
+                y: { 
+                    stacked: true,
+                    ticks: { callback: (val) => formatLarge(val) }
+                }
+            },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: $${formatLarge(ctx.raw)}`
+                    }
                 }
             }
         }

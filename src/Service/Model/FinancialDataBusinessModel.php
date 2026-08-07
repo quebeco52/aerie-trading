@@ -80,9 +80,11 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         $subscriptionWeight = $params['subscription_revenue_weight'];
         $transactionWeight  = $params['transaction_revenue_weight'];
 
-        // Independent stream Z-scores
-        $subscriptionZ = $mathUtility->generateStandardNormal(); // Recurring seat subscriptions & data licenses
-        $transactionZ  = $mathUtility->generateStandardNormal(); // Debt issuance credit rating mandates & API usage
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+
+        // Independent stream Z-scores with AR(1) persistence
+        $subscriptionZ = $mathUtility->generatePersistentZ($momentum['subscription'] ?? 0.0, 0.50); // Recurring seat subscriptions & data licenses
+        $transactionZ  = $mathUtility->generatePersistentZ($momentum['transaction'] ?? 0.0, 0.15); // Debt issuance credit rating mandates & API usage
 
         $subscriptionRevenue = $expectedRevenue * $subscriptionWeight * (1.0 + ($subscriptionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
         $transactionRevenue  = $expectedRevenue * $transactionWeight * (1.0 + ($transactionZ * ($baselineVol * (self::REVENUE_VARIANCE_SCALAR * 5.0))));
@@ -103,6 +105,14 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: null,
+            streamZ: [
+                'subscription' => $subscriptionZ,
+                'transaction'  => $transactionZ,
+            ],
+            streamRevenue: [
+                'subscription' => $subscriptionRevenue,
+                'transaction'  => $transactionRevenue,
+            ],
         );
     }
 

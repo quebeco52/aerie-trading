@@ -95,9 +95,11 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
         $tradingWeight  = $params['trading_revenue_weight'];
         $advisoryWeight = $params['advisory_revenue_weight'];
 
-        // Independent stream Z-scores
-        $tradingZ  = $mathUtility->generateStandardNormal(); // Trading volume, flow capture, prop desk P&L
-        $advisoryZ = $mathUtility->generateStandardNormal(); // Advisory mandates, prime brokerage balances
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+
+        // Independent stream Z-scores with AR(1) persistence
+        $tradingZ  = $mathUtility->generatePersistentZ($momentum['trading'] ?? 0.0, 0.20); // Trading volume, flow capture, prop desk P&L
+        $advisoryZ = $mathUtility->generatePersistentZ($momentum['advisory'] ?? 0.0, 0.35); // Advisory mandates, prime brokerage balances
 
         // The Volatility Bonus (Trading Volume):
         // Brokerage trading revenues are hyper-sensitive to the VIX (Systemic Market Volatility).
@@ -123,13 +125,22 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
 
         // observableShockZ: the VIX bonus is completely public via daily VIX tracking — analysts can anticipate it fully.
         $primaryShockZ = abs($tradingZ) > abs($advisoryZ) ? $tradingZ : $advisoryZ;
+        $observableShockZ = $volatilityBonus * $tradingWeight;
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $primaryShockZ,
-            observableShockZ: $volatilityBonus * $tradingWeight,
+            observableShockZ: $observableShockZ,
             eventType: $eventType,
+            streamZ: [
+                'trading'  => $tradingZ,
+                'advisory' => $advisoryZ,
+            ],
+            streamRevenue: [
+                'trading'  => $tradingRevenue,
+                'advisory' => $advisoryRevenue,
+            ],
         );
     }
 

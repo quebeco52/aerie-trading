@@ -82,16 +82,18 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         $brandedWeight = $params['branded_staples_weight'];
         $volumeWeight  = $params['volume_commodity_weight'];
 
-        // Independent stream Z-scores
-        $brandedZ = $mathUtility->generateStandardNormal(); // Packaged consumer staples demand
-        $volumeZ  = $mathUtility->generateStandardNormal(); // Bulk agricultural processing throughput
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+
+        // Independent stream Z-scores with AR(1) persistence
+        $brandedZ = $mathUtility->generatePersistentZ($momentum['branded'] ?? 0.0, 0.15); // Core branded consumer products
+        $volumeZ  = $mathUtility->generatePersistentZ($momentum['volume'] ?? 0.0, 0.15); // Unbranded bulk volume / wholesale processing
 
         $brandedRevenue = $expectedRevenue * $brandedWeight * (1.0 + ($brandedZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
         $volumeRevenue  = $expectedRevenue * $volumeWeight * (1.0 + ($volumeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
 
         // Tail Risk: Product Recalls and Health Regulations
         // Scaled proportionally to packaged branded consumer staples ($brandedWeight).
-        $eventZ = $mathUtility->generateStandardNormal();
+        $eventZ = $mathUtility->generatePersistentZ($momentum['event'] ?? 0.0, 0.05);
         $eventType = null;
         $recallPenalty = 0.0;
 
@@ -121,6 +123,15 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
+            streamZ: [
+                'branded' => $brandedZ,
+                'volume'  => $volumeZ,
+                'event'   => $eventZ,
+            ],
+            streamRevenue: [
+                'branded' => $brandedRevenue,
+                'volume'  => $volumeRevenue,
+            ],
         );
     }
 

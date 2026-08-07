@@ -61,7 +61,8 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
-        $revenueZ = $mathUtility->generateStandardNormal();
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.35);
 
         // Counter-Cyclical Credit Spread Trigger
         $creditSpread = $macroState->macroCreditSpread;
@@ -99,8 +100,16 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $revenueZ,
-            observableShockZ: $distressMultiplier,
+            observableShockZ: $revenueZ * ($baselineVol * 0.90),
             eventType: $eventType,
+            isPublicEvent: $eventType !== null ? true : null,
+            streamZ: [
+                'revenue' => $revenueZ,
+            ],
+            streamRevenue: [
+                'advisory' => $advisoryRevenue,
+                'recovery' => $recoveryRevenue,
+            ],
         );
     }
 

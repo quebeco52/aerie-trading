@@ -125,7 +125,8 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
         $inflationMultiplier = 2.0 - ($pricingPower * 2.0); 
         $macroSensitivityMultiplier = 0.5 + $pricingPower;
 
-        $revenueZ = $mathUtility->generateStandardNormal();
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.25);
         
         // Macro Volume Sensitivity (Demand elasticity based on GDP)
         $macroVolumeShock = $macroState->outputGapEma * $macroSensitivityMultiplier * abs((float) $stock->getBeta());
@@ -145,8 +146,14 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $revenueZ,
-            observableShockZ: $revenueShock,
+            observableShockZ: $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR),
             eventType: null,
+            streamZ: [
+                'revenue' => $revenueZ,
+            ],
+            streamRevenue: [
+                'core_business' => $actualRevenue,
+            ],
         );
     }
 

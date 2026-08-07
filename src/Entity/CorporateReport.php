@@ -34,6 +34,12 @@ class CorporateReport
     #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, nullable: true)]
     private ?string $roic = null;
 
+    #[ORM\Column(type: Types::BOOLEAN, options: ['default' => false])]
+    private bool $isAudited = false;
+
+    #[ORM\Column(type: 'json', nullable: true)]
+    private ?array $revenueStreams = null;
+
     #[ORM\Column(type: Types::BIGINT, nullable: true)]
     private ?string $shares = null;
 
@@ -249,6 +255,18 @@ class CorporateReport
     public function setRevenue(string $revenue): static
     {
         $this->revenue = $revenue;
+
+        return $this;
+    }
+
+    public function getRevenueStreams(): ?array
+    {
+        return $this->revenueStreams;
+    }
+
+    public function setRevenueStreams(?array $revenueStreams): static
+    {
+        $this->revenueStreams = $revenueStreams;
 
         return $this;
     }

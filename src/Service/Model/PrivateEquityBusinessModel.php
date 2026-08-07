@@ -239,7 +239,8 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
-        $revenueZ = $mathUtility->generateStandardNormal();
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.50); // High persistence due to multi-year deal funnels
 
         $params = $this->resolveModelParameters($stock, [
             'management_fee_weight'   => 0.35,
@@ -327,6 +328,14 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
             primaryShockZ: $revenueZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
+            isPublicEvent: $eventType !== null ? true : null,
+            streamZ: [
+                'revenue' => $revenueZ,
+            ],
+            streamRevenue: [
+                'management_fees'  => $mgmtRevenue,
+                'carried_interest' => $carriedInterestRevenue,
+            ],
         );
     }
 

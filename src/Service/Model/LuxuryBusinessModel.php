@@ -103,9 +103,11 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         $hauteWeight      = $params['haute_couture_weight'];
         $accessibleWeight = $params['accessible_luxury_weight'];
 
-        // Independent stream Z-scores
-        $hauteZ      = $mathUtility->generateStandardNormal(); // UHNW leather goods / couture demand
-        $accessibleZ = $mathUtility->generateStandardNormal(); // Fragrance & cosmetics retail volume
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+
+        // Independent stream Z-scores with AR(1) persistence
+        $hauteZ      = $mathUtility->generatePersistentZ($momentum['haute'] ?? 0.0, 0.40); // UHNW leather goods / couture demand
+        $accessibleZ = $mathUtility->generatePersistentZ($momentum['accessible'] ?? 0.0, 0.15); // Fragrance & cosmetics retail volume
 
         $hauteRevenue      = $expectedRevenue * $hauteWeight * (1.0 + ($hauteZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
         $accessibleRevenue = $expectedRevenue * $accessibleWeight * (1.0 + ($accessibleZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
@@ -115,7 +117,7 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         $veblenMarginBenefit = $inflation > MacroEngine::TARGET_INFLATION ? -($inflation - MacroEngine::TARGET_INFLATION) * self::VEBLEN_MARGIN_BENEFIT * $hauteWeight : 0.0;
 
         // Tail Risk: Brand Dilution vs. Viral Fashion Super-Cycle
-        $eventZ = $mathUtility->generateStandardNormal();
+        $eventZ = $mathUtility->generatePersistentZ($momentum['event'] ?? 0.0, 0.05);
         $eventType = null;
         $brandModifier = 0.0;
 
@@ -138,13 +140,24 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
 
         // Analyst Visibility
         $primaryShockZ = abs($eventZ) > abs($hauteZ) ? $eventZ : $hauteZ;
+        $observableShockZ = $hauteZ * $hauteWeight + $accessibleZ * $accessibleWeight;
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $primaryShockZ,
-            observableShockZ: $hauteZ * $hauteWeight + $accessibleZ * $accessibleWeight,
+            observableShockZ: $observableShockZ,
             eventType: $eventType,
+            isPublicEvent: $eventType !== null ? true : null,
+            streamZ: [
+                'haute'      => $hauteZ,
+                'accessible' => $accessibleZ,
+                'event'      => $eventZ,
+            ],
+            streamRevenue: [
+                'haute_couture' => $hauteRevenue,
+                'accessible'    => $accessibleRevenue,
+            ],
         );
     }
 

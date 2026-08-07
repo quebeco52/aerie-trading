@@ -81,6 +81,8 @@ trait StandardOperatingPhysicsTrait
             eventType: $physics->eventType,
             eventContext: $physics->eventContext,
             isPublicEvent: $physics->isPublicEvent,
+            streamZ: $physics->streamZ,
+            streamRevenue: $physics->streamRevenue,
         );
     }
 

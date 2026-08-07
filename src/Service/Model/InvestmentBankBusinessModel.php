@@ -127,10 +127,12 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         $tradingWeight  = $params['trading_revenue_weight'];
         $vixScalar      = $params['vix_arbitrage_scalar'];
 
-        // Independent desk Z-scores
-        $advisoryZ = $mathUtility->generateStandardNormal(); // M&A + ECM/DCM underwriting
-        $tradingZ  = $mathUtility->generateStandardNormal(); // S&T: FICC, equities, prime brokerage
-        $eventZ    = $mathUtility->generateStandardNormal(); // Mega-deal / regulatory tail
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+
+        // Independent stream Z-scores with AR(1) persistence
+        $advisoryZ = $mathUtility->generatePersistentZ($momentum['advisory'] ?? 0.0, 0.40); // M&A + ECM/DCM underwriting (strong pipeline memory)
+        $tradingZ  = $mathUtility->generatePersistentZ($momentum['trading'] ?? 0.0, 0.15); // S&T: FICC, equities, prime brokerage
+        $eventZ    = $mathUtility->generatePersistentZ($momentum['event'] ?? 0.0, 0.05); // Mega-deal / regulatory tail
 
         // Pro-Cyclical M&A Deal Flow
         $outputGap = $macroState->outputGapEma;
@@ -201,9 +203,9 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         }
 
         // Primary shock Z: whichever desk or tail event produced the largest absolute deviation
-        $primaryZ = $advisoryZ;
-        if (abs($tradingZ) > abs($primaryZ)) $primaryZ = $tradingZ;
-        if (abs($eventZ)   > abs($primaryZ)) $primaryZ = $eventZ;
+        $primaryShockZ = $advisoryZ;
+        if (abs($tradingZ) > abs($primaryShockZ)) $primaryShockZ = $tradingZ;
+        if (abs($eventZ)   > abs($primaryShockZ)) $primaryShockZ = $eventZ;
 
         // observableShockZ: scalar approximation — weighted per-desk visibility blend
         $observableShockZ = ($advisoryZ * $advisoryWeight * self::ADVISORY_ANALYST_VISIBILITY
@@ -213,9 +215,19 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedVariableMargin,
-            primaryShockZ: $primaryZ,
+            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
+            isPublicEvent: $eventType !== null ? true : null,
+            streamZ: [
+                'advisory' => $advisoryZ,
+                'trading'  => $tradingZ,
+                'event'    => $eventZ,
+            ],
+            streamRevenue: [
+                'advisory' => $advisoryRevenue,
+                'trading'  => $tradingRevenue,
+            ],
         );
     }
 

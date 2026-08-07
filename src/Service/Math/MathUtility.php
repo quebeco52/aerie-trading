@@ -89,6 +89,22 @@ class MathUtility
     }
 
     /**
+     * Generates an AR(1) persistent Z-score for autoregressive dynamics.
+     * Preserves unit variance (σ = 1.0) of the underlying stationary distribution.
+     *
+     * @param float $previousZ The previous quarter's realized Z-score (z_{t-1}).
+     * @param float $phi       The autoregressive persistence coefficient (0 = i.i.d., 1 = random walk).
+     * @return float The new Z-score z_t.
+     */
+    public function generatePersistentZ(float $previousZ, float $phi): float
+    {
+        $innovation = $this->generateStandardNormal();
+        $innovationScale = sqrt(max(0.0, 1.0 - ($phi * $phi)));
+        
+        return ($phi * $previousZ) + ($innovationScale * $innovation);
+    }
+
+    /**
      * Calculates a log-normal random draw, used for right-skewed distributions like M&A synergy.
      *
      * @param float $mu The mean of the underlying normal distribution.

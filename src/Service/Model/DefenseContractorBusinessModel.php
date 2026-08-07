@@ -105,9 +105,11 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $govtWeight       = $params['government_contract_weight'];
         $commercialWeight = $params['commercial_services_weight'];
 
-        // Independent stream Z-scores
-        $contractZ   = $mathUtility->generateStandardNormal(); // Core sovereign defense contracts
-        $commercialZ = $mathUtility->generateStandardNormal(); // Commercial security & protection consulting
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+
+        // Independent stream Z-scores with AR(1) persistence
+        $contractZ   = $mathUtility->generatePersistentZ($momentum['contract'] ?? 0.0, 0.50); // Core sovereign defense contracts
+        $commercialZ = $mathUtility->generatePersistentZ($momentum['commercial'] ?? 0.0, 0.20); // Commercial security & protection consulting
 
         // Cost-Plus Contracting (The Inflation Blessing):
         // Applies specifically to long-term sovereign government defense contracts ($govtWeight).
@@ -118,7 +120,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $commercialRevenue = $expectedRevenue * $commercialWeight * (1.0 + ($commercialZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
 
         // Tail Risk: Geopolitical Contract Wins/Losses impact the sovereign government contract stream directly
-        $eventZ = $mathUtility->generateStandardNormal();
+        $eventZ = $mathUtility->generatePersistentZ($momentum['event'] ?? 0.0, 0.10);
         $eventType = null;
 
         if ($eventZ < self::CONTRACT_LOSS_Z_SCORE) {
@@ -153,6 +155,16 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
+            isPublicEvent: $eventType !== null ? true : null,
+            streamZ: [
+                'contract'   => $contractZ,
+                'commercial' => $commercialZ,
+                'event'      => $eventZ,
+            ],
+            streamRevenue: [
+                'contract'   => $govtRevenue,
+                'commercial' => $commercialRevenue,
+            ],
         );
     }
 

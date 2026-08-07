@@ -113,10 +113,12 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         $regulatoryZThreshold = self::REGULATORY_FINE_Z_SCORE * (1.5 - $aggression);
         $regulatorySeverity   = self::REGULATORY_FINE_PENALTY * (0.5 + $aggression);
 
-        // Independent stream Z-scores
-        $subscriptionZ = $mathUtility->generateStandardNormal(); // Enterprise SaaS ARR & Cloud compute contract volume
-        $adZ           = $mathUtility->generateStandardNormal(); // Digital advertising auction demand & impression volume
-        $eventZ        = $mathUtility->generateStandardNormal(); // Fat-tail regulatory antitrust / data breach Z-score
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+
+        // Independent stream Z-scores with AR(1) persistence
+        $subscriptionZ = $mathUtility->generatePersistentZ($momentum['subscription'] ?? 0.0, 0.45); // Enterprise SaaS ARR & Cloud compute contract volume
+        $adZ           = $mathUtility->generatePersistentZ($momentum['ad'] ?? 0.0, 0.30); // Digital advertising auction demand & impression volume
+        $eventZ        = $mathUtility->generatePersistentZ($momentum['event'] ?? 0.0, 0.10); // Fat-tail regulatory antitrust / data breach Z-score
 
         // Macro advertising cyclicality (marketing budgets expand with positive output gap, collapse in recessions)
         $outputGap = $macroState->outputGapEma;
@@ -172,14 +174,24 @@ class TechBusinessModel extends StandardCorporateBusinessModel
             $primaryShockZ = $eventZ;
         }
 
-        $blendedRevenueShock = (($subscriptionZ * $subWeight) + ($adZ * $adWeight)) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
+        $observableShockZ = (($subscriptionZ * $subWeight) + ($adZ * $adWeight)) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $primaryShockZ,
-            observableShockZ: $blendedRevenueShock,
+            observableShockZ: $observableShockZ,
             eventType: $eventType,
+            isPublicEvent: $eventType !== null ? true : null,
+            streamZ: [
+                'subscription' => $subscriptionZ,
+                'ad'           => $adZ,
+                'event'        => $eventZ,
+            ],
+            streamRevenue: [
+                'subscription' => $subscriptionRevenue,
+                'advertising'  => $adRevenue,
+            ],
         );
     }
 

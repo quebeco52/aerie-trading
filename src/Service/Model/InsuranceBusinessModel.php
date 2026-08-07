@@ -312,13 +312,15 @@ class InsuranceBusinessModel implements BusinessModelInterface
         $catThreshold = $params['catastrophe_z_threshold'];
         $catScalar    = $params['catastrophe_loss_scalar'];
 
-        // 1. Premium Revenue Shock (Very low top-line variance)
-        $revenueZ = $mathUtility->generateStandardNormal();
+        // 1. Premium Revenue Shock
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+
+        // Independent stream Z-scores with AR(1) persistence
+        $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.25);
+        $claimZ   = $mathUtility->generatePersistentZ($momentum['claim'] ?? 0.0, 0.05); // Claims are near i.i.d. random
         $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
 
         // 2. The Combined Ratio Shock (Catastrophes/Underwriting Cycle)
-        $claimZ = $mathUtility->generateStandardNormal();
-
         // Catastrophe Risk Beta: high-catastrophe insurers earn higher premium margins in benign years.
         // Combines both Frequency ($catThreshold) and Severity ($catScalar) to price expected tail risk.
         $frequencyBeta = self::CATASTROPHE_Z_THRESHOLD / min(-0.1, $catThreshold);
@@ -370,9 +372,15 @@ class InsuranceBusinessModel implements BusinessModelInterface
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $primaryShockZ,
-            // Revenue is premium volume — fully opaque until filings. Analysts assume no revenue deviation.
             observableShockZ: 0.0,
             eventType: $eventType,
+            streamZ: [
+                'revenue' => $revenueZ,
+                'claim'   => $claimZ,
+            ],
+            streamRevenue: [
+                'premium_revenue' => $actualRevenue,
+            ],
         );
     }
 
@@ -436,13 +444,13 @@ class InsuranceBusinessModel implements BusinessModelInterface
         $stochasticEquityReturn -= $catastropheEquityPenalty;
 
         $floatYield = $baseYield + ($floatEquityWeight * $stochasticEquityReturn);
-        
+
         $policyholderFloat = (float) $stock->getCustomerDeposits();
         $investableFloat = min($cash, $policyholderFloat);
         $excessCash = max(0.0, $cash - $investableFloat);
-        
+
         $moneyMarketYield = max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
-        
+
         return ($investableFloat * $floatYield) + ($excessCash * $moneyMarketYield);
     }
 
@@ -483,13 +491,13 @@ class InsuranceBusinessModel implements BusinessModelInterface
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
         $scaledKappa = $kappa / self::TTM_ROIC_WEIGHT;
         $math = new MathUtility();
-        
+
         $saturationPenalty = 0.0;
         if ($macroState !== null) {
             $metrics = new \App\Service\Math\CorporateMetrics();
             $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
         }
-        
+
         $newTtm += $math->calculateReversionPull($newTtm, $costOfEquity - $saturationPenalty, $scaledKappa, $moatSpread);
         $stock->setRoeTtm((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $newTtm)));
 

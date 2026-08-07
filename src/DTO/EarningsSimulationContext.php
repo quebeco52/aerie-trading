@@ -52,6 +52,7 @@ class EarningsSimulationContext
     public float $primaryShockZ = 0.0;
     public ?string $eventType = null;
     public array $eventContext = [];
+    public array $streamRevenue = [];
 
     // Interest & Depreciation
     public float $expectedInterestExpense = 0.0;

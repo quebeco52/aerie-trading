@@ -268,9 +268,11 @@ class AssetManagementBusinessModel implements BusinessModelInterface
         $perfZFloor      = $params['performance_fee_z_floor'];
         $perfScalar      = $params['performance_fee_scalar'];
 
-        // Independent stream Z-scores
-        $baseFeeZ = $mathUtility->generateStandardNormal(); // Sticky recurring AUM management fees
-        $alphaZ   = $mathUtility->generateStandardNormal(); // Fund alpha / activist execution
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+
+        // Independent stream Z-scores with AR(1) persistence
+        $baseFeeZ = $mathUtility->generatePersistentZ($momentum['base_fee'] ?? 0.0, 0.45); // Sticky recurring AUM management fees
+        $alphaZ   = $mathUtility->generatePersistentZ($momentum['alpha'] ?? 0.0, 0.15); // Fund alpha / activist execution
 
         // 1. AUM Mark-to-Market Beta (Base Management Fee Stream):
         // When equity/credit markets rise or fall, base AUM fee revenue expands or contracts.
@@ -310,13 +312,23 @@ class AssetManagementBusinessModel implements BusinessModelInterface
         // We encode the relative deviation from the macro-expected revenue as the observable shock.
         $unanticipatedRevenueDelta = $actualRevenue - ($expectedRevenue * (1.0 + $aumMarketBeta));
         $observableShockZ = $expectedRevenue > 0 ? ($unanticipatedRevenueDelta / $expectedRevenue) : 0.0;
+        $primaryShockZ = abs($alphaZ) > abs($baseFeeZ) ? $alphaZ : $baseFeeZ;
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: abs($alphaZ) > abs($baseFeeZ) ? $alphaZ : $baseFeeZ,
+            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
+            isPublicEvent: $eventType !== null ? true : null,
+            streamZ: [
+                'base_fee' => $baseFeeZ,
+                'alpha'    => $alphaZ,
+            ],
+            streamRevenue: [
+                'base_fee' => $baseRevenue,
+                'alpha'    => $perfRevenue,
+            ],
         );
     }
 

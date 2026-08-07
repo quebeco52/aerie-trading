@@ -106,9 +106,11 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         $spotWeight     = $params['spot_charter_weight'];
         $contractWeight = $params['contract_charter_weight'];
 
-        // Independent stream Z-scores
-        $spotZ     = $mathUtility->generateStandardNormal(); // Spot ocean freight / Baltic Dry variance
-        $contractZ = $mathUtility->generateStandardNormal(); // Multi-year contracted logistics lines
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+
+        // Independent stream Z-scores with AR(1) persistence
+        $spotZ     = $mathUtility->generatePersistentZ($momentum['spot'] ?? 0.0, 0.35); // Spot ocean freight / Baltic Dry variance
+        $contractZ = $mathUtility->generatePersistentZ($momentum['contract'] ?? 0.0, 0.50); // Multi-year contracted logistics lines
 
         // Spot Rate Super-Cycle vs. Capacity Glut
         // Crucially, spot rate elasticity applies continuously to spot charter revenue ($spotWeight).
@@ -146,6 +148,15 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
+            isPublicEvent: $eventType !== null ? true : null,
+            streamZ: [
+                'spot'     => $spotZ,
+                'contract' => $contractZ,
+            ],
+            streamRevenue: [
+                'spot'     => $spotRevenue,
+                'contract' => $contractRevenue,
+            ],
         );
     }
 

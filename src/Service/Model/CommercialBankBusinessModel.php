@@ -324,10 +324,12 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $feeWeight            = $params['fee_revenue_weight'];
         $inversionSensitivity = $params['nim_inversion_sensitivity'];
 
-        // Independent stream Z-scores
-        $revenueZ = $mathUtility->generateStandardNormal(); // NII loan origination volume
-        $feeZ     = $mathUtility->generateStandardNormal(); // Non-interest custodial / payment fee volume
-        $defaultZ = $mathUtility->generateStandardNormal(); // Idiosyncratic credit default
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+
+        // Independent stream Z-scores with AR(1) persistence
+        $revenueZ = $mathUtility->generatePersistentZ($momentum['nii'] ?? 0.0, 0.35); // NII loan origination volume
+        $feeZ     = $mathUtility->generatePersistentZ($momentum['fee'] ?? 0.0, 0.25); // Non-interest custodial / payment fee volume
+        $defaultZ = $mathUtility->generatePersistentZ($momentum['default'] ?? 0.0, 0.25); // Idiosyncratic credit default
 
         $outputGap = $macroState->outputGapEma;
 
@@ -398,9 +400,17 @@ class CommercialBankBusinessModel implements BusinessModelInterface
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: abs($defaultZ) > abs($revenueZ) ? $defaultZ : $revenueZ,
-            // observableShockZ: NIM guidance makes revenue trend ~65% visible (encoded in baseVisibility via getCoverageProfile)
             observableShockZ: $revenueZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR,
             eventType: $eventType,
+            streamZ: [
+                'nii'     => $revenueZ,
+                'fee'     => $feeZ,
+                'default' => $defaultZ,
+            ],
+            streamRevenue: [
+                'net_interest_income' => $niiRevenue,
+                'fee_income'          => $feeRevenue,
+            ],
         );
     }
 

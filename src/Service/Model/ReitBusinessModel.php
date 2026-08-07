@@ -187,7 +187,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
-        $revenueZ = $mathUtility->generateStandardNormal();
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.25);
 
         $params = $this->resolveModelParameters($stock, [
             'sticky_lease_weight'         => 0.85,
@@ -213,7 +214,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         // The Tenant Default Shock (Vacancy) & Refinancing Wall:
         // Deep recessions cause anchor tenants to break leases.
         // Higher 10Y Treasury yields increase property cap rates and debt refinancing drag.
-        $tenantDefaultZ = $mathUtility->generateStandardNormal();
+        $tenantDefaultZ = $mathUtility->generatePersistentZ($momentum['tenant_default'] ?? 0.0, 0.20);
         $vacancyShock = $tenantDefaultZ < self::VACANCY_Z_THRESHOLD
             ? abs($tenantDefaultZ) * self::VACANCY_LOSS_SCALAR
             : ($tenantDefaultZ > self::BENIGN_LEASING_Z_FLOOR
@@ -240,6 +241,14 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             // Rent escalators (inflation) and 10Y Treasury yields are 100% visible; vacancies ~70% visible
             observableShockZ: $rentEscalator,
             eventType: $eventType,
+            streamZ: [
+                'revenue'        => $revenueZ,
+                'tenant_default' => $tenantDefaultZ,
+            ],
+            streamRevenue: [
+                'lease'       => $leaseRevenue,
+                'hospitality' => $hospitalityRevenue,
+            ],
         );
     }
 

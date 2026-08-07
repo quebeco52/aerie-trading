@@ -164,8 +164,10 @@ class ClearingHouseBusinessModel implements BusinessModelInterface
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
-        $revenueZ = $mathUtility->generateStandardNormal();
-        $dataZ    = $mathUtility->generateStandardNormal(); // Separate Z-score for sticky data subscriptions
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+
+        $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.25);
+        $dataZ    = $mathUtility->generatePersistentZ($momentum['data'] ?? 0.0, 0.45); // Separate Z-score for sticky data subscriptions
 
         $params = $this->resolveModelParameters($stock, [
             'clearing_fee_weight' => 0.55,
@@ -197,7 +199,7 @@ class ClearingHouseBusinessModel implements BusinessModelInterface
         $actualRevenue   = max(0.0, $clearingRevenue + $custodyRevenue + $dataRevenue);
 
         // The CCP Default Waterfall (Catastrophic Tail Risk)
-        $defaultZ = $mathUtility->generateStandardNormal();
+        $defaultZ = $mathUtility->generatePersistentZ($momentum['default'] ?? 0.0, 0.05);
 
         // Under the Default Waterfall, routine member defaults ($defaultZ >= CATASTROPHE_Z_THRESHOLD) are fully absorbed
         // by the defaulting member's posted Initial Margin and Guaranty Fund contribution ($0 loss to CCP equity).
@@ -215,13 +217,24 @@ class ClearingHouseBusinessModel implements BusinessModelInterface
             $eventType = ShockEvent::VOLATILITY_SURGE;
         }
 
+        $primaryShockZ = abs($defaultZ) > abs($revenueZ) ? $defaultZ : $revenueZ;
+        $observableShockZ = 0.0;
+
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: abs($defaultZ) > abs($revenueZ) ? $defaultZ : $revenueZ,
-            // Systemic defaults are largely opaque until they occur; analysts see only macro stress signals.
-            observableShockZ: 0.0,
+            primaryShockZ: $primaryShockZ,
+            observableShockZ: $observableShockZ,
             eventType: $eventType,
+            streamZ: [
+                'revenue' => $revenueZ,
+                'data'    => $dataZ,
+                'default' => $defaultZ,
+            ],
+            streamRevenue: [
+                'clearing_fees'  => $clearingRevenue,
+                'data_licensing' => $dataRevenue,
+            ],
         );
     }
 

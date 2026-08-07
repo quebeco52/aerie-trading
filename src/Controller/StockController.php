@@ -365,6 +365,29 @@ class StockController extends AbstractController
             }
         };
 
+        // Dynamically add revenue streams if present
+        $revenueStreams = isset($latestReport['revenue_streams']) ? json_decode($latestReport['revenue_streams'], true) : null;
+        if (is_array($revenueStreams) && count($revenueStreams) > 0) {
+            foreach ($revenueStreams as $streamName => $streamValue) {
+                $value = (float) $streamValue;
+                if ($value > 0) {
+                    $formattedName = ucwords(str_replace('_', ' ', $streamName)) . ' Revenue';
+                    $nodes[] = ['name' => $formattedName, 'itemStyle' => ['color' => '#0284c7']]; // sky blue
+                    $addLink($formattedName, 'Total Revenue', $value);
+                }
+            }
+            
+            // If the sum of streams doesn't perfectly match total revenue (due to interest income or rounding),
+            // add an 'Other Revenue' or 'Interest Income' node to balance the Sankey
+            $streamSum = array_sum($revenueStreams);
+            $difference = $totalRevenue - $streamSum;
+            if ($difference > 0.01) {
+                $nodes[] = ['name' => 'Other / Interest Income', 'itemStyle' => ['color' => '#64748b']]; // slate
+                $addLink('Other / Interest Income', 'Total Revenue', $difference);
+            }
+        }
+
+
         $addLink('Total Revenue', 'Operating Costs', $actualOperatingCosts);
         $addLink('Total Revenue', 'Operating Profit', $opProfit);
         

@@ -34,6 +34,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $report->setRevenue((string) $ctx->actualRevenue);
         $report->setNetIncome((string) $ctx->reportedActualNetIncome);
         $report->setOperatingMargin((string) $ctx->trueOperatingMargin);
+        $report->setRevenueStreams($ctx->streamRevenue);
         $report->setOperatingCosts((string) $ctx->operatingCosts);
         $report->setEbit((string) $ctx->ebit);
         $report->setPreTaxIncome((string) $ctx->preTaxIncome);

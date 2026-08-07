@@ -120,9 +120,11 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $regulatedWeight   = $params['regulated_base_weight'];
         $unregulatedWeight = $params['unregulated_merchant_weight'];
 
-        // Independent stream Z-scores
-        $regulatedZ   = $mathUtility->generateStandardNormal(); // Regulated tariff distribution volume (weather / seasonal)
-        $unregulatedZ = $mathUtility->generateStandardNormal(); // Merchant wholesale electricity & PPA trading
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+
+        // Independent stream Z-scores with AR(1) persistence
+        $regulatedZ   = $mathUtility->generatePersistentZ($momentum['regulated'] ?? 0.0, 0.15); // Regulated tariff distribution volume (weather / seasonal)
+        $unregulatedZ = $mathUtility->generatePersistentZ($momentum['unregulated'] ?? 0.0, 0.20); // Merchant wholesale electricity & PPA trading
 
         $regulatedRevenue   = $expectedRevenue * $regulatedWeight * (1.0 + ($regulatedZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
         $unregulatedRevenue = $expectedRevenue * $unregulatedWeight * (1.0 + ($unregulatedZ * ($baselineVol * (self::REVENUE_VARIANCE_SCALAR * 3.0))));
@@ -149,6 +151,14 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: null,
+            streamZ: [
+                'regulated'   => $regulatedZ,
+                'unregulated' => $unregulatedZ,
+            ],
+            streamRevenue: [
+                'regulated_tariff' => $regulatedRevenue,
+                'unregulated'      => $unregulatedRevenue,
+            ],
         );
     }
 

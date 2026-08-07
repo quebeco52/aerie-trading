@@ -83,9 +83,11 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         $spotWeight       = $params['spot_price_weight'];
         $spotSensitivity  = $params['spot_price_sensitivity'];
 
-        // Independent stream Z-scores
-        $extractionZ = $mathUtility->generateStandardNormal(); // Physical extraction/refining volume variance
-        $spotZ       = $mathUtility->generateStandardNormal(); // Global commodity spot price deviations
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+
+        // Independent stream Z-scores with AR(1) persistence
+        $extractionZ = $mathUtility->generatePersistentZ($momentum['extraction'] ?? 0.0, 0.35); // Physical extraction/refining volume variance
+        $spotZ       = $mathUtility->generatePersistentZ($momentum['spot'] ?? 0.0, 0.15); // Global commodity spot price deviations
 
         // Higher top-line variance compared to standard retail/manufacturing
         $extractionRevenue = $expectedRevenue * $extractionWeight * (1.0 + ($extractionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
@@ -113,6 +115,14 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: null,
+            streamZ: [
+                'extraction' => $extractionZ,
+                'spot'       => $spotZ,
+            ],
+            streamRevenue: [
+                'extraction' => $extractionRevenue,
+                'spot'       => $spotRevenue,
+            ],
         );
     }
 

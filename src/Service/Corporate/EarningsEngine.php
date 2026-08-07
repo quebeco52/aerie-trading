@@ -242,6 +242,8 @@ class EarningsEngine
         $ctx->primaryShockZ = $actuals->primaryShockZ;
         $ctx->eventType = $actuals->eventType;
         $ctx->eventContext = $actuals->eventContext;
+        $ctx->stock->setEarningsMomentumZ($actuals->streamZ);
+        $ctx->streamRevenue = $actuals->streamRevenue;
     }
 
     private function calculateInterestAndDepreciation(EarningsSimulationContext $ctx): void

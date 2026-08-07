@@ -123,9 +123,11 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         $foundryWeight = $params['foundry_revenue_weight'];
         $designWeight  = $params['design_revenue_weight'];
 
-        // Independent stream Z-scores
-        $foundryZ = $mathUtility->generateStandardNormal(); // Cleanroom wafer manufacturing volume
-        $designZ  = $mathUtility->generateStandardNormal(); // IP architecture licensing & AI design mandates
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+
+        // Independent stream Z-scores with AR(1) persistence
+        $foundryZ = $mathUtility->generatePersistentZ($momentum['foundry'] ?? 0.0, 0.35); // Cleanroom wafer manufacturing volume
+        $designZ  = $mathUtility->generatePersistentZ($momentum['design'] ?? 0.0, 0.45); // IP architecture licensing & AI design mandates
 
         // Fab Utilization Leverage & Tech Super-Cycles
         // Crucially, capacity utilization leverage applies to physical fab manufacturing ($foundryWeight),
@@ -134,7 +136,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         $utilizationMultiplier = 0.0;
         $eventType = null;
 
-        $cycleZ = $mathUtility->generateStandardNormal();
+        $cycleZ = $mathUtility->generatePersistentZ($momentum['cycle'] ?? 0.0, 0.10);
         if ($outputGap > self::BOOM_GAP_THRESHOLD && $cycleZ > self::BOOM_Z_SCORE_THRESHOLD) {
             $utilizationMultiplier = $outputGap * self::BOOM_UTILIZATION_MULT;
             $eventType = ShockEvent::SEMICONDUCTOR_FAB_SHORTAGE;
@@ -178,6 +180,16 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
+            isPublicEvent: $eventType !== null ? true : null,
+            streamZ: [
+                'foundry' => $foundryZ,
+                'design'  => $designZ,
+                'cycle'   => $cycleZ,
+            ],
+            streamRevenue: [
+                'foundry' => $foundryRevenue,
+                'design'  => $designRevenue,
+            ],
         );
     }
 

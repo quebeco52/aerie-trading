@@ -20,6 +20,8 @@ readonly class ActualFinancialsDTO
      * @param string|null          $eventType             Named event type if a tail-risk event fired, otherwise null.
      * @param array<string, mixed> $eventContext          Optional key-value lore context for the NarrativeEngine.
      * @param bool|null            $isPublicEvent         For event-conditional models: true when a binary public event occurred.
+     * @param array<string, float> $streamZ               Dictionary of individual AR(1) stream Z-scores to persist.
+     * @param array<string, float> $streamRevenue         Dictionary of absolute dollar revenue generated per stream.
      */
     public function __construct(
         public float $actualRevenue,
@@ -31,5 +33,7 @@ readonly class ActualFinancialsDTO
         public ?string $eventType = null,
         public array $eventContext = [],
         public ?bool $isPublicEvent = null,
+        public array $streamZ = [],
+        public array $streamRevenue = [],
     ) {}
 }

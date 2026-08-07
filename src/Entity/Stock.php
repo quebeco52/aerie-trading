@@ -283,6 +283,9 @@ class Stock
     #[ORM\Column(type: 'float', nullable: true)]
     private ?float $structuralVariableMargin = null;
 
+    #[ORM\Column(type: Types::JSON, nullable: true)]
+    private ?array $earningsMomentumZ = [];
+
     /**
      * @var string|null The Serviceable Addressable Market (SAM) multiplier.
      */
@@ -750,6 +753,17 @@ class Stock
     public function getStructuralVariableMargin(): ?float
     {
         return $this->structuralVariableMargin;
+    }
+
+    public function setEarningsMomentumZ(?array $earningsMomentumZ): static
+    {
+        $this->earningsMomentumZ = $earningsMomentumZ;
+        return $this;
+    }
+
+    public function getEarningsMomentumZ(): ?array
+    {
+        return $this->earningsMomentumZ;
     }
 
     public function getSamRatio(): ?string

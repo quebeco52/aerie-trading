@@ -147,10 +147,12 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $networkWeight   = $params['network_revenue_weight'];
         $ceclSensitivity = $params['cecl_spread_sensitivity'];
 
-        // Independent stream Z-scores
-        $lendingZ = $mathUtility->generateStandardNormal(); // Revolving credit loan origination volume
-        $swipeZ   = $mathUtility->generateStandardNormal(); // Payment gateway transaction swipe volume
-        $defaultZ = $mathUtility->generateStandardNormal(); // Consumer credit default Z-score
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+
+        // Independent stream Z-scores with AR(1) persistence
+        $lendingZ = $mathUtility->generatePersistentZ($momentum['lending'] ?? 0.0, 0.25); // Revolving credit loan origination volume
+        $swipeZ   = $mathUtility->generatePersistentZ($momentum['swipe'] ?? 0.0, 0.25); // Payment gateway transaction swipe volume
+        $defaultZ = $mathUtility->generatePersistentZ($momentum['default'] ?? 0.0, 0.20); // Consumer credit default Z-score
 
         // Inflation Bonus (Interchange Swipe Fees):
         // Swipe fees (Visa/MC network) are a percentage of transaction value — higher prices = higher revenue.
@@ -229,6 +231,15 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
+            streamZ: [
+                'lending' => $lendingZ,
+                'swipe'   => $swipeZ,
+                'default' => $defaultZ,
+            ],
+            streamRevenue: [
+                'lending' => $lendingRevenue,
+                'swipe'   => $swipeRevenue,
+            ],
         );
     }
 
