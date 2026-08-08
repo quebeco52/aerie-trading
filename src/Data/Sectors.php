@@ -41,6 +41,7 @@ class Sectors
         'investment_bank' => 'Pure-play investment banks and M&A advisory syndicates. Pro-cyclical M&A and IPO deal flow explode during expansions, while proprietary market-making desks print billions in volatility arbitrage during market crashes or VIX spikes. Evaluated on ROE.',
         'distressed_debt' => 'Distressed debt and turnaround asset managers. Counter-cyclical special situations: hoards dry powder during bull markets, then deploys capital aggressively when macro credit spreads blow out or defaults spike, generating massive turnaround ROE.',
         'heavy_manufacturing' => 'Asset-heavy industrials with extreme operating leverage and cyclicality.',
+        'auto_manufacturer' => 'Extremely capital-intensive with massive fixed costs. Highly sensitive to the macro output gap and consumer interest rates, as most vehicles are financed. Margins compress violently during recessions or rate hikes.',
         'none'            => 'Standard corporate physics. Evaluated on Return on Invested Capital (ROIC). Subject to physical depreciation and supply chain inflation penalties when costs rise faster than pricing power. Idiosyncratic variance applies directly to sales volume.',
     ];
 
@@ -53,7 +54,7 @@ class Sectors
         'Apparel Manufacturing' => ['pe' => 16.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'none'],
         'Apparel Retail' => ['pe' => 18.00, 'depreciation' => 0.10, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'none'],
         'Asset Management' => ['pe' => 15.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'business_model' => 'asset_manager'],
-        'Auto Manufacturers' => ['pe' => 8.50, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 2.0, 'business_model' => 'none'],
+        'Auto Manufacturers' => ['pe' => 8.50, 'depreciation' => 0.08, 'ebitda_limit' => 3.0, 'equity_limit' => 2.0, 'business_model' => 'auto_manufacturer'],
         'Auto Parts' => ['pe' => 14.00, 'depreciation' => 0.07, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'heavy_manufacturing'],
         'Auto & Truck Dealerships' => ['pe' => 12.00, 'depreciation' => 0.05, 'ebitda_limit' => 4.0, 'equity_limit' => 2.0, 'business_model' => 'none'], // Floorplan debt allows high limits
         'Banks - Diversified' => ['pe' => 11.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 10.0, 'business_model' => 'commercial_bank'],
@@ -223,6 +224,7 @@ class Sectors
             'investment_bank' => new \App\Service\Model\InvestmentBankBusinessModel(),
             'distressed_debt' => new \App\Service\Model\DistressedDebtBusinessModel(),
             'heavy_manufacturing' => new \App\Service\Model\HeavyManufacturingBusinessModel(),
+            'auto_manufacturer' => new \App\Service\Model\AutoManufacturerBusinessModel(),
             default           => new \App\Service\Model\StandardCorporateBusinessModel(),
         };
 

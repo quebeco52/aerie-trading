@@ -466,6 +466,21 @@ class StockModelTuning
         'PENG' => [
             'pricing_power_index' => 0.65,
         ],
+
+        // =====================================================================
+        // AUTO MANUFACTURER ARCHETYPES
+        // =====================================================================
+
+        // --- Falconet Motor Group (FALC) ---
+        // Vertically integrated tech-auto leviathan. Predatory base models cross-subsidized by 
+        // ultra-luxury 'Apex Division' and inescapable software/telemetry tollbooths.
+        // Extreme pricing power, but terrifyingly sensitive to macroeconomic liquidity crises.
+        'FALC' => [
+            'auto_sales_weight'       => 0.75,
+            'auto_financing_weight'   => 0.25, // Represents telemetry, insurance, and software lock-ins
+            'pricing_power_index'     => 0.80, // Veblen good luxury pricing; immune to inflation but hyper-pro-cyclical
+            'rate_sensitivity_scalar' => 3.00, // Highly sensitive to liquidity panics pausing elite consumption
+        ],
     ];
 
     /**

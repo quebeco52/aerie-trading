@@ -333,16 +333,16 @@ class StockController extends AbstractController
         $actualOperatingCosts = min($totalRevenue, $operatingCostsRaw);
         $opProfit = $totalRevenue - $actualOperatingCosts;
         
-        $actualCapex = min($opProfit, $capexRaw);
-        $actualInterest = min($opProfit - $actualCapex, $interestExpenseRaw);
-        $preTax = $opProfit - $actualCapex - $actualInterest;
+        $actualInterest = min($opProfit, $interestExpenseRaw);
+        $preTax = $opProfit - $actualInterest;
         
         $actualTax = min($preTax, $taxPaidRaw);
         $netIncomeFlow = $preTax - $actualTax;
         
-        $actualDiv = min($netIncomeFlow, $divPaidRaw);
-        $actualBuybacks = min($netIncomeFlow - $actualDiv, $buybacksRaw);
-        $retained = $netIncomeFlow - $actualDiv - $actualBuybacks;
+        $actualCapex = min($netIncomeFlow, $capexRaw);
+        $actualDiv = min($netIncomeFlow - $actualCapex, $divPaidRaw);
+        $actualBuybacks = min($netIncomeFlow - $actualCapex - $actualDiv, $buybacksRaw);
+        $retained = $netIncomeFlow - $actualCapex - $actualDiv - $actualBuybacks;
 
         $nodes = [
             ['name' => 'Total Revenue', 'itemStyle' => ['color' => '#3b82f6']], // blue
@@ -391,13 +391,13 @@ class StockController extends AbstractController
         $addLink('Total Revenue', 'Operating Costs', $actualOperatingCosts);
         $addLink('Total Revenue', 'Operating Profit', $opProfit);
         
-        $addLink('Operating Profit', 'Capital Expenditures', $actualCapex);
         $addLink('Operating Profit', 'Interest Expense', $actualInterest);
         $addLink('Operating Profit', 'Pre-Tax Income', $preTax);
         
         $addLink('Pre-Tax Income', 'Taxes', $actualTax);
         $addLink('Pre-Tax Income', 'Net Income', $netIncomeFlow);
         
+        $addLink('Net Income', 'Capital Expenditures', $actualCapex);
         $addLink('Net Income', 'Dividends', $actualDiv);
         $addLink('Net Income', 'Stock Buybacks', $actualBuybacks);
         $addLink('Net Income', 'Retained Earnings', $retained);

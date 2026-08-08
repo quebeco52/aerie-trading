@@ -238,7 +238,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             ],
             streamRevenue: [
                 'lending' => $lendingRevenue,
-                'swipe'   => $swipeRevenue,
+                'swipe'   => $networkRevenue,
             ],
         );
     }

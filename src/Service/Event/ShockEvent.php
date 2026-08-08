@@ -55,6 +55,10 @@ class ShockEvent
     public const GEOPOLITICAL_SANCTIONS = 'geopolitical_sanctions';
     public const REINSURANCE_ATTACHMENT_BREACH = 'reinsurance_attachment_breach';
 
+    public const AUTO_SUPPLY_CHAIN_DISRUPTION = 'auto_supply_chain_disruption';
+    public const AUTO_SUBPRIME_DEFAULT_SURGE = 'auto_subprime_default_surge';
+    public const AUTO_PRICING_POWER_SURGE = 'auto_pricing_power_surge';
+
 
 }
 
