@@ -201,8 +201,8 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
                 'credit'  => $creditZ,
             ],
             streamRevenue: [
-                'net_interest_income' => $niiRevenue,
-                'origination_fees'    => $feeRevenue,
+                'net_interest_income' => $lendingRevenue,
+                'origination_fees'    => $mortgageRevenue,
             ],
         );
     }
