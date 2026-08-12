@@ -47,4 +47,44 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         
         return $physics;
     }
+    
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
+    {
+        $params = $this->resolveModelParameters($stock, [
+            'pricing_power_index' => self::MIN_BETA_PRICING_POWER_FLOOR, 
+        ]);
+
+        $pricingPower = max(0.0, min(1.0, $params['pricing_power_index']));
+        $inflationMultiplier = 2.0 - ($pricingPower * 2.0); 
+        $macroSensitivityMultiplier = 0.5 + $pricingPower;
+
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.25);
+        
+        $revenueShock = ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR));
+        $actualRevenue = $expectedRevenue * (1.0 + $revenueShock);
+
+        // Supply Chain Energy Penalty
+        // Heavy industry relies heavily on energy and commodities. We use energyPriceIndexEma instead of general inflation.
+        $energyShift = ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0;
+        $baseInflationPenalty = $energyShift > 0 ? $energyShift * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0;
+        
+        $inflationPenalty = $baseInflationPenalty * $inflationMultiplier;
+
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $inflationPenalty);
+
+        return new SectorPhysicsResult(
+            actualRevenue: $actualRevenue,
+            rawVariableMargin: $clampedMargin,
+            primaryShockZ: $revenueZ,
+            observableShockZ: $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR),
+            eventType: null,
+            streamZ: [
+                'revenue' => $revenueZ,
+            ],
+            streamRevenue: [
+                'core_business' => $actualRevenue,
+            ],
+        );
+    }
 }

@@ -209,6 +209,7 @@ class StockModelTuning
         'SINK' => [
             'extraction_revenue_weight' => 0.70,
             'spot_price_weight'         => 0.30,
+            'spot_price_sensitivity'    => 0.30, // Highly hedged to secure deep-sea financing
         ],
 
         // --- Cascade Minerals & Energy (CASC) ---
@@ -216,6 +217,7 @@ class StockModelTuning
         'CASC' => [
             'extraction_revenue_weight' => 0.50,
             'spot_price_weight'         => 0.50,
+            'spot_price_sensitivity'    => 0.50, // Standard 50% hedged production book
         ],
 
         // --- Condor Rare Earths (CNDR) ---
@@ -223,6 +225,7 @@ class StockModelTuning
         'CNDR' => [
             'extraction_revenue_weight' => 0.40,
             'spot_price_weight'         => 0.60,
+            'spot_price_sensitivity'    => 0.75, // Mostly unhedged wildcat, exposed to massive spot volatility
         ],
 
         // --- Steel Wings Smelting & Corp (WING) ---
@@ -341,10 +344,10 @@ class StockModelTuning
         ],
 
         // --- Copperhead Coffee Roasters (BREW) ---
-        // Retail coffee roasting & distribution. Balanced packaged branded coffee (55%) vs bulk wholesale bean volume (45%).
+        // Retail coffee roasting & distribution. Heavy corporate footprint (90%) with minor franchise presence (10%).
         'BREW' => [
-            'branded_staples_weight'  => 0.55,
-            'volume_commodity_weight' => 0.45,
+            'corporate_weight' => 0.90,
+            'franchise_weight' => 0.10,
         ],
 
         // --- Poultry Crop Operations (CROP) ---
@@ -366,8 +369,8 @@ class StockModelTuning
         // Operates as an industrial tollbooth with incredibly high margins and ROIC due to absolute quality control.
         // Extremely insulated from typical manufacturing boom/bust.
         'CBIL' => [
-            'capital_goods_weight'     => 0.90, // Unbreakable industrial fortress
-            'consumer_cyclical_weight' => 0.10, // Retail secondary market liquidations
+            'consumer_weight'   => 0.10, // Retail secondary market liquidations (volatile)
+            'commercial_weight' => 0.90, // Unbreakable industrial fortress / premium tooling (sticky)
         ],
 
         // --- Pintail Beverage Group (PINT) ---
@@ -435,6 +438,8 @@ class StockModelTuning
         // Robotics and automation manufacturer. Long-term service contracts and essential margin-expanding tools.
         'RIVE' => [
             'pricing_power_index' => 0.85,
+            'equipment_weight'    => 0.40,
+            'services_weight'     => 0.60,
         ],
 
         // --- Three Rivers Manufacturing (TRIV) ---
@@ -456,15 +461,30 @@ class StockModelTuning
         ],
 
         // --- Golden Swift Holdings (SWFT) ---
-        // Restaurant chain. Moderate ability to pass on costs, but sensitive to consumer pushback.
+        // Massive global fast-food franchise network. Almost entirely franchised (95%) for stable royalties.
         'SWFT' => [
-            'pricing_power_index' => 0.60,
+            'corporate_weight' => 0.05,
+            'franchise_weight' => 0.95,
+        ],
+
+        'APE' => [
+            'apparel_weight'  => 0.45,
+            'footwear_weight' => 0.55,
+        ],
+
+        // --- Weaver Marketplace (WEAV) ---
+        // Massive third-party ecosystem (the profit engine) blended with volatile first-party retail (the scale engine).
+        'WEAV' => [
+            'third_party_weight' => 0.60,
+            'first_party_weight' => 0.40,
         ],
 
         // --- Penguin Computing (PENG) ---
-        // High performance supercomputers and liquid cooling. High tech margins.
+        // High performance supercomputers and liquid cooling. High tech margins. Heavily weighted to enterprise.
         'PENG' => [
             'pricing_power_index' => 0.65,
+            'enterprise_weight'   => 0.85,
+            'consumer_weight'     => 0.15,
         ],
 
         // =====================================================================

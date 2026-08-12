@@ -61,7 +61,14 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
 
     public function getCoverageProfile(): SectorCoverageProfile
     {
-        return new SectorCoverageProfile(baseVisibility: 0.40, errorStdDev: 0.07);
+        // Monthly dealer inventory and car sales data provide ~40% base visibility.
+        // Massive safety recalls and major UAW labor strikes are highly public events.
+        return new SectorCoverageProfile(
+            baseVisibility: 0.40,
+            errorStdDev: 0.07,
+            eventBaseVisibility: 0.90,
+            eventMinVisibility: 0.70
+        );
     }
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
@@ -88,6 +95,10 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         // Subtract the penalty from the demand shift (a positive penalty reduces demand)
         $physics['macro_demand_shift'] -= $ratePenalty; 
         
+        // Auto sales are highly sensitive to consumer sentiment
+        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
+        $physics['macro_demand_shift'] += $sentimentShift * $beta * 1.5; // Amplify sentiment impact
+        
         return $physics;
     }
 
@@ -112,22 +123,22 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $inflationMultiplier = 2.0 - ($pricingPower * 2.0); 
         $macroSensitivityMultiplier = 0.5 + $pricingPower;
 
-        // Base macro volume shock from GDP (amplified by elasticity)
-        $macroVolumeShock = $macroState->outputGapEma * $macroSensitivityMultiplier * abs((float) $stock->getBeta());
-        $salesShock = ($salesZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $macroVolumeShock;
+        // Base macro volume shock from Consumer Sentiment is now handled in getMacroPhysics
+        $salesShock = ($salesZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR));
         
-        // Supply chain inflation penalty for physical components
+        // Supply chain inflation & energy penalty for physical components and manufacturing
         $inflation = $macroState->inflationEma;
+        $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
+        
         $baseInflationPenalty = $inflation > MacroEngine::TARGET_INFLATION 
             ? ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR 
             : 0.0;
-        $inflationPenalty = $baseInflationPenalty * $inflationMultiplier;
+        $inflationPenalty = ($baseInflationPenalty + ($energyShift * 0.05)) * $inflationMultiplier;
 
         // --- Auto Financing Arm (Shadow Bank / Credit Services Physics) ---
-        $outputGap = $macroState->outputGapEma;
-        
-        // Unsecured default drag: negative output gap severely hits auto loans
-        $macroDefaultDrag = $outputGap < 0.0 ? abs($outputGap) * self::MACRO_DEFAULT_SCALAR : 0.0;
+        // Unsecured default drag: negative sentiment severely hits auto loans
+        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
+        $macroDefaultDrag = $sentimentShift < 0.0 ? abs($sentimentShift) * self::MACRO_DEFAULT_SCALAR : 0.0;
 
         // CECL Forward Provisioning (Credit Spread Channel)
         $creditSpread = $macroState->macroCreditSpreadEma;
@@ -163,6 +174,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
 
         // --- Event Lore ---
         $eventType = null;
+        $outputGap = $macroState->outputGap;
         if ($salesZ < -1.5 && $outputGap < -0.01) {
             $eventType = ShockEvent::AUTO_SUPPLY_CHAIN_DISRUPTION;
         } elseif ($outputGap < -0.02 && $macroDefaultDrag > 0.01) {

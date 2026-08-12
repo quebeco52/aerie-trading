@@ -168,7 +168,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             * (1.0 + ($advisoryZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR) + $dealFlowMultiplier + $dcmBonus);
         $tradingRevenue  = $expectedRevenue * $tradingWeight
             * (1.0 + ($tradingZ * $baselineVol * self::TRADING_VARIANCE_SCALAR) + $volatilityArbitrage);
-        $actualRevenue = $advisoryRevenue + $tradingRevenue;
+        $actualRevenue = max(0.0, $advisoryRevenue + $tradingRevenue);
 
         //  Compensation ratio floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_COMPENSATION_RATIO.
         $minCompRatio = max(0.01, self::MIN_COMPENSATION_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));

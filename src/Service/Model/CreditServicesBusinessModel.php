@@ -168,8 +168,8 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
 
         // Unsecured Default Shock:
         // Credit card debt is unsecured. Consumers default on cards long before mortgages during recessions.
-        $outputGap = $macroState->outputGapEma;
-        $macroDefaultDrag = $outputGap < 0.0 ? abs($outputGap) * self::MACRO_DEFAULT_SCALAR : 0.0;
+        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
+        $macroDefaultDrag = $sentimentShift < 0.0 ? abs($sentimentShift) * self::MACRO_DEFAULT_SCALAR : 0.0;
 
         if ($defaultZ < self::CREDIT_STRESS_Z_THRESHOLD) {
             $provisionShock = abs($defaultZ) * self::LOSS_PROVISION_SCALAR;

@@ -19,7 +19,10 @@ readonly class MacroStateDTO
         public float $unemploymentRate = 0.04,
         public float $unemploymentRateEma = 0.04,
         public float $energyPriceIndex = 100.0,
+        public float $energyPriceIndexEma = 100.0,
         public float $energyPriceShock = 0.0,
+        public float $consumerSentimentIndex = 100.0,
+        public float $consumerSentimentIndexEma = 100.0,
         public float $inflation = 0.02,
         public float $inflationEma = 0.02,
         public float $policyRate = 0.02,
@@ -66,7 +69,10 @@ readonly class MacroStateDTO
         $unemploymentRateEma = (float) ($data['unemployment_rate_ema'] ?? $unemploymentRate);
         
         $energyPriceIndex = (float) ($data['energy_price_index'] ?? 100.0);
+        $energyPriceIndexEma = (float) ($data['energy_price_index_ema'] ?? $energyPriceIndex);
         $energyPriceShock = (float) ($data['energy_price_shock'] ?? 0.0);
+        $consumerSentimentIndex = (float) ($data['consumer_sentiment_index'] ?? 100.0);
+        $consumerSentimentIndexEma = (float) ($data['consumer_sentiment_index_ema'] ?? $consumerSentimentIndex);
         
         $policyRate = (float) ($data['policy_rate'] ?? 0.02);
         $policyRateEma = (float) ($data['policy_rate_ema'] ?? $policyRate);
@@ -108,7 +114,10 @@ readonly class MacroStateDTO
             unemploymentRate: $unemploymentRate,
             unemploymentRateEma: $unemploymentRateEma,
             energyPriceIndex: $energyPriceIndex,
+            energyPriceIndexEma: $energyPriceIndexEma,
             energyPriceShock: $energyPriceShock,
+            consumerSentimentIndex: $consumerSentimentIndex,
+            consumerSentimentIndexEma: $consumerSentimentIndexEma,
             inflation: $inflation,
             inflationEma: $inflationEma,
             policyRate: $policyRate,
@@ -153,7 +162,10 @@ readonly class MacroStateDTO
             unemploymentRate: $state->unemploymentRate,
             unemploymentRateEma: $state->unemploymentRateEma,
             energyPriceIndex: $state->energyPriceIndex,
+            energyPriceIndexEma: $state->energyPriceIndexEma,
             energyPriceShock: $state->energyPriceShock,
+            consumerSentimentIndex: $state->consumerSentimentIndex,
+            consumerSentimentIndexEma: $state->consumerSentimentIndexEma,
             inflation: $state->inflation,
             inflationEma: $state->inflationEma,
             policyRate: $state->policyRate,
@@ -198,7 +210,10 @@ readonly class MacroStateDTO
             'unemployment_rate' => $this->unemploymentRate,
             'unemployment_rate_ema' => $this->unemploymentRateEma,
             'energy_price_index' => $this->energyPriceIndex,
+            'energy_price_index_ema' => $this->energyPriceIndexEma,
             'energy_price_shock' => $this->energyPriceShock,
+            'consumer_sentiment_index' => $this->consumerSentimentIndex,
+            'consumer_sentiment_index_ema' => $this->consumerSentimentIndexEma,
             'inflation' => $this->inflation,
             'inflation_ema' => $this->inflationEma,
             'policy_rate' => $this->policyRate,

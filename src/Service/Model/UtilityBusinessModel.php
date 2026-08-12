@@ -130,11 +130,16 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $unregulatedRevenue = $expectedRevenue * $unregulatedWeight * (1.0 + ($unregulatedZ * ($baselineVol * (self::REVENUE_VARIANCE_SCALAR * 3.0))));
         $actualRevenue      = max(0.0, $regulatedRevenue + $unregulatedRevenue);
 
-        // Regulatory Lag:
+        // Regulatory Lag & Input Costs:
         // Applies specifically to regulated tariff distribution ($regulatedWeight).
+        // High energy prices squeeze margins because they cannot immediately pass on the fuel costs.
         $inflation = $macroState->inflationEma;
+        $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
+        
         $lagThreshold = MacroEngine::TARGET_INFLATION + self::REGULATORY_LAG_BUFFER;
-        $regulatoryLagPenalty = $inflation > $lagThreshold ? ($inflation - $lagThreshold) * self::REGULATORY_LAG_PENALTY * $regulatedWeight : 0.0;
+        $baseLagPenalty = $inflation > $lagThreshold ? ($inflation - $lagThreshold) * self::REGULATORY_LAG_PENALTY : 0.0;
+        
+        $regulatoryLagPenalty = ($baseLagPenalty + ($energyShift * 0.15)) * $regulatedWeight;
 
         // Merchant Spark Spread Variance:
         // Unregulated merchant power and services experience wholesale margin volatility from power/fuel spread shifts.

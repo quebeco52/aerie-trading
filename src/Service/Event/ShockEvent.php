@@ -17,6 +17,9 @@ class ShockEvent
     public const CAPTURED_NEW_DEPOSITS = 'captured_new_deposits';
     public const PERFORMANCE_FEE_SURGE = 'performance_fee_surge';
     public const FUND_OUTFLOWS = 'fund_outflows';
+    
+    public const TITAN_INTERVENTION = 'titan_intervention';
+    public const SOVEREIGN_WEALTH_DEPLOYMENT = 'sovereign_wealth_deployment';
 
     // Sector-Specific Shocks
     public const VOLATILITY_SURGE = 'volatility_surge';

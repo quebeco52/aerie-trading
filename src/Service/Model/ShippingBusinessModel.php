@@ -131,9 +131,11 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         // Fuel and Bunker Cost Inflation / Deflation:
         // Shipping is directly exposed to crude oil and commodity inflation, capturing savings during deflationary/falling fuel regimes.
         $inflation = $macroState->inflationEma;
+        $energyShift = ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0;
+        
         $bunkerInflationAdjustment = max(
             -0.05,
-            min(0.15, ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::BUNKER_INFLATION_SCALAR)
+            min(0.15, (($inflation - MacroEngine::TARGET_INFLATION) + ($energyShift * 0.20)) * abs((float) $stock->getBeta()) * self::BUNKER_INFLATION_SCALAR)
         );
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $bunkerInflationAdjustment);
@@ -163,7 +165,14 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
     {
         // Baltic Dry Index and Harpex give analysts ~75% visibility (50% floor).
-        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.75, errorStdDev: 0.05, minVisibility: 0.50);
+        // Canal blockages, port strikes, and maritime disasters are extremely public.
+        return new \App\DTO\SectorCoverageProfile(
+            baseVisibility: 0.75,
+            errorStdDev: 0.05,
+            minVisibility: 0.50,
+            eventBaseVisibility: 0.95,
+            eventMinVisibility: 0.80
+        );
     }
 
     public function getMarginReversionSpeed(): float

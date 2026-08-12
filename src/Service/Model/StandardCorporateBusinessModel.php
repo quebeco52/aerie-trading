@@ -99,12 +99,18 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
+        $params = $this->resolveModelParameters($stock, [
+            'pricing_power_index' => 0.5,
+        ]);
+        $pricingPower = max(0.0, min(1.0, $params['pricing_power_index']));
+        $macroSensitivityMultiplier = 0.5 + $pricingPower;
+
         $outputGap = $macroState->outputGapEma;
         $inflation = $macroState->inflationEma;
         $beta = (float) $stock->getBeta();
 
         return [
-            'macro_demand_shift' => $outputGap * $beta,
+            'macro_demand_shift' => $outputGap * $macroSensitivityMultiplier * $beta,
             'pricing_power_multiplier' => 1.0 + ($inflation * max(self::MIN_BETA_PRICING_POWER_FLOOR, $beta)),
         ];
     }
@@ -128,10 +134,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.25);
         
-        // Macro Volume Sensitivity (Demand elasticity based on GDP)
-        $macroVolumeShock = $macroState->outputGapEma * $macroSensitivityMultiplier * abs((float) $stock->getBeta());
-        
-        $revenueShock = ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $macroVolumeShock;
+        $revenueShock = ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR));
         $actualRevenue = $expectedRevenue * (1.0 + $revenueShock);
 
         // Supply Chain Inflation Penalty

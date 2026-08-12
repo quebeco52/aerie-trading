@@ -348,6 +348,11 @@ class CapitalAllocationEngine
 
             $actualSpend = $absoluteMaxSpend * $aggression * ($isHoarder ? 1.0 : (mt_rand(50, 100) / 100.0));
             $sharesRepurchased = (int) floor($actualSpend / max($ctx->currentPrice, 0.01));
+            
+            // CRITICAL FIX: Prevent buying back more shares than exist (which causes negative shares and unsigned bigint wraparound)
+            // Cap buybacks at 95% of currently outstanding shares per quarter.
+            $maxSharesToBuy = (int) floor($ctx->sharesOutstanding * 0.95);
+            $sharesRepurchased = min($sharesRepurchased, $maxSharesToBuy);
 
             if ($sharesRepurchased > 0) {
                 $ctx->totalCashSpent = $sharesRepurchased * max($ctx->currentPrice, 0.01);

@@ -171,7 +171,13 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
     {
         // Cost-plus inflation is 100% public. Defense contracts are mostly public (~50% visibility).
-        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.10);
+        // Major defense contract wins/losses and geopolitical shocks are highly public.
+        return new \App\DTO\SectorCoverageProfile(
+            baseVisibility: 0.50,
+            errorStdDev: 0.10,
+            eventBaseVisibility: 0.95,
+            eventMinVisibility: 0.80
+        );
     }
 
     public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float

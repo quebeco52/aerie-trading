@@ -23,9 +23,18 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     {
         return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.10, 'moat_spread' => 0.025, 'nwc_intensity' => -0.05, 'capex_completion_rate' => 1.0];
     }
-    public function getSecularGrowthRate(Stock $stock): float { return 0.05; }
-    public function getCapexCyclicality(): float { return 0.5; }
-    public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.60, 'revenue_weight' => 0.40]; }
+    public function getSecularGrowthRate(Stock $stock): float
+    {
+        return 0.05;
+    }
+    public function getCapexCyclicality(): float
+    {
+        return 0.5;
+    }
+    public function getSurpriseBlendWeights(): array
+    {
+        return ['eps_weight' => 0.60, 'revenue_weight' => 0.40];
+    }
 
     // --- Dual-Stream Financial Data Architecture ---
     /** Baseline fraction of revenue derived from recurring multi-year terminal & rating subscriptions. */

@@ -96,7 +96,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         $lbiEtf = $this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
 
         $dt = 1.0 / $this->ticksPerYear;
-        $tickCount = 0;
+        $tickCount = (int) ($this->redis->get('simulation_tick_count') ?: 0);
 
         $historyInterval = (int) max(1, $this->ticksPerYear / 2400); // 2400 points per year
         $operatorInterval = (int) max(1, $this->ticksPerYear / 24);  // Operator audits once a game "month"
@@ -222,6 +222,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $this->redis->set('stocks_live_data', json_encode($stockUpdates));
                 $this->redis->set('etf_live_data', json_encode([$etfUpdate]));
                 $this->redis->set(\App\Service\Macro\MacroEngine::REDIS_MACRO_STATE, json_encode($macroState->toArray()));
+                $this->redis->set('simulation_tick_count', $tickCount);
 
                 // Save Portfolio Snapshots once a "Simulation Week"
                 if ($tickCount % $snapshotInterval === 0) {

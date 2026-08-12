@@ -8,6 +8,7 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
 
 /**
  * Earnings strategy for Consumer Staples (Food, Tobacco, Household Goods).
@@ -110,8 +111,12 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         // Agricultural & Packaging Commodity Input Cost Elasticity:
         // Fluctuations in bulk agricultural processing ($volumeZ) smoothly shift variable input costs.
         $commodityInputShift = self::COMMODITY_INPUT_ELASTICITY * $volumeZ * $volumeWeight;
+        
+        // Supply Chain & Packaging Penalty (Energy Price Index)
+        $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
+        $logisticsPenalty = $energyShift * abs((float) $stock->getBeta()) * 0.50; // Plastic packaging & freight cost spike
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $recallPenalty + $commodityInputShift);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $recallPenalty + $commodityInputShift + $logisticsPenalty);
 
         $primaryShockZ = abs($eventZ) > abs($brandedZ) ? $eventZ : $brandedZ;
         $observableShockZ = ($brandedZ * $brandedWeight + $volumeZ * $volumeWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);

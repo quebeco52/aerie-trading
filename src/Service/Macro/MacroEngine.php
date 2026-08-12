@@ -42,6 +42,8 @@ class MacroEngine
 
 
     // ENERGY SHOCK JUMP DIFFUSION
+    /** Baseline index value for energy prices. */
+    public const ENERGY_BASELINE = 100.0;
     public const ENERGY_JUMP_PROBABILITY = 0.05; // 5% chance of severe shock per year
     public const ENERGY_MEAN_REVERSION = 0.8;    // Speed of reversion to 100 baseline
     public const ENERGY_VOLATILITY = 0.25;       // Log-price volatility (Schwartz 1-factor sigma)
@@ -111,6 +113,15 @@ class MacroEngine
     public const FISCAL_ADJUSTMENT_SPEED = 0.15;        // Institutional speed of tax legislation (~4-5 yr half-life)
     public const MIN_CORPORATE_TAX_RATE = 0.12;        // 12% statutory tax floor during deep recessions
     public const MAX_CORPORATE_TAX_RATE = 0.30;        // 30% statutory tax cap during overheating booms
+
+    // --- CONSUMER SENTIMENT INDEX CONSTANTS ---
+    public const SENTIMENT_BASELINE = 100.0;
+    public const SENTIMENT_MISERY_MULTIPLIER = 300.0;
+    public const SENTIMENT_VOLATILITY_MULTIPLIER = 50.0;
+    public const SENTIMENT_MOMENTUM_MULTIPLIER = 500.0;
+    public const SENTIMENT_RATE_MULTIPLIER = 100.0;
+    public const ANIMAL_SPIRITS_MEAN_REVERSION = 2.0; // Theta (Speed of return to reality)
+    public const ANIMAL_SPIRITS_VOLATILITY = 2.5;     // Sigma (How irrational people get)
 
     // --- QE & Yield Curve Constants ---
     public const QE_ACTIVATION_ZLB_THRESHOLD = 0.90;
@@ -182,6 +193,7 @@ class MacroEngine
         $this->calculatePotentialAndNominalGdp($state, self::NATURAL_RATE, $dt);
         $this->calculateDynamicFiscalPolicy($state, $dt);
         $this->calculateEquityRiskPremium($state);
+        $this->calculateConsumerSentiment($state, $dt);
 
 
         $payload = $state->toArray();
@@ -193,8 +205,8 @@ class MacroEngine
     {
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
         $conn->executeStatement(
-            "INSERT INTO macro_report (recorded_at, inflation, inflation_ema, output_gap, output_gap_ema, policy_rate, policy_rate_ema, yield2y, yield2y_ema, yield5y, yield5y_ema, yield10y, yield10y_ema, yield30y, yield30y_ema, corporate_tax_rate, equity_risk_premium, nominal_gdp_index, market_volatility, macro_credit_spread, macro_credit_spread_ema, unemployment_rate, unemployment_rate_ema, energy_price_index) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO macro_report (recorded_at, inflation, inflation_ema, output_gap, output_gap_ema, policy_rate, policy_rate_ema, yield2y, yield2y_ema, yield5y, yield5y_ema, yield10y, yield10y_ema, yield30y, yield30y_ema, corporate_tax_rate, equity_risk_premium, nominal_gdp_index, market_volatility, macro_credit_spread, macro_credit_spread_ema, unemployment_rate, unemployment_rate_ema, energy_price_index, energy_price_index_ema, consumer_sentiment_index, consumer_sentiment_index_ema) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 $now,
                 $macroState->inflation,
@@ -220,6 +232,9 @@ class MacroEngine
                 $macroState->unemploymentRate,
                 $macroState->unemploymentRateEma,
                 $macroState->energyPriceIndex,
+                $macroState->energyPriceIndexEma,
+                $macroState->consumerSentimentIndex,
+                $macroState->consumerSentimentIndexEma,
             ]
         );
     }
@@ -431,6 +446,8 @@ class MacroEngine
         $state->marketVolatilityEma += $emaWeight * ($state->marketVolatility - $state->marketVolatilityEma);
         $state->macroCreditSpreadEma += $emaWeight * ($state->macroCreditSpread - $state->macroCreditSpreadEma);
         $state->unemploymentRateEma += $emaWeight * ($state->unemploymentRate - $state->unemploymentRateEma);
+        $state->energyPriceIndexEma += $emaWeight * ($state->energyPriceIndex - $state->energyPriceIndexEma);
+        $state->consumerSentimentIndexEma += $emaWeight * ($state->consumerSentimentIndex - $state->consumerSentimentIndexEma);
     }
 
     private function calculateDynamicFiscalPolicy(MacroState $state, float $dt): void
@@ -514,5 +531,44 @@ class MacroEngine
         $state->energyPriceIndex = $baseProcess + $jumpAmount;
         $state->energyPriceIndex = max(10.0, min(500.0, $state->energyPriceIndex)); // Clamp extremes
         $state->energyPriceShock = $state->energyPriceIndex - 100.0;
+    }
+
+    private function calculateConsumerSentiment(MacroState $state, float $dt): void
+    {
+        // 1. Calculate the "Rational" Fundamental Sentiment (The math we just tuned)
+        $excessInflation = max(0.0, $state->inflation - self::TARGET_INFLATION);
+        $excessUnemployment = max(0.0, $state->unemploymentRate - self::NATURAL_UNEMPLOYMENT);
+        $miseryPenalty = ($excessInflation + $excessUnemployment) * self::SENTIMENT_MISERY_MULTIPLIER;
+
+        $inflationMomentum = max(0.0, $state->inflation - $state->inflationEma);
+        $unemploymentMomentum = max(0.0, $state->unemploymentRate - $state->unemploymentRateEma);
+        $momentumPenalty = ($inflationMomentum + $unemploymentMomentum) * self::SENTIMENT_MOMENTUM_MULTIPLIER;
+
+        $excessVolatility = max(0.0, $state->marketVolatility - self::MACRO_VOL_BASE_ANCHOR);
+        $fearPenalty = $excessVolatility * self::SENTIMENT_VOLATILITY_MULTIPLIER;
+
+        $excessYield = max(0.0, $state->yield10y - (self::NATURAL_RATE + self::TARGET_INFLATION));
+        $ratePenalty = $excessYield * self::SENTIMENT_RATE_MULTIPLIER;
+
+        $gasPanic = max(0.0, $state->energyPriceShock) * 0.15;
+
+        // The "Rational" Target (Mu)
+        $fundamentalSentiment = self::SENTIMENT_BASELINE - $miseryPenalty - $momentumPenalty - $fearPenalty - $ratePenalty - $gasPanic;
+        if ($state->outputGap > 0.0) {
+            $fundamentalSentiment += ($state->outputGap * 200.0);
+        }
+
+        // 2. Apply Ornstein-Uhlenbeck (OU) Stochastic Process for "Animal Spirits"
+        $currentSentiment = $state->consumerSentimentIndex ?? 100.0;
+        $dW = $this->mathUtility->generateStandardNormal(); // Wiener process increment
+
+        // OU Equation: dX = Theta * (Mu - X) * dt + Sigma * sqrt(dt) * dW
+        $drift = self::ANIMAL_SPIRITS_MEAN_REVERSION * ($fundamentalSentiment - $currentSentiment) * $dt;
+        $diffusion = self::ANIMAL_SPIRITS_VOLATILITY * sqrt($dt) * $dW;
+
+        $newSentiment = $currentSentiment + $drift + $diffusion;
+
+        // 3. Apply final bounds
+        $state->consumerSentimentIndex = max(40.0, min(120.0, $newSentiment));
     }
 }

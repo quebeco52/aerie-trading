@@ -87,6 +87,15 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $energyPriceIndex = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $energyPriceIndexEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $consumerSentimentIndex = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $consumerSentimentIndexEma = null;
+
     // --- Standard Getters & Setters ---
 
     public function getId(): ?int { return $this->id; }
@@ -164,4 +173,13 @@ class MacroReport
 
     public function getEnergyPriceIndex(): ?string { return $this->energyPriceIndex; }
     public function setEnergyPriceIndex(string $energyPriceIndex): self { $this->energyPriceIndex = $energyPriceIndex; return $this; }
+
+    public function getEnergyPriceIndexEma(): ?string { return $this->energyPriceIndexEma; }
+    public function setEnergyPriceIndexEma(string $energyPriceIndexEma): self { $this->energyPriceIndexEma = $energyPriceIndexEma; return $this; }
+
+    public function getConsumerSentimentIndex(): ?string { return $this->consumerSentimentIndex; }
+    public function setConsumerSentimentIndex(string $consumerSentimentIndex): self { $this->consumerSentimentIndex = $consumerSentimentIndex; return $this; }
+
+    public function getConsumerSentimentIndexEma(): ?string { return $this->consumerSentimentIndexEma; }
+    public function setConsumerSentimentIndexEma(string $consumerSentimentIndexEma): self { $this->consumerSentimentIndexEma = $consumerSentimentIndexEma; return $this; }
 }

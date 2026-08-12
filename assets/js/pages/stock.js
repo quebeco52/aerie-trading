@@ -420,7 +420,7 @@ function initStockPage() {
                     const lev = eqVal > 0 ? (totalAssets / eqVal) : 1.0;
                     document.getElementById('stat-leverage-mult').innerText = lev.toFixed(1) + 'x';
                 }
-                
+
                 let assetTypeLabel = 'Invested Capital';
                 let cashLabel = 'Treasury Reserves';
 
@@ -785,7 +785,7 @@ function updateCharts(timeframe) {
             let streams = {};
             try {
                 streams = typeof report.revenue_streams === 'string' ? JSON.parse(report.revenue_streams) : (report.revenue_streams || {});
-            } catch (e) {}
+            } catch (e) { }
             Object.keys(streams).forEach(k => revenueStreamsKeys.add(k));
             revenueStreamsDataRaw.push(streams);
 
@@ -907,7 +907,7 @@ function updateCharts(timeframe) {
                     let s = {};
                     try {
                         s = typeof rep.revenue_streams === 'string' ? JSON.parse(rep.revenue_streams) : (rep.revenue_streams || {});
-                    } catch (e) {}
+                    } catch (e) { }
                     for (const [k, v] of Object.entries(s)) {
                         sumStreams[k] = (sumStreams[k] || 0) + parseFloat(v || 0);
                         revenueStreamsKeys.add(k);
@@ -1152,7 +1152,7 @@ function renderRevenueStreamsChart(labels, streamsKeysSet, rawStreamsData) {
     if (!ctx) return;
 
     const streamsKeys = Array.from(streamsKeysSet);
-    
+
     // Fallback if there are no streams
     if (streamsKeys.length === 0) {
         revenueStreamsChartInstance = new Chart(ctx.getContext('2d'), { type: 'bar', data: { labels: labels, datasets: [] } });
@@ -1174,7 +1174,7 @@ function renderRevenueStreamsChart(labels, streamsKeysSet, rawStreamsData) {
 
     const datasets = streamsKeys.map((key, index) => {
         const color = palette[index % palette.length];
-        
+
         return {
             type: 'bar',
             label: key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
@@ -1196,7 +1196,7 @@ function renderRevenueStreamsChart(labels, streamsKeysSet, rawStreamsData) {
             maintainAspectRatio: false,
             scales: {
                 x: { stacked: true },
-                y: { 
+                y: {
                     stacked: true,
                     ticks: { callback: (val) => formatLarge(val) }
                 }
@@ -1236,6 +1236,7 @@ function updateMacroCharts() {
     let erpData = [], volData = [], taxData = [];
     let gdpData = [];
     let unemploymentData = [], energyPriceData = [];
+    let sentimentData = [];
 
     // Expand and cap the macro charts to show exactly the last 100 quarters (25 years)
     const slicedReports = rawReports.slice(-100);
@@ -1282,7 +1283,8 @@ function updateMacroCharts() {
         gdpData.push(parseFloat(report.nominal_gdp_index) * 25.0);
 
         unemploymentData.push(parseFloat(report.unemployment_rate) * 100);
-        energyPriceData.push(parseFloat(report.energy_price_index));
+        energyPriceData.push(parseFloat(report.energy_price_index_ema || report.energy_price_index || 100.0));
+        sentimentData.push(parseFloat(report.consumer_sentiment_index_ema || report.consumer_sentiment_index || 100.0));
     });
 
     renderMacroEconomyChart(labels, inflationData, outputGapData);
@@ -1292,6 +1294,7 @@ function updateMacroCharts() {
     renderMacroGdpChart(labels, gdpData);
     renderMacroLaborChart(labels, unemploymentData);
     renderMacroEnergyChart(labels, energyPriceData);
+    renderMacroSentimentChart(labels, sentimentData);
 }
 
 function renderMacroEconomyChart(labels, inflationData, outputGapData) {
@@ -1590,6 +1593,49 @@ function renderMacroEnergyChart(labels, energyPriceData) {
             interaction: { mode: 'index', intersect: false },
             plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `Index: ${ctx.raw.toFixed(2)}` } } },
             scales: { y: { ticks: { callback: (val) => val } } }
+        }
+    });
+}
+
+let macroSentimentChartInstance = null;
+function renderMacroSentimentChart(labels, sentimentData) {
+    if (macroSentimentChartInstance) macroSentimentChartInstance.destroy();
+    const ctx = document.getElementById('macroSentimentChart');
+    if (!ctx) return;
+
+    macroSentimentChartInstance = new Chart(ctx.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Consumer Sentiment Index',
+                    data: sentimentData,
+                    borderColor: '#a855f7',
+                    backgroundColor: 'rgba(168, 85, 247, 0.2)',
+                    borderWidth: 2,
+                    tension: 0.2,
+                    fill: true,
+                    pointRadius: labels.length > 50 ? 0 : 2
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `${ctx.raw.toFixed(1)}` } } },
+            scales: {
+                y: {
+                    min: 40,
+                    max: 120,
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { color: 'rgba(255, 255, 255, 0.7)' }
+                },
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 10, color: 'rgba(255, 255, 255, 0.5)' }
+                }
+            }
         }
     });
 }

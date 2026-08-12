@@ -198,7 +198,13 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
     {
         // Tech usage/engagement is partially visible via 3rd party trackers (~20%).
-        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.20, errorStdDev: 0.05);
+        // Data breaches, antitrust fines, and viral adoption are highly public events.
+        return new \App\DTO\SectorCoverageProfile(
+            baseVisibility: 0.20,
+            errorStdDev: 0.05,
+            eventBaseVisibility: 0.85,
+            eventMinVisibility: 0.60
+        );
     }
 
     public function getMarginReversionSpeed(): float

@@ -342,7 +342,8 @@ class CommercialBankBusinessModel implements BusinessModelInterface
 
         // Loan Loss Provisions (Idiosyncratic Credit Cycle):
         // Collateralized loans (prime mortgages, corporate debt) have lower LGD than unsecured credit.
-        $macroDefaultDrag = $outputGap < 0.0 ? abs($outputGap) * self::MACRO_DEFAULT_LGD_DRAG : 0.0;
+        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
+        $macroDefaultDrag = $sentimentShift < 0.0 ? abs($sentimentShift) * self::MACRO_DEFAULT_LGD_DRAG : 0.0;
 
         if ($defaultZ < self::SECTOR_SHOCK_ELEVATED_DEFAULT_Z) {
             $provisionShock = abs($defaultZ) * self::LOSS_PROVISION_Z_FACTOR;

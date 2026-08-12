@@ -8,6 +8,7 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
+use App\Service\Event\ShockEvent;
 
 /**
  * Earnings strategy for Heavy Extractors and Refiners (Oil, Copper, Steel).
@@ -24,17 +25,38 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
     {
         return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.30, 'moat_spread' => 0.000, 'nwc_intensity' => 0.15, 'capex_completion_rate' => 0.125];
     }
-    public function getSecularGrowthRate(Stock $stock): float { return 0.01; }
-    public function getCapexCyclicality(): float { return 3.0; }
-    public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.30, 'revenue_weight' => 0.70]; }
+    public function getSecularGrowthRate(Stock $stock): float
+    {
+        return 0.01;
+    }
+    public function getCapexCyclicality(): float
+    {
+        return 3.0;
+    }
+    public function getSurpriseBlendWeights(): array
+    {
+        return ['eps_weight' => 0.30, 'revenue_weight' => 0.70];
+    }
 
     // --- Dual-Stream Commodity Architecture ---
     /** Baseline fraction of revenue tied to physical extraction and production volume. */
     public const EXTRACTION_REVENUE_WEIGHT = 0.50;
     /** Baseline fraction of revenue tied to global commodity spot pricing and inflation premium. */
     public const SPOT_PRICE_WEIGHT         = 0.50;
-    /** Baseline multiplier scaling spot price sensitivity to macro inflation spikes. */
-    public const SPOT_PRICE_SENSITIVITY    = 1.00;
+    /** Baseline multiplier scaling spot price sensitivity to macro inflation spikes (0.50 simulates 50% hedging). */
+    public const SPOT_PRICE_SENSITIVITY    = 0.50;
+
+    // --- Tail Risk & Shock Events ---
+    /** Negative z-score threshold indicating severe geopolitical sanctions throttling extraction. */
+    public const GEOPOLITICAL_SANCTIONS_Z_SCORE = -2.20;
+    /** Positive z-score threshold indicating a massive geopolitical export ban (spot price spike). */
+    public const GEOPOLITICAL_EXPORT_BAN_Z_SCORE = 2.40;
+    /** Multiplier applied to spot prices during an export ban. */
+    public const EXPORT_BAN_SPOT_MULT = 1.25;
+
+    // --- Continuous Elasticity ---
+    /** Variable margin sensitivity to physical extraction economies of scale. */
+    public const EXTRACTION_SCALE_ELASTICITY = 0.015;
 
     // --- Commodity Spot Price & Inflation Physics ---
     /** Volatility multiplier for top-line revenue shocks driven by global commodity spot prices. */
@@ -64,6 +86,10 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         // by global spot prices ($inflationBonus) during the Idiosyncratic Shock phase. 
         // Setting this higher would result in massive, compounded double-dipping on inflation.
         $physics['pricing_power_multiplier'] = 1.0;
+        
+        // Re-implementing Macro Volume Shock (GDP Sensitivity)
+        // Commodities are heavily exposed to economic cycles, so multiplier is 1.5
+        $physics['macro_demand_shift'] = $macroState->outputGapEma * 1.5 * abs((float) $stock->getBeta());
 
         return $physics;
     }
@@ -88,36 +114,75 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         // Independent stream Z-scores with AR(1) persistence
         $extractionZ = $mathUtility->generatePersistentZ($momentum['extraction'] ?? 0.0, 0.35); // Physical extraction/refining volume variance
         $spotZ       = $mathUtility->generatePersistentZ($momentum['spot'] ?? 0.0, 0.15); // Global commodity spot price deviations
+        $eventZ      = $mathUtility->generatePersistentZ($momentum['event'] ?? 0.0, 0.10);
+
+        // Tail Risk Events
+        $extractionMultiplier = 1.0;
+        $spotMultiplier = 1.0;
+        $eventType = null;
+
+        if ($eventZ < self::GEOPOLITICAL_SANCTIONS_Z_SCORE) {
+            $eventType = ShockEvent::GEOPOLITICAL_SANCTIONS;
+            $extractionMultiplier = 0.75; // Severe extraction volume drop
+        } elseif ($eventZ > self::GEOPOLITICAL_EXPORT_BAN_Z_SCORE) {
+            $eventType = ShockEvent::GEOPOLITICAL_EXPORT_BAN;
+            $spotMultiplier = self::EXPORT_BAN_SPOT_MULT; // Massive spot price spike
+        }
 
         // Higher top-line variance compared to standard retail/manufacturing
-        $extractionRevenue = $expectedRevenue * $extractionWeight * (1.0 + ($extractionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
+        // (Macro demand shift is already handled by EarningsEngine capacityUtilization)
+        $extractionRevenue = $expectedRevenue * $extractionWeight * (1.0 + ($extractionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))) * $extractionMultiplier;
 
         // The Inflation Exposure:
         // While standard corporates get crushed by supply chain inflation, commodities *are* the supply chain.
         // Their margins explode upwards during inflationary spikes as spot prices rise, and violently contract during deflation.
         $inflation = $macroState->inflationEma;
-        $inflationBonus = ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_BONUS_SCALAR * $spotSensitivity;
+        $energyShift = ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0;
 
-        $spotRevenue   = $expectedRevenue * $spotWeight * (1.0 + ($spotZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $inflationBonus);
+        $inflationBonus = ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_BONUS_SCALAR * $spotSensitivity;
+        
+        // Energy shift is already a massive percentage multiplier (e.g. 100 -> 400 is +300%). 
+        // We shouldn't multiply it by beta and 2.0, otherwise a 300% spike causes a 1050% revenue spike.
+        // We rely on $spotSensitivity (set to 0.50) to simulate a partially hedged production book (locking in futures).
+        $energyBonus = $energyShift * self::INFLATION_BONUS_SCALAR * $spotSensitivity; 
+
+        $spotRevenue   = $expectedRevenue * $spotWeight * (1.0 + ($spotZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $inflationBonus + $energyBonus) * $spotMultiplier;
         $actualRevenue = max(0.0, $extractionRevenue + $spotRevenue);
 
+        // The total realizedVariableMargin is exclusively allocated to physical extraction.
+        // Spot price shocks carry 100% gross margin (0% variable cost), serving as pure operating leverage.
         $extractionVariableMargin = $extractionWeight > 0 ? ($realizedVariableMargin / $extractionWeight) : $realizedVariableMargin;
         $actualVariableCosts = $extractionRevenue * $extractionVariableMargin;
+
+        // Continuous Elasticity
+        $elasticityShift = -self::EXTRACTION_SCALE_ELASTICITY * $extractionZ * $extractionWeight;
+
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
+        $clampedMargin = $this->clampMargin($effectiveMargin + $elasticityShift);
 
         $primaryShockZ = abs($extractionZ) > abs($spotZ) ? $extractionZ : $spotZ;
-        // observableShockZ: extraction volume drift is partially visible; spot is fully public
-        $observableShockZ = $extractionZ * $extractionWeight * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
+        if (abs($eventZ) > abs($primaryShockZ)) {
+            $primaryShockZ = $eventZ;
+        }
+
+        // observableShockZ: extraction volume drift is partially visible (~20%). Spot prices & macro bonuses are 100% public.
+        // We divide the public spot component by 0.20 so that when MarketConsensusEngine multiplies observableShockZ 
+        // by dynamicVisibility (~0.20), the spot shock passes through to analysts at ~100% visibility.
+        $extractionShock = $extractionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
+        $spotShockTotal = ($spotZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $inflationBonus + $energyBonus;
+        $observableShockZ = ($extractionShock * $extractionWeight) + (($spotShockTotal * $spotWeight) / 0.20);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
-            rawVariableMargin: $effectiveMargin,
+            rawVariableMargin: $clampedMargin,
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
-            eventType: null,
+            eventType: $eventType,
+            isPublicEvent: $eventType !== null ? true : null,
             streamZ: [
                 'extraction' => $extractionZ,
                 'spot'       => $spotZ,
+                'event'      => $eventZ,
             ],
             streamRevenue: [
                 'extraction' => $extractionRevenue,

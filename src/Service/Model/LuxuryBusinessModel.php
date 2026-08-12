@@ -24,8 +24,14 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     {
         return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.10, 'moat_spread' => 0.020, 'nwc_intensity' => 0.15, 'capex_completion_rate' => 0.33];
     }
-    public function getSecularGrowthRate(Stock $stock): float { return 0.04; }
-    public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.55, 'revenue_weight' => 0.45]; }
+    public function getSecularGrowthRate(Stock $stock): float
+    {
+        return 0.04;
+    }
+    public function getSurpriseBlendWeights(): array
+    {
+        return ['eps_weight' => 0.55, 'revenue_weight' => 0.45];
+    }
 
     // --- Dual-Stream Luxury Brand Architecture ---
     /** Baseline fraction of revenue derived from ultra-high-net-worth Maison leather goods and haute couture. */
@@ -81,14 +87,17 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $outputGap = $macroState->outputGapEma;
+        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
         $inflation = $macroState->inflationEma;
         $beta = (float) $stock->getBeta();
+
+        $blendedMacroShift = ($outputGap * 0.4) + ($sentimentShift * 0.6);
 
         // Luxury goods benefit from Veblen pricing power during inflation
         $inflationBonus = $inflation > MacroEngine::TARGET_INFLATION ? ($inflation - MacroEngine::TARGET_INFLATION) * self::VEBLEN_INFLATION_SCALAR : 0.0;
 
         return [
-            'macro_demand_shift' => $outputGap * $beta * self::MACRO_DEMAND_SCALAR,
+            'macro_demand_shift' => $blendedMacroShift * $beta * self::MACRO_DEMAND_SCALAR,
             'pricing_power_multiplier' => 1.0 + $inflationBonus,
         ];
     }
@@ -114,7 +123,7 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
 
         // Veblen Inflation Benefit vs. Standard Supply Chain Penalty:
         $inflation = $macroState->inflationEma;
-        $veblenMarginBenefit = $inflation > MacroEngine::TARGET_INFLATION ? -($inflation - MacroEngine::TARGET_INFLATION) * self::VEBLEN_MARGIN_BENEFIT * $hauteWeight : 0.0;
+        $veblenMarginBenefit = $inflation > MacroEngine::TARGET_INFLATION ? - ($inflation - MacroEngine::TARGET_INFLATION) * self::VEBLEN_MARGIN_BENEFIT * $hauteWeight : 0.0;
 
         // Tail Risk: Brand Dilution vs. Viral Fashion Super-Cycle
         $eventZ = $mathUtility->generatePersistentZ($momentum['event'] ?? 0.0, 0.05);
@@ -199,4 +208,3 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         }
     }
 }
-

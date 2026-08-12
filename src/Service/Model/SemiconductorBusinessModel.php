@@ -196,7 +196,14 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
     {
         // Wafer shipment lead times and supply chain checks give ~60% visibility (40% floor).
-        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.60, errorStdDev: 0.05, minVisibility: 0.40);
+        // Fab fires, power outages, and export bans are highly public events.
+        return new \App\DTO\SectorCoverageProfile(
+            baseVisibility: 0.60,
+            errorStdDev: 0.05,
+            minVisibility: 0.40,
+            eventBaseVisibility: 0.95,
+            eventMinVisibility: 0.80
+        );
     }
 
     public function getMarginReversionSpeed(): float

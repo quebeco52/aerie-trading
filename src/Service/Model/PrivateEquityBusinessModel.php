@@ -342,7 +342,13 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
     {
         // Macro GDP and credit spread drags are public; individual exits are opaque (~20% visible).
-        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.20, errorStdDev: 0.05);
+        // Hostile takeovers and mega LBO announcements are highly public events.
+        return new \App\DTO\SectorCoverageProfile(
+            baseVisibility: 0.20,
+            errorStdDev: 0.05,
+            eventBaseVisibility: 0.85,
+            eventMinVisibility: 0.60
+        );
     }
 
     public function calculateMaxBuybackSpend(float $excessCash, float $retainedEarningsThisQuarter, bool $isMegaHoarder): float
