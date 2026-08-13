@@ -299,7 +299,7 @@ class InsuranceBusinessModel implements BusinessModelInterface
      * @param float       $baselineVol            The stock's historical volatility.
      * @param MacroStateDTO $macroState             The current macroeconomic state.
      * @param MathUtility $mathUtility            Mathematical utility for Z-score generation.
-     * @return array{actual_revenue: float, actual_variable_costs: float, ebit: float, primary_shock_z: float, event_lore: string|null}
+     * @return SectorPhysicsResult
      */
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
@@ -382,12 +382,6 @@ class InsuranceBusinessModel implements BusinessModelInterface
                 'premium_revenue' => $actualRevenue,
             ],
         );
-    }
-
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
-    {
-        // Catastrophe events are highly visible via industry cat models (~80%). Revenue is opaque (observableShockZ=0).
-        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.80, errorStdDev: 0.10);
     }
 
     public function getMarginReversionSpeed(): float

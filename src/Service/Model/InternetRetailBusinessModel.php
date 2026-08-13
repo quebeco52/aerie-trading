@@ -90,14 +90,16 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            'pricing_power_index' => 0.2, // Commoditized, very low pricing power
-            'third_party_weight' => self::THIRD_PARTY_WEIGHT,
-            'first_party_weight' => self::FIRST_PARTY_WEIGHT,
+            'pricing_power_index'        => 0.2, // Commoditized, very low pricing power
+            'third_party_weight'         => self::THIRD_PARTY_WEIGHT,
+            'first_party_weight'         => self::FIRST_PARTY_WEIGHT,
+            'advertising_revenue_weight' => 0.00,
         ]);
 
         $pricingPower = max(0.0, min(1.0, $params['pricing_power_index']));
         $thirdPartyWeight = $params['third_party_weight'];
         $firstPartyWeight = $params['first_party_weight'];
+        $adWeight = $params['advertising_revenue_weight'];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
 
@@ -122,8 +124,15 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         }
 
         $firstPartyRevenue = $expectedRevenue * $firstPartyWeight * (1.0 + ($firstPartyZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.8))) * $holidayMultiplier;
+        
+        $adRevenue = 0.0;
+        $adZ = 0.0;
+        if ($adWeight > 0.0) {
+            $adZ = $mathUtility->generatePersistentZ($momentum['advertising'] ?? 0.0, 0.40);
+            $adRevenue = $expectedRevenue * $adWeight * (1.0 + ($adZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR));
+        }
 
-        $actualRevenue = max(0.0, $thirdPartyRevenue + $firstPartyRevenue);
+        $actualRevenue = max(0.0, $thirdPartyRevenue + $firstPartyRevenue + $adRevenue);
 
         // --- Structural Margin Blending ---
         // Third-party marketplace is asset-light and operates at a very low variable cost (high margin).
@@ -139,6 +148,7 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $firstPartyVariableMargin = $expectedFirstPartyRevenue > 0 ? $firstPartyBaselineCosts / $expectedFirstPartyRevenue : $realizedVariableMargin;
 
         // Apply derived distinct margins to actual shocked revenues
+        // Advertising is virtually zero marginal cost (100% margin)
         $actualVariableCosts = ($thirdPartyRevenue * self::THIRD_PARTY_VARIABLE_COST_RATIO) + ($firstPartyRevenue * $firstPartyVariableMargin);
 
         // Supply Chain Inflation Penalty
@@ -163,26 +173,37 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $firstPartyShock = $firstPartyZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.8);
         $observableShockZ = $primaryShockZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
 
-        return new SectorPhysicsResult(
+        $streamZ = [
+            'third_party_marketplace' => $thirdPartyZ,
+            'first_party_retail' => $firstPartyZ,
+            'event' => $eventZ,
+        ];
+        
+        $streamRevenue = [
+            'Third-Party Marketplace' => $thirdPartyRevenue,
+            'First-Party Retail' => $firstPartyRevenue,
+        ];
+
+        if ($adWeight > 0.0) {
+            $streamZ['advertising'] = $adZ;
+            $streamRevenue['advertising_revenue'] = $adRevenue;
+        }
+
+        $result = new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'third_party_marketplace' => $thirdPartyZ,
-                'first_party_retail' => $firstPartyZ,
-                'event' => $eventZ,
-            ],
-            streamRevenue: [
-                'Third-Party Marketplace' => $thirdPartyRevenue,
-                'First-Party Retail' => $firstPartyRevenue,
-            ]
+            streamZ: $streamZ,
+            streamRevenue: $streamRevenue
         );
+        
+        return $result;
     }
 
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    public function getCoverageProfile(\App\Entity\Stock $stock): \App\DTO\SectorCoverageProfile
     {
         // Third-party marketplace GMV and physical shipping volume is partially trackable via web scraping and logistics (~35%).
         // Holiday super-cycles are fully public knowledge.

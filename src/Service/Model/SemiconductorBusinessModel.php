@@ -193,7 +193,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    public function getCoverageProfile(\App\Entity\Stock $stock): \App\DTO\SectorCoverageProfile
     {
         // Wafer shipment lead times and supply chain checks give ~60% visibility (40% floor).
         // Fab fires, power outages, and export bans are highly public events.

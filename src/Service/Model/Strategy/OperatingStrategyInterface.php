@@ -14,7 +14,7 @@ interface OperatingStrategyInterface
 {
     public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array;
     public function computeActualFinancials(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): ActualFinancialsDTO;
-    public function getCoverageProfile(): SectorCoverageProfile;
+    public function getCoverageProfile(Stock $stock): SectorCoverageProfile;
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array;
     public function getEffectiveTaxRate(float $macroTaxRate): float;
     public function calculateEconomicReturn(Stock $stock, float $nopat, float $investedCapital): float;

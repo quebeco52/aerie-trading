@@ -59,7 +59,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.08, 'moat_spread' => 0.015, 'nwc_intensity' => 0.15, 'capex_completion_rate' => 0.125];
     }
 
-    public function getCoverageProfile(): SectorCoverageProfile
+    public function getCoverageProfile(\App\Entity\Stock $stock): \App\DTO\SectorCoverageProfile
     {
         // Monthly dealer inventory and car sales data provide ~40% base visibility.
         // Massive safety recalls and major UAW labor strikes are highly public events.
@@ -105,13 +105,15 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            'pricing_power_index' => 0.5,
-            'auto_sales_weight' => self::AUTO_SALES_WEIGHT,
-            'auto_financing_weight' => self::AUTO_FINANCING_WEIGHT
+            'pricing_power_index'      => 0.5,
+            'auto_sales_weight'        => self::AUTO_SALES_WEIGHT,
+            'auto_financing_weight'    => self::AUTO_FINANCING_WEIGHT,
+            'software_services_weight' => 0.00
         ]);
         
-        $salesWeight = $params['auto_sales_weight'];
-        $financeWeight = $params['auto_financing_weight'];
+        $salesWeight    = $params['auto_sales_weight'];
+        $financeWeight  = $params['auto_financing_weight'];
+        $softwareWeight = $params['software_services_weight'];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $salesZ = $mathUtility->generatePersistentZ($momentum['auto_sales'] ?? 0.0, 0.25);
@@ -161,7 +163,15 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         // --- Combine Streams ---
         $salesRevenue = $expectedRevenue * $salesWeight * (1.0 + $salesShock);
         $financeRevenue = $expectedRevenue * $financeWeight * (1.0 + ($financeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
-        $actualRevenue = max(0.0, $salesRevenue + $financeRevenue);
+        
+        $softwareRevenue = 0.0;
+        $softwareZ = 0.0;
+        if ($softwareWeight > 0.0) {
+            $softwareZ = $mathUtility->generatePersistentZ($momentum['software'] ?? 0.0, 0.40);
+            $softwareRevenue = $expectedRevenue * $softwareWeight * (1.0 + ($softwareZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.8)));
+        }
+
+        $actualRevenue = max(0.0, $salesRevenue + $financeRevenue + $softwareRevenue);
 
         // Blended margins 
         // Note: Positive cost addons compress the margin (e.g., inflation penalty).
@@ -195,21 +205,32 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $observableShockZ = ($salesZ * $salesWeight * 0.60 + $financeZ * $financeWeight * 0.30) 
             * $baselineVol * self::REVENUE_VARIANCE_SCALAR;
 
-        return new SectorPhysicsResult(
+        $streamZ = [
+            'auto_sales'     => $salesZ,
+            'auto_financing' => $financeZ,
+        ];
+        
+        $streamRevenue = [
+            'auto_sales'     => $salesRevenue,
+            'auto_financing' => $financeRevenue,
+        ];
+
+        if ($softwareWeight > 0.0) {
+            $streamZ['software'] = $softwareZ;
+            $streamRevenue['software_services'] = $softwareRevenue;
+        }
+
+        $result = new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'auto_sales'     => $salesZ,
-                'auto_financing' => $financeZ,
-            ],
-            streamRevenue: [
-                'auto_sales'     => $salesRevenue,
-                'auto_financing' => $financeRevenue,
-            ],
+            streamZ: $streamZ,
+            streamRevenue: $streamRevenue,
         );
+        
+        return $result;
     }
 }

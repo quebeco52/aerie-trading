@@ -80,12 +80,11 @@ class CommercialBankBusinessModel implements BusinessModelInterface
      *  Even JPMorgan's best quarter never broke below ~62%. 0.55 is a theoretical minimum for the leanest operators. */
     public const MIN_EFFICIENCY_RATIO          = 0.55;
 
-    // --- Analyst Visibility ---
-    /** Fraction of quarterly revenue variance visible to analysts via NIM guidance and Fed H.8 balance sheet data. */
-    public const REVENUE_ANALYST_VISIBILITY    = 0.65;
-    // Analyst error std dev moved to getCoverageProfile() — see MarketConsensusEngine.
+    // --- Analyst Visibility & Error ---
+    public const BASE_COVERAGE_VISIBILITY = 0.65;
+    public const BASE_COVERAGE_ERROR = 0.06;
 
-    // --- Yield Safety Rails ---
+    // --- Model Specific Constants ---
     /** Hard ceiling on gross asset yield: prevents hyperinflated loan yields during margin compression. */
     public const MAX_GROSS_ASSET_YIELD  = 0.40;
     /** EBIT floor as a fraction of core liabilities: ensures the bank never shuts down its loan book. */
@@ -315,13 +314,15 @@ class CommercialBankBusinessModel implements BusinessModelInterface
     {
         // Resolve company-specific tuned commercial bank parameters
         $params = $this->resolveModelParameters($stock, [
-            'nii_revenue_weight'        => self::NII_REVENUE_WEIGHT,
-            'fee_revenue_weight'        => self::FEE_REVENUE_WEIGHT,
-            'nim_inversion_sensitivity' => self::NIM_INVERSION_SENSITIVITY,
+            'nii_revenue_weight'          => self::NII_REVENUE_WEIGHT,
+            'fee_revenue_weight'          => self::FEE_REVENUE_WEIGHT,
+            'proprietary_dividend_weight' => 0.00,
+            'nim_inversion_sensitivity'   => self::NIM_INVERSION_SENSITIVITY,
         ]);
 
-        $niiWeight            = $params['nii_revenue_weight'];
-        $feeWeight            = $params['fee_revenue_weight'];
+        $niiWeight                 = $params['nii_revenue_weight'];
+        $feeWeight                 = $params['fee_revenue_weight'];
+        $proprietaryDividendWeight = $params['proprietary_dividend_weight'];
         $inversionSensitivity = $params['nim_inversion_sensitivity'];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
@@ -330,6 +331,8 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $revenueZ = $mathUtility->generatePersistentZ($momentum['nii'] ?? 0.0, 0.35); // NII loan origination volume
         $feeZ     = $mathUtility->generatePersistentZ($momentum['fee'] ?? 0.0, 0.25); // Non-interest custodial / payment fee volume
         $defaultZ = $mathUtility->generatePersistentZ($momentum['default'] ?? 0.0, 0.25); // Idiosyncratic credit default
+        
+
 
         $outputGap = $macroState->outputGapEma;
 
@@ -338,7 +341,16 @@ class CommercialBankBusinessModel implements BusinessModelInterface
             * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
         $feeRevenue = $expectedRevenue * $feeWeight
             * (1.0 + ($feeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + ($outputGap * self::SECTOR_SHOCK_FEE_OUTPUT_GAP_MULT));
-        $actualRevenue = max(0.0, $niiRevenue + $feeRevenue);
+            
+        $proprietaryDividendRevenue = 0.0;
+        $proprietaryDividendZ = 0.0;
+        if ($proprietaryDividendWeight > 0.0) {
+            // Proprietary dividends are highly cyclical and tie to corporate expansion
+            $proprietaryDividendZ = $mathUtility->generatePersistentZ($momentum['proprietary_dividend'] ?? 0.0, 0.25);
+            $proprietaryDividendRevenue = $expectedRevenue * $proprietaryDividendWeight * (1.0 + ($proprietaryDividendZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5)) + ($outputGap * self::SECTOR_SHOCK_FEE_OUTPUT_GAP_MULT * 2.0));
+        }
+        
+        $actualRevenue = max(0.0, $niiRevenue + $feeRevenue + $proprietaryDividendRevenue);
 
         // Loan Loss Provisions (Idiosyncratic Credit Cycle):
         // Collateralized loans (prime mortgages, corporate debt) have lower LGD than unsecured credit.
@@ -397,29 +409,34 @@ class CommercialBankBusinessModel implements BusinessModelInterface
             $eventType = ShockEvent::RESERVE_RELEASE;
         }
 
+        $streamZ = [
+            'nii'     => $revenueZ,
+            'fee'     => $feeZ,
+            'default' => $defaultZ,
+        ];
+        
+        $streamRevenue = [
+            'net_interest_income' => $niiRevenue,
+            'fee_income'          => $feeRevenue,
+        ];
+        
+        if ($proprietaryDividendWeight > 0.0) {
+            $streamZ['proprietary_dividend'] = $proprietaryDividendZ;
+            $streamRevenue['proprietary_dividend'] = $proprietaryDividendRevenue;
+        }
+
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: abs($defaultZ) > abs($revenueZ) ? $defaultZ : $revenueZ,
             observableShockZ: $revenueZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR,
             eventType: $eventType,
-            streamZ: [
-                'nii'     => $revenueZ,
-                'fee'     => $feeZ,
-                'default' => $defaultZ,
-            ],
-            streamRevenue: [
-                'net_interest_income' => $niiRevenue,
-                'fee_income'          => $feeRevenue,
-            ],
+            streamZ: $streamZ,
+            streamRevenue: $streamRevenue,
         );
     }
 
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
-    {
-        // NIM guidance and Fed H.8 data give analysts ~65% revenue visibility. CECL provisions are fully opaque.
-        return new \App\DTO\SectorCoverageProfile(baseVisibility: self::REVENUE_ANALYST_VISIBILITY, errorStdDev: 0.06);
-    }
+
 
     /**
      * Banks earn standard money-market yields only on excess liquidity that isn't actively deployed.

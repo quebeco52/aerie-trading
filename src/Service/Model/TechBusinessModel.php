@@ -21,6 +21,9 @@ use App\Service\Event\ShockEvent;
  */
 class TechBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Analyst Visibility & Error ---
+    public const BASE_COVERAGE_VISIBILITY = 0.20;
+    public const BASE_COVERAGE_ERROR = 0.05;
     public function getModelThresholds(): array
     {
         return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.10, 'moat_spread' => 0.025, 'nwc_intensity' => -0.05, 'capex_completion_rate' => 0.50];
@@ -94,12 +97,14 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         $params = $this->resolveModelParameters($stock, [
             'subscription_revenue_weight' => self::SUBSCRIPTION_REVENUE_WEIGHT,
             'advertising_revenue_weight'  => self::ADVERTISING_REVENUE_WEIGHT,
+            'cloud_infrastructure_weight' => 0.00,
             'advertising_cyclicality'     => self::ADVERTISING_CYCLICALITY_SCALAR,
             'monopoly_aggression'         => 0.5,
         ]);
 
         $subWeight           = $params['subscription_revenue_weight'];
         $adWeight            = $params['advertising_revenue_weight'];
+        $cloudWeight         = $params['cloud_infrastructure_weight'];
         $adCyclicalityScalar = $params['advertising_cyclicality'];
         
         $aggression = max(0.0, min(1.0, $params['monopoly_aggression']));
@@ -147,8 +152,15 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         $adRevenue = $expectedRevenue * $adWeight
             * (1.0 + ($adZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $adCyclicality)
             * $viralMultiplier;
+            
+        $cloudRevenue = 0.0;
+        $cloudZ = 0.0;
+        if ($cloudWeight > 0.0) {
+            $cloudZ = $mathUtility->generatePersistentZ($momentum['cloud'] ?? 0.0, 0.60); // High persistence, sticky enterprise contracts
+            $cloudRevenue = $expectedRevenue * $cloudWeight * (1.0 + ($cloudZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.4));
+        }
 
-        $actualRevenue = max(0.0, $subscriptionRevenue + $adRevenue);
+        $actualRevenue = max(0.0, $subscriptionRevenue + $adRevenue + $cloudRevenue);
 
         // Supply Chain Immunity vs. Continuous Talent Inflation:
         // Tech companies don't buy steel or oil, they pay for engineers and cloud compute.
@@ -176,35 +188,34 @@ class TechBusinessModel extends StandardCorporateBusinessModel
 
         $observableShockZ = (($subscriptionZ * $subWeight) + ($adZ * $adWeight)) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
 
-        return new SectorPhysicsResult(
+        $streamZ = [
+            'subscription' => $subscriptionZ,
+            'ad'           => $adZ,
+            'event'        => $eventZ,
+        ];
+        
+        $streamRevenue = [
+            'subscription' => $subscriptionRevenue,
+            'advertising'  => $adRevenue,
+        ];
+
+        if ($cloudWeight > 0.0) {
+            $streamZ['cloud'] = $cloudZ;
+            $streamRevenue['cloud_infrastructure'] = $cloudRevenue;
+        }
+
+        $result = new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'subscription' => $subscriptionZ,
-                'ad'           => $adZ,
-                'event'        => $eventZ,
-            ],
-            streamRevenue: [
-                'subscription' => $subscriptionRevenue,
-                'advertising'  => $adRevenue,
-            ],
+            streamZ: $streamZ,
+            streamRevenue: $streamRevenue,
         );
-    }
-
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
-    {
-        // Tech usage/engagement is partially visible via 3rd party trackers (~20%).
-        // Data breaches, antitrust fines, and viral adoption are highly public events.
-        return new \App\DTO\SectorCoverageProfile(
-            baseVisibility: 0.20,
-            errorStdDev: 0.05,
-            eventBaseVisibility: 0.85,
-            eventMinVisibility: 0.60
-        );
+        
+        return $result;
     }
 
     public function getMarginReversionSpeed(): float

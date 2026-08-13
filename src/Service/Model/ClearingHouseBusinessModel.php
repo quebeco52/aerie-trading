@@ -170,13 +170,15 @@ class ClearingHouseBusinessModel implements BusinessModelInterface
         $dataZ    = $mathUtility->generatePersistentZ($momentum['data'] ?? 0.0, 0.45); // Separate Z-score for sticky data subscriptions
 
         $params = $this->resolveModelParameters($stock, [
-            'clearing_fee_weight' => 0.55,
-            'custody_float_weight' => 0.20,
+            'clearing_fee_weight'      => 0.55,
+            'custody_float_weight'     => 0.20,
             'data_subscription_weight' => 0.25,
+            'margin_interest_weight'   => 0.00,
         ]);
         $clearingWeight = $params['clearing_fee_weight'];
         $custodyWeight  = $params['custody_float_weight'];
         $dataWeight     = $params['data_subscription_weight'];
+        $marginWeight   = $params['margin_interest_weight'];
 
         // The Volatility Bonus (Transaction Volume):
         // Clearinghouses thrive on sheer volume. Market panics = massive liquidations = massive fees.
@@ -195,8 +197,18 @@ class ClearingHouseBusinessModel implements BusinessModelInterface
         $custodyRevenue  = $expectedRevenue * $custodyWeight * (1.0 + ($revenueZ * ($baselineVol * 0.3)));
         // 3. NEW: Data & Analytics Revenue (Highly sticky SaaS revenue, immune to trading panics)
         $dataRevenue     = $expectedRevenue * $dataWeight * (1.0 + ($dataZ * ($baselineVol * 0.05)));
+        
+        $marginRevenue = 0.0;
+        $marginZ = 0.0;
+        if ($marginWeight > 0.0) {
+            $marginZ = $mathUtility->generatePersistentZ($momentum['margin'] ?? 0.0, 0.30);
+            $policyRateEma = $macroState->policyRateEma;
+            // Margin interest explodes when rates are high
+            $rateBonus = $policyRateEma > 0.03 ? ($policyRateEma - 0.03) * 5.0 : 0.0;
+            $marginRevenue = $expectedRevenue * $marginWeight * (1.0 + ($marginZ * $baselineVol * 0.5) + $rateBonus);
+        }
 
-        $actualRevenue   = max(0.0, $clearingRevenue + $custodyRevenue + $dataRevenue);
+        $actualRevenue   = max(0.0, $clearingRevenue + $custodyRevenue + $dataRevenue + $marginRevenue);
 
         // The CCP Default Waterfall (Catastrophic Tail Risk)
         $defaultZ = $mathUtility->generatePersistentZ($momentum['default'] ?? 0.0, 0.05);
@@ -220,28 +232,33 @@ class ClearingHouseBusinessModel implements BusinessModelInterface
         $primaryShockZ = abs($defaultZ) > abs($revenueZ) ? $defaultZ : $revenueZ;
         $observableShockZ = 0.0;
 
-        return new SectorPhysicsResult(
+        $streamZ = [
+            'revenue' => $revenueZ,
+            'data'    => $dataZ,
+            'default' => $defaultZ,
+        ];
+        
+        $streamRevenue = [
+            'clearing_fees'  => $clearingRevenue,
+            'data_licensing' => $dataRevenue,
+        ];
+
+        if ($marginWeight > 0.0) {
+            $streamZ['margin'] = $marginZ;
+            $streamRevenue['margin_interest'] = $marginRevenue;
+        }
+
+        $result = new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
-            streamZ: [
-                'revenue' => $revenueZ,
-                'data'    => $dataZ,
-                'default' => $defaultZ,
-            ],
-            streamRevenue: [
-                'clearing_fees'  => $clearingRevenue,
-                'data_licensing' => $dataRevenue,
-            ],
+            streamZ: $streamZ,
+            streamRevenue: $streamRevenue,
         );
-    }
-
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
-    {
-        // Systemic defaults partially rumored before earnings (~10% visibility).
-        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.10, errorStdDev: 0.05);
+        
+        return $result;
     }
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array

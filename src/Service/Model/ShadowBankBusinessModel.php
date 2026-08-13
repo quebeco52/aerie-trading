@@ -23,6 +23,9 @@ use App\Service\Math\FinancialConstants;
  */
 class ShadowBankBusinessModel extends CommercialBankBusinessModel
 {
+    // --- Analyst Visibility & Error ---
+    public const BASE_COVERAGE_VISIBILITY = 0.50;
+    public const BASE_COVERAGE_ERROR = 0.10;
     public function getModelThresholds(): array
     {
         return ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => null, 'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.18, 'moat_spread' => 0.005, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 1.0];
@@ -205,12 +208,6 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
                 'origination_fees'    => $mortgageRevenue,
             ],
         );
-    }
-
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
-    {
-        // Private NIM structures partially visible via FRED/securitization data (~50%).
-        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.10);
     }
 }
 

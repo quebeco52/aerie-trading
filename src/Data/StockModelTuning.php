@@ -29,9 +29,10 @@ class StockModelTuning
         // Quantitative institutional market maker and derivatives options writer (Citadel / Jane Street archetype).
         // 100% Sales & Trading / Volatility Arbitrage, 0% M&A Advisory.
         'PERE' => [
-            'advisory_revenue_weight' => 0.00,
-            'trading_revenue_weight'  => 1.00,
-            'vix_arbitrage_scalar'    => 1.80,
+            'advisory_revenue_weight'       => 0.00,
+            'trading_revenue_weight'        => 0.60,
+            'options_premium_income_weight' => 0.40,
+            'vix_arbitrage_scalar'          => 1.80,
         ],
 
         // --- Kingfisher Capital (KING) ---
@@ -59,6 +60,12 @@ class StockModelTuning
             'trading_revenue_weight'  => 0.75,
             'vix_arbitrage_scalar'    => 2.00,
         ],
+
+        // =====================================================================
+        // BANKING ARCHETYPES
+        // =====================================================================
+
+
 
         // =====================================================================
         // INSURANCE & REINSURANCE ARCHETYPES
@@ -89,15 +96,17 @@ class StockModelTuning
         // --- Black Swan Capital (SWAN) ---
         // Mega-cap alternative asset manager specializing in leveraged buyouts and carried interest.
         'SWAN' => [
-            'management_fee_weight'   => 0.80,
-            'carried_interest_weight' => 0.20,
+            'management_fee_weight'        => 0.60,
+            'carried_interest_weight'      => 0.20,
+            'principal_investments_weight' => 0.20,
         ],
 
         // --- Vulture Capital Recovery (VULT) ---
         // Specialist distressed debt restructuring and turnaround equity sponsor.
         'VULT' => [
-            'advisory_fee_weight'   => 0.40,
-            'asset_recovery_weight' => 0.60,
+            'advisory_fee_weight'      => 0.40,
+            'asset_recovery_weight'    => 0.30,
+            'loan_to_own_gains_weight' => 0.30,
         ],
 
         // =====================================================================
@@ -107,8 +116,9 @@ class StockModelTuning
         // --- Lakeshore Living (SHOR) ---
         // Residential multi-family apartment REIT with ultra-stable annual leases.
         'SHOR' => [
-            'sticky_lease_weight'         => 0.90,
-            'variable_hospitality_weight' => 0.10,
+            'sticky_lease_weight'          => 0.75,
+            'variable_hospitality_weight'  => 0.10,
+            'securitization_income_weight' => 0.15,
         ],
 
         // --- Plaza Civic River Trust (PLZA) ---
@@ -121,8 +131,23 @@ class StockModelTuning
         // --- Elderbird Retirement Services (ELDE) ---
         // Healthcare & assisted living property REIT with long-duration institutional leases.
         'ELDE' => [
-            'sticky_lease_weight'         => 0.95,
+            'sticky_lease_weight'         => 0.80,
             'variable_hospitality_weight' => 0.05,
+            'longevity_bond_yield_weight' => 0.15,
+        ],
+
+        'STG' => [
+            'pnc_weight'          => 0.40,
+            'life_annuity_weight' => 0.60,
+        ],
+
+        // --- Aerie Central Clearing (ACC) ---
+        // Systemically important central counterparty clearinghouse (CCP). 
+        'ACC' => [
+            'clearing_fee_weight'      => 0.50,
+            'custody_float_weight'     => 0.15,
+            'data_subscription_weight' => 0.20,
+            'margin_interest_weight'   => 0.15,
         ],
 
         // =====================================================================
@@ -156,8 +181,9 @@ class StockModelTuning
         // --- Lakebird Bank (LAKE) ---
         // Universal banking behemoth.
         'LAKE' => [
-            'nii_revenue_weight'        => 0.65,
-            'fee_revenue_weight'        => 0.35,
+            'proprietary_dividend_weight' => 0.20,
+            'nii_revenue_weight'        => 0.60,
+            'fee_revenue_weight'        => 0.20,
             'nim_inversion_sensitivity' => 8.0,
             'credit_risk_appetite'      => 0.40,
         ],
@@ -194,8 +220,9 @@ class StockModelTuning
         // --- Hummingbird Interactive (HUMM) ---
         // Consumer mobile OS & advertising giant. Heavily ad-supported platform usage (65%).
         'HUMM' => [
-            'subscription_revenue_weight' => 0.35,
-            'advertising_revenue_weight'  => 0.65,
+            'subscription_revenue_weight' => 0.15,
+            'advertising_revenue_weight'  => 0.45,
+            'cloud_infrastructure_weight' => 0.40,
             'advertising_cyclicality'     => 0.22,
             'monopoly_aggression'         => 0.90, // Ruthless data monopoly, high margins, existential regulatory risk
         ],
@@ -215,8 +242,9 @@ class StockModelTuning
         // --- Cascade Minerals & Energy (CASC) ---
         // Diversified global mining & metallurgical coal exporter. Balanced volume & spot exposure (50/50).
         'CASC' => [
-            'extraction_revenue_weight' => 0.50,
-            'spot_price_weight'         => 0.50,
+            'extraction_revenue_weight' => 0.40,
+            'spot_price_weight'         => 0.40,
+            'refining_spread_weight'    => 0.20,
             'spot_price_sensitivity'    => 0.50, // Standard 50% hedged production book
         ],
 
@@ -339,8 +367,10 @@ class StockModelTuning
         // --- Sugarbird Confectionery (SGRB) ---
         // Confectionery, snacks & packaged food leader. Skewed toward packaged branded staples (75%).
         'SGRB' => [
-            'branded_staples_weight'  => 0.75,
-            'volume_commodity_weight' => 0.25,
+            'branded_staples_weight'   => 0.65,
+            'volume_commodity_weight'  => 0.15,
+            'commodity_trading_weight' => 0.10,
+            'land_speculation_weight'  => 0.10,
         ],
 
         // --- Copperhead Coffee Roasters (BREW) ---
@@ -353,8 +383,10 @@ class StockModelTuning
         // --- Poultry Crop Operations (CROP) ---
         // Integrated poultry & agricultural producer. Skewed toward commodity volume agriculture (70%).
         'CROP' => [
-            'branded_staples_weight'  => 0.30,
-            'volume_commodity_weight' => 0.70,
+            'branded_staples_weight'   => 0.20,
+            'volume_commodity_weight'  => 0.50,
+            'commodity_trading_weight' => 0.15,
+            'land_speculation_weight'  => 0.15,
         ],
 
         // --- Lark & Crest Brands (LARK) ---
@@ -433,9 +465,10 @@ class StockModelTuning
         // VIP casino acting as bait for an apex commercial real estate and landlord empire.
         // Massive skew towards non-gaming (extortionate revenue-sharing leases) as the primary engine.
         'GULL' => [
-            'pricing_power_index'       => 1.00, // Absolute monopoly pricing power over captive tenants
-            'gaming_revenue_weight'     => 0.25, // Casino floors are just the bait for foot traffic
-            'non_gaming_revenue_weight' => 0.75, // The real engine: extortionate commercial real estate leases
+            'pricing_power_index'           => 1.00, // Absolute monopoly pricing power over captive tenants
+            'gaming_revenue_weight'         => 0.25, // Casino floors are just the bait for foot traffic
+            'non_gaming_revenue_weight'     => 0.15,
+            'commercial_real_estate_weight' => 0.60, // The real engine: extortionate commercial real estate leases
         ],
 
         // =====================================================================
@@ -462,11 +495,6 @@ class StockModelTuning
             'pricing_power_index' => 0.30,
         ],
 
-        // --- Weaver Marketplace (WEAV) ---
-        // Internet retail giant. Logistics-heavy with thin margins that get squeezed by inflation.
-        'WEAV' => [
-            'pricing_power_index' => 0.40,
-        ],
 
         // --- Golden Swift Holdings (SWFT) ---
         // Massive global fast-food franchise network. Almost entirely franchised (95%) for stable royalties.
@@ -483,8 +511,10 @@ class StockModelTuning
         // --- Weaver Marketplace (WEAV) ---
         // Massive third-party ecosystem (the profit engine) blended with volatile first-party retail (the scale engine).
         'WEAV' => [
-            'third_party_weight' => 0.60,
-            'first_party_weight' => 0.40,
+            'pricing_power_index'        => 0.40,
+            'third_party_weight'         => 0.40,
+            'first_party_weight'         => 0.35,
+            'advertising_revenue_weight' => 0.25,
         ],
 
         // --- Penguin Computing (PENG) ---
@@ -504,10 +534,11 @@ class StockModelTuning
         // ultra-luxury 'Apex Division' and inescapable software/telemetry tollbooths.
         // Extreme pricing power, but terrifyingly sensitive to macroeconomic liquidity crises.
         'FALC' => [
-            'auto_sales_weight'       => 0.75,
-            'auto_financing_weight'   => 0.25, // Represents telemetry, insurance, and software lock-ins
-            'pricing_power_index'     => 0.80, // Veblen good luxury pricing; immune to inflation but hyper-pro-cyclical
-            'rate_sensitivity_scalar' => 3.00, // Highly sensitive to liquidity panics pausing elite consumption
+            'auto_sales_weight'        => 0.60,
+            'auto_financing_weight'    => 0.15,
+            'software_services_weight' => 0.25, // Represents telemetry and software lock-ins
+            'pricing_power_index'      => 0.80, // Veblen good luxury pricing; immune to inflation but hyper-pro-cyclical
+            'rate_sensitivity_scalar'  => 3.00, // Highly sensitive to liquidity panics pausing elite consumption
         ],
     ];
 

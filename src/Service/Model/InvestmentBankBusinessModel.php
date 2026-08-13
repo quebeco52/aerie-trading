@@ -86,12 +86,14 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     /** Variable cost increase as a fraction of revenue when a regulatory settlement triggers. */
     public const REGULATORY_FINE_SCALAR     = 0.08;
 
-    // --- Analyst Visibility Calibration ---
+    // --- Analyst Visibility & Error ---
+    public const BASE_COVERAGE_VISIBILITY = 0.30;
+    public const BASE_COVERAGE_ERROR = 0.10;
+
     /** Fraction of advisory shock visible to analysts: M&A pipeline is strictly confidential until close. */
     public const ADVISORY_ANALYST_VISIBILITY = 0.20;
     /** Fraction of S&T shock visible to analysts: trading volumes are semi-public via FINRA/industry data. */
     public const TRADING_ANALYST_VISIBILITY  = 0.55;
-    // Analyst error std dev moved to getCoverageProfile() — see MarketConsensusEngine.
 
     // --- Event Lore Thresholds ---
     /** Positive output gap required to trigger M&A boom event lore. */
@@ -118,13 +120,15 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     {
         // Resolve company-specific tuned parameters (or fallback to sector defaults)
         $params = $this->resolveModelParameters($stock, [
-            'advisory_revenue_weight' => self::ADVISORY_REVENUE_WEIGHT,
-            'trading_revenue_weight'  => self::TRADING_REVENUE_WEIGHT,
-            'vix_arbitrage_scalar'    => self::VIX_ARBITRAGE_SCALAR,
+            'advisory_revenue_weight'       => self::ADVISORY_REVENUE_WEIGHT,
+            'trading_revenue_weight'        => self::TRADING_REVENUE_WEIGHT,
+            'options_premium_income_weight' => 0.00,
+            'vix_arbitrage_scalar'          => self::VIX_ARBITRAGE_SCALAR,
         ]);
 
         $advisoryWeight = $params['advisory_revenue_weight'];
         $tradingWeight  = $params['trading_revenue_weight'];
+        $optionsWeight  = $params['options_premium_income_weight'];
         $vixScalar      = $params['vix_arbitrage_scalar'];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
@@ -168,7 +172,17 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             * (1.0 + ($advisoryZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR) + $dealFlowMultiplier + $dcmBonus);
         $tradingRevenue  = $expectedRevenue * $tradingWeight
             * (1.0 + ($tradingZ * $baselineVol * self::TRADING_VARIANCE_SCALAR) + $volatilityArbitrage);
-        $actualRevenue = max(0.0, $advisoryRevenue + $tradingRevenue);
+            
+        $optionsRevenue = 0.0;
+        $optionsZ = 0.0;
+        if ($optionsWeight > 0.0) {
+            $optionsZ = $mathUtility->generatePersistentZ($momentum['options'] ?? 0.0, 0.20);
+            // Options premium thrives in low VIX (theta decay), gets crushed by VIX spikes (gamma squeeze)
+            $optionsVixPenalty = $vixGap > 0.0 ? -($vixGap * 1.5) : abs($vixGap * 0.5);
+            $optionsRevenue = $expectedRevenue * $optionsWeight * (1.0 + ($optionsZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR) + $optionsVixPenalty);
+        }
+            
+        $actualRevenue = max(0.0, $advisoryRevenue + $tradingRevenue + $optionsRevenue);
 
         //  Compensation ratio floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_COMPENSATION_RATIO.
         $minCompRatio = max(0.01, self::MIN_COMPENSATION_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
@@ -212,28 +226,33 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             + $tradingZ * $tradingWeight * self::TRADING_ANALYST_VISIBILITY)
             * $baselineVol * self::REVENUE_VARIANCE_SCALAR;
 
-        return new SectorPhysicsResult(
+        $streamZ = [
+            'advisory' => $advisoryZ,
+            'trading'  => $tradingZ,
+            'event'    => $eventZ,
+        ];
+        
+        $streamRevenue = [
+            'advisory' => $advisoryRevenue,
+            'trading'  => $tradingRevenue,
+        ];
+
+        if ($optionsWeight > 0.0) {
+            $streamZ['options'] = $optionsZ;
+            $streamRevenue['options_premium_income'] = $optionsRevenue;
+        }
+
+        $result = new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedVariableMargin,
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'advisory' => $advisoryZ,
-                'trading'  => $tradingZ,
-                'event'    => $eventZ,
-            ],
-            streamRevenue: [
-                'advisory' => $advisoryRevenue,
-                'trading'  => $tradingRevenue,
-            ],
+            streamZ: $streamZ,
+            streamRevenue: $streamRevenue,
         );
-    }
-
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
-    {
-        // All per-desk visibility is pre-embedded in observableShockZ, so baseVisibility=1.0 (pass-through).
-        return new \App\DTO\SectorCoverageProfile(baseVisibility: 1.0, errorStdDev: 0.08);
+        
+        return $result;
     }
 }

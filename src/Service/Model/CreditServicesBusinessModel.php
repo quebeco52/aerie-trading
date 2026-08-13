@@ -88,10 +88,12 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public const LOSS_PROVISION_SCALAR     = 0.08;
     /** Z-score threshold above which benign credit conditions trigger a reserve release. */
     public const HEALTHY_CREDIT_Z_FLOOR    = 1.00;
-    /** Cost reduction per z-unit of benign conditions above the release threshold (replaces flat HEALTHY_CREDIT_BONUS). */
-    public const PROVISION_REVERSAL_SCALE  = 0.020;
     /** Maximum quarterly reserve release clamp. Credit cycle is lumpier than bank loans: cap at 5%. */
-    public const MAX_PROVISION_REVERSAL    = 0.05;
+    public const MAX_PROVISION_REVERSAL      = 0.02;
+    public const PROVISION_REVERSAL_SCALE    = 0.01;
+
+    public const BASE_COVERAGE_VISIBILITY = 0.50;
+    public const BASE_COVERAGE_ERROR = 0.10;
     /** Upper clamp for realized variable margin. */
     public const MAX_VARIABLE_MARGIN_CLAMP = 0.95;
 
@@ -243,11 +245,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         );
     }
 
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
-    {
-        // Monthly delinquency reports give analysts ~50% visibility into loss provisions.
-        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.10);
-    }
+
 
     public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
     {

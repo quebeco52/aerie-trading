@@ -1,4 +1,6 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 
 namespace App\Service\Model;
 
@@ -32,9 +34,11 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     // --- Macro & Sentiment Physics ---
     /** Hard floor on pricing power given ultra-discretionary nature. */
     public const MIN_BETA_PRICING_POWER_FLOOR = 0.40;
-    /** Multiplier scaling consumer sentiment sensitivity (casinos are hyper-elastic). */
-    public const SENTIMENT_SENSITIVITY_SCALAR = 2.00;
-    /** Margin drag when casinos increase promotional comps (free rooms/food) to attract weak consumers. */
+    
+    // --- Macro Sensitivities ---
+    /** Scalar for how aggressively consumer sentiment shifts drive macro demand. */
+    public const SENTIMENT_SENSITIVITY_SCALAR = 0.25;
+    /** Scalar for how much variable margins compress via promotional comps when sentiment drops. */
     public const PROMOTIONAL_COMP_DRAG_SCALAR = 0.15;
     /** Sensitivity scalar for supply chain inflation cost penalties. */
     public const INFLATION_PENALTY_SCALAR = 0.80;
@@ -42,7 +46,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     // --- Revenue Volatility & Stream Physics ---
     /** Volatility multiplier for top-line revenue shocks reflecting gaming hold and tourism swings. */
     public const REVENUE_VARIANCE_SCALAR = 0.30;
-    /** Multiplier indicating how much more expensive non-gaming variable costs are compared to gaming. */
+    /** The structural intensity of non-gaming variable costs relative to gaming costs. */
     public const NON_GAMING_COST_INTENSITY = 2.0;
 
     // --- Tail Risk & Shock Events ---
@@ -57,13 +61,21 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
 
     // --- Property Reinvestment & Asset Decay ---
     /** Quarterly margin decay rate per unit of underinvestment in resort remodels and attractions. */
-    public const RESORT_AGING_DECAY_RATE = 0.022;
+    public const RESORT_AGING_DECAY_RATE = 0.008;
     /** Quarterly margin gain scalar per unit of mega-resort expansion and modernization. */
-    public const RESORT_MODERNIZATION_GAIN_RATE = 0.012;
+    public const RESORT_MODERNIZATION_GAIN_RATE = 0.005;
     /** Structural minimum operating margin floor under severe property aging. */
-    public const MIN_OPERATING_MARGIN_FLOOR = 0.06;
+    public const MIN_OPERATING_MARGIN_FLOOR = 0.10;
     /** Structural maximum operating margin ceiling for flagship premier Strip resorts. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.36;
+
+    // --- Commercial Real Estate (CRE) Physics ---
+    /** Fraction of excess inflation captured by CRE lease rent escalators. */
+    public const CRE_RENT_ESCALATOR_CAPTURE = 0.50;
+    /** Penalty applied to CRE margins when 10Y yield rises, simulating refinancing friction on property debt. */
+    public const CRE_REFINANCING_WALL_DRAG  = 0.15;
+    /** Fallback safe 10Y yield before refinancing drag kicks in. */
+    public const DEFAULT_10Y_YIELD_FALLBACK = 0.04;
 
     public function getModelThresholds(): array
     {
@@ -85,7 +97,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         return 2.5; // High CapEx required for ongoing room renovations and new property builds
     }
 
-    public function getCoverageProfile(): SectorCoverageProfile
+    public function getCoverageProfile(\App\Entity\Stock $stock): \App\DTO\SectorCoverageProfile
     {
         // Monthly Gaming Control Board reports (Nevada / Macau) give high base visibility (~70%).
         // Regulatory crackdowns and travel restrictions are public events.
@@ -122,13 +134,15 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         MathUtility $mathUtility
     ): SectorPhysicsResult {
         $params = $this->resolveModelParameters($stock, [
-            'pricing_power_index' => self::MIN_BETA_PRICING_POWER_FLOOR,
-            'gaming_revenue_weight' => self::GAMING_REVENUE_WEIGHT,
-            'non_gaming_revenue_weight' => self::NON_GAMING_REVENUE_WEIGHT,
+            'pricing_power_index'             => self::MIN_BETA_PRICING_POWER_FLOOR,
+            'gaming_revenue_weight'           => self::GAMING_REVENUE_WEIGHT,
+            'non_gaming_revenue_weight'       => self::NON_GAMING_REVENUE_WEIGHT,
+            'commercial_real_estate_weight'   => 0.00,
         ]);
 
-        $gamingWeight = $params['gaming_revenue_weight'];
-        $nonGamingWeight = $params['non_gaming_revenue_weight'];
+        $gamingWeight      = $params['gaming_revenue_weight'];
+        $nonGamingWeight   = $params['non_gaming_revenue_weight'];
+        $creWeight         = $params['commercial_real_estate_weight'];
         $pricingPower = max(0.0, min(1.0, $params['pricing_power_index']));
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
@@ -146,28 +160,55 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         if ($eventZ < self::GAMING_REGULATION_CRACKDOWN_Z) {
             $gamingHaircut = (1.0 - self::GAMING_REGULATION_HAIRCUT);
             $eventType = ShockEvent::REGULATORY_FINE; // Proxy for gaming regulatory crackdown
-        } elseif ($eventZ > self::WHALE_LUCK_SURGE_Z) {             
+        } elseif ($eventZ > self::WHALE_LUCK_SURGE_Z) {
             $whaleMultiplier = self::WHALE_LUCK_MULT;
             $eventType = ShockEvent::VIRAL_GROWTH; // Proxy for landmark high-roller hold quarter
         }
 
         // --- Dual-Stream Revenue Calculation ---
         // (Macro Sentiment Volume Shock is now handled globally in getMacroPhysics to avoid double-dipping)
-        $gamingRevenue = $expectedRevenue * $gamingWeight 
-            * (1.0 + ($gamingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))) 
+        $gamingRevenue = max(0.0, $expectedRevenue * $gamingWeight)
+            * (1.0 + ($gamingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)))
             * $whaleMultiplier * $gamingHaircut;
 
-        $nonGamingRevenue = $expectedRevenue * $nonGamingWeight 
+        $nonGamingRevenue = max(0.0, $expectedRevenue * $nonGamingWeight)
             * (1.0 + ($nonGamingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.5)));
 
-        $actualRevenue = max(0.0, $gamingRevenue + $nonGamingRevenue);
+        $creRevenue = 0.0;
+        $creZ = 0.0;
+        $creVacancyShock = 0.0;
+        $creRefinancingDrag = 0.0;
+
+        if ($creWeight > 0.0) {
+            $creZ = $mathUtility->generatePersistentZ($momentum['cre'] ?? 0.0, 0.50); // Real estate leases are highly persistent
+
+            // 1. GDP output gap affects commercial real estate leasing demand
+            $creDemandShock = $macroState->outputGap * abs((float) $stock->getBeta()) * 0.5;
+
+            // 2. CPI Rent Escalators (Inflation Hedge)
+            $excessInflation = max(0.0, $macroState->inflationEma - MacroEngine::TARGET_INFLATION);
+            $rentEscalator = $excessInflation * self::CRE_RENT_ESCALATOR_CAPTURE;
+
+            $creRevenue = max(0.0, $expectedRevenue * $creWeight * (1.0 + ($creZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.2) + $creDemandShock + $rentEscalator));
+
+            // 3. Refinancing Drag on CRE debt (10Y Yield sensitivity)
+            $yield10y = $macroState->yield10yEma;
+            $creRefinancingDrag = max(0.0, ($yield10y - self::DEFAULT_10Y_YIELD_FALLBACK) * self::CRE_REFINANCING_WALL_DRAG);
+
+            // 4. Vacancy Shock (if creZ drops too low, tenants default/leave)
+            if ($creZ < -1.5) {
+                $creVacancyShock = abs($creZ) * 0.05; // 5% margin hit per Z-score of distress
+            }
+        }
+
+        $actualRevenue = max(0.0, $gamingRevenue + $nonGamingRevenue + $creRevenue);
 
         // --- Cost & Margin Physics ---
         // 1. Inflation Penalty (F&B and labor costs)
         $inflation = $macroState->inflationEma;
         $inflationMultiplier = 2.0 - ($pricingPower * 2.0);
-        $baseInflationPenalty = $inflation > MacroEngine::TARGET_INFLATION 
-            ? ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR 
+        $baseInflationPenalty = $inflation > MacroEngine::TARGET_INFLATION
+            ? ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR
             : 0.0;
         $inflationPenalty = $baseInflationPenalty * $inflationMultiplier;
 
@@ -179,12 +220,18 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         // 3. Structural Margin Blending
         // Gaming is high margin (low variable cost). Non-Gaming (F&B, Hotel, Leases) has higher variable cost.
         // We dynamically scale their costs against the total realizedVariableMargin to guarantee neither is ever negative.
-        $gamingVariableMargin = $realizedVariableMargin / ($gamingWeight + (self::NON_GAMING_COST_INTENSITY * $nonGamingWeight));
-        $nonGamingVariableMargin = $gamingVariableMargin * self::NON_GAMING_COST_INTENSITY;
+        // CRE is assumed to have very low variable costs (similar to gaming)
+        $baseGamingMargin = $realizedVariableMargin / ($gamingWeight + (self::NON_GAMING_COST_INTENSITY * $nonGamingWeight) + $creWeight);
 
-        $actualVariableCosts = ($nonGamingRevenue * $nonGamingVariableMargin) + ($gamingRevenue * $gamingVariableMargin);
+        $gamingVariableMargin = $baseGamingMargin + $promotionalDrag;
+        $nonGamingVariableMargin = ($baseGamingMargin * self::NON_GAMING_COST_INTENSITY) + $promotionalDrag;
 
-        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $inflationPenalty + $promotionalDrag;
+        // CRE is unaffected by casino promotions, but faces vacancy and refinancing drags
+        $creVariableMargin = $baseGamingMargin + $creVacancyShock + $creRefinancingDrag;
+
+        $actualVariableCosts = ($nonGamingRevenue * $nonGamingVariableMargin) + ($gamingRevenue * $gamingVariableMargin) + ($creRevenue * $creVariableMargin);
+
+        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $inflationPenalty;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock Z selection
@@ -195,23 +242,34 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
 
         $observableShockZ = ($gamingZ * $gamingWeight + $nonGamingZ * $nonGamingWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
 
-        return new SectorPhysicsResult(
+        $streamZ = [
+            'gaming' => $gamingZ,
+            'non_gaming' => $nonGamingZ,
+            'event' => $eventZ,
+        ];
+
+        $streamRevenue = [
+            'Gaming (GGR)' => $gamingRevenue,
+            'Non-Gaming (Hotels/F&B)' => $nonGamingRevenue,
+        ];
+
+        if ($creWeight > 0.0) {
+            $streamZ['cre'] = $creZ;
+            $streamRevenue['commercial_real_estate'] = $creRevenue;
+        }
+
+        $result = new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'gaming' => $gamingZ,
-                'non_gaming' => $nonGamingZ,
-                'event' => $eventZ,
-            ],
-            streamRevenue: [
-                'Gaming (GGR)' => $gamingRevenue,
-                'Non-Gaming (Hotels/F&B)' => $nonGamingRevenue,
-            ]
+            streamZ: $streamZ,
+            streamRevenue: $streamRevenue
         );
+
+        return $result;
     }
 
     public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void

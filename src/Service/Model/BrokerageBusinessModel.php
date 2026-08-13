@@ -21,6 +21,11 @@ use App\Service\Math\FinancialConstants;
  */
 class BrokerageBusinessModel extends AssetManagementBusinessModel
 {
+    public const LOSS_PROVISION_Z_FACTOR    = 0.005;
+
+    public const BASE_COVERAGE_VISIBILITY = 0.30;
+    public const BASE_COVERAGE_ERROR = 0.10;
+
     public function getModelThresholds(): array
     {
         return ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => null, 'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.18, 'moat_spread' => 0.005, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 1.0];
@@ -142,12 +147,6 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
                 'advisory' => $advisoryRevenue,
             ],
         );
-    }
-
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
-    {
-        // VIX bonus is 100% public; underlying trading/advisory shocks are opaque (~10% visible baseline).
-        return new \App\DTO\SectorCoverageProfile(baseVisibility: 1.0, errorStdDev: 0.06);
     }
 
     public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array

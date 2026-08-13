@@ -332,12 +332,6 @@ class AssetManagementBusinessModel implements BusinessModelInterface
         );
     }
 
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
-    {
-        // AUM flows partially visible via 13F filings and industry AUM trackers (~10%).
-        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.10, errorStdDev: 0.05);
-    }
-
     /**
      * Asset Managers invest excess corporate treasury in seed capital co-investment portfolios (60/40).
      * The 40% equity seed tranche experiences quarterly stochastic mark-to-market volatility and VIX tail risk.

@@ -57,11 +57,20 @@ class ShockEvent
     public const GEOPOLITICAL_EXPORT_BAN = 'geopolitical_export_ban';
     public const GEOPOLITICAL_SANCTIONS = 'geopolitical_sanctions';
     public const REINSURANCE_ATTACHMENT_BREACH = 'reinsurance_attachment_breach';
+    
+    public const LITIGATION_SETTLEMENT_WIN = 'litigation_settlement_win';
+    public const LITIGATION_SETTLEMENT_LOSS = 'litigation_settlement_loss';
 
     public const AUTO_SUPPLY_CHAIN_DISRUPTION = 'auto_supply_chain_disruption';
     public const AUTO_SUBPRIME_DEFAULT_SURGE = 'auto_subprime_default_surge';
     public const AUTO_PRICING_POWER_SURGE = 'auto_pricing_power_surge';
 
+    public const CRISIS_MANAGEMENT_BOOM = 'crisis_management_boom';
+    public const TALENT_PLACEMENT_BOOM = 'talent_placement_boom';
+    public const SUBSIDY_CUT = 'subsidy_cut';
+    public const LOGISTICS_SURGE_PRICING = 'logistics_surge_pricing';
 
+    public const INFRASTRUCTURE_BILL_WIN = 'infrastructure_bill_win';
+    public const PROJECT_DELAY = 'project_delay';
 }
 

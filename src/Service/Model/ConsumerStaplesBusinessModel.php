@@ -20,6 +20,9 @@ use App\Service\Macro\MacroEngine;
  */
 class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Analyst Visibility & Error ---
+    public const BASE_COVERAGE_VISIBILITY = 0.30;
+    public const BASE_COVERAGE_ERROR = 0.05;
     public function getModelThresholds(): array
     {
         return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.15, 'moat_spread' => 0.015, 'nwc_intensity' => 0.05, 'capex_completion_rate' => 0.33];
@@ -76,12 +79,16 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            'branded_staples_weight'  => self::BRANDED_STAPLES_WEIGHT,
-            'volume_commodity_weight' => self::VOLUME_COMMODITY_WEIGHT,
+            'branded_staples_weight'   => self::BRANDED_STAPLES_WEIGHT,
+            'volume_commodity_weight'  => self::VOLUME_COMMODITY_WEIGHT,
+            'commodity_trading_weight' => 0.00,
+            'land_speculation_weight'  => 0.00,
         ]);
 
-        $brandedWeight = $params['branded_staples_weight'];
-        $volumeWeight  = $params['volume_commodity_weight'];
+        $brandedWeight     = $params['branded_staples_weight'];
+        $volumeWeight      = $params['volume_commodity_weight'];
+        $commodityWeight   = $params['commodity_trading_weight'];
+        $landWeight        = $params['land_speculation_weight'];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
 
@@ -105,8 +112,22 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
             $recallPenalty = self::RECALL_MODERATE_PENALTY * $brandedWeight;
             $eventType = ShockEvent::REGULATORY_FINE;
         }
+        
+        $commodityRevenue = 0.0;
+        $commodityZ = 0.0;
+        if ($commodityWeight > 0.0) {
+            $commodityZ = $mathUtility->generatePersistentZ($momentum['commodity_trading'] ?? 0.0, 0.20);
+            $commodityRevenue = $expectedRevenue * $commodityWeight * (1.0 + ($commodityZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 2.5));
+        }
 
-        $actualRevenue = max(0.0, $brandedRevenue + $volumeRevenue);
+        $landRevenue = 0.0;
+        $landZ = 0.0;
+        if ($landWeight > 0.0) {
+            $landZ = $mathUtility->generatePersistentZ($momentum['land_speculation'] ?? 0.0, 0.50);
+            $landRevenue = $expectedRevenue * $landWeight * (1.0 + ($landZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.5));
+        }
+
+        $actualRevenue = max(0.0, $brandedRevenue + $volumeRevenue + $commodityRevenue + $landRevenue);
 
         // Agricultural & Packaging Commodity Input Cost Elasticity:
         // Fluctuations in bulk agricultural processing ($volumeZ) smoothly shift variable input costs.
@@ -121,35 +142,39 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         $primaryShockZ = abs($eventZ) > abs($brandedZ) ? $eventZ : $brandedZ;
         $observableShockZ = ($brandedZ * $brandedWeight + $volumeZ * $volumeWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
 
-        return new SectorPhysicsResult(
+        $streamZ = [
+            'branded' => $brandedZ,
+            'volume'  => $volumeZ,
+            'event'   => $eventZ,
+        ];
+        
+        $streamRevenue = [
+            'branded' => $brandedRevenue,
+            'volume'  => $volumeRevenue,
+        ];
+
+        if ($commodityWeight > 0.0) {
+            $streamZ['commodity_trading'] = $commodityZ;
+            $streamRevenue['commodity_trading'] = $commodityRevenue;
+        }
+        
+        if ($landWeight > 0.0) {
+            $streamZ['land_speculation'] = $landZ;
+            $streamRevenue['land_speculation'] = $landRevenue;
+        }
+
+        $result = new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'branded' => $brandedZ,
-                'volume'  => $volumeZ,
-                'event'   => $eventZ,
-            ],
-            streamRevenue: [
-                'branded' => $brandedRevenue,
-                'volume'  => $volumeRevenue,
-            ],
+            streamZ: $streamZ,
+            streamRevenue: $streamRevenue,
         );
-    }
-
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
-    {
-        // Retail scanner data: ~20% revenue visibility. Recalls are public events: ~80% cost visibility.
-        return new \App\DTO\SectorCoverageProfile(
-            baseVisibility:      0.20,
-            errorStdDev:         0.05,
-            minVisibility:       0.0,
-            eventBaseVisibility: 0.80,
-            eventMinVisibility:  0.0,
-        );
+        
+        return $result;
     }
 
     public function getMarginReversionSpeed(): float

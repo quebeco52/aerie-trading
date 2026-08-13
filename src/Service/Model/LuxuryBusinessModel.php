@@ -20,6 +20,10 @@ use App\Service\Macro\MacroEngine;
  */
 class LuxuryBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Analyst Visibility & Error ---
+    public const BASE_COVERAGE_VISIBILITY = 0.50;
+    public const BASE_COVERAGE_ERROR = 0.05;
+    public const BASE_COVERAGE_MIN_VISIBILITY = 0.30;
     public function getModelThresholds(): array
     {
         return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.10, 'moat_spread' => 0.020, 'nwc_intensity' => 0.15, 'capex_completion_rate' => 0.33];
@@ -168,12 +172,6 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
                 'accessible'    => $accessibleRevenue,
             ],
         );
-    }
-
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
-    {
-        // Fashion cycles tracked by retail data (~50% visibility, 30% floor).
-        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.05, minVisibility: 0.30);
     }
 
     public function getMarginReversionSpeed(): float

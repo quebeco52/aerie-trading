@@ -21,6 +21,10 @@ use App\Service\Macro\MacroEngine;
  */
 class ShippingBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Analyst Visibility & Error ---
+    public const BASE_COVERAGE_VISIBILITY = 0.75;
+    public const BASE_COVERAGE_ERROR = 0.10;
+    public const BASE_COVERAGE_MIN_VISIBILITY = 0.50;
     public function getModelThresholds(): array
     {
         return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.30, 'moat_spread' => 0.000, 'nwc_intensity' => 0.10, 'capex_completion_rate' => 0.125];
@@ -159,19 +163,6 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
                 'spot'     => $spotRevenue,
                 'contract' => $contractRevenue,
             ],
-        );
-    }
-
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
-    {
-        // Baltic Dry Index and Harpex give analysts ~75% visibility (50% floor).
-        // Canal blockages, port strikes, and maritime disasters are extremely public.
-        return new \App\DTO\SectorCoverageProfile(
-            baseVisibility: 0.75,
-            errorStdDev: 0.05,
-            minVisibility: 0.50,
-            eventBaseVisibility: 0.95,
-            eventMinVisibility: 0.80
         );
     }
 

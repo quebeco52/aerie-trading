@@ -168,7 +168,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    public function getCoverageProfile(\App\Entity\Stock $stock): \App\DTO\SectorCoverageProfile
     {
         // Cost-plus inflation is 100% public. Defense contracts are mostly public (~50% visibility).
         // Major defense contract wins/losses and geopolitical shocks are highly public.

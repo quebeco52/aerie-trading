@@ -228,7 +228,7 @@ class EarningsEngine
         $ctx->actualRevenue = $actuals->actualRevenue;
         $ctx->actualVariableCosts = $actuals->actualVariableCosts;
 
-        $coverage = $ctx->strategy->getCoverageProfile();
+        $coverage = $ctx->strategy->getCoverageProfile($ctx->stock);
         $consensus = $this->marketConsensusEngine->generateConsensus($actuals, $coverage, $ctx->expectedRevenue, $this->mathUtility, $ctx->stock, $ctx->macroState->marketVolatilityEma);
         $ctx->analystExpectedRevenue = $consensus->analystExpectedRevenue;
         $ctx->analystExpectedVariableCosts = $consensus->analystExpectedVariableCosts;

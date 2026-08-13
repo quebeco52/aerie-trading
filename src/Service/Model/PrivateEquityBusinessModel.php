@@ -243,11 +243,13 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.50); // High persistence due to multi-year deal funnels
 
         $params = $this->resolveModelParameters($stock, [
-            'management_fee_weight'   => 0.35,
-            'carried_interest_weight' => 0.65,
+            'management_fee_weight'        => 0.35,
+            'carried_interest_weight'      => 0.65,
+            'principal_investments_weight' => 0.00,
         ]);
-        $mgmtWeight     = $params['management_fee_weight'];
-        $carryWeight    = $params['carried_interest_weight'];
+        $mgmtWeight      = $params['management_fee_weight'];
+        $carryWeight     = $params['carried_interest_weight'];
+        $principalWeight = $params['principal_investments_weight'];
 
         // 1. GDP Deal Flow Multiplier:
         $outputGap = $macroState->outputGapEma;
@@ -273,7 +275,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         // Economic condition for the hurdle
         $economicCondition = $revenueZ + $dealFlowMultiplier;
 
-        $blendedMultiplier = ($mgmtWeight * 1.0) + ($carryWeight * $multipleCompression);
+        $blendedMultiplier = ($mgmtWeight * 1.0) + ($carryWeight * $multipleCompression) + ($principalWeight * 1.0);
 
         // Because expectations are structurally scaled by blendedMultiplier via getMacroPhysics,
         // we extract the 'optimal' revenue first to prevent double-counting the multiplier.
@@ -299,7 +301,14 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
             $missedHurdle = true;
         }
 
-        $actualRevenue = max(0.0, $mgmtRevenue + $carriedInterestRevenue);
+        $principalInvestmentsRevenue = 0.0;
+        $principalZ = 0.0;
+        if ($principalWeight > 0.0) {
+            $principalZ = $mathUtility->generatePersistentZ($momentum['principal'] ?? 0.0, 0.20);
+            $principalInvestmentsRevenue = $optimalRevenue * $principalWeight * (1.0 + ($principalZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 2.0));
+        }
+
+        $actualRevenue = max(0.0, $mgmtRevenue + $carriedInterestRevenue + $principalInvestmentsRevenue);
 
         // 5. Structural Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
@@ -322,24 +331,35 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         // observableShockZ represents the percentage deviation of actual revenue from expected revenue.
         $observableShockZ = $expectedRevenue > 0.0 ? (($actualRevenue - $expectedRevenue) / $expectedRevenue) : 0.0;
 
-        return new SectorPhysicsResult(
+        $streamZ = [
+            'revenue' => $revenueZ,
+        ];
+        
+        $streamRevenue = [
+            'management_fees'  => $mgmtRevenue,
+            'carried_interest' => $carriedInterestRevenue,
+        ];
+
+        if ($principalWeight > 0.0) {
+            $streamZ['principal'] = $principalZ;
+            $streamRevenue['principal_investments'] = $principalInvestmentsRevenue;
+        }
+
+        $result = new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $revenueZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'revenue' => $revenueZ,
-            ],
-            streamRevenue: [
-                'management_fees'  => $mgmtRevenue,
-                'carried_interest' => $carriedInterestRevenue,
-            ],
+            streamZ: $streamZ,
+            streamRevenue: $streamRevenue,
         );
+        
+        return $result;
     }
 
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    public function getCoverageProfile(\App\Entity\Stock $stock): \App\DTO\SectorCoverageProfile
     {
         // Macro GDP and credit spread drags are public; individual exits are opaque (~20% visible).
         // Hostile takeovers and mega LBO announcements are highly public events.

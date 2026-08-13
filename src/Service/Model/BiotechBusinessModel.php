@@ -169,7 +169,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    public function getCoverageProfile(\App\Entity\Stock $stock): \App\DTO\SectorCoverageProfile
     {
         // Dual-mode: FDA/trial announcements are binary public events (85% visible, 70% floor).
         // Routine operational variance is low-visibility (~20%, 10% floor).

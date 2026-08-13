@@ -20,6 +20,9 @@ use App\Service\Macro\MacroEngine;
  */
 class UtilityBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Analyst Visibility & Error ---
+    public const BASE_COVERAGE_VISIBILITY = 0.20;
+    public const BASE_COVERAGE_ERROR = 0.05;
     public function getModelThresholds(): array
     {
         return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.15, 'moat_spread' => 0.015, 'nwc_intensity' => 0.12, 'capex_completion_rate' => 0.125];
@@ -165,12 +168,6 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
                 'unregulated'      => $unregulatedRevenue,
             ],
         );
-    }
-
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
-    {
-        // Regulated tariff schedules and EIA production data give analysts ~20% visibility.
-        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.20, errorStdDev: 0.05);
     }
 
     public function getMarginReversionSpeed(): float

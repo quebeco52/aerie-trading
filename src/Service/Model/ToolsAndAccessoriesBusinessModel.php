@@ -183,7 +183,7 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    public function getCoverageProfile(\App\Entity\Stock $stock): \App\DTO\SectorCoverageProfile
     {
         // B2B precision tooling orders are opaque and hard for retail analysts to track.
         return new \App\DTO\SectorCoverageProfile(

@@ -21,6 +21,9 @@ use App\Service\Event\ShockEvent;
  */
 class CommodityBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Analyst Visibility & Error ---
+    public const BASE_COVERAGE_VISIBILITY = 0.80;
+    public const BASE_COVERAGE_ERROR = 0.10;
     public function getModelThresholds(): array
     {
         return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.30, 'moat_spread' => 0.000, 'nwc_intensity' => 0.15, 'capex_completion_rate' => 0.125];
@@ -102,11 +105,13 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         $params = $this->resolveModelParameters($stock, [
             'extraction_revenue_weight' => self::EXTRACTION_REVENUE_WEIGHT,
             'spot_price_weight'         => self::SPOT_PRICE_WEIGHT,
+            'refining_spread_weight'    => 0.00,
             'spot_price_sensitivity'    => self::SPOT_PRICE_SENSITIVITY,
         ]);
 
         $extractionWeight = $params['extraction_revenue_weight'];
         $spotWeight       = $params['spot_price_weight'];
+        $refiningWeight   = $params['refining_spread_weight'];
         $spotSensitivity  = $params['spot_price_sensitivity'];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
@@ -147,7 +152,16 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         $energyBonus = $energyShift * self::INFLATION_BONUS_SCALAR * $spotSensitivity; 
 
         $spotRevenue   = $expectedRevenue * $spotWeight * (1.0 + ($spotZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $inflationBonus + $energyBonus) * $spotMultiplier;
-        $actualRevenue = max(0.0, $extractionRevenue + $spotRevenue);
+        
+        $refiningRevenue = 0.0;
+        $refiningZ = 0.0;
+        if ($refiningWeight > 0.0) {
+            $refiningZ = $mathUtility->generatePersistentZ($momentum['refining'] ?? 0.0, 0.40);
+            $crackSpreadBonus = max(0.0, $macroState->outputGapEma * 2.0); // Refiners print money when output gap is tight (high capacity utilization)
+            $refiningRevenue = $expectedRevenue * $refiningWeight * (1.0 + ($refiningZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5) + $crackSpreadBonus);
+        }
+
+        $actualRevenue = max(0.0, $extractionRevenue + $spotRevenue + $refiningRevenue);
 
         // The total realizedVariableMargin is exclusively allocated to physical extraction.
         // Spot price shocks carry 100% gross margin (0% variable cost), serving as pure operating leverage.
@@ -172,29 +186,34 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         $spotShockTotal = ($spotZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $inflationBonus + $energyBonus;
         $observableShockZ = ($extractionShock * $extractionWeight) + (($spotShockTotal * $spotWeight) / 0.20);
 
-        return new SectorPhysicsResult(
+        $streamZ = [
+            'extraction' => $extractionZ,
+            'spot'       => $spotZ,
+            'event'      => $eventZ,
+        ];
+        
+        $streamRevenue = [
+            'extraction' => $extractionRevenue,
+            'spot'       => $spotRevenue,
+        ];
+
+        if ($refiningWeight > 0.0) {
+            $streamZ['refining'] = $refiningZ;
+            $streamRevenue['refined_products'] = $refiningRevenue;
+        }
+
+        $result = new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'extraction' => $extractionZ,
-                'spot'       => $spotZ,
-                'event'      => $eventZ,
-            ],
-            streamRevenue: [
-                'extraction' => $extractionRevenue,
-                'spot'       => $spotRevenue,
-            ],
+            streamZ: $streamZ,
+            streamRevenue: $streamRevenue,
         );
-    }
-
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
-    {
-        // Commodity spot prices and inflation are public. Physical extraction volumes are ~20% visible.
-        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.20, errorStdDev: 0.05);
+        
+        return $result;
     }
 
     public function getWorkingCapitalIntensity(Stock $stock): float

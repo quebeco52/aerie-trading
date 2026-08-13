@@ -34,9 +34,33 @@ trait StandardOperatingPhysicsTrait
         return $macroTaxRate;
     }
 
-    public function getCoverageProfile(): SectorCoverageProfile
+    public function getCoverageProfile(Stock $stock): SectorCoverageProfile
     {
-        return new SectorCoverageProfile(baseVisibility: 0.20, errorStdDev: 0.06);
+        $params = $this->resolveModelParameters($stock, [
+            'base_visibility' => defined('static::BASE_COVERAGE_VISIBILITY') ? static::BASE_COVERAGE_VISIBILITY : 0.20,
+            'coverage_error'  => defined('static::BASE_COVERAGE_ERROR') ? static::BASE_COVERAGE_ERROR : 0.06,
+            'min_visibility'  => defined('static::BASE_COVERAGE_MIN_VISIBILITY') ? static::BASE_COVERAGE_MIN_VISIBILITY : 0.0,
+        ]);
+
+        $visibility = $params['base_visibility'];
+        $error      = $params['coverage_error'];
+        $minVis     = $params['min_visibility'];
+
+        // Systemic importance modifier: titans get more analyst coverage
+        $importance = $stock->getSystemicImportance();
+        if ($importance === 'titan') {
+            $visibility += 0.15;
+            $minVis += 0.10;
+        } elseif ($importance === 'systemic') {
+            $visibility += 0.10;
+            $minVis += 0.05;
+        }
+
+        return new SectorCoverageProfile(
+            baseVisibility: min(1.0, $visibility),
+            errorStdDev: $error,
+            minVisibility: min(1.0, $minVis)
+        );
     }
 
     public function getWorkingCapitalIntensity(Stock $stock): float

@@ -177,7 +177,7 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    public function getCoverageProfile(\App\Entity\Stock $stock): \App\DTO\SectorCoverageProfile
     {
         // Foot traffic and credit card data make restaurant sales moderately visible.
         // Food safety recalls are highly public.

@@ -69,17 +69,18 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         return $thresholds;
     }
 
-    public function getSecularGrowthRate(Stock $stock): float { return 0.045; }
+    public function getSecularGrowthRate(Stock $stock): float
+    {
+        return 0.045;
+    }
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
 
-        $outputGap = $macroState->outputGapEma;
-        $beta = (float) $stock->getBeta();
-
-        // Slightly higher macro demand shift due to cyclical upgrade cycles
-        $physics['macro_demand_shift'] = $outputGap * $beta * 1.30;
+        // Set to 0.0 to prevent double-dipping, as macro volume shocks 
+        // are handled discretely per-stream in calculateSectorPhysics.
+        $physics['macro_demand_shift'] = 0.0;
 
         return $physics;
     }
@@ -104,9 +105,9 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         $standardParams = $this->resolveModelParameters($stock, ['pricing_power_index' => 0.5]);
         $pricingPower = max(0.0, min(1.0, $standardParams['pricing_power_index']));
         $macroSensitivityMultiplier = 0.5 + $pricingPower;
-        
+
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
-        
+
         $enterpriseMacroVolumeShock = $macroState->outputGapEma * $macroSensitivityMultiplier * abs((float) $stock->getBeta());
         $consumerMacroVolumeShock = $sentimentShift * $macroSensitivityMultiplier * abs((float) $stock->getBeta());
 
@@ -115,7 +116,7 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         $consumerMultiplier = 1.0;
         $eventType = null;
         $shortagePenalty = 0.0;
-        
+
         if ($eventZ < self::SEMICONDUCTOR_SHORTAGE_Z_SCORE) {
             $shortagePenalty = self::SEMICONDUCTOR_SHORTAGE_PENALTY;
             $eventType = ShockEvent::SEMICONDUCTOR_FAB_SHORTAGE;
@@ -128,10 +129,10 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
 
         // Consumer revenue gets a massive variance scalar (boom/bust upgrade cycles)
         // Enterprise revenue gets a dampened variance scalar (sticky B2B contracts)
-        $enterpriseRevenue = $expectedRevenue * $enterpriseWeight * (1.0 + ($enterpriseZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.5)) + $enterpriseMacroVolumeShock) * $enterpriseMultiplier;
-        $consumerRevenue   = $expectedRevenue * $consumerWeight   * (1.0 + ($consumerZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5)) + $consumerMacroVolumeShock) * $consumerMultiplier;
+        $enterpriseRevenue = max(0.0, $expectedRevenue * $enterpriseWeight * (1.0 + ($enterpriseZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.5)) + $enterpriseMacroVolumeShock) * $enterpriseMultiplier);
+        $consumerRevenue   = max(0.0, $expectedRevenue * $consumerWeight * (1.0 + ($consumerZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5)) + $consumerMacroVolumeShock) * $consumerMultiplier);
 
-        $actualRevenue = max(0.0, $enterpriseRevenue + $consumerRevenue);
+        $actualRevenue = $enterpriseRevenue + $consumerRevenue; // Already safe from negatives
 
         // --- Structural Margin Blending ---
         // Enterprise B2B hardware operates at a structurally lower variable cost (higher margin).
@@ -143,7 +144,7 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
 
         // Derive required consumer cost ratio to hit the engine's target margin at baseline
         $targetTotalCosts = $expectedRevenue * $realizedVariableMargin;
-        $consumerBaselineCosts = $targetTotalCosts - $enterpriseBaselineCosts;
+        $consumerBaselineCosts = max(0.0, $targetTotalCosts - $enterpriseBaselineCosts);
         $consumerVariableMargin = $expectedConsumerRevenue > 0 ? $consumerBaselineCosts / $expectedConsumerRevenue : $realizedVariableMargin;
 
         // Apply derived distinct margins to actual shocked revenues
@@ -151,14 +152,15 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
 
         // Re-implementing Inflation Penalty (dropped from Standard Corporate model)
         $inflation = $macroState->inflationEma;
-        $inflationMultiplier = 2.0 - ($pricingPower * 2.0); 
+        $inflationMultiplier = 2.0 - ($pricingPower * 2.0);
         $baseInflationPenalty = $inflation > MacroEngine::TARGET_INFLATION ? ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0;
         $inflationPenalty = $baseInflationPenalty * $inflationMultiplier;
 
         // Continuous Elasticity
         $elasticityShift = -self::ENTERPRISE_SOFTWARE_ATTACH_ELASTICITY * $enterpriseZ * $enterpriseWeight;
 
-        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $shortagePenalty + $inflationPenalty + $elasticityShift;
+        $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
+        $rawMargin = $effectiveMargin + $shortagePenalty + $inflationPenalty + $elasticityShift;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Blended primary shock for standard model integration
@@ -177,18 +179,18 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: [
-                'enterprise' => $enterpriseZ,
-                'consumer'   => $consumerZ,
-                'event'      => $eventZ,
+                'enterprise_hardware' => $enterpriseZ,
+                'consumer_hardware'   => $consumerZ,
+                'event'               => $eventZ,
             ],
             streamRevenue: [
-                'Enterprise Hardware' => $enterpriseRevenue,
-                'Consumer Hardware' => $consumerRevenue,
+                'enterprise_hardware' => $enterpriseRevenue,
+                'consumer_hardware'   => $consumerRevenue,
             ]
         );
     }
 
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    public function getCoverageProfile(\App\Entity\Stock $stock): \App\DTO\SectorCoverageProfile
     {
         // Consumer tech supply chains are heavily scrutinized and scraped.
         return new \App\DTO\SectorCoverageProfile(

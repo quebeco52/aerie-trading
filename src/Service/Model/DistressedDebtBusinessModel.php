@@ -21,6 +21,10 @@ use App\Service\Macro\MacroEngine;
  */
 class DistressedDebtBusinessModel extends AssetManagementBusinessModel
 {
+    // --- Analyst Visibility & Error ---
+    public const BASE_COVERAGE_VISIBILITY = 0.90;
+    public const BASE_COVERAGE_ERROR = 0.05;
+    public const BASE_COVERAGE_MIN_VISIBILITY = 0.80;
     public function getModelThresholds(): array
     {
         return ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => 0.5,  'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.18, 'moat_spread' => 0.005, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 1.0];
@@ -83,40 +87,56 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
         }
 
         $params = $this->resolveModelParameters($stock, [
-            'advisory_fee_weight'   => 0.40,
-            'asset_recovery_weight' => 0.60,
+            'advisory_fee_weight'      => 0.40,
+            'asset_recovery_weight'    => 0.60,
+            'loan_to_own_gains_weight' => 0.00,
         ]);
-        $advisoryWeight = $params['advisory_fee_weight'];
-        $recoveryWeight = $params['asset_recovery_weight'];
+        $advisoryWeight   = $params['advisory_fee_weight'];
+        $recoveryWeight   = $params['asset_recovery_weight'];
+        $loanToOwnWeight  = $params['loan_to_own_gains_weight'];
 
         $advisoryRevenue = $expectedRevenue * $advisoryWeight * (1.0 + ($revenueZ * ($baselineVol * 0.5)));
         $recoveryRevenue = $expectedRevenue * $recoveryWeight * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $distressMultiplier);
-        $actualRevenue   = max(0.0, $advisoryRevenue + $recoveryRevenue);
+        
+        $loanToOwnRevenue = 0.0;
+        $loanToOwnZ = 0.0;
+        if ($loanToOwnWeight > 0.0) {
+            $loanToOwnZ = $mathUtility->generatePersistentZ($momentum['loan_to_own'] ?? 0.0, 0.40);
+            // Loan-to-own explodes when credit spreads blow out
+            $loanToOwnRevenue = $expectedRevenue * $loanToOwnWeight * (1.0 + ($loanToOwnZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5) + ($distressMultiplier * 1.5));
+        }
+
+        $actualRevenue   = max(0.0, $advisoryRevenue + $recoveryRevenue + $loanToOwnRevenue);
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin);
 
+        $streamZ = [
+            'revenue' => $revenueZ,
+        ];
+        
+        $streamRevenue = [
+            'advisory' => $advisoryRevenue,
+            'recovery' => $recoveryRevenue,
+        ];
+
+        if ($loanToOwnWeight > 0.0) {
+            $streamZ['loan_to_own'] = $loanToOwnZ;
+            $streamRevenue['loan_to_own_gains'] = $loanToOwnRevenue;
+        }
+
         // observableShockZ: macro credit spreads and corporate default rates are public data (~90% visibility).
-        return new SectorPhysicsResult(
+        $result = new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $revenueZ,
             observableShockZ: $revenueZ * ($baselineVol * 0.90),
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'revenue' => $revenueZ,
-            ],
-            streamRevenue: [
-                'advisory' => $advisoryRevenue,
-                'recovery' => $recoveryRevenue,
-            ],
+            streamZ: $streamZ,
+            streamRevenue: $streamRevenue,
         );
-    }
-
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
-    {
-        // Macro credit spreads and default rates are fully public (~90% visible, 80% floor).
-        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.90, errorStdDev: 0.05, minVisibility: 0.80);
+        
+        return $result;
     }
 
     public function evaluateHoardingStatus(float $treasury, float $targetCashReserves, float $operatingBase, float $totalDebt): array

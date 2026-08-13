@@ -185,7 +185,7 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         );
     }
 
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
+    public function getCoverageProfile(\App\Entity\Stock $stock): \App\DTO\SectorCoverageProfile
     {
         // B2B long-cycle orders are opaque (low base visibility).
         // Mega infrastructure deal wins are widely publicized (high event visibility).

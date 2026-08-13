@@ -53,7 +53,8 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
     // --- Analyst Visibility & Error ---
-    // Moved to getCoverageProfile() — see MarketConsensusEngine.
+    public const BASE_COVERAGE_VISIBILITY = 0.20;
+    public const BASE_COVERAGE_ERROR = 0.06;
 
     // --- DCF & Valuation Rails ---
     /** Assumed perpetual terminal growth rate for DCF fair value estimation. */
@@ -159,14 +160,6 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
             ],
         );
     }
-
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
-    {
-        // Supply chain inflation is fully visible via CPI/PPI reports.
-        // Individual product demand shocks are partially visible via retail foot traffic (~20%).
-        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.20, errorStdDev: 0.05);
-    }
-
 
     /**
      * Normal physical companies are evaluated on NOPAT / Invested Capital (ROIC).

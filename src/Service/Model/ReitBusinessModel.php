@@ -21,6 +21,9 @@ use App\Service\Macro\MacroEngine;
  */
 class ReitBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Analyst Visibility & Error ---
+    public const BASE_COVERAGE_VISIBILITY = 0.70;
+    public const BASE_COVERAGE_ERROR = 0.10;
     public function getModelThresholds(): array
     {
         return ['min_icr' => 1.05, 'bankrupt_equity' => 10.0, 'distress_equity' => 20.0, 'warning_equity' => 30.0, 'wholesale_leverage_limit' => 2.0,  'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.20, 'moat_spread' => 0.005, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 0.125];
@@ -191,11 +194,15 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.25);
 
         $params = $this->resolveModelParameters($stock, [
-            'sticky_lease_weight'         => 0.85,
-            'variable_hospitality_weight' => 0.15,
+            'sticky_lease_weight'            => 0.85,
+            'variable_hospitality_weight'    => 0.15,
+            'securitization_income_weight'   => 0.00,
+            'longevity_bond_yield_weight'    => 0.00,
         ]);
-        $leaseWeight      = $params['sticky_lease_weight'];
-        $hospitalityWeight = $params['variable_hospitality_weight'];
+        $leaseWeight        = $params['sticky_lease_weight'];
+        $hospitalityWeight  = $params['variable_hospitality_weight'];
+        $securitizationWeight = $params['securitization_income_weight'];
+        $longevityWeight    = $params['longevity_bond_yield_weight'];
 
         // REIT sticky lease revenues are incredibly stable due to multi-year binding contracts
         $leaseShock = $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
@@ -209,7 +216,22 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
         $leaseRevenue        = $expectedRevenue * $leaseWeight * (1.0 + $leaseShock + $rentEscalator);
         $hospitalityRevenue  = $expectedRevenue * $hospitalityWeight * (1.0 + $hospitalityShock);
-        $actualRevenue       = max(0.0, $leaseRevenue + $hospitalityRevenue);
+        
+        $securitizationRevenue = 0.0;
+        $securitizationZ = 0.0;
+        if ($securitizationWeight > 0.0) {
+            $securitizationZ = $mathUtility->generatePersistentZ($momentum['securitization'] ?? 0.0, 0.40);
+            $securitizationRevenue = $expectedRevenue * $securitizationWeight * (1.0 + ($securitizationZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 2.0));
+        }
+
+        $longevityRevenue = 0.0;
+        $longevityZ = 0.0;
+        if ($longevityWeight > 0.0) {
+            $longevityZ = $mathUtility->generatePersistentZ($momentum['longevity'] ?? 0.0, 0.60);
+            $longevityRevenue = $expectedRevenue * $longevityWeight * (1.0 + ($longevityZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.25));
+        }
+
+        $actualRevenue       = max(0.0, $leaseRevenue + $hospitalityRevenue + $securitizationRevenue + $longevityRevenue);
 
         // The Tenant Default Shock (Vacancy) & Refinancing Wall:
         // Deep recessions cause anchor tenants to break leases.
@@ -234,28 +256,38 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::REIT_ELEVATED_VACANCIES;
         }
 
-        return new SectorPhysicsResult(
+        $streamZ = [
+            'revenue'        => $revenueZ,
+            'tenant_default' => $tenantDefaultZ,
+        ];
+        
+        $streamRevenue = [
+            'lease'       => $leaseRevenue,
+            'hospitality' => $hospitalityRevenue,
+        ];
+
+        if ($securitizationWeight > 0.0) {
+            $streamZ['securitization'] = $securitizationZ;
+            $streamRevenue['securitization_income'] = $securitizationRevenue;
+        }
+        
+        if ($longevityWeight > 0.0) {
+            $streamZ['longevity'] = $longevityZ;
+            $streamRevenue['longevity_bond_yield'] = $longevityRevenue;
+        }
+
+        $result = new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: abs($tenantDefaultZ) > abs($revenueZ) ? $tenantDefaultZ : $revenueZ,
             // Rent escalators (inflation) and 10Y Treasury yields are 100% visible; vacancies ~70% visible
             observableShockZ: $rentEscalator,
             eventType: $eventType,
-            streamZ: [
-                'revenue'        => $revenueZ,
-                'tenant_default' => $tenantDefaultZ,
-            ],
-            streamRevenue: [
-                'lease'       => $leaseRevenue,
-                'hospitality' => $hospitalityRevenue,
-            ],
+            streamZ: $streamZ,
+            streamRevenue: $streamRevenue,
         );
-    }
-
-    public function getCoverageProfile(): \App\DTO\SectorCoverageProfile
-    {
-        // Rent escalators fully public; vacancy surveys give ~70% visibility.
-        return new \App\DTO\SectorCoverageProfile(baseVisibility: 0.70, errorStdDev: 0.10);
+        
+        return $result;
     }
 
     /**
