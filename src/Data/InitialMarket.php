@@ -822,7 +822,7 @@ class InitialMarket
             'price' => 411.00,
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.30,
-            'beta' => 1.70,
+            'beta' => 1.50,
             'jump_intensity' => 0.75,
             'jump_mean' => -0.04,
             'jump_vol' => 0.08,
@@ -840,7 +840,7 @@ class InitialMarket
             'depreciation_rate' => 0.06,
             'corporate_treasury' => 8_000_000_000.00,
             'total_net_income'  => 10_480_000_000.00,
-            'total_equity'      => 65_500_000_000.00,
+            'total_equity'      => 125_500_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 94_975_000_000.00,
             'retained_earnings' => 10_000_000_000.00

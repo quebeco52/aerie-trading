@@ -47,6 +47,7 @@ class Sectors
         'computer_hardware' => 'Physical technology manufacturing. Fast depreciation and inventory obsolescence create high baseline variance. Split between highly volatile B2C consumer electronics and stickier, high-margin B2B enterprise sales.',
         'internet_retail' => 'Digital retail apex predators. Extremely high macro sensitivity and inflation penalties due to massive fulfillment networks. Blends asset-light, high-margin third-party marketplace fees with volatile, logistics-heavy first-party retail.',
         'restaurant'      => 'Operates a mix of corporate-owned and franchised locations. Corporate stores have high revenue and high fixed costs. Franchise operations generate low revenue but near 100% margin royalty streams. Highly sensitive to consumer discretionary spending and input inflation.',
+        'resorts_casinos' => 'Integrated resorts and casinos. Dual-stream engine: high-margin gaming (subject to volatile "Whale Luck") and sticky non-gaming conventions. Highly elastic to consumer sentiment, suffering promotional margin drag during downturns.',
         'none'            => 'Standard corporate physics. Evaluated on Return on Invested Capital (ROIC). Subject to physical depreciation and supply chain inflation penalties when costs rise faster than pricing power. Idiosyncratic variance applies directly to sales volume.',
     ];
 
@@ -153,7 +154,7 @@ class Sectors
         'REIT - Specialty' => ['pe' => 16.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'reit'], // Data centers, cell towers
         'Rental & Leasing Services' => ['pe' => 15.00, 'depreciation' => 0.10, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'none'], // Rental cars depreciate fast
         'Residential Construction' => ['pe' => 10.00, 'depreciation' => 0.02, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'none'], // Homebuilders. Highly cyclical.
-        'Resorts & Casinos' => ['pe' => 18.00, 'depreciation' => 0.06, 'ebitda_limit' => 4.5, 'equity_limit' => 2.0, 'business_model' => 'none'], // Collateralized by prime real estate
+        'Resorts & Casinos' => ['pe' => 18.00, 'depreciation' => 0.06, 'ebitda_limit' => 4.5, 'equity_limit' => 2.0, 'business_model' => 'resorts_casinos'], // Collateralized by prime real estate
         'Restaurants' => ['pe' => 20.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'restaurant'], // Mix of corporate and franchise
         'Scientific & Technical Instruments' => ['pe' => 26.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'none'], // High margin, IP heavy
         'Security & Protection Services' => ['pe' => 18.00, 'depreciation' => 0.04, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'defense_contractor'],
@@ -210,6 +211,7 @@ class Sectors
             'commercial_bank' => new \App\Service\Model\CommercialBankBusinessModel(),
             'insurance'       => new \App\Service\Model\InsuranceBusinessModel(),
             'brokerage'       => new \App\Service\Model\BrokerageBusinessModel(),
+            'resorts_casinos' => new \App\Service\Model\ResortsCasinosBusinessModel(),
             'asset_manager'   => new \App\Service\Model\AssetManagementBusinessModel(),
             'credit_services' => new \App\Service\Model\CreditServicesBusinessModel(),
             'private_equity'  => new \App\Service\Model\PrivateEquityBusinessModel(),

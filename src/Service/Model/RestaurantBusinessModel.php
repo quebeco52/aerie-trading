@@ -34,8 +34,8 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     // --- Revenue & Shock Physics ---
     /** High sensitivity to consumer discretionary spending. */
     public const REVENUE_VARIANCE_SCALAR = 0.40;
-    /** Structural variable cost ratio of franchise royalties (near 100% margin). */
-    public const FRANCHISE_VARIABLE_COST_RATIO = 0.02;
+    /** Multiplier indicating how much cheaper franchise variable costs are compared to corporate. */
+    public const FRANCHISE_COST_INTENSITY = 0.05;
     /** Sensitivity scalar for supply chain inflation cost penalties during high CPI/PPI regimes. */
     public const INFLATION_PENALTY_SCALAR = 1.50; // Massively exposed to food & labor inflation
 
@@ -132,16 +132,11 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         // --- Structural Margin Blending ---
         // Corporate stores pay the bulk of the variable costs (food, labor, utilities).
         // Franchise revenue is a royalty stream with near 100% margin (minimal variable cost).
-        $expectedCorporateRevenue = $expectedRevenue * $corporateWeight;
-        $expectedFranchiseRevenue = $expectedRevenue * $franchiseWeight;
+        // We dynamically scale their costs against the total realizedVariableMargin to guarantee neither is ever negative.
+        $corporateVariableMargin = $realizedVariableMargin / ($corporateWeight + (self::FRANCHISE_COST_INTENSITY * $franchiseWeight));
+        $franchiseVariableMargin = $corporateVariableMargin * self::FRANCHISE_COST_INTENSITY;
 
-        $franchiseBaselineCosts = $expectedFranchiseRevenue * self::FRANCHISE_VARIABLE_COST_RATIO;
-        $targetTotalCosts = $expectedRevenue * $realizedVariableMargin;
-        $corporateBaselineCosts = $targetTotalCosts - $franchiseBaselineCosts;
-
-        $corporateVariableMargin = $expectedCorporateRevenue > 0 ? $corporateBaselineCosts / $expectedCorporateRevenue : $realizedVariableMargin;
-
-        $actualVariableCosts = ($corporateRevenue * $corporateVariableMargin) + ($franchiseRevenue * self::FRANCHISE_VARIABLE_COST_RATIO);
+        $actualVariableCosts = ($corporateRevenue * $corporateVariableMargin) + ($franchiseRevenue * $franchiseVariableMargin);
 
         // Re-implementing Inflation Penalty (dropped from Standard Corporate model)
         $inflation = $macroState->inflationEma;

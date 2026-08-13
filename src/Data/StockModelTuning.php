@@ -425,14 +425,22 @@ class StockModelTuning
         ],
 
         // =====================================================================
-        // STANDARD CORPORATE ARCHETYPES
+        // RESORTS & CASINOS ARCHETYPES
         // =====================================================================
 
         // --- Silver Gull Resorts (GULL) ---
         // VIP casino and resorts catering to oligarchs. Very high pricing power against inflation.
+        // VIP casino acting as bait for an apex commercial real estate and landlord empire.
+        // Massive skew towards non-gaming (extortionate revenue-sharing leases) as the primary engine.
         'GULL' => [
-            'pricing_power_index' => 0.70,
+            'pricing_power_index'       => 1.00, // Absolute monopoly pricing power over captive tenants
+            'gaming_revenue_weight'     => 0.25, // Casino floors are just the bait for foot traffic
+            'non_gaming_revenue_weight' => 0.75, // The real engine: extortionate commercial real estate leases
         ],
+
+        // =====================================================================
+        // STANDARD CORPORATE ARCHETYPES
+        // =====================================================================
 
         // --- River Stream Industries (RIVE) ---
         // Robotics and automation manufacturer. Long-term service contracts and essential margin-expanding tools.
