@@ -101,8 +101,6 @@ class MarketResetCommand extends Command
         );
 
         foreach (InitialMarket::STOCKS as $stockData) {
-
-            $netIncome = $stockData['total_net_income'] ?? 0.00;
             $margin = $stockData['operating_margin'] ?? 0.15;
 
             $historicalRate = $stockData['historical_fixed_rate'] ?? 0.04;
@@ -143,22 +141,33 @@ class MarketResetCommand extends Command
                 : $operatingYield;
 
             $shares = $stockData['shares_outstanding'] ?? 1_000_000_000;
-            $annualEps = $shares > 0 ? ($netIncome / $shares) : 0.0;
-            $targetPayout = $stockData['target_payout_ratio'] ?? 0.30;
-            $startingDividend = ($annualEps / 4.0) * ($targetPayout * 0.50);
-
-            $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
+            $bookValuePerShare = $shares > 0 ? ((float) ($stockData['total_equity'] ?? 0.0)) / $shares : 0.0;
 
             // Set required temporary values for debt engine
             $tempStock->setTotalRevenue((string)$revenue);
-            $tempStock->setEarningsPerShare((string)$annualEps);
             $tempStock->setSharesOutstanding((string)$shares);
-            $tempStock->setPrice((string)$stockData['price']);
+            $tempStock->setPrice((string)$bookValuePerShare);
 
             $debtHealth = $this->debtEngine->analyzeDebtHealth($tempStock, $dummyMacro, $revenue, $margin);
 
+            if ($isFinancial) {
+                $netIncome = ((float) ($stockData['total_equity'] ?? 0.0)) * (float) $tempStock->getBaselineRoe();
+            } else {
+                $ebit = $revenue * $margin;
+                $interestExpense = $debtHealth->interestExpense ?? 0.0;
+                $interestIncome = $strategy->calculateInterestIncome($tempStock, $dummyMacro, $this->mathUtility);
+                $ebt = $ebit - $interestExpense + $interestIncome;
+                $effectiveTaxRate = $strategy->getEffectiveTaxRate($taxRate);
+                $netIncome = max(0.0, $ebt * (1.0 - $effectiveTaxRate));
+            }
+
+            $annualEps = $shares > 0 ? ($netIncome / $shares) : 0.0;
+            $tempStock->setEarningsPerShare((string)$annualEps);
+            $targetPayout = $stockData['target_payout_ratio'] ?? 0.30;
+            $startingDividend = ($annualEps / 4.0) * ($targetPayout * 0.50);
+
             $pricingCtx = new \App\DTO\MarketPricingContext(
-                currentPrice: (float) $stockData['price'],
+                currentPrice: $bookValuePerShare,
                 currentVolatility: (float) ($stockData['volatility'] ?? 0.15),
                 longTermVolatility: (float) ($stockData['volatility'] ?? 0.15),
                 earningsPerShare: $annualEps,
@@ -170,7 +179,7 @@ class MarketResetCommand extends Command
                 marketVol: 0.15,
                 macroState: $dummyMacro,
                 fcfPerShare: null,
-                bookValuePerShare: $shares > 0 ? ($stockData['total_equity'] ?? 0.0) / $shares : 0.0,
+                bookValuePerShare: $bookValuePerShare,
                 maShock: 0.0,
                 currentRoic: $impliedPricingRoic,
                 roicTtm: $impliedPricingRoic,
@@ -260,7 +269,7 @@ class MarketResetCommand extends Command
                     'margin' => $stockData['operating_margin'] ?? 0.15,
                     'structural_var_margin' => (1.0 - ($stockData['operating_margin'] ?? 0.15)) * (1.0 - ($stockData['fixed_cost_ratio'] ?? 0.50)),
                     'float_pct' => $stockData['public_float'] ?? 0.90,
-                    'net_income' => $stockData['total_net_income'] ?? 0.00,
+                    'net_income' => $netIncome,
                     'equity' => $stockData['total_equity'] ?? 0.00,
                     'retained' => $stockData['retained_earnings'] ?? 0.00,
                     'revenue' => $revenue,

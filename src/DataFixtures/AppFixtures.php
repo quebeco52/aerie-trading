@@ -60,11 +60,17 @@ class AppFixtures extends Fixture
             $stock->setTicker($stockData['ticker']);
             $stock->setName($stockData['name']);
             $stock->setSector($stockData['sector']);
-            $stock->setPrice((string) $stockData['price']);
+            $shares = (float) ($stockData['shares_outstanding'] ?? 1_000_000_000);
+            $totalEquity = (float) ($stockData['total_equity'] ?? 0.0);
+            $bookValuePerShare = $shares > 0 ? $totalEquity / $shares : 100.0;
+            $baselineReturn = (float) ($stockData['baseline_roic'] ?? $stockData['baseline_roe'] ?? 0.10);
+            $approxPb = max(0.5, $baselineReturn / 0.08);
+            $initialPrice = max(1.0, $bookValuePerShare * $approxPb);
+            $stock->setPrice((string) round($initialPrice, 2));
 
             // Calculate Neutral EPS
             $targetPE = Sectors::MACRO_SECTORS[$stockData['sector']] ?? 20.0;
-            $neutralEps = (float) $stockData['price'] / $targetPE;
+            $neutralEps = $initialPrice / $targetPE;
             $stock->setEarningsPerShare((string) round($neutralEps, 2));
 
             // Standard Metrics
@@ -97,7 +103,6 @@ class AppFixtures extends Fixture
             $stock->setCorporateTreasury((string) ($stockData['corporate_treasury'] ?? 1000000000.00));
             $stock->setOperatingMargin((string) ($stockData['operating_margin'] ?? 0.15));
             $stock->setPublicFloatPercentage((string) ($stockData['public_float'] ?? 0.90));
-            $stock->setTotalNetIncome((string) ($stockData['total_net_income'] ?? 0.00));
             $stock->setTotalEquity((string) ($stockData['total_equity'] ?? 0.00));
             $stock->setWholesaleDebt((string) ($stockData['wholesale_debt'] ?? 0.00));
             $stock->setCustomerDeposits((string) ($stockData['customer_deposits'] ?? 0.00));

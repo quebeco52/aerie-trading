@@ -27,7 +27,9 @@ class MarketSeedCommand extends Command
     public function __construct(
         private EntityManagerInterface $entityManager,
         private UserPasswordHasherInterface $passwordHasher,
-        private MathUtility $mathUtility
+        private MathUtility $mathUtility,
+        private \App\Service\Corporate\DebtEngine $debtEngine,
+        private \App\Service\Market\MarketEngine $marketEngine
     ) {
         parent::__construct();
     }
@@ -71,12 +73,6 @@ class MarketSeedCommand extends Command
             if (!$stock) {
                 $stock = new Stock();
                 $stock->setTicker($stockData['ticker']);
-                $stock->setPrice((string) $stockData['price']);
-
-                $netIncome = $stockData['total_net_income'] ?? 0.00;
-                $shares = $stockData['shares_outstanding'] ?? 1_000_000_000;
-                $trueEps = $shares > 0 ? ($netIncome / $shares) : 0.0;
-                $stock->setEarningsPerShare((string) round($trueEps, 2));
 
                 $stock->setSharesOutstanding((string) $stockData['shares_outstanding']);
                 $stock->setVolatility((string) $stockData['volatility']);
@@ -112,16 +108,13 @@ class MarketSeedCommand extends Command
                 $stock->setFloatingDebtRatio((string) ($stockData['floating_debt_ratio'] ?? 0.30));
                 $stock->setOperatingMargin((string) ($stockData['operating_margin'] ?? 0.15));
                 $stock->setPublicFloatPercentage((string) ($stockData['public_float'] ?? 0.90));
-                $stock->setTotalNetIncome((string) ($stockData['total_net_income'] ?? 0.00));
                 $stock->setTotalEquity((string) ($stockData['total_equity'] ?? 0.00));
                 $stock->setWholesaleDebt((string) ($stockData['wholesale_debt'] ?? 0.00));
                 $stock->setCustomerDeposits((string) ($stockData['customer_deposits'] ?? 0.00));
                 $stock->setRetainedEarnings((string) ($stockData['retained_earnings'] ?? 0.00));
                 $stock->setSamRatio((string) ($stockData['sam_ratio'] ?? 1.00));
 
-                $netIncome = $stockData['total_net_income'] ?? 0.00;
                 $margin = $stockData['operating_margin'] ?? 0.15;
-
                 $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
 
                 // Query the exact structural metrics the engine uses to prevent massive gravity explosions on tick 1
@@ -134,14 +127,63 @@ class MarketSeedCommand extends Command
 
                 $stock->setTotalRevenue((string) $revenue);
 
+                $debtHealth = $this->debtEngine->analyzeDebtHealth($stock, $dummyMacro, $revenue, $margin);
+
+                if ($isFinancial) {
+                    $netIncome = ((float) ($stockData['total_equity'] ?? 0.0)) * (float) $stock->getBaselineRoe();
+                } else {
+                    $ebit = $revenue * $margin;
+                    $interestExpense = $debtHealth->interestExpense ?? 0.0;
+                    $interestIncome = $strategy->calculateInterestIncome($stock, $dummyMacro, $this->mathUtility);
+                    $ebt = $ebit - $interestExpense + $interestIncome;
+                    $effectiveTaxRate = $strategy->getEffectiveTaxRate($taxRate);
+                    $netIncome = max(0.0, $ebt * (1.0 - $effectiveTaxRate));
+                }
+
                 $shares = $stockData['shares_outstanding'] ?? 1_000_000_000;
                 $annualEps = $shares > 0 ? ($netIncome / $shares) : 0.0;
+                $stock->setTotalNetIncome((string) $netIncome);
+                $stock->setEarningsPerShare((string) round($annualEps, 2));
+
                 $targetPayout = $stockData['target_payout_ratio'] ?? 0.30;
                 $startingDividend = ($annualEps / 4.0) * ($targetPayout * 0.50);
                 $stock->setLastDividend((string) $startingDividend);
 
                 $stock->setCreditSpread((string) ($stockData['credit_spread'] ?? 0.0100));
                 $stock->setHistoricalFixedRate((string) ($stockData['historical_fixed_rate'] ?? 0.04));
+
+                $impliedPricingRoic = $isFinancial 
+                    ? max(0.01, (float) $stock->getBaselineRoe())
+                    : $impliedRoic;
+                $bookValuePerShare = $shares > 0 ? ((float) ($stockData['total_equity'] ?? 0.0)) / $shares : 0.0;
+
+                $pricingCtx = new \App\DTO\MarketPricingContext(
+                    currentPrice: $bookValuePerShare,
+                    currentVolatility: (float) ($stockData['volatility'] ?? 0.15),
+                    longTermVolatility: (float) ($stockData['volatility'] ?? 0.15),
+                    earningsPerShare: $annualEps,
+                    dt: 0.0,
+                    lambda: (float) ($stockData['jump_intensity'] ?? 2.0),
+                    jumpVol: (float) ($stockData['jump_vol'] ?? 0.05),
+                    beta: (float) ($stockData['beta'] ?? 1.0),
+                    marketZ: 0.0,
+                    marketVol: 0.15,
+                    macroState: $dummyMacro,
+                    fcfPerShare: null,
+                    bookValuePerShare: $bookValuePerShare,
+                    maShock: 0.0,
+                    currentRoic: $impliedPricingRoic,
+                    roicTtm: $impliedPricingRoic,
+                    dividendPerShare: $startingDividend,
+                    liveWacc: $debtHealth->wacc ?? 0.08,
+                    baselineIndustryPE: \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['pe'] ?? 20.0,
+                    revenuePerShare: $shares > 0 ? $revenue / $shares : 0.0,
+                    businessModel: $businessModel,
+                    liveCostOfEquity: $debtHealth->costOfEquity ?? 0.10
+                );
+
+                $marketCalc = $this->marketEngine->calculateNextPrice($pricingCtx);
+                $stock->setPrice((string) $marketCalc['perceived_fair_value']);
             }
             $stock->setName($stockData['name']);
             $stock->setSector($stockData['sector']);

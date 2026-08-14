@@ -259,7 +259,8 @@ class DebtEngine
         $currentDebt = (float) $stock->getTotalDebt();
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
         $equity = (float) $stock->getTotalEquity();
-        $marketCap = (float) $stock->getPrice() * max(1.0, (float) $stock->getSharesOutstanding());
+        $stockPrice = (float) $stock->getPrice();
+        $marketCap = $stockPrice > 0.0 ? ($stockPrice * max(1.0, (float) $stock->getSharesOutstanding())) : max(1.0, $equity);
         $policyRate = $macroState->policyRateEma;
         $corporateTaxRate = $macroState->corporateTaxRate;
 
