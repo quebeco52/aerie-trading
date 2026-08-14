@@ -12,76 +12,75 @@ use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 
 /**
- * Earnings strategy for Internet Retail (Weaver Marketplace archetype).
+ * Earnings strategy for Internet Retail & Digital Marketplace Megacorporations.
  * 
  * Financial Physics:
- * - Extremely high macro sensitivity (revenue scales directly with absolute consumer volume).
- * - Severe inflation penalty (shipping, logistics, warehouse wages).
- * - Third-Party Marketplace: High margin, sticky, asset-light platform fees.
- * - First-Party Retail: Direct sales, high volume, low margin, highly volatile.
+ * - Tri-Stream Architecture:
+ *      1. 1st-Party Retail: Buys and sells physical inventory. Low margin, highly exposed to supply chain inflation and recessions.
+ *      2. 3rd-Party Fulfillment (The Tollbooth): Charges independent vendors to use their logistics. High margin, high volume.
+ *      3. Digital Advertising / Cloud: Monetizes consumer data. Near-100% margin, zero physical overhead.
+ * - Margin Cross-Subsidization: The retail division runs at a near loss to dominate market share, subsidized by Ads and 3P fees.
+ * - Tail Risk: Labor unionization strikes in fulfillment centers, or sovereign antitrust breakups.
  */
 class InternetRetailBusinessModel extends StandardCorporateBusinessModel
 {
-    // --- Dual-Stream Architecture ---
-    /** Baseline fraction of revenue derived from high-margin third-party marketplace fees. */
-    public const THIRD_PARTY_WEIGHT = 0.60;
-    /** Baseline fraction of revenue derived from low-margin first-party retail sales. */
-    public const FIRST_PARTY_WEIGHT = 0.40;
-
-    // --- Revenue & Shock Physics ---
-    /** Moderately high baseline variance due to consumer trends. */
-    public const REVENUE_VARIANCE_SCALAR = 0.50;
-    /** Structural variable cost ratio of the asset-light third-party marketplace. */
-    public const THIRD_PARTY_VARIABLE_COST_RATIO = 0.20;
-
-    // --- Tail Risk & Shock Events ---
-    /** Negative z-score threshold indicating severe antitrust/marketplace regulation. */
-    public const ANTITRUST_FINE_Z_SCORE = -2.20;
-    /** Variable cost penalty applied during severe antitrust action and compliance mandates. */
-    public const ANTITRUST_FINE_PENALTY = 0.08;
-    /** Positive z-score threshold indicating a massive holiday/prime-day super-cycle. */
-    public const HOLIDAY_SUPER_CYCLE_Z_SCORE = 2.40;
-    /** Top-line revenue multiplier for first-party retail during a holiday super-cycle. */
-    public const HOLIDAY_SUPER_CYCLE_MULT = 1.15;
-
-    // --- Continuous Elasticity ---
-    /** Variable margin sensitivity to third-party marketplace network expansion. */
-    public const MARKETPLACE_NETWORK_ELASTICITY = 0.018;
-
-    // --- Asset Depreciation & Reinvestment ---
-    /** Quarterly margin decay rate per unit of underinvestment in physical fulfillment infrastructure. */
-    public const FULFILLMENT_DECAY_RATE = 0.022;
-    /** Quarterly margin gain scalar per unit of logistics automation modernization. */
-    public const AUTOMATION_GAIN_RATE = 0.012;
-    /** Structural minimum operating margin floor under severe fulfillment tech debt. */
-    public const MIN_OPERATING_MARGIN_FLOOR = 0.08;
-    /** Structural maximum operating margin ceiling for automated logistics monopolies. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.30;
+    // --- Analyst Visibility & Error ---
+    public const BASE_COVERAGE_VISIBILITY = 0.40; // 1P sales are visible, but 3P/Ads are a black box
+    public const BASE_COVERAGE_ERROR = 0.08;
 
     public function getModelThresholds(): array
     {
-        return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.12, 'moat_spread' => 0.015, 'nwc_intensity' => -0.08, 'capex_completion_rate' => 0.40];
+        return ['min_icr' => 2.50, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.5,  'dividend_crisis_icr' => 2.00, 'buyback_min_icr' => 2.50, 'reversion_speed' => 0.15, 'moat_spread' => 0.020, 'nwc_intensity' => -0.05, 'capex_completion_rate' => 0.50];
     }
+
     public function getSecularGrowthRate(Stock $stock): float
     {
-        return 0.05;
-    }
+        return 0.04;
+    } // E-commerce secular adoption
+    public function getCapexCyclicality(): float
+    {
+        return 1.5;
+    } // Massive warehouse and server farm buildouts
     public function getSurpriseBlendWeights(): array
     {
         return ['eps_weight' => 0.40, 'revenue_weight' => 0.60];
     }
 
+    // --- Tri-Stream Architecture Weights ---
+    public const FIRST_PARTY_WEIGHT  = 0.45;
+    public const THIRD_PARTY_WEIGHT  = 0.40;
+    public const DIGITAL_ADS_WEIGHT  = 0.15;
+
+    // --- Stream Variance Scalars ---
+    public const FIRST_PARTY_VARIANCE = 0.35; // Highly cyclical (consumers stop buying TVs in a recession)
+    public const THIRD_PARTY_VARIANCE = 0.15; // Sticky (vendors must pay the toll to survive)
+    public const DIGITAL_ADS_VARIANCE = 0.25; // Scales aggressively with platform traffic
+
+    // --- Margin Architecture ---
+    public const THIRD_PARTY_COST_RATIO = 0.40; // Moderate cost (logistics, server compute)
+    public const DIGITAL_ADS_COST_RATIO = 0.10; // Pure profit (algorithmic placement)
+
+    // --- Supply Chain & Labor Physics ---
+    public const INFLATION_PENALTY_SCALAR = 1.20; // 1P Retail eats the cost of physical goods inflation
+    public const WAGE_INFLATION_SCALAR    = 0.80; // Massive warehouse workforce makes them vulnerable to labor shortages
+
+    // --- Tail Risk Events ---
+    public const WAREHOUSE_STRIKE_Z_SCORE = -2.20;
+    public const WAREHOUSE_STRIKE_PENALTY = 0.08; // Margin hit from crippled logistics/overtime pay
+
+    public const ANTITRUST_FINE_Z_SCORE   = -2.60;
+    public const ANTITRUST_FINE_MULT      = 0.90; // Top-line haircut from forced breakups or regulatory bans
+
+    public const VIRAL_HOLIDAY_SURGE_Z    = 2.40;
+    public const VIRAL_HOLIDAY_MULT       = 1.15; // Prime Day / Holiday super-cycle
+
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
 
-        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
-        $beta = (float) $stock->getBeta();
-
-        // Consumer sentiment drives digital consumption volume. Beta already amplifies (WEAV beta=1.70).
-        $physics['macro_demand_shift'] = $sentimentShift * $beta;
-
-        // Internet retail has no pricing power - highly commoditized
+        // Nullify global demand shift. We process output gap cyclically per-stream to prevent double-dipping.
+        $physics['macro_demand_shift'] = 0.0;
+        // Inflation is absorbed as a cost penalty, not passed on (Internet Retailers compete on lowest price).
         $physics['pricing_power_multiplier'] = 1.0;
 
         return $physics;
@@ -90,150 +89,122 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            'pricing_power_index'        => 0.2, // Commoditized, very low pricing power
-            'third_party_weight'         => self::THIRD_PARTY_WEIGHT,
-            'first_party_weight'         => self::FIRST_PARTY_WEIGHT,
-            'advertising_revenue_weight' => 0.00,
+            'first_party_weight' => self::FIRST_PARTY_WEIGHT,
+            'third_party_weight' => self::THIRD_PARTY_WEIGHT,
+            'digital_ads_weight' => self::DIGITAL_ADS_WEIGHT,
         ]);
 
-        $pricingPower = max(0.0, min(1.0, $params['pricing_power_index']));
-        $thirdPartyWeight = $params['third_party_weight'];
-        $firstPartyWeight = $params['first_party_weight'];
-        $adWeight = $params['advertising_revenue_weight'];
+        $fpWeight  = $params['first_party_weight'];
+        $tpWeight  = $params['third_party_weight'];
+        $adsWeight = $params['digital_ads_weight'];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $beta = abs((float) $stock->getBeta());
 
-        // Marketplace fees are sticky. First party retail is highly volatile.
-        $thirdPartyZ = $mathUtility->generatePersistentZ($momentum['third_party_marketplace'] ?? 0.0, 0.05);
-        $firstPartyZ = $mathUtility->generatePersistentZ($momentum['first_party_retail'] ?? 0.0, 0.25);
-        $eventZ = $mathUtility->generatePersistentZ($momentum['event'] ?? 0.0, 0.10);
+        // Independent stream Z-scores
+        $fpZ  = $streams->generateZ('first_party_retail', 0.25);
+        $tpZ  = $streams->generateZ('third_party_seller', 0.40); // High persistence tollbooth
+        $adsZ = $streams->generateZ('digital_ads_cloud', 0.20);
+        $eventZ = $streams->generateZ('event', 0.10);
 
-        // Apply variance scalars. (Macro demand is already applied via capacityUtilization in EarningsEngine)
-        $thirdPartyRevenue = $expectedRevenue * $thirdPartyWeight * (1.0 + ($thirdPartyZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.2)));
+        // --- Macro Sensitivities ---
+        $outputGap = $macroState->outputGapEma;
 
-        $holidayMultiplier = 1.0;
+        // 1P Retail bears the absolute brunt of consumer recessions
+        $fpMacroShift = $outputGap * 2.0 * $beta;
+
+        // 3P and Ads are partially insulated, acting as a structural tollbooth
+        $tpMacroShift = $outputGap * 0.5 * $beta;
+
+        // --- Tail Risk Events ---
+        $revenueMultiplier = 1.0;
         $eventType = null;
-        $antitrustPenalty = 0.0;
+        $strikePenalty = 0.0;
 
         if ($eventZ < self::ANTITRUST_FINE_Z_SCORE) {
-            $antitrustPenalty = self::ANTITRUST_FINE_PENALTY;
+            $revenueMultiplier = self::ANTITRUST_FINE_MULT;
             $eventType = ShockEvent::REGULATORY_FINE;
-        } elseif ($eventZ > self::HOLIDAY_SUPER_CYCLE_Z_SCORE) {
-            $holidayMultiplier = self::HOLIDAY_SUPER_CYCLE_MULT;
+        } elseif ($eventZ < self::WAREHOUSE_STRIKE_Z_SCORE) {
+            $strikePenalty = self::WAREHOUSE_STRIKE_PENALTY;
+            $eventType = ShockEvent::LABOR_STRIKE;
+        } elseif ($eventZ > self::VIRAL_HOLIDAY_SURGE_Z) {
+            $revenueMultiplier = self::VIRAL_HOLIDAY_MULT;
             $eventType = ShockEvent::VIRAL_GROWTH;
         }
 
-        $firstPartyRevenue = $expectedRevenue * $firstPartyWeight * (1.0 + ($firstPartyZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.8))) * $holidayMultiplier;
-        
-        $adRevenue = 0.0;
-        $adZ = 0.0;
-        if ($adWeight > 0.0) {
-            $adZ = $mathUtility->generatePersistentZ($momentum['advertising'] ?? 0.0, 0.40);
-            $adRevenue = $expectedRevenue * $adWeight * (1.0 + ($adZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR));
-        }
+        // --- Clamped Tri-Stream Revenue Calculation ---
+        $fpRevenue  = max(0.0, $expectedRevenue * $fpWeight * (1.0 + ($fpZ * $baselineVol * self::FIRST_PARTY_VARIANCE) + $fpMacroShift) * $revenueMultiplier);
+        $tpRevenue  = max(0.0, $expectedRevenue * $tpWeight * (1.0 + ($tpZ * $baselineVol * self::THIRD_PARTY_VARIANCE) + $tpMacroShift) * $revenueMultiplier);
 
-        $actualRevenue = max(0.0, $thirdPartyRevenue + $firstPartyRevenue + $adRevenue);
+        // Digital Ads scale exponentially with underlying platform traffic (blending FP and TP Z-scores)
+        $platformTrafficBonus = ($fpZ * 0.5) + ($tpZ * 0.5);
+        $adsRevenue = max(0.0, $expectedRevenue * $adsWeight * (1.0 + ($adsZ * $baselineVol * self::DIGITAL_ADS_VARIANCE) + ($platformTrafficBonus * 0.10)) * $revenueMultiplier);
+
+        $actualRevenue = $fpRevenue + $tpRevenue + $adsRevenue;
 
         // --- Structural Margin Blending ---
-        // Third-party marketplace is asset-light and operates at a very low variable cost (high margin).
-        // First-party retail operates at a much higher variable cost (low margin).
-        $expectedThirdPartyRevenue = $expectedRevenue * $thirdPartyWeight;
-        $expectedFirstPartyRevenue = $expectedRevenue * $firstPartyWeight;
+        // Calculate organic costs for the high-margin divisions
+        $tpCosts = $tpRevenue * self::THIRD_PARTY_COST_RATIO;
+        $adsCosts = $adsRevenue * self::DIGITAL_ADS_COST_RATIO;
 
-        $thirdPartyBaselineCosts = $expectedThirdPartyRevenue * self::THIRD_PARTY_VARIABLE_COST_RATIO;
-
-        // Derive required first-party cost ratio to hit the engine's target margin at baseline
+        // Back-calculate the 1st Party Retail margin constraints based on the global expectation
         $targetTotalCosts = $expectedRevenue * $realizedVariableMargin;
-        $firstPartyBaselineCosts = $targetTotalCosts - $thirdPartyBaselineCosts;
-        $firstPartyVariableMargin = $expectedFirstPartyRevenue > 0 ? $firstPartyBaselineCosts / $expectedFirstPartyRevenue : $realizedVariableMargin;
+        $fpBaselineCosts = max(0.0, $targetTotalCosts - $tpCosts - $adsCosts);
+        $fpVariableMargin = $expectedRevenue * $fpWeight > 0 ? $fpBaselineCosts / ($expectedRevenue * $fpWeight) : $realizedVariableMargin;
 
-        // Apply derived distinct margins to actual shocked revenues
-        // Advertising is virtually zero marginal cost (100% margin)
-        $actualVariableCosts = ($thirdPartyRevenue * self::THIRD_PARTY_VARIABLE_COST_RATIO) + ($firstPartyRevenue * $firstPartyVariableMargin);
+        // Re-blend actual costs based on shocked revenue
+        $actualVariableCosts = $tpCosts + $adsCosts + ($fpRevenue * $fpVariableMargin);
 
-        // Supply Chain Inflation Penalty
+        // --- Inflation & Labor Penalties ---
         $inflation = $macroState->inflationEma;
-        $inflationMultiplier = 2.0 - ($pricingPower * 2.0); 
-        $baseInflationPenalty = $inflation > MacroEngine::TARGET_INFLATION ? ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0;
-        $inflationPenalty = $baseInflationPenalty * $inflationMultiplier;
 
-        // Continuous Marketplace Network Elasticity
-        $networkElasticityShift = -self::MARKETPLACE_NETWORK_ELASTICITY * $thirdPartyZ * $thirdPartyWeight;
+        // Physical goods inflation crushes 1P retail
+        $goodsInflationDrag = $inflation > MacroEngine::TARGET_INFLATION
+            ? ($inflation - MacroEngine::TARGET_INFLATION) * $beta * self::INFLATION_PENALTY_SCALAR
+            : 0.0;
 
-        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $inflationPenalty + $antitrustPenalty + $networkElasticityShift;
+        // Wage inflation crushes the warehouse network (applies to both 1P and 3P fulfillment)
+        $unemployment = $macroState->unemploymentRateEma;
+        $wageInflationDrag = $unemployment < 0.04
+            ? (0.04 - $unemployment) * self::WAGE_INFLATION_SCALAR // Tight labor market forces wage hikes
+            : 0.0;
+
+        $totalMacroCostDrag = ($goodsInflationDrag * $fpWeight) + ($wageInflationDrag * ($fpWeight + $tpWeight));
+
+        $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
+
+        // Apply penalties directly to the baseline margin
+        $rawMargin = $effectiveMargin + $totalMacroCostDrag + $strikePenalty;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // Blended primary shock for standard model integration
-        $primaryShockZ = ($thirdPartyZ * $thirdPartyWeight) + ($firstPartyZ * $firstPartyWeight);
+        // Primary shock
+        $primaryShockZ = max(abs($fpZ), abs($tpZ), abs($adsZ));
+        $primaryShockZ = $primaryShockZ === abs($fpZ) ? $fpZ : ($primaryShockZ === abs($tpZ) ? $tpZ : $adsZ);
+
         if (abs($eventZ) > abs($primaryShockZ)) {
             $primaryShockZ = $eventZ;
         }
 
-        $thirdPartyShock = $thirdPartyZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.2);
-        $firstPartyShock = $firstPartyZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.8);
-        $observableShockZ = $primaryShockZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
+        // Visibility: 1P retail is visible via credit card data, 3P and Ads are opaque.
+        $observableShockZ = ($fpZ * $fpWeight * self::FIRST_PARTY_VARIANCE * 0.80) +
+            ($tpZ * $tpWeight * self::THIRD_PARTY_VARIANCE * 0.20) +
+            ($adsZ * $adsWeight * self::DIGITAL_ADS_VARIANCE * 0.10);
+        $observableShockZ *= $baselineVol;
 
-        $streamZ = [
-            'third_party_marketplace' => $thirdPartyZ,
-            'first_party_retail' => $firstPartyZ,
-            'event' => $eventZ,
-        ];
-        
-        $streamRevenue = [
-            'Third-Party Marketplace' => $thirdPartyRevenue,
-            'First-Party Retail' => $firstPartyRevenue,
-        ];
-
-        if ($adWeight > 0.0) {
-            $streamZ['advertising'] = $adZ;
-            $streamRevenue['advertising_revenue'] = $adRevenue;
-        }
-
-        $result = new SectorPhysicsResult(
+        return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: $streamZ,
-            streamRevenue: $streamRevenue
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: [
+                'first_party_retail' => $fpRevenue,
+                'third_party_seller' => $tpRevenue,
+                'digital_ads_cloud'  => $adsRevenue,
+            ],
         );
-        
-        return $result;
-    }
-
-    public function getCoverageProfile(\App\Entity\Stock $stock): \App\DTO\SectorCoverageProfile
-    {
-        // Third-party marketplace GMV and physical shipping volume is partially trackable via web scraping and logistics (~35%).
-        // Holiday super-cycles are fully public knowledge.
-        return new \App\DTO\SectorCoverageProfile(
-            baseVisibility: 0.35,
-            errorStdDev: 0.05,
-            minVisibility: 0.10,
-            eventBaseVisibility: 0.80,
-            eventMinVisibility: 0.50
-        );
-    }
-
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
-    {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
-
-        if ($reinvestmentRatio < 1.0) {
-            // Fulfillment center tech debt causes margin decay
-            $decayRate = self::FULFILLMENT_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            // Logistics automation modernization improves margin
-            $modGain = self::AUTOMATION_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
     }
 }

@@ -30,8 +30,8 @@ class StockModelTuning
         // 100% Sales & Trading / Volatility Arbitrage, 0% M&A Advisory.
         'PERE' => [
             'advisory_revenue_weight'       => 0.00,
-            'trading_revenue_weight'        => 0.60,
-            'options_premium_income_weight' => 0.40,
+            'trading_revenue_weight'        => 0.40,
+            'options_premium_income_weight' => 0.60,
             'vix_arbitrage_scalar'          => 1.80,
         ],
 
@@ -279,24 +279,30 @@ class StockModelTuning
         // =====================================================================
 
         // --- Gryphon Defense Systems (GRIP) ---
-        // Tier-1 sovereign aerospace & defense contractor. Heavily cost-plus government mandates (85%).
+        // Tier-1 sovereign aerospace & defense contractor. Heavily cost-plus domestic defense mandates.
         'GRIP' => [
-            'government_contract_weight' => 0.85,
-            'commercial_services_weight' => 0.15,
+            'domestic_procurement_weight'   => 0.80,
+            'foreign_military_sales_weight' => 0.20,
         ],
 
-        // --- Watchman Security Consulting (WATCH) ---
-        // Balanced commercial security consulting & sovereign physical security contracts (50/50).
+        // =====================================================================
+        // SECURITY & PROTECTION SERVICES ARCHETYPES
+        // =====================================================================
+
+        // --- Bird Watch Security (WATCH) ---
+        // Premier domestic physical asset protection & municipal security retainers.
         'WATCH' => [
-            'government_contract_weight' => 0.50,
-            'commercial_services_weight' => 0.50,
+            'government_contract_weight' => 0.40,
+            'retainer_weight'            => 0.50,
+            'expeditionary_weight'       => 0.10,
         ],
 
         // --- Osprey Global Vanguard (OSPR) ---
-        // Global security and protection systems provider. Skewed toward government security mandates (70%).
+        // Extraterritorial private military contractor & black-ops extraction.
         'OSPR' => [
-            'government_contract_weight' => 0.70,
-            'commercial_services_weight' => 0.30,
+            'government_contract_weight' => 0.10,
+            'retainer_weight'            => 0.10,
+            'expeditionary_weight'       => 0.80,
         ],
 
         // =====================================================================
@@ -304,14 +310,14 @@ class StockModelTuning
         // =====================================================================
 
         // --- Albatross Deepwaters (ALBT) ---
-        // Marine shipping freight operator. Heavily exposed to short-term spot ocean freight rates (75%).
+        // Marine shipping freight operator. Heavily exposed to short-term spot ocean freight rates.
         'ALBT' => [
             'spot_charter_weight'     => 0.75,
             'contract_charter_weight' => 0.25,
         ],
 
         // --- Canvasback Logistics (CANV) ---
-        // Integrated freight & logistics provider. Skewed toward dedicated multi-year enterprise contracts (60%).
+        // Integrated freight & logistics provider. Skewed toward dedicated multi-year enterprise contracts.
         'CANV' => [
             'spot_charter_weight'     => 0.40,
             'contract_charter_weight' => 0.60,
@@ -431,11 +437,27 @@ class StockModelTuning
             'unregulated_merchant_weight' => 0.05,
         ],
 
+        // =====================================================================
+        // TELECOMMUNICATIONS ARCHETYPES
+        // =====================================================================
+
         // --- Loon Call Telecom (LOON) ---
-        // Regulated regional telecom & fiber carrier. Skewed toward regulated wireline infrastructure (75%).
+        // Regional telecom & fiber carrier. Skewed toward recurring wireless/broadband subscriptions (80%) with equipment sales (20%).
         'LOON' => [
-            'regulated_base_weight'       => 0.75,
-            'unregulated_merchant_weight' => 0.25,
+            'subscription_weight' => 0.80,
+            'equipment_weight'    => 0.20,
+        ],
+
+        // =====================================================================
+        // WASTE MANAGEMENT ARCHETYPES
+        // =====================================================================
+
+        // --- Cormorant Environmental (CORM) ---
+        // Municipal waste management & environmental services operator.
+        'CORM' => [
+            'residential_weight' => 0.60,
+            'commercial_weight'  => 0.30,
+            'recycling_weight'   => 0.10,
         ],
 
         // =====================================================================
@@ -466,9 +488,9 @@ class StockModelTuning
         // Massive skew towards non-gaming (extortionate revenue-sharing leases) as the primary engine.
         'GULL' => [
             'pricing_power_index'           => 1.00, // Absolute monopoly pricing power over captive tenants
-            'gaming_revenue_weight'         => 0.25, // Casino floors are just the bait for foot traffic
-            'non_gaming_revenue_weight'     => 0.15,
-            'commercial_real_estate_weight' => 0.60, // The real engine: extortionate commercial real estate leases
+            'gaming_revenue_weight'         => 0.20, // Casino floors are just the bait for foot traffic
+            'non_gaming_revenue_weight'     => 0.10,
+            'commercial_real_estate_weight' => 0.70, // The real engine: extortionate commercial real estate leases
         ],
 
         // =====================================================================
@@ -511,10 +533,9 @@ class StockModelTuning
         // --- Weaver Marketplace (WEAV) ---
         // Massive third-party ecosystem (the profit engine) blended with volatile first-party retail (the scale engine).
         'WEAV' => [
-            'pricing_power_index'        => 0.40,
-            'third_party_weight'         => 0.40,
-            'first_party_weight'         => 0.35,
-            'advertising_revenue_weight' => 0.25,
+            'third_party_weight'         => 0.45,
+            'first_party_weight'         => 0.30,
+            'digital_ads_weight'         => 0.25,
         ],
 
         // --- Penguin Computing (PENG) ---

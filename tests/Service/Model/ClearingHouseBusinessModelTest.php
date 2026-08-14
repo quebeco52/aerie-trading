@@ -37,8 +37,8 @@ class ClearingHouseBusinessModelTest extends TestCase
     public function testCalculateInterestIncomeScalesWithPolicyRateAndZirpTrap(): void
     {
         $stockMock = $this->createMock(\App\Entity\Stock::class);
-        $stockMock->method('getCorporateTreasury')->willReturn(100_000_000_000.0);
-        $stockMock->method('getCustomerDeposits')->willReturn(100_000_000_000.0); // 100% margin pool
+        $stockMock->method('getCorporateTreasury')->willReturn('100000000000.0');
+        $stockMock->method('getCustomerDeposits')->willReturn('100000000000.0'); // 100% margin pool
 
         $mathMock = $this->createMock(MathUtility::class);
 

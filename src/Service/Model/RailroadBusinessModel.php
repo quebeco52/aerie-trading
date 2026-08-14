@@ -46,16 +46,17 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
 
         $macroBoost = $macroState->outputGapEma * 0.8; // Macro drives walk-up and real estate
 
-        $subscriptionZ = $mathUtility->generatePersistentZ($momentum['subscription_revenue'] ?? 0.0, 0.50);
-        $walkupZ = $mathUtility->generatePersistentZ($momentum['walk_up_tickets'] ?? 0.0, 0.10) + ($macroBoost * 0.5); 
-        $realEstateZ = $mathUtility->generatePersistentZ($momentum['real_estate_development'] ?? 0.0, 0.30) + $macroBoost; 
+        $subscriptionZ = $streams->generateZ('subscription_revenue', 0.50);
+        $walkupZ       = $streams->generateZ('walk_up_tickets', 0.10); 
+        $realEstateZ   = $streams->generateZ('real_estate_development', 0.30); 
 
         $subscriptionRevenue = $expectedRevenue * self::SUBSCRIPTION_WEIGHT * (1.0 + ($subscriptionZ * ($baselineVol * self::SUBSCRIPTION_VARIANCE_SCALAR)));
-        $walkupRevenue = $expectedRevenue * self::WALKUP_WEIGHT * (1.0 + ($walkupZ * ($baselineVol * self::WALKUP_VARIANCE_SCALAR)));
-        $realEstateRevenue = $expectedRevenue * self::REAL_ESTATE_WEIGHT * (1.0 + ($realEstateZ * ($baselineVol * self::REAL_ESTATE_VARIANCE_SCALAR)));
+        $walkupRevenue       = $expectedRevenue * self::WALKUP_WEIGHT       * (1.0 + ($walkupZ * ($baselineVol * self::WALKUP_VARIANCE_SCALAR)) + ($macroBoost * 0.5));
+        $realEstateRevenue   = $expectedRevenue * self::REAL_ESTATE_WEIGHT  * (1.0 + ($realEstateZ * ($baselineVol * self::REAL_ESTATE_VARIANCE_SCALAR)) + $macroBoost);
 
         $actualRevenue = max(0.0, $subscriptionRevenue + $walkupRevenue + $realEstateRevenue);
         $clampedMargin = $this->clampMargin($realizedVariableMargin);
@@ -65,7 +66,9 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
         if (abs($walkupZ) > abs($primaryShockZ)) $primaryShockZ = $walkupZ;
         if (abs($subscriptionZ) > abs($primaryShockZ)) $primaryShockZ = $subscriptionZ;
 
-        $observableShockZ = ($subscriptionZ * self::SUBSCRIPTION_WEIGHT * self::SUBSCRIPTION_VARIANCE_SCALAR) * $baselineVol;
+        $observableShockZ = (($subscriptionZ * self::SUBSCRIPTION_WEIGHT * self::SUBSCRIPTION_VARIANCE_SCALAR) * $baselineVol)
+            + (($macroBoost * 0.5) * self::WALKUP_WEIGHT)
+            + ($macroBoost * self::REAL_ESTATE_WEIGHT);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -74,11 +77,7 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
             observableShockZ: $observableShockZ,
             eventType: null,
             isPublicEvent: null,
-            streamZ: [
-                'subscription_revenue'    => $subscriptionZ,
-                'walk_up_tickets'         => $walkupZ,
-                'real_estate_development' => $realEstateZ,
-            ],
+            streamZ: $streams->getStreamZ(),
             streamRevenue: [
                 'subscription_revenue'    => $subscriptionRevenue,
                 'walk_up_tickets'         => $walkupRevenue,

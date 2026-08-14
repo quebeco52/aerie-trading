@@ -15,14 +15,17 @@ class ConsumerStaplesBusinessModelTest extends TestCase
     {
         $model = new ConsumerStaplesBusinessModel();
         $stock = new Stock();
+        $stock->setTicker('STAPLE');
         $stock->setBeta('0.6');
 
-        $mathUtilityMock = $this->createMock(MathUtility::class);
+        $mathUtilityMock = $this->getMockBuilder(MathUtility::class)
+            ->onlyMethods(['generateStandardNormal'])
+            ->getMock();
         // sequence: brandedZ=0, volumeZ=2.0 (commodity spike), eventZ=0, revenueError=0, recallError=0
         $mathUtilityMock->method('generateStandardNormal')
             ->willReturnOnConsecutiveCalls(0.0, 2.0, 0.0, 0.0, 0.0);
 
-        $macroState = [];
+        $macroState = \App\DTO\MacroStateDTO::fromArray([]);
         $result = $model->computeActualFinancials(
             $stock,
             1000.0,

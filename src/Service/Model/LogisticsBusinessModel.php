@@ -48,15 +48,16 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
 
         // Logistics is perfectly correlated to the output gap (economic expansion)
         $macroBoost = $macroState->outputGapEma * 1.5;
 
-        $parcelZ = $mathUtility->generatePersistentZ($momentum['parcel_volume'] ?? 0.0, 0.30) + $macroBoost;
-        $surgeZ = $mathUtility->generatePersistentZ($momentum['algorithmic_surge_pricing'] ?? 0.0, 0.05); 
+        $parcelZ = $streams->generateZ('parcel_volume', 0.30);
+        $surgeZ  = $streams->generateZ('algorithmic_surge_pricing', 0.05); 
 
-        $parcelRevenue = $expectedRevenue * self::PARCEL_WEIGHT * (1.0 + ($parcelZ * ($baselineVol * self::PARCEL_VARIANCE_SCALAR)));
-        $surgeRevenue = $expectedRevenue * self::SURGE_WEIGHT * (1.0 + ($surgeZ * ($baselineVol * self::SURGE_VARIANCE_SCALAR)));
+        $parcelRevenue = $expectedRevenue * self::PARCEL_WEIGHT * (1.0 + ($parcelZ * ($baselineVol * self::PARCEL_VARIANCE_SCALAR)) + $macroBoost);
+        $surgeRevenue  = $expectedRevenue * self::SURGE_WEIGHT  * (1.0 + ($surgeZ  * ($baselineVol * self::SURGE_VARIANCE_SCALAR)));
 
         $eventType = null;
 
@@ -69,7 +70,7 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($realizedVariableMargin);
 
         $primaryShockZ = abs($surgeZ) > abs($parcelZ) ? $surgeZ : $parcelZ;
-        $observableShockZ = ($parcelZ * self::PARCEL_WEIGHT * self::PARCEL_VARIANCE_SCALAR) * $baselineVol;
+        $observableShockZ = (($parcelZ * self::PARCEL_WEIGHT * self::PARCEL_VARIANCE_SCALAR) * $baselineVol) + ($macroBoost * self::PARCEL_WEIGHT);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -78,10 +79,7 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'parcel_volume'               => $parcelZ,
-                'algorithmic_surge_pricing'   => $surgeZ,
-            ],
+            streamZ: $streams->getStreamZ(),
             streamRevenue: [
                 'parcel_volume'               => $parcelRevenue,
                 'algorithmic_surge_pricing'   => $surgeRevenue,

@@ -47,19 +47,20 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
 
         // Industrial is heavily macro-correlated
         $macroBoost = $macroState->outputGapEma * 0.8;
         // Consumer is immune to macro, but maybe slightly dragged by inflation
         $inflationDrag = ($macroState->inflationEma - MacroEngine::TARGET_INFLATION) * 2.0;
 
-        $industrialZ = $mathUtility->generatePersistentZ($momentum['industrial_manufacturing'] ?? 0.0, 0.25) + $macroBoost;
-        $consumerZ = $mathUtility->generatePersistentZ($momentum['consumer_products'] ?? 0.0, 0.50) - $inflationDrag;
-        $financialZ = $mathUtility->generatePersistentZ($momentum['financial_investments'] ?? 0.0, 0.10); 
+        $industrialZ = $streams->generateZ('industrial_manufacturing', 0.25);
+        $consumerZ   = $streams->generateZ('consumer_products', 0.50);
+        $financialZ  = $streams->generateZ('financial_investments', 0.10); 
 
-        $industrialRevenue = $expectedRevenue * self::INDUSTRIAL_WEIGHT * (1.0 + ($industrialZ * ($baselineVol * self::INDUSTRIAL_VARIANCE_SCALAR)));
-        $consumerRevenue = $expectedRevenue * self::CONSUMER_WEIGHT * (1.0 + ($consumerZ * ($baselineVol * self::CONSUMER_VARIANCE_SCALAR)));
-        $financialRevenue = $expectedRevenue * self::FINANCIAL_WEIGHT * (1.0 + ($financialZ * ($baselineVol * self::FINANCIAL_VARIANCE_SCALAR)));
+        $industrialRevenue = $expectedRevenue * self::INDUSTRIAL_WEIGHT * (1.0 + ($industrialZ * ($baselineVol * self::INDUSTRIAL_VARIANCE_SCALAR)) + $macroBoost);
+        $consumerRevenue   = $expectedRevenue * self::CONSUMER_WEIGHT   * (1.0 + ($consumerZ * ($baselineVol * self::CONSUMER_VARIANCE_SCALAR)) - $inflationDrag);
+        $financialRevenue  = $expectedRevenue * self::FINANCIAL_WEIGHT  * (1.0 + ($financialZ * ($baselineVol * self::FINANCIAL_VARIANCE_SCALAR)));
 
         $actualRevenue = max(0.0, $industrialRevenue + $consumerRevenue + $financialRevenue);
         $clampedMargin = $this->clampMargin($realizedVariableMargin);
@@ -70,10 +71,11 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         if (abs($financialZ) > abs($primaryShockZ)) $primaryShockZ = $financialZ;
 
         // Observable shock is blended
-        $observableShockZ = ($industrialZ * self::INDUSTRIAL_WEIGHT * self::INDUSTRIAL_VARIANCE_SCALAR) +
+        $observableShockZ = (($industrialZ * self::INDUSTRIAL_WEIGHT * self::INDUSTRIAL_VARIANCE_SCALAR) +
                             ($consumerZ * self::CONSUMER_WEIGHT * self::CONSUMER_VARIANCE_SCALAR) +
-                            ($financialZ * self::FINANCIAL_WEIGHT * self::FINANCIAL_VARIANCE_SCALAR);
-        $observableShockZ *= $baselineVol;
+                            ($financialZ * self::FINANCIAL_WEIGHT * self::FINANCIAL_VARIANCE_SCALAR)) * $baselineVol
+                            + ($macroBoost * self::INDUSTRIAL_WEIGHT)
+                            - ($inflationDrag * self::CONSUMER_WEIGHT);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -82,11 +84,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
             observableShockZ: $observableShockZ,
             eventType: null, // Conglomerates rarely have single events that rock the whole ship
             isPublicEvent: null,
-            streamZ: [
-                'industrial_manufacturing' => $industrialZ,
-                'consumer_products'        => $consumerZ,
-                'financial_investments'    => $financialZ,
-            ],
+            streamZ: $streams->getStreamZ(),
             streamRevenue: [
                 'industrial_manufacturing' => $industrialRevenue,
                 'consumer_products'        => $consumerRevenue,

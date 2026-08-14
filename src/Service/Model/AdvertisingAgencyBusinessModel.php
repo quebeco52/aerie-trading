@@ -48,15 +48,16 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
 
         // Retainers correlate slightly to macro (ad budgets expand in booms)
         $macroBoost = $macroState->outputGapEma * 0.5;
 
-        $retainerZ = $mathUtility->generatePersistentZ($momentum['retainer_media_buying'] ?? 0.0, 0.40) + $macroBoost;
+        $retainerZ = $streams->generateZ('retainer_media_buying', 0.40);
         // Crisis management is completely random/uncorrelated
-        $crisisZ = $mathUtility->generatePersistentZ($momentum['crisis_management'] ?? 0.0, 0.05); 
+        $crisisZ = $streams->generateZ('crisis_management', 0.05); 
 
-        $retainerRevenue = $expectedRevenue * self::RETAINER_WEIGHT * (1.0 + ($retainerZ * ($baselineVol * self::RETAINER_VARIANCE_SCALAR)));
+        $retainerRevenue = $expectedRevenue * self::RETAINER_WEIGHT * (1.0 + ($retainerZ * ($baselineVol * self::RETAINER_VARIANCE_SCALAR)) + $macroBoost);
         $crisisRevenue = $expectedRevenue * self::CRISIS_MANAGEMENT_WEIGHT * (1.0 + ($crisisZ * ($baselineVol * self::CRISIS_VARIANCE_SCALAR)));
 
         $eventType = null;
@@ -70,7 +71,7 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($realizedVariableMargin);
 
         $primaryShockZ = abs($crisisZ) > abs($retainerZ) ? $crisisZ : $retainerZ;
-        $observableShockZ = $retainerZ * self::RETAINER_WEIGHT * ($baselineVol * self::RETAINER_VARIANCE_SCALAR);
+        $observableShockZ = ($retainerZ * self::RETAINER_WEIGHT * ($baselineVol * self::RETAINER_VARIANCE_SCALAR)) + ($macroBoost * self::RETAINER_WEIGHT);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -79,10 +80,7 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'retainer_media_buying' => $retainerZ,
-                'crisis_management'     => $crisisZ,
-            ],
+            streamZ: $streams->getStreamZ(),
             streamRevenue: [
                 'retainer_media_buying' => $retainerRevenue,
                 'crisis_management'     => $crisisRevenue,

@@ -129,14 +129,14 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         if ($equity <= 0.0) {
             return self::MIN_LEVERAGE_AGGRESSION;
         }
-        
+
         $actualLeverage = $debt / $equity;
-        
+
         $industry = $stock->getIndustry() ?: 'General';
         $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? self::DEFAULT_EQUITY_LIMIT;
-        
+
         $rawAggression = $actualLeverage / max(0.01, $equityLimit);
-        
+
         return max(self::MIN_LEVERAGE_AGGRESSION, min(self::MAX_LEVERAGE_AGGRESSION, $rawAggression));
     }
 
@@ -240,7 +240,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.50); // High persistence due to multi-year deal funnels
+        $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.50);
 
         $params = $this->resolveModelParameters($stock, [
             'management_fee_weight'        => 0.35,
@@ -251,12 +251,11 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $carryWeight     = $params['carried_interest_weight'];
         $principalWeight = $params['principal_investments_weight'];
 
-        // 1. GDP Deal Flow Multiplier:
+        // 1. GDP Deal Flow Multiplier
         $outputGap = $macroState->outputGapEma;
         $dealFlowMultiplier = $outputGap > 0.0 ? ($outputGap * self::DEAL_FLOW_BOOM_MULT) : ($outputGap * self::DEAL_FLOW_BUST_MULT);
 
-        // 2. LBO Financing Freeze Drag (Credit Spread & Policy Rate):
-        // Carried interest crystallization freezes when leveraged debt markets widen or short rates spike.
+        // 2. LBO Financing Freeze Drag (Credit Spread & Policy Rate)
         $creditSpread = $macroState->macroCreditSpreadEma;
         $policyRate   = $macroState->policyRateEma;
 
@@ -264,58 +263,58 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $rateFreezeDrag   = max(0.0, ($policyRate - self::LBO_RATE_FREEZE_THRESHOLD) * self::LBO_RATE_FREEZE_SCALAR);
         $lboFinancingDrag = $spreadFreezeDrag + $rateFreezeDrag;
 
-        // Multiple Compression: LBO drag acts as a multiplier compressing exits, max 1.0 (no drag), min 0.0 (total freeze)
         $multipleCompression = max(0.0, 1.0 - $lboFinancingDrag);
 
-        // 3. Credit-Condition Hurdle Cliff:
-        // In tight-credit environments, LPs demand higher returns before carry crystallizes.
-        // Excess credit spread directly raises the hurdle bar — leveraged funds feel this most acutely.
+        // 3. Credit-Condition Hurdle Cliff
         $hurdleRateZCliff = self::HURDLE_RATE_Z_CLIFF - ($spreadFreezeDrag * self::HURDLE_CREDIT_SPREAD_SCALAR);
-
-        // Economic condition for the hurdle
         $economicCondition = $revenueZ + $dealFlowMultiplier;
 
         $blendedMultiplier = ($mgmtWeight * 1.0) + ($carryWeight * $multipleCompression) + ($principalWeight * 1.0);
-
-        // Because expectations are structurally scaled by blendedMultiplier via getMacroPhysics,
-        // we extract the 'optimal' revenue first to prevent double-counting the multiplier.
         $optimalRevenue = $blendedMultiplier > 0 ? $expectedRevenue / $blendedMultiplier : $expectedRevenue;
 
-        // 4. Leverage Amplifier: sole leverage→carry mechanism.
-        // Replaces the old carryMultiplier aggression proxy. Amplifies both upside carry and downside busts.
+        // 4. Leverage Amplifier
         $actualLeverage   = (float) $stock->getTotalEquity() > 0 ? ((float) $stock->getWholesaleDebt() / (float) $stock->getTotalEquity()) : 0.0;
         $leverageAmplifier = 1.0 + ($actualLeverage * self::CARRY_LEVERAGE_AMPLIFIER_SCALAR);
 
-        // Blended dual-stream revenue
-        $mgmtRevenue = $optimalRevenue * $mgmtWeight
-            * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.5)));
+        // --- Clamped Dual-Stream Revenue ---
+        $mgmtRevenue = max(0.0, $optimalRevenue * $mgmtWeight * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.5))));
 
-        $carriedInterestRevenue = $optimalRevenue * $carryWeight
+        $carriedInterestRevenue = max(0.0, $optimalRevenue * $carryWeight
             * (1.0 + ($economicCondition * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5) * $leverageAmplifier))
-            * $multipleCompression;
+            * $multipleCompression);
 
-        // Binary Cliff: if economic conditions fall below the credit-adjusted hurdle, zero carry.
+        // Binary Cliff Check
         $missedHurdle = false;
         if ($economicCondition < $hurdleRateZCliff) {
             $carriedInterestRevenue = 0.0;
             $missedHurdle = true;
         }
 
+        // Apply Multiple Compression to Principal Investments (Deal Drought halts deployment)
         $principalInvestmentsRevenue = 0.0;
         $principalZ = 0.0;
         if ($principalWeight > 0.0) {
             $principalZ = $mathUtility->generatePersistentZ($momentum['principal'] ?? 0.0, 0.20);
-            $principalInvestmentsRevenue = $optimalRevenue * $principalWeight * (1.0 + ($principalZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 2.0));
+            $principalInvestmentsRevenue = max(0.0, $optimalRevenue * $principalWeight
+                * (1.0 + ($principalZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 2.0))
+                * $multipleCompression);
         }
 
-        $actualRevenue = max(0.0, $mgmtRevenue + $carriedInterestRevenue + $principalInvestmentsRevenue);
+        $actualRevenue = $mgmtRevenue + $carriedInterestRevenue + $principalInvestmentsRevenue;
 
-        // 5. Structural Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
+        // --- 5. Cost & Margin Physics ---
+        // Rescue Capital Drag: High policy rates choke highly levered portfolio companies, requiring costly capital injections.
+        $rescueCapitalDrag = max(0.0, ($policyRate - self::LBO_RATE_FREEZE_THRESHOLD) * 1.5) * $carryWeight;
+
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
-        $clampedMargin = $this->clampMargin($realizedVariableMargin, $minVariableMargin);
 
+        // Apply rescue capital drag directly to the margin
+        $clampedMargin = $this->clampMargin($realizedVariableMargin - $rescueCapitalDrag, $minVariableMargin);
+
+        // --- Event Triggers ---
         $aggression = $this->calculateLeverageAggression($stock);
         $eventType = null;
+
         if ($missedHurdle) {
             $eventType = ShockEvent::PE_HURDLE_RATE_MISSED;
         } elseif ($multipleCompression < 0.50 && $aggression > 0.6) {
@@ -328,13 +327,9 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
             $eventType = ShockEvent::PE_DEAL_DROUGHT;
         }
 
-        // observableShockZ represents the percentage deviation of actual revenue from expected revenue.
         $observableShockZ = $expectedRevenue > 0.0 ? (($actualRevenue - $expectedRevenue) / $expectedRevenue) : 0.0;
 
-        $streamZ = [
-            'revenue' => $revenueZ,
-        ];
-        
+        $streamZ = ['revenue' => $revenueZ];
         $streamRevenue = [
             'management_fees'  => $mgmtRevenue,
             'carried_interest' => $carriedInterestRevenue,
@@ -345,7 +340,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
             $streamRevenue['principal_investments'] = $principalInvestmentsRevenue;
         }
 
-        $result = new SectorPhysicsResult(
+        return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $revenueZ,
@@ -355,8 +350,6 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
             streamZ: $streamZ,
             streamRevenue: $streamRevenue,
         );
-        
-        return $result;
     }
 
     public function getCoverageProfile(\App\Entity\Stock $stock): \App\DTO\SectorCoverageProfile
@@ -434,13 +427,13 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
         $scaledKappa = $kappa / self::TTM_ROE_WEIGHT;
         $math = new MathUtility();
-        
+
         $saturationPenalty = 0.0;
         if ($macroState !== null) {
             $metrics = new \App\Service\Math\CorporateMetrics();
             $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
         }
-        
+
         $newTtm += $math->calculateReversionPull($newTtm, $costOfEquity - $saturationPenalty, $scaledKappa, $moatSpread);
         $stock->setRoeTtm((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $newTtm)));
 
@@ -491,20 +484,20 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     {
         // First get the base balance sheet and income statement constrained capacity
         $baseCapacity = parent::calculateDebtExpansionCapacity($equity, $totalDebt, $wholesaleDebt, $health, $newBorrowingRate, $ebit, $depreciation);
-        
+
         // Re-calculate the credit spread / LBO drag to gate debt issuance during credit freezes
         // We can infer the macro dynamic spread directly from the health metrics raw dynamicSpread.
         // The dynamicSpread in health->rawMetrics is the firm's total credit spread (merton + macro + baseline).
         // Since we are applying PE cycle physics, we use the firm's own dynamic spread.
         $firmCreditSpread = $health->rawMetrics->dynamicSpread ?? self::LBO_CREDIT_SPREAD_BASELINE;
-        
+
         $spreadFreezeDrag = max(0.0, ($firmCreditSpread - self::LBO_CREDIT_SPREAD_BASELINE) * self::LBO_SPREAD_FREEZE_SCALAR);
-        
+
         if ($spreadFreezeDrag > self::DEBT_GATE_LBO_DRAG_THRESHOLD) {
             // Apply drought scalar to expansion capacity when LBO exits are frozen
             $baseCapacity *= self::DEBT_GATE_DROUGHT_SCALAR;
         }
-        
+
         return $baseCapacity;
     }
 
@@ -518,4 +511,3 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         return $currentDebtRatio < ($equityLimit * 0.85);
     }
 }
-

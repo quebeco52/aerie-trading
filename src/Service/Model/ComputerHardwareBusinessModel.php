@@ -96,11 +96,12 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         $consumerWeight   = $params['consumer_weight'];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
 
         // Consumer hardware is volatile, enterprise hardware is stickier
-        $enterpriseZ = $mathUtility->generatePersistentZ($momentum['enterprise'] ?? 0.0, 0.15);
-        $consumerZ   = $mathUtility->generatePersistentZ($momentum['consumer'] ?? 0.0, 0.05);
-        $eventZ      = $mathUtility->generatePersistentZ($momentum['event'] ?? 0.0, 0.10);
+        $enterpriseZ = $streams->generateZ('enterprise_hardware', 0.15);
+        $consumerZ   = $streams->generateZ('consumer_hardware', 0.05);
+        $eventZ      = $streams->generateZ('event', 0.10);
 
         $standardParams = $this->resolveModelParameters($stock, ['pricing_power_index' => 0.5]);
         $pricingPower = max(0.0, min(1.0, $standardParams['pricing_power_index']));
@@ -178,11 +179,7 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'enterprise_hardware' => $enterpriseZ,
-                'consumer_hardware'   => $consumerZ,
-                'event'               => $eventZ,
-            ],
+            streamZ: $streams->getStreamZ(),
             streamRevenue: [
                 'enterprise_hardware' => $enterpriseRevenue,
                 'consumer_hardware'   => $consumerRevenue,

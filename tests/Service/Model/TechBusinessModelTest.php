@@ -15,6 +15,7 @@ class TechBusinessModelTest extends TestCase
     {
         $model = new TechBusinessModel();
         $stock = new Stock();
+        $stock->setTicker('TECH');
         $stock->setBeta('1.5');
 
         $mathUtilityMock = $this->createMock(MathUtility::class);
@@ -22,7 +23,7 @@ class TechBusinessModelTest extends TestCase
         $mathUtilityMock->method('generateStandardNormal')
             ->willReturnOnConsecutiveCalls(2.0, 0.0, 0.0, 0.0);
 
-        $macroState = ['inflation_ema' => 0.02];
+        $macroState = \App\DTO\MacroStateDTO::fromArray(['inflation_ema' => 0.02]);
         $result = $model->computeActualFinancials(
             $stock,
             1000.0,

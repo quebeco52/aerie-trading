@@ -15,13 +15,14 @@ class ShippingBusinessModelTest extends TestCase
     {
         $model = new ShippingBusinessModel();
         $stock = new Stock();
+        $stock->setTicker('SHIP');
         $stock->setBeta('1.0');
 
         $mathUtilityMock = $this->createMock(MathUtility::class);
         $mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         // Positive output gap -> continuous positive spot rate multiplier
-        $macroStatePositive = ['output_gap_ema' => 0.010, 'inflation_ema' => 0.02];
+        $macroStatePositive = \App\DTO\MacroStateDTO::fromArray(['output_gap_ema' => 0.010, 'inflation_ema' => 0.02]);
         $resultPositive = $model->computeActualFinancials(
             $stock,
             1000.0,
@@ -33,7 +34,7 @@ class ShippingBusinessModelTest extends TestCase
         );
 
         // Negative output gap -> continuous negative spot rate multiplier
-        $macroStateNegative = ['output_gap_ema' => -0.010, 'inflation_ema' => 0.02];
+        $macroStateNegative = \App\DTO\MacroStateDTO::fromArray(['output_gap_ema' => -0.010, 'inflation_ema' => 0.02]);
         $resultNegative = $model->computeActualFinancials(
             $stock,
             1000.0,

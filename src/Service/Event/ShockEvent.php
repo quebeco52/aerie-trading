@@ -72,5 +72,15 @@ class ShockEvent
 
     public const INFRASTRUCTURE_BILL_WIN = 'infrastructure_bill_win';
     public const PROJECT_DELAY = 'project_delay';
+    public const INFRASTRUCTURE_FAILURE = 'grid_failure_wildfire';
+
+    public const ENVIRONMENTAL_DISASTER = 'environmental_disaster';
+    public const TELECOM_PRICE_WAR = 'telecom_price_war';
+    public const SPECTRUM_AUCTION = 'spectrum_auction';
+
+    public const SECURITY_BREACH = 'security_breach';
+    public const GEOPOLITICAL_CONFLICT = 'geopolitical_conflict';
+    public const LABOR_STRIKE = 'labor_strike';
 }
+
 

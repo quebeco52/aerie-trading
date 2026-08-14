@@ -198,6 +198,26 @@ class NarrativeEngine
                 "Capitalized on corporate credit spread blowouts by acquiring senior debt at steep discounts.",
                 "Orchestrated successful debtor-in-possession restructurings across distressed assets."
             ]),
+            ShockEvent::INFRASTRUCTURE_FAILURE => $this->getRandomPhrase([
+                "Suffered a major grid infrastructure failure and catastrophic wildfire liability charges.",
+                "Grid failure and wildfire damage claims severely impacted quarterly operating margins.",
+                "Faced sudden wildfire liability reserves following catastrophic grid equipment failure."
+            ]),
+            ShockEvent::SECURITY_BREACH => $this->getRandomPhrase([
+                "Suffered a catastrophic security breach and VIP protection failure, prompting immediate contract terminations.",
+                "High-profile tactical failure triggered intense legal scrutiny, lawsuits, and client flight.",
+                "Faced severe reputational damage and client cancellations following a publicized security breakdown."
+            ]),
+            ShockEvent::GEOPOLITICAL_CONFLICT => $this->getRandomPhrase([
+                "Surge in global geopolitical conflict drove record demand for private military extraction and expeditionary security.",
+                "Outbreak of regional hostilities triggered an explosion in high-margin expeditionary deployment contracts.",
+                "Escalating international tensions fueled massive contract awards for specialized private security forces."
+            ]),
+            ShockEvent::LABOR_STRIKE => $this->getRandomPhrase([
+                "Fulfillment center labor strikes and unionization votes severely disrupted logistics operations.",
+                "Mass warehouse worker walkouts and picket lines halted regional package distribution.",
+                "Coordinated labor strikes across key fulfillment hubs triggered widespread delivery delays and emergency overtime costs."
+            ]),
 
             default => "Experienced an unexpected market event."
         };

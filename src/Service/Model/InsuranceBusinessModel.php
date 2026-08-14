@@ -314,10 +314,18 @@ class InsuranceBusinessModel implements BusinessModelInterface
 
         // 1. Premium Revenue Shock
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
 
-        // Independent stream Z-scores with AR(1) persistence
-        $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.25);
-        $claimZ   = $mathUtility->generatePersistentZ($momentum['claim'] ?? 0.0, 0.05); // Claims are near i.i.d. random
+        // Independent stream Z-scores with AR(1) persistence (supporting subclass key aliases)
+        $prevRevenueZ = $momentum['revenue'] ?? $momentum['reinsurance_premiums'] ?? $momentum['property_casualty_premiums'] ?? 0.0;
+        $prevClaimZ   = $momentum['claim'] ?? $momentum['catastrophe_bonds'] ?? $momentum['life_insurance_premiums'] ?? 0.0;
+
+        $revenueZ = $mathUtility->generatePersistentZ($prevRevenueZ, 0.25);
+        $claimZ   = $mathUtility->generatePersistentZ($prevClaimZ, 0.05); // Claims are near i.i.d. random
+
+        $streams->registerZ('revenue', $revenueZ);
+        $streams->registerZ('claim', $claimZ);
+
         $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
 
         // 2. The Combined Ratio Shock (Catastrophes/Underwriting Cycle)
@@ -374,10 +382,7 @@ class InsuranceBusinessModel implements BusinessModelInterface
             primaryShockZ: $primaryShockZ,
             observableShockZ: 0.0,
             eventType: $eventType,
-            streamZ: [
-                'revenue' => $revenueZ,
-                'claim'   => $claimZ,
-            ],
+            streamZ: $streams->getStreamZ(),
             streamRevenue: [
                 'premium_revenue' => $actualRevenue,
             ],

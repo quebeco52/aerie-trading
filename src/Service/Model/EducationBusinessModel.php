@@ -50,15 +50,16 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
 
         // Placement correlates heavily to macro hiring
         $macroBoost = $macroState->outputGapEma * 0.8;
 
-        $subsidyZ = $mathUtility->generatePersistentZ($momentum['corporate_subsidies'] ?? 0.0, 0.40);
-        $placementZ = $mathUtility->generatePersistentZ($momentum['talent_placement_fees'] ?? 0.0, 0.20) + $macroBoost; 
+        $subsidyZ   = $streams->generateZ('corporate_subsidies', 0.40);
+        $placementZ = $streams->generateZ('talent_placement_fees', 0.20); 
 
-        $subsidyRevenue = $expectedRevenue * self::SUBSIDY_WEIGHT * (1.0 + ($subsidyZ * ($baselineVol * self::SUBSIDY_VARIANCE_SCALAR)));
-        $placementRevenue = $expectedRevenue * self::PLACEMENT_WEIGHT * (1.0 + ($placementZ * ($baselineVol * self::PLACEMENT_VARIANCE_SCALAR)));
+        $subsidyRevenue   = $expectedRevenue * self::SUBSIDY_WEIGHT   * (1.0 + ($subsidyZ * ($baselineVol * self::SUBSIDY_VARIANCE_SCALAR)));
+        $placementRevenue = $expectedRevenue * self::PLACEMENT_WEIGHT * (1.0 + ($placementZ * ($baselineVol * self::PLACEMENT_VARIANCE_SCALAR)) + $macroBoost);
 
         $eventType = null;
 
@@ -74,7 +75,7 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($realizedVariableMargin);
 
         $primaryShockZ = abs($placementZ) > abs($subsidyZ) ? $placementZ : $subsidyZ;
-        $observableShockZ = $subsidyZ * self::SUBSIDY_WEIGHT * ($baselineVol * self::SUBSIDY_VARIANCE_SCALAR);
+        $observableShockZ = ($subsidyZ * self::SUBSIDY_WEIGHT * ($baselineVol * self::SUBSIDY_VARIANCE_SCALAR)) + ($macroBoost * self::PLACEMENT_WEIGHT);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -83,10 +84,7 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'corporate_subsidies'   => $subsidyZ,
-                'talent_placement_fees' => $placementZ,
-            ],
+            streamZ: $streams->getStreamZ(),
             streamRevenue: [
                 'corporate_subsidies'   => $subsidyRevenue,
                 'talent_placement_fees' => $placementRevenue,

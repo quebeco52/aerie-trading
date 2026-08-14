@@ -15,9 +15,12 @@ class FinancialDataBusinessModelTest extends TestCase
     {
         $model = new FinancialDataBusinessModel();
         $stock = new Stock();
+        $stock->setTicker('FINDATA');
         $stock->setBeta('1.0');
 
-        $mathUtilityMock = $this->createMock(MathUtility::class);
+        $mathUtilityMock = $this->getMockBuilder(MathUtility::class)
+            ->onlyMethods(['generateStandardNormal'])
+            ->getMock();
         // Sequence of generateStandardNormal calls:
         // 1. subscriptionZ = 0.0
         // 2. transactionZ = 2.0 (Boom in debt issuance & credit rating mandates)
@@ -25,7 +28,7 @@ class FinancialDataBusinessModelTest extends TestCase
             ->method('generateStandardNormal')
             ->willReturnOnConsecutiveCalls(0.0, 2.0);
 
-        $macroState = [];
+        $macroState = \App\DTO\MacroStateDTO::fromArray([]);
         $result = $model->computeActualFinancials(
             $stock,
             1000.0,
@@ -68,7 +71,6 @@ class FinancialDataBusinessModelTest extends TestCase
         // Ke > Kd + 0.02, ICR >= 6.0, debtRatio < tolerance * 0.60 -> True
         $this->assertTrue(
             $model->isUnderLeveraged(
-                false,
                 0.20,
                 0.50,
                 8.0,
@@ -81,7 +83,6 @@ class FinancialDataBusinessModelTest extends TestCase
         // ICR < 6.0 -> False
         $this->assertFalse(
             $model->isUnderLeveraged(
-                false,
                 0.20,
                 0.50,
                 5.0,

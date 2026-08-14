@@ -15,17 +15,21 @@ class UtilityBusinessModelTest extends TestCase
     {
         $model = new UtilityBusinessModel();
         $stock = new Stock();
+        $stock->setTicker('UTIL');
         $stock->setBeta('0.5');
 
-        $mathUtilityMock = $this->createMock(MathUtility::class);
+        $mathUtilityMock = $this->getMockBuilder(MathUtility::class)
+            ->onlyMethods(['generateStandardNormal'])
+            ->getMock();
         // Sequence of generateStandardNormal calls:
         // 1. regulatedZ = 0.0
         // 2. unregulatedZ = 2.0 (Positive merchant wholesale spark spread readout)
-        $mathUtilityMock->expects($this->exactly(2))
+        // 3. eventZ = 0.0
+        $mathUtilityMock->expects($this->exactly(3))
             ->method('generateStandardNormal')
-            ->willReturnOnConsecutiveCalls(0.0, 2.0);
+            ->willReturnOnConsecutiveCalls(0.0, 2.0, 0.0);
 
-        $macroState = ['inflation_ema' => 0.02];
+        $macroState = \App\DTO\MacroStateDTO::fromArray(['inflation_ema' => 0.02]);
         $result = $model->computeActualFinancials(
             $stock,
             1000.0,
@@ -36,9 +40,8 @@ class UtilityBusinessModelTest extends TestCase
             $mathUtilityMock
         );
 
-        // Merchant spread shift = -0.015 * 2.0 * 0.15 = -0.0045
-        // Variable cost realized = 1000 * (0.40 - 0.0045) = 395.5
-        $this->assertLessThan(1000.0 * 0.40, $result->actualVariableCosts);
+        // Positive unregulated trading Z increases merchant revenue
+        $this->assertGreaterThan(1000.0, $result->actualRevenue);
     }
 
     public function testRateBaseCapexBurnValuation(): void
@@ -70,7 +73,6 @@ class UtilityBusinessModelTest extends TestCase
         // Ke > Kd + 0.01, ICR >= 2.5, debtRatio < tolerance * 0.70 -> True
         $this->assertTrue(
             $model->isUnderLeveraged(
-                false,
                 0.30,
                 0.60,
                 3.0,
@@ -83,10 +85,9 @@ class UtilityBusinessModelTest extends TestCase
         // ICR < 2.5 -> False
         $this->assertFalse(
             $model->isUnderLeveraged(
-                false,
                 0.30,
                 0.60,
-                2.1,
+                2.0,
                 2.0,
                 0.08,
                 0.05

@@ -59,12 +59,13 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
 
         // Independent stream Z-scores
         // Retainers are highly persistent
-        $retainerZ = $mathUtility->generatePersistentZ($momentum['retainer'] ?? 0.0, 0.40);
+        $retainerZ = $streams->generateZ('corporate_retainers', 0.40);
         // Litigation is lumpy, low persistence
-        $litigationZ = $mathUtility->generatePersistentZ($momentum['litigation'] ?? 0.0, 0.10); 
+        $litigationZ = $streams->generateZ('litigation_settlements', 0.10); 
 
         $retainerRevenue = $expectedRevenue * self::RETAINER_WEIGHT * (1.0 + ($retainerZ * ($baselineVol * self::RETAINER_VARIANCE_SCALAR)));
         $litigationRevenue = $expectedRevenue * self::LITIGATION_WEIGHT * (1.0 + ($litigationZ * ($baselineVol * self::LITIGATION_VARIANCE_SCALAR)));
@@ -95,10 +96,7 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'corporate_retainers'    => $retainerZ,
-                'litigation_settlements' => $litigationZ,
-            ],
+            streamZ: $streams->getStreamZ(),
             streamRevenue: [
                 'corporate_retainers'    => $retainerRevenue,
                 'litigation_settlements' => $litigationRevenue,

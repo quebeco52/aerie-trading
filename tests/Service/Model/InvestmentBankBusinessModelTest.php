@@ -49,12 +49,12 @@ class InvestmentBankBusinessModelTest extends TestCase
         $mathMock->method('generateUniform')->willReturn(0.50); // No regulatory fine
 
         // High VIX environment to test CORV's vix_arbitrage_scalar = 2.00
-        $macroState = [
+        $macroState = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema' => 0.0,
             'policy_rate_ema' => 0.04,
-            'yield_5y_ema' => 0.04,
+            'yield_5y_ema' => 0.045, // Neutral DCM curve slope (0.0050 spread over policy rate)
             'market_volatility_ema' => 0.28, // 10% above VIX_ARBITRAGE_FLOOR (0.18)
-        ];
+        ]);
 
         $result = $this->model->computeActualFinancials(
             $stock,

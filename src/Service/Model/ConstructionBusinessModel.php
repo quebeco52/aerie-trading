@@ -26,6 +26,10 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.40;
     public const BASE_COVERAGE_ERROR = 0.08;
 
+    // --- Backlog & Order Book ---
+    /** Fraction of revenue shock absorbed by multi-year order backlog (1.0 = fully absorbed). */
+    public const BACKLOG_DAMPING_FACTOR = 0.75;
+
     public function getModelThresholds(): array
     {
         return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 2.5,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.10, 'moat_spread' => 0.015, 'nwc_intensity' => 0.25, 'capex_completion_rate' => 0.40];
@@ -51,9 +55,9 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
     public const PRIVATE_DEV_WEIGHT = 0.50;
 
     // --- Physics ---
-    public const INFRASTRUCTURE_VARIANCE_SCALAR = 0.15; // Sticky, multi-year contracts
-    public const PRIVATE_DEV_VARIANCE_SCALAR = 1.20; // Highly cyclical corporate spending
-    public const INFLATION_PENALTY_SCALAR = 1.50; // Extremely vulnerable to fixed-price contract cost overruns
+    public const INFRASTRUCTURE_VARIANCE_SCALAR = 0.10; // Tamed: Infrastructure is very slow moving
+    public const PRIVATE_DEV_VARIANCE_SCALAR = 0.50; // Tamed: Cyclical, but not a 3x swing Q/Q
+    public const INFLATION_PENALTY_SCALAR = 1.00; // Tamed slightly for realism
 
     // --- Tail Risk & Shock Events ---
     public const COST_OVERRUN_Z_SCORE = -2.00;
@@ -82,10 +86,10 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $privateZ = $mathUtility->generatePersistentZ($momentum['private_development'] ?? 0.0, 0.20);
         $eventZ = $mathUtility->generatePersistentZ($momentum['event'] ?? 0.0, 0.10);
 
-        // --- Macro Demand Sensitivities ---
-        $macroBoost = $macroState->outputGapEma * 1.5 * $beta;
-        $creditDrag = max(0.0, ($macroState->policyRateEma - MacroEngine::NATURAL_RATE) * 2.0 * $beta);
-        $nominalBoost = max(0.0, ($macroState->nominalGdpIndex - 1.0) * 0.4); // Gov contracts inflate nominally over time
+        // --- Macro Demand Sensitivities (Damped by Backlog) ---
+        // Using outputGapEma ensures we are modeling cyclical deviations, not compounding secular growth!
+        $macroBoost = ($macroState->outputGapEma * 1.5 * $beta) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
+        $creditDrag = max(0.0, ($macroState->policyRateEma - MacroEngine::NATURAL_RATE) * 2.0 * $beta) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
 
         // --- Tail Risk Events ---
         $dealMultiplier = 1.0;
@@ -101,8 +105,11 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         }
 
         // --- Dual-Stream Revenue Calculation ---
-        $infrastructureRevenue = max(0.0, $expectedRevenue * self::INFRASTRUCTURE_WEIGHT * (1.0 + ($infrastructureZ * ($baselineVol * self::INFRASTRUCTURE_VARIANCE_SCALAR)) + $nominalBoost) * $dealMultiplier);
-        $privateRevenue = max(0.0, $expectedRevenue * self::PRIVATE_DEV_WEIGHT * (1.0 + ($privateZ * ($baselineVol * self::PRIVATE_DEV_VARIANCE_SCALAR)) + $macroBoost - $creditDrag));
+        $infrastructureShock = $infrastructureZ * ($baselineVol * self::INFRASTRUCTURE_VARIANCE_SCALAR) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
+        $privateShock = $privateZ * ($baselineVol * self::PRIVATE_DEV_VARIANCE_SCALAR) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
+
+        $infrastructureRevenue = max(0.0, $expectedRevenue * self::INFRASTRUCTURE_WEIGHT * (1.0 + $infrastructureShock) * $dealMultiplier);
+        $privateRevenue = max(0.0, $expectedRevenue * self::PRIVATE_DEV_WEIGHT * (1.0 + $privateShock + $macroBoost - $creditDrag));
 
         $actualRevenue = $infrastructureRevenue + $privateRevenue;
 
@@ -117,9 +124,8 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
 
         $materialCostDrag = $baseInflationPenalty + ($energyShift * 0.10);
 
-        // Apply raw margin penalties
-        $effectiveMargin = $actualRevenue > 0 ? ($realizedVariableMargin * $expectedRevenue) / max(1.0, $actualRevenue) : $realizedVariableMargin;
-        $rawMargin = $effectiveMargin - $materialCostDrag - $costOverrunDrag;
+        // Apply penalties directly to the baseline variable margin
+        $rawMargin = $realizedVariableMargin - $materialCostDrag - $costOverrunDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock is whichever stream deviated the most, overridden by tail events

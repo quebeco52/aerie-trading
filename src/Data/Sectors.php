@@ -32,7 +32,8 @@ class Sectors
         'financial_data'  => 'Asset-light data monopolies. Characterized by incredibly sticky recurring subscription revenue, ultra-high margins, and complete immunity to physical supply chain inflation. Features exceptionally low idiosyncratic variance.',
         'tech'            => 'Asset-light platform businesses with near-zero marginal costs. Immune to physical supply chains but exposed to high wage inflation. Features higher baseline volatility and fat-tail risks like massive regulatory anti-trust fines or data breaches.',
         'consumer_staples' => 'Produces essential goods and non-cyclical services (Food, Tobacco, Household, Medical Care Facilities, Discount Stores). Features inelastic demand (very low volatility) and high pricing power, allowing them to completely ignore supply chain inflation penalties.',
-        'defense_contractor' => 'Operates on government "Cost-Plus" contracts and municipal defense budgets (Aerospace, Security Services). Highly immune to recessions. Because their profit margin is a guaranteed percentage of total costs, inflation actually increases their absolute earnings.',
+        'defense_contractor' => 'Operates on sovereign government "Cost-Plus" procurement contracts (Aerospace & Defense). Highly immune to recessions with guaranteed margin cost escalators.',
+        'security_protection' => 'Private military contractors and executive protection. Tri-stream revenue engine: sovereign cost-plus contracts, sticky corporate campus retainers, and counter-cyclical expeditionary black-ops that thrive on market panic (high VIX) and credit distress. Carries asymmetric tail risk from publicized tactical breaches.',
         'clearing_house'  => 'Acts as the ultimate guarantor of all market trades. Holds massive "Initial Margin" deposits from member firms, earning interest on the float. Revenue scales off transaction volume, thriving during market panics (high VIX). Carries extreme apocalyptic tail risk if member defaults exceed the margin pool. Evaluated on ROE.',
         'biotech'         => 'Biotechnology and specialty pharma. CapEx is intangible R&D IP. Thrives on blockbuster drug super-cycles when R&D reinvestment is strong, but suffers rapid patent cliff amortization and generic margin erosion when R&D lags. Inelastic demand during recessions.',
         'luxury'          => 'Luxury goods and elite brand conglomerates. Possesses Veblen pricing power: immune to inflation penalties, raising prices without volume loss. Very high operating leverage and brand equity, but sensitive to global liquidity freezes among ultra-wealthy buyers.',
@@ -58,6 +59,8 @@ class Sectors
         'construction'    => 'Operates on massive, multi-year timelines. Mix of sticky infrastructure contracts and highly cyclical private development.',
         'retail_insurance'=> 'Insulates tail-risk via reinsurance. Split between short-tail Property & Casualty premiums and long-duration Life Insurance premiums.',
         'reinsurance'     => 'Extremely lumpy and catastrophic tail-risk. Revenue is split between core reinsurance premiums and high-yield catastrophe bonds.',
+        'waste_management'=> 'Operates localized oligopolies with immense pricing power due to landfill permitting moats. Revenues mix hyper-sticky residential collection with cyclical commercial streams. Inflation hedge via municipal contract CPI escalators.',
+        'telecom'         => 'High barriers to entry with revenue dominated by sticky recurring subscriptions. Subject to margin-crushing price wars for market share. Astronomical debt loads create high sensitivity to 10-year Treasury yields.',
         'none'            => 'Standard corporate physics. Evaluated on Return on Invested Capital (ROIC). Subject to physical depreciation and supply chain inflation penalties when costs rise faster than pricing power. Idiosyncratic variance applies directly to sales volume.',
     ];
 
@@ -167,7 +170,7 @@ class Sectors
         'Resorts & Casinos' => ['pe' => 18.00, 'depreciation' => 0.06, 'ebitda_limit' => 4.5, 'equity_limit' => 2.0, 'business_model' => 'resorts_casinos'], // Collateralized by prime real estate
         'Restaurants' => ['pe' => 20.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'restaurant'], // Mix of corporate and franchise
         'Scientific & Technical Instruments' => ['pe' => 26.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'none'], // High margin, IP heavy
-        'Security & Protection Services' => ['pe' => 18.00, 'depreciation' => 0.04, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'defense_contractor'],
+        'Security & Protection Services' => ['pe' => 18.00, 'depreciation' => 0.04, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'security_protection'],
         'Semiconductor Equipment & Materials' => ['pe' => 22.00, 'depreciation' => 0.12, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'business_model' => 'semiconductor'], // ASML etc. Boom and bust.
         'Semiconductors' => ['pe' => 24.00, 'depreciation' => 0.15, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'business_model' => 'semiconductor'], // Fab plants age like milk
         'Software - Application' => ['pe' => 28.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'business_model' => 'tech'], // Asset light, pure IP, high growth
@@ -179,7 +182,7 @@ class Sectors
         'Specialty Retail' => ['pe' => 16.00, 'depreciation' => 0.06, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'none'],
         'Staffing & Employment Services' => ['pe' => 14.00, 'depreciation' => 0.02, 'ebitda_limit' => 2.0, 'equity_limit' => 0.5, 'business_model' => 'none'], // Pure human capital. No hard assets.
         'Steel' => ['pe' => 10.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.0, 'equity_limit' => 1.5, 'business_model' => 'steel_manufacturing'], // Brutally cyclical commodity
-        'Telecom Services' => ['pe' => 14.00, 'depreciation' => 0.10, 'ebitda_limit' => 4.5, 'equity_limit' => 2.0, 'business_model' => 'utility'], // Massive CAPEX, but incredibly stable utility-like cash flows
+        'Telecom Services' => ['pe' => 14.00, 'depreciation' => 0.10, 'ebitda_limit' => 4.5, 'equity_limit' => 2.0, 'business_model' => 'telecom'], // Massive CAPEX, but incredibly stable utility-like cash flows
         'Tobacco' => ['pe' => 11.00, 'depreciation' => 0.04, 'ebitda_limit' => 4.0, 'equity_limit' => 1.5, 'business_model' => 'consumer_staples'], // Secular volume decline, massive cash flows, huge debt capacity
         'Tools & Accessories' => ['pe' => 16.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'tools_and_accessories'],
         'Travel Services' => ['pe' => 18.00, 'depreciation' => 0.04, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'none'], // Expedia, Booking.com. Asset light.
@@ -188,7 +191,7 @@ class Sectors
         'Utilities - Regulated Electric' => ['pe' => 16.00, 'depreciation' => 0.04, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'utility'],
         'Utilities - Regulated Gas' => ['pe' => 15.00, 'depreciation' => 0.04, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'utility'],
         'Utilities - Regulated Water' => ['pe' => 18.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'utility'], // Safest asset class on earth
-        'Waste Management' => ['pe' => 22.00, 'depreciation' => 0.05, 'ebitda_limit' => 4.0, 'equity_limit' => 1.5, 'business_model' => 'utility'], // Trash is cash. High P/E.
+        'Waste Management' => ['pe' => 22.00, 'depreciation' => 0.05, 'ebitda_limit' => 4.0, 'equity_limit' => 1.5, 'business_model' => 'waste_management'], // Trash is cash. High P/E.
         'General' => ['pe' => 18.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'none'],
     ];
 
@@ -234,6 +237,7 @@ class Sectors
             'tech'            => new \App\Service\Model\TechBusinessModel(),
             'consumer_staples' => new \App\Service\Model\ConsumerStaplesBusinessModel(),
             'defense_contractor' => new \App\Service\Model\DefenseContractorBusinessModel(),
+            'security_protection' => new \App\Service\Model\SecurityProtectionBusinessModel(),
             'biotech'         => new \App\Service\Model\BiotechBusinessModel(),
             'luxury'          => new \App\Service\Model\LuxuryBusinessModel(),
             'shipping'        => new \App\Service\Model\ShippingBusinessModel(),
@@ -257,6 +261,8 @@ class Sectors
             'construction'    => new \App\Service\Model\ConstructionBusinessModel(),
             'retail_insurance'=> new \App\Service\Model\RetailInsuranceBusinessModel(),
             'reinsurance'     => new \App\Service\Model\ReinsuranceBusinessModel(),
+            'waste_management'=> new \App\Service\Model\WasteManagementBusinessModel(),
+            'telecom'         => new \App\Service\Model\TelecomBusinessModel(),
             default           => new \App\Service\Model\StandardCorporateBusinessModel(),
         };
 

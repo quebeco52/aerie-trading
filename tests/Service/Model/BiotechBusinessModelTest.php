@@ -40,9 +40,12 @@ class BiotechBusinessModelTest extends TestCase
     {
         $model = new BiotechBusinessModel();
         $stock = new Stock();
+        $stock->setTicker('BIO');
         $stock->setBeta('1.0');
 
-        $mathUtilityMock = $this->createMock(MathUtility::class);
+        $mathUtilityMock = $this->getMockBuilder(MathUtility::class)
+            ->onlyMethods(['generateStandardNormal'])
+            ->getMock();
         // Sequence of generateStandardNormal calls:
         // 1. establishedZ = 0.0
         // 2. pipelineZ = 1.5 (Positive clinical pipeline progress)
@@ -51,7 +54,7 @@ class BiotechBusinessModelTest extends TestCase
             ->method('generateStandardNormal')
             ->willReturnOnConsecutiveCalls(0.0, 1.5, 0.0);
 
-        $macroState = ['output_gap_ema' => 0.0, 'inflation_ema' => 0.02];
+        $macroState = \App\DTO\MacroStateDTO::fromArray(['output_gap_ema' => 0.0, 'inflation_ema' => 0.02]);
         $result = $model->computeActualFinancials(
             $stock,
             1000.0,
