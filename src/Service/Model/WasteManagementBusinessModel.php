@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
@@ -95,14 +96,14 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            'residential_weight' => self::RESIDENTIAL_WEIGHT,
-            'commercial_weight'  => self::COMMERCIAL_WEIGHT,
-            'recycling_weight'   => self::RECYCLING_WEIGHT,
+            ModelParam::ResidentialWeight->value => self::RESIDENTIAL_WEIGHT,
+            ModelParam::CommercialWeight->value  => self::COMMERCIAL_WEIGHT,
+            ModelParam::RecyclingWeight->value   => self::RECYCLING_WEIGHT,
         ]);
 
-        $residentialWeight = $params['residential_weight'];
-        $commercialWeight  = $params['commercial_weight'];
-        $recyclingWeight   = $params['recycling_weight'];
+        $residentialWeight = $params[ModelParam::ResidentialWeight];
+        $commercialWeight  = $params[ModelParam::CommercialWeight];
+        $recyclingWeight   = $params[ModelParam::RecyclingWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = new \App\DTO\StreamContext($momentum, $mathUtility);

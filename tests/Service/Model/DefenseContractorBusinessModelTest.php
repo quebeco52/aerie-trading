@@ -79,6 +79,146 @@ class DefenseContractorBusinessModelTest extends TestCase
         $this->assertLessThan(1000.0 * 0.65, $result->actualVariableCosts);
     }
 
+    public function testRevenueNotDistortedByCumulativeNominalGdpGrowth(): void
+    {
+        $model = new DefenseContractorBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('GRIP');
+        $stock->setBeta('0.35');
+
+        $mathUtilityMock = $this->createMock(MathUtility::class);
+        // Zero Z-shocks
+        $mathUtilityMock->method('generatePersistentZ')
+            ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0);
+
+        // Simulation has run for hours: nominal GDP index is 3.5 (high accumulated growth)
+        $macroState = new MacroStateDTO(
+            outputGap: 0.0,
+            outputGapEma: 0.0,
+            unemploymentRate: 0.04,
+            unemploymentRateEma: 0.04,
+            energyPriceIndex: 100.0,
+            energyPriceIndexEma: 100.0,
+            energyPriceShock: 0.0,
+            consumerSentimentIndex: 100.0,
+            consumerSentimentIndexEma: 100.0,
+            inflation: 0.02,
+            inflationEma: 0.02, // Target inflation -> costPlusBonus = 0.0
+            policyRate: 0.04,
+            policyRateEma: 0.04,
+            targetRate: 0.04,
+            yield2y: 0.04,
+            yield2yEma: 0.04,
+            yield5y: 0.04,
+            yield5yEma: 0.04,
+            yield10y: 0.04,
+            yield10yEma: 0.04,
+            yield30y: 0.04,
+            yield30yEma: 0.04,
+            marketVolatility: 0.15,
+            marketVolatilityEma: 0.15,
+            marketZ: 0.0,
+            corporateTaxRate: 0.21,
+            equityRiskPremium: 0.05,
+            macroCreditSpread: 0.015,
+            macroCreditSpreadEma: 0.015,
+            qeActive: false,
+            qeIntensity: 0.0,
+            inversionDuration: 0.0,
+            nsLevel: 0.04,
+            nsSlope: 0.0,
+            nsSlopeEma: 0.0,
+            nsCurvature: 0.0,
+            potentialGdpIndex: 3.5,
+            nominalGdpIndex: 3.5, // 3.5x cumulative GDP
+        );
+
+        $expectedRevenue = 10_000.0;
+        $result = $model->computeActualFinancials(
+            $stock,
+            $expectedRevenue,
+            0.30,
+            3000.0,
+            0.15,
+            $macroState,
+            $mathUtilityMock
+        );
+
+        // With zero Z-scores and 2% inflation, actual revenue should equal expected revenue exactly ($10,000)
+        $this->assertEqualsWithDelta($expectedRevenue, $result->actualRevenue, 0.01);
+        $this->assertEqualsWithDelta(0.0, $result->observableShockZ, 0.0001);
+    }
+
+    public function testCostPlusBonusAppliesWhenInflationExceedsTarget(): void
+    {
+        $model = new DefenseContractorBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('GRIP');
+
+        $mathUtilityMock = $this->createMock(MathUtility::class);
+        $mathUtilityMock->method('generatePersistentZ')
+            ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0);
+
+        // Inflation running at 4% (2% in excess of 2% target)
+        $macroState = new MacroStateDTO(
+            outputGap: 0.0,
+            outputGapEma: 0.0,
+            unemploymentRate: 0.04,
+            unemploymentRateEma: 0.04,
+            energyPriceIndex: 100.0,
+            energyPriceIndexEma: 100.0,
+            energyPriceShock: 0.0,
+            consumerSentimentIndex: 100.0,
+            consumerSentimentIndexEma: 100.0,
+            inflation: 0.04,
+            inflationEma: 0.04,
+            policyRate: 0.04,
+            policyRateEma: 0.04,
+            targetRate: 0.04,
+            yield2y: 0.04,
+            yield2yEma: 0.04,
+            yield5y: 0.04,
+            yield5yEma: 0.04,
+            yield10y: 0.04,
+            yield10yEma: 0.04,
+            yield30y: 0.04,
+            yield30yEma: 0.04,
+            marketVolatility: 0.15,
+            marketVolatilityEma: 0.15,
+            marketZ: 0.0,
+            corporateTaxRate: 0.21,
+            equityRiskPremium: 0.05,
+            macroCreditSpread: 0.015,
+            macroCreditSpreadEma: 0.015,
+            qeActive: false,
+            qeIntensity: 0.0,
+            inversionDuration: 0.0,
+            nsLevel: 0.04,
+            nsSlope: 0.0,
+            nsSlopeEma: 0.0,
+            nsCurvature: 0.0,
+            potentialGdpIndex: 1.0,
+            nominalGdpIndex: 1.0,
+        );
+
+        $expectedRevenue = 10_000.0;
+        $result = $model->computeActualFinancials(
+            $stock,
+            $expectedRevenue,
+            0.30,
+            3000.0,
+            0.15,
+            $macroState,
+            $mathUtilityMock
+        );
+
+        // Excess inflation (0.04 - 0.02) = 0.02 * 1.50 = 0.03 costPlusBonus
+        // Domestic procurement weight is 0.80 for GRIP (from StockModelTuning)
+        // Expected bonus = 0.03 * 0.80 = 0.024 (+2.4% -> $10,240)
+        $this->assertEqualsWithDelta(10_240.0, $result->actualRevenue, 1.0);
+        $this->assertEqualsWithDelta(0.024, $result->observableShockZ, 0.001);
+    }
+
     public function testClassifiedToolingAndNextGenPlatformReinvestment(): void
     {
         $model = new DefenseContractorBusinessModel();

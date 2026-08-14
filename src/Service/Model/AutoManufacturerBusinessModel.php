@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -76,8 +77,8 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         // Get the base physics from HeavyManufacturing (which already amplifies output gap)
         $physics = parent::getMacroPhysics($stock, $macroState);
         
-        $params = $this->resolveModelParameters($stock, ['rate_sensitivity_scalar' => self::RATE_SENSITIVITY_SCALAR]);
-        $rateScalar = $params['rate_sensitivity_scalar'];
+        $params = $this->resolveModelParameters($stock, [ModelParam::RateSensitivityScalar->value => self::RATE_SENSITIVITY_SCALAR]);
+        $rateScalar = $params[ModelParam::RateSensitivityScalar];
 
         $policyRate = $macroState->policyRate;
         $beta = (float) $stock->getBeta();
@@ -105,15 +106,15 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            'pricing_power_index'      => 0.5,
-            'auto_sales_weight'        => self::AUTO_SALES_WEIGHT,
-            'auto_financing_weight'    => self::AUTO_FINANCING_WEIGHT,
-            'software_services_weight' => 0.00
+            ModelParam::PricingPowerIndex->value      => 0.5,
+            ModelParam::AutoSalesWeight->value        => self::AUTO_SALES_WEIGHT,
+            ModelParam::AutoFinancingWeight->value    => self::AUTO_FINANCING_WEIGHT,
+            ModelParam::SoftwareServicesWeight->value => 0.00
         ]);
         
-        $salesWeight    = $params['auto_sales_weight'];
-        $financeWeight  = $params['auto_financing_weight'];
-        $softwareWeight = $params['software_services_weight'];
+        $salesWeight    = $params[ModelParam::AutoSalesWeight];
+        $financeWeight  = $params[ModelParam::AutoFinancingWeight];
+        $softwareWeight = $params[ModelParam::SoftwareServicesWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $salesZ = $mathUtility->generatePersistentZ($momentum['auto_sales'] ?? 0.0, 0.25);
@@ -121,7 +122,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
 
         // --- Core Auto Sales (Heavy Manufacturing Physics) ---
         // Resolve pricing power for inflation penalty logic
-        $pricingPower = max(0.0, min(1.0, $params['pricing_power_index']));
+        $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
         $inflationMultiplier = 2.0 - ($pricingPower * 2.0); 
         $macroSensitivityMultiplier = 0.5 + $pricingPower;
 

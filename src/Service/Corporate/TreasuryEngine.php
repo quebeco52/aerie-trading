@@ -328,7 +328,7 @@ class TreasuryEngine
 
         $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $trueReturn, 0.02);
 
-        $bookValuePerShare = max(0.01, $stock->getTotalEquity() / max(1, $ctx->sharesOutstanding));
+        $bookValuePerShare = max(0.01, (float) $stock->getTotalEquity() / max(1, $ctx->sharesOutstanding));
         $priceToBook = $ctx->currentPrice / $bookValuePerShare;
 
         $isBubble = $economicSpread > 0.0 && $currentPE > ($fairValuePE * 2.5) && $currentPE > 40.0 && $priceToBook > 3.0;
@@ -531,7 +531,7 @@ class TreasuryEngine
                 return $val;
             }
         }
-        if (is_numeric($val) && !is_finite((float) $val)) {
+        if (!is_finite((float) $val)) {
             return '0.' . str_repeat('0', $scale);
         }
         return sprintf('%.' . $scale . 'F', (float) $val);

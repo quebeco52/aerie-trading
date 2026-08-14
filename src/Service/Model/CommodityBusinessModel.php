@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -89,7 +90,7 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         // by global spot prices ($inflationBonus) during the Idiosyncratic Shock phase. 
         // Setting this higher would result in massive, compounded double-dipping on inflation.
         $physics['pricing_power_multiplier'] = 1.0;
-        
+
         // Re-implementing Macro Volume Shock (GDP Sensitivity)
         // Commodities are heavily exposed to economic cycles, so multiplier is 1.5
         $physics['macro_demand_shift'] = $macroState->outputGapEma * 1.5 * abs((float) $stock->getBeta());
@@ -103,16 +104,16 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            'extraction_revenue_weight' => self::EXTRACTION_REVENUE_WEIGHT,
-            'spot_price_weight'         => self::SPOT_PRICE_WEIGHT,
-            'refining_spread_weight'    => 0.00,
-            'spot_price_sensitivity'    => self::SPOT_PRICE_SENSITIVITY,
+            ModelParam::ExtractionRevenueWeight->value => self::EXTRACTION_REVENUE_WEIGHT,
+            ModelParam::SpotPriceWeight->value         => self::SPOT_PRICE_WEIGHT,
+            ModelParam::RefiningSpreadWeight->value    => 0.00,
+            ModelParam::SpotPriceSensitivity->value    => self::SPOT_PRICE_SENSITIVITY,
         ]);
 
-        $extractionWeight = $params['extraction_revenue_weight'];
-        $spotWeight       = $params['spot_price_weight'];
-        $refiningWeight   = $params['refining_spread_weight'];
-        $spotSensitivity  = $params['spot_price_sensitivity'];
+        $extractionWeight = $params[ModelParam::ExtractionRevenueWeight];
+        $spotWeight       = $params[ModelParam::SpotPriceWeight];
+        $refiningWeight   = $params[ModelParam::RefiningSpreadWeight];
+        $spotSensitivity  = $params[ModelParam::SpotPriceSensitivity];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
 
@@ -145,14 +146,14 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         $energyShift = ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0;
 
         $inflationBonus = ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_BONUS_SCALAR * $spotSensitivity;
-        
+
         // Energy shift is already a massive percentage multiplier (e.g. 100 -> 400 is +300%). 
         // We shouldn't multiply it by beta and 2.0, otherwise a 300% spike causes a 1050% revenue spike.
         // We rely on $spotSensitivity (set to 0.50) to simulate a partially hedged production book (locking in futures).
-        $energyBonus = $energyShift * self::INFLATION_BONUS_SCALAR * $spotSensitivity; 
+        $energyBonus = $energyShift * self::INFLATION_BONUS_SCALAR * $spotSensitivity;
 
         $spotRevenue   = $expectedRevenue * $spotWeight * (1.0 + ($spotZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $inflationBonus + $energyBonus) * $spotMultiplier;
-        
+
         $refiningRevenue = 0.0;
         $refiningZ = 0.0;
         if ($refiningWeight > 0.0) {
@@ -191,7 +192,7 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
             'spot'       => $spotZ,
             'event'      => $eventZ,
         ];
-        
+
         $streamRevenue = [
             'extraction' => $extractionRevenue,
             'spot'       => $spotRevenue,
@@ -212,7 +213,7 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streamZ,
             streamRevenue: $streamRevenue,
         );
-        
+
         return $result;
     }
 

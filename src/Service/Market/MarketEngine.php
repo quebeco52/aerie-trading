@@ -99,10 +99,10 @@ class MarketEngine
 
         // CAPM & MACRO TRANSMISSION MECHANISM
 
-        $riskFreeRate = $macroState?->policyRate ?? 0.04;
-        $outputGap = $macroState?->outputGap ?? 0.0;
-        $inflation = $macroState?->inflation ?? 0.02;
-        $erp = $macroState?->equityRiskPremium ?? MacroEngine::BASE_EQUITY_RISK_PREMIUM;
+        $riskFreeRate = $macroState->policyRate;
+        $outputGap = $macroState->outputGap;
+        $inflation = $macroState->inflation;
+        $erp = $macroState->equityRiskPremium;
 
         $finalDrift = $this->mathUtility->calculateCAPM($riskFreeRate, $beta, $erp);
 

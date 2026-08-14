@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
@@ -134,16 +135,16 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         MathUtility $mathUtility
     ): SectorPhysicsResult {
         $params = $this->resolveModelParameters($stock, [
-            'pricing_power_index'             => self::MIN_BETA_PRICING_POWER_FLOOR,
-            'gaming_revenue_weight'           => self::GAMING_REVENUE_WEIGHT,
-            'non_gaming_revenue_weight'       => self::NON_GAMING_REVENUE_WEIGHT,
-            'commercial_real_estate_weight'   => 0.00,
+            ModelParam::PricingPowerIndex->value             => self::MIN_BETA_PRICING_POWER_FLOOR,
+            ModelParam::GamingRevenueWeight->value           => self::GAMING_REVENUE_WEIGHT,
+            ModelParam::NonGamingRevenueWeight->value       => self::NON_GAMING_REVENUE_WEIGHT,
+            ModelParam::CommercialRealEstateWeight->value   => 0.00,
         ]);
 
-        $gamingWeight      = $params['gaming_revenue_weight'];
-        $nonGamingWeight   = $params['non_gaming_revenue_weight'];
-        $creWeight         = $params['commercial_real_estate_weight'];
-        $pricingPower = max(0.0, min(1.0, $params['pricing_power_index']));
+        $gamingWeight      = $params[ModelParam::GamingRevenueWeight];
+        $nonGamingWeight   = $params[ModelParam::NonGamingRevenueWeight];
+        $creWeight         = $params[ModelParam::CommercialRealEstateWeight];
+        $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
 

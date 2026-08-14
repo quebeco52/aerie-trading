@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
@@ -32,6 +33,8 @@ class InsuranceBusinessModel implements BusinessModelInterface
     use Trait\StandardOperatingPhysicsTrait, Trait\StandardCapitalAllocationTrait, FinancialPhysicsTrait {
         FinancialPhysicsTrait::getTrueReturn insteadof Trait\StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::getEvaluationCapital insteadof Trait\StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::calculateEconomicReturn insteadof Trait\StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::updateDynamicRoic insteadof Trait\StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::getMaxOrganicGrowthSpeed insteadof Trait\StandardCapitalAllocationTrait;
     }
 
@@ -305,12 +308,12 @@ class InsuranceBusinessModel implements BusinessModelInterface
     {
         // Resolve company-specific tuned underwriting parameters
         $params = $this->resolveModelParameters($stock, [
-            'catastrophe_z_threshold' => self::CATASTROPHE_Z_THRESHOLD,
-            'catastrophe_loss_scalar' => self::CATASTROPHE_LOSS_SCALAR,
+            ModelParam::CatastropheZThreshold->value => self::CATASTROPHE_Z_THRESHOLD,
+            ModelParam::CatastropheLossScalar->value => self::CATASTROPHE_LOSS_SCALAR,
         ]);
 
-        $catThreshold = $params['catastrophe_z_threshold'];
-        $catScalar    = $params['catastrophe_loss_scalar'];
+        $catThreshold = $params[ModelParam::CatastropheZThreshold];
+        $catScalar    = $params[ModelParam::CatastropheLossScalar];
 
         // 1. Premium Revenue Shock
         $momentum = $stock->getEarningsMomentumZ() ?? [];
@@ -409,10 +412,10 @@ class InsuranceBusinessModel implements BusinessModelInterface
     {
         // Resolve company-specific tuned float allocation parameters
         $params = $this->resolveModelParameters($stock, [
-            'float_equity_weight' => self::FLOAT_EQUITY_WEIGHT,
+            ModelParam::FloatEquityWeight->value => self::FLOAT_EQUITY_WEIGHT,
         ]);
 
-        $floatEquityWeight = $params['float_equity_weight'];
+        $floatEquityWeight = $params[ModelParam::FloatEquityWeight];
         $cash              = (float) $stock->getCorporateTreasury();
         $policyRate        = $macroState->policyRateEma;
         $yield10y          = $macroState->yield10yEma;

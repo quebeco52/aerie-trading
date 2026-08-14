@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -22,7 +23,9 @@ use App\Service\Macro\MacroEngine;
 class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Analyst Visibility & Error ---
-    public const BASE_COVERAGE_VISIBILITY = 0.60; // Defense budgets are public, R&D is black-box
+    /** Base coverage visibility for defense contractors with public budgets. */
+    public const BASE_COVERAGE_VISIBILITY = 0.60;
+    /** Base analyst forecasting error standard deviation for defense programs. */
     public const BASE_COVERAGE_ERROR = 0.08;
 
     public function getModelThresholds(): array
@@ -39,46 +42,73 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Dual-Stream Defense Architecture ---
+    /** Baseline fraction of revenue from long-term sovereign government procurement contracts. */
     public const DOMESTIC_PROCUREMENT_WEIGHT = 0.75;
+    /** Baseline fraction of revenue from foreign military sales (FMS). */
     public const FOREIGN_MILITARY_SALES_WEIGHT = 0.25;
 
     // --- Government Contracting & Cost-Plus Physics ---
-    public const DOMESTIC_VARIANCE_SCALAR   = 0.05; // Bureaucratic capture makes revenue incredibly stable
-    public const FMS_VARIANCE_SCALAR        = 0.35; // FMS is much more volatile and geopolitically sensitive
+    /** Variance scalar for domestic defense procurement contracts. */
+    public const DOMESTIC_VARIANCE_SCALAR   = 0.05;
+    /** Variance scalar for volatile foreign military sales. */
+    public const FMS_VARIANCE_SCALAR        = 0.35;
+    /** Multiplier converting inflation in excess of target into cost-plus top-line revenue bonuses. */
     public const COST_PLUS_BONUS_SCALAR     = 1.50;
 
     // --- Fixed-Price Contract Margin Squeeze ---
+    /** Negative Z-score threshold triggering fixed-price R&D cost overrun forward losses. */
     public const FORWARD_LOSS_Z_SCORE       = -1.50;
-    public const FORWARD_LOSS_PENALTY       = 0.08; // 8% variable cost spike from R&D overruns
+    /** Variable cost penalty applied during fixed-price program cost overruns. */
+    public const FORWARD_LOSS_PENALTY       = 0.08;
 
     // --- Geopolitical Contract Lore & Shock Thresholds ---
+    /** Negative Z-score threshold indicating catastrophic flagship weapon platform failure. */
     public const FLAGSHIP_FAILURE_Z_SCORE  = -2.50;
+    /** Revenue multiplier haircut applied following a flagship weapon platform failure. */
     public const FLAGSHIP_FAILURE_MULT     = 0.80;
+    /** Variable cost penalty applied to remediate flagship weapon engineering defects. */
     public const FLAGSHIP_FAILURE_PENALTY  = 0.10;
 
+    /** Positive Z-score threshold indicating a mega-procurement contract win. */
     public const MEGA_CONTRACT_WIN_Z_SCORE = 2.50;
+    /** Revenue multiplier boost from winning a mega defense procurement program. */
     public const MEGA_CONTRACT_WIN_MULT    = 1.15;
 
     // --- Geopolitical Sanctions & Conflict Physics ---
+    /** Positive Z-score threshold indicating active geopolitical conflict surge. */
     public const GEOPOLITICAL_CONFLICT_Z = 2.00;
-    public const FMS_CONFLICT_BOOST = 1.50; // Foreign sales explode during war
+    /** Revenue multiplier boost on foreign military sales during active geopolitical conflicts. */
+    public const FMS_CONFLICT_BOOST = 1.50;
+    /** Margin drag from raw material shortages and emergency expediting during wartime. */
     public const SANCTIONS_EXECUTION_DRAG = 0.035;
 
+    /** Negative Z-score threshold indicating congressional foreign arms export ban. */
     public const CONGRESSIONAL_EXPORT_BAN_Z = -2.00;
-    public const EXPORT_BAN_MULT = 0.50; // FMS gets crushed if Congress blocks arms sales
+    /** Revenue multiplier haircut applied when congress bans foreign arms exports. */
+    public const EXPORT_BAN_MULT = 0.50;
 
     // --- Program Execution & Classified R&D Tooling Physics ---
+    /** Margin elasticity per unit of sovereign program execution Z-score. */
     public const PROGRAM_EXECUTION_ELASTICITY = 0.015;
+    /** Quarterly margin decay rate per unit of underinvestment in classified tooling. */
     public const DEFENSE_TOOLING_DECAY_RATE   = 0.018;
+    /** Quarterly margin gain scalar per unit of logarithmic overinvestment in platform modernization. */
     public const CLASSIFIED_PLATFORM_GAIN_RATE = 0.009;
+    /** Structural minimum operating margin floor under severe tooling tech debt. */
     public const MIN_OPERATING_MARGIN_FLOOR   = 0.06;
+    /** Structural maximum operating margin ceiling for modernized next-gen platforms. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.22;
 
     // --- ROIC Annualization & Smoothing ---
+    /** Annualization multiplier converting quarterly NOPAT into annual returns. */
     public const ROIC_ANNUALIZATION_MULT   = 4.00;
+    /** Lower clamp for calculated ROIC. */
     public const MIN_ROIC_CLAMP            = -0.50;
+    /** Upper clamp for calculated ROIC. */
     public const MAX_ROIC_CLAMP            = 1.00;
+    /** Weight given to current quarter post-tax return when updating TTM ROIC EMA. */
     public const ROIC_TTM_EMA_WEIGHT       = 0.20;
+    /** Weight given to historical TTM ROIC when updating TTM ROIC EMA. */
     public const ROIC_TTM_HIST_WEIGHT      = 0.80;
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
@@ -97,12 +127,12 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            'domestic_procurement_weight'   => self::DOMESTIC_PROCUREMENT_WEIGHT,
-            'foreign_military_sales_weight' => self::FOREIGN_MILITARY_SALES_WEIGHT,
+            ModelParam::DomesticProcurementWeight->value   => self::DOMESTIC_PROCUREMENT_WEIGHT,
+            ModelParam::ForeignMilitarySalesWeight->value => self::FOREIGN_MILITARY_SALES_WEIGHT,
         ]);
 
-        $domesticWeight = $params['domestic_procurement_weight'];
-        $fmsWeight      = $params['foreign_military_sales_weight'];
+        $domesticWeight = $params[ModelParam::DomesticProcurementWeight];
+        $fmsWeight      = $params[ModelParam::ForeignMilitarySalesWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
@@ -117,8 +147,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $costPlusBonus = $inflation > MacroEngine::TARGET_INFLATION
             ? ($inflation - MacroEngine::TARGET_INFLATION) * self::COST_PLUS_BONUS_SCALAR
             : 0.0;
-
-        $nominalDefenseGrowth = max(0.0, ($macroState->nominalGdpIndex - 1.0) * 0.50);
 
         // --- Tail Risk & Event Multipliers ---
         $domesticMultiplier = 1.0;
@@ -156,7 +184,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         }
 
         // --- Clamped Revenue Streams ---
-        $domesticRevenue = max(0.0, $expectedRevenue * $domesticWeight * (1.0 + ($domesticZ * $baselineVol * self::DOMESTIC_VARIANCE_SCALAR) + $costPlusBonus + $nominalDefenseGrowth) * $domesticMultiplier);
+        $domesticRevenue = max(0.0, $expectedRevenue * $domesticWeight * (1.0 + ($domesticZ * $baselineVol * self::DOMESTIC_VARIANCE_SCALAR) + $costPlusBonus) * $domesticMultiplier);
         $fmsRevenue      = max(0.0, $expectedRevenue * $fmsWeight * (1.0 + ($fmsZ * $baselineVol * self::FMS_VARIANCE_SCALAR)) * $fmsMultiplier);
 
         $actualRevenue = $domesticRevenue + $fmsRevenue;
@@ -171,10 +199,10 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             $primaryShockZ = $eventZ;
         }
 
-        // Cost-plus bonus bypasses the baselineVol scalar because it is a direct percentage revenue boost.
-        $observableShockZ = ($domesticZ * $domesticWeight * self::DOMESTIC_VARIANCE_SCALAR * 0.60 * $baselineVol) +
-            ($fmsZ * $fmsWeight * self::FMS_VARIANCE_SCALAR * 0.30 * $baselineVol) +
-            ($costPlusBonus * $domesticWeight);
+        $domesticShock = (($domesticZ * $baselineVol * self::DOMESTIC_VARIANCE_SCALAR) + $costPlusBonus) * $domesticMultiplier + ($domesticMultiplier - 1.0);
+        $fmsShock      = ($fmsZ * $baselineVol * self::FMS_VARIANCE_SCALAR) * $fmsMultiplier + ($fmsMultiplier - 1.0);
+
+        $observableShockZ = ($domesticShock * $domesticWeight) + ($fmsShock * $fmsWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

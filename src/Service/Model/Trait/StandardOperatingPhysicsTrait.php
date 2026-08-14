@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Trait;
 
+use App\Data\ModelParam;
 use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorCoverageProfile;
@@ -37,14 +38,14 @@ trait StandardOperatingPhysicsTrait
     public function getCoverageProfile(Stock $stock): SectorCoverageProfile
     {
         $params = $this->resolveModelParameters($stock, [
-            'base_visibility' => defined('static::BASE_COVERAGE_VISIBILITY') ? static::BASE_COVERAGE_VISIBILITY : 0.20,
-            'coverage_error'  => defined('static::BASE_COVERAGE_ERROR') ? static::BASE_COVERAGE_ERROR : 0.06,
-            'min_visibility'  => defined('static::BASE_COVERAGE_MIN_VISIBILITY') ? static::BASE_COVERAGE_MIN_VISIBILITY : 0.0,
+            ModelParam::BaseVisibility->value => defined('static::BASE_COVERAGE_VISIBILITY') ? static::BASE_COVERAGE_VISIBILITY : 0.20,
+            ModelParam::CoverageError->value  => defined('static::BASE_COVERAGE_ERROR') ? static::BASE_COVERAGE_ERROR : 0.06,
+            ModelParam::MinVisibility->value  => defined('static::BASE_COVERAGE_MIN_VISIBILITY') ? static::BASE_COVERAGE_MIN_VISIBILITY : 0.0,
         ]);
 
-        $visibility = $params['base_visibility'];
-        $error      = $params['coverage_error'];
-        $minVis     = $params['min_visibility'];
+        $visibility = $params[ModelParam::BaseVisibility];
+        $error      = $params[ModelParam::CoverageError];
+        $minVis     = $params[ModelParam::MinVisibility];
 
         // Systemic importance modifier: titans get more analyst coverage
         $importance = $stock->getSystemicImportance();
@@ -114,40 +115,14 @@ trait StandardOperatingPhysicsTrait
 
     public function calculateEconomicReturn(Stock $stock, float $quarterlyNopatOrIncome, float $investedCapital): float
     {
-        $industry = $stock->getIndustry() ?: 'General';
-        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        if (\App\Data\Sectors::isFinancial($businessModel)) {
-            $equity = (float) $stock->getTotalEquity();
-            return $equity > 0 ? ($quarterlyNopatOrIncome / $equity) * 4.0 : 0.0;
-        }
         return $investedCapital > 0 ? ($quarterlyNopatOrIncome / $investedCapital) * 4.0 : 0.0;
     }
 
     public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float
     {
-        $industry = $stock->getIndustry() ?: 'General';
-        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
         $thresholds = $this->getModelThresholds();
         $kappa = $thresholds['reversion_speed'] ?? 0.20;
         $moatSpread = $thresholds['moat_spread'] ?? 0.00;
-
-        $math = new MathUtility();
-
-        if (\App\Data\Sectors::isFinancial($businessModel)) {
-            $equity = (float) $stock->getTotalEquity();
-            $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * 4.0 : 0.0;
-
-            $stock->setCurrentRoe((string) max(-0.50, min(1.0, $truePostTaxReturn)));
-
-            $oldTtm = (float) $stock->getRoeTtm();
-            // TTM_SMOOTHING_NEW_WEIGHT = 0.25, OLD_WEIGHT = 0.75
-            $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * 0.25) + ($oldTtm * 0.75);
-            $scaledKappa = $kappa / (defined('static::TTM_ROE_WEIGHT') ? static::TTM_ROE_WEIGHT : 0.50);
-            $newTtm += $math->calculateReversionPull($newTtm, $costOfEquity, $scaledKappa, $moatSpread);
-            $stock->setRoeTtm((string) max(-0.50, min(1.0, $newTtm)));
-
-            return $truePostTaxReturn;
-        }
 
         $nopatProxy = $ebit > 0 ? $ebit * (1.0 - $corporateTaxRate) : $ebit;
         $effectiveCapital = max(1.0, abs($investedCapital));
@@ -156,7 +131,7 @@ trait StandardOperatingPhysicsTrait
         $stock->setCurrentRoic((string) max(-0.50, min(1.0, $truePostTaxReturn)));
 
         $oldTtm = (float) $stock->getRoicTtm();
-        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * 0.25) + ($oldTtm * 0.75);
+        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * FinancialConstants::TTM_SMOOTHING_NEW_WEIGHT) + ($oldTtm * FinancialConstants::TTM_SMOOTHING_OLD_WEIGHT);
         $scaledKappa = $kappa / (defined('static::TTM_ROIC_WEIGHT') ? static::TTM_ROIC_WEIGHT : 0.50);
 
         $saturationPenalty = 0.0;
@@ -165,6 +140,7 @@ trait StandardOperatingPhysicsTrait
             $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, abs($investedCapital), $macroState);
         }
 
+        $math = new MathUtility();
         $newTtm += $math->calculateReversionPull($newTtm, $wacc - $saturationPenalty, $scaledKappa, $moatSpread);
         $stock->setRoicTtm((string) max(-0.50, min(1.0, $newTtm)));
 

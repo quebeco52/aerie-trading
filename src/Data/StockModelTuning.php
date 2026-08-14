@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Data;
 
+use App\DTO\ModelParameters;
+
 /**
  * Centralized registry for company-specific business model tuning overrides.
  *
@@ -29,36 +31,36 @@ class StockModelTuning
         // Quantitative institutional market maker and derivatives options writer (Citadel / Jane Street archetype).
         // 100% Sales & Trading / Volatility Arbitrage, 0% M&A Advisory.
         'PERE' => [
-            'advisory_revenue_weight'       => 0.00,
-            'trading_revenue_weight'        => 0.40,
-            'options_premium_income_weight' => 0.60,
-            'vix_arbitrage_scalar'          => 1.80,
+            ModelParam::AdvisoryRevenueWeight->value       => 0.00,
+            ModelParam::TradingRevenueWeight->value        => 0.40,
+            ModelParam::OptionsPremiumIncomeWeight->value => 0.60,
+            ModelParam::VixArbitrageScalar->value          => 1.80,
         ],
 
         // --- Kingfisher Capital (KING) ---
         // Pure-play M&A advisory syndicate and capital markets boutique (Lazard / Evercore archetype).
         // Hyper-sensitive to corporate deal pipelines and GDP booms.
         'KING' => [
-            'advisory_revenue_weight' => 0.75,
-            'trading_revenue_weight'  => 0.25,
-            'vix_arbitrage_scalar'    => 1.20,
+            ModelParam::AdvisoryRevenueWeight->value => 0.75,
+            ModelParam::TradingRevenueWeight->value  => 0.25,
+            ModelParam::VixArbitrageScalar->value    => 1.20,
         ],
 
         // --- Rook Proprietary Trading (ROOK) ---
         // High-frequency proprietary trading & institutional execution desk. Pure volatility arbitrage focus.
         'ROOK' => [
-            'advisory_revenue_weight' => 0.15,
-            'trading_revenue_weight'  => 0.85,
-            'vix_arbitrage_scalar'    => 1.80,
+            ModelParam::AdvisoryRevenueWeight->value => 0.15,
+            ModelParam::TradingRevenueWeight->value  => 0.85,
+            ModelParam::VixArbitrageScalar->value    => 1.80,
         ],
 
         // --- Corvid Strategic Arbitrage (CORV) ---
         // Ultra-exclusive boutique investment bank and weaponized information arbitrage apparatus.
         // Uncorrelated to traditional cycles; thrives on high-frequency arbitrage and institutional volatility.
         'CORV' => [
-            'advisory_revenue_weight' => 0.25,
-            'trading_revenue_weight'  => 0.75,
-            'vix_arbitrage_scalar'    => 2.00,
+            ModelParam::AdvisoryRevenueWeight->value => 0.25,
+            ModelParam::TradingRevenueWeight->value  => 0.75,
+            ModelParam::VixArbitrageScalar->value    => 2.00,
         ],
 
         // =====================================================================
@@ -74,19 +76,19 @@ class StockModelTuning
         // --- Safe Harbor Reinsurance (SAFE) ---
         // Institutional reinsurance titan that absorbs extreme systemic and catastrophe tail risk.
         'SAFE' => [
-            'catastrophe_z_threshold' => -1.55,
-            'catastrophe_loss_scalar' => 0.20,
-            'float_equity_weight'     => 0.05,
-            'equity_portfolio_vol'    => 0.08,
+            ModelParam::CatastropheZThreshold->value => -1.55,
+            ModelParam::CatastropheLossScalar->value => 0.20,
+            ModelParam::FloatEquityWeight->value     => 0.05,
+            ModelParam::EquityPortfolioVol->value    => 0.08,
         ],
 
         // --- White Dove Insurance (DOVE) ---
         // Retail multi-line P&C and Life insurer spun out of Safe Harbor. Sheds tail risks to reinsurers.
         'DOVE' => [
-            'catastrophe_z_threshold' => -1.80,
-            'catastrophe_loss_scalar' => 0.08,
-            'float_equity_weight'     => 0.10,
-            'equity_portfolio_vol'    => 0.10,
+            ModelParam::CatastropheZThreshold->value => -1.80,
+            ModelParam::CatastropheLossScalar->value => 0.08,
+            ModelParam::FloatEquityWeight->value     => 0.10,
+            ModelParam::EquityPortfolioVol->value    => 0.10,
         ],
 
         // =====================================================================
@@ -96,17 +98,17 @@ class StockModelTuning
         // --- Black Swan Capital (SWAN) ---
         // Mega-cap alternative asset manager specializing in leveraged buyouts and carried interest.
         'SWAN' => [
-            'management_fee_weight'        => 0.60,
-            'carried_interest_weight'      => 0.20,
-            'principal_investments_weight' => 0.20,
+            ModelParam::ManagementFeeWeight->value        => 0.60,
+            ModelParam::CarriedInterestWeight->value      => 0.20,
+            ModelParam::PrincipalInvestmentsWeight->value => 0.20,
         ],
 
         // --- Vulture Capital Recovery (VULT) ---
         // Specialist distressed debt restructuring and turnaround equity sponsor.
         'VULT' => [
-            'advisory_fee_weight'      => 0.40,
-            'asset_recovery_weight'    => 0.30,
-            'loan_to_own_gains_weight' => 0.30,
+            ModelParam::AdvisoryFeeWeight->value      => 0.40,
+            ModelParam::AssetRecoveryWeight->value    => 0.30,
+            ModelParam::LoanToOwnGainsWeight->value => 0.30,
         ],
 
         // =====================================================================
@@ -116,38 +118,38 @@ class StockModelTuning
         // --- Lakeshore Living (SHOR) ---
         // Residential multi-family apartment REIT with ultra-stable annual leases.
         'SHOR' => [
-            'sticky_lease_weight'          => 0.75,
-            'variable_hospitality_weight'  => 0.10,
-            'securitization_income_weight' => 0.15,
+            ModelParam::StickyLeaseWeight->value          => 0.75,
+            ModelParam::VariableHospitalityWeight->value  => 0.10,
+            ModelParam::SecuritizationIncomeWeight->value => 0.15,
         ],
 
         // --- Plaza Civic River Trust (PLZA) ---
         // Commercial & Class-A office REIT with mix of corporate leases and amenity parking/retail.
         'PLZA' => [
-            'sticky_lease_weight'         => 0.80,
-            'variable_hospitality_weight' => 0.20,
+            ModelParam::StickyLeaseWeight->value         => 0.80,
+            ModelParam::VariableHospitalityWeight->value => 0.20,
         ],
 
         // --- Elderbird Retirement Services (ELDE) ---
         // Healthcare & assisted living property REIT with long-duration institutional leases.
         'ELDE' => [
-            'sticky_lease_weight'         => 0.80,
-            'variable_hospitality_weight' => 0.05,
-            'longevity_bond_yield_weight' => 0.15,
+            ModelParam::StickyLeaseWeight->value         => 0.80,
+            ModelParam::VariableHospitalityWeight->value => 0.05,
+            ModelParam::LongevityBondYieldWeight->value => 0.15,
         ],
 
         'STG' => [
-            'pnc_weight'          => 0.40,
-            'life_annuity_weight' => 0.60,
+            ModelParam::PncWeight->value          => 0.40,
+            ModelParam::LifeAnnuityWeight->value => 0.60,
         ],
 
         // --- Aerie Central Clearing (ACC) ---
         // Systemically important central counterparty clearinghouse (CCP). 
         'ACC' => [
-            'clearing_fee_weight'      => 0.50,
-            'custody_float_weight'     => 0.15,
-            'data_subscription_weight' => 0.20,
-            'margin_interest_weight'   => 0.15,
+            ModelParam::ClearingFeeWeight->value      => 0.50,
+            ModelParam::CustodyFloatWeight->value     => 0.15,
+            ModelParam::DataSubscriptionWeight->value => 0.20,
+            ModelParam::MarginInterestWeight->value   => 0.15,
         ],
 
         // =====================================================================
@@ -157,21 +159,21 @@ class StockModelTuning
         // --- Owl Capital Partners (OWLS) ---
         // Disciplined value-investing conglomerate with sticky recurring management fees.
         'OWLS' => [
-            'base_fee_weight'         => 0.85,
-            'performance_fee_weight'  => 0.15,
-            'aum_market_beta_scalar'  => 0.20,
-            'performance_fee_z_floor' => 1.60,
-            'performance_fee_scalar'  => 0.06,
+            ModelParam::BaseFeeWeight->value         => 0.85,
+            ModelParam::PerformanceFeeWeight->value  => 0.15,
+            ModelParam::AumMarketBetaScalar->value  => 0.20,
+            ModelParam::PerformanceFeeZFloor->value => 1.60,
+            ModelParam::PerformanceFeeScalar->value  => 0.06,
         ],
 
         // --- Crowfall Capital (CROW) ---
         // Activist forensic short-selling syndicate hunting bloated/overleveraged targets.
         'CROW' => [
-            'base_fee_weight'         => 0.45,
-            'performance_fee_weight'  => 0.55,
-            'aum_market_beta_scalar'  => 0.60,
-            'performance_fee_z_floor' => 1.00,
-            'performance_fee_scalar'  => 0.18,
+            ModelParam::BaseFeeWeight->value         => 0.45,
+            ModelParam::PerformanceFeeWeight->value  => 0.55,
+            ModelParam::AumMarketBetaScalar->value  => 0.60,
+            ModelParam::PerformanceFeeZFloor->value => 1.00,
+            ModelParam::PerformanceFeeScalar->value  => 0.18,
         ],
 
         // =====================================================================
@@ -181,36 +183,36 @@ class StockModelTuning
         // --- Lakebird Bank (LAKE) ---
         // Universal banking behemoth.
         'LAKE' => [
-            'proprietary_dividend_weight' => 0.20,
-            'nii_revenue_weight'        => 0.60,
-            'fee_revenue_weight'        => 0.20,
-            'nim_inversion_sensitivity' => 8.0,
-            'credit_risk_appetite'      => 0.40,
+            ModelParam::ProprietaryDividendWeight->value => 0.20,
+            ModelParam::NiiRevenueWeight->value          => 0.60,
+            ModelParam::FeeRevenueWeight->value          => 0.20,
+            ModelParam::NimInversionSensitivity->value   => 8.0,
+            ModelParam::CreditRiskAppetite->value        => 0.40,
         ],
 
         // --- Riverstone Financial (RIVR) ---
         // Agile regional lender poaching district SMEs. Pure NII model (90%) hyper-sensitive to NIM inversion.
         'RIVR' => [
-            'nii_revenue_weight'        => 0.90,
-            'fee_revenue_weight'        => 0.10,
-            'nim_inversion_sensitivity' => 12.0,
-            'credit_risk_appetite'      => 0.60,
+            ModelParam::NiiRevenueWeight->value          => 0.90,
+            ModelParam::FeeRevenueWeight->value          => 0.10,
+            ModelParam::NimInversionSensitivity->value   => 12.0,
+            ModelParam::CreditRiskAppetite->value        => 0.60,
         ],
 
         // --- Talon Credit (TALN) ---
         // Prime credit card & digital merchant payment rail network. Substantial swipe interchange fee tollbooth (45%).
         'TALN' => [
-            'lending_revenue_weight'  => 0.55,
-            'network_revenue_weight'  => 0.45,
-            'cecl_spread_sensitivity' => 1.40,
+            ModelParam::LendingRevenueWeight->value  => 0.55,
+            ModelParam::NetworkRevenueWeight->value  => 0.45,
+            ModelParam::CeclSpreadSensitivity->value => 1.40,
         ],
 
         // --- Stork Consumer Credit (STRK) ---
         // Subprime consumer finance & installment loan originator. Highly exposed to credit spread widening.
         'STRK' => [
-            'lending_revenue_weight'  => 0.95,
-            'network_revenue_weight'  => 0.05,
-            'cecl_spread_sensitivity' => 2.20,
+            ModelParam::LendingRevenueWeight->value  => 0.95,
+            ModelParam::NetworkRevenueWeight->value  => 0.05,
+            ModelParam::CeclSpreadSensitivity->value => 2.20,
         ],
 
         // =====================================================================
@@ -220,11 +222,11 @@ class StockModelTuning
         // --- Hummingbird Interactive (HUMM) ---
         // Consumer mobile OS & advertising giant. Heavily ad-supported platform usage (65%).
         'HUMM' => [
-            'subscription_revenue_weight' => 0.15,
-            'advertising_revenue_weight'  => 0.45,
-            'cloud_infrastructure_weight' => 0.40,
-            'advertising_cyclicality'     => 0.22,
-            'monopoly_aggression'         => 0.90, // Ruthless data monopoly, high margins, existential regulatory risk
+            ModelParam::SubscriptionRevenueWeight->value => 0.15,
+            ModelParam::AdvertisingRevenueWeight->value  => 0.45,
+            ModelParam::CloudInfrastructureWeight->value => 0.40,
+            ModelParam::AdvertisingCyclicality->value     => 0.22,
+            ModelParam::MonopolyAggression->value         => 0.90, // Ruthless data monopoly, high margins, existential regulatory risk
         ],
 
         // =====================================================================
@@ -234,33 +236,33 @@ class StockModelTuning
         // --- Sinking Shore Extraction (SINK) ---
         // Deep-sea minerals & rare metals extraction. Skewed toward production volume (70%).
         'SINK' => [
-            'extraction_revenue_weight' => 0.70,
-            'spot_price_weight'         => 0.30,
-            'spot_price_sensitivity'    => 0.30, // Highly hedged to secure deep-sea financing
+            ModelParam::ExtractionRevenueWeight->value => 0.70,
+            ModelParam::SpotPriceWeight->value         => 0.30,
+            ModelParam::SpotPriceSensitivity->value    => 0.30, // Highly hedged to secure deep-sea financing
         ],
 
         // --- Cascade Minerals & Energy (CASC) ---
         // Diversified global mining & metallurgical coal exporter. Balanced volume & spot exposure (50/50).
         'CASC' => [
-            'extraction_revenue_weight' => 0.40,
-            'spot_price_weight'         => 0.40,
-            'refining_spread_weight'    => 0.20,
-            'spot_price_sensitivity'    => 0.50, // Standard 50% hedged production book
+            ModelParam::ExtractionRevenueWeight->value => 0.40,
+            ModelParam::SpotPriceWeight->value         => 0.40,
+            ModelParam::RefiningSpreadWeight->value    => 0.20,
+            ModelParam::SpotPriceSensitivity->value    => 0.50, // Standard 50% hedged production book
         ],
 
         // --- Condor Rare Earths (CNDR) ---
         // Strategic lithium & rare earth refining operator. High spot commodity price sensitivity (60%).
         'CNDR' => [
-            'extraction_revenue_weight' => 0.40,
-            'spot_price_weight'         => 0.60,
-            'spot_price_sensitivity'    => 0.75, // Mostly unhedged wildcat, exposed to massive spot volatility
+            ModelParam::ExtractionRevenueWeight->value => 0.40,
+            ModelParam::SpotPriceWeight->value         => 0.60,
+            ModelParam::SpotPriceSensitivity->value    => 0.75, // Mostly unhedged wildcat, exposed to massive spot volatility
         ],
 
         // --- Steel Wings Smelting & Corp (WING) ---
         // Industrial steel smelting & metallurgical production. Heavy physical production volume focus (80%).
         'WING' => [
-            'extraction_revenue_weight' => 0.80,
-            'spot_price_weight'         => 0.20,
+            ModelParam::ExtractionRevenueWeight->value => 0.80,
+            ModelParam::SpotPriceWeight->value         => 0.20,
         ],
 
         // =====================================================================
@@ -270,8 +272,8 @@ class StockModelTuning
         // --- Silicon Creek Foundries (SILC) ---
         // Dedicated pure-play advanced silicon wafer foundry. Pure manufacturing capacity focus (85%).
         'SILC' => [
-            'foundry_manufacturing_weight' => 0.85,
-            'fabless_design_weight'        => 0.15,
+            ModelParam::FoundryRevenueWeight->value => 0.85,
+            ModelParam::DesignRevenueWeight->value  => 0.15,
         ],
 
         // =====================================================================
@@ -281,8 +283,8 @@ class StockModelTuning
         // --- Gryphon Defense Systems (GRIP) ---
         // Tier-1 sovereign aerospace & defense contractor. Heavily cost-plus domestic defense mandates.
         'GRIP' => [
-            'domestic_procurement_weight'   => 0.80,
-            'foreign_military_sales_weight' => 0.20,
+            ModelParam::DomesticProcurementWeight->value   => 0.80,
+            ModelParam::ForeignMilitarySalesWeight->value => 0.20,
         ],
 
         // =====================================================================
@@ -292,17 +294,17 @@ class StockModelTuning
         // --- Bird Watch Security (WATCH) ---
         // Premier domestic physical asset protection & municipal security retainers.
         'WATCH' => [
-            'government_contract_weight' => 0.40,
-            'retainer_weight'            => 0.50,
-            'expeditionary_weight'       => 0.10,
+            ModelParam::GovernmentContractWeight->value => 0.40,
+            ModelParam::RetainerWeight->value            => 0.50,
+            ModelParam::ExpeditionaryWeight->value       => 0.10,
         ],
 
         // --- Osprey Global Vanguard (OSPR) ---
         // Extraterritorial private military contractor & black-ops extraction.
         'OSPR' => [
-            'government_contract_weight' => 0.10,
-            'retainer_weight'            => 0.10,
-            'expeditionary_weight'       => 0.80,
+            ModelParam::GovernmentContractWeight->value => 0.10,
+            ModelParam::RetainerWeight->value            => 0.10,
+            ModelParam::ExpeditionaryWeight->value       => 0.80,
         ],
 
         // =====================================================================
@@ -312,22 +314,22 @@ class StockModelTuning
         // --- Albatross Deepwaters (ALBT) ---
         // Marine shipping freight operator. Heavily exposed to short-term spot ocean freight rates.
         'ALBT' => [
-            'spot_charter_weight'     => 0.75,
-            'contract_charter_weight' => 0.25,
+            ModelParam::SpotCharterWeight->value     => 0.75,
+            ModelParam::ContractCharterWeight->value => 0.25,
         ],
 
         // --- Canvasback Logistics (CANV) ---
         // Integrated freight & logistics provider. Skewed toward dedicated multi-year enterprise contracts.
         'CANV' => [
-            'spot_charter_weight'     => 0.40,
-            'contract_charter_weight' => 0.60,
+            ModelParam::SpotCharterWeight->value     => 0.40,
+            ModelParam::ContractCharterWeight->value => 0.60,
         ],
 
         // --- Kestrel Civic Lines (KSTL) ---
         // Railroad & dedicated freight line operator. Overwhelmingly long-term contracted rail lines (75%).
         'KSTL' => [
-            'spot_charter_weight'     => 0.25,
-            'contract_charter_weight' => 0.75,
+            ModelParam::SpotCharterWeight->value     => 0.25,
+            ModelParam::ContractCharterWeight->value => 0.75,
         ],
 
         // =====================================================================
@@ -337,15 +339,15 @@ class StockModelTuning
         // --- Ibis Pharmaceuticals (IBIS) ---
         // Global biopharma giant. Skewed toward established commercial blockbuster portfolio (75%).
         'IBIS' => [
-            'established_drug_weight' => 0.90,
-            'pipeline_drug_weight'    => 0.10,
+            ModelParam::EstablishedDrugWeight->value => 0.90,
+            ModelParam::PipelineDrugWeight->value    => 0.10,
         ],
 
         // --- Crane Medical Network (CRAN) ---
         // Specialized clinical development and medical oncology network. Higher experimental R&D pipeline weighting (45%).
         'CRAN' => [
-            'established_drug_weight' => 0.55,
-            'pipeline_drug_weight'    => 0.45,
+            ModelParam::EstablishedDrugWeight->value => 0.55,
+            ModelParam::PipelineDrugWeight->value    => 0.45,
         ],
 
         // =====================================================================
@@ -355,8 +357,8 @@ class StockModelTuning
         // --- Peacock Heritage Group (PEAC) ---
         // Elite ultra-luxury French house archetype. Heavily Haute Couture & Maison leather goods (70%).
         'PEAC' => [
-            'haute_couture_weight'     => 0.70,
-            'accessible_luxury_weight' => 0.30,
+            ModelParam::HauteCoutureWeight->value     => 0.70,
+            ModelParam::AccessibleLuxuryWeight->value => 0.30,
         ],
 
         // =====================================================================
@@ -366,57 +368,57 @@ class StockModelTuning
         // --- Pheasant & Morris International (PHIL) ---
         // Global tobacco and nicotine conglomerate. Overwhelmingly branded packaged staples (85%).
         'PHIL' => [
-            'branded_staples_weight'  => 0.85,
-            'volume_commodity_weight' => 0.15,
+            ModelParam::BrandedStaplesWeight->value  => 0.85,
+            ModelParam::VolumeCommodityWeight->value => 0.15,
         ],
 
         // --- Sugarbird Confectionery (SGRB) ---
         // Confectionery, snacks & packaged food leader. Skewed toward packaged branded staples (75%).
         'SGRB' => [
-            'branded_staples_weight'   => 0.65,
-            'volume_commodity_weight'  => 0.15,
-            'commodity_trading_weight' => 0.10,
-            'land_speculation_weight'  => 0.10,
+            ModelParam::BrandedStaplesWeight->value   => 0.65,
+            ModelParam::VolumeCommodityWeight->value  => 0.15,
+            ModelParam::CommodityTradingWeight->value => 0.10,
+            ModelParam::LandSpeculationWeight->value  => 0.10,
         ],
 
         // --- Copperhead Coffee Roasters (BREW) ---
         // Retail coffee roasting & distribution. Heavy corporate footprint (90%) with minor franchise presence (10%).
         'BREW' => [
-            'corporate_weight' => 0.90,
-            'franchise_weight' => 0.10,
+            ModelParam::CorporateWeight->value => 0.90,
+            ModelParam::FranchiseWeight->value => 0.10,
         ],
 
         // --- Poultry Crop Operations (CROP) ---
         // Integrated poultry & agricultural producer. Skewed toward commodity volume agriculture (70%).
         'CROP' => [
-            'branded_staples_weight'   => 0.20,
-            'volume_commodity_weight'  => 0.50,
-            'commodity_trading_weight' => 0.15,
-            'land_speculation_weight'  => 0.15,
+            ModelParam::BrandedStaplesWeight->value   => 0.20,
+            ModelParam::VolumeCommodityWeight->value  => 0.50,
+            ModelParam::CommodityTradingWeight->value => 0.15,
+            ModelParam::LandSpeculationWeight->value  => 0.15,
         ],
 
         // --- Lark & Crest Brands (LARK) ---
         // Household goods & personal hygiene giant (P&G / Kimberly-Clark archetype).
         // Essential consumer staple with overwhelming brand dominance & pricing power (80% branded staples).
         'LARK' => [
-            'branded_staples_weight'  => 0.80,
-            'volume_commodity_weight' => 0.20,
+            ModelParam::BrandedStaplesWeight->value  => 0.80,
+            ModelParam::VolumeCommodityWeight->value => 0.20,
         ],
 
         // --- Crossbill Precision Tooling (CBIL) ---
         // Operates as an industrial tollbooth with incredibly high margins and ROIC due to absolute quality control.
         // Extremely insulated from typical manufacturing boom/bust.
         'CBIL' => [
-            'consumer_weight'   => 0.10, // Retail secondary market liquidations (volatile)
-            'commercial_weight' => 0.90, // Unbreakable industrial fortress / premium tooling (sticky)
+            ModelParam::ConsumerWeight->value   => 0.10, // Retail secondary market liquidations (volatile)
+            ModelParam::CommercialWeight->value => 0.90, // Unbreakable industrial fortress / premium tooling (sticky)
         ],
 
         // --- Pintail Beverage Group (PINT) ---
         // Industrial ethanol syndicate & heritage alcohol cartel.
         // Balances branded artisanal spirits with aggressive bulk ethanol/commodity trading via the 'Proof Desk'.
         'PINT' => [
-            'branded_staples_weight'  => 0.60,
-            'volume_commodity_weight' => 0.40,
+            ModelParam::BrandedStaplesWeight->value  => 0.60,
+            ModelParam::VolumeCommodityWeight->value => 0.40,
         ],
 
         // =====================================================================
@@ -426,15 +428,15 @@ class StockModelTuning
         // --- Bird Power Inc (BIRD) ---
         // Integrated electric utility. Heavily regulated rate base transmission & distribution (80%), merchant renewables (20%).
         'BIRD' => [
-            'regulated_base_weight'       => 0.80,
-            'unregulated_merchant_weight' => 0.20,
+            ModelParam::RegulatedBaseWeight->value       => 0.80,
+            ModelParam::UnregulatedMerchantWeight->value => 0.20,
         ],
 
         // --- Heron Regional Water (WADE) ---
         // Regulated municipal water & wastewater utility. Pure regulated rate base monopoly (95%).
         'WADE' => [
-            'regulated_base_weight'       => 0.95,
-            'unregulated_merchant_weight' => 0.05,
+            ModelParam::RegulatedBaseWeight->value       => 0.95,
+            ModelParam::UnregulatedMerchantWeight->value => 0.05,
         ],
 
         // =====================================================================
@@ -444,8 +446,8 @@ class StockModelTuning
         // --- Loon Call Telecom (LOON) ---
         // Regional telecom & fiber carrier. Skewed toward recurring wireless/broadband subscriptions (80%) with equipment sales (20%).
         'LOON' => [
-            'subscription_weight' => 0.80,
-            'equipment_weight'    => 0.20,
+            ModelParam::SubscriptionWeight->value => 0.80,
+            ModelParam::EquipmentWeight->value    => 0.20,
         ],
 
         // =====================================================================
@@ -455,9 +457,9 @@ class StockModelTuning
         // --- Cormorant Environmental (CORM) ---
         // Municipal waste management & environmental services operator.
         'CORM' => [
-            'residential_weight' => 0.60,
-            'commercial_weight'  => 0.30,
-            'recycling_weight'   => 0.10,
+            ModelParam::ResidentialWeight->value => 0.60,
+            ModelParam::CommercialWeight->value  => 0.30,
+            ModelParam::RecyclingWeight->value   => 0.10,
         ],
 
         // =====================================================================
@@ -467,15 +469,15 @@ class StockModelTuning
         // --- Shrike Standard Ratings (SHRK) ---
         // Credit rating agency & risk benchmarks. Skewed toward transaction-linked bond & debt rating mandates (40%).
         'SHRK' => [
-            'subscription_revenue_weight' => 0.60,
-            'transaction_revenue_weight'  => 0.40,
+            ModelParam::SubscriptionRevenueWeight->value => 0.60,
+            ModelParam::TransactionRevenueWeight->value  => 0.40,
         ],
 
         // --- Tickbird Data Systems (TICK) ---
         // Terminal, financial analytics & data feed monopoly. Overwhelmingly recurring subscription seat contracts (90%).
         'TICK' => [
-            'subscription_revenue_weight' => 0.90,
-            'transaction_revenue_weight'  => 0.10,
+            ModelParam::SubscriptionRevenueWeight->value => 0.90,
+            ModelParam::TransactionRevenueWeight->value  => 0.10,
         ],
 
         // =====================================================================
@@ -487,10 +489,10 @@ class StockModelTuning
         // VIP casino acting as bait for an apex commercial real estate and landlord empire.
         // Massive skew towards non-gaming (extortionate revenue-sharing leases) as the primary engine.
         'GULL' => [
-            'pricing_power_index'           => 1.00, // Absolute monopoly pricing power over captive tenants
-            'gaming_revenue_weight'         => 0.20, // Casino floors are just the bait for foot traffic
-            'non_gaming_revenue_weight'     => 0.10,
-            'commercial_real_estate_weight' => 0.70, // The real engine: extortionate commercial real estate leases
+            ModelParam::PricingPowerIndex->value           => 1.00, // Absolute monopoly pricing power over captive tenants
+            ModelParam::GamingRevenueWeight->value         => 0.20, // Casino floors are just the bait for foot traffic
+            ModelParam::NonGamingRevenueWeight->value     => 0.10,
+            ModelParam::CommercialRealEstateWeight->value => 0.70, // The real engine: extortionate commercial real estate leases
         ],
 
         // =====================================================================
@@ -500,50 +502,50 @@ class StockModelTuning
         // --- River Stream Industries (RIVE) ---
         // Robotics and automation manufacturer. Long-term service contracts and essential margin-expanding tools.
         'RIVE' => [
-            'pricing_power_index' => 0.85,
-            'equipment_weight'    => 0.40,
-            'services_weight'     => 0.60,
+            ModelParam::PricingPowerIndex->value => 0.85,
+            ModelParam::EquipmentWeight->value    => 0.40,
+            ModelParam::ServicesWeight->value     => 0.60,
         ],
 
         // --- Three Rivers Manufacturing (TRIV) ---
         // Unsinkable, diversified industrial conglomerate with ubiquitous products.
         'TRIV' => [
-            'pricing_power_index' => 0.75,
+            ModelParam::PricingPowerIndex->value => 0.75,
         ],
 
         // --- Iron Beak Heavy Industries (IBHI) ---
         // Massive physical architect. Captive builder with highly cyclical revenue and poor pricing power against inflation.
         'IBHI' => [
-            'pricing_power_index' => 0.30,
+            ModelParam::PricingPowerIndex->value => 0.30,
         ],
 
 
         // --- Golden Swift Holdings (SWFT) ---
         // Massive global fast-food franchise network. Almost entirely franchised (95%) for stable royalties.
         'SWFT' => [
-            'corporate_weight' => 0.05,
-            'franchise_weight' => 0.95,
+            ModelParam::CorporateWeight->value => 0.05,
+            ModelParam::FranchiseWeight->value => 0.95,
         ],
 
         'APE' => [
-            'apparel_weight'  => 0.45,
-            'footwear_weight' => 0.55,
+            ModelParam::ApparelWeight->value  => 0.45,
+            ModelParam::FootwearWeight->value => 0.55,
         ],
 
         // --- Weaver Marketplace (WEAV) ---
         // Massive third-party ecosystem (the profit engine) blended with volatile first-party retail (the scale engine).
         'WEAV' => [
-            'third_party_weight'         => 0.45,
-            'first_party_weight'         => 0.30,
-            'digital_ads_weight'         => 0.25,
+            ModelParam::ThirdPartyWeight->value         => 0.45,
+            ModelParam::FirstPartyWeight->value         => 0.30,
+            ModelParam::DigitalAdsWeight->value         => 0.25,
         ],
 
         // --- Penguin Computing (PENG) ---
         // High performance supercomputers and liquid cooling. High tech margins. Heavily weighted to enterprise.
         'PENG' => [
-            'pricing_power_index' => 0.65,
-            'enterprise_weight'   => 0.85,
-            'consumer_weight'     => 0.15,
+            ModelParam::PricingPowerIndex->value => 0.65,
+            ModelParam::EnterpriseWeight->value   => 0.85,
+            ModelParam::ConsumerWeight->value     => 0.15,
         ],
 
         // =====================================================================
@@ -555,20 +557,21 @@ class StockModelTuning
         // ultra-luxury 'Apex Division' and inescapable software/telemetry tollbooths.
         // Extreme pricing power, but terrifyingly sensitive to macroeconomic liquidity crises.
         'FALC' => [
-            'auto_sales_weight'        => 0.60,
-            'auto_financing_weight'    => 0.15,
-            'software_services_weight' => 0.25, // Represents telemetry and software lock-ins
-            'pricing_power_index'      => 0.80, // Veblen good luxury pricing; immune to inflation but hyper-pro-cyclical
-            'rate_sensitivity_scalar'  => 3.00, // Highly sensitive to liquidity panics pausing elite consumption
+            ModelParam::AutoSalesWeight->value        => 0.60,
+            ModelParam::AutoFinancingWeight->value    => 0.15,
+            ModelParam::SoftwareServicesWeight->value => 0.25, // Represents telemetry and software lock-ins
+            ModelParam::PricingPowerIndex->value      => 0.80, // Veblen good luxury pricing; immune to inflation but hyper-pro-cyclical
+            ModelParam::RateSensitivityScalar->value  => 3.00, // Highly sensitive to liquidity panics pausing elite consumption
         ],
     ];
 
     /**
      * Retrieves a tuned parameter for a given stock ticker, or falls back to the baseline default.
      */
-    public static function get(string $ticker, string $parameterKey, float $default): float
+    public static function get(string $ticker, ModelParam|string $parameterKey, float $default): float
     {
-        return self::OVERRIDES[$ticker][$parameterKey] ?? $default;
+        $key = $parameterKey instanceof ModelParam ? $parameterKey->value : (string) $parameterKey;
+        return self::OVERRIDES[$ticker][$key] ?? $default;
     }
 
     /**
@@ -590,17 +593,23 @@ class StockModelTuning
     }
 
     /**
-     * Resolves a complete parameter map by merging baseline defaults with any company-specific tuning overrides.
+     * Resolves a complete parameter DTO by merging baseline defaults with any company-specific tuning overrides.
      *
-     * @param array<string, float> $defaults
-     * @return array<string, float>
+     * @param array<ModelParam|string, float> $defaults
      */
-    public static function resolve(string $ticker, array $defaults): array
+    public static function resolve(string $ticker, array $defaults): ModelParameters
     {
-        if (!isset(self::OVERRIDES[$ticker])) {
-            return $defaults;
+        $normalizedDefaults = [];
+        foreach ($defaults as $key => $value) {
+            $stringKey = $key instanceof ModelParam ? $key->value : (string) $key;
+            $normalizedDefaults[$stringKey] = (float) $value;
         }
 
-        return array_merge($defaults, self::OVERRIDES[$ticker]);
+        if (!isset(self::OVERRIDES[$ticker])) {
+            return new ModelParameters($normalizedDefaults);
+        }
+
+        $merged = array_merge($normalizedDefaults, self::OVERRIDES[$ticker]);
+        return new ModelParameters($merged);
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
@@ -92,14 +93,14 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            'pricing_power_index' => self::MIN_BETA_PRICING_POWER_FLOOR,
-            'corporate_weight' => self::CORPORATE_WEIGHT,
-            'franchise_weight' => self::FRANCHISE_WEIGHT,
+            ModelParam::PricingPowerIndex->value => self::MIN_BETA_PRICING_POWER_FLOOR,
+            ModelParam::CorporateWeight->value   => self::CORPORATE_WEIGHT,
+            ModelParam::FranchiseWeight->value   => self::FRANCHISE_WEIGHT,
         ]);
 
-        $corporateWeight = $params['corporate_weight'];
-        $franchiseWeight = $params['franchise_weight'];
-        $pricingPower = max(0.0, min(1.0, $params['pricing_power_index']));
+        $corporateWeight = $params[ModelParam::CorporateWeight];
+        $franchiseWeight = $params[ModelParam::FranchiseWeight];
+        $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
 

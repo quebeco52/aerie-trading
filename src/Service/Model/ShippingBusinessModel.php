@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -29,8 +30,14 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     {
         return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.30, 'moat_spread' => 0.000, 'nwc_intensity' => 0.10, 'capex_completion_rate' => 0.125];
     }
-    public function getCapexCyclicality(): float { return 3.0; }
-    public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.20, 'revenue_weight' => 0.80]; }
+    public function getCapexCyclicality(): float
+    {
+        return 3.0;
+    }
+    public function getSurpriseBlendWeights(): array
+    {
+        return ['eps_weight' => 0.20, 'revenue_weight' => 0.80];
+    }
 
     // --- Dual-Stream Maritime Charter Architecture ---
     /** Baseline fraction of revenue derived from volatile spot market freight and short-term voyage charters. */
@@ -103,12 +110,12 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            'spot_charter_weight'     => self::SPOT_CHARTER_WEIGHT,
-            'contract_charter_weight' => self::CONTRACT_CHARTER_WEIGHT,
+            ModelParam::SpotCharterWeight->value     => self::SPOT_CHARTER_WEIGHT,
+            ModelParam::ContractCharterWeight->value => self::CONTRACT_CHARTER_WEIGHT,
         ]);
 
-        $spotWeight     = $params['spot_charter_weight'];
-        $contractWeight = $params['contract_charter_weight'];
+        $spotWeight     = $params[ModelParam::SpotCharterWeight];
+        $contractWeight = $params[ModelParam::ContractCharterWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
 
@@ -136,7 +143,7 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         // Shipping is directly exposed to crude oil and commodity inflation, capturing savings during deflationary/falling fuel regimes.
         $inflation = $macroState->inflationEma;
         $energyShift = ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0;
-        
+
         $bunkerInflationAdjustment = max(
             -0.05,
             min(0.15, (($inflation - MacroEngine::TARGET_INFLATION) + ($energyShift * 0.20)) * abs((float) $stock->getBeta()) * self::BUNKER_INFLATION_SCALAR)
@@ -193,4 +200,3 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         }
     }
 }
-

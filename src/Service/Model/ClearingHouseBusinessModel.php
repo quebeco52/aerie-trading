@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -33,6 +34,8 @@ class ClearingHouseBusinessModel implements BusinessModelInterface
     use Trait\StandardOperatingPhysicsTrait, Trait\StandardCapitalAllocationTrait, FinancialPhysicsTrait {
         FinancialPhysicsTrait::getTrueReturn insteadof Trait\StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::getEvaluationCapital insteadof Trait\StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::calculateEconomicReturn insteadof Trait\StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::updateDynamicRoic insteadof Trait\StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::getMaxOrganicGrowthSpeed insteadof Trait\StandardCapitalAllocationTrait;
     }
 
@@ -170,15 +173,15 @@ class ClearingHouseBusinessModel implements BusinessModelInterface
         $dataZ    = $mathUtility->generatePersistentZ($momentum['data'] ?? 0.0, 0.45); // Separate Z-score for sticky data subscriptions
 
         $params = $this->resolveModelParameters($stock, [
-            'clearing_fee_weight'      => 0.55,
-            'custody_float_weight'     => 0.20,
-            'data_subscription_weight' => 0.25,
-            'margin_interest_weight'   => 0.00,
+            ModelParam::ClearingFeeWeight->value      => 0.55,
+            ModelParam::CustodyFloatWeight->value     => 0.20,
+            ModelParam::DataSubscriptionWeight->value => 0.25,
+            ModelParam::MarginInterestWeight->value   => 0.00,
         ]);
-        $clearingWeight = $params['clearing_fee_weight'];
-        $custodyWeight  = $params['custody_float_weight'];
-        $dataWeight     = $params['data_subscription_weight'];
-        $marginWeight   = $params['margin_interest_weight'];
+        $clearingWeight = $params[ModelParam::ClearingFeeWeight];
+        $custodyWeight  = $params[ModelParam::CustodyFloatWeight];
+        $dataWeight     = $params[ModelParam::DataSubscriptionWeight];
+        $marginWeight   = $params[ModelParam::MarginInterestWeight];
 
         // The Volatility Bonus (Transaction Volume):
         // Clearinghouses thrive on sheer volume. Market panics = massive liquidations = massive fees.
@@ -197,7 +200,7 @@ class ClearingHouseBusinessModel implements BusinessModelInterface
         $custodyRevenue  = $expectedRevenue * $custodyWeight * (1.0 + ($revenueZ * ($baselineVol * 0.3)));
         // 3. NEW: Data & Analytics Revenue (Highly sticky SaaS revenue, immune to trading panics)
         $dataRevenue     = $expectedRevenue * $dataWeight * (1.0 + ($dataZ * ($baselineVol * 0.05)));
-        
+
         $marginRevenue = 0.0;
         $marginZ = 0.0;
         if ($marginWeight > 0.0) {
@@ -237,7 +240,7 @@ class ClearingHouseBusinessModel implements BusinessModelInterface
             'data'    => $dataZ,
             'default' => $defaultZ,
         ];
-        
+
         $streamRevenue = [
             'clearing_fees'  => $clearingRevenue,
             'data_licensing' => $dataRevenue,
@@ -257,7 +260,7 @@ class ClearingHouseBusinessModel implements BusinessModelInterface
             streamZ: $streamZ,
             streamRevenue: $streamRevenue,
         );
-        
+
         return $result;
     }
 

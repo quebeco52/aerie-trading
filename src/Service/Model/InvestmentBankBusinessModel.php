@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\Data\StockModelTuning;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
@@ -96,16 +97,16 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            'advisory_revenue_weight'       => self::ADVISORY_REVENUE_WEIGHT,
-            'trading_revenue_weight'        => self::TRADING_REVENUE_WEIGHT,
-            'options_premium_income_weight' => 0.00,
-            'vix_arbitrage_scalar'          => self::VIX_ARBITRAGE_SCALAR,
+            ModelParam::AdvisoryRevenueWeight->value       => self::ADVISORY_REVENUE_WEIGHT,
+            ModelParam::TradingRevenueWeight->value        => self::TRADING_REVENUE_WEIGHT,
+            ModelParam::OptionsPremiumIncomeWeight->value => 0.00,
+            ModelParam::VixArbitrageScalar->value          => self::VIX_ARBITRAGE_SCALAR,
         ]);
 
-        $advisoryWeight = $params['advisory_revenue_weight'];
-        $tradingWeight  = $params['trading_revenue_weight'];
-        $optionsWeight  = $params['options_premium_income_weight'];
-        $vixScalar      = $params['vix_arbitrage_scalar'];
+        $advisoryWeight = $params[ModelParam::AdvisoryRevenueWeight];
+        $tradingWeight  = $params[ModelParam::TradingRevenueWeight];
+        $optionsWeight  = $params[ModelParam::OptionsPremiumIncomeWeight];
+        $vixScalar      = $params[ModelParam::VixArbitrageScalar];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
 

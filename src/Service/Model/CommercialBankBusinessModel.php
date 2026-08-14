@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
@@ -31,6 +32,8 @@ class CommercialBankBusinessModel implements BusinessModelInterface
     use Trait\StandardOperatingPhysicsTrait, Trait\StandardCapitalAllocationTrait, FinancialPhysicsTrait {
         FinancialPhysicsTrait::getTrueReturn insteadof Trait\StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::getEvaluationCapital insteadof Trait\StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::calculateEconomicReturn insteadof Trait\StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::updateDynamicRoic insteadof Trait\StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::getMaxOrganicGrowthSpeed insteadof Trait\StandardCapitalAllocationTrait;
     }
 
@@ -314,16 +317,16 @@ class CommercialBankBusinessModel implements BusinessModelInterface
     {
         // Resolve company-specific tuned commercial bank parameters
         $params = $this->resolveModelParameters($stock, [
-            'nii_revenue_weight'          => self::NII_REVENUE_WEIGHT,
-            'fee_revenue_weight'          => self::FEE_REVENUE_WEIGHT,
-            'proprietary_dividend_weight' => 0.00,
-            'nim_inversion_sensitivity'   => self::NIM_INVERSION_SENSITIVITY,
+            ModelParam::NiiRevenueWeight->value          => self::NII_REVENUE_WEIGHT,
+            ModelParam::FeeRevenueWeight->value          => self::FEE_REVENUE_WEIGHT,
+            ModelParam::ProprietaryDividendWeight->value => 0.00,
+            ModelParam::NimInversionSensitivity->value   => self::NIM_INVERSION_SENSITIVITY,
         ]);
 
-        $niiWeight                 = $params['nii_revenue_weight'];
-        $feeWeight                 = $params['fee_revenue_weight'];
-        $proprietaryDividendWeight = $params['proprietary_dividend_weight'];
-        $inversionSensitivity = $params['nim_inversion_sensitivity'];
+        $niiWeight                 = $params[ModelParam::NiiRevenueWeight];
+        $feeWeight                 = $params[ModelParam::FeeRevenueWeight];
+        $proprietaryDividendWeight = $params[ModelParam::ProprietaryDividendWeight];
+        $inversionSensitivity = $params[ModelParam::NimInversionSensitivity];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
 
@@ -331,7 +334,7 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $revenueZ = $mathUtility->generatePersistentZ($momentum['nii'] ?? 0.0, 0.35); // NII loan origination volume
         $feeZ     = $mathUtility->generatePersistentZ($momentum['fee'] ?? 0.0, 0.25); // Non-interest custodial / payment fee volume
         $defaultZ = $mathUtility->generatePersistentZ($momentum['default'] ?? 0.0, 0.25); // Idiosyncratic credit default
-        
+
 
 
         $outputGap = $macroState->outputGapEma;
@@ -341,7 +344,7 @@ class CommercialBankBusinessModel implements BusinessModelInterface
             * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
         $feeRevenue = $expectedRevenue * $feeWeight
             * (1.0 + ($feeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + ($outputGap * self::SECTOR_SHOCK_FEE_OUTPUT_GAP_MULT));
-            
+
         $proprietaryDividendRevenue = 0.0;
         $proprietaryDividendZ = 0.0;
         if ($proprietaryDividendWeight > 0.0) {
@@ -349,7 +352,7 @@ class CommercialBankBusinessModel implements BusinessModelInterface
             $proprietaryDividendZ = $mathUtility->generatePersistentZ($momentum['proprietary_dividend'] ?? 0.0, 0.25);
             $proprietaryDividendRevenue = $expectedRevenue * $proprietaryDividendWeight * (1.0 + ($proprietaryDividendZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5)) + ($outputGap * self::SECTOR_SHOCK_FEE_OUTPUT_GAP_MULT * 2.0));
         }
-        
+
         $actualRevenue = max(0.0, $niiRevenue + $feeRevenue + $proprietaryDividendRevenue);
 
         // Loan Loss Provisions (Idiosyncratic Credit Cycle):
@@ -414,12 +417,12 @@ class CommercialBankBusinessModel implements BusinessModelInterface
             'fee'     => $feeZ,
             'default' => $defaultZ,
         ];
-        
+
         $streamRevenue = [
             'net_interest_income' => $niiRevenue,
             'fee_income'          => $feeRevenue,
         ];
-        
+
         if ($proprietaryDividendWeight > 0.0) {
             $streamZ['proprietary_dividend'] = $proprietaryDividendZ;
             $streamRevenue['proprietary_dividend'] = $proprietaryDividendRevenue;
@@ -472,13 +475,13 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
         $scaledKappa = $kappa / self::TTM_ROE_WEIGHT;
         $math = new MathUtility();
-        
+
         $saturationPenalty = 0.0;
         if ($macroState !== null) {
             $metrics = new \App\Service\Math\CorporateMetrics();
             $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
         }
-        
+
         $newTtm += $math->calculateReversionPull($newTtm, $costOfEquity - $saturationPenalty, $scaledKappa, $moatSpread);
         $stock->setRoeTtm((string) max(-0.50, min(1.0, $newTtm)));
 

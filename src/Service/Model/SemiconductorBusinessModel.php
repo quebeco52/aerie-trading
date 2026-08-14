@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -26,8 +27,14 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     {
         return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.15, 'moat_spread' => 0.020, 'nwc_intensity' => 0.18, 'capex_completion_rate' => 0.125];
     }
-    public function getSecularGrowthRate(Stock $stock): float { return 0.05; }
-    public function getCapexCyclicality(): float { return 3.5; }
+    public function getSecularGrowthRate(Stock $stock): float
+    {
+        return 0.05;
+    }
+    public function getCapexCyclicality(): float
+    {
+        return 3.5;
+    }
 
     // --- Dual-Stream Semiconductor Architecture ---
     /** Baseline fraction of revenue derived from physical cleanroom fab manufacturing and wafer sales. */
@@ -116,12 +123,12 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            'foundry_revenue_weight' => self::FOUNDRY_REVENUE_WEIGHT,
-            'design_revenue_weight'  => self::DESIGN_REVENUE_WEIGHT,
+            ModelParam::FoundryRevenueWeight->value => self::FOUNDRY_REVENUE_WEIGHT,
+            ModelParam::DesignRevenueWeight->value  => self::DESIGN_REVENUE_WEIGHT,
         ]);
 
-        $foundryWeight = $params['foundry_revenue_weight'];
-        $designWeight  = $params['design_revenue_weight'];
+        $foundryWeight = $params[ModelParam::FoundryRevenueWeight];
+        $designWeight  = $params[ModelParam::DesignRevenueWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
 
@@ -250,4 +257,3 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         }
     }
 }
-

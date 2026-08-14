@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -93,12 +94,12 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            'trading_revenue_weight'  => self::TRADING_REVENUE_WEIGHT,
-            'advisory_revenue_weight' => self::ADVISORY_REVENUE_WEIGHT,
+            ModelParam::TradingRevenueWeight->value  => self::TRADING_REVENUE_WEIGHT,
+            ModelParam::AdvisoryRevenueWeight->value => self::ADVISORY_REVENUE_WEIGHT,
         ]);
 
-        $tradingWeight  = $params['trading_revenue_weight'];
-        $advisoryWeight = $params['advisory_revenue_weight'];
+        $tradingWeight  = $params[ModelParam::TradingRevenueWeight];
+        $advisoryWeight = $params[ModelParam::AdvisoryRevenueWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
 

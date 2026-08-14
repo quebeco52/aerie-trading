@@ -5,7 +5,33 @@ parameters:
         - config/
         - public/
         - src/
-        #- tests/
+        - tests/Service/Model/
+
+    tmpDir: var/cache/phpstan
+    treatPhpDocTypesAsCertain: false
+    reportUnmatchedIgnoredErrors: false
+
+    symfony:
+        containerXmlPath: var/cache/dev/App_KernelDevDebugContainer.xml
+
+    bootstrapFiles:
+        - tests/bootstrap.php
+
+    excludePaths:
+        - tests/bootstrap.php
 
     ignoreErrors:
         - identifier: missingType.iterableValue
+        - identifier: nullCoalesce.property
+        - identifier: nullCoalesce.expr
+        - identifier: nullCoalesce.offset
+        - identifier: classConstant.unused
+        - identifier: property.onlyWritten
+        - identifier: parameter.notFound
+        - identifier: doctrine.columnType
+        - identifier: doctrine.associationType
+        - identifier: greater.alwaysTrue
+        - identifier: method.unused
+        - identifier: method.alreadyNarrowedType
+
+

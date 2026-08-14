@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Service\Model;
 
 use App\Entity\Stock;
@@ -16,6 +18,48 @@ trait FinancialPhysicsTrait
     public function getTrueReturn(Stock $stock): float
     {
         return (float) $stock->getRoeTtm();
+    }
+
+    public function calculateEconomicReturn(Stock $stock, float $quarterlyNopatOrIncome, float $investedCapital): float
+    {
+        $equity = (float) $stock->getTotalEquity();
+        return $equity > 0 ? ($quarterlyNopatOrIncome / $equity) * 4.0 : 0.0;
+    }
+
+    public function updateDynamicRoic(
+        Stock $stock,
+        float $actualTotalNetIncome,
+        float $investedCapital,
+        float $ebit,
+        float $corporateTaxRate,
+        float $wacc = 0.08,
+        float $costOfEquity = 0.10,
+        ?\App\DTO\MacroStateDTO $macroState = null
+    ): float {
+        $thresholds = $this->getModelThresholds();
+        $kappa = $thresholds['reversion_speed'] ?? 0.18;
+        $moatSpread = $thresholds['moat_spread'] ?? 0.00;
+
+        $equity = (float) $stock->getTotalEquity();
+        $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * 4.0 : 0.0;
+
+        $stock->setCurrentRoe((string) max(-0.50, min(1.0, $truePostTaxReturn)));
+
+        $oldTtm = (float) $stock->getRoeTtm();
+        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * \App\Service\Math\FinancialConstants::TTM_SMOOTHING_NEW_WEIGHT) + ($oldTtm * \App\Service\Math\FinancialConstants::TTM_SMOOTHING_OLD_WEIGHT);
+        $scaledKappa = $kappa / (defined('static::TTM_ROE_WEIGHT') ? static::TTM_ROE_WEIGHT : 0.50);
+        $math = new \App\Service\Math\MathUtility();
+
+        $saturationPenalty = 0.0;
+        if ($macroState !== null) {
+            $metrics = new \App\Service\Math\CorporateMetrics();
+            $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
+        }
+
+        $newTtm += $math->calculateReversionPull($newTtm, $costOfEquity - $saturationPenalty, $scaledKappa, $moatSpread);
+        $stock->setRoeTtm((string) max(-0.50, min(1.0, $newTtm)));
+
+        return $truePostTaxReturn;
     }
 
     public function calculateCapacityModifier(float $totalDebt, float $equity, float $equityLimit, ?float $coreLiabilities = null): float

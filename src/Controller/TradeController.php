@@ -24,6 +24,9 @@ class TradeController extends AbstractController
     public function execute(Request $request, TradeExecutionService $tradeExecutionService): Response
     {
         $user = $this->getUser();
+        if (!$user instanceof \App\Entity\User) {
+            return $this->redirectToRoute('app_login');
+        }
         
         $ticker = $request->request->get('ticker');
         $action = $request->request->get('action');
@@ -56,6 +59,10 @@ class TradeController extends AbstractController
     public function cancel(int $id, Request $request, TradeExecutionService $tradeExecutionService): Response
     {
         $user = $this->getUser();
+        if (!$user instanceof \App\Entity\User) {
+            return $this->redirectToRoute('app_login');
+        }
+
         $csrfToken = $request->request->get('_token');
         
         if (!$this->isCsrfTokenValid('cancel_trade_'.$id, $csrfToken)) {

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -30,6 +31,8 @@ class AssetManagementBusinessModel implements BusinessModelInterface
     use Trait\StandardOperatingPhysicsTrait, Trait\StandardCapitalAllocationTrait, FinancialPhysicsTrait {
         FinancialPhysicsTrait::getTrueReturn insteadof Trait\StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::getEvaluationCapital insteadof Trait\StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::calculateEconomicReturn insteadof Trait\StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::updateDynamicRoic insteadof Trait\StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::getMaxOrganicGrowthSpeed insteadof Trait\StandardCapitalAllocationTrait;
     }
 
@@ -255,18 +258,18 @@ class AssetManagementBusinessModel implements BusinessModelInterface
     {
         // Resolve company-specific tuned asset management parameters
         $params = $this->resolveModelParameters($stock, [
-            'base_fee_weight'         => self::BASE_FEE_WEIGHT,
-            'performance_fee_weight'  => self::PERFORMANCE_FEE_WEIGHT,
-            'aum_market_beta_scalar'  => self::AUM_MARKET_BETA_SCALAR,
-            'performance_fee_z_floor' => self::PERFORMANCE_FEE_Z_FLOOR,
-            'performance_fee_scalar'  => self::PERFORMANCE_FEE_SCALAR,
+            ModelParam::BaseFeeWeight->value         => self::BASE_FEE_WEIGHT,
+            ModelParam::PerformanceFeeWeight->value  => self::PERFORMANCE_FEE_WEIGHT,
+            ModelParam::AumMarketBetaScalar->value  => self::AUM_MARKET_BETA_SCALAR,
+            ModelParam::PerformanceFeeZFloor->value => self::PERFORMANCE_FEE_Z_FLOOR,
+            ModelParam::PerformanceFeeScalar->value  => self::PERFORMANCE_FEE_SCALAR,
         ]);
 
-        $baseWeight      = $params['base_fee_weight'];
-        $perfWeight      = $params['performance_fee_weight'];
-        $aumBetaScalar   = $params['aum_market_beta_scalar'];
-        $perfZFloor      = $params['performance_fee_z_floor'];
-        $perfScalar      = $params['performance_fee_scalar'];
+        $baseWeight      = $params[ModelParam::BaseFeeWeight];
+        $perfWeight      = $params[ModelParam::PerformanceFeeWeight];
+        $aumBetaScalar   = $params[ModelParam::AumMarketBetaScalar];
+        $perfZFloor      = $params[ModelParam::PerformanceFeeZFloor];
+        $perfScalar      = $params[ModelParam::PerformanceFeeScalar];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
@@ -99,7 +100,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         if ($ttmRoe !== 0.0) {
             $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
         }
-        
+
         $metrics = new \App\Service\Math\CorporateMetrics();
         $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, $effectiveEquity, $macroState);
         $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
@@ -144,11 +145,11 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.35);
         $params = $this->resolveModelParameters($stock, [
-            'mortgage_origination_weight' => 0.60,
-            'direct_lending_weight'       => 0.40,
+            ModelParam::MortgageOriginationWeight->value => 0.60,
+            ModelParam::DirectLendingWeight->value       => 0.40,
         ]);
-        $mortgageWeight  = $params['mortgage_origination_weight'];
-        $lendingWeight   = $params['direct_lending_weight'];
+        $mortgageWeight  = $params[ModelParam::MortgageOriginationWeight];
+        $lendingWeight   = $params[ModelParam::DirectLendingWeight];
 
         $mortgageRevenue = $expectedRevenue * $mortgageWeight * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
         $lendingRevenue  = $expectedRevenue * $lendingWeight * (1.0 + ($revenueZ * ($baselineVol * 0.8)));
@@ -167,7 +168,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         $lossProvisionShock = ($creditZ < self::CREDIT_STRESS_Z_THRESHOLD
             ? abs($creditZ) * self::LOSS_PROVISION_SCALAR
             : ($creditZ > self::HEALTHY_CREDIT_Z_FLOOR
-                ? -($creditZ - self::HEALTHY_CREDIT_Z_FLOOR) * self::PROVISION_REVERSAL_SCALE
+                ? - ($creditZ - self::HEALTHY_CREDIT_Z_FLOOR) * self::PROVISION_REVERSAL_SCALE
                 : 0.0)) + $macroDefaultDrag + $ceclForwardProvision;
 
         // Shadow Bank NIM Squeeze (high VULNERABILITY):
@@ -210,4 +211,3 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         );
     }
 }
-

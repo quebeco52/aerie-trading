@@ -321,7 +321,7 @@ class TradeExecutionService
         ]));
     }
 
-    private function addAssetToUser(User $user, ?Stock $stock, ?Etf $etf, $userAsset, int $quantity)
+    private function addAssetToUser(User $user, ?Stock $stock, ?Etf $etf, UserStock|UserEtf|null $userAsset, int $quantity): UserStock|UserEtf
     {
         if (!$userAsset) {
             if ($stock) {
@@ -340,7 +340,7 @@ class TradeExecutionService
         return $userAsset;
     }
 
-    private function removeAssetFromUser($userAsset, int $quantity)
+    private function removeAssetFromUser(UserStock|UserEtf $userAsset, int $quantity): void
     {
         $newQuantity = $userAsset->getQuantity() - $quantity;
         $userAsset->setQuantity($newQuantity);

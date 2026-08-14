@@ -68,22 +68,9 @@ class CorporateLedgerService
                     if ($remnant > 0 && $oldPrice !== null) {
                         $cashoutValue = round($remnant * $oldPrice, 4);
 
-                        // NOTE: Ensure the table name is correct (user vs users). Using users here as used in dividend payment.
-                        // Wait, previous code used `UPDATE user SET cash_balance` in executeReverseSplit, but `UPDATE users` in processDividendPayment. 
-                        // I will use `users` as it is standard, but I need to make sure. Let me use `users`.
                         $conn->executeStatement(
                             'UPDATE users SET cash_balance = cash_balance + :cashout WHERE id = :user_id',
                             ['cashout' => $cashoutValue, 'user_id' => $holding['user_id']]
-                        );
-
-                        $conn->executeStatement(
-                            'INSERT INTO account_ledger (user_id, type, amount, description, created_at) VALUES (:user_id, :type, :amount, :desc, NOW())',
-                            [
-                                'user_id' => $holding['user_id'],
-                                'type'    => 'REVERSE_SPLIT_CASHOUT',
-                                'amount'  => $cashoutValue,
-                                'desc'    => "Cashout for {$remnant} fractional shares of {$stock->getTicker()} during 1-for-{$splitFactor} reverse split."
-                            ]
                         );
                     }
                 }

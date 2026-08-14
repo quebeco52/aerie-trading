@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -217,8 +218,8 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $params = $this->resolveModelParameters($stock, [
-            'management_fee_weight'   => 0.35,
-            'carried_interest_weight' => 0.65,
+            ModelParam::ManagementFeeWeight->value   => 0.35,
+            ModelParam::CarriedInterestWeight->value => 0.65,
         ]);
 
         // Credit cycle pricing power: LBO exits freeze when credit is expensive or rates are high.
@@ -229,7 +230,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $rateFreezeDrag   = max(0.0, ($policyRate - self::LBO_RATE_FREEZE_THRESHOLD) * self::LBO_RATE_FREEZE_SCALAR);
         $multipleCompression = max(0.0, 1.0 - ($spreadFreezeDrag + $rateFreezeDrag));
 
-        $blendedMultiplier = ($params['management_fee_weight'] * 1.0) + ($params['carried_interest_weight'] * $multipleCompression);
+        $blendedMultiplier = ($params[ModelParam::ManagementFeeWeight] * 1.0) + ($params[ModelParam::CarriedInterestWeight] * $multipleCompression);
 
         return [
             'macro_demand_shift'       => 0.0,
@@ -243,13 +244,13 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.50);
 
         $params = $this->resolveModelParameters($stock, [
-            'management_fee_weight'        => 0.35,
-            'carried_interest_weight'      => 0.65,
-            'principal_investments_weight' => 0.00,
+            ModelParam::ManagementFeeWeight->value        => 0.35,
+            ModelParam::CarriedInterestWeight->value      => 0.65,
+            ModelParam::PrincipalInvestmentsWeight->value => 0.00,
         ]);
-        $mgmtWeight      = $params['management_fee_weight'];
-        $carryWeight     = $params['carried_interest_weight'];
-        $principalWeight = $params['principal_investments_weight'];
+        $mgmtWeight      = $params[ModelParam::ManagementFeeWeight];
+        $carryWeight     = $params[ModelParam::CarriedInterestWeight];
+        $principalWeight = $params[ModelParam::PrincipalInvestmentsWeight];
 
         // 1. GDP Deal Flow Multiplier
         $outputGap = $macroState->outputGapEma;

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
@@ -110,12 +111,12 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            'regulated_base_weight'       => self::REGULATED_BASE_WEIGHT,
-            'unregulated_merchant_weight' => self::UNREGULATED_MERCHANT_WEIGHT,
+            ModelParam::RegulatedBaseWeight->value       => self::REGULATED_BASE_WEIGHT,
+            ModelParam::UnregulatedMerchantWeight->value => self::UNREGULATED_MERCHANT_WEIGHT,
         ]);
 
-        $regulatedWeight   = $params['regulated_base_weight'];
-        $unregulatedWeight = $params['unregulated_merchant_weight'];
+        $regulatedWeight   = $params[ModelParam::RegulatedBaseWeight];
+        $unregulatedWeight = $params[ModelParam::UnregulatedMerchantWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = new \App\DTO\StreamContext($momentum, $mathUtility);

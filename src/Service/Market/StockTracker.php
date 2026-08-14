@@ -3,6 +3,7 @@
 namespace App\Service\Market;
 
 use App\Entity\Stock;
+use App\DTO\MacroStateDTO;
 use Doctrine\ORM\EntityManagerInterface;
 use App\Service\Corporate\CorporateActionEngine;
 use App\Service\Corporate\DebtEngine;

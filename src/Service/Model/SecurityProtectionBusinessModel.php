@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
@@ -112,14 +113,14 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
     {
         // Resolve company-specific tuned parameters (e.g. GRIP = 80% Gov, WATCH = 60% Retainer, OSPR = 80% Expeditionary)
         $params = $this->resolveModelParameters($stock, [
-            'government_contract_weight' => self::GOVERNMENT_CONTRACT_WEIGHT,
-            'retainer_weight'            => self::RETAINER_WEIGHT,
-            'expeditionary_weight'       => self::EXPEDITIONARY_WEIGHT,
+            ModelParam::GovernmentContractWeight->value => self::GOVERNMENT_CONTRACT_WEIGHT,
+            ModelParam::RetainerWeight->value           => self::RETAINER_WEIGHT,
+            ModelParam::ExpeditionaryWeight->value      => self::EXPEDITIONARY_WEIGHT,
         ]);
 
-        $govWeight          = $params['government_contract_weight'];
-        $retainerWeight     = $params['retainer_weight'];
-        $expeditionaryWeight = $params['expeditionary_weight'];
+        $govWeight          = $params[ModelParam::GovernmentContractWeight];
+        $retainerWeight     = $params[ModelParam::RetainerWeight];
+        $expeditionaryWeight = $params[ModelParam::ExpeditionaryWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = new \App\DTO\StreamContext($momentum, $mathUtility);

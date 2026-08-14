@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -87,17 +88,17 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
         }
 
         $params = $this->resolveModelParameters($stock, [
-            'advisory_fee_weight'      => 0.40,
-            'asset_recovery_weight'    => 0.60,
-            'loan_to_own_gains_weight' => 0.00,
+            ModelParam::AdvisoryFeeWeight->value      => 0.40,
+            ModelParam::AssetRecoveryWeight->value    => 0.60,
+            ModelParam::LoanToOwnGainsWeight->value => 0.00,
         ]);
-        $advisoryWeight   = $params['advisory_fee_weight'];
-        $recoveryWeight   = $params['asset_recovery_weight'];
-        $loanToOwnWeight  = $params['loan_to_own_gains_weight'];
+        $advisoryWeight   = $params[ModelParam::AdvisoryFeeWeight];
+        $recoveryWeight   = $params[ModelParam::AssetRecoveryWeight];
+        $loanToOwnWeight  = $params[ModelParam::LoanToOwnGainsWeight];
 
         $advisoryRevenue = $expectedRevenue * $advisoryWeight * (1.0 + ($revenueZ * ($baselineVol * 0.5)));
         $recoveryRevenue = $expectedRevenue * $recoveryWeight * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $distressMultiplier);
-        
+
         $loanToOwnRevenue = 0.0;
         $loanToOwnZ = 0.0;
         if ($loanToOwnWeight > 0.0) {
@@ -113,7 +114,7 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
         $streamZ = [
             'revenue' => $revenueZ,
         ];
-        
+
         $streamRevenue = [
             'advisory' => $advisoryRevenue,
             'recovery' => $recoveryRevenue,
@@ -135,7 +136,7 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
             streamZ: $streamZ,
             streamRevenue: $streamRevenue,
         );
-        
+
         return $result;
     }
 

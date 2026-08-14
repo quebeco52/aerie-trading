@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -101,9 +102,9 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $params = $this->resolveModelParameters($stock, [
-            'pricing_power_index' => 0.5,
+            ModelParam::PricingPowerIndex->value => 0.5,
         ]);
-        $pricingPower = max(0.0, min(1.0, $params['pricing_power_index']));
+        $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
         $macroSensitivityMultiplier = 0.5 + $pricingPower;
 
         $outputGap = $macroState->outputGapEma;
@@ -122,26 +123,26 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            'pricing_power_index' => 0.5,
+            ModelParam::PricingPowerIndex->value => 0.5,
         ]);
-        $pricingPower = max(0.0, min(1.0, $params['pricing_power_index']));
+        $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
 
         // Risk vs Reward:
         // High pricing power (1.0) = 0x inflation penalty, but 1.5x macro volume sensitivity (highly elastic luxury/premium goods)
         // Low pricing power (0.0)  = 2.0x inflation penalty, but 0.5x macro volume sensitivity (inelastic discount goods)
-        $inflationMultiplier = 2.0 - ($pricingPower * 2.0); 
+        $inflationMultiplier = 2.0 - ($pricingPower * 2.0);
         $macroSensitivityMultiplier = 0.5 + $pricingPower;
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.25);
-        
+
         $revenueShock = ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR));
         $actualRevenue = $expectedRevenue * (1.0 + $revenueShock);
 
         // Supply Chain Inflation Penalty
         $inflation = $macroState->inflationEma;
         $baseInflationPenalty = $inflation > \App\Service\Macro\MacroEngine::TARGET_INFLATION ? ($inflation - \App\Service\Macro\MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0;
-        
+
         $inflationPenalty = $baseInflationPenalty * $inflationMultiplier;
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $inflationPenalty);
@@ -184,13 +185,13 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
         $scaledKappa = $kappa / self::TTM_ROIC_WEIGHT;
         $math = new MathUtility();
-        
+
         $saturationPenalty = 0.0;
         if ($macroState !== null) {
             $metrics = new \App\Service\Math\CorporateMetrics();
             $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, abs($investedCapital), $macroState);
         }
-        
+
         $newTtm += $math->calculateReversionPull($newTtm, $wacc - $saturationPenalty, $scaledKappa, $moatSpread);
         $stock->setRoicTtm((string) max(-0.50, min(1.0, $newTtm)));
 

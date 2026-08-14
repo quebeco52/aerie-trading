@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
@@ -97,12 +98,12 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            'subscription_weight' => self::SUBSCRIPTION_WEIGHT,
-            'equipment_weight'    => self::EQUIPMENT_WEIGHT,
+            ModelParam::SubscriptionWeight->value => self::SUBSCRIPTION_WEIGHT,
+            ModelParam::EquipmentWeight->value    => self::EQUIPMENT_WEIGHT,
         ]);
 
-        $subscriptionWeight = $params['subscription_weight'];
-        $equipmentWeight    = $params['equipment_weight'];
+        $subscriptionWeight = $params[ModelParam::SubscriptionWeight];
+        $equipmentWeight    = $params[ModelParam::EquipmentWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = new \App\DTO\StreamContext($momentum, $mathUtility);

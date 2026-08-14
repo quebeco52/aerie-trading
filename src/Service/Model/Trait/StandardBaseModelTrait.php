@@ -1,9 +1,14 @@
 <?php
+
 declare(strict_types=1);
 
 namespace App\Service\Model\Trait;
 
+use App\Data\ModelParam;
+use App\Data\StockModelTuning;
+use App\DTO\ModelParameters;
 use App\Entity\Stock;
+use App\Service\Math\FinancialConstants;
 
 trait StandardBaseModelTrait
 {
@@ -21,11 +26,16 @@ trait StandardBaseModelTrait
 
     protected function getOperatingBase(Stock $stock): float
     {
-        return max((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity(), \App\Service\Math\FinancialConstants::MIN_OPERATING_BASE_CASH);
+        return max((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity(), FinancialConstants::MIN_OPERATING_BASE_CASH);
     }
 
-    protected function resolveModelParameters(Stock $stock, array $defaults = []): array
+    /**
+     * Resolves model tuning parameters merging baseline defaults with ticker overrides.
+     *
+     * @param array<ModelParam|string, float> $defaults
+     */
+    protected function resolveModelParameters(Stock $stock, array $defaults = []): ModelParameters
     {
-        return \App\Data\StockModelTuning::resolve($stock->getTicker(), $defaults);
+        return StockModelTuning::resolve($stock->getTicker(), $defaults);
     }
 }

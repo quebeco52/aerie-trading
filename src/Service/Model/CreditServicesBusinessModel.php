@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -140,14 +141,14 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     {
         // Resolve company-specific tuned credit services parameters
         $params = $this->resolveModelParameters($stock, [
-            'lending_revenue_weight'  => self::LENDING_REVENUE_WEIGHT,
-            'network_revenue_weight'  => self::NETWORK_REVENUE_WEIGHT,
-            'cecl_spread_sensitivity' => self::CECL_SPREAD_SENSITIVITY,
+            ModelParam::LendingRevenueWeight->value  => self::LENDING_REVENUE_WEIGHT,
+            ModelParam::NetworkRevenueWeight->value  => self::NETWORK_REVENUE_WEIGHT,
+            ModelParam::CeclSpreadSensitivity->value => self::CECL_SPREAD_SENSITIVITY,
         ]);
 
-        $lendingWeight   = $params['lending_revenue_weight'];
-        $networkWeight   = $params['network_revenue_weight'];
-        $ceclSensitivity = $params['cecl_spread_sensitivity'];
+        $lendingWeight   = $params[ModelParam::LendingRevenueWeight];
+        $networkWeight   = $params[ModelParam::NetworkRevenueWeight];
+        $ceclSensitivity = $params[ModelParam::CeclSpreadSensitivity];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
 

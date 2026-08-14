@@ -8,6 +8,7 @@ use App\Service\Model\Strategy\CapitalAllocationStrategyInterface;
 use App\Service\Model\Strategy\TreasuryStrategyInterface;
 use App\Service\Model\Strategy\MaStrategyInterface;
 use App\Service\Model\Strategy\ValuationStrategyInterface;
+use Symfony\Component\DependencyInjection\Attribute\AutoconfigureTag;
 
 /**
  * Interface that defines the core financial physics required to process 
@@ -17,6 +18,7 @@ use App\Service\Model\Strategy\ValuationStrategyInterface;
  * type-hint specific behaviors while allowing Business Models to act as a 
  * unified strategy provider.
  */
+#[AutoconfigureTag('app.business_model')]
 interface BusinessModelInterface extends 
     OperatingStrategyInterface,
     DebtStrategyInterface,

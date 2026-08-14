@@ -207,6 +207,12 @@ class Sectors
     }
 
     private static array $strategyInstances = [];
+    private static ?\App\Service\Model\BusinessModelRegistryInterface $registry = null;
+
+    public static function setBusinessModelRegistry(?\App\Service\Model\BusinessModelRegistryInterface $registry): void
+    {
+        self::$registry = $registry;
+    }
 
     /**
      * Factory method to retrieve the financial physics model for a given business type.
@@ -216,6 +222,10 @@ class Sectors
      */
     public static function getBusinessModelStrategy(string $businessModel): \App\Service\Model\BusinessModelInterface
     {
+        if (self::$registry !== null) {
+            return self::$registry->get($businessModel);
+        }
+
         if (isset(self::$strategyInstances[$businessModel])) {
             return self::$strategyInstances[$businessModel];
         }
@@ -266,9 +276,7 @@ class Sectors
             default           => new \App\Service\Model\StandardCorporateBusinessModel(),
         };
 
-        if ($strategy instanceof \App\Service\Model\BusinessModelInterface) {
-            $strategy->setModelIdentifier($businessModel);
-        }
+        $strategy->setModelIdentifier($businessModel);
 
         self::$strategyInstances[$businessModel] = $strategy;
         return $strategy;

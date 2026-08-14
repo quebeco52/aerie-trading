@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -109,12 +110,12 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            'haute_couture_weight'     => self::HAUTE_COUTURE_WEIGHT,
-            'accessible_luxury_weight' => self::ACCESSIBLE_LUXURY_WEIGHT,
+            ModelParam::HauteCoutureWeight->value     => self::HAUTE_COUTURE_WEIGHT,
+            ModelParam::AccessibleLuxuryWeight->value => self::ACCESSIBLE_LUXURY_WEIGHT,
         ]);
 
-        $hauteWeight      = $params['haute_couture_weight'];
-        $accessibleWeight = $params['accessible_luxury_weight'];
+        $hauteWeight      = $params[ModelParam::HauteCoutureWeight];
+        $accessibleWeight = $params[ModelParam::AccessibleLuxuryWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
 

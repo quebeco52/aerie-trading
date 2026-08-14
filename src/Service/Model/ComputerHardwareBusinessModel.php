@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
@@ -88,12 +89,12 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            'enterprise_weight' => self::ENTERPRISE_WEIGHT,
-            'consumer_weight'   => self::CONSUMER_WEIGHT,
+            ModelParam::EnterpriseWeight->value => self::ENTERPRISE_WEIGHT,
+            ModelParam::ConsumerWeight->value   => self::CONSUMER_WEIGHT,
         ]);
 
-        $enterpriseWeight = $params['enterprise_weight'];
-        $consumerWeight   = $params['consumer_weight'];
+        $enterpriseWeight = $params[ModelParam::EnterpriseWeight];
+        $consumerWeight   = $params[ModelParam::ConsumerWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
@@ -103,8 +104,8 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         $consumerZ   = $streams->generateZ('consumer_hardware', 0.05);
         $eventZ      = $streams->generateZ('event', 0.10);
 
-        $standardParams = $this->resolveModelParameters($stock, ['pricing_power_index' => 0.5]);
-        $pricingPower = max(0.0, min(1.0, $standardParams['pricing_power_index']));
+        $standardParams = $this->resolveModelParameters($stock, [ModelParam::PricingPowerIndex->value => 0.5]);
+        $pricingPower = max(0.0, min(1.0, $standardParams[ModelParam::PricingPowerIndex]));
         $macroSensitivityMultiplier = 0.5 + $pricingPower;
 
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -28,9 +29,18 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     {
         return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.10, 'moat_spread' => 0.025, 'nwc_intensity' => -0.05, 'capex_completion_rate' => 0.50];
     }
-    public function getSecularGrowthRate(Stock $stock): float { return 0.06; }
-    public function getCapexCyclicality(): float { return 1.0; }
-    public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.25, 'revenue_weight' => 0.75]; }
+    public function getSecularGrowthRate(Stock $stock): float
+    {
+        return 0.06;
+    }
+    public function getCapexCyclicality(): float
+    {
+        return 1.0;
+    }
+    public function getSurpriseBlendWeights(): array
+    {
+        return ['eps_weight' => 0.25, 'revenue_weight' => 0.75];
+    }
 
     // --- Dual-Stream Tech & Software Architecture ---
     /** Baseline fraction of revenue derived from recurring SaaS subscription & cloud infrastructure. */
@@ -95,23 +105,23 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     {
         // Resolve company-specific tuned tech and software parameters
         $params = $this->resolveModelParameters($stock, [
-            'subscription_revenue_weight' => self::SUBSCRIPTION_REVENUE_WEIGHT,
-            'advertising_revenue_weight'  => self::ADVERTISING_REVENUE_WEIGHT,
-            'cloud_infrastructure_weight' => 0.00,
-            'advertising_cyclicality'     => self::ADVERTISING_CYCLICALITY_SCALAR,
-            'monopoly_aggression'         => 0.5,
+            ModelParam::SubscriptionRevenueWeight->value => self::SUBSCRIPTION_REVENUE_WEIGHT,
+            ModelParam::AdvertisingRevenueWeight->value  => self::ADVERTISING_REVENUE_WEIGHT,
+            ModelParam::CloudInfrastructureWeight->value => 0.00,
+            ModelParam::AdvertisingCyclicality->value     => self::ADVERTISING_CYCLICALITY_SCALAR,
+            ModelParam::MonopolyAggression->value         => 0.5,
         ]);
 
-        $subWeight           = $params['subscription_revenue_weight'];
-        $adWeight            = $params['advertising_revenue_weight'];
-        $cloudWeight         = $params['cloud_infrastructure_weight'];
-        $adCyclicalityScalar = $params['advertising_cyclicality'];
-        
-        $aggression = max(0.0, min(1.0, $params['monopoly_aggression']));
+        $subWeight           = $params[ModelParam::SubscriptionRevenueWeight];
+        $adWeight            = $params[ModelParam::AdvertisingRevenueWeight];
+        $cloudWeight         = $params[ModelParam::CloudInfrastructureWeight];
+        $adCyclicalityScalar = $params[ModelParam::AdvertisingCyclicality];
+
+        $aggression = max(0.0, min(1.0, $params[ModelParam::MonopolyAggression]));
         // Risk vs Reward Trade-off:
         // Reward: Lower variable costs (higher margins) via aggressive pricing and data harvesting
         $marginBonus = $aggression * 0.10; // Up to 1000 bps baseline margin expansion
-        
+
         // Risk: Massive amplification of regulatory scrutiny
         // At aggression=1.0, Z-score threshold shifts from -2.5 to -1.25 (frequent fines), and penalty severity is 1.5x.
         // At aggression=0.0, Z-score threshold shifts to -3.75 (nearly impossible), and penalty is 0.5x.
@@ -152,7 +162,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         $adRevenue = $expectedRevenue * $adWeight
             * (1.0 + ($adZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $adCyclicality)
             * $viralMultiplier;
-            
+
         $cloudRevenue = 0.0;
         $cloudZ = 0.0;
         if ($cloudWeight > 0.0) {
@@ -193,7 +203,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
             'ad'           => $adZ,
             'event'        => $eventZ,
         ];
-        
+
         $streamRevenue = [
             'subscription' => $subscriptionRevenue,
             'advertising'  => $adRevenue,
@@ -214,7 +224,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streamZ,
             streamRevenue: $streamRevenue,
         );
-        
+
         return $result;
     }
 

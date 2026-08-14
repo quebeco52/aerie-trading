@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -133,16 +134,16 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.25);
 
         $params = $this->resolveModelParameters($stock, [
-            'sticky_lease_weight'            => 0.85,
-            'variable_hospitality_weight'    => 0.15,
-            'securitization_income_weight'   => 0.00,
-            'longevity_bond_yield_weight'    => 0.00,
+            ModelParam::StickyLeaseWeight->value            => 0.85,
+            ModelParam::VariableHospitalityWeight->value    => 0.15,
+            ModelParam::SecuritizationIncomeWeight->value   => 0.00,
+            ModelParam::LongevityBondYieldWeight->value    => 0.00,
         ]);
 
-        $leaseWeight          = $params['sticky_lease_weight'];
-        $hospitalityWeight    = $params['variable_hospitality_weight'];
-        $securitizationWeight = $params['securitization_income_weight'];
-        $longevityWeight      = $params['longevity_bond_yield_weight'];
+        $leaseWeight          = $params[ModelParam::StickyLeaseWeight];
+        $hospitalityWeight    = $params[ModelParam::VariableHospitalityWeight];
+        $securitizationWeight = $params[ModelParam::SecuritizationIncomeWeight];
+        $longevityWeight      = $params[ModelParam::LongevityBondYieldWeight];
 
         // Core Revenue Shocks
         $leaseShock       = $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
@@ -105,14 +106,14 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            'pricing_power_index' => 0.70,
-            'equipment_weight'    => self::EQUIPMENT_WEIGHT,
-            'services_weight'     => self::SERVICES_WEIGHT,
+            ModelParam::PricingPowerIndex->value => 0.70,
+            ModelParam::EquipmentWeight->value    => self::EQUIPMENT_WEIGHT,
+            ModelParam::ServicesWeight->value     => self::SERVICES_WEIGHT,
         ]);
 
-        $pricingPower    = max(0.0, min(1.0, $params['pricing_power_index']));
-        $equipmentWeight = $params['equipment_weight'];
-        $servicesWeight  = $params['services_weight'];
+        $pricingPower    = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
+        $equipmentWeight = $params[ModelParam::EquipmentWeight];
+        $servicesWeight  = $params[ModelParam::ServicesWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $beta = abs((float) $stock->getBeta());

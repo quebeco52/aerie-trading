@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -26,8 +27,14 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     {
         return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.15, 'moat_spread' => 0.015, 'nwc_intensity' => 0.10, 'capex_completion_rate' => 0.125];
     }
-    public function getSecularGrowthRate(Stock $stock): float { return 0.04; }
-    public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.20, 'revenue_weight' => 0.80]; }
+    public function getSecularGrowthRate(Stock $stock): float
+    {
+        return 0.04;
+    }
+    public function getSurpriseBlendWeights(): array
+    {
+        return ['eps_weight' => 0.20, 'revenue_weight' => 0.80];
+    }
 
     // --- Dual-Stream Biotech Portfolio Architecture ---
     /** Baseline fraction of revenue derived from commercially marketed, patent-protected established pharmaceuticals. */
@@ -108,12 +115,12 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            'established_drug_weight' => self::ESTABLISHED_DRUG_WEIGHT,
-            'pipeline_drug_weight'    => self::PIPELINE_DRUG_WEIGHT,
+            ModelParam::EstablishedDrugWeight->value => self::ESTABLISHED_DRUG_WEIGHT,
+            ModelParam::PipelineDrugWeight->value    => self::PIPELINE_DRUG_WEIGHT,
         ]);
 
-        $establishedWeight = $params['established_drug_weight'];
-        $pipelineWeight    = $params['pipeline_drug_weight'];
+        $establishedWeight = $params[ModelParam::EstablishedDrugWeight];
+        $pipelineWeight    = $params[ModelParam::PipelineDrugWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
 

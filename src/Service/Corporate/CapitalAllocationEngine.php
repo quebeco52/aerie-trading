@@ -171,7 +171,7 @@ class CapitalAllocationEngine
 
             $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$ctx->industry]['equity_limit'] ?? 10.0;
             $leverageRatio = (float) $stock->getDebtToEquityRatio();
-            $leverageOvershoot = $equityLimit > 0.0 ? ($leverageRatio / $equityLimit) : 1.0;
+            $leverageOvershoot = $leverageRatio / $equityLimit;
 
             if ($leverageOvershoot >= self::REGULATORY_BUFFER_TIER_3_THRESHOLD) {
                 $isRegulatoryDividendHalt = true;

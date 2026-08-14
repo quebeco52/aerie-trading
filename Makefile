@@ -1,7 +1,7 @@
 .PHONY: up down clean install seed reset ticker ticker-stop tailwind-watch bash test phpstan
 
 DC = docker compose --env-file .env.dev -f docker-compose.dev.yml
-EXEC_PHP = $(DC) exec aerie-php
+EXEC_PHP = $(DC) exec aerie-app
 
 up:
 	$(DC) up -d
@@ -40,4 +40,4 @@ test: up
 	$(EXEC_PHP) vendor/bin/phpunit
 
 phpstan: up
-	$(EXEC_PHP) vendor/bin/phpstan analyse
+	$(EXEC_PHP) vendor/bin/phpstan analyse --memory-limit=1G

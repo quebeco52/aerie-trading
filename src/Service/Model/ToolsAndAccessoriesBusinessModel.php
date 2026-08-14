@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
@@ -68,7 +69,10 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         return $thresholds;
     }
 
-    public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.70, 'revenue_weight' => 0.30]; }
+    public function getSurpriseBlendWeights(): array
+    {
+        return ['eps_weight' => 0.70, 'revenue_weight' => 0.30];
+    }
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
@@ -86,12 +90,12 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            'commercial_weight' => self::COMMERCIAL_WEIGHT,
-            'consumer_weight' => self::CONSUMER_WEIGHT,
+            ModelParam::CommercialWeight->value => self::COMMERCIAL_WEIGHT,
+            ModelParam::ConsumerWeight->value   => self::CONSUMER_WEIGHT,
         ]);
 
-        $commercialWeight = $params['commercial_weight'];
-        $consumerWeight = $params['consumer_weight'];
+        $commercialWeight = $params[ModelParam::CommercialWeight];
+        $consumerWeight   = $params[ModelParam::ConsumerWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
 
@@ -100,12 +104,12 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         $consumerZ = $mathUtility->generatePersistentZ($momentum['consumer'] ?? 0.0, 0.30);
         $eventZ    = $mathUtility->generatePersistentZ($momentum['event'] ?? 0.0, 0.10);
 
-        $standardParams = $this->resolveModelParameters($stock, ['pricing_power_index' => 0.5]);
-        $pricingPower = max(0.0, min(1.0, $standardParams['pricing_power_index']));
+        $standardParams = $this->resolveModelParameters($stock, [ModelParam::PricingPowerIndex->value => 0.5]);
+        $pricingPower = max(0.0, min(1.0, $standardParams[ModelParam::PricingPowerIndex]));
         $macroSensitivityMultiplier = 0.5 + $pricingPower;
-        
+
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
-        
+
         $commercialMacroVolumeShock = $macroState->outputGapEma * $macroSensitivityMultiplier * abs((float) $stock->getBeta());
         $consumerMacroVolumeShock = $sentimentShift * $macroSensitivityMultiplier * abs((float) $stock->getBeta());
 
@@ -113,7 +117,7 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         $cycleMultiplier = 1.0;
         $eventType = null;
         $supplyChainPenalty = 0.0;
-        
+
         if ($eventZ < self::SUPPLY_CHAIN_CONGESTION_Z_SCORE) {
             $supplyChainPenalty = self::SUPPLY_CHAIN_CONGESTION_PENALTY;
             $eventType = ShockEvent::SHIPPING_PORT_CONGESTION;
@@ -146,7 +150,7 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
 
         // Re-implementing Inflation Penalty (dropped from Standard Corporate model)
         $inflation = $macroState->inflationEma;
-        $inflationMultiplier = 2.0 - ($pricingPower * 2.0); 
+        $inflationMultiplier = 2.0 - ($pricingPower * 2.0);
         $baseInflationPenalty = $inflation > MacroEngine::TARGET_INFLATION ? ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0;
         $inflationPenalty = $baseInflationPenalty * $inflationMultiplier;
 

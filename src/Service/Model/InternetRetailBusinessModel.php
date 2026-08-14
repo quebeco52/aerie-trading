@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\DTO\MacroStateDTO;
@@ -89,14 +90,14 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            'first_party_weight' => self::FIRST_PARTY_WEIGHT,
-            'third_party_weight' => self::THIRD_PARTY_WEIGHT,
-            'digital_ads_weight' => self::DIGITAL_ADS_WEIGHT,
+            ModelParam::FirstPartyWeight->value => self::FIRST_PARTY_WEIGHT,
+            ModelParam::ThirdPartyWeight->value => self::THIRD_PARTY_WEIGHT,
+            ModelParam::DigitalAdsWeight->value => self::DIGITAL_ADS_WEIGHT,
         ]);
 
-        $fpWeight  = $params['first_party_weight'];
-        $tpWeight  = $params['third_party_weight'];
-        $adsWeight = $params['digital_ads_weight'];
+        $fpWeight  = $params[ModelParam::FirstPartyWeight];
+        $tpWeight  = $params[ModelParam::ThirdPartyWeight];
+        $adsWeight = $params[ModelParam::DigitalAdsWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = new \App\DTO\StreamContext($momentum, $mathUtility);

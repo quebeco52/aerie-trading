@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -27,9 +28,18 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     {
         return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.15, 'moat_spread' => 0.015, 'nwc_intensity' => 0.05, 'capex_completion_rate' => 0.33];
     }
-    public function getSecularGrowthRate(Stock $stock): float { return 0.03; }
-    public function getCapexCyclicality(): float { return 0.8; }
-    public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.75, 'revenue_weight' => 0.25]; }
+    public function getSecularGrowthRate(Stock $stock): float
+    {
+        return 0.03;
+    }
+    public function getCapexCyclicality(): float
+    {
+        return 0.8;
+    }
+    public function getSurpriseBlendWeights(): array
+    {
+        return ['eps_weight' => 0.75, 'revenue_weight' => 0.25];
+    }
 
     // --- Dual-Stream Consumer Staples Architecture ---
     /** Baseline fraction of revenue derived from premium packaged branded staples and inelastic consumer goods. */
@@ -79,16 +89,16 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            'branded_staples_weight'   => self::BRANDED_STAPLES_WEIGHT,
-            'volume_commodity_weight'  => self::VOLUME_COMMODITY_WEIGHT,
-            'commodity_trading_weight' => 0.00,
-            'land_speculation_weight'  => 0.00,
+            ModelParam::BrandedStaplesWeight->value   => self::BRANDED_STAPLES_WEIGHT,
+            ModelParam::VolumeCommodityWeight->value  => self::VOLUME_COMMODITY_WEIGHT,
+            ModelParam::CommodityTradingWeight->value => 0.00,
+            ModelParam::LandSpeculationWeight->value  => 0.00,
         ]);
 
-        $brandedWeight     = $params['branded_staples_weight'];
-        $volumeWeight      = $params['volume_commodity_weight'];
-        $commodityWeight   = $params['commodity_trading_weight'];
-        $landWeight        = $params['land_speculation_weight'];
+        $brandedWeight     = $params[ModelParam::BrandedStaplesWeight];
+        $volumeWeight      = $params[ModelParam::VolumeCommodityWeight];
+        $commodityWeight   = $params[ModelParam::CommodityTradingWeight];
+        $landWeight        = $params[ModelParam::LandSpeculationWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
 
@@ -112,7 +122,7 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
             $recallPenalty = self::RECALL_MODERATE_PENALTY * $brandedWeight;
             $eventType = ShockEvent::REGULATORY_FINE;
         }
-        
+
         $commodityRevenue = 0.0;
         $commodityZ = 0.0;
         if ($commodityWeight > 0.0) {
@@ -132,7 +142,7 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         // Agricultural & Packaging Commodity Input Cost Elasticity:
         // Fluctuations in bulk agricultural processing ($volumeZ) smoothly shift variable input costs.
         $commodityInputShift = self::COMMODITY_INPUT_ELASTICITY * $volumeZ * $volumeWeight;
-        
+
         // Supply Chain & Packaging Penalty (Energy Price Index)
         $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
         $logisticsPenalty = $energyShift * abs((float) $stock->getBeta()) * 0.50; // Plastic packaging & freight cost spike
@@ -147,7 +157,7 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
             'volume'  => $volumeZ,
             'event'   => $eventZ,
         ];
-        
+
         $streamRevenue = [
             'branded' => $brandedRevenue,
             'volume'  => $volumeRevenue,
@@ -157,7 +167,7 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
             $streamZ['commodity_trading'] = $commodityZ;
             $streamRevenue['commodity_trading'] = $commodityRevenue;
         }
-        
+
         if ($landWeight > 0.0) {
             $streamZ['land_speculation'] = $landZ;
             $streamRevenue['land_speculation'] = $landRevenue;
@@ -173,7 +183,7 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streamZ,
             streamRevenue: $streamRevenue,
         );
-        
+
         return $result;
     }
 
@@ -208,4 +218,3 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         }
     }
 }
-
