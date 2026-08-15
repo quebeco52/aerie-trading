@@ -195,20 +195,19 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             ModelParam::ForeignMilitarySalesWeight->value => self::FOREIGN_MILITARY_SALES_WEIGHT,
         ]);
 
-        $costPlusWeight   = $params[ModelParam::CostPlusWeight];
-        $fixedPriceWeight = $params[ModelParam::FixedPriceDevWeight];
-        $fmsWeight        = $params[ModelParam::ForeignMilitarySalesWeight];
-
-        // Normalize weights if needed
-        $totalWeight = $costPlusWeight + $fixedPriceWeight + $fmsWeight;
-        if ($totalWeight > 0.0 && abs($totalWeight - 1.0) > 0.0001) {
-            $costPlusWeight   /= $totalWeight;
-            $fixedPriceWeight /= $totalWeight;
-            $fmsWeight        /= $totalWeight;
-        }
-
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = new StreamContext($momentum, $mathUtility);
+
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'cost_plus_procurement'   => $params[ModelParam::CostPlusWeight],
+            'fixed_price_development' => $params[ModelParam::FixedPriceDevWeight],
+            'foreign_military_sales'  => $params[ModelParam::ForeignMilitarySalesWeight],
+        ]);
+
+        $costPlusWeight   = $activeWeights['cost_plus_procurement'];
+        $fixedPriceWeight = $activeWeights['fixed_price_development'];
+        $fmsWeight        = $activeWeights['foreign_military_sales'];
 
         // Independent stream Z-scores
         $costPlusZ   = $streams->generateZ('cost_plus_procurement', 0.70); // High persistence (multi-year appropriations)
@@ -285,7 +284,14 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             $expectedRevenue * $fmsWeight * (1.0 + ($fmsZ * $baselineVol * self::FMS_VARIANCE_SCALAR)) * $fmsMultiplier
         );
 
-        $actualRevenue = $costPlusRevenue + $fixedPriceRevenue + $fmsRevenue;
+        $streamRevenues = [
+            'cost_plus_procurement'   => $costPlusRevenue,
+            'fixed_price_development' => $fixedPriceRevenue,
+            'foreign_military_sales'  => $fmsRevenue,
+        ];
+
+        $actualRevenue = array_sum($streamRevenues);
+        $streams->recordStreamShares($streamRevenues);
 
         // --- Realized Variable Cost Margin ---
         $rawMargin = $realizedVariableMargin + $executionEfficiencyShift + $forwardLossPenalty + $flagshipPenalty + $materialDrag;
@@ -317,11 +323,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
-            streamRevenue: [
-                'cost_plus_procurement'   => $costPlusRevenue,
-                'fixed_price_development' => $fixedPriceRevenue,
-                'foreign_military_sales'  => $fmsRevenue,
-            ],
+            streamRevenue: $streamRevenues,
         );
     }
 

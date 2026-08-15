@@ -741,4 +741,57 @@ class MathUtility
         
         return $posteriorEstimate;
     }
+
+    /**
+     * Calculates the mean-reverting exponential moving average (Ornstein-Uhlenbeck mix drift) for dynamic portfolio/revenue weights.
+     *
+     * Formula: w_{t+1} = w_t + alpha * (realized_t - w_t) + kappa * (target - w_t)
+     *
+     * @param float $currentWeight Current active weight w_t
+     * @param float $realizedShare Recent realized share r_t
+     * @param float $targetWeight  Long-term strategic anchor theta
+     * @param float $alpha         Adaptation speed parameter [0, 1]
+     * @param float $kappa         Mean reversion pull speed [0, 1]
+     * @param float $minFloor      Minimum structural floor clamp
+     * @param float $maxCeiling    Maximum structural ceiling clamp
+     * @return float Clamped updated weight before simplex normalization
+     */
+    public function calculateMeanRevertingWeight(
+        float $currentWeight,
+        float $realizedShare,
+        float $targetWeight,
+        float $alpha,
+        float $kappa,
+        float $minFloor = 0.05,
+        float $maxCeiling = 0.85
+    ): float {
+        $drift = $alpha * ($realizedShare - $currentWeight);
+        $reversion = $kappa * ($targetWeight - $currentWeight);
+        $raw = $currentWeight + $drift + $reversion;
+
+        return max($minFloor, min($maxCeiling, $raw));
+    }
+
+    /**
+     * Normalizes an array of weights to sum strictly to 1.0 (simplex projection).
+     *
+     * @param array<string, float> $weights
+     * @return array<string, float>
+     */
+    public function normalizeWeightsSimplex(array $weights): array
+    {
+        $total = array_sum($weights);
+        if ($total <= 0.0) {
+            $count = count($weights);
+            $equal = $count > 0 ? 1.0 / $count : 1.0;
+            return array_map(fn() => $equal, $weights);
+        }
+
+        $normalized = [];
+        foreach ($weights as $key => $weight) {
+            $normalized[$key] = $weight / $total;
+        }
+
+        return $normalized;
+    }
 }

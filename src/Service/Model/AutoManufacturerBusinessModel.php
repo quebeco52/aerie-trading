@@ -177,6 +177,17 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $streams = new StreamContext($momentum, $mathUtility);
         $beta = abs((float) $stock->getBeta());
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'mass_market_sales'   => $params[ModelParam::AutoSalesWeight],
+            'apex_luxury'         => $params[ModelParam::ApexLuxuryWeight],
+            'software_telematics' => $params[ModelParam::SoftwareServicesWeight],
+        ]);
+
+        $salesWeight    = $activeWeights['mass_market_sales'];
+        $apexWeight     = $activeWeights['apex_luxury'];
+        $softwareWeight = $activeWeights['software_telematics'];
+
         // Independent stream Z-scores with persistent AR(1) momentum
         $salesZ    = $streams->generateZ('mass_market_sales', 0.25);
         $apexZ     = $streams->generateZ('apex_luxury', 0.35);
@@ -235,7 +246,14 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $apexRevenue     = max(0.0, $expectedRevenue * $apexWeight     * (1.0 + $apexShock + $apexMacroBoost));
         $softwareRevenue = max(0.0, $expectedRevenue * $softwareWeight * (1.0 + $softwareShock));
 
-        $actualRevenue = $salesRevenue + $apexRevenue + $softwareRevenue;
+        $streamRevenues = [
+            'mass_market_sales'   => $salesRevenue,
+            'apex_luxury'         => $apexRevenue,
+            'software_telematics' => $softwareRevenue,
+        ];
+
+        $actualRevenue = array_sum($streamRevenues);
+        $streams->recordStreamShares($streamRevenues);
 
         // --- Cross-Subsidization Variable Cost Architecture ---
         $blendedIntensity = ($salesWeight * self::MASS_MARKET_COST_INTENSITY)
@@ -288,17 +306,8 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'mass_market_sales'   => $salesZ,
-                'apex_luxury'         => $apexZ,
-                'software_telematics' => $softwareZ,
-                'event'               => $eventZ,
-            ],
-            streamRevenue: [
-                'mass_market_sales'   => $salesRevenue,
-                'apex_luxury'         => $apexRevenue,
-                'software_telematics' => $softwareRevenue,
-            ],
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: $streamRevenues,
         );
     }
 }

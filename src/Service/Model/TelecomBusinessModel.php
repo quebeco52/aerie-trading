@@ -109,6 +109,15 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
         $beta = abs((float) $stock->getBeta());
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'wireless_subscriptions' => $params[ModelParam::SubscriptionWeight],
+            'equipment_sales'        => $params[ModelParam::EquipmentWeight],
+        ]);
+
+        $subscriptionWeight = $activeWeights['wireless_subscriptions'];
+        $equipmentWeight    = $activeWeights['equipment_sales'];
+
         // Independent stream Z-scores
         $subscriptionZ = $streams->generateZ('wireless_subscriptions', 0.40); // High persistence
         $equipmentZ    = $streams->generateZ('equipment_sales', 0.15); // Low persistence, driven by hardware cycles
@@ -136,7 +145,13 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         $subscriptionRevenue = max(0.0, $expectedRevenue * $subscriptionWeight * (1.0 + ($subscriptionZ * $baselineVol * self::SUBSCRIPTION_VARIANCE_SCALAR) + $macroDefensiveShift));
         $equipmentRevenue    = max(0.0, $expectedRevenue * $equipmentWeight * (1.0 + ($equipmentZ * $baselineVol * self::EQUIPMENT_VARIANCE_SCALAR) + $macroCyclicalShift));
 
-        $actualRevenue = $subscriptionRevenue + $equipmentRevenue;
+        $streamRevenues = [
+            'wireless_subscriptions' => $subscriptionRevenue,
+            'equipment_sales'        => $equipmentRevenue,
+        ];
+
+        $actualRevenue = array_sum($streamRevenues);
+        $streams->recordStreamShares($streamRevenues);
 
         // --- Cost & Margin Physics ---
 
@@ -173,10 +188,7 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
-            streamRevenue: [
-                'wireless_subscriptions' => $subscriptionRevenue,
-                'equipment_sales'        => $equipmentRevenue,
-            ],
+            streamRevenue: $streamRevenues,
         );
     }
 

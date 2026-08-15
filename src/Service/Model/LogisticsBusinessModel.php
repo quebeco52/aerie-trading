@@ -71,6 +71,17 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
         $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
         $beta     = abs((float) $stock->getBeta());
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'dedicated_fleet_contracts' => $params[ModelParam::DedicatedFleetWeight],
+            'spot_freight_brokerage'    => $params[ModelParam::SpotBrokerageWeight],
+            'value_added_warehousing'   => $params[ModelParam::Warehousing3plWeight],
+        ]);
+
+        $fleetWeight = $activeWeights['dedicated_fleet_contracts'];
+        $spotWeight  = $activeWeights['spot_freight_brokerage'];
+        $whWeight    = $activeWeights['value_added_warehousing'];
+
         // Macro GDP sensitivity
         $macroBoost = $macroState->outputGapEma * 1.5 * $beta;
 
@@ -89,7 +100,15 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
         $spotRevenue  = max(0.0, $expectedRevenue * $spotWeight  * (1.0 + ($spotZ  * ($baselineVol * self::SPOT_VARIANCE_SCALAR)) + ($macroBoost * 1.5)) * $spotMultiplier);
         $whRevenue    = max(0.0, $expectedRevenue * $whWeight    * (1.0 + ($whZ    * ($baselineVol * self::WAREHOUSING_VARIANCE_SCALAR))));
 
-        $actualRevenue = $fleetRevenue + $spotRevenue + $whRevenue;
+        $streamRevenues = [
+            'dedicated_fleet_contracts' => $fleetRevenue,
+            'spot_freight_brokerage'    => $spotRevenue,
+            'value_added_warehousing'   => $whRevenue,
+        ];
+
+        $actualRevenue = array_sum($streamRevenues);
+        $streams->recordStreamShares($streamRevenues);
+
         $clampedMargin = $this->clampMargin($realizedVariableMargin);
 
         $primaryShockZ = abs($spotZ) > abs($fleetZ) ? $spotZ : $fleetZ;
@@ -109,11 +128,7 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
-            streamRevenue: [
-                'dedicated_fleet_contracts' => $fleetRevenue,
-                'spot_freight_brokerage'    => $spotRevenue,
-                'value_added_warehousing'   => $whRevenue,
-            ],
+            streamRevenue: $streamRevenues,
         );
     }
 }

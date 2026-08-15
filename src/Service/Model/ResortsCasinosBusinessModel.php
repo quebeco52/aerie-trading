@@ -141,17 +141,31 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
             ModelParam::CommercialRealEstateWeight->value   => 0.00,
         ]);
 
-        $gamingWeight      = $params[ModelParam::GamingRevenueWeight];
-        $nonGamingWeight   = $params[ModelParam::NonGamingRevenueWeight];
-        $creWeight         = $params[ModelParam::CommercialRealEstateWeight];
+        $rawCreWeight = $params[ModelParam::CommercialRealEstateWeight];
         $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+
+        $targetWeights = [
+            'gaming'     => $params[ModelParam::GamingRevenueWeight],
+            'non_gaming' => $params[ModelParam::NonGamingRevenueWeight],
+        ];
+        if ($rawCreWeight > 0.0) {
+            $targetWeights['cre'] = $rawCreWeight;
+        }
+
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
+
+        $gamingWeight    = $activeWeights['gaming'];
+        $nonGamingWeight = $activeWeights['non_gaming'];
+        $creWeight       = $activeWeights['cre'] ?? 0.0;
 
         // Independent stream Z-scores with AR(1) persistence
-        $gamingZ = $mathUtility->generatePersistentZ($momentum['gaming'] ?? 0.0, 0.15); // Table hold / win volatility (i.i.d. luck)
-        $nonGamingZ = $mathUtility->generatePersistentZ($momentum['non_gaming'] ?? 0.0, 0.35); // Hotel occupancy & convention backlog
-        $eventZ = $mathUtility->generatePersistentZ($momentum['event'] ?? 0.0, 0.10);
+        $gamingZ    = $streams->generateZ('gaming', 0.15); // Table hold / win volatility (i.i.d. luck)
+        $nonGamingZ = $streams->generateZ('non_gaming', 0.35); // Hotel occupancy & convention backlog
+        $eventZ     = $streams->generateZ('event', 0.10);
 
         // --- Tail Risk Events ---
         $whaleMultiplier = 1.0;
@@ -175,13 +189,18 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         $nonGamingRevenue = max(0.0, $expectedRevenue * $nonGamingWeight)
             * (1.0 + ($nonGamingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.5)));
 
+        $streamRevenues = [
+            'gaming'     => $gamingRevenue,
+            'non_gaming' => $nonGamingRevenue,
+        ];
+
         $creRevenue = 0.0;
         $creZ = 0.0;
         $creVacancyShock = 0.0;
         $creRefinancingDrag = 0.0;
 
         if ($creWeight > 0.0) {
-            $creZ = $mathUtility->generatePersistentZ($momentum['cre'] ?? 0.0, 0.50); // Real estate leases are highly persistent
+            $creZ = $streams->generateZ('cre', 0.50); // Real estate leases are highly persistent
 
             // 1. GDP output gap affects commercial real estate leasing demand
             $creDemandShock = $macroState->outputGap * abs((float) $stock->getBeta()) * 0.5;
@@ -191,6 +210,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
             $rentEscalator = $excessInflation * self::CRE_RENT_ESCALATOR_CAPTURE;
 
             $creRevenue = max(0.0, $expectedRevenue * $creWeight * (1.0 + ($creZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.2) + $creDemandShock + $rentEscalator));
+            $streamRevenues['cre'] = $creRevenue;
 
             // 3. Refinancing Drag on CRE debt (10Y Yield sensitivity)
             $yield10y = $macroState->yield10yEma;
@@ -202,7 +222,8 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
             }
         }
 
-        $actualRevenue = max(0.0, $gamingRevenue + $nonGamingRevenue + $creRevenue);
+        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
 
         // --- Cost & Margin Physics ---
         // 1. Inflation Penalty (F&B and labor costs)
@@ -243,34 +264,16 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
 
         $observableShockZ = ($gamingZ * $gamingWeight + $nonGamingZ * $nonGamingWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
 
-        $streamZ = [
-            'gaming' => $gamingZ,
-            'non_gaming' => $nonGamingZ,
-            'event' => $eventZ,
-        ];
-
-        $streamRevenue = [
-            'Gaming (GGR)' => $gamingRevenue,
-            'Non-Gaming (Hotels/F&B)' => $nonGamingRevenue,
-        ];
-
-        if ($creWeight > 0.0) {
-            $streamZ['cre'] = $creZ;
-            $streamRevenue['commercial_real_estate'] = $creRevenue;
-        }
-
-        $result = new SectorPhysicsResult(
+        return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: $streamZ,
-            streamRevenue: $streamRevenue
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: $streamRevenues
         );
-
-        return $result;
     }
 
     public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void

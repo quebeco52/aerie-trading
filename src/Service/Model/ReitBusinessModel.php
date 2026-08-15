@@ -130,9 +130,6 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
-        $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.25);
-
         $params = $this->resolveModelParameters($stock, [
             ModelParam::StickyLeaseWeight->value            => 0.85,
             ModelParam::VariableHospitalityWeight->value    => 0.15,
@@ -140,14 +137,37 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             ModelParam::LongevityBondYieldWeight->value    => 0.00,
         ]);
 
-        $leaseWeight          = $params[ModelParam::StickyLeaseWeight];
-        $hospitalityWeight    = $params[ModelParam::VariableHospitalityWeight];
-        $securitizationWeight = $params[ModelParam::SecuritizationIncomeWeight];
-        $longevityWeight      = $params[ModelParam::LongevityBondYieldWeight];
+        $rawSecuritizationWeight = $params[ModelParam::SecuritizationIncomeWeight];
+        $rawLongevityWeight      = $params[ModelParam::LongevityBondYieldWeight];
+
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+
+        $targetWeights = [
+            'lease'       => $params[ModelParam::StickyLeaseWeight],
+            'hospitality' => $params[ModelParam::VariableHospitalityWeight],
+        ];
+        if ($rawSecuritizationWeight > 0.0) {
+            $targetWeights['securitization_income'] = $rawSecuritizationWeight;
+        }
+        if ($rawLongevityWeight > 0.0) {
+            $targetWeights['longevity_bond_yield'] = $rawLongevityWeight;
+        }
+
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
+
+        $leaseWeight          = $activeWeights['lease'];
+        $hospitalityWeight    = $activeWeights['hospitality'];
+        $securitizationWeight = $activeWeights['securitization_income'] ?? 0.0;
+        $longevityWeight      = $activeWeights['longevity_bond_yield'] ?? 0.0;
+
+        $revenueZ = $streams->generateZ('lease', 0.25);
+        $hospitalityZ = $streams->generateZ('hospitality', 0.25);
 
         // Core Revenue Shocks
         $leaseShock       = $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
-        $hospitalityShock = $revenueZ * ($baselineVol * self::HOSPITALITY_VARIANCE_SCALAR);
+        $hospitalityShock = $hospitalityZ * ($baselineVol * self::HOSPITALITY_VARIANCE_SCALAR);
 
         // The Inflation Hedge (CPI Rent Escalators)
         $inflation = $macroState->inflationEma;
@@ -158,24 +178,32 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $leaseRevenue       = max(0.0, $expectedRevenue * $leaseWeight * (1.0 + $leaseShock + $rentEscalator));
         $hospitalityRevenue = max(0.0, $expectedRevenue * $hospitalityWeight * (1.0 + $hospitalityShock));
 
+        $streamRevenues = [
+            'lease'       => $leaseRevenue,
+            'hospitality' => $hospitalityRevenue,
+        ];
+
         $securitizationRevenue = 0.0;
         $securitizationZ = 0.0;
         if ($securitizationWeight > 0.0) {
-            $securitizationZ = $mathUtility->generatePersistentZ($momentum['securitization'] ?? 0.0, 0.40);
+            $securitizationZ = $streams->generateZ('securitization_income', 0.40);
             $securitizationRevenue = max(0.0, $expectedRevenue * $securitizationWeight * (1.0 + ($securitizationZ * $baselineVol * self::SECURITIZATION_VARIANCE_SCALAR)));
+            $streamRevenues['securitization_income'] = $securitizationRevenue;
         }
 
         $longevityRevenue = 0.0;
         $longevityZ = 0.0;
         if ($longevityWeight > 0.0) {
-            $longevityZ = $mathUtility->generatePersistentZ($momentum['longevity'] ?? 0.0, 0.60);
+            $longevityZ = $streams->generateZ('longevity_bond_yield', 0.60);
             $longevityRevenue = max(0.0, $expectedRevenue * $longevityWeight * (1.0 + ($longevityZ * $baselineVol * self::LONGEVITY_VARIANCE_SCALAR)));
+            $streamRevenues['longevity_bond_yield'] = $longevityRevenue;
         }
 
-        $actualRevenue = $leaseRevenue + $hospitalityRevenue + $securitizationRevenue + $longevityRevenue;
+        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
 
         // --- Margin Penalties ---
-        $tenantDefaultZ = $mathUtility->generatePersistentZ($momentum['tenant_default'] ?? 0.0, 0.20);
+        $tenantDefaultZ = $streams->generateZ('tenant_default', 0.20);
         $vacancyShock = $tenantDefaultZ < self::VACANCY_Z_THRESHOLD
             ? abs($tenantDefaultZ) * self::VACANCY_LOSS_SCALAR
             : ($tenantDefaultZ > self::BENIGN_LEASING_Z_FLOOR
@@ -195,26 +223,6 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::REIT_ELEVATED_VACANCIES;
         }
 
-        $streamZ = [
-            'revenue'        => $revenueZ,
-            'tenant_default' => $tenantDefaultZ,
-        ];
-
-        $streamRevenue = [
-            'lease'       => $leaseRevenue,
-            'hospitality' => $hospitalityRevenue,
-        ];
-
-        if ($securitizationWeight > 0.0) {
-            $streamZ['securitization'] = $securitizationZ;
-            $streamRevenue['securitization_income'] = $securitizationRevenue;
-        }
-
-        if ($longevityWeight > 0.0) {
-            $streamZ['longevity'] = $longevityZ;
-            $streamRevenue['longevity_bond_yield'] = $longevityRevenue;
-        }
-
         // FIX: Combine all shocks so analysts can actually predict the outcome
         $observableShockZ = ($leaseShock * $leaseWeight * 0.8) +
             ($hospitalityShock * $hospitalityWeight * 0.6) +
@@ -227,8 +235,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: $streamZ,
-            streamRevenue: $streamRevenue,
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: $streamRevenues,
         );
     }
 

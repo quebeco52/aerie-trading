@@ -118,10 +118,20 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         $contractWeight = $params[ModelParam::ContractCharterWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'spot'     => $params[ModelParam::SpotCharterWeight],
+            'contract' => $params[ModelParam::ContractCharterWeight],
+        ]);
+
+        $spotWeight     = $activeWeights['spot'];
+        $contractWeight = $activeWeights['contract'];
 
         // Independent stream Z-scores with AR(1) persistence
-        $spotZ     = $mathUtility->generatePersistentZ($momentum['spot'] ?? 0.0, 0.35); // Spot ocean freight / Baltic Dry variance
-        $contractZ = $mathUtility->generatePersistentZ($momentum['contract'] ?? 0.0, 0.50); // Multi-year contracted logistics lines
+        $spotZ     = $streams->generateZ('spot', 0.35); // Spot ocean freight / Baltic Dry variance
+        $contractZ = $streams->generateZ('contract', 0.50); // Multi-year contracted logistics lines
 
         // Spot Rate Super-Cycle vs. Capacity Glut
         // Crucially, spot rate elasticity applies continuously to spot charter revenue ($spotWeight).
@@ -135,9 +145,16 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::SHIPPING_CAPACITY_GLUT;
         }
 
-        $spotRevenue     = $expectedRevenue * $spotWeight * (1.0 + ($spotZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $spotRateMultiplier);
-        $contractRevenue = $expectedRevenue * $contractWeight * (1.0 + ($contractZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
-        $actualRevenue   = max(0.0, $spotRevenue + $contractRevenue);
+        $spotRevenue     = max(0.0, $expectedRevenue * $spotWeight * (1.0 + ($spotZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $spotRateMultiplier));
+        $contractRevenue = max(0.0, $expectedRevenue * $contractWeight * (1.0 + ($contractZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
+        
+        $streamRevenues = [
+            'spot'     => $spotRevenue,
+            'contract' => $contractRevenue,
+        ];
+
+        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
 
         // Fuel and Bunker Cost Inflation / Deflation:
         // Shipping is directly exposed to crude oil and commodity inflation, capturing savings during deflationary/falling fuel regimes.
@@ -162,14 +179,8 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'spot'     => $spotZ,
-                'contract' => $contractZ,
-            ],
-            streamRevenue: [
-                'spot'     => $spotRevenue,
-                'contract' => $contractRevenue,
-            ],
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: $streamRevenues,
         );
     }
 

@@ -72,6 +72,15 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
         $beta     = abs((float) $stock->getBeta());
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'contracted_oem_steel' => $params[ModelParam::ContractOemWeight],
+            'spot_hrc_market'      => $params[ModelParam::SpotHrcWeight],
+        ]);
+
+        $contractWeight = $activeWeights['contracted_oem_steel'];
+        $spotWeight     = $activeWeights['spot_hrc_market'];
+
         // Strongly tied to macro output gap and energy prices
         $macroBoost = $macroState->outputGapEma * 1.5 * $beta;
         $energyDrag = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0) * self::ENERGY_INPUT_DRAG_SCALAR;
@@ -82,7 +91,13 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $contractRevenue = max(0.0, $expectedRevenue * $contractWeight * (1.0 + ($contractZ * ($baselineVol * self::CONTRACT_VARIANCE_SCALAR)) + ($macroBoost * 0.5)));
         $spotRevenue     = max(0.0, $expectedRevenue * $spotWeight     * (1.0 + ($spotZ     * ($baselineVol * self::SPOT_VARIANCE_SCALAR)) + ($macroBoost * 1.5)));
 
-        $actualRevenue = max(0.0, $contractRevenue + $spotRevenue);
+        $streamRevenues = [
+            'contracted_oem_steel' => $contractRevenue,
+            'spot_hrc_market'      => $spotRevenue,
+        ];
+
+        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
 
         // Cyclical Metal Spread & Energy Compression
         $clampedMargin = $this->clampMargin($realizedVariableMargin - ($energyDrag * 0.50));
@@ -100,10 +115,7 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
             eventType: null,
             isPublicEvent: null,
             streamZ: $streams->getStreamZ(),
-            streamRevenue: [
-                'contracted_oem_steel' => $contractRevenue,
-                'spot_hrc_market'      => $spotRevenue,
-            ],
+            streamRevenue: $streamRevenues,
         );
     }
 }

@@ -149,11 +149,18 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             ModelParam::MortgageOriginationWeight->value => 0.60,
             ModelParam::DirectLendingWeight->value       => 0.40,
         ]);
-        $mortgageWeight = $params[ModelParam::MortgageOriginationWeight];
-        $lendingWeight  = $params[ModelParam::DirectLendingWeight];
+
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'origination_fees' => $params[ModelParam::MortgageOriginationWeight],
+            'direct_lending'   => $params[ModelParam::DirectLendingWeight],
+        ]);
+
+        $mortgageWeight = $activeWeights['origination_fees'];
+        $lendingWeight  = $activeWeights['direct_lending'];
 
         // Independent stream Z-scores
-        $originationZ = $streams->generateZ('origination', 0.20);
+        $originationZ = $streams->generateZ('origination_fees', 0.20);
         $lendingZ     = $streams->generateZ('direct_lending', 0.45);
         $creditZ      = $streams->generateZ('credit', 0.25);
 
@@ -169,7 +176,14 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
 
         $mortgageRevenue = max(0.0, $expectedRevenue * $mortgageWeight * (1.0 + ($originationZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5)) - $mortgageRateDrag));
         $lendingRevenue  = max(0.0, $expectedRevenue * $lendingWeight * (1.0 + ($lendingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.8)) + $directLendingRateBonus));
-        $actualRevenue   = max(0.0, $mortgageRevenue + $lendingRevenue);
+        
+        $streamRevenues = [
+            'origination_fees' => $mortgageRevenue,
+            'direct_lending'   => $lendingRevenue,
+        ];
+
+        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
 
         // CECL Forward Provisioning & Default Shock:
         // Shadow Banks primarily hold highly leveraged mortgages and direct loans.
@@ -220,10 +234,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             streamZ: $streams->getStreamZ(),
-            streamRevenue: [
-                'origination_fees' => $mortgageRevenue,
-                'direct_lending'   => $lendingRevenue,
-            ],
+            streamRevenue: $streamRevenues,
         );
     }
 }

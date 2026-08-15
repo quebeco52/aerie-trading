@@ -103,23 +103,41 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
             ModelParam::LandSpeculationWeight->value  => 0.00,
         ]);
 
-        $brandedWeight     = $params[ModelParam::BrandedStaplesWeight];
-        $volumeWeight      = $params[ModelParam::VolumeCommodityWeight];
-        $commodityWeight   = $params[ModelParam::CommodityTradingWeight];
-        $landWeight        = $params[ModelParam::LandSpeculationWeight];
+        $rawCommodityWeight = $params[ModelParam::CommodityTradingWeight];
+        $rawLandWeight      = $params[ModelParam::LandSpeculationWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+
+        $targetWeights = [
+            'branded' => $params[ModelParam::BrandedStaplesWeight],
+            'volume'  => $params[ModelParam::VolumeCommodityWeight],
+        ];
+        if ($rawCommodityWeight > 0.0) {
+            $targetWeights['commodity_trading'] = $rawCommodityWeight;
+        }
+        if ($rawLandWeight > 0.0) {
+            $targetWeights['land_speculation'] = $rawLandWeight;
+        }
+
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
+
+        $brandedWeight   = $activeWeights['branded'];
+        $volumeWeight    = $activeWeights['volume'];
+        $commodityWeight = $activeWeights['commodity_trading'] ?? 0.0;
+        $landWeight      = $activeWeights['land_speculation'] ?? 0.0;
 
         // Independent stream Z-scores with AR(1) persistence
-        $brandedZ = $mathUtility->generatePersistentZ($momentum['branded'] ?? 0.0, 0.15); // Core branded consumer products
-        $volumeZ  = $mathUtility->generatePersistentZ($momentum['volume'] ?? 0.0, 0.15); // Unbranded bulk volume / wholesale processing
+        $brandedZ = $streams->generateZ('branded', 0.15); // Core branded consumer products
+        $volumeZ  = $streams->generateZ('volume', 0.15); // Unbranded bulk volume / wholesale processing
+        $eventZ   = $streams->generateZ('event', 0.05);
 
-        $brandedRevenue = $expectedRevenue * $brandedWeight * (1.0 + ($brandedZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
-        $volumeRevenue  = $expectedRevenue * $volumeWeight * (1.0 + ($volumeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
+        $brandedRevenue = max(0.0, $expectedRevenue * $brandedWeight * (1.0 + ($brandedZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
+        $volumeRevenue  = max(0.0, $expectedRevenue * $volumeWeight * (1.0 + ($volumeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
 
         // Tail Risk: Product Recalls and Health Regulations
         // Scaled proportionally to packaged branded consumer staples ($brandedWeight).
-        $eventZ = $mathUtility->generatePersistentZ($momentum['event'] ?? 0.0, 0.05);
         $eventType = null;
         $recallPenalty = 0.0;
 
@@ -131,27 +149,35 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::REGULATORY_FINE;
         }
 
+        $streamRevenues = [
+            'branded' => $brandedRevenue,
+            'volume'  => $volumeRevenue,
+        ];
+
         $commodityRevenue = 0.0;
         $commodityZ = 0.0;
         if ($commodityWeight > 0.0) {
-            $commodityZ = $mathUtility->generatePersistentZ($momentum['commodity_trading'] ?? 0.0, 0.20);
+            $commodityZ = $streams->generateZ('commodity_trading', 0.20);
 
             // Physical inventory hoarding & Proof Desk short squeezes profit from supply bottlenecks & inflation panics
             $inflationExcess = max(0.0, $macroState->inflationEma - MacroEngine::TARGET_INFLATION);
             $energyExcess = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
             $commoditySqueezeBonus = ($inflationExcess * self::COMMODITY_INFLATION_ALPHA_SCALAR) + ($energyExcess * self::COMMODITY_ENERGY_ALPHA_SCALAR);
 
-            $commodityRevenue = $expectedRevenue * $commodityWeight * (1.0 + ($commodityZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 2.5) + $commoditySqueezeBonus);
+            $commodityRevenue = max(0.0, $expectedRevenue * $commodityWeight * (1.0 + ($commodityZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 2.5) + $commoditySqueezeBonus));
+            $streamRevenues['commodity_trading'] = $commodityRevenue;
         }
 
         $landRevenue = 0.0;
         $landZ = 0.0;
         if ($landWeight > 0.0) {
-            $landZ = $mathUtility->generatePersistentZ($momentum['land_speculation'] ?? 0.0, 0.50);
-            $landRevenue = $expectedRevenue * $landWeight * (1.0 + ($landZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.5));
+            $landZ = $streams->generateZ('land_speculation', 0.50);
+            $landRevenue = max(0.0, $expectedRevenue * $landWeight * (1.0 + ($landZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.5)));
+            $streamRevenues['land_speculation'] = $landRevenue;
         }
 
-        $actualRevenue = max(0.0, $brandedRevenue + $volumeRevenue + $commodityRevenue + $landRevenue);
+        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
 
         // Agricultural & Packaging Commodity Input Cost Elasticity:
         // Fluctuations in bulk agricultural processing ($volumeZ) smoothly shift variable input costs.
@@ -169,39 +195,16 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         $primaryShockZ = abs($eventZ) > abs($brandedZ) ? $eventZ : $brandedZ;
         $observableShockZ = ($brandedZ * $brandedWeight + $volumeZ * $volumeWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
 
-        $streamZ = [
-            'branded' => $brandedZ,
-            'volume'  => $volumeZ,
-            'event'   => $eventZ,
-        ];
-
-        $streamRevenue = [
-            'branded' => $brandedRevenue,
-            'volume'  => $volumeRevenue,
-        ];
-
-        if ($commodityWeight > 0.0) {
-            $streamZ['commodity_trading'] = $commodityZ;
-            $streamRevenue['commodity_trading'] = $commodityRevenue;
-        }
-
-        if ($landWeight > 0.0) {
-            $streamZ['land_speculation'] = $landZ;
-            $streamRevenue['land_speculation'] = $landRevenue;
-        }
-
-        $result = new SectorPhysicsResult(
+        return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: $streamZ,
-            streamRevenue: $streamRevenue,
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: $streamRevenues,
         );
-
-        return $result;
     }
 
     public function getMarginReversionSpeed(): float

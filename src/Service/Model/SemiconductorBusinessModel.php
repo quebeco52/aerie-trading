@@ -131,10 +131,21 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         $designWeight  = $params[ModelParam::DesignRevenueWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'foundry' => $params[ModelParam::FoundryRevenueWeight],
+            'design'  => $params[ModelParam::DesignRevenueWeight],
+        ]);
+
+        $foundryWeight = $activeWeights['foundry'];
+        $designWeight  = $activeWeights['design'];
 
         // Independent stream Z-scores with AR(1) persistence
-        $foundryZ = $mathUtility->generatePersistentZ($momentum['foundry'] ?? 0.0, 0.35); // Cleanroom wafer manufacturing volume
-        $designZ  = $mathUtility->generatePersistentZ($momentum['design'] ?? 0.0, 0.45); // IP architecture licensing & AI design mandates
+        $foundryZ = $streams->generateZ('foundry', 0.35); // Cleanroom wafer manufacturing volume
+        $designZ  = $streams->generateZ('design', 0.45); // IP architecture licensing & AI design mandates
+        $cycleZ   = $streams->generateZ('cycle', 0.10);
 
         // Fab Utilization Leverage & Tech Super-Cycles
         // Crucially, capacity utilization leverage applies to physical fab manufacturing ($foundryWeight),
@@ -143,7 +154,6 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         $utilizationMultiplier = 0.0;
         $eventType = null;
 
-        $cycleZ = $mathUtility->generatePersistentZ($momentum['cycle'] ?? 0.0, 0.10);
         if ($outputGap > self::BOOM_GAP_THRESHOLD && $cycleZ > self::BOOM_Z_SCORE_THRESHOLD) {
             $utilizationMultiplier = $outputGap * self::BOOM_UTILIZATION_MULT;
             $eventType = ShockEvent::SEMICONDUCTOR_FAB_SHORTAGE;
@@ -152,8 +162,8 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::SEMICONDUCTOR_INVENTORY_CORRECTION;
         }
 
-        $foundryRevenue = $expectedRevenue * $foundryWeight * (1.0 + ($foundryZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $utilizationMultiplier);
-        $designRevenue  = $expectedRevenue * $designWeight * (1.0 + ($designZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
+        $foundryRevenue = max(0.0, $expectedRevenue * $foundryWeight * (1.0 + ($foundryZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $utilizationMultiplier));
+        $designRevenue  = max(0.0, $expectedRevenue * $designWeight * (1.0 + ($designZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
 
         if ($designZ < self::EXPORT_BAN_Z_THRESHOLD) {
             $designRevenue *= (1.0 - self::EXPORT_BAN_DESIGN_HAIRCUT);
@@ -161,7 +171,13 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::GEOPOLITICAL_EXPORT_BAN;
         }
 
-        $actualRevenue  = max(0.0, $foundryRevenue + $designRevenue);
+        $streamRevenues = [
+            'foundry' => $foundryRevenue,
+            'design'  => $designRevenue,
+        ];
+
+        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
 
         // CapEx Hurdle Rate & Yield Penalties
         // In semiconductor manufacturing, massive ongoing CapEx is mandatory table stakes to maintain cleanroom purity.
@@ -188,15 +204,8 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'foundry' => $foundryZ,
-                'design'  => $designZ,
-                'cycle'   => $cycleZ,
-            ],
-            streamRevenue: [
-                'foundry' => $foundryRevenue,
-                'design'  => $designRevenue,
-            ],
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: $streamRevenues,
         );
     }
 

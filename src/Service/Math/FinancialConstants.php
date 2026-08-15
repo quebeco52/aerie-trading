@@ -59,6 +59,16 @@ class FinancialConstants
     public const HOARDER_THRESHOLD_RATIO = 0.25;
     public const MEGA_HOARDER_THRESHOLD_RATIO = 0.40;
 
+    // --- Dynamic Revenue Mix Drift & Mean Reversion ---
+    /** Adaptation speed scalar (alpha) at which quarterly realized revenue mix shifts active baseline weights. */
+    public const DEFAULT_MIX_ADAPTATION_RATE = 0.15;
+    /** Strategic mean reversion speed (kappa) pulling dynamic weights back toward long-term franchise target. */
+    public const DEFAULT_MIX_REVERSION_SPEED = 0.08;
+    /** Minimum structural floor for any business unit to prevent complete segment abandonment. */
+    public const DEFAULT_MIN_STREAM_WEIGHT_FLOOR = 0.05;
+    /** Maximum structural ceiling for any single business unit to prevent total monopoly capture. */
+    public const DEFAULT_MAX_STREAM_WEIGHT_CEILING = 0.85;
+
     // --- Gordon Growth & Perpetual Valuation Bounds ---
     /** Absolute minimum hurdle rate (~4% COE) to prevent Gordon Growth divergence under extreme distress. */
     public const MIN_COST_OF_EQUITY = 0.04;

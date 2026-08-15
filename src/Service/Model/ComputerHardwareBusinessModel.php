@@ -99,6 +99,15 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'enterprise_hardware' => $params[ModelParam::EnterpriseWeight],
+            'consumer_hardware'   => $params[ModelParam::ConsumerWeight],
+        ]);
+
+        $enterpriseWeight = $activeWeights['enterprise_hardware'];
+        $consumerWeight   = $activeWeights['consumer_hardware'];
+
         // Consumer hardware is volatile, enterprise hardware is stickier
         $enterpriseZ = $streams->generateZ('enterprise_hardware', 0.15);
         $consumerZ   = $streams->generateZ('consumer_hardware', 0.05);
@@ -134,7 +143,13 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         $enterpriseRevenue = max(0.0, $expectedRevenue * $enterpriseWeight * (1.0 + ($enterpriseZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.5)) + $enterpriseMacroVolumeShock) * $enterpriseMultiplier);
         $consumerRevenue   = max(0.0, $expectedRevenue * $consumerWeight * (1.0 + ($consumerZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5)) + $consumerMacroVolumeShock) * $consumerMultiplier);
 
-        $actualRevenue = $enterpriseRevenue + $consumerRevenue; // Already safe from negatives
+        $streamRevenues = [
+            'enterprise_hardware' => $enterpriseRevenue,
+            'consumer_hardware'   => $consumerRevenue,
+        ];
+
+        $actualRevenue = array_sum($streamRevenues);
+        $streams->recordStreamShares($streamRevenues);
 
         // --- Structural Margin Blending ---
         // Enterprise B2B hardware operates at a structurally lower variable cost (higher margin).
@@ -181,10 +196,7 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
-            streamRevenue: [
-                'enterprise_hardware' => $enterpriseRevenue,
-                'consumer_hardware'   => $consumerRevenue,
-            ]
+            streamRevenue: $streamRevenues,
         );
     }
 

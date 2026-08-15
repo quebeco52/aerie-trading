@@ -59,6 +59,15 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'treaty_reinsurance' => $params[ModelParam::TreatyReinsuranceWeight],
+            'catastrophe_bonds'  => $params[ModelParam::CatBondSpreadWeight],
+        ]);
+
+        $treatyWeight  = $activeWeights['treaty_reinsurance'];
+        $catBondWeight = $activeWeights['catastrophe_bonds'];
+
         // Independent stream Z-scores
         $treatyZ  = $streams->generateZ('treaty_reinsurance', 0.30);
         $catBondZ = $streams->generateZ('catastrophe_bonds', 0.15);
@@ -89,7 +98,14 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
 
         $treatyRevenue  = max(0.0, $expectedRevenue * $treatyWeight * (1.0 + ($treatyZ * ($baselineVol * self::TREATY_VARIANCE_SCALAR)) + $hardMarketPricingBonus));
         $catBondRevenue = max(0.0, $expectedRevenue * $catBondWeight * (1.0 + ($catBondZ * ($baselineVol * self::CAT_BOND_VARIANCE_SCALAR))) * $catBondMultiplier);
-        $actualRevenue  = max(0.0, $treatyRevenue + $catBondRevenue);
+        
+        $streamRevenues = [
+            'treaty_reinsurance' => $treatyRevenue,
+            'catastrophe_bonds'  => $catBondRevenue,
+        ];
+
+        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $underwritingShock - $hardMarketPricingBonus);
 
@@ -118,10 +134,7 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
-            streamRevenue: [
-                'treaty_reinsurance' => $treatyRevenue,
-                'catastrophe_bonds'  => $catBondRevenue,
-            ],
+            streamRevenue: $streamRevenues,
         );
     }
 }

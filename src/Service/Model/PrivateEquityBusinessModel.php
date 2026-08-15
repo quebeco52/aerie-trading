@@ -198,18 +198,31 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
             ModelParam::CarriedInterestWeight->value      => 0.65,
             ModelParam::PrincipalInvestmentsWeight->value => 0.00,
         ]);
-
-        $mgmtWeight      = $params[ModelParam::ManagementFeeWeight];
-        $carryWeight     = $params[ModelParam::CarriedInterestWeight];
-        $principalWeight = $params[ModelParam::PrincipalInvestmentsWeight];
+        $rawPrincipalWeight = $params[ModelParam::PrincipalInvestmentsWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+
+        $targetWeights = [
+            'management_fees'  => $params[ModelParam::ManagementFeeWeight],
+            'carried_interest' => $params[ModelParam::CarriedInterestWeight],
+        ];
+        if ($rawPrincipalWeight > 0.0) {
+            $targetWeights['principal_investments'] = $rawPrincipalWeight;
+        }
+
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
+
+        $mgmtWeight      = $activeWeights['management_fees'];
+        $carryWeight     = $activeWeights['carried_interest'];
+        $principalWeight = $activeWeights['principal_investments'] ?? 0.0;
 
         // 1. Independent stream Z-scores with tailored persistence
-        $mgmtZ      = $mathUtility->generatePersistentZ($momentum['management_fees'] ?? 0.0, 0.50);
-        $carryZ     = $mathUtility->generatePersistentZ($momentum['carried_interest'] ?? 0.0, 0.15);
+        $mgmtZ  = $streams->generateZ('management_fees', 0.50);
+        $carryZ = $streams->generateZ('carried_interest', 0.15);
         $principalZ = $principalWeight > 0.0
-            ? $mathUtility->generatePersistentZ($momentum['principal_investments'] ?? 0.0, 0.20)
+            ? $streams->generateZ('principal_investments', 0.20)
             : 0.0;
 
         // 2. GDP Deal Flow Multiplier (Affects exit realizations)
@@ -253,6 +266,11 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
 
         // 6. MTM Principal Investments
         $principalInvestmentsRevenue = 0.0;
+        $streamRevenues = [
+            'management_fees'  => $mgmtRevenue,
+            'carried_interest' => $carriedInterestRevenue,
+        ];
+
         if ($principalWeight > 0.0) {
             // Mark-to-Market Shift: Principal investments act like a highly levered equity portfolio.
             // If the output gap is hot, they get Multiple Expansion. If it crashes, MTM takes a hit.
@@ -260,9 +278,11 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
 
             $principalInvestmentsRevenue = max(0.0, $optimalRevenue * $principalWeight
                 * (1.0 + ($principalZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 2.0) + $mtmShift));
+            $streamRevenues['principal_investments'] = $principalInvestmentsRevenue;
         }
 
-        $actualRevenue = $mgmtRevenue + $carriedInterestRevenue + $principalInvestmentsRevenue;
+        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
 
         // --- 7. Cost & Margin Physics ---
         // Rescue Capital Drag: High policy rates choke highly levered portfolio companies, requiring costly capital injections.
@@ -300,29 +320,14 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
             $primaryShockZ = $principalZ;
         }
 
-        $streamZ = [
-            'management_fees'  => $mgmtZ,
-            'carried_interest' => $carryZ,
-        ];
-        $streamRevenue = [
-            'management_fees'  => $mgmtRevenue,
-            'carried_interest' => $carriedInterestRevenue,
-        ];
-
-        if ($principalWeight > 0.0) {
-            $streamZ['principal_investments'] = $principalZ;
-            $streamRevenue['principal_investments'] = $principalInvestmentsRevenue;
-        }
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
-            isPublicEvent: $eventType !== null ? true : null,
-            streamZ: $streamZ,
-            streamRevenue: $streamRevenue,
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: $streamRevenues,
         );
     }
 

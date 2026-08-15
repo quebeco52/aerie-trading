@@ -175,4 +175,60 @@ class MathUtilityTest extends TestCase
         $this->assertGreaterThanOrEqual(1.0, $multiplier);
         $this->assertLessThanOrEqual(FinancialConstants::MAX_DCF_MULTIPLIER, $multiplier);
     }
+
+    public function testCalculateMeanRevertingWeight(): void
+    {
+        // Target = 0.20, Current = 0.20, Realized Share = 0.50 (boom)
+        // Drift = 0.15 * (0.50 - 0.20) = +0.045
+        // Reversion = 0.08 * (0.20 - 0.20) = 0.0
+        // Result = 0.20 + 0.045 = 0.245
+        $updated = $this->mathUtility->calculateMeanRevertingWeight(
+            0.20,
+            0.50,
+            0.20,
+            0.15,
+            0.08,
+            0.05,
+            0.85
+        );
+        $this->assertEqualsWithDelta(0.245, $updated, 0.001);
+
+        // Reversion pull when weight has drifted far above target:
+        // Target = 0.20, Current = 0.40, Realized Share = 0.20 (cooled down)
+        // Drift = 0.15 * (0.20 - 0.40) = -0.030
+        // Reversion = 0.08 * (0.20 - 0.40) = -0.016
+        // Result = 0.40 - 0.030 - 0.016 = 0.354 (pulling back toward 0.20)
+        $reverting = $this->mathUtility->calculateMeanRevertingWeight(
+            0.40,
+            0.20,
+            0.20,
+            0.15,
+            0.08,
+            0.05,
+            0.85
+        );
+        $this->assertEqualsWithDelta(0.354, $reverting, 0.001);
+
+        // Clamping bounds
+        $clampedCeiling = $this->mathUtility->calculateMeanRevertingWeight(0.80, 1.0, 0.80, 0.50, 0.0, 0.05, 0.85);
+        $this->assertEqualsWithDelta(0.85, $clampedCeiling, 0.001);
+
+        $clampedFloor = $this->mathUtility->calculateMeanRevertingWeight(0.10, 0.0, 0.10, 0.50, 0.0, 0.05, 0.85);
+        $this->assertEqualsWithDelta(0.05, $clampedFloor, 0.001);
+    }
+
+    public function testNormalizeWeightsSimplex(): void
+    {
+        $weights = ['a' => 0.60, 'b' => 0.20, 'c' => 0.20];
+        $norm = $this->mathUtility->normalizeWeightsSimplex($weights);
+        $this->assertEqualsWithDelta(1.0, array_sum($norm), 0.0001);
+        $this->assertEqualsWithDelta(0.60, $norm['a'], 0.0001);
+
+        $unnormalized = ['a' => 0.90, 'b' => 0.30, 'c' => 0.30];
+        $norm2 = $this->mathUtility->normalizeWeightsSimplex($unnormalized);
+        $this->assertEqualsWithDelta(1.0, array_sum($norm2), 0.0001);
+        $this->assertEqualsWithDelta(0.60, $norm2['a'], 0.0001);
+        $this->assertEqualsWithDelta(0.20, $norm2['b'], 0.0001);
+        $this->assertEqualsWithDelta(0.20, $norm2['c'], 0.0001);
+    }
 }

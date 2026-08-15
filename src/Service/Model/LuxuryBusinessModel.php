@@ -118,10 +118,21 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         $accessibleWeight = $params[ModelParam::AccessibleLuxuryWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'haute_couture'     => $params[ModelParam::HauteCoutureWeight],
+            'accessible_luxury' => $params[ModelParam::AccessibleLuxuryWeight],
+        ]);
+
+        $hauteWeight      = $activeWeights['haute_couture'];
+        $accessibleWeight = $activeWeights['accessible_luxury'];
 
         // Independent stream Z-scores with AR(1) persistence
-        $hauteZ      = $mathUtility->generatePersistentZ($momentum['haute'] ?? 0.0, 0.40); // UHNW leather goods / couture demand
-        $accessibleZ = $mathUtility->generatePersistentZ($momentum['accessible'] ?? 0.0, 0.15); // Fragrance & cosmetics retail volume
+        $hauteZ      = $streams->generateZ('haute_couture', 0.40); // UHNW leather goods / couture demand
+        $accessibleZ = $streams->generateZ('accessible_luxury', 0.15); // Fragrance & cosmetics retail volume
+        $eventZ      = $streams->generateZ('event', 0.05);
 
         $hauteRevenue      = $expectedRevenue * $hauteWeight * (1.0 + ($hauteZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
         $accessibleRevenue = $expectedRevenue * $accessibleWeight * (1.0 + ($accessibleZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
@@ -131,7 +142,6 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         $veblenMarginBenefit = $inflation > MacroEngine::TARGET_INFLATION ? - ($inflation - MacroEngine::TARGET_INFLATION) * self::VEBLEN_MARGIN_BENEFIT * $hauteWeight : 0.0;
 
         // Tail Risk: Brand Dilution vs. Viral Fashion Super-Cycle
-        $eventZ = $mathUtility->generatePersistentZ($momentum['event'] ?? 0.0, 0.05);
         $eventType = null;
         $brandModifier = 0.0;
 
@@ -144,7 +154,13 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::LUXURY_CULTURAL_DOMINANCE;
         }
 
-        $actualRevenue = max(0.0, $hauteRevenue + $accessibleRevenue);
+        $streamRevenues = [
+            'haute_couture'     => $hauteRevenue,
+            'accessible_luxury' => $accessibleRevenue,
+        ];
+
+        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
 
         // Continuous Veblen Brand Cachet Elasticity:
         // Strong haute couture desirability ($hauteZ > 0) continuously expands pricing cachet and improves gross margin.
@@ -163,15 +179,8 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'haute'      => $hauteZ,
-                'accessible' => $accessibleZ,
-                'event'      => $eventZ,
-            ],
-            streamRevenue: [
-                'haute_couture' => $hauteRevenue,
-                'accessible'    => $accessibleRevenue,
-            ],
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: $streamRevenues,
         );
     }
 

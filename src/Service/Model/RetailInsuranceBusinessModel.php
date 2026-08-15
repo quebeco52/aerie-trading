@@ -56,6 +56,15 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'property_casualty_premiums' => $params[ModelParam::PropertyCasualtyWeight],
+            'life_insurance_premiums'    => $params[ModelParam::LifeAndAnnuityWeight],
+        ]);
+
+        $pcWeight     = $activeWeights['property_casualty_premiums'];
+        $lifeWeight   = $activeWeights['life_insurance_premiums'];
+
         // Independent stream Z-scores
         $pcZ    = $streams->generateZ('property_casualty_premiums', 0.25);
         $lifeZ  = $streams->generateZ('life_insurance_premiums', 0.50);
@@ -69,7 +78,14 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
 
         $pcRevenue   = max(0.0, $expectedRevenue * $pcWeight * (1.0 + ($pcZ * ($baselineVol * self::PC_VARIANCE_SCALAR))));
         $lifeRevenue = max(0.0, $expectedRevenue * $lifeWeight * (1.0 + ($lifeZ * ($baselineVol * self::LIFE_VARIANCE_SCALAR)) + $lifeSpreadBonus));
-        $actualRevenue = max(0.0, $pcRevenue + $lifeRevenue);
+        
+        $streamRevenues = [
+            'property_casualty_premiums' => $pcRevenue,
+            'life_insurance_premiums'    => $lifeRevenue,
+        ];
+
+        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
 
         // The Combined Ratio Shock applies primarily to Property & Casualty operations
         $underwritingShock = $claimZ < $catThreshold
@@ -115,10 +131,7 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
-            streamRevenue: [
-                'property_casualty_premiums' => $pcRevenue,
-                'life_insurance_premiums'    => $lifeRevenue,
-            ],
+            streamRevenue: $streamRevenues,
         );
     }
 }

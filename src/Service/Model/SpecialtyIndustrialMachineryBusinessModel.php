@@ -116,12 +116,22 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         $servicesWeight  = $params[ModelParam::ServicesWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
         $beta = abs((float) $stock->getBeta());
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'equipment_sales'      => $params[ModelParam::EquipmentWeight],
+            'aftermarket_services' => $params[ModelParam::ServicesWeight],
+        ]);
+
+        $equipmentWeight = $activeWeights['equipment_sales'];
+        $servicesWeight  = $activeWeights['aftermarket_services'];
+
         // Independent stream Z-scores
-        $equipmentZ = $mathUtility->generatePersistentZ($momentum['equipment'] ?? 0.0, 0.20);
-        $servicesZ  = $mathUtility->generatePersistentZ($momentum['services'] ?? 0.0, 0.05);
-        $eventZ     = $mathUtility->generatePersistentZ($momentum['event'] ?? 0.0, 0.10);
+        $equipmentZ = $streams->generateZ('equipment_sales', 0.20);
+        $servicesZ  = $streams->generateZ('aftermarket_services', 0.05);
+        $eventZ     = $streams->generateZ('event', 0.10);
 
         // --- Macro Sensitivities ---
         // Equipment is highly exposed to GDP, but cushioned by the backlog
@@ -147,7 +157,13 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         $equipmentRevenue = max(0.0, $expectedRevenue * $equipmentWeight * (1.0 + $dampedEquipmentShock + $macroEquipmentBoost) * $dealMultiplier);
         $servicesRevenue  = max(0.0, $expectedRevenue * $servicesWeight * (1.0 + ($servicesZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::SERVICES_VARIANCE_RATIO))));
 
-        $actualRevenue = $equipmentRevenue + $servicesRevenue;
+        $streamRevenues = [
+            'equipment_sales'      => $equipmentRevenue,
+            'aftermarket_services' => $servicesRevenue,
+        ];
+
+        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
 
         // --- Structural Razor/Razorblade Margin Blending ---
         $expectedServicesRevenue  = $expectedRevenue * $servicesWeight;
@@ -186,15 +202,8 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'equipment' => $equipmentZ,
-                'services'  => $servicesZ,
-                'event'     => $eventZ,
-            ],
-            streamRevenue: [
-                'equipment_sales'      => $equipmentRevenue,
-                'aftermarket_services' => $servicesRevenue,
-            ]
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: $streamRevenues,
         );
     }
 

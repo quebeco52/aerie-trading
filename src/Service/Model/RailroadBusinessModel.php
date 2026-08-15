@@ -73,6 +73,17 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
         $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
         $beta     = abs((float) $stock->getBeta());
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'intermodal_freight'  => $params[ModelParam::IntermodalFreightWeight],
+            'bulk_commodities'    => $params[ModelParam::BulkCommoditiesWeight],
+            'industrial_carloads' => $params[ModelParam::IndustrialCarloadsWeight],
+        ]);
+
+        $intermodalWeight = $activeWeights['intermodal_freight'];
+        $bulkWeight       = $activeWeights['bulk_commodities'];
+        $industrialWeight = $activeWeights['industrial_carloads'];
+
         // Independent stream Z-scores
         $intermodalZ = $streams->generateZ('intermodal_freight', 0.20);
         $bulkZ       = $streams->generateZ('bulk_commodities', 0.40);
@@ -86,7 +97,14 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
         $bulkRevenue       = max(0.0, $expectedRevenue * $bulkWeight       * (1.0 + ($bulkZ * ($baselineVol * self::BULK_VARIANCE_SCALAR))));
         $industrialRevenue = max(0.0, $expectedRevenue * $industrialWeight * (1.0 + ($industrialZ * ($baselineVol * self::INDUSTRIAL_VARIANCE_SCALAR)) + $industrialMacroShift));
 
-        $actualRevenue = $intermodalRevenue + $bulkRevenue + $industrialRevenue;
+        $streamRevenues = [
+            'intermodal_freight'  => $intermodalRevenue,
+            'bulk_commodities'    => $bulkRevenue,
+            'industrial_carloads' => $industrialRevenue,
+        ];
+
+        $actualRevenue = array_sum($streamRevenues);
+        $streams->recordStreamShares($streamRevenues);
 
         // Diesel fuel surcharge lag: Railroads consume massive quantities of diesel.
         // Spikes in energy price index create temporary margin compression before 60-day fuel surcharges adjust.
@@ -114,11 +132,7 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
             eventType: null,
             isPublicEvent: null,
             streamZ: $streams->getStreamZ(),
-            streamRevenue: [
-                'intermodal_freight'  => $intermodalRevenue,
-                'bulk_commodities'    => $bulkRevenue,
-                'industrial_carloads' => $industrialRevenue,
-            ],
+            streamRevenue: $streamRevenues,
         );
     }
 }

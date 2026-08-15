@@ -126,6 +126,17 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
         $beta = abs((float) $stock->getBeta());
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'government_contracts' => $params[ModelParam::GovernmentContractWeight],
+            'corporate_retainers'  => $params[ModelParam::RetainerWeight],
+            'expeditionary_ops'    => $params[ModelParam::ExpeditionaryWeight],
+        ]);
+
+        $govWeight          = $activeWeights['government_contracts'];
+        $retainerWeight     = $activeWeights['corporate_retainers'];
+        $expeditionaryWeight = $activeWeights['expeditionary_ops'];
+
         // Independent stream Z-scores
         $govZ           = $streams->generateZ('government_contracts', 0.60); // High persistence (multi-year budgets)
         $retainerZ      = $streams->generateZ('corporate_retainers', 0.40); // High persistence
@@ -181,7 +192,14 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         // STREAM 3: Expeditionary / Black-Ops (Hyper-Volatile & Counter-Cyclical)
         $expeditionaryRevenue = max(0.0, $expectedRevenue * $expeditionaryWeight * (1.0 + ($expeditionaryZ * $baselineVol * self::EXPEDITIONARY_VARIANCE_SCALAR) + $fearPremium + $creditDistressPremium) * $expeditionaryMultiplier);
 
-        $actualRevenue = $govRevenue + $retainerRevenue + $expeditionaryRevenue;
+        $streamRevenues = [
+            'government_contracts' => $govRevenue,
+            'corporate_retainers'  => $retainerRevenue,
+            'expeditionary_ops'    => $expeditionaryRevenue,
+        ];
+
+        $actualRevenue = array_sum($streamRevenues);
+        $streams->recordStreamShares($streamRevenues);
 
         // --- Cost & Margin Physics ---
         // Apply the tactical failure legal penalty directly to the baseline variable margin
@@ -207,11 +225,7 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
-            streamRevenue: [
-                'government_contracts'  => $govRevenue,
-                'corporate_retainers'   => $retainerRevenue,
-                'expeditionary_ops'     => $expeditionaryRevenue,
-            ],
+            streamRevenue: $streamRevenues,
         );
     }
 }

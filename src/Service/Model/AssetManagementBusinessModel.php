@@ -272,10 +272,20 @@ class AssetManagementBusinessModel implements BusinessModelInterface
         $perfScalar      = $params[ModelParam::PerformanceFeeScalar];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'base_fee' => $params[ModelParam::BaseFeeWeight],
+            'alpha'    => $params[ModelParam::PerformanceFeeWeight],
+        ]);
+
+        $baseWeight = $activeWeights['base_fee'];
+        $perfWeight = $activeWeights['alpha'];
 
         // Independent stream Z-scores with AR(1) persistence
-        $baseFeeZ = $mathUtility->generatePersistentZ($momentum['base_fee'] ?? 0.0, 0.45); // Sticky recurring AUM management fees
-        $alphaZ   = $mathUtility->generatePersistentZ($momentum['alpha'] ?? 0.0, 0.15); // Fund alpha / activist execution
+        $baseFeeZ = $streams->generateZ('base_fee', 0.45); // Sticky recurring AUM management fees
+        $alphaZ   = $streams->generateZ('alpha', 0.15); // Fund alpha / activist execution
 
         // 1. AUM Mark-to-Market Beta (Base Management Fee Stream):
         // When equity/credit markets rise or fall, base AUM fee revenue expands or contracts.
@@ -293,11 +303,18 @@ class AssetManagementBusinessModel implements BusinessModelInterface
         }
 
         // Blended dual-stream revenue
-        $baseRevenue = $expectedRevenue * $baseWeight
-            * (1.0 + ($baseFeeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $aumMarketBeta);
-        $perfRevenue = $expectedRevenue * $perfWeight
-            * (1.0 + ($alphaZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $alphaFeeBonus);
-        $actualRevenue = max(0.0, $baseRevenue + $perfRevenue);
+        $baseRevenue = max(0.0, $expectedRevenue * $baseWeight
+            * (1.0 + ($baseFeeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $aumMarketBeta));
+        $perfRevenue = max(0.0, $expectedRevenue * $perfWeight
+            * (1.0 + ($alphaZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $alphaFeeBonus));
+        
+        $streamRevenues = [
+            'base_fee' => $baseRevenue,
+            'alpha'    => $perfRevenue,
+        ];
+
+        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
 
         // 3. Structural Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
@@ -324,14 +341,8 @@ class AssetManagementBusinessModel implements BusinessModelInterface
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'base_fee' => $baseFeeZ,
-                'alpha'    => $alphaZ,
-            ],
-            streamRevenue: [
-                'base_fee' => $baseRevenue,
-                'alpha'    => $perfRevenue,
-            ],
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: $streamRevenues,
         );
     }
 

@@ -9,8 +9,10 @@ use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
 use App\Service\Model\DefenseContractorBusinessModel;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class DefenseContractorBusinessModelTest extends TestCase
 {
     private function createMacroState(
@@ -61,6 +63,20 @@ class DefenseContractorBusinessModelTest extends TestCase
         );
     }
 
+    private function createMathUtilityMock(array $persistentZCalls = []): MathUtility
+    {
+        $mock = $this->getMockBuilder(MathUtility::class)
+            ->onlyMethods(['generatePersistentZ'])
+            ->getMock();
+
+        if (!empty($persistentZCalls)) {
+            $mock->method('generatePersistentZ')
+                ->willReturnOnConsecutiveCalls(...$persistentZCalls);
+        }
+
+        return $mock;
+    }
+
     public function testProgramExecutionElasticityImprovesVariableMargin(): void
     {
         $model = new DefenseContractorBusinessModel();
@@ -68,10 +84,8 @@ class DefenseContractorBusinessModelTest extends TestCase
         $stock->setTicker('GRIP');
         $stock->setBeta('0.7');
 
-        $mathUtilityMock = $this->createStub(MathUtility::class);
         // costPlusZ = 2.0 (strong sovereign execution), fixedPriceZ = 0.0, fmsZ = 0.0, eventZ = 0.0
-        $mathUtilityMock->method('generatePersistentZ')
-            ->willReturnOnConsecutiveCalls(2.0, 0.0, 0.0, 0.0);
+        $mathUtilityMock = $this->createMathUtilityMock([2.0, 0.0, 0.0, 0.0]);
 
         $macroState = $this->createMacroState();
 
@@ -96,9 +110,7 @@ class DefenseContractorBusinessModelTest extends TestCase
         $stock->setTicker('GRIP');
         $stock->setBeta('0.35');
 
-        $mathUtilityMock = $this->createStub(MathUtility::class);
-        $mathUtilityMock->method('generatePersistentZ')
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, 0.0);
+        $mathUtilityMock = $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0]);
 
         // Simulation has run for hours: nominal GDP index is 3.5 (high accumulated growth)
         $macroState = $this->createMacroState(inflation: 0.02, nominalGdpIndex: 3.5);
@@ -125,9 +137,7 @@ class DefenseContractorBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('GRIP');
 
-        $mathUtilityMock = $this->createStub(MathUtility::class);
-        $mathUtilityMock->method('generatePersistentZ')
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, 0.0);
+        $mathUtilityMock = $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0]);
 
         // Inflation running at 4% (2% in excess of 2% target)
         $macroState = $this->createMacroState(inflation: 0.04);
@@ -156,9 +166,7 @@ class DefenseContractorBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('GRIP');
 
-        $mathUtilityMock = $this->createStub(MathUtility::class);
-        $mathUtilityMock->method('generatePersistentZ')
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, 0.0);
+        $mathUtilityMock = $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0]);
 
         // Sovereign credit spread elevated to 5.0% (2.0% above 3.0% threshold)
         $macroState = $this->createMacroState(macroCreditSpread: 0.05);
@@ -186,10 +194,8 @@ class DefenseContractorBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('GRIP');
 
-        $mathUtilityMock = $this->createStub(MathUtility::class);
         // fixedPriceZ = -2.0 (< -1.50 FORWARD_LOSS_Z_SCORE)
-        $mathUtilityMock->method('generatePersistentZ')
-            ->willReturnOnConsecutiveCalls(0.0, -2.0, 0.0, 0.0);
+        $mathUtilityMock = $this->createMathUtilityMock([0.0, -2.0, 0.0, 0.0]);
 
         // Energy/commodity shock of 0.10
         $macroState = $this->createMacroState(energyPriceShock: 0.10);
@@ -216,10 +222,8 @@ class DefenseContractorBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('GRIP');
 
-        $mathUtilityMock = $this->createStub(MathUtility::class);
         // fmsZ = 2.5 (> 2.0 GEOPOLITICAL_CONFLICT_Z)
-        $mathUtilityMock->method('generatePersistentZ')
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, 2.5, 0.0);
+        $mathUtilityMock = $this->createMathUtilityMock([0.0, 0.0, 2.5, 0.0]);
 
         $macroState = $this->createMacroState();
 
@@ -245,10 +249,8 @@ class DefenseContractorBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('GRIP');
 
-        $mathUtilityMock = $this->createStub(MathUtility::class);
         // eventZ = -2.2 (< -2.0 CONGRESSIONAL_EXPORT_BAN_Z)
-        $mathUtilityMock->method('generatePersistentZ')
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, -2.2);
+        $mathUtilityMock = $this->createMathUtilityMock([0.0, 0.0, 0.0, -2.2]);
 
         $macroState = $this->createMacroState();
 
@@ -274,9 +276,7 @@ class DefenseContractorBusinessModelTest extends TestCase
         $stock->setTicker('GRIP');
 
         // Flagship failure (eventZ = -2.8 < -2.5)
-        $mathMock1 = $this->createStub(MathUtility::class);
-        $mathMock1->method('generatePersistentZ')
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, -2.8);
+        $mathMock1 = $this->createMathUtilityMock([0.0, 0.0, 0.0, -2.8]);
 
         $macroState = $this->createMacroState();
         $resFailure = $model->computeActualFinancials($stock, 10_000.0, 0.30, 3000.0, 0.15, $macroState, $mathMock1);
@@ -284,9 +284,7 @@ class DefenseContractorBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(0.30 + DefenseContractorBusinessModel::FLAGSHIP_FAILURE_PENALTY, $resFailure->clampedMargin, 0.001);
 
         // Mega contract win (eventZ = 2.8 > 2.5)
-        $mathMock2 = $this->createStub(MathUtility::class);
-        $mathMock2->method('generatePersistentZ')
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, 2.8);
+        $mathMock2 = $this->createMathUtilityMock([0.0, 0.0, 0.0, 2.8]);
 
         $resWin = $model->computeActualFinancials($stock, 10_000.0, 0.30, 3000.0, 0.15, $macroState, $mathMock2);
         $this->assertSame(ShockEvent::DEFENSE_CONTRACT_WIN, $resWin->eventType);
@@ -361,6 +359,52 @@ class DefenseContractorBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta(0.0, $physics['macro_demand_shift'], 0.001);
         $this->assertEqualsWithDelta(1.0, $physics['pricing_power_multiplier'], 0.001);
+    }
+
+    public function testDynamicRevenueMixDriftsWithRealizedSharesAndMeanReverts(): void
+    {
+        $model = new DefenseContractorBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('GRIP');
+
+        // Quarter 1: Previous quarter had huge FMS share (50% FMS, 30% CostPlus, 20% FixedPrice)
+        $stock->setEarningsMomentumZ([
+            'weight:cost_plus_procurement'   => 0.60,
+            'weight:fixed_price_development' => 0.20,
+            'weight:foreign_military_sales'  => 0.20,
+            'share:cost_plus_procurement'    => 0.30,
+            'share:fixed_price_development'  => 0.20,
+            'share:foreign_military_sales'   => 0.50,
+        ]);
+
+        $mathUtility = new MathUtility();
+        $macroState = $this->createMacroState();
+
+        $result1 = $model->computeActualFinancials(
+            $stock,
+            10_000.0,
+            0.30,
+            3000.0,
+            0.15,
+            $macroState,
+            $mathUtility
+        );
+
+        // FMS active weight should have drifted up from 0.20 due to 50% realized share
+        $activeFmsWeight = $result1->streamZ['weight:foreign_military_sales'];
+        $this->assertGreaterThan(0.20, $activeFmsWeight);
+        $this->assertLessThanOrEqual(\App\Service\Math\FinancialConstants::DEFAULT_MAX_STREAM_WEIGHT_CEILING, $activeFmsWeight);
+
+        // Cost-plus active weight should have drifted down from 0.60
+        $activeCostPlusWeight = $result1->streamZ['weight:cost_plus_procurement'];
+        $this->assertLessThan(0.60, $activeCostPlusWeight);
+        $this->assertGreaterThanOrEqual(\App\Service\Math\FinancialConstants::DEFAULT_MIN_STREAM_WEIGHT_FLOOR, $activeCostPlusWeight);
+
+        // All active weights must sum to 1.0
+        $totalActiveWeight = $result1->streamZ['weight:cost_plus_procurement']
+            + $result1->streamZ['weight:fixed_price_development']
+            + $result1->streamZ['weight:foreign_military_sales'];
+        $this->assertEqualsWithDelta(1.0, $totalActiveWeight, 0.0001);
     }
 }
 

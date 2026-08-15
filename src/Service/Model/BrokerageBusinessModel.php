@@ -131,10 +131,20 @@ class BrokerageBusinessModel implements BusinessModelInterface
         $advisoryWeight = $params[ModelParam::AdvisoryRevenueWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'trading'  => $params[ModelParam::TradingRevenueWeight],
+            'advisory' => $params[ModelParam::AdvisoryRevenueWeight],
+        ]);
+
+        $tradingWeight  = $activeWeights['trading'];
+        $advisoryWeight = $activeWeights['advisory'];
 
         // Independent stream Z-scores with AR(1) persistence
-        $tradingZ  = $mathUtility->generatePersistentZ($momentum['trading'] ?? 0.0, 0.20); // Trading volume, flow capture, prop desk P&L
-        $advisoryZ = $mathUtility->generatePersistentZ($momentum['advisory'] ?? 0.0, 0.35); // Advisory mandates, prime brokerage balances
+        $tradingZ  = $streams->generateZ('trading', 0.20); // Trading volume, flow capture, prop desk P&L
+        $advisoryZ = $streams->generateZ('advisory', 0.35); // Advisory mandates, prime brokerage balances
 
         // The Volatility Bonus (Trading Volume):
         // Brokerage trading revenues are hyper-sensitive to the VIX (Systemic Market Volatility).
@@ -143,9 +153,16 @@ class BrokerageBusinessModel implements BusinessModelInterface
         $vixEma = $macroState->marketVolatilityEma;
         $volatilityBonus = max(0.0, ($vixEma - self::VIX_BASELINE_THRESHOLD) * self::VIX_REVENUE_SCALAR);
 
-        $tradingRevenue  = $expectedRevenue * $tradingWeight * (1.0 + ($tradingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $volatilityBonus);
-        $advisoryRevenue = $expectedRevenue * $advisoryWeight * (1.0 + ($advisoryZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
-        $actualRevenue   = max(0.0, $tradingRevenue + $advisoryRevenue);
+        $tradingRevenue  = max(0.0, $expectedRevenue * $tradingWeight * (1.0 + ($tradingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $volatilityBonus));
+        $advisoryRevenue = max(0.0, $expectedRevenue * $advisoryWeight * (1.0 + ($advisoryZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
+        
+        $streamRevenues = [
+            'trading'  => $tradingRevenue,
+            'advisory' => $advisoryRevenue,
+        ];
+
+        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
 
         // Structural Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
@@ -168,14 +185,8 @@ class BrokerageBusinessModel implements BusinessModelInterface
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
-            streamZ: [
-                'trading'  => $tradingZ,
-                'advisory' => $advisoryZ,
-            ],
-            streamRevenue: [
-                'trading'  => $tradingRevenue,
-                'advisory' => $advisoryRevenue,
-            ],
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: $streamRevenues,
         );
     }
 

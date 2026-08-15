@@ -90,6 +90,15 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'oem_equipment'   => $params[ModelParam::OemEquipmentWeight],
+            'aftermarket_mro' => $params[ModelParam::AftermarketMroWeight],
+        ]);
+
+        $oemWeight = $activeWeights['oem_equipment'];
+        $mroWeight = $activeWeights['aftermarket_mro'];
+
         // Independent stream Z-scores
         $oemZ = $streams->generateZ('oem_equipment', 0.20);
         $mroZ = $streams->generateZ('aftermarket_mro', 0.40);
@@ -99,7 +108,13 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
 
         $oemRevenue = max(0.0, $expectedRevenue * $oemWeight * (1.0 + $dampedOemShock));
         $mroRevenue = max(0.0, $expectedRevenue * $mroWeight * (1.0 + $mroShock));
-        $actualRevenue = max(0.0, $oemRevenue + $mroRevenue);
+        $streamRevenues = [
+            'oem_equipment'   => $oemRevenue,
+            'aftermarket_mro' => $mroRevenue,
+        ];
+
+        $actualRevenue = array_sum($streamRevenues);
+        $streams->recordStreamShares($streamRevenues);
 
         // Structural Margin Blending:
         // MRO consumables operate at structurally low variable cost (high margin).
@@ -133,10 +148,7 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
             observableShockZ: $observableShockZ,
             eventType: null,
             streamZ: $streams->getStreamZ(),
-            streamRevenue: [
-                'oem_equipment'   => $oemRevenue,
-                'aftermarket_mro' => $mroRevenue,
-            ],
+            streamRevenue: $streamRevenues,
         );
     }
 }

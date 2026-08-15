@@ -103,7 +103,6 @@ class TechBusinessModel extends StandardCorporateBusinessModel
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
-        // Resolve company-specific tuned tech and software parameters
         $params = $this->resolveModelParameters($stock, [
             ModelParam::SubscriptionRevenueWeight->value => self::SUBSCRIPTION_REVENUE_WEIGHT,
             ModelParam::AdvertisingRevenueWeight->value  => self::ADVERTISING_REVENUE_WEIGHT,
@@ -112,9 +111,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
             ModelParam::MonopolyAggression->value         => 0.5,
         ]);
 
-        $subWeight           = $params[ModelParam::SubscriptionRevenueWeight];
-        $adWeight            = $params[ModelParam::AdvertisingRevenueWeight];
-        $cloudWeight         = $params[ModelParam::CloudInfrastructureWeight];
+        $rawCloudWeight      = $params[ModelParam::CloudInfrastructureWeight];
         $adCyclicalityScalar = $params[ModelParam::AdvertisingCyclicality];
 
         $aggression = max(0.0, min(1.0, $params[ModelParam::MonopolyAggression]));
@@ -129,11 +126,27 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         $regulatorySeverity   = self::REGULATORY_FINE_PENALTY * (0.5 + $aggression);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+
+        $targetWeights = [
+            'subscription' => $params[ModelParam::SubscriptionRevenueWeight],
+            'advertising'  => $params[ModelParam::AdvertisingRevenueWeight],
+        ];
+        if ($rawCloudWeight > 0.0) {
+            $targetWeights['cloud_infrastructure'] = $rawCloudWeight;
+        }
+
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
+
+        $subWeight   = $activeWeights['subscription'];
+        $adWeight    = $activeWeights['advertising'];
+        $cloudWeight = $activeWeights['cloud_infrastructure'] ?? 0.0;
 
         // Independent stream Z-scores with AR(1) persistence
-        $subscriptionZ = $mathUtility->generatePersistentZ($momentum['subscription'] ?? 0.0, 0.45); // Enterprise SaaS ARR & Cloud compute contract volume
-        $adZ           = $mathUtility->generatePersistentZ($momentum['ad'] ?? 0.0, 0.30); // Digital advertising auction demand & impression volume
-        $eventZ        = $mathUtility->generatePersistentZ($momentum['event'] ?? 0.0, 0.10); // Fat-tail regulatory antitrust / data breach Z-score
+        $subscriptionZ = $streams->generateZ('subscription', 0.45); // Enterprise SaaS ARR & Cloud compute contract volume
+        $adZ           = $streams->generateZ('advertising', 0.30); // Digital advertising auction demand & impression volume
+        $eventZ        = $streams->generateZ('event', 0.10); // Fat-tail regulatory antitrust / data breach Z-score
 
         // Macro advertising cyclicality (marketing budgets expand with positive output gap, collapse in recessions)
         $outputGap = $macroState->outputGapEma;
@@ -155,22 +168,29 @@ class TechBusinessModel extends StandardCorporateBusinessModel
 
         // Blended dual-stream revenue (SaaS Subscription vs. Digital Advertising & Platform Usage)
         // Subscription ARR has lower baseline volatility (0.6x scalar), whereas Ads take the full swing plus cyclicality
-        $subscriptionRevenue = $expectedRevenue * $subWeight
-            * (1.0 + ($subscriptionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.6)));
+        $subscriptionRevenue = max(0.0, $expectedRevenue * $subWeight
+            * (1.0 + ($subscriptionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.6))));
 
         $viralMultiplier = ($eventType === ShockEvent::VIRAL_GROWTH) ? self::VIRAL_GROWTH_REV_MULT : 1.0;
-        $adRevenue = $expectedRevenue * $adWeight
+        $adRevenue = max(0.0, $expectedRevenue * $adWeight
             * (1.0 + ($adZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $adCyclicality)
-            * $viralMultiplier;
+            * $viralMultiplier);
+
+        $streamRevenues = [
+            'subscription' => $subscriptionRevenue,
+            'advertising'  => $adRevenue,
+        ];
 
         $cloudRevenue = 0.0;
         $cloudZ = 0.0;
         if ($cloudWeight > 0.0) {
-            $cloudZ = $mathUtility->generatePersistentZ($momentum['cloud'] ?? 0.0, 0.60); // High persistence, sticky enterprise contracts
-            $cloudRevenue = $expectedRevenue * $cloudWeight * (1.0 + ($cloudZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.4));
+            $cloudZ = $streams->generateZ('cloud_infrastructure', 0.60); // High persistence, sticky enterprise contracts
+            $cloudRevenue = max(0.0, $expectedRevenue * $cloudWeight * (1.0 + ($cloudZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.4)));
+            $streamRevenues['cloud_infrastructure'] = $cloudRevenue;
         }
 
-        $actualRevenue = max(0.0, $subscriptionRevenue + $adRevenue + $cloudRevenue);
+        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
 
         // Supply Chain Immunity vs. Continuous Talent Inflation:
         // Tech companies don't buy steel or oil, they pay for engineers and cloud compute.
@@ -198,34 +218,16 @@ class TechBusinessModel extends StandardCorporateBusinessModel
 
         $observableShockZ = (($subscriptionZ * $subWeight) + ($adZ * $adWeight)) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
 
-        $streamZ = [
-            'subscription' => $subscriptionZ,
-            'ad'           => $adZ,
-            'event'        => $eventZ,
-        ];
-
-        $streamRevenue = [
-            'subscription' => $subscriptionRevenue,
-            'advertising'  => $adRevenue,
-        ];
-
-        if ($cloudWeight > 0.0) {
-            $streamZ['cloud'] = $cloudZ;
-            $streamRevenue['cloud_infrastructure'] = $cloudRevenue;
-        }
-
-        $result = new SectorPhysicsResult(
+        return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: $streamZ,
-            streamRevenue: $streamRevenue,
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: $streamRevenues,
         );
-
-        return $result;
     }
 
     public function getMarginReversionSpeed(): float

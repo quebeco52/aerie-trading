@@ -100,6 +100,17 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'company_operated_stores'      => $params[ModelParam::CompanyStoresWeight],
+            'franchise_royalties'          => $params[ModelParam::FranchiseRoyaltiesWeight],
+            'franchise_real_estate_leases' => $params[ModelParam::FranchiseLeaseWeight],
+        ]);
+
+        $corporateWeight = $activeWeights['company_operated_stores'];
+        $franchiseWeight = $activeWeights['franchise_royalties'];
+        $leaseWeight     = $activeWeights['franchise_real_estate_leases'];
+
         // Independent stream Z-scores
         $corporateZ = $streams->generateZ('company_operated_stores', 0.10);
         $franchiseZ = $streams->generateZ('franchise_royalties', 0.20);
@@ -128,7 +139,14 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         $franchiseRevenue = max(0.0, $expectedRevenue * $franchiseWeight * (1.0 + ($franchiseZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.15))));
         $leaseRevenue     = max(0.0, $expectedRevenue * $leaseWeight     * (1.0 + ($leaseZ     * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.05)) + $rentEscalator));
 
-        $actualRevenue = $corporateRevenue + $franchiseRevenue + $leaseRevenue;
+        $streamRevenues = [
+            'company_operated_stores'      => $corporateRevenue,
+            'franchise_royalties'          => $franchiseRevenue,
+            'franchise_real_estate_leases' => $leaseRevenue,
+        ];
+
+        $actualRevenue = array_sum($streamRevenues);
+        $streams->recordStreamShares($streamRevenues);
 
         // Structural Margin Blending:
         // Corporate stores pay the bulk of variable costs.
@@ -167,11 +185,7 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
-            streamRevenue: [
-                'company_operated_stores'       => $corporateRevenue,
-                'franchise_royalties'           => $franchiseRevenue,
-                'franchise_real_estate_leases'  => $leaseRevenue,
-            ]
+            streamRevenue: $streamRevenues,
         );
     }
 

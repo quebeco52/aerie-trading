@@ -151,11 +151,21 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $ceclSensitivity = $params[ModelParam::CeclSpreadSensitivity];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'lending' => $params[ModelParam::LendingRevenueWeight],
+            'swipe'   => $params[ModelParam::NetworkRevenueWeight],
+        ]);
+
+        $lendingWeight = $activeWeights['lending'];
+        $networkWeight = $activeWeights['swipe'];
 
         // Independent stream Z-scores with AR(1) persistence
-        $lendingZ = $mathUtility->generatePersistentZ($momentum['lending'] ?? 0.0, 0.25); // Revolving credit loan origination volume
-        $swipeZ   = $mathUtility->generatePersistentZ($momentum['swipe'] ?? 0.0, 0.25); // Payment gateway transaction swipe volume
-        $defaultZ = $mathUtility->generatePersistentZ($momentum['default'] ?? 0.0, 0.20); // Consumer credit default Z-score
+        $lendingZ = $streams->generateZ('lending', 0.25); // Revolving credit loan origination volume
+        $swipeZ   = $streams->generateZ('swipe', 0.25); // Payment gateway transaction swipe volume
+        $defaultZ = $streams->generateZ('default', 0.20); // Consumer credit default Z-score
 
         // Inflation Bonus (Interchange Swipe Fees):
         // Swipe fees (Visa/MC network) are a percentage of transaction value — higher prices = higher revenue.
@@ -163,11 +173,18 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $inflationBonus = ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta());
 
         // Blended dual-stream revenue (Lending vs. Payment Network Interchange)
-        $lendingRevenue = $expectedRevenue * $lendingWeight
-            * (1.0 + ($lendingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
-        $networkRevenue = $expectedRevenue * $networkWeight
-            * (1.0 + ($swipeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $inflationBonus);
-        $actualRevenue = max(0.0, $lendingRevenue + $networkRevenue);
+        $lendingRevenue = max(0.0, $expectedRevenue * $lendingWeight
+            * (1.0 + ($lendingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
+        $networkRevenue = max(0.0, $expectedRevenue * $networkWeight
+            * (1.0 + ($swipeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $inflationBonus));
+        
+        $streamRevenues = [
+            'lending' => $lendingRevenue,
+            'swipe'   => $networkRevenue,
+        ];
+
+        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
 
         // Unsecured Default Shock:
         // Credit card debt is unsecured. Consumers default on cards long before mortgages during recessions.
@@ -234,15 +251,8 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
-            streamZ: [
-                'lending' => $lendingZ,
-                'swipe'   => $swipeZ,
-                'default' => $defaultZ,
-            ],
-            streamRevenue: [
-                'lending' => $lendingRevenue,
-                'swipe'   => $networkRevenue,
-            ],
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: $streamRevenues,
         );
     }
 

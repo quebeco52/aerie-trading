@@ -49,7 +49,7 @@ class ShadowBankBusinessModelTest extends TestCase
         $this->assertArrayHasKey('origination_fees', $result->streamRevenue);
         $this->assertArrayHasKey('direct_lending', $result->streamRevenue);
 
-        $this->assertArrayHasKey('origination', $result->streamZ);
+        $this->assertArrayHasKey('origination_fees', $result->streamZ);
         $this->assertArrayHasKey('direct_lending', $result->streamZ);
         $this->assertArrayHasKey('credit', $result->streamZ);
 

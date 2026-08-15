@@ -168,9 +168,7 @@ class ClearingHouseBusinessModel implements BusinessModelInterface
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-
-        $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.25);
-        $dataZ    = $mathUtility->generatePersistentZ($momentum['data'] ?? 0.0, 0.45); // Separate Z-score for sticky data subscriptions
+        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
 
         $params = $this->resolveModelParameters($stock, [
             ModelParam::ClearingFeeWeight->value      => 0.55,
@@ -178,10 +176,28 @@ class ClearingHouseBusinessModel implements BusinessModelInterface
             ModelParam::DataSubscriptionWeight->value => 0.25,
             ModelParam::MarginInterestWeight->value   => 0.00,
         ]);
-        $clearingWeight = $params[ModelParam::ClearingFeeWeight];
-        $custodyWeight  = $params[ModelParam::CustodyFloatWeight];
-        $dataWeight     = $params[ModelParam::DataSubscriptionWeight];
-        $marginWeight   = $params[ModelParam::MarginInterestWeight];
+        $rawMarginWeight = $params[ModelParam::MarginInterestWeight];
+
+        $targetWeights = [
+            'clearing_fees'  => $params[ModelParam::ClearingFeeWeight],
+            'custody_float'  => $params[ModelParam::CustodyFloatWeight],
+            'data_licensing' => $params[ModelParam::DataSubscriptionWeight],
+        ];
+        if ($rawMarginWeight > 0.0) {
+            $targetWeights['margin_interest'] = $rawMarginWeight;
+        }
+
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
+
+        $clearingWeight = $activeWeights['clearing_fees'];
+        $custodyWeight  = $activeWeights['custody_float'];
+        $dataWeight     = $activeWeights['data_licensing'];
+        $marginWeight   = $activeWeights['margin_interest'] ?? 0.0;
+
+        $revenueZ = $streams->generateZ('clearing_fees', 0.25);
+        $custodyZ = $streams->generateZ('custody_float', 0.20);
+        $dataZ    = $streams->generateZ('data_licensing', 0.45); // Separate Z-score for sticky data subscriptions
 
         // The Volatility Bonus (Transaction Volume):
         // Clearinghouses thrive on sheer volume. Market panics = massive liquidations = massive fees.
@@ -195,26 +211,34 @@ class ClearingHouseBusinessModel implements BusinessModelInterface
         $totalMacroBonus = $volatilityBonus + $ratesVolBonus;
 
         // 1. Clearing Revenue (Highly cyclical, gets the Vol and Rates bonus)
-        $clearingRevenue = $expectedRevenue * $clearingWeight * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $totalMacroBonus);
+        $clearingRevenue = max(0.0, $expectedRevenue * $clearingWeight * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $totalMacroBonus));
         // 2. Custody Revenue (Tied somewhat to volume/Z-score but no macro bonus)
-        $custodyRevenue  = $expectedRevenue * $custodyWeight * (1.0 + ($revenueZ * ($baselineVol * 0.3)));
+        $custodyRevenue  = max(0.0, $expectedRevenue * $custodyWeight * (1.0 + ($custodyZ * ($baselineVol * 0.3))));
         // 3. NEW: Data & Analytics Revenue (Highly sticky SaaS revenue, immune to trading panics)
-        $dataRevenue     = $expectedRevenue * $dataWeight * (1.0 + ($dataZ * ($baselineVol * 0.05)));
+        $dataRevenue     = max(0.0, $expectedRevenue * $dataWeight * (1.0 + ($dataZ * ($baselineVol * 0.05))));
+
+        $streamRevenues = [
+            'clearing_fees'  => $clearingRevenue,
+            'custody_float'  => $custodyRevenue,
+            'data_licensing' => $dataRevenue,
+        ];
 
         $marginRevenue = 0.0;
         $marginZ = 0.0;
         if ($marginWeight > 0.0) {
-            $marginZ = $mathUtility->generatePersistentZ($momentum['margin'] ?? 0.0, 0.30);
+            $marginZ = $streams->generateZ('margin_interest', 0.30);
             $policyRateEma = $macroState->policyRateEma;
             // Margin interest explodes when rates are high
             $rateBonus = $policyRateEma > 0.03 ? ($policyRateEma - 0.03) * 5.0 : 0.0;
-            $marginRevenue = $expectedRevenue * $marginWeight * (1.0 + ($marginZ * $baselineVol * 0.5) + $rateBonus);
+            $marginRevenue = max(0.0, $expectedRevenue * $marginWeight * (1.0 + ($marginZ * $baselineVol * 0.5) + $rateBonus));
+            $streamRevenues['margin_interest'] = $marginRevenue;
         }
 
-        $actualRevenue   = max(0.0, $clearingRevenue + $custodyRevenue + $dataRevenue + $marginRevenue);
+        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
 
         // The CCP Default Waterfall (Catastrophic Tail Risk)
-        $defaultZ = $mathUtility->generatePersistentZ($momentum['default'] ?? 0.0, 0.05);
+        $defaultZ = $streams->generateZ('default', 0.05);
 
         // Under the Default Waterfall, routine member defaults ($defaultZ >= CATASTROPHE_Z_THRESHOLD) are fully absorbed
         // by the defaulting member's posted Initial Margin and Guaranty Fund contribution ($0 loss to CCP equity).
@@ -235,30 +259,14 @@ class ClearingHouseBusinessModel implements BusinessModelInterface
         $primaryShockZ = abs($defaultZ) > abs($revenueZ) ? $defaultZ : $revenueZ;
         $observableShockZ = 0.0;
 
-        $streamZ = [
-            'revenue' => $revenueZ,
-            'data'    => $dataZ,
-            'default' => $defaultZ,
-        ];
-
-        $streamRevenue = [
-            'clearing_fees'  => $clearingRevenue,
-            'data_licensing' => $dataRevenue,
-        ];
-
-        if ($marginWeight > 0.0) {
-            $streamZ['margin'] = $marginZ;
-            $streamRevenue['margin_interest'] = $marginRevenue;
-        }
-
         $result = new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
-            streamZ: $streamZ,
-            streamRevenue: $streamRevenue,
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: $streamRevenues,
         );
 
         return $result;

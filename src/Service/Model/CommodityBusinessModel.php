@@ -170,6 +170,17 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         $streams = new StreamContext($momentum, $mathUtility);
         $beta = abs((float) $stock->getBeta());
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'extraction_volume' => $params[ModelParam::ExtractionRevenueWeight],
+            'spot_price'        => $params[ModelParam::SpotPriceWeight],
+            'refining_spread'   => $params[ModelParam::RefiningSpreadWeight],
+        ]);
+
+        $extractionWeight = $activeWeights['extraction_volume'];
+        $spotWeight       = $activeWeights['spot_price'];
+        $refiningWeight   = $activeWeights['refining_spread'];
+
         // Independent stream Z-scores with persistent AR(1) momentum
         $extractionZ = $streams->generateZ('extraction_volume', 0.35);
         $spotZ       = $streams->generateZ('spot_price', 0.15);
@@ -215,7 +226,14 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         $spotRevenue       = max(0.0, $expectedRevenue * $spotWeight * (1.0 + $spotShock + $inflationBonus + $energyBonus) * $spotMultiplier);
         $refiningRevenue   = max(0.0, $expectedRevenue * $refiningWeight * (1.0 + $refiningShock + $crackSpreadBonus));
 
-        $actualRevenue = $extractionRevenue + $spotRevenue + $refiningRevenue;
+        $streamRevenues = [
+            'extraction_volume' => $extractionRevenue,
+            'spot_price'        => $spotRevenue,
+            'refining_spread'   => $refiningRevenue,
+        ];
+
+        $actualRevenue = array_sum($streamRevenues);
+        $streams->recordStreamShares($streamRevenues);
 
         // --- Operating Margin & Scale Elasticity Physics ---
         // Realized variable margin is allocated across physical extraction and refining operations.
@@ -262,17 +280,8 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'extraction_volume' => $extractionZ,
-                'spot_price'        => $spotZ,
-                'refining_spread'   => $refiningZ,
-                'event'             => $eventZ,
-            ],
-            streamRevenue: [
-                'extraction_volume' => $extractionRevenue,
-                'spot_price'        => $spotRevenue,
-                'refining_spread'   => $refiningRevenue,
-            ],
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: $streamRevenues,
         );
     }
 

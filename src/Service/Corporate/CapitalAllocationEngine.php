@@ -355,10 +355,10 @@ class CapitalAllocationEngine
             $sharesRepurchased = min($sharesRepurchased, $maxSharesToBuy);
 
             if ($sharesRepurchased > 0) {
-                $ctx->totalCashSpent = $sharesRepurchased * max($ctx->currentPrice, 0.01);
-                $sharesStr = \bcsub((string) $stock->getSharesOutstanding(), (string) $sharesRepurchased, 8);
+                $newSharesVal = max(1.0, (float) $stock->getSharesOutstanding() - $sharesRepurchased);
+                $sharesStr = (string) $newSharesVal;
                 $stock->setSharesOutstanding($sharesStr);
-                $ctx->newShares = (float) $sharesStr;
+                $ctx->newShares = $newSharesVal;
 
                 $pctRetired = ($sharesRepurchased / ($ctx->sharesOutstanding + $sharesRepurchased)) * 100;
                 $ctx->events[] = [

@@ -103,6 +103,17 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
         $beta = abs((float) $stock->getBeta());
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'first_party_retail' => $params[ModelParam::FirstPartyWeight],
+            'third_party_seller' => $params[ModelParam::ThirdPartyWeight],
+            'digital_ads_cloud'  => $params[ModelParam::DigitalAdsWeight],
+        ]);
+
+        $fpWeight  = $activeWeights['first_party_retail'];
+        $tpWeight  = $activeWeights['third_party_seller'];
+        $adsWeight = $activeWeights['digital_ads_cloud'];
+
         // Independent stream Z-scores
         $fpZ  = $streams->generateZ('first_party_retail', 0.25);
         $tpZ  = $streams->generateZ('third_party_seller', 0.40); // High persistence tollbooth
@@ -142,7 +153,14 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $platformTrafficBonus = ($fpZ * 0.5) + ($tpZ * 0.5);
         $adsRevenue = max(0.0, $expectedRevenue * $adsWeight * (1.0 + ($adsZ * $baselineVol * self::DIGITAL_ADS_VARIANCE) + ($platformTrafficBonus * 0.10)) * $revenueMultiplier);
 
-        $actualRevenue = $fpRevenue + $tpRevenue + $adsRevenue;
+        $streamRevenues = [
+            'first_party_retail' => $fpRevenue,
+            'third_party_seller' => $tpRevenue,
+            'digital_ads_cloud'  => $adsRevenue,
+        ];
+
+        $actualRevenue = array_sum($streamRevenues);
+        $streams->recordStreamShares($streamRevenues);
 
         // --- Structural Margin Blending ---
         // Calculate organic costs for the high-margin divisions
@@ -201,11 +219,7 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
-            streamRevenue: [
-                'first_party_retail' => $fpRevenue,
-                'third_party_seller' => $tpRevenue,
-                'digital_ads_cloud'  => $adsRevenue,
-            ],
+            streamRevenue: $streamRevenues,
         );
     }
 }

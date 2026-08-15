@@ -150,6 +150,17 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         $streams = new StreamContext($momentum, $mathUtility);
         $beta = abs((float) $stock->getBeta());
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'inpatient_care'      => $params[ModelParam::InpatientCareWeight],
+            'elective_outpatient' => $params[ModelParam::ElectiveOutpatientWeight],
+            'insurance_arbitrage' => $params[ModelParam::InsuranceArbitrageWeight],
+        ]);
+
+        $inpatientWeight  = $activeWeights['inpatient_care'];
+        $outpatientWeight = $activeWeights['elective_outpatient'];
+        $arbitrageWeight  = $activeWeights['insurance_arbitrage'];
+
         // Independent stream Z-scores with persistent momentum
         $inpatientZ  = $streams->generateZ('inpatient_care', 0.35);
         $outpatientZ = $streams->generateZ('elective_outpatient', 0.25);
@@ -190,7 +201,14 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         $outpatientRevenue = max(0.0, $expectedRevenue * $outpatientWeight * (1.0 + $outpatientShock + $outpatientMacroBoost));
         $arbitrageRevenue  = max(0.0, $expectedRevenue * $arbitrageWeight * (1.0 + $arbitrageShock + $arbitrageInflationBoost));
 
-        $actualRevenue = $inpatientRevenue + $outpatientRevenue + $arbitrageRevenue;
+        $streamRevenues = [
+            'inpatient_care'      => $inpatientRevenue,
+            'elective_outpatient' => $outpatientRevenue,
+            'insurance_arbitrage' => $arbitrageRevenue,
+        ];
+
+        $actualRevenue = array_sum($streamRevenues);
+        $streams->recordStreamShares($streamRevenues);
 
         // --- Clinical Wage Inflation Squeeze & Pricing Power Mitigation ---
         $baseWageInflationPenalty = $inflationExcess * $beta * self::WAGE_INFLATION_PENALTY_SCALAR;
@@ -230,17 +248,8 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'inpatient_care'      => $inpatientZ,
-                'elective_outpatient' => $outpatientZ,
-                'insurance_arbitrage' => $arbitrageZ,
-                'event'               => $eventZ,
-            ],
-            streamRevenue: [
-                'inpatient_care'      => $inpatientRevenue,
-                'elective_outpatient' => $outpatientRevenue,
-                'insurance_arbitrage' => $arbitrageRevenue,
-            ],
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: $streamRevenues,
         );
     }
 }

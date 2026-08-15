@@ -94,14 +94,31 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         $transactionWeight  = $params[ModelParam::TransactionRevenueWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'subscription' => $params[ModelParam::SubscriptionRevenueWeight],
+            'transaction'  => $params[ModelParam::TransactionRevenueWeight],
+        ]);
+
+        $subscriptionWeight = $activeWeights['subscription'];
+        $transactionWeight  = $activeWeights['transaction'];
 
         // Independent stream Z-scores with AR(1) persistence
-        $subscriptionZ = $mathUtility->generatePersistentZ($momentum['subscription'] ?? 0.0, 0.50); // Recurring seat subscriptions & data licenses
-        $transactionZ  = $mathUtility->generatePersistentZ($momentum['transaction'] ?? 0.0, 0.15); // Debt issuance credit rating mandates & API usage
+        $subscriptionZ = $streams->generateZ('subscription', 0.50); // Recurring seat subscriptions & data licenses
+        $transactionZ  = $streams->generateZ('transaction', 0.15); // Debt issuance credit rating mandates & API usage
 
-        $subscriptionRevenue = $expectedRevenue * $subscriptionWeight * (1.0 + ($subscriptionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
-        $transactionRevenue  = $expectedRevenue * $transactionWeight * (1.0 + ($transactionZ * ($baselineVol * (self::REVENUE_VARIANCE_SCALAR * 5.0))));
-        $actualRevenue       = max(0.0, $subscriptionRevenue + $transactionRevenue);
+        $subscriptionRevenue = max(0.0, $expectedRevenue * $subscriptionWeight * (1.0 + ($subscriptionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
+        $transactionRevenue  = max(0.0, $expectedRevenue * $transactionWeight * (1.0 + ($transactionZ * ($baselineVol * (self::REVENUE_VARIANCE_SCALAR * 5.0)))));
+        
+        $streamRevenues = [
+            'subscription' => $subscriptionRevenue,
+            'transaction'  => $transactionRevenue,
+        ];
+
+        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
 
         // Rating Issuance Operating Leverage:
         // High transaction/rating volume ($transactionZ) provides strong positive operating leverage because incremental debt ratings have near-zero marginal cost.
@@ -118,14 +135,8 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: null,
-            streamZ: [
-                'subscription' => $subscriptionZ,
-                'transaction'  => $transactionZ,
-            ],
-            streamRevenue: [
-                'subscription' => $subscriptionRevenue,
-                'transaction'  => $transactionRevenue,
-            ],
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: $streamRevenues,
         );
     }
 

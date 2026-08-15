@@ -125,6 +125,15 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'commercial_therapeutics'       => $params[ModelParam::EstablishedDrugWeight],
+            'pipeline_licensing_milestones' => $params[ModelParam::PipelineDrugWeight],
+        ]);
+
+        $establishedWeight = $activeWeights['commercial_therapeutics'];
+        $pipelineWeight    = $activeWeights['pipeline_licensing_milestones'];
+
         // Independent stream Z-scores with AR(1) persistence
         $establishedZ = $streams->generateZ('commercial_therapeutics', 0.40); // Commercial prescription volume variance
         $pipelineZ    = $streams->generateZ('pipeline_licensing_milestones', 0.10); // Clinical trial milestone readouts
@@ -150,7 +159,14 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::BIOTECH_TRIAL_SETBACK;
         }
 
-        $actualRevenue = max(0.0, $establishedRevenue + $pipelineRevenue);
+        $streamRevenues = [
+            'commercial_therapeutics'       => $establishedRevenue,
+            'pipeline_licensing_milestones' => $pipelineRevenue,
+        ];
+
+        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
+
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $patentModifier);
 
         $primaryShockZ = abs($trialZ) > abs($establishedZ) ? $trialZ : $establishedZ;
@@ -164,10 +180,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
-            streamRevenue: [
-                'commercial_therapeutics'       => $establishedRevenue,
-                'pipeline_licensing_milestones' => $pipelineRevenue,
-            ],
+            streamRevenue: $streamRevenues,
         );
     }
 

@@ -109,6 +109,17 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
         $beta = abs((float) $stock->getBeta());
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'residential_collection' => $params[ModelParam::ResidentialWeight],
+            'commercial_disposal'    => $params[ModelParam::CommercialWeight],
+            'recycling_and_rng'      => $params[ModelParam::RecyclingWeight],
+        ]);
+
+        $residentialWeight = $activeWeights['residential_collection'];
+        $commercialWeight  = $activeWeights['commercial_disposal'];
+        $recyclingWeight   = $activeWeights['recycling_and_rng'];
+
         // Independent stream Z-scores
         $residentialZ = $streams->generateZ('residential_collection', 0.40);
         $commercialZ  = $streams->generateZ('commercial_disposal', 0.20);
@@ -138,7 +149,14 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         $commercialRevenue  = max(0.0, $expectedRevenue * $commercialWeight  * (1.0 + ($commercialZ * $baselineVol * self::COMMERCIAL_VARIANCE_SCALAR) + $macroBoost));
         $recyclingRevenue   = max(0.0, $expectedRevenue * $recyclingWeight   * (1.0 + ($recyclingZ * $baselineVol * self::RECYCLING_VARIANCE_SCALAR) + $recyclingCommodityBoost));
 
-        $actualRevenue = $residentialRevenue + $commercialRevenue + $recyclingRevenue;
+        $streamRevenues = [
+            'residential_collection' => $residentialRevenue,
+            'commercial_disposal'    => $commercialRevenue,
+            'recycling_and_rng'      => $recyclingRevenue,
+        ];
+
+        $actualRevenue = array_sum($streamRevenues);
+        $streams->recordStreamShares($streamRevenues);
 
         // --- Cost & Margin Physics ---
         // Fuel Surcharge Lag: Waste trucks guzzle diesel. If energy prices spike suddenly (> 0), 
@@ -168,11 +186,7 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
-            streamRevenue: [
-                'residential_collection' => $residentialRevenue,
-                'commercial_disposal'    => $commercialRevenue,
-                'recycling_and_rng'      => $recyclingRevenue,
-            ],
+            streamRevenue: $streamRevenues,
         );
     }
 

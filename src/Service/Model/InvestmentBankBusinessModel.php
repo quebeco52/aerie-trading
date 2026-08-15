@@ -102,18 +102,31 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             ModelParam::OptionsPremiumIncomeWeight->value => 0.00,
             ModelParam::VixArbitrageScalar->value          => self::VIX_ARBITRAGE_SCALAR,
         ]);
-
-        $advisoryWeight = $params[ModelParam::AdvisoryRevenueWeight];
-        $tradingWeight  = $params[ModelParam::TradingRevenueWeight];
-        $optionsWeight  = $params[ModelParam::OptionsPremiumIncomeWeight];
-        $vixScalar      = $params[ModelParam::VixArbitrageScalar];
+        $rawOptionsWeight = $params[ModelParam::OptionsPremiumIncomeWeight];
+        $vixScalar        = $params[ModelParam::VixArbitrageScalar];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+
+        $targetWeights = [
+            'advisory' => $params[ModelParam::AdvisoryRevenueWeight],
+            'trading'  => $params[ModelParam::TradingRevenueWeight],
+        ];
+        if ($rawOptionsWeight > 0.0) {
+            $targetWeights['options_premium_income'] = $rawOptionsWeight;
+        }
+
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
+
+        $advisoryWeight = $activeWeights['advisory'];
+        $tradingWeight  = $activeWeights['trading'];
+        $optionsWeight  = $activeWeights['options_premium_income'] ?? 0.0;
 
         // Independent stream Z-scores with AR(1) persistence
-        $advisoryZ = $mathUtility->generatePersistentZ($momentum['advisory'] ?? 0.0, 0.40);
-        $tradingZ  = $mathUtility->generatePersistentZ($momentum['trading'] ?? 0.0, 0.15);
-        $eventZ    = $mathUtility->generatePersistentZ($momentum['event'] ?? 0.0, 0.05);
+        $advisoryZ = $streams->generateZ('advisory', 0.40);
+        $tradingZ  = $streams->generateZ('trading', 0.15);
+        $eventZ    = $streams->generateZ('event', 0.05);
 
         // --- Pro-Cyclical M&A Deal Flow ---
         $outputGap = $macroState->outputGapEma;
@@ -162,15 +175,22 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         $advisoryRevenue = max(0.0, $expectedRevenue * $advisoryWeight * (1.0 + ($advisoryZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR) + $dealFlowMultiplier + $dcmBonus) * $advisoryEventMultiplier);
         $tradingRevenue  = max(0.0, $expectedRevenue * $tradingWeight * (1.0 + ($tradingZ * $baselineVol * self::TRADING_VARIANCE_SCALAR) + $volatilityArbitrage));
 
+        $streamRevenues = [
+            'advisory' => $advisoryRevenue,
+            'trading'  => $tradingRevenue,
+        ];
+
         $optionsRevenue = 0.0;
         $optionsZ = 0.0;
         if ($optionsWeight > 0.0) {
-            $optionsZ = $mathUtility->generatePersistentZ($momentum['options'] ?? 0.0, 0.20);
+            $optionsZ = $streams->generateZ('options_premium_income', 0.20);
             $optionsVixPenalty = $vixGap > 0.0 ? - ($vixGap * 1.5) : abs($vixGap * 0.5);
             $optionsRevenue = max(0.0, $expectedRevenue * $optionsWeight * (1.0 + ($optionsZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR) + $optionsVixPenalty));
+            $streamRevenues['options_premium_income'] = $optionsRevenue;
         }
 
-        $actualRevenue = $advisoryRevenue + $tradingRevenue + $optionsRevenue;
+        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
 
         // --- Compensation Ratio Physics & Cost Penalties ---
         // Add the regulatory penalty to the base variable margin before clamping
@@ -200,22 +220,6 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             + $tradingZ * $tradingWeight * self::TRADING_ANALYST_VISIBILITY)
             * $baselineVol * self::REVENUE_VARIANCE_SCALAR;
 
-        $streamZ = [
-            'advisory' => $advisoryZ,
-            'trading'  => $tradingZ,
-            'event'    => $eventZ,
-        ];
-
-        $streamRevenue = [
-            'advisory' => $advisoryRevenue,
-            'trading'  => $tradingRevenue,
-        ];
-
-        if ($optionsWeight > 0.0) {
-            $streamZ['options'] = $optionsZ;
-            $streamRevenue['options_premium_income'] = $optionsRevenue;
-        }
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedVariableMargin,
@@ -223,8 +227,8 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: $streamZ,
-            streamRevenue: $streamRevenue,
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: $streamRevenues,
         );
     }
 }

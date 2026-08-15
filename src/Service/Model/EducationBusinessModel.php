@@ -69,6 +69,17 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
         $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
         $beta     = abs((float) $stock->getBeta());
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'degree_tuition_enrollment' => $params[ModelParam::DegreeTuitionWeight],
+            'enterprise_b2b_training'   => $params[ModelParam::EnterpriseTrainingWeight],
+            'digital_lms_licensing'     => $params[ModelParam::LmsLicensingWeight],
+        ]);
+
+        $tuitionWeight    = $activeWeights['degree_tuition_enrollment'];
+        $enterpriseWeight = $activeWeights['enterprise_b2b_training'];
+        $lmsWeight        = $activeWeights['digital_lms_licensing'];
+
         // Counter-cyclical student enrollment boost during recessions
         $outputGap = $macroState->outputGapEma;
         $counterCyclicalEnrollmentBoost = $outputGap < 0.0 ? abs($outputGap) * 1.2 * $beta : -($outputGap * 0.4);
@@ -82,7 +93,15 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
         $enterpriseRevenue = max(0.0, $expectedRevenue * $enterpriseWeight * (1.0 + ($enterpriseZ * ($baselineVol * self::ENTERPRISE_VARIANCE_SCALAR)) + $proCyclicalEnterpriseShift));
         $lmsRevenue        = max(0.0, $expectedRevenue * $lmsWeight        * (1.0 + ($lmsZ * ($baselineVol * self::LMS_VARIANCE_SCALAR))));
 
-        $actualRevenue = $tuitionRevenue + $enterpriseRevenue + $lmsRevenue;
+        $streamRevenues = [
+            'degree_tuition_enrollment' => $tuitionRevenue,
+            'enterprise_b2b_training'   => $enterpriseRevenue,
+            'digital_lms_licensing'     => $lmsRevenue,
+        ];
+
+        $actualRevenue = array_sum($streamRevenues);
+        $streams->recordStreamShares($streamRevenues);
+
         $clampedMargin = $this->clampMargin($realizedVariableMargin);
 
         $primaryShockZ = abs($enterpriseZ) > abs($tuitionZ) ? $enterpriseZ : $tuitionZ;
@@ -103,11 +122,7 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
             eventType: null,
             isPublicEvent: null,
             streamZ: $streams->getStreamZ(),
-            streamRevenue: [
-                'degree_tuition_enrollment' => $tuitionRevenue,
-                'enterprise_b2b_training'   => $enterpriseRevenue,
-                'digital_lms_licensing'     => $lmsRevenue,
-            ],
+            streamRevenue: $streamRevenues,
         );
     }
 }

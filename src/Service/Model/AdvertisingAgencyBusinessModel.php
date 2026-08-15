@@ -68,6 +68,17 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
         $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
         $beta     = abs((float) $stock->getBeta());
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'media_buying_commissions' => $params[ModelParam::MediaBuyingWeight],
+            'creative_brand_retainers' => $params[ModelParam::BrandRetainerWeight],
+            'martech_consulting'       => $params[ModelParam::MartechConsultingWeight],
+        ]);
+
+        $mediaWeight   = $activeWeights['media_buying_commissions'];
+        $brandWeight   = $activeWeights['creative_brand_retainers'];
+        $martechWeight = $activeWeights['martech_consulting'];
+
         // Ad budgets expand aggressively during GDP booms and contract sharply during recessions
         $macroAdSpendShift = $macroState->outputGapEma * 1.8 * $beta;
 
@@ -79,7 +90,15 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
         $brandRevenue   = max(0.0, $expectedRevenue * $brandWeight   * (1.0 + ($brandZ * ($baselineVol * self::BRAND_VARIANCE_SCALAR))));
         $martechRevenue = max(0.0, $expectedRevenue * $martechWeight * (1.0 + ($martechZ * ($baselineVol * self::MARTECH_VARIANCE_SCALAR)) + ($macroAdSpendShift * 0.4)));
 
-        $actualRevenue = $mediaRevenue + $brandRevenue + $martechRevenue;
+        $streamRevenues = [
+            'media_buying_commissions' => $mediaRevenue,
+            'creative_brand_retainers' => $brandRevenue,
+            'martech_consulting'       => $martechRevenue,
+        ];
+
+        $actualRevenue = array_sum($streamRevenues);
+        $streams->recordStreamShares($streamRevenues);
+
         $clampedMargin = $this->clampMargin($realizedVariableMargin);
 
         $primaryShockZ = abs($mediaZ) > abs($brandZ) ? $mediaZ : $brandZ;
@@ -99,11 +118,7 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
             eventType: null,
             isPublicEvent: null,
             streamZ: $streams->getStreamZ(),
-            streamRevenue: [
-                'media_buying_commissions' => $mediaRevenue,
-                'creative_brand_retainers' => $brandRevenue,
-                'martech_consulting'       => $martechRevenue,
-            ],
+            streamRevenue: $streamRevenues,
         );
     }
 }

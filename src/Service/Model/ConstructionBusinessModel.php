@@ -154,6 +154,17 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $streams = new StreamContext($momentum, $mathUtility);
         $beta = abs((float) $stock->getBeta());
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'civil_infrastructure'   => $params[ModelParam::CivilInfrastructureWeight],
+            'commercial_epc'         => $params[ModelParam::CommercialEpcWeight],
+            'facilities_maintenance' => $params[ModelParam::FacilitiesMaintenanceWeight],
+        ]);
+
+        $civilWeight       = $activeWeights['civil_infrastructure'];
+        $commercialWeight  = $activeWeights['commercial_epc'];
+        $maintenanceWeight = $activeWeights['facilities_maintenance'];
+
         // Independent stream Z-scores with persistent auto-regressive momentum
         $civilZ       = $streams->generateZ('civil_infrastructure', 0.40);
         $commercialZ  = $streams->generateZ('commercial_epc', 0.20);
@@ -190,7 +201,14 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $commercialRevenue = max(0.0, $expectedRevenue * $commercialWeight * (1.0 + $commercialShock + $commercialMacroBoost - $commercialCreditDrag));
         $maintenanceRevenue = max(0.0, $expectedRevenue * $maintenanceWeight * (1.0 + $maintenanceShock + $maintenanceMacroBoost));
 
-        $actualRevenue = $civilRevenue + $commercialRevenue + $maintenanceRevenue;
+        $streamRevenues = [
+            'civil_infrastructure'   => $civilRevenue,
+            'commercial_epc'         => $commercialRevenue,
+            'facilities_maintenance' => $maintenanceRevenue,
+        ];
+
+        $actualRevenue = array_sum($streamRevenues);
+        $streams->recordStreamShares($streamRevenues);
 
         // --- Fixed-Price Contract Margin Squeeze with Cost-Plus Pass-Through ---
         $inflation = $macroState->inflationEma;
@@ -239,17 +257,8 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'civil_infrastructure'   => $civilZ,
-                'commercial_epc'         => $commercialZ,
-                'facilities_maintenance' => $maintenanceZ,
-                'event'                  => $eventZ,
-            ],
-            streamRevenue: [
-                'civil_infrastructure'   => $civilRevenue,
-                'commercial_epc'         => $commercialRevenue,
-                'facilities_maintenance' => $maintenanceRevenue,
-            ],
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: $streamRevenues,
         );
     }
 }

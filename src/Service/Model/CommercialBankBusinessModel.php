@@ -315,7 +315,6 @@ class CommercialBankBusinessModel implements BusinessModelInterface
      */
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
-        // Resolve company-specific tuned commercial bank parameters
         $params = $this->resolveModelParameters($stock, [
             ModelParam::NiiRevenueWeight->value          => self::NII_REVENUE_WEIGHT,
             ModelParam::FeeRevenueWeight->value          => self::FEE_REVENUE_WEIGHT,
@@ -323,37 +322,56 @@ class CommercialBankBusinessModel implements BusinessModelInterface
             ModelParam::NimInversionSensitivity->value   => self::NIM_INVERSION_SENSITIVITY,
         ]);
 
-        $niiWeight                 = $params[ModelParam::NiiRevenueWeight];
-        $feeWeight                 = $params[ModelParam::FeeRevenueWeight];
-        $proprietaryDividendWeight = $params[ModelParam::ProprietaryDividendWeight];
+        $rawProprietaryWeight = $params[ModelParam::ProprietaryDividendWeight];
         $inversionSensitivity = $params[ModelParam::NimInversionSensitivity];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+
+        $targetWeights = [
+            'net_interest_income' => $params[ModelParam::NiiRevenueWeight],
+            'fee_income'          => $params[ModelParam::FeeRevenueWeight],
+        ];
+        if ($rawProprietaryWeight > 0.0) {
+            $targetWeights['proprietary_dividend'] = $rawProprietaryWeight;
+        }
+
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
+
+        $niiWeight                 = $activeWeights['net_interest_income'];
+        $feeWeight                 = $activeWeights['fee_income'];
+        $proprietaryDividendWeight = $activeWeights['proprietary_dividend'] ?? 0.0;
 
         // Independent stream Z-scores with AR(1) persistence
-        $revenueZ = $mathUtility->generatePersistentZ($momentum['nii'] ?? 0.0, 0.35); // NII loan origination volume
-        $feeZ     = $mathUtility->generatePersistentZ($momentum['fee'] ?? 0.0, 0.25); // Non-interest custodial / payment fee volume
-        $defaultZ = $mathUtility->generatePersistentZ($momentum['default'] ?? 0.0, 0.25); // Idiosyncratic credit default
-
-
+        $revenueZ = $streams->generateZ('net_interest_income', 0.35); // NII loan origination volume
+        $feeZ     = $streams->generateZ('fee_income', 0.25); // Non-interest custodial / payment fee volume
+        $defaultZ = $streams->generateZ('default', 0.25); // Idiosyncratic credit default
 
         $outputGap = $macroState->outputGapEma;
 
         // Blended dual-stream revenue (NII vs. Non-Interest Fee Income)
-        $niiRevenue = $expectedRevenue * $niiWeight
-            * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
-        $feeRevenue = $expectedRevenue * $feeWeight
-            * (1.0 + ($feeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + ($outputGap * self::SECTOR_SHOCK_FEE_OUTPUT_GAP_MULT));
+        $niiRevenue = max(0.0, $expectedRevenue * $niiWeight
+            * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
+        $feeRevenue = max(0.0, $expectedRevenue * $feeWeight
+            * (1.0 + ($feeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + ($outputGap * self::SECTOR_SHOCK_FEE_OUTPUT_GAP_MULT)));
+
+        $streamRevenues = [
+            'net_interest_income' => $niiRevenue,
+            'fee_income'          => $feeRevenue,
+        ];
 
         $proprietaryDividendRevenue = 0.0;
         $proprietaryDividendZ = 0.0;
         if ($proprietaryDividendWeight > 0.0) {
             // Proprietary dividends are highly cyclical and tie to corporate expansion
-            $proprietaryDividendZ = $mathUtility->generatePersistentZ($momentum['proprietary_dividend'] ?? 0.0, 0.25);
-            $proprietaryDividendRevenue = $expectedRevenue * $proprietaryDividendWeight * (1.0 + ($proprietaryDividendZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5)) + ($outputGap * self::SECTOR_SHOCK_FEE_OUTPUT_GAP_MULT * 2.0));
+            $proprietaryDividendZ = $streams->generateZ('proprietary_dividend', 0.25);
+            $proprietaryDividendRevenue = max(0.0, $expectedRevenue * $proprietaryDividendWeight * (1.0 + ($proprietaryDividendZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5)) + ($outputGap * self::SECTOR_SHOCK_FEE_OUTPUT_GAP_MULT * 2.0)));
+            $streamRevenues['proprietary_dividend'] = $proprietaryDividendRevenue;
         }
 
-        $actualRevenue = max(0.0, $niiRevenue + $feeRevenue + $proprietaryDividendRevenue);
+        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
 
         // Loan Loss Provisions (Idiosyncratic Credit Cycle):
         // Collateralized loans (prime mortgages, corporate debt) have lower LGD than unsecured credit.
@@ -412,30 +430,14 @@ class CommercialBankBusinessModel implements BusinessModelInterface
             $eventType = ShockEvent::RESERVE_RELEASE;
         }
 
-        $streamZ = [
-            'nii'     => $revenueZ,
-            'fee'     => $feeZ,
-            'default' => $defaultZ,
-        ];
-
-        $streamRevenue = [
-            'net_interest_income' => $niiRevenue,
-            'fee_income'          => $feeRevenue,
-        ];
-
-        if ($proprietaryDividendWeight > 0.0) {
-            $streamZ['proprietary_dividend'] = $proprietaryDividendZ;
-            $streamRevenue['proprietary_dividend'] = $proprietaryDividendRevenue;
-        }
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: abs($defaultZ) > abs($revenueZ) ? $defaultZ : $revenueZ,
             observableShockZ: $revenueZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR,
             eventType: $eventType,
-            streamZ: $streamZ,
-            streamRevenue: $streamRevenue,
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: $streamRevenues,
         );
     }
 

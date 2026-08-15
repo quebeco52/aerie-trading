@@ -157,6 +157,17 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
         $streams = new StreamContext($momentum, $mathUtility);
         $beta = abs((float) $stock->getBeta());
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'corporate_retainers'    => $params[ModelParam::CorporateRetainerWeight],
+            'litigation_settlements' => $params[ModelParam::LitigationContingencyWeight],
+            'restructuring_advisory' => $params[ModelParam::RestructuringAdvisoryWeight],
+        ]);
+
+        $retainerWeight      = $activeWeights['corporate_retainers'];
+        $litigationWeight    = $activeWeights['litigation_settlements'];
+        $restructuringWeight = $activeWeights['restructuring_advisory'];
+
         // Independent stream Z-scores with persistent AR(1) momentum
         $retainerZ      = $streams->generateZ('corporate_retainers', 0.40);
         $litigationZ    = $streams->generateZ('litigation_settlements', 0.10);
@@ -197,7 +208,14 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
         $litigationRevenue    = max(0.0, $expectedRevenue * $litigationWeight    * (1.0 + $litigationShock) * $litigationMult);
         $restructuringRevenue = max(0.0, $expectedRevenue * $restructuringWeight * (1.0 + $restructuringShock + $restructuringSurge));
 
-        $actualRevenue = $retainerRevenue + $litigationRevenue + $restructuringRevenue;
+        $streamRevenues = [
+            'corporate_retainers'    => $retainerRevenue,
+            'litigation_settlements' => $litigationRevenue,
+            'restructuring_advisory' => $restructuringRevenue,
+        ];
+
+        $actualRevenue = array_sum($streamRevenues);
+        $streams->recordStreamShares($streamRevenues);
 
         // Associate Wage Inflation Squeeze (mitigated by pricing power)
         $excessInflation = max(0.0, $macroState->inflationEma - MacroEngine::TARGET_INFLATION);
@@ -237,17 +255,8 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'corporate_retainers'    => $retainerZ,
-                'litigation_settlements' => $litigationZ,
-                'restructuring_advisory' => $restructuringZ,
-                'event'                  => $eventZ,
-            ],
-            streamRevenue: [
-                'corporate_retainers'    => $retainerRevenue,
-                'litigation_settlements' => $litigationRevenue,
-                'restructuring_advisory' => $restructuringRevenue,
-            ],
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: $streamRevenues,
         );
     }
 }

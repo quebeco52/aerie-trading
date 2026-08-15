@@ -91,9 +91,22 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
             ModelParam::TurnaroundGainsWeight->value       => self::ASSET_RECOVERY_WEIGHT,
             ModelParam::LoanToOwnGainsWeight->value        => 0.00,
         ]);
-        $advisoryWeight   = $params[ModelParam::RestructuringAdvisoryWeight];
-        $recoveryWeight   = $params[ModelParam::TurnaroundGainsWeight];
-        $loanToOwnWeight  = $params[ModelParam::LoanToOwnGainsWeight];
+        $rawLoanToOwnWeight = $params[ModelParam::LoanToOwnGainsWeight];
+
+        $targetWeights = [
+            'restructuring_advisory' => $params[ModelParam::RestructuringAdvisoryWeight],
+            'turnaround_recovery'    => $params[ModelParam::TurnaroundGainsWeight],
+        ];
+        if ($rawLoanToOwnWeight > 0.0) {
+            $targetWeights['loan_to_own'] = $rawLoanToOwnWeight;
+        }
+
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
+
+        $advisoryWeight  = $activeWeights['restructuring_advisory'];
+        $recoveryWeight  = $activeWeights['turnaround_recovery'];
+        $loanToOwnWeight = $activeWeights['loan_to_own'] ?? 0.0;
 
         // Independent stream Z-scores
         $advisoryZ = $streams->generateZ('restructuring_advisory', 0.50);
@@ -106,14 +119,22 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
         $advisoryRevenue = max(0.0, $expectedRevenue * $advisoryWeight * (1.0 + ($advisoryZ * ($baselineVol * self::ADVISORY_VARIANCE_SCALAR))));
         $recoveryRevenue = max(0.0, $expectedRevenue * $recoveryWeight * (1.0 + ($recoveryZ * ($baselineVol * self::RECOVERY_VARIANCE_SCALAR)) + $distressMultiplier));
 
+        $streamRevenues = [
+            'restructuring_advisory' => $advisoryRevenue,
+            'turnaround_recovery'    => $recoveryRevenue,
+        ];
+
         $loanToOwnRevenue = 0.0;
         $loanToOwnZ = 0.0;
         if ($loanToOwnWeight > 0.0) {
             $loanToOwnZ = $streams->generateZ('loan_to_own', 0.15);
             $loanToOwnRevenue = max(0.0, $expectedRevenue * $loanToOwnWeight * (1.0 + ($loanToOwnZ * $baselineVol * self::RECOVERY_VARIANCE_SCALAR * 1.5) + ($distressMultiplier * 1.5)));
+            $streamRevenues['loan_to_own'] = $loanToOwnRevenue;
         }
 
-        $actualRevenue = max(0.0, $advisoryRevenue + $recoveryRevenue + $loanToOwnRevenue);
+        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
+
         $clampedMargin = $this->clampMargin($realizedVariableMargin);
 
         $primaryShockZ = abs($recoveryZ) > abs($advisoryZ) ? $recoveryZ : $advisoryZ;
@@ -125,14 +146,6 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
             ($recoveryZ * $recoveryWeight * self::RECOVERY_VARIANCE_SCALAR * $baselineVol) +
             ($distressMultiplier * $recoveryWeight);
 
-        $streamRevenue = [
-            'restructuring_advisory' => $advisoryRevenue,
-            'turnaround_recovery'    => $recoveryRevenue,
-        ];
-        if ($loanToOwnWeight > 0.0) {
-            $streamRevenue['loan_to_own'] = $loanToOwnRevenue;
-        }
-
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
@@ -141,7 +154,7 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
-            streamRevenue: $streamRevenue,
+            streamRevenue: $streamRevenues,
         );
     }
 

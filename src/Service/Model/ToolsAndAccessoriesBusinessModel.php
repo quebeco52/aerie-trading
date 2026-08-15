@@ -98,11 +98,21 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         $consumerWeight   = $params[ModelParam::ConsumerWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'commercial' => $params[ModelParam::CommercialWeight],
+            'consumer'   => $params[ModelParam::ConsumerWeight],
+        ]);
+
+        $commercialWeight = $activeWeights['commercial'];
+        $consumerWeight   = $activeWeights['consumer'];
 
         // Commercial is highly sticky, Consumer is volatile
-        $commercialZ = $mathUtility->generatePersistentZ($momentum['commercial'] ?? 0.0, 0.02);
-        $consumerZ = $mathUtility->generatePersistentZ($momentum['consumer'] ?? 0.0, 0.30);
-        $eventZ    = $mathUtility->generatePersistentZ($momentum['event'] ?? 0.0, 0.10);
+        $commercialZ = $streams->generateZ('commercial', 0.02);
+        $consumerZ   = $streams->generateZ('consumer', 0.30);
+        $eventZ      = $streams->generateZ('event', 0.10);
 
         $standardParams = $this->resolveModelParameters($stock, [ModelParam::PricingPowerIndex->value => 0.5]);
         $pricingPower = max(0.0, min(1.0, $standardParams[ModelParam::PricingPowerIndex]));
@@ -127,10 +137,16 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::DEFENSE_CONTRACT_WIN; // Proxy for mega industrial boom
         }
 
-        $commercialRevenue = $expectedRevenue * $commercialWeight * (1.0 + ($commercialZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.1)) + $commercialMacroVolumeShock) * $cycleMultiplier;
-        $consumerRevenue = $expectedRevenue * $consumerWeight * (1.0 + ($consumerZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 2.5)) + $consumerMacroVolumeShock);
+        $commercialRevenue = max(0.0, $expectedRevenue * $commercialWeight * (1.0 + ($commercialZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.1)) + $commercialMacroVolumeShock) * $cycleMultiplier);
+        $consumerRevenue   = max(0.0, $expectedRevenue * $consumerWeight * (1.0 + ($consumerZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 2.5)) + $consumerMacroVolumeShock));
 
-        $actualRevenue = max(0.0, $commercialRevenue + $consumerRevenue);
+        $streamRevenues = [
+            'commercial' => $commercialRevenue,
+            'consumer'   => $consumerRevenue,
+        ];
+
+        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
 
         // --- Structural Margin Blending ---
         // Commercial B2B precision tooling operates at a structurally lower variable cost (higher margin).
@@ -175,15 +191,8 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'commercial' => $commercialZ,
-                'consumer' => $consumerZ,
-                'event'      => $eventZ,
-            ],
-            streamRevenue: [
-                'Commercial / B2B' => $commercialRevenue,
-                'Consumer / Retail' => $consumerRevenue,
-            ]
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: $streamRevenues,
         );
     }
 

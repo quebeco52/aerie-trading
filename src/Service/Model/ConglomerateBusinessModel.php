@@ -154,6 +154,17 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         $streams = new StreamContext($momentum, $mathUtility);
         $beta = abs((float) $stock->getBeta());
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'industrial_manufacturing' => $params[ModelParam::IndustrialConglomerateWeight],
+            'defensive_staples'        => $params[ModelParam::DefensiveStaplesWeight],
+            'financial_investments'    => $params[ModelParam::ContrarianFloatWeight],
+        ]);
+
+        $industrialWeight = $activeWeights['industrial_manufacturing'];
+        $defensiveWeight  = $activeWeights['defensive_staples'];
+        $floatWeight      = $activeWeights['financial_investments'];
+
         // Independent stream Z-scores with persistent AR(1) momentum
         $industrialZ = $streams->generateZ('industrial_manufacturing', 0.25);
         $defensiveZ  = $streams->generateZ('defensive_staples', 0.45);
@@ -195,7 +206,14 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         $defensiveRevenue  = max(0.0, $expectedRevenue * $defensiveWeight  * (1.0 + $defensiveShock));
         $floatRevenue      = max(0.0, $expectedRevenue * $floatWeight      * (1.0 + $floatShock + $contrarianSurge));
 
-        $actualRevenue = $industrialRevenue + $defensiveRevenue + $floatRevenue;
+        $streamRevenues = [
+            'industrial_manufacturing' => $industrialRevenue,
+            'defensive_staples'        => $defensiveRevenue,
+            'financial_investments'    => $floatRevenue,
+        ];
+
+        $actualRevenue = array_sum($streamRevenues);
+        $streams->recordStreamShares($streamRevenues);
 
         // Realized variable margin scaling
         $rawMargin = $realizedVariableMargin + $restructuringPenalty;
@@ -233,17 +251,8 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'industrial_manufacturing' => $industrialZ,
-                'defensive_staples'        => $defensiveZ,
-                'financial_investments'    => $floatZ,
-                'event'                    => $eventZ,
-            ],
-            streamRevenue: [
-                'industrial_manufacturing' => $industrialRevenue,
-                'defensive_staples'        => $defensiveRevenue,
-                'financial_investments'    => $floatRevenue,
-            ],
+            streamZ: $streams->getStreamZ(),
+            streamRevenue: $streamRevenues,
         );
     }
 }

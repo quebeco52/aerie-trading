@@ -121,6 +121,15 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'regulated_weather_load' => $params[ModelParam::RegulatedBaseWeight],
+            'unregulated_merchant'   => $params[ModelParam::UnregulatedMerchantWeight],
+        ]);
+
+        $regulatedWeight   = $activeWeights['regulated_weather_load'];
+        $unregulatedWeight = $activeWeights['unregulated_merchant'];
+
         // Independent stream Z-scores
         $weatherZ     = $streams->generateZ('regulated_weather_load', 0.05); // Weather is random, low persistence
         $unregulatedZ = $streams->generateZ('unregulated_merchant', 0.20); // Merchant wholesale electricity trading
@@ -131,7 +140,13 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $regulatedRevenue   = max(0.0, $expectedRevenue * $regulatedWeight * (1.0 + ($weatherZ * ($baselineVol * self::WEATHER_VARIANCE_SCALAR))));
         $unregulatedRevenue = max(0.0, $expectedRevenue * $unregulatedWeight * (1.0 + ($unregulatedZ * ($baselineVol * self::MERCHANT_VARIANCE_SCALAR))));
 
-        $actualRevenue      = $regulatedRevenue + $unregulatedRevenue;
+        $streamRevenues = [
+            'regulated_weather_load' => $regulatedRevenue,
+            'unregulated_merchant'   => $unregulatedRevenue,
+        ];
+
+        $actualRevenue = array_sum($streamRevenues);
+        $streams->recordStreamShares($streamRevenues);
 
         // --- Event Tail Risks (Grid Failure) ---
         $eventType = null;
@@ -185,10 +200,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
-            streamRevenue: [
-                'regulated_tariff' => $regulatedRevenue,
-                'unregulated_merchant' => $unregulatedRevenue,
-            ],
+            streamRevenue: $streamRevenues,
         );
     }
 
