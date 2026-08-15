@@ -376,8 +376,10 @@ class StockModelTuning
         // --- Gryphon Defense Systems (GRIP) ---
         // Tier-1 sovereign aerospace & defense contractor. Heavily cost-plus domestic defense mandates.
         'GRIP' => [
-            ModelParam::DomesticProcurementWeight->value   => 0.80,
+            ModelParam::CostPlusWeight->value             => 0.60,
+            ModelParam::FixedPriceDevWeight->value        => 0.20,
             ModelParam::ForeignMilitarySalesWeight->value => 0.20,
+            ModelParam::DomesticProcurementWeight->value  => 0.80,
         ],
 
         // --- Bird Watch Security (WATCH) ---
@@ -475,9 +477,9 @@ class StockModelTuning
         // Confectionery giant & commodities cartel. Weaponizes raw cocoa/sugar physical storage to orchestrate short squeezes against hedge funds.
         'SGRB' => [
             ModelParam::BrandedStaplesWeight->value   => 0.55,
-            ModelParam::VolumeCommodityWeight->value  => 0.15,
-            ModelParam::CommodityTradingWeight->value => 0.30, // Raw cocoa/sugar physical storage short squeezes
-            ModelParam::PricingPowerIndex->value      => 0.75,
+            ModelParam::VolumeCommodityWeight->value  => 0.10,
+            ModelParam::CommodityTradingWeight->value => 0.35, // Raw cocoa/sugar physical storage short squeezes
+            ModelParam::PricingPowerIndex->value      => 0.90,
         ],
 
         // --- Poultry Crop Operations (CROP) ---
@@ -493,8 +495,8 @@ class StockModelTuning
         // Industrial ethanol syndicate & heritage alcohol cartel. Deploys the 'Proof Desk' to corner agricultural futures and packaging supply.
         'PINT' => [
             ModelParam::BrandedStaplesWeight->value   => 0.60,
-            ModelParam::VolumeCommodityWeight->value  => 0.15,
-            ModelParam::CommodityTradingWeight->value => 0.25, // Internal 'Proof Desk' agricultural futures & silica hoarding
+            ModelParam::VolumeCommodityWeight->value  => 0.20,
+            ModelParam::CommodityTradingWeight->value => 0.20, // Internal 'Proof Desk' agricultural futures & silica hoarding
             ModelParam::PricingPowerIndex->value      => 0.85,
         ],
 
@@ -642,14 +644,13 @@ class StockModelTuning
     /**
      * Resolves a complete parameter DTO by merging baseline defaults with any company-specific tuning overrides.
      *
-     * @param array<ModelParam|string, float> $defaults
+     * @param array<string, float> $defaults
      */
     public static function resolve(string $ticker, array $defaults): ModelParameters
     {
         $normalizedDefaults = [];
         foreach ($defaults as $key => $value) {
-            $stringKey = $key instanceof ModelParam ? $key->value : (string) $key;
-            $normalizedDefaults[$stringKey] = (float) $value;
+            $normalizedDefaults[(string) $key] = (float) $value;
         }
 
         if (!isset(self::OVERRIDES[$ticker])) {

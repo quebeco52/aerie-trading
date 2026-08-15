@@ -1,26 +1,27 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Service\Archetype;
 
 class TurnaroundArchetype extends AbstractArchetype
 {
-    public function modifyFixedCostRatio(float $fixedCostRatio): float
-    {
-        // Massively slashes fixed costs (layoffs, restructuring)
-        return min(0.85, $fixedCostRatio * 0.75);
-    }
-
     public function modifyDebtToleranceLimit(float $limit, float $effectiveCostOfDebt): float
     {
-        // Inherits AbstractArchetype but forces a massive reduction to pay down debt
+        // Forces a significant reduction in debt tolerance to deleverage the company
         $adjusted = parent::modifyDebtToleranceLimit($limit, $effectiveCostOfDebt);
-        return max(0.1, $adjusted - 0.2);
+        return max(0.10, $adjusted - 0.20);
     }
 
     public function shouldResistDividendCut(bool $isLiquidityCrisis, bool $isRegulatoryDividendHalt, bool $isDeepDistress = false): bool
     {
         // A turnaround CEO will aggressively cut the dividend to preserve cash for survival
         return false;
+    }
+
+    public function modifyTargetPayoutRatio(float $targetPayout): float
+    {
+        return $targetPayout * 0.20;
     }
 
     public function modifyInvestmentProbability(float $prob, float $trueReturn): float
@@ -33,5 +34,17 @@ class TurnaroundArchetype extends AbstractArchetype
     {
         // Zero interest in M&A while turning the ship around
         return $baseAggression * 0.10;
+    }
+
+    public function modifyBuybackAggression(float $aggression): float
+    {
+        // Suspends buybacks to hoard cash and pay down debt
+        return $aggression * 0.10;
+    }
+
+    public function modifyTargetOperatingCash(float $targetCash): float
+    {
+        // Builds a cash cushion to survive distress
+        return $targetCash * 1.50;
     }
 }

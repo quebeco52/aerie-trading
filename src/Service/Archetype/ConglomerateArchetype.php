@@ -1,23 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Service\Archetype;
 
 class ConglomerateArchetype extends AbstractArchetype
 {
-    public function modifyFixedCostRatio(float $fixedCostRatio): float
-    {
-        // Highly efficient, lean headquarters structure
-        return max(0.10, $fixedCostRatio * 0.80);
-    }
-    
-
-    
-    public function modifyCreditSpread(float $spread): float
-    {
-        // The bond market trusts them completely. 30% discount on credit spreads.
-        return max(0.0010, $spread * 0.70);
-    }
-    
     public function modifyMAndASynergyRange(float $min, float $max): array
     {
         // Refuses to overpay. Shifts synergy range UP, guaranteeing strong accretion.

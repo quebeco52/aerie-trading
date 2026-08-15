@@ -20,12 +20,30 @@ use App\Service\Math\FinancialConstants;
  * - Revenue scales off trading volume, investment banking advisory, and margin loans.
  * - Evaluated on Return on Equity (ROE).
  */
-class BrokerageBusinessModel extends AssetManagementBusinessModel
+class BrokerageBusinessModel implements BusinessModelInterface
 {
-    public const LOSS_PROVISION_Z_FACTOR    = 0.005;
+    use Trait\StandardBaseModelTrait;
+    use Trait\StandardTreasuryTrait;
+    use Trait\StandardValuationTrait;
+    use Trait\StandardOperatingPhysicsTrait, Trait\StandardCapitalAllocationTrait, FinancialPhysicsTrait {
+        FinancialPhysicsTrait::getTrueReturn insteadof Trait\StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::getEvaluationCapital insteadof Trait\StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::calculateEconomicReturn insteadof Trait\StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::updateDynamicRoic insteadof Trait\StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::getMaxOrganicGrowthSpeed insteadof Trait\StandardCapitalAllocationTrait;
+    }
 
+    // --- Loss Provisions & Analyst Coverage ---
+    /** Loss provision z-factor for margin credit defaults. */
+    public const LOSS_PROVISION_Z_FACTOR    = 0.005;
+    /** Base coverage visibility for brokerages. */
     public const BASE_COVERAGE_VISIBILITY = 0.30;
+    /** Base coverage error for brokerages. */
     public const BASE_COVERAGE_ERROR = 0.10;
+
+    // --- Macro Demand Physics ---
+    /** Macroeconomic demand shift sensitivity to output gap. */
+    public const MACRO_DEMAND_SCALAR = 0.50;
 
     public function getModelThresholds(): array
     {
@@ -86,6 +104,17 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
     public const TARGET_CASH_BACKING_RATIO = 0.15;
     /** Hard minimum liquidity floor required to prevent clearinghouse margin defaults. */
     public const MIN_CASH_BACKING_RATIO    = 0.10;
+
+    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    {
+        $outputGap = $macroState->outputGapEma;
+        $beta = (float) $stock->getBeta();
+
+        return [
+            'macro_demand_shift' => $outputGap * $beta * self::MACRO_DEMAND_SCALAR,
+            'pricing_power_multiplier' => 1.0,
+        ];
+    }
 
     /**
      * Idiosyncratic shock applied to retail trading volume and institutional deal flow.
@@ -291,4 +320,10 @@ class BrokerageBusinessModel extends AssetManagementBusinessModel
         // Hard 10% liquidity floor to prevent catastrophic margin calls
         return max($operatingBase * self::MIN_CASH_BACKING_RATIO, $wholesaleDebt * self::MIN_CASH_BACKING_RATIO);
     }
+
+    public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float
+    {
+        return max($revenueFloorValue, $peFairValue);
+    }
 }
+

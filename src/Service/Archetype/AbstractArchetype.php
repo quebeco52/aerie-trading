@@ -23,14 +23,6 @@ abstract class AbstractArchetype implements ArchetypeInterface
     
     public function modifyAcquisitionAggression(float $baseAggression): float { return $baseAggression; }
     
-    public function modifyFixedCostRatio(float $fixedCostRatio): float { return $fixedCostRatio; }
-    
-    public function modifyVariableMarginTheta(float $theta): float { return $theta; }
-    
-    public function modifyIdiosyncraticVol(float $vol): float { return $vol; }
-    
-    public function modifyCreditSpread(float $spread): float { return $spread; }
-    
     public function modifyMAndASynergyRange(float $min, float $max): array { 
         return ['min' => $min, 'max' => $max]; 
     }

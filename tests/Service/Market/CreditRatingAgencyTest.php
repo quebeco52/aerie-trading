@@ -20,7 +20,7 @@ class CreditRatingAgencyTest extends TestCase
     public function testConvertDistanceToRatingBrackets(): void
     {
         $this->assertSame('AAA', $this->agency->convertDistanceToRating(4.0));
-        $this->assertSame('AAA', $this->agency->convertDistanceToRating(3.5));
+        $this->assertSame('AAA', $this->agency->convertDistanceToRating(3.5, 'AAA'));
         $this->assertSame('AA', $this->agency->convertDistanceToRating(3.2));
         $this->assertSame('A', $this->agency->convertDistanceToRating(2.7));
         $this->assertSame('BBB', $this->agency->convertDistanceToRating(2.1));

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Service\Archetype;
 
 class DealmakerArchetype extends AbstractArchetype
@@ -15,18 +17,6 @@ class DealmakerArchetype extends AbstractArchetype
         // Extremely comfortable with high leverage (LBOs). Inherits base elasticity but adds a buffer.
         $adjusted = parent::modifyDebtToleranceLimit($limit, $effectiveCostOfDebt);
         return $adjusted + 0.15;
-    }
-    
-    public function modifyCreditSpread(float $spread): float
-    {
-        // Bond market demands a premium due to risky leverage profiles
-        return $spread * 1.25;
-    }
-    
-    public function modifyIdiosyncraticVol(float $vol): float
-    {
-        // More volatile due to constant corporate restructuring and dealmaking
-        return $vol * 1.30;
     }
     
     public function modifyMAndASynergyRange(float $min, float $max): array

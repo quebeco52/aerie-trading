@@ -133,6 +133,9 @@ class CommodityBusinessModelTest extends TestCase
 
     public function testTickerParameterResolution(): void
     {
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
         $sink = new Stock();
         $sink->setTicker('SINK');
         $sink->setBeta('1.0');
@@ -147,9 +150,9 @@ class CommodityBusinessModelTest extends TestCase
 
         $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 100.0);
 
-        $sinkRes = $this->model->computeActualFinancials($sink, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $macro, $this->mathUtility);
-        $cascRes = $this->model->computeActualFinancials($casc, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $macro, $this->mathUtility);
-        $cndrRes = $this->model->computeActualFinancials($cndr, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $macro, $this->mathUtility);
+        $sinkRes = $this->model->computeActualFinancials($sink, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $macro, $mathMock);
+        $cascRes = $this->model->computeActualFinancials($casc, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $macro, $mathMock);
+        $cndrRes = $this->model->computeActualFinancials($cndr, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $macro, $mathMock);
 
         // SINK: 50% Extraction, 50% Spot, 0% Refining
         $this->assertEqualsWithDelta(50_000_000.0, $sinkRes->streamRevenue['extraction_volume'], 1.0);

@@ -141,7 +141,6 @@ class EarningsEngine
         $stock = $ctx->stock;
         $strategy = $ctx->strategy;
         $macroState = $ctx->macroState;
-        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
 
         $annualTurnover = max(0.01, $ctx->baselineRoic) / ($ctx->stableMargin * (1.0 - $ctx->corporateTaxRate));
         $assetTurnover = min(self::MAX_QUARTERLY_ASSET_TURNOVER, $annualTurnover / 4.0);
@@ -151,7 +150,6 @@ class EarningsEngine
         $pricingPowerMultiplier = $macroPhysics['pricing_power_multiplier'];
 
         $revenueVol = $ctx->baselineVol * self::IDIOSYNCRATIC_REV_VOL_RATIO;
-        $revenueVol = $archetypeStrategy->modifyIdiosyncraticVol($revenueVol);
         $z1 = $this->mathUtility->generateStandardNormal();
 
         $priceJumpIntensity = (float) ($stock->getJumpIntensity() ?? 2.00);
@@ -175,7 +173,6 @@ class EarningsEngine
         $ctx->expectedRevenue = $ctx->structuralRevenue * $ctx->capacityUtilization;
 
         $fixedCostRatio = (float) $stock->getFixedCostRatio();
-        $fixedCostRatio = $archetypeStrategy->modifyFixedCostRatio($fixedCostRatio);
         $structuralCosts = $ctx->structuralRevenue * (1.0 - $ctx->stableMargin);
         $ctx->fixedCosts = $structuralCosts * $fixedCostRatio;
 
@@ -187,7 +184,6 @@ class EarningsEngine
     {
         $stock = $ctx->stock;
         $strategy = $ctx->strategy;
-        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
 
         $kappa = $strategy->getMarginReversionSpeed();
         $outputGap = $ctx->macroState->outputGapEma;
@@ -195,7 +191,6 @@ class EarningsEngine
 
         $cyclicalMarginShift = $outputGap * $beta * self::CYCLICAL_MARGIN_SHIFT_COEFFICIENT;
         $dynamicVariableTheta = min(0.99, max(0.01, $ctx->baselineVariableMargin - $cyclicalMarginShift));
-        $dynamicVariableTheta = $archetypeStrategy->modifyVariableMarginTheta($dynamicVariableTheta);
 
         $z2 = $this->mathUtility->generateStandardNormal();
         $marginVol = $ctx->baselineVol * self::MARGIN_VOLATILITY_COEFFICIENT;
@@ -204,7 +199,6 @@ class EarningsEngine
             $currentVariableMargin = max(0.01, min(0.99, (float) $stock->getStructuralVariableMargin()));
         } else {
             $fixedCostRatio = (float) $stock->getFixedCostRatio();
-            $fixedCostRatio = $archetypeStrategy->modifyFixedCostRatio($fixedCostRatio);
             $currentVariableMargin = max(0.01, min(0.99, (1.0 - $ctx->stableMargin) * (1.0 - $fixedCostRatio)));
         }
 

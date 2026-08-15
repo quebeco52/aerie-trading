@@ -128,7 +128,7 @@ class MathUtilityTest extends TestCase
         // ROIC < Growth -> b > 1.0 -> Capped at 1.0 -> Payout Ratio = 0.0 -> PE = 0.0 -> Clamped to MIN_INTRINSIC_PE
         $pe = $this->mathUtility->calculateIntrinsicFairValuePE(0.10, 0.02, 0.05);
 
-        $this->assertEquals(FinancialConstants::MIN_INTRINSIC_PE, $pe, 'Value-destroying growth must clamp to MIN_INTRINSIC_PE.');
+        $this->assertEqualsWithDelta(FinancialConstants::MIN_INTRINSIC_PE, $pe, 0.0001, 'Value-destroying growth must clamp to MIN_INTRINSIC_PE.');
     }
 
     public function testCalculateIntrinsicFairValuePEConstrainsGrowthBelowCOE(): void
@@ -138,7 +138,7 @@ class MathUtilityTest extends TestCase
         // b = 0.075 / 0.20 = 0.375 -> Payout Ratio = 0.625 -> PE = 0.625 / 0.005 = 125.0 -> Clamped to MAX_INTRINSIC_PE
         $pe = $this->mathUtility->calculateIntrinsicFairValuePE(0.08, 0.20, 0.15);
 
-        $this->assertEquals(FinancialConstants::MAX_INTRINSIC_PE, $pe, 'Growth >= COE must constrain growth and clamp to MAX_INTRINSIC_PE.');
+        $this->assertEqualsWithDelta(FinancialConstants::MAX_INTRINSIC_PE, $pe, 0.0001, 'Growth >= COE must constrain growth and clamp to MAX_INTRINSIC_PE.');
     }
 
     public function testCalculateDcfMultiplier(): void

@@ -178,13 +178,13 @@ class StockModelTuningTest extends TestCase
 
         // Sugarbird Confectionery (SGRB)
         $this->assertSame(0.55, StockModelTuning::get('SGRB', ModelParam::BrandedStaplesWeight, 0.0));
-        $this->assertSame(0.15, StockModelTuning::get('SGRB', ModelParam::VolumeCommodityWeight, 0.0));
-        $this->assertSame(0.30, StockModelTuning::get('SGRB', ModelParam::CommodityTradingWeight, 0.0));
+        $this->assertSame(0.10, StockModelTuning::get('SGRB', ModelParam::VolumeCommodityWeight, 0.0));
+        $this->assertSame(0.35, StockModelTuning::get('SGRB', ModelParam::CommodityTradingWeight, 0.0));
 
         // Pintail Beverage Group (PINT)
         $this->assertSame(0.60, StockModelTuning::get('PINT', ModelParam::BrandedStaplesWeight, 0.0));
-        $this->assertSame(0.15, StockModelTuning::get('PINT', ModelParam::VolumeCommodityWeight, 0.0));
-        $this->assertSame(0.25, StockModelTuning::get('PINT', ModelParam::CommodityTradingWeight, 0.0));
+        $this->assertSame(0.20, StockModelTuning::get('PINT', ModelParam::VolumeCommodityWeight, 0.0));
+        $this->assertSame(0.20, StockModelTuning::get('PINT', ModelParam::CommodityTradingWeight, 0.0));
 
         // Canvasback Logistics (CANV)
         $this->assertSame(0.55, StockModelTuning::get('CANV', ModelParam::DedicatedFleetWeight, 0.0));

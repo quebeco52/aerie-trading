@@ -235,18 +235,4 @@ trait FinancialPhysicsTrait
         $roeBump = $baselineRoe * ($divestedFraction * $bumpMultiplier);
         $seller->setBaselineRoe((string) ($baselineRoe + $roeBump));
     }
-
-    public function getMaArchetypeStrategy(string $archetype): array
-    {
-        if ($archetype === 'empire_builder') {
-            return ['prob' => 0.050, 'spend' => 0.80, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => true, 'use_stock' => false];
-        }
-        if ($archetype === 'mega_hoarder') {
-            return ['prob' => 0.015, 'spend' => 0.60, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => false, 'use_stock' => false];
-        }
-        if ($archetype === 'hoarder') {
-            return ['prob' => 0.020, 'spend' => 0.40, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => false, 'use_stock' => false];
-        }
-        return ['prob' => 0.035, 'spend' => 0.40, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => true, 'use_stock' => false];
-    }
 }

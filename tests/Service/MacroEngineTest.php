@@ -60,15 +60,11 @@ class MacroEngineTest extends TestCase
 
         $result = $this->engine->updateMacroState(1.0);
 
-        $this->assertIsArray($result);
-        $this->assertArrayHasKey('inflation', $result);
-        $this->assertArrayHasKey('output_gap', $result);
-        $this->assertArrayHasKey('policy_rate', $result);
-        $this->assertArrayHasKey('yield_10y', $result);
+        $this->assertInstanceOf(\App\DTO\MacroStateDTO::class, $result);
         
         // Starting in a 0.02 boom pulls the initial target rate up, raising the policy rate from 0.02 to ~0.04
-        $this->assertEqualsWithDelta(0.04, $result['policy_rate'], 0.01);
-        $this->assertEqualsWithDelta(0.02, $result['inflation'], 0.01);
+        $this->assertEqualsWithDelta(0.04, $result->policyRate, 0.01);
+        $this->assertEqualsWithDelta(0.02, $result->inflation, 0.01);
     }
 
     public function testUpdateMacroStateWithExistingStateAndRecessionShock()
@@ -94,13 +90,13 @@ class MacroEngineTest extends TestCase
 
         $result = $this->engine->updateMacroState(0.25); // Advance by 1 quarter
 
-        $this->assertIsArray($result);
+        $this->assertInstanceOf(\App\DTO\MacroStateDTO::class, $result);
         
         // Output gap should drop below 0 due to the negative shock
-        $this->assertLessThan(0.0, $result['output_gap'], 'Recession shock should drive output gap negative.');
+        $this->assertLessThan(0.0, $result->outputGap, 'Recession shock should drive output gap negative.');
         
         // Because output gap is negative, ERP should increase
-        $this->assertGreaterThan(MacroEngine::BASE_EQUITY_RISK_PREMIUM, $result['equity_risk_premium'], 'ERP should rise during a recession.');
+        $this->assertGreaterThan(MacroEngine::BASE_EQUITY_RISK_PREMIUM, $result->equityRiskPremium, 'ERP should rise during a recession.');
     }
     
     public function testUpdateMacroStateDuringSevereInflationBoom()
@@ -125,15 +121,15 @@ class MacroEngineTest extends TestCase
         // Advance by a smaller time step (0.05) so the economy has time to hike taxes
         $result = $this->engine->updateMacroState(0.05);
 
-        $this->assertIsArray($result);
+        $this->assertInstanceOf(\App\DTO\MacroStateDTO::class, $result);
         
         // Central bank should aggressively hike target rates
-        $this->assertGreaterThan(0.05, $result['target_rate'], 'Central Bank should aggressively hike rates during an inflationary boom.');
+        $this->assertGreaterThan(0.05, $result->targetRate, 'Central Bank should aggressively hike rates during an inflationary boom.');
         
         // Corporate tax rate should increase to cool the economy
-        $this->assertGreaterThan(MacroEngine::BASE_CORPORATE_TAX_RATE, $result['corporate_tax_rate'], 'Fiscal policy should hike taxes to cool an overheated economy.');
+        $this->assertGreaterThan(MacroEngine::BASE_CORPORATE_TAX_RATE, $result->corporateTaxRate, 'Fiscal policy should hike taxes to cool an overheated economy.');
         
         // ERP should drop due to complacency in a boom
-        $this->assertLessThan(MacroEngine::BASE_EQUITY_RISK_PREMIUM, $result['equity_risk_premium'], 'ERP should drop during an economic boom due to market complacency.');
+        $this->assertLessThan(MacroEngine::BASE_EQUITY_RISK_PREMIUM, $result->equityRiskPremium, 'ERP should drop during an economic boom due to market complacency.');
     }
 }

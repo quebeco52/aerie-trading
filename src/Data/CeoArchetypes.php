@@ -112,20 +112,17 @@ class CeoArchetypes
         };
     }
 
-    /**
-     * Tooltip descriptions of how this archetype manages capital and operations.
-     */
     public const DESCRIPTIONS = [
-        self::OPPORTUNIST => 'The Opportunist follows standard data-driven capital allocation, balancing growth with shareholder returns based on market conditions.',
-        self::EMPIRE_BUILDER => 'The Empire Builder ignores market saturation and aggressively pursues organic CapEx and massive Leveraged Buyouts (M&A) at any cost.',
-        self::CANNIBAL => 'The Cannibal is obsessed with inflating EPS. They ignore valuation caps and mechanically execute massive share buybacks down to their last dollar.',
-        self::YIELD_KING => 'The Yield King treats the dividend as sacred. They force a massive minimum payout ratio and refuse to cut the dividend unless facing imminent bankruptcy.',
-        self::CONSERVATIVE => 'The Conservative is paranoid about debt. They hoard massive cash reserves and trigger aggressive deleveraging sweeps to pay down debt early.',
-        self::VISIONARY => 'The Tech Visionary pursues massive moonshots, resulting in extreme idiosyncratic volatility, bloated fixed costs, but massive growth potential. They hate dividends.',
-        self::CONGLOMERATE => 'The Conglomerate Builder hoards cash efficiently, refuses to overpay for M&A, runs extreme lean operations, and is highly trusted by bond markets.',
-        self::DEALMAKER => 'The Dealmaker views the company as a trading desk. They execute LBOs at high frequencies with massive leverage tolerance.',
-        self::TURNAROUND => 'The Turnaround Specialist focuses on saving distressed companies by slashing fixed costs, aggressively deleveraging, and readily cutting dividends.',
-        self::COST_CUTTER => 'The Cost Cutter is obsessed with operational efficiency, hoarding cash, and executing massive share repurchases while avoiding risky M&A.',
+        self::OPPORTUNIST => 'The Opportunist follows standard data-driven capital allocation, balancing organic growth, dividends, and buybacks based on hurdle rates.',
+        self::EMPIRE_BUILDER => 'The Empire Builder prioritizes asset growth and massive Leveraged Buyouts (M&A) over shareholder returns, operating with high leverage tolerance.',
+        self::CANNIBAL => 'The Cannibal is obsessed with per-share value accretion. They aggressively channel excess free cash flow into share buybacks rather than dividends or large CapEx.',
+        self::YIELD_KING => 'The Yield King treats the dividend as sacred, forcing high payout ratios and defending dividend stability even during economic downturns.',
+        self::CONSERVATIVE => 'The Conservative values balance sheet fortitude above all. They maintain heavy cash buffers, avoid excessive leverage, and sweep cash to pay down debt early.',
+        self::VISIONARY => 'The Visionary reinvests 100% of capital into organic growth and CapEx, completely eschewing dividends and share repurchases.',
+        self::CONGLOMERATE => 'The Conglomerate Builder maintains disciplined capital allocation, holding substantial cash reserves and only executing highly accretive, selective M&A.',
+        self::DEALMAKER => 'The Dealmaker uses the corporate balance sheet for high-frequency M&A and LBO transactions, operating with expanded leverage capacity.',
+        self::TURNAROUND => 'The Turnaround Specialist focuses on financial survival: aggressively cutting dividends, pausing discretionary CapEx, and directing all liquidity to deleveraging.',
+        self::COST_CUTTER => 'The Cost Cutter maintains strict capital discipline, halting speculative M&A, limiting CapEx, and returning surplus cash via debt reduction and buybacks.',
     ];
 
     /**

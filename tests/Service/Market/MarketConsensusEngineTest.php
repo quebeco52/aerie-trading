@@ -7,6 +7,7 @@ namespace App\Tests\Service\Market;
 use App\DTO\ActualFinancialsDTO;
 use App\DTO\ConsensusDTO;
 use App\DTO\SectorCoverageProfile;
+use App\Entity\Stock;
 use App\Service\Market\MarketConsensusEngine;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -46,7 +47,7 @@ class MarketConsensusEngineTest extends TestCase
             minVisibility: 0.20
         );
 
-        $consensus = $this->engine->generateConsensus($actuals, $coverage, 1000.0, $this->mathUtilityMock);
+        $consensus = $this->engine->generateConsensus($actuals, $coverage, 1000.0, $this->mathUtilityMock, new Stock());
 
         $this->assertInstanceOf(ConsensusDTO::class, $consensus);
         $this->assertSame(0.50, $consensus->dynamicVisibility);
@@ -77,7 +78,7 @@ class MarketConsensusEngineTest extends TestCase
             minVisibility: 0.25
         );
 
-        $consensus = $this->engine->generateConsensus($actuals, $coverage, 1000.0, $this->mathUtilityMock);
+        $consensus = $this->engine->generateConsensus($actuals, $coverage, 1000.0, $this->mathUtilityMock, new Stock());
 
         // baseVisibility (0.50) - 0.50 = 0.0, clamped to minVisibility (0.25)
         $this->assertSame(0.25, $consensus->dynamicVisibility);
@@ -105,7 +106,7 @@ class MarketConsensusEngineTest extends TestCase
             minVisibility: 0.20
         );
 
-        $consensus = $this->engine->generateConsensus($actuals, $coverage, 1000.0, $this->mathUtilityMock);
+        $consensus = $this->engine->generateConsensus($actuals, $coverage, 1000.0, $this->mathUtilityMock, new Stock());
 
         // baseVisibility (0.80) + 0.50 = 1.30, clamped to 1.0
         $this->assertSame(1.0, $consensus->dynamicVisibility);
@@ -137,7 +138,7 @@ class MarketConsensusEngineTest extends TestCase
             eventMinVisibility: 0.50
         );
 
-        $consensus = $this->engine->generateConsensus($actuals, $coverage, 1000.0, $this->mathUtilityMock);
+        $consensus = $this->engine->generateConsensus($actuals, $coverage, 1000.0, $this->mathUtilityMock, new Stock());
 
         $this->assertSame(0.90, $consensus->dynamicVisibility);
         // 1000 * (1 + 1.0 * 0.90) = 1900.0
@@ -168,7 +169,7 @@ class MarketConsensusEngineTest extends TestCase
             eventMinVisibility: 0.50
         );
 
-        $consensus = $this->engine->generateConsensus($actuals, $coverage, 1000.0, $this->mathUtilityMock);
+        $consensus = $this->engine->generateConsensus($actuals, $coverage, 1000.0, $this->mathUtilityMock, new Stock());
 
         $this->assertSame(0.10, $consensus->dynamicVisibility);
         // 1000 * (1 + 0.1 * 0.10) = 1010.0

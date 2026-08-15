@@ -67,7 +67,7 @@ class DebtEngineTest extends TestCase
                 $this->equalTo(-3.0)
             );
 
-        $this->engine->calculateQuarterlyInterestAndTurnover($stock, $macroState, false, 'General');
+        $this->engine->calculateInterestExpense($stock, $macroState, true);
 
         $this->assertSame('BB', $stock->getCreditRating());
     }
@@ -102,7 +102,7 @@ class DebtEngineTest extends TestCase
                 $this->equalTo(2.0)
             );
 
-        $this->engine->calculateQuarterlyInterestAndTurnover($stock, $macroState, false, 'General');
+        $this->engine->calculateInterestExpense($stock, $macroState, true);
 
         $this->assertSame('A', $stock->getCreditRating());
     }

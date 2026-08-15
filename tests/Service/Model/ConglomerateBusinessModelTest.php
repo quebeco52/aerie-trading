@@ -97,6 +97,9 @@ class ConglomerateBusinessModelTest extends TestCase
 
     public function testTrivAndBrkwParameterResolution(): void
     {
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
         $triv = new Stock();
         $triv->setTicker('TRIV');
         $triv->setBeta('0.6');
@@ -107,8 +110,8 @@ class ConglomerateBusinessModelTest extends TestCase
 
         $macro = new MacroStateDTO(outputGapEma: 0.0, macroCreditSpread: 0.015);
 
-        $trivRes = $this->model->computeActualFinancials($triv, 100_000_000.0, 0.20, 10_000_000.0, 0.0, $macro, $this->mathUtility);
-        $brkwRes = $this->model->computeActualFinancials($brkw, 100_000_000.0, 0.20, 10_000_000.0, 0.0, $macro, $this->mathUtility);
+        $trivRes = $this->model->computeActualFinancials($triv, 100_000_000.0, 0.20, 10_000_000.0, 0.0, $macro, $mathMock);
+        $brkwRes = $this->model->computeActualFinancials($brkw, 100_000_000.0, 0.20, 10_000_000.0, 0.0, $macro, $mathMock);
 
         // TRIV: 60% Industrial, 30% Defensive, 10% Float
         $this->assertEqualsWithDelta(60_000_000.0, $trivRes->streamRevenue['industrial_manufacturing'], 1.0);

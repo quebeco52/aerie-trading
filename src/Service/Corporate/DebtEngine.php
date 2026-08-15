@@ -92,9 +92,6 @@ class DebtEngine
         // Floored at 15 bps (0.0015) so ultra-safe Titans don't get negative spreads during massive economic booms.
         $baselineCreditSpread = max(0.0015, $rawCreditSpread + $macroCreditAdjustment + $volatilityPremium);
 
-        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
-        $baselineCreditSpread = $archetypeStrategy->modifyCreditSpread($baselineCreditSpread);
-
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';

@@ -101,4 +101,35 @@ class AutoManufacturerBusinessModelTest extends TestCase
             $boomResult->streamRevenue['apex_luxury']
         );
     }
+
+    public function testLaborStrikeObservableShockBounded(): void
+    {
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(-3.0);
+
+        $stock = new Stock();
+        $stock->setTicker('GEN_AUTO');
+        $stock->setBeta('1.0');
+        $stock->setEarningsMomentumZ([
+            'event' => -3.0,
+        ]);
+
+        $macro = new MacroStateDTO();
+
+        $result = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.20,
+            fixedCosts: 25_000_000.0,
+            baselineVol: 0.15,
+            macroState: $macro,
+            mathUtility: $mathMock
+        );
+
+        $this->assertSame(\App\Service\Event\ShockEvent::LABOR_STRIKE, $result->eventType);
+        // Strike reduces mass-market sales by 20% (on 60% of revenue -> -12% overall hit).
+        // Observable shock is properly scaled between -0.25 and 0.0, rather than blowing up to -2.0 (-200%).
+        $this->assertGreaterThan(-0.25, $result->observableShockZ);
+        $this->assertLessThan(0.0, $result->observableShockZ);
+    }
 }

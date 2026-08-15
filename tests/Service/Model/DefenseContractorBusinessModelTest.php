@@ -6,36 +6,31 @@ namespace App\Tests\Service\Model;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
 use App\Service\Model\DefenseContractorBusinessModel;
 use PHPUnit\Framework\TestCase;
 
 class DefenseContractorBusinessModelTest extends TestCase
 {
-    public function testProgramExecutionElasticityImprovesVariableMargin(): void
-    {
-        $model = new DefenseContractorBusinessModel();
-        $stock = new Stock();
-        $stock->setTicker('GRIP');
-        $stock->setBeta('0.7');
-
-        $mathUtilityMock = $this->createMock(MathUtility::class);
-        // domesticZ = 2.0 (strong sovereign execution), fmsZ = 0.0, eventZ = 0.0
-        $mathUtilityMock->method('generatePersistentZ')
-            ->willReturnOnConsecutiveCalls(2.0, 0.0, 0.0);
-
-        $macroState = new MacroStateDTO(
+    private function createMacroState(
+        float $inflation = 0.02,
+        float $macroCreditSpread = 0.015,
+        float $energyPriceShock = 0.0,
+        float $nominalGdpIndex = 1.0
+    ): MacroStateDTO {
+        return new MacroStateDTO(
             outputGap: 0.0,
             outputGapEma: 0.0,
             unemploymentRate: 0.04,
             unemploymentRateEma: 0.04,
             energyPriceIndex: 100.0,
             energyPriceIndexEma: 100.0,
-            energyPriceShock: 0.0,
+            energyPriceShock: $energyPriceShock,
             consumerSentimentIndex: 100.0,
             consumerSentimentIndexEma: 100.0,
-            inflation: 0.02,
-            inflationEma: 0.02,
+            inflation: $inflation,
+            inflationEma: $inflation,
             policyRate: 0.04,
             policyRateEma: 0.04,
             targetRate: 0.04,
@@ -52,8 +47,8 @@ class DefenseContractorBusinessModelTest extends TestCase
             marketZ: 0.0,
             corporateTaxRate: 0.21,
             equityRiskPremium: 0.05,
-            macroCreditSpread: 0.015,
-            macroCreditSpreadEma: 0.015,
+            macroCreditSpread: $macroCreditSpread,
+            macroCreditSpreadEma: $macroCreditSpread,
             qeActive: false,
             qeIntensity: 0.0,
             inversionDuration: 0.0,
@@ -61,9 +56,24 @@ class DefenseContractorBusinessModelTest extends TestCase
             nsSlope: 0.0,
             nsSlopeEma: 0.0,
             nsCurvature: 0.0,
-            potentialGdpIndex: 1.0,
-            nominalGdpIndex: 1.0,
+            potentialGdpIndex: $nominalGdpIndex,
+            nominalGdpIndex: $nominalGdpIndex,
         );
+    }
+
+    public function testProgramExecutionElasticityImprovesVariableMargin(): void
+    {
+        $model = new DefenseContractorBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('GRIP');
+        $stock->setBeta('0.7');
+
+        $mathUtilityMock = $this->createStub(MathUtility::class);
+        // costPlusZ = 2.0 (strong sovereign execution), fixedPriceZ = 0.0, fmsZ = 0.0, eventZ = 0.0
+        $mathUtilityMock->method('generatePersistentZ')
+            ->willReturnOnConsecutiveCalls(2.0, 0.0, 0.0, 0.0);
+
+        $macroState = $this->createMacroState();
 
         $result = $model->computeActualFinancials(
             $stock,
@@ -86,52 +96,12 @@ class DefenseContractorBusinessModelTest extends TestCase
         $stock->setTicker('GRIP');
         $stock->setBeta('0.35');
 
-        $mathUtilityMock = $this->createMock(MathUtility::class);
-        // Zero Z-shocks
+        $mathUtilityMock = $this->createStub(MathUtility::class);
         $mathUtilityMock->method('generatePersistentZ')
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0);
+            ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, 0.0);
 
         // Simulation has run for hours: nominal GDP index is 3.5 (high accumulated growth)
-        $macroState = new MacroStateDTO(
-            outputGap: 0.0,
-            outputGapEma: 0.0,
-            unemploymentRate: 0.04,
-            unemploymentRateEma: 0.04,
-            energyPriceIndex: 100.0,
-            energyPriceIndexEma: 100.0,
-            energyPriceShock: 0.0,
-            consumerSentimentIndex: 100.0,
-            consumerSentimentIndexEma: 100.0,
-            inflation: 0.02,
-            inflationEma: 0.02, // Target inflation -> costPlusBonus = 0.0
-            policyRate: 0.04,
-            policyRateEma: 0.04,
-            targetRate: 0.04,
-            yield2y: 0.04,
-            yield2yEma: 0.04,
-            yield5y: 0.04,
-            yield5yEma: 0.04,
-            yield10y: 0.04,
-            yield10yEma: 0.04,
-            yield30y: 0.04,
-            yield30yEma: 0.04,
-            marketVolatility: 0.15,
-            marketVolatilityEma: 0.15,
-            marketZ: 0.0,
-            corporateTaxRate: 0.21,
-            equityRiskPremium: 0.05,
-            macroCreditSpread: 0.015,
-            macroCreditSpreadEma: 0.015,
-            qeActive: false,
-            qeIntensity: 0.0,
-            inversionDuration: 0.0,
-            nsLevel: 0.04,
-            nsSlope: 0.0,
-            nsSlopeEma: 0.0,
-            nsCurvature: 0.0,
-            potentialGdpIndex: 3.5,
-            nominalGdpIndex: 3.5, // 3.5x cumulative GDP
-        );
+        $macroState = $this->createMacroState(inflation: 0.02, nominalGdpIndex: 3.5);
 
         $expectedRevenue = 10_000.0;
         $result = $model->computeActualFinancials(
@@ -144,7 +114,7 @@ class DefenseContractorBusinessModelTest extends TestCase
             $mathUtilityMock
         );
 
-        // With zero Z-scores and 2% inflation, actual revenue should equal expected revenue exactly ($10,000)
+        // With zero Z-scores and target inflation, actual revenue should equal expected revenue exactly ($10,000)
         $this->assertEqualsWithDelta($expectedRevenue, $result->actualRevenue, 0.01);
         $this->assertEqualsWithDelta(0.0, $result->observableShockZ, 0.0001);
     }
@@ -155,51 +125,12 @@ class DefenseContractorBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('GRIP');
 
-        $mathUtilityMock = $this->createMock(MathUtility::class);
+        $mathUtilityMock = $this->createStub(MathUtility::class);
         $mathUtilityMock->method('generatePersistentZ')
-            ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0);
+            ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, 0.0);
 
         // Inflation running at 4% (2% in excess of 2% target)
-        $macroState = new MacroStateDTO(
-            outputGap: 0.0,
-            outputGapEma: 0.0,
-            unemploymentRate: 0.04,
-            unemploymentRateEma: 0.04,
-            energyPriceIndex: 100.0,
-            energyPriceIndexEma: 100.0,
-            energyPriceShock: 0.0,
-            consumerSentimentIndex: 100.0,
-            consumerSentimentIndexEma: 100.0,
-            inflation: 0.04,
-            inflationEma: 0.04,
-            policyRate: 0.04,
-            policyRateEma: 0.04,
-            targetRate: 0.04,
-            yield2y: 0.04,
-            yield2yEma: 0.04,
-            yield5y: 0.04,
-            yield5yEma: 0.04,
-            yield10y: 0.04,
-            yield10yEma: 0.04,
-            yield30y: 0.04,
-            yield30yEma: 0.04,
-            marketVolatility: 0.15,
-            marketVolatilityEma: 0.15,
-            marketZ: 0.0,
-            corporateTaxRate: 0.21,
-            equityRiskPremium: 0.05,
-            macroCreditSpread: 0.015,
-            macroCreditSpreadEma: 0.015,
-            qeActive: false,
-            qeIntensity: 0.0,
-            inversionDuration: 0.0,
-            nsLevel: 0.04,
-            nsSlope: 0.0,
-            nsSlopeEma: 0.0,
-            nsCurvature: 0.0,
-            potentialGdpIndex: 1.0,
-            nominalGdpIndex: 1.0,
-        );
+        $macroState = $this->createMacroState(inflation: 0.04);
 
         $expectedRevenue = 10_000.0;
         $result = $model->computeActualFinancials(
@@ -213,10 +144,172 @@ class DefenseContractorBusinessModelTest extends TestCase
         );
 
         // Excess inflation (0.04 - 0.02) = 0.02 * 1.50 = 0.03 costPlusBonus
-        // Domestic procurement weight is 0.80 for GRIP (from StockModelTuning)
-        // Expected bonus = 0.03 * 0.80 = 0.024 (+2.4% -> $10,240)
-        $this->assertEqualsWithDelta(10_240.0, $result->actualRevenue, 1.0);
-        $this->assertEqualsWithDelta(0.024, $result->observableShockZ, 0.001);
+        // Cost-Plus weight is 0.60 for GRIP (from StockModelTuning)
+        // Expected bonus = 0.03 * 0.60 = 0.018 (+1.8% -> $10,180)
+        $this->assertEqualsWithDelta(10_180.0, $result->actualRevenue, 1.0);
+        $this->assertEqualsWithDelta(0.018, $result->observableShockZ, 0.001);
+    }
+
+    public function testSovereignFiscalStressAndContinuingResolutionDrag(): void
+    {
+        $model = new DefenseContractorBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('GRIP');
+
+        $mathUtilityMock = $this->createStub(MathUtility::class);
+        $mathUtilityMock->method('generatePersistentZ')
+            ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, 0.0);
+
+        // Sovereign credit spread elevated to 5.0% (2.0% above 3.0% threshold)
+        $macroState = $this->createMacroState(macroCreditSpread: 0.05);
+
+        $expectedRevenue = 10_000.0;
+        $result = $model->computeActualFinancials(
+            $stock,
+            $expectedRevenue,
+            0.30,
+            3000.0,
+            0.15,
+            $macroState,
+            $mathUtilityMock
+        );
+
+        // CR drag = (0.05 - 0.03) * 2.50 = 0.05 drag on cost-plus lot multiplier (multiplier = 0.95)
+        // Cost-plus revenue = 10_000 * 0.60 * 0.95 = 5,700 (down from 6,000)
+        // Total revenue = 5,700 + 2,000 + 2,000 = 9,700
+        $this->assertEqualsWithDelta(9_700.0, $result->actualRevenue, 1.0);
+    }
+
+    public function testFixedPriceForwardLossAndMaterialSqueeze(): void
+    {
+        $model = new DefenseContractorBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('GRIP');
+
+        $mathUtilityMock = $this->createStub(MathUtility::class);
+        // fixedPriceZ = -2.0 (< -1.50 FORWARD_LOSS_Z_SCORE)
+        $mathUtilityMock->method('generatePersistentZ')
+            ->willReturnOnConsecutiveCalls(0.0, -2.0, 0.0, 0.0);
+
+        // Energy/commodity shock of 0.10
+        $macroState = $this->createMacroState(energyPriceShock: 0.10);
+
+        $result = $model->computeActualFinancials(
+            $stock,
+            10_000.0,
+            0.30,
+            3000.0,
+            0.15,
+            $macroState,
+            $mathUtilityMock
+        );
+
+        $this->assertSame(ShockEvent::PROJECT_DELAY, $result->eventType);
+        // Variable margin should absorb FORWARD_LOSS_PENALTY (0.08) + energy shock (0.10 * 0.40 = 0.04) = +0.12
+        // Clamped margin = 0.30 + 0.12 = 0.42
+        $this->assertEqualsWithDelta(0.42, $result->clampedMargin, 0.001);
+    }
+
+    public function testGeopoliticalConflictSurge(): void
+    {
+        $model = new DefenseContractorBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('GRIP');
+
+        $mathUtilityMock = $this->createStub(MathUtility::class);
+        // fmsZ = 2.5 (> 2.0 GEOPOLITICAL_CONFLICT_Z)
+        $mathUtilityMock->method('generatePersistentZ')
+            ->willReturnOnConsecutiveCalls(0.0, 0.0, 2.5, 0.0);
+
+        $macroState = $this->createMacroState();
+
+        $result = $model->computeActualFinancials(
+            $stock,
+            10_000.0,
+            0.30,
+            3000.0,
+            0.15,
+            $macroState,
+            $mathUtilityMock
+        );
+
+        $this->assertSame(ShockEvent::GEOPOLITICAL_CONFLICT, $result->eventType);
+        // FMS revenue boosted by 1.50 multiplier + wartime supply chain drag on variable margin
+        $this->assertGreaterThan(2000.0, $result->streamRevenue['foreign_military_sales']);
+        $this->assertEqualsWithDelta(0.30 + DefenseContractorBusinessModel::WARTIME_SUPPLY_CHAIN_DRAG, $result->clampedMargin, 0.001);
+    }
+
+    public function testCongressionalExportBan(): void
+    {
+        $model = new DefenseContractorBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('GRIP');
+
+        $mathUtilityMock = $this->createStub(MathUtility::class);
+        // eventZ = -2.2 (< -2.0 CONGRESSIONAL_EXPORT_BAN_Z)
+        $mathUtilityMock->method('generatePersistentZ')
+            ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, -2.2);
+
+        $macroState = $this->createMacroState();
+
+        $result = $model->computeActualFinancials(
+            $stock,
+            10_000.0,
+            0.30,
+            3000.0,
+            0.15,
+            $macroState,
+            $mathUtilityMock
+        );
+
+        $this->assertSame(ShockEvent::GEOPOLITICAL_EXPORT_BAN, $result->eventType);
+        // FMS revenue halved (0.50 multiplier) -> 2000 * 0.50 = 1000
+        $this->assertEqualsWithDelta(1000.0, $result->streamRevenue['foreign_military_sales'], 1.0);
+    }
+
+    public function testFlagshipWeaponPlatformFailureAndMegaContractWin(): void
+    {
+        $model = new DefenseContractorBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('GRIP');
+
+        // Flagship failure (eventZ = -2.8 < -2.5)
+        $mathMock1 = $this->createStub(MathUtility::class);
+        $mathMock1->method('generatePersistentZ')
+            ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, -2.8);
+
+        $macroState = $this->createMacroState();
+        $resFailure = $model->computeActualFinancials($stock, 10_000.0, 0.30, 3000.0, 0.15, $macroState, $mathMock1);
+        $this->assertSame(ShockEvent::DEFENSE_CONTRACT_LOSS, $resFailure->eventType);
+        $this->assertEqualsWithDelta(0.30 + DefenseContractorBusinessModel::FLAGSHIP_FAILURE_PENALTY, $resFailure->clampedMargin, 0.001);
+
+        // Mega contract win (eventZ = 2.8 > 2.5)
+        $mathMock2 = $this->createStub(MathUtility::class);
+        $mathMock2->method('generatePersistentZ')
+            ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, 2.8);
+
+        $resWin = $model->computeActualFinancials($stock, 10_000.0, 0.30, 3000.0, 0.15, $macroState, $mathMock2);
+        $this->assertSame(ShockEvent::DEFENSE_CONTRACT_WIN, $resWin->eventType);
+        $this->assertGreaterThan(6000.0, $resWin->streamRevenue['cost_plus_procurement']);
+    }
+
+    public function testProgressPaymentWithholdingExpandsWorkingCapital(): void
+    {
+        $model = new DefenseContractorBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('GRIP');
+
+        // Normal operations -> BASE_NWC_INTENSITY (0.10)
+        $stock->setEarningsMomentumZ(['fixed_price_development' => 0.0, 'event' => 0.0]);
+        $this->assertEqualsWithDelta(DefenseContractorBusinessModel::BASE_NWC_INTENSITY, $model->getWorkingCapitalIntensity($stock), 0.001);
+
+        // Fixed-price development distress -> WITHHOLDING_NWC_INTENSITY (0.18)
+        $stock->setEarningsMomentumZ(['fixed_price_development' => -1.8, 'event' => 0.0]);
+        $this->assertEqualsWithDelta(DefenseContractorBusinessModel::WITHHOLDING_NWC_INTENSITY, $model->getWorkingCapitalIntensity($stock), 0.001);
+
+        // Flagship defect / fleet grounding -> WITHHOLDING_NWC_INTENSITY (0.18)
+        $stock->setEarningsMomentumZ(['fixed_price_development' => 0.0, 'event' => -2.6]);
+        $this->assertEqualsWithDelta(DefenseContractorBusinessModel::WITHHOLDING_NWC_INTENSITY, $model->getWorkingCapitalIntensity($stock), 0.001);
     }
 
     public function testClassifiedToolingAndNextGenPlatformReinvestment(): void
@@ -238,4 +331,36 @@ class DefenseContractorBusinessModelTest extends TestCase
         $this->assertGreaterThan(0.14, $expanded);
         $this->assertLessThanOrEqual(DefenseContractorBusinessModel::MAX_OPERATING_MARGIN_CEILING, $expanded);
     }
+
+    public function testRoicSmoothingUnderLumpyContractAwards(): void
+    {
+        $model = new DefenseContractorBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('GRIP');
+        $stock->setRoicTtm('0.15');
+
+        // Big positive quarter (NOPAT = 50 on 500 invested capital -> 10% quarterly -> 40% annualized)
+        $return = $model->updateDynamicRoic($stock, 50.0, 500.0, 63.29, 0.21, 0.08, 0.10);
+        $this->assertEqualsWithDelta(0.40, $return, 0.01);
+
+        // TTM ROIC should be smoothed with 0.20 weight: 0.15 * 0.80 + 0.40 * 0.20 = 0.20 (before reversion pull)
+        $newTtm = (float) $stock->getRoicTtm();
+        $this->assertGreaterThan(0.15, $newTtm);
+        $this->assertLessThan(0.40, $newTtm);
+    }
+
+    public function testMacroPhysicsRecessionImmunity(): void
+    {
+        $model = new DefenseContractorBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('GRIP');
+        $stock->setBeta('0.7');
+
+        $macroState = $this->createMacroState();
+        $physics = $model->getMacroPhysics($stock, $macroState);
+
+        $this->assertEqualsWithDelta(0.0, $physics['macro_demand_shift'], 0.001);
+        $this->assertEqualsWithDelta(1.0, $physics['pricing_power_multiplier'], 0.001);
+    }
 }
+

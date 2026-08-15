@@ -48,26 +48,6 @@ class BoardGovernanceDecorator implements ArchetypeInterface
         return 0.0; // Board halts M&A
     }
 
-    public function modifyFixedCostRatio(float $fixedCostRatio): float
-    {
-        return $this->baseStrategy->modifyFixedCostRatio($fixedCostRatio) * 0.90; // Board mandates 10% cost-cutting (layoffs)
-    }
-
-    public function modifyVariableMarginTheta(float $theta): float
-    {
-        return $this->baseStrategy->modifyVariableMarginTheta($theta);
-    }
-
-    public function modifyIdiosyncraticVol(float $vol): float
-    {
-        return $this->baseStrategy->modifyIdiosyncraticVol($vol) * 0.80; // Board demands conservative operations
-    }
-
-    public function modifyCreditSpread(float $spread): float
-    {
-        return $this->baseStrategy->modifyCreditSpread($spread);
-    }
-
     public function modifyMAndASynergyRange(float $min, float $max): array
     {
         return $this->baseStrategy->modifyMAndASynergyRange($min, $max);

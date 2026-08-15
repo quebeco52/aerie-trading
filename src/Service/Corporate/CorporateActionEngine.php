@@ -96,14 +96,12 @@ class CorporateActionEngine
         $sharesOutstanding *= $splitFactor;
 
         $oldDiv = (float) $stock->getLastDividend();
-        $oldEps = (float) $stock->getEarningsPerShare();
         $oldFcf = (float) $stock->getFreeCashFlowPerShare();
 
         $stock->setSharesOutstanding((string) $sharesOutstanding);
         $stock->setPrice((string) $newPrice);
 
         $stock->setLastDividend((string) ($oldDiv / $splitFactor));
-        $stock->setEarningsPerShare((string) ($oldEps / $splitFactor));
         $stock->setFreeCashFlowPerShare((string) ($oldFcf / $splitFactor));
 
         $desc = "{$stock->getName()} has executed a {$splitFactor}-for-1 stock split.";
@@ -130,30 +128,34 @@ class CorporateActionEngine
      */
     public function executeReverseSplit(Stock $stock, float $newPrice, int $reverseFactor = 10): array
     {
+        $oldPrice = $newPrice;
+        $splitFactor = 1;
+        while ($newPrice < self::REVERSE_SPLIT_THRESHOLD && $splitFactor <= self::MAX_SPLIT_MULTIPLIER && !is_infinite($newPrice)) {
+            $newPrice = $newPrice * self::REVERSE_SPLIT_FACTOR;
+            $splitFactor *= (int) self::REVERSE_SPLIT_FACTOR;
+        }
+
         $oldShares = (float) $stock->getSharesOutstanding();
-        $sharesOutstanding = (string) floor($oldShares / $reverseFactor);
-        $stock->setSharesOutstanding($sharesOutstanding);
-
-        $oldPrice = (float) $stock->getPrice();
-        $stock->setPrice((string) round($oldPrice * $reverseFactor, 4));
-
-        $oldEps = (float) $stock->getEarningsPerShare();
-        $stock->setEarningsPerShare((string) ($oldEps * $reverseFactor));
+        $sharesOutstanding = (string) floor($oldShares / $splitFactor);
 
         $oldDiv = (float) $stock->getLastDividend();
-        $stock->setLastDividend((string) ($oldDiv * $reverseFactor));
-
         $oldFcf = (float) $stock->getFreeCashFlowPerShare();
-        $stock->setFreeCashFlowPerShare((string) ($oldFcf * $reverseFactor));
 
-        $desc = "{$stock->getName()} has executed a 1-for-{$reverseFactor} reverse stock split.";
+        $stock->setSharesOutstanding($sharesOutstanding);
+
+        $stock->setPrice((string) round($newPrice, 4));
+
+        $stock->setLastDividend((string) ($oldDiv * $splitFactor));
+        $stock->setFreeCashFlowPerShare((string) ($oldFcf * $splitFactor));
+
+        $desc = "{$stock->getName()} has executed a 1-for-{$splitFactor} reverse stock split.";
         $splitEvent = $this->marketEvent->publish($stock, 'REVERSE_SPLIT', $desc, 0.00);
 
-        $this->corporateLedgerService->processStockSplit($stock, (float) $reverseFactor, true, $oldPrice);
+        $this->corporateLedgerService->processStockSplit($stock, (float) $splitFactor, true, $oldPrice);
 
-        $this->adjustRedisBuffer($stock->getTicker(), $reverseFactor, 'multiply');
+        $this->adjustRedisBuffer($stock->getTicker(), $splitFactor, 'multiply');
 
-        return ['price' => $newPrice, 'shares' => $sharesOutstanding, 'event' => $splitEvent];
+        return ['price' => $newPrice, 'shares' => (float) $sharesOutstanding, 'event' => $splitEvent];
     }
 
 

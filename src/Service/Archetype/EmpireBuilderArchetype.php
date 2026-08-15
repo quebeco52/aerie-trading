@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Service\Archetype;
 
 class EmpireBuilderArchetype extends AbstractArchetype
@@ -8,7 +10,7 @@ class EmpireBuilderArchetype extends AbstractArchetype
     { 
         // Empire builders largely ignore debt costs (1.0 multiplier) and add a huge 30% leverage buffer
         $adjusted = min($limit, max(0.10, $limit * (1.0 - ($effectiveCostOfDebt * 1.0))));
-        return $adjusted + 0.3;
+        return $adjusted + 0.30;
     }
     
     public function modifyInvestmentProbability(float $prob, float $trueReturn): float 
@@ -36,11 +38,5 @@ class EmpireBuilderArchetype extends AbstractArchetype
         // Willing to massively overpay just to get the deal done and build their empire.
         // Shifts synergy range DOWN, ensuring frequent Goodwill write-offs.
         return ['min' => $min - 0.20, 'max' => $max - 0.05]; 
-    }
-    
-    public function modifyFixedCostRatio(float $fixedCostRatio): float 
-    { 
-        // Bloated corporate structure, too many executives and private jets
-        return min(0.85, $fixedCostRatio * 1.20); 
     }
 }

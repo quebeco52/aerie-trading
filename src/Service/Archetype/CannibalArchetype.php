@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Service\Archetype;
 
 class CannibalArchetype extends AbstractArchetype
@@ -8,22 +10,15 @@ class CannibalArchetype extends AbstractArchetype
     { 
         return $prob * 0.85; 
     }
+
+    public function modifyTargetPayoutRatio(float $targetPayout): float 
+    { 
+        return $targetPayout * 0.70; 
+    }
     
     public function modifyBuybackAggression(float $aggression): float 
     { 
         return min(1.0, $aggression * 1.50); 
-    }
-    
-    public function modifyVariableMarginTheta(float $theta): float 
-    { 
-        // Underinvests in operations, causing structural margins to decay over time
-        return $theta * 0.90; 
-    }
-    
-    public function modifyCreditSpread(float $spread): float 
-    { 
-        // Bond market penalizes financial engineering
-        return $spread * 1.10; 
     }
 
     public function shouldResistDividendCut(bool $isLiquidityCrisis, bool $isRegulatoryDividendHalt, bool $isDeepDistress = false): bool 

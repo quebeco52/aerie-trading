@@ -63,8 +63,8 @@ class ModelParametersTest extends TestCase
     public function testFromFactoryWithMixedKeys(): void
     {
         $params = ModelParameters::from([
-            ModelParam::FoundryRevenueWeight => 0.85,
-            'design_revenue_weight'          => 0.15,
+            ModelParam::FoundryRevenueWeight->value => 0.85,
+            'design_revenue_weight'                 => 0.15,
         ]);
 
         $this->assertSame(0.85, $params->get(ModelParam::FoundryRevenueWeight));

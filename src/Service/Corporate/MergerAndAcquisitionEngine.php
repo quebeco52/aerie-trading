@@ -347,8 +347,7 @@ class MergerAndAcquisitionEngine
             
             $projectedSpread = $this->mathUtility->calculateMertonCreditSpread($distanceToDefault, $lossGivenDefault, self::MA_MERTON_MATURITY);
             
-            $tmpArchetype = \App\Data\CeoArchetypes::getStrategy($stock);
-            $baselineCreditSpread = $tmpArchetype->modifyCreditSpread((float) $stock->getCreditSpread());
+            $baselineCreditSpread = (float) $stock->getCreditSpread();
             $dynamicSpread = $baselineCreditSpread + $projectedSpread;
             
             $ctx->costOfNewDebt = $ctx->yield5y + $dynamicSpread;

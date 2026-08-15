@@ -111,6 +111,8 @@ enum ModelParam: string
     case DesignRevenueWeight = 'design_revenue_weight';
 
     // --- Defense & Security ---
+    case CostPlusWeight = 'cost_plus_weight';
+    case FixedPriceDevWeight = 'fixed_price_dev_weight';
     case DomesticProcurementWeight = 'domestic_procurement_weight';
     case ForeignMilitarySalesWeight = 'foreign_military_sales_weight';
     case GovernmentContractWeight = 'government_contract_weight';

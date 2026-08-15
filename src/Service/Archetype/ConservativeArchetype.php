@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Service\Archetype;
 
 class ConservativeArchetype extends AbstractArchetype
@@ -19,18 +21,6 @@ class ConservativeArchetype extends AbstractArchetype
     public function modifyInvestmentProbability(float $prob, float $trueReturn): float 
     { 
         return $prob * 0.90; 
-    }
-    
-    public function modifyFixedCostRatio(float $fixedCostRatio): float 
-    { 
-        // Lean, conservative corporate structure
-        return $fixedCostRatio * 0.90; 
-    }
-    
-    public function modifyCreditSpread(float $spread): float 
-    { 
-        // Highly trusted by bond markets
-        return max(0.0010, $spread * 0.85); 
     }
 
     public function shouldResistDividendCut(bool $isLiquidityCrisis, bool $isRegulatoryDividendHalt, bool $isDeepDistress = false): bool 

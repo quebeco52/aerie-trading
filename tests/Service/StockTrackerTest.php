@@ -49,10 +49,36 @@ class StockTrackerTest extends TestCase
             'shock_pct' => null
         ]);
         
-        $this->debtEngineMock->method('analyzeDebtHealth')->willReturn([
-            'wacc' => 0.08,
-            'cost_of_equity' => 0.10
-        ]);
+        $debtMetrics = new \App\DTO\DebtMetricsDTO(
+            interestExpense: 0.0,
+            blendedRate: 0.05,
+            historicalFixedRate: 0.05,
+            dynamicSpread: 0.01,
+            currentMarketRate: 0.05,
+            wholesaleRate: 0.05,
+            ebit: 1000.0,
+            revenue: 5000.0,
+            depreciation: 100.0,
+            ebitda: 1100.0
+        );
+        $this->debtEngineMock->method('analyzeDebtHealth')->willReturn(new \App\DTO\DebtHealthDTO(
+            grossCost: 0.05,
+            effectiveCost: 0.04,
+            cashYield: 0.02,
+            isNegativeCarry: false,
+            isSevereNegativeCarry: false,
+            interestCoverage: 5.0,
+            wantsToPaydownDebt: false,
+            canIssueDebt: true,
+            debtTolerance: 2.0,
+            wacc: 0.08,
+            costOfEquity: 0.10,
+            leveredBeta: 1.0,
+            rawMetrics: $debtMetrics,
+            isLiquidityCrisis: false,
+            isLiquidityWarning: false,
+            isUnderLeveraged: false
+        ));
         
         $this->tracker = new StockTracker(
             $this->entityManagerMock,

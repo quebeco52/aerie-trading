@@ -83,15 +83,15 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Scalar for demand destruction per 100bps of policy rate above neutral. */
     public const RATE_SENSITIVITY_SCALAR = 2.50;
 
-    // --- Structural Gross Margin Ratios for Cross-Subsidization ---
-    /** Variable cost ratio of mass-market commuter fleet (low margin / predatory pricing). */
-    public const MASS_MARKET_VARIABLE_COST_RATIO = 0.85;
+    // --- Structural Gross Margin Cost Intensities for Cross-Subsidization ---
+    /** Relative variable cost intensity of mass-market commuter fleet (low margin / predatory baseline). */
+    public const MASS_MARKET_COST_INTENSITY = 1.35;
 
-    /** Variable cost ratio of Apex Division ultra-luxury hypercars (astronomical 70% gross profit margin). */
-    public const APEX_LUXURY_VARIABLE_COST_RATIO = 0.30;
+    /** Relative variable cost intensity of Apex Division ultra-luxury hypercars (astronomical gross profit margin cross-subsidy). */
+    public const APEX_LUXURY_COST_INTENSITY = 0.50;
 
-    /** Variable cost ratio of connected telematics and software services (pure digital/financing profit). */
-    public const SOFTWARE_SERVICES_VARIABLE_COST_RATIO = 0.15;
+    /** Relative variable cost intensity of connected telematics and software services (pure digital/financing tollbooth). */
+    public const SOFTWARE_SERVICES_COST_INTENSITY = 0.25;
 
     // --- Tail Risk & Event Physics ---
     /** Negative Z-score threshold indicating a massive vehicle safety recall and litigation liability. */
@@ -238,9 +238,18 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $actualRevenue = $salesRevenue + $apexRevenue + $softwareRevenue;
 
         // --- Cross-Subsidization Variable Cost Architecture ---
-        $salesCosts    = $salesRevenue    * (self::MASS_MARKET_VARIABLE_COST_RATIO + $inflationCostPenalty + $recallPenalty);
-        $apexCosts     = $apexRevenue     * self::APEX_LUXURY_VARIABLE_COST_RATIO;
-        $softwareCosts = $softwareRevenue * (self::SOFTWARE_SERVICES_VARIABLE_COST_RATIO + $macroDefaultDrag + $nimSqueeze + $ceclDrag);
+        $blendedIntensity = ($salesWeight * self::MASS_MARKET_COST_INTENSITY)
+            + ($apexWeight * self::APEX_LUXURY_COST_INTENSITY)
+            + ($softwareWeight * self::SOFTWARE_SERVICES_COST_INTENSITY);
+        $blendedIntensity = max(0.01, $blendedIntensity);
+
+        $salesBaseMargin    = $realizedVariableMargin * (self::MASS_MARKET_COST_INTENSITY / $blendedIntensity);
+        $apexBaseMargin     = $realizedVariableMargin * (self::APEX_LUXURY_COST_INTENSITY / $blendedIntensity);
+        $softwareBaseMargin = $realizedVariableMargin * (self::SOFTWARE_SERVICES_COST_INTENSITY / $blendedIntensity);
+
+        $salesCosts    = $salesRevenue    * ($salesBaseMargin + $inflationCostPenalty + $recallPenalty);
+        $apexCosts     = $apexRevenue     * $apexBaseMargin;
+        $softwareCosts = $softwareRevenue * ($softwareBaseMargin + $macroDefaultDrag + $nimSqueeze + $ceclDrag);
 
         $totalVariableCosts = $salesCosts + $apexCosts + $softwareCosts;
         $effectiveMargin = $actualRevenue > 0 ? ($totalVariableCosts / $actualRevenue) : $realizedVariableMargin;
@@ -265,10 +274,12 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         }
 
         // Observable shock blending
+        $strikeShock = ($salesMultiplier - 1.0) * $salesWeight;
+
         $observableShockZ = ($salesShock * $salesWeight * 0.60) +
             ($apexShock * $apexWeight * 0.40) +
             ($softwareShock * $softwareWeight * 0.20) +
-            ($eventZ * 0.80);
+            ($strikeShock * 0.80);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

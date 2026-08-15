@@ -99,10 +99,10 @@ class MarketEngine
 
         // CAPM & MACRO TRANSMISSION MECHANISM
 
-        $riskFreeRate = $macroState->policyRate;
-        $outputGap = $macroState->outputGap;
-        $inflation = $macroState->inflation;
-        $erp = $macroState->equityRiskPremium;
+        $riskFreeRate = $macroState->policyRate ?? 0.04;
+        $outputGap = $macroState->outputGap ?? 0.0;
+        $inflation = $macroState->inflation ?? 0.02;
+        $erp = $macroState->equityRiskPremium ?? 0.045;
 
         $finalDrift = $this->mathUtility->calculateCAPM($riskFreeRate, $beta, $erp);
 
@@ -217,7 +217,8 @@ class MarketEngine
             'shock'             => $jumpData['shock_pct'],
             'next_volatility'   => $nextVolatility,
             'analyst_targets'   => $fundamentalState['analyst_targets'],
-            'perceived_fair_value' => $perceivedFairValue
+            'perceived_fair_value' => $perceivedFairValue,
+            'dynamic_reversion' => $fundamentalState['dynamic_reversion'],
         ];
     }
 

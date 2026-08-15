@@ -419,12 +419,6 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         return 'LEVERAGED BUYOUT';
     }
 
-    public function getMaArchetypeStrategy(string $archetype): array
-    {
-        // PE firms are ultimate LBO sponsors. They deploy max leverage and high spend on targets.
-        return ['prob' => 0.080, 'spend' => 0.90, 'type' => 'LEVERAGED BUYOUT', 'use_leverage' => true, 'use_stock' => false];
-    }
-
     public function calculateCashYield(\App\DTO\MacroStateDTO $macroState): float
     {
         $yield10y = $macroState->yield10yEma;

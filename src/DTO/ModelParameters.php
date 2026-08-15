@@ -22,16 +22,15 @@ class ModelParameters implements \ArrayAccess, \Countable
     ) {}
 
     /**
-     * Creates a ModelParameters instance from a raw array with ModelParam or string keys.
+     * Creates a ModelParameters instance from a raw array with string keys.
      *
-     * @param array<ModelParam|string, float> $raw
+     * @param array<string, float> $raw
      */
     public static function from(array $raw): self
     {
         $normalized = [];
         foreach ($raw as $key => $value) {
-            $stringKey = $key instanceof ModelParam ? $key->value : (string) $key;
-            $normalized[$stringKey] = (float) $value;
+            $normalized[(string) $key] = (float) $value;
         }
 
         return new self($normalized);

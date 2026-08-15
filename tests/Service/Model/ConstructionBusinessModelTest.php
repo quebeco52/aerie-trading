@@ -74,6 +74,9 @@ class ConstructionBusinessModelTest extends TestCase
             energyPriceIndexEma: 100.0
         );
 
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
         $result = $this->model->computeActualFinancials(
             $stock,
             expectedRevenue: 100_000_000.0,
@@ -81,7 +84,7 @@ class ConstructionBusinessModelTest extends TestCase
             fixedCosts: 10_000_000.0,
             baselineVol: 0.00, // zero vol to test baseline weights
             macroState: $macro,
-            mathUtility: $this->mathUtility
+            mathUtility: $mathMock
         );
 
         // IBHI tuned weights: 60% Civil, 25% Commercial, 15% Maintenance
@@ -104,6 +107,9 @@ class ConstructionBusinessModelTest extends TestCase
             energyPriceIndexEma: 140.0 // 40% energy spike
         );
 
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
         $resultDefault = $this->model->computeActualFinancials(
             $stockDefault,
             expectedRevenue: 100_000_000.0,
@@ -111,7 +117,7 @@ class ConstructionBusinessModelTest extends TestCase
             fixedCosts: 10_000_000.0,
             baselineVol: 0.0,
             macroState: $macro,
-            mathUtility: $this->mathUtility
+            mathUtility: $mathMock
         );
 
         // Under high material cost inflation, variable cost margin expands (realizedVariableMargin increases)

@@ -17,20 +17,12 @@ class CorporateActionEngineTest extends TestCase
 
     protected function setUp(): void
     {
-        // 1. Mock the Database Connection so we don't actually write to MariaDB during tests!
-        $mockConnection = $this->createStub(Connection::class);
-        $mockConnection->method('executeStatement')->willReturn(1);
-
-        $mockEntityManager = $this->createStub(EntityManagerInterface::class);
-        $mockEntityManager->method('getConnection')->willReturn($mockConnection);
-
+        $mockLedgerService = $this->createStub(\App\Service\Corporate\CorporateLedgerService::class);
         $mockMarketEvent = $this->createStub(MarketEventPublisher::class);
-        $mockDebtEngine = $this->createStub(DebtEngine::class);
         $mockRedis = $this->createStub(\Redis::class);
-        $mockMathUtility = $this->createStub(MathUtility::class);
 
         // 2. Instantiate the Engine with our fake database
-        $this->engine = new CorporateActionEngine($mockEntityManager, $mockMarketEvent, $mockRedis);
+        $this->engine = new CorporateActionEngine($mockLedgerService, $mockMarketEvent, $mockRedis);
     }
 
     public function testRecursiveForwardSplitProtectsNetWorth()
@@ -56,7 +48,7 @@ class CorporateActionEngineTest extends TestCase
         $this->assertEquals(250.0, $result['price']);
         
         // EPS should automatically drop from 40 to 10 because shares quadrupled while Net Income stayed constant
-        $this->assertEquals('10', $stock->getEarningsPerShare());
+        $this->assertEquals(10.0, (float) $stock->getEarningsPerShare());
         
         // Shares should double twice (1000 -> 2000 -> 4000)
         $this->assertEquals(4000, $result['shares']);
@@ -89,7 +81,7 @@ class CorporateActionEngineTest extends TestCase
         $this->assertEquals(10.00, $result['price']);
 
         // EPS should automatically multiply by 100
-        $this->assertEquals('1', $stock->getEarningsPerShare());
+        $this->assertEquals(1.0, (float) $stock->getEarningsPerShare());
 
         // Shares should be divided by 10, two times (100,000 -> 10,000 -> 1,000)
         $this->assertEquals(1000, $result['shares']);
@@ -99,19 +91,14 @@ class CorporateActionEngineTest extends TestCase
         $this->assertEquals($startingNetWorth, $newNetWorth, 'The reverse split destroyed player wealth!');
     }
 
-    public function testForwardSplitMutatesTradeOrders()
+    public function testForwardSplitDelegatesToCorporateLedgerService(): void
     {
-        $mockConnection = $this->createMock(Connection::class);
-        $executedQueries = [];
-        $mockConnection->method('executeStatement')->willReturnCallback(function ($sql, $params = []) use (&$executedQueries) {
-            $executedQueries[] = $sql;
-            return 1;
-        });
+        $mockLedger = $this->createMock(\App\Service\Corporate\CorporateLedgerService::class);
+        $mockLedger->expects($this->once())
+            ->method('processStockSplit')
+            ->with($this->isInstanceOf(Stock::class), 4.0, false);
 
-        $mockEntityManager = $this->createStub(EntityManagerInterface::class);
-        $mockEntityManager->method('getConnection')->willReturn($mockConnection);
-
-        $engine = new CorporateActionEngine($mockEntityManager, $this->createStub(MarketEventPublisher::class), $this->createStub(\Redis::class));
+        $engine = new CorporateActionEngine($mockLedger, $this->createStub(MarketEventPublisher::class), $this->createStub(\Redis::class));
 
         $stock = new Stock();
         $stock->setTicker('HYPR');
@@ -120,30 +107,16 @@ class CorporateActionEngineTest extends TestCase
         $stock->setEarningsPerShare('40.0');
 
         $engine->processSplits($stock, 1000.0, 1000);
-
-        $foundTradeOrderUpdate = false;
-        foreach ($executedQueries as $sql) {
-            if (str_contains($sql, 'UPDATE trade_orders SET quantity = quantity * :factor')) {
-                $foundTradeOrderUpdate = true;
-                break;
-            }
-        }
-        $this->assertTrue($foundTradeOrderUpdate, 'Forward split did not execute trade_orders update SQL!');
     }
 
-    public function testReverseSplitMutatesTradeOrdersAndRefundsRemainders()
+    public function testReverseSplitDelegatesToCorporateLedgerService(): void
     {
-        $mockConnection = $this->createMock(Connection::class);
-        $executedQueries = [];
-        $mockConnection->method('executeStatement')->willReturnCallback(function ($sql, $params = []) use (&$executedQueries) {
-            $executedQueries[] = $sql;
-            return 1;
-        });
+        $mockLedger = $this->createMock(\App\Service\Corporate\CorporateLedgerService::class);
+        $mockLedger->expects($this->once())
+            ->method('processStockSplit')
+            ->with($this->isInstanceOf(Stock::class), 100.0, true, 0.10);
 
-        $mockEntityManager = $this->createStub(EntityManagerInterface::class);
-        $mockEntityManager->method('getConnection')->willReturn($mockConnection);
-
-        $engine = new CorporateActionEngine($mockEntityManager, $this->createStub(MarketEventPublisher::class), $this->createStub(\Redis::class));
+        $engine = new CorporateActionEngine($mockLedger, $this->createStub(MarketEventPublisher::class), $this->createStub(\Redis::class));
 
         $stock = new Stock();
         $stock->setTicker('DEAD');
@@ -152,30 +125,5 @@ class CorporateActionEngineTest extends TestCase
         $stock->setEarningsPerShare('0.01');
 
         $engine->processSplits($stock, 0.10, 100000);
-
-        $foundSellRemainderRefund = false;
-        $foundBuyRemainderRefund = false;
-        $foundTradeOrderUpdate = false;
-        $foundOrderCancellation = false;
-
-        foreach ($executedQueries as $sql) {
-            if (str_contains($sql, "FROM trade_orders WHERE ticker = :ticker AND status = 'OPEN' AND action = 'SELL'")) {
-                $foundSellRemainderRefund = true;
-            }
-            if (str_contains($sql, "FROM trade_orders") && str_contains($sql, "action = 'BUY' AND (quantity % :factor) > 0")) {
-                $foundBuyRemainderRefund = true;
-            }
-            if (str_contains($sql, "UPDATE trade_orders SET quantity = FLOOR(quantity / :factor), limit_price = ROUND(limit_price * :factor, 8)")) {
-                $foundTradeOrderUpdate = true;
-            }
-            if (str_contains($sql, "UPDATE trade_orders SET status = 'CANCELLED'")) {
-                $foundOrderCancellation = true;
-            }
-        }
-
-        $this->assertTrue($foundSellRemainderRefund, 'Reverse split did not refund open SELL order remainders!');
-        $this->assertTrue($foundBuyRemainderRefund, 'Reverse split did not refund open BUY order remainders!');
-        $this->assertTrue($foundTradeOrderUpdate, 'Reverse split did not update trade_orders quantity and limit_price!');
-        $this->assertTrue($foundOrderCancellation, 'Reverse split did not cancel zero quantity trade_orders!');
     }
 }
