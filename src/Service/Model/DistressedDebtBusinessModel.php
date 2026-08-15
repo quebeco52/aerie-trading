@@ -16,9 +16,13 @@ use App\Service\Macro\MacroEngine;
  * 
  * Financial Physics:
  * - Counter-Cyclical Special Situations: Thrives during systemic recessions and credit crises.
- * - When corporate credit spreads blow out, the fund deploys capital to buy defaulted corporate bonds and distressed assets for pennies on the dollar.
- * - As markets recover or restructure, these assets yield extraordinary turnaround ROE (30% to 50%+).
- * - During prolonged bull markets with tight credit spreads, earnings remain modest and defensive as the fund hoards dry powder.
+ * - Tri-Stream Architecture:
+ *      1. Restructuring Advisory Fees: Steady retainer-based fee income earned during bankruptcy workouts.
+ *      2. Distressed Asset Recovery: High-yield gains from buying defaulted senior secured debt at discounts.
+ *      3. Loan-to-Own Equity Gains: Asymmetric capital gains upon post-reorganization equity emergence.
+ * - Credit Spread & Recession Multipliers: When corporate credit spreads blow out above 2.5%,
+ *   distressed asset acquisition opportunities and liquidation yields surge non-linearly.
+ * - During prolonged bull markets with tight credit spreads, earnings remain defensive as the fund hoards dry powder.
  */
 class DistressedDebtBusinessModel extends AssetManagementBusinessModel
 {
@@ -26,10 +30,12 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.90;
     public const BASE_COVERAGE_ERROR = 0.05;
     public const BASE_COVERAGE_MIN_VISIBILITY = 0.80;
+
     public function getModelThresholds(): array
     {
         return ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => 0.5,  'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.18, 'moat_spread' => 0.005, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 1.0];
     }
+
     // --- Special Situations & Macro Triggers ---
     /** Baseline macro credit spread fallback when macroeconomic state data is absent. */
     public const DEFAULT_CREDIT_SPREAD_FALLBACK = 0.015;
@@ -46,28 +52,25 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     /** Revenue contraction multiplier during prolonged bull markets with tight credit spreads. */
     public const BULL_MARKET_REVENUE_DRAG       = -0.10;
 
-    // --- Revenue & Shock Physics ---
-    /** Volatility multiplier for top-line revenue shocks in special situation portfolios. */
-    public const REVENUE_VARIANCE_SCALAR        = 0.20;
-    /** Upper clamp for realized variable margin. */
-    public const MAX_VARIABLE_MARGIN_CLAMP      = 1.50;
-    /** Lower clamp for realized variable margin. */
-    public const MIN_VARIABLE_MARGIN_CLAMP      = 0.01;
+    // --- Stream Weights & Variances ---
+    public const RESTRUCTURING_ADVISORY_WEIGHT = 0.40;
+    public const ASSET_RECOVERY_WEIGHT         = 0.60;
 
-    // --- Event Lore Thresholds ---
-    /** Positive z-score threshold required during credit blowout to trigger turnaround restructuring lore. */
+    public const ADVISORY_VARIANCE_SCALAR = 0.15;
+    public const RECOVERY_VARIANCE_SCALAR = 0.45;
+    public const REVENUE_VARIANCE_SCALAR  = 0.20;
+
+    // --- Tail Risk Events ---
     public const LORE_RESTRUCTURING_Z_SCORE     = 1.00;
 
     // --- Dry Powder Liquidity Rules ---
-    /** Threshold ratio of excess cash over operating base triggering hoarder status for dry powder funds. */
     public const DRY_POWDER_HOARDER_THRESHOLD   = 0.40;
-    /** Threshold ratio of excess cash over operating base triggering mega-hoarder status for dry powder funds. */
     public const DRY_POWDER_MEGA_THRESHOLD      = 0.70;
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.35);
+        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
 
         // Counter-Cyclical Credit Spread Trigger
         $creditSpread = $macroState->macroCreditSpread;
@@ -79,65 +82,67 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
         // When credit spreads exceed 2.5% or output gap is negative, distressed debt opportunities explode
         if ($creditSpread > self::SPREAD_BLOWOUT_THRESHOLD || $outputGap < self::RECESSION_GAP_THRESHOLD) {
             $distressMultiplier = ($creditSpread - self::DEFAULT_CREDIT_SPREAD_FALLBACK) * self::SPREAD_SURGE_SCALAR + abs(min(0.0, $outputGap)) * self::RECESSION_SURGE_SCALAR;
-            if ($revenueZ > self::LORE_RESTRUCTURING_Z_SCORE) {
-                $eventType = ShockEvent::DISTRESSED_DEBT_RESTRUCTURING;
-            }
         } elseif ($outputGap > self::BULL_MARKET_GAP_THRESHOLD && $creditSpread < self::DEFAULT_CREDIT_SPREAD_FALLBACK) {
-            // Tight credit spreads in roaring bull markets reduce distressed supply
             $distressMultiplier = self::BULL_MARKET_REVENUE_DRAG;
         }
 
         $params = $this->resolveModelParameters($stock, [
-            ModelParam::AdvisoryFeeWeight->value      => 0.40,
-            ModelParam::AssetRecoveryWeight->value    => 0.60,
-            ModelParam::LoanToOwnGainsWeight->value => 0.00,
+            ModelParam::RestructuringAdvisoryWeight->value => self::RESTRUCTURING_ADVISORY_WEIGHT,
+            ModelParam::TurnaroundGainsWeight->value       => self::ASSET_RECOVERY_WEIGHT,
+            ModelParam::LoanToOwnGainsWeight->value        => 0.00,
         ]);
-        $advisoryWeight   = $params[ModelParam::AdvisoryFeeWeight];
-        $recoveryWeight   = $params[ModelParam::AssetRecoveryWeight];
+        $advisoryWeight   = $params[ModelParam::RestructuringAdvisoryWeight];
+        $recoveryWeight   = $params[ModelParam::TurnaroundGainsWeight];
         $loanToOwnWeight  = $params[ModelParam::LoanToOwnGainsWeight];
 
-        $advisoryRevenue = $expectedRevenue * $advisoryWeight * (1.0 + ($revenueZ * ($baselineVol * 0.5)));
-        $recoveryRevenue = $expectedRevenue * $recoveryWeight * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $distressMultiplier);
+        // Independent stream Z-scores
+        $advisoryZ = $streams->generateZ('restructuring_advisory', 0.50);
+        $recoveryZ = $streams->generateZ('turnaround_recovery', 0.15);
+
+        if ($recoveryZ > self::LORE_RESTRUCTURING_Z_SCORE && $distressMultiplier > 0.0) {
+            $eventType = ShockEvent::DISTRESSED_DEBT_RESTRUCTURING;
+        }
+
+        $advisoryRevenue = max(0.0, $expectedRevenue * $advisoryWeight * (1.0 + ($advisoryZ * ($baselineVol * self::ADVISORY_VARIANCE_SCALAR))));
+        $recoveryRevenue = max(0.0, $expectedRevenue * $recoveryWeight * (1.0 + ($recoveryZ * ($baselineVol * self::RECOVERY_VARIANCE_SCALAR)) + $distressMultiplier));
 
         $loanToOwnRevenue = 0.0;
         $loanToOwnZ = 0.0;
         if ($loanToOwnWeight > 0.0) {
-            $loanToOwnZ = $mathUtility->generatePersistentZ($momentum['loan_to_own'] ?? 0.0, 0.40);
-            // Loan-to-own explodes when credit spreads blow out
-            $loanToOwnRevenue = $expectedRevenue * $loanToOwnWeight * (1.0 + ($loanToOwnZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5) + ($distressMultiplier * 1.5));
+            $loanToOwnZ = $streams->generateZ('loan_to_own', 0.15);
+            $loanToOwnRevenue = max(0.0, $expectedRevenue * $loanToOwnWeight * (1.0 + ($loanToOwnZ * $baselineVol * self::RECOVERY_VARIANCE_SCALAR * 1.5) + ($distressMultiplier * 1.5)));
         }
 
-        $actualRevenue   = max(0.0, $advisoryRevenue + $recoveryRevenue + $loanToOwnRevenue);
-
+        $actualRevenue = max(0.0, $advisoryRevenue + $recoveryRevenue + $loanToOwnRevenue);
         $clampedMargin = $this->clampMargin($realizedVariableMargin);
 
-        $streamZ = [
-            'revenue' => $revenueZ,
-        ];
-
-        $streamRevenue = [
-            'advisory' => $advisoryRevenue,
-            'recovery' => $recoveryRevenue,
-        ];
-
-        if ($loanToOwnWeight > 0.0) {
-            $streamZ['loan_to_own'] = $loanToOwnZ;
-            $streamRevenue['loan_to_own_gains'] = $loanToOwnRevenue;
+        $primaryShockZ = abs($recoveryZ) > abs($advisoryZ) ? $recoveryZ : $advisoryZ;
+        if ($loanToOwnWeight > 0.0 && abs($loanToOwnZ) > abs($primaryShockZ)) {
+            $primaryShockZ = $loanToOwnZ;
         }
 
-        // observableShockZ: macro credit spreads and corporate default rates are public data (~90% visibility).
-        $result = new SectorPhysicsResult(
+        $observableShockZ = ($advisoryZ * $advisoryWeight * self::ADVISORY_VARIANCE_SCALAR * $baselineVol) +
+            ($recoveryZ * $recoveryWeight * self::RECOVERY_VARIANCE_SCALAR * $baselineVol) +
+            ($distressMultiplier * $recoveryWeight);
+
+        $streamRevenue = [
+            'restructuring_advisory' => $advisoryRevenue,
+            'turnaround_recovery'    => $recoveryRevenue,
+        ];
+        if ($loanToOwnWeight > 0.0) {
+            $streamRevenue['loan_to_own'] = $loanToOwnRevenue;
+        }
+
+        return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $revenueZ,
-            observableShockZ: $revenueZ * ($baselineVol * 0.90),
+            primaryShockZ: $primaryShockZ,
+            observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: $streamZ,
+            streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenue,
         );
-
-        return $result;
     }
 
     public function evaluateHoardingStatus(float $treasury, float $targetCashReserves, float $operatingBase, float $totalDebt): array
@@ -145,8 +150,6 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
         $excessCash = max(0.0, $treasury - $targetCashReserves);
         return [
             'excess_cash'     => $excessCash,
-            // Distressed debt funds intentionally hold massive cash reserves ("dry powder") to deploy during market crashes.
-            // We allow them a much higher cash buffer before triggering hoarding penalties.
             'is_hoarder'      => $excessCash > ($operatingBase * self::DRY_POWDER_HOARDER_THRESHOLD),
             'is_mega_hoarder' => $excessCash > ($operatingBase * self::DRY_POWDER_MEGA_THRESHOLD),
         ];

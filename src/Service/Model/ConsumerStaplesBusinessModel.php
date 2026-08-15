@@ -76,6 +76,14 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     /** Variable margin sensitivity to agricultural and packaging commodity input cost shocks. */
     public const COMMODITY_INPUT_ELASTICITY   = 0.015;
 
+    // --- Weaponized Proof Desk & Commodity Arbitrage Physics ---
+    /** Revenue expansion scalar on commodity trading desk when global inflation accelerates. */
+    public const COMMODITY_INFLATION_ALPHA_SCALAR = 2.50;
+    /** Revenue expansion scalar on commodity trading desk during energy & packaging price spikes. */
+    public const COMMODITY_ENERGY_ALPHA_SCALAR    = 0.40;
+    /** Maximum fraction of logistics & packaging drag mitigated by physical inventory hoarding. */
+    public const MAX_COMMODITY_HEDGE_MITIGATION   = 0.80;
+
     // --- Brand Equity Amortization & Marketing Reinvestment Physics ---
     /** Quarterly margin decay rate per unit of underinvestment below brand maintenance CapEx. */
     public const BRAND_EQUITY_DECAY_RATE      = 0.020;
@@ -127,7 +135,13 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         $commodityZ = 0.0;
         if ($commodityWeight > 0.0) {
             $commodityZ = $mathUtility->generatePersistentZ($momentum['commodity_trading'] ?? 0.0, 0.20);
-            $commodityRevenue = $expectedRevenue * $commodityWeight * (1.0 + ($commodityZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 2.5));
+
+            // Physical inventory hoarding & Proof Desk short squeezes profit from supply bottlenecks & inflation panics
+            $inflationExcess = max(0.0, $macroState->inflationEma - MacroEngine::TARGET_INFLATION);
+            $energyExcess = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
+            $commoditySqueezeBonus = ($inflationExcess * self::COMMODITY_INFLATION_ALPHA_SCALAR) + ($energyExcess * self::COMMODITY_ENERGY_ALPHA_SCALAR);
+
+            $commodityRevenue = $expectedRevenue * $commodityWeight * (1.0 + ($commodityZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 2.5) + $commoditySqueezeBonus);
         }
 
         $landRevenue = 0.0;
@@ -145,7 +159,10 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
 
         // Supply Chain & Packaging Penalty (Energy Price Index)
         $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
-        $logisticsPenalty = $energyShift * abs((float) $stock->getBeta()) * 0.50; // Plastic packaging & freight cost spike
+        $rawLogisticsPenalty = $energyShift * abs((float) $stock->getBeta()) * 0.50; // Plastic packaging & freight cost spike
+
+        // Physical inventory hoarding buffers input costs and mitigates packaging bottlenecks
+        $logisticsPenalty = $rawLogisticsPenalty * (1.0 - min(self::MAX_COMMODITY_HEDGE_MITIGATION, $commodityWeight * 2.5));
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $recallPenalty + $commodityInputShift + $logisticsPenalty);
 

@@ -40,6 +40,8 @@ class BusinessModelRegistry implements BusinessModelRegistryInterface
                 $this->models['standard_corporate'] = $model;
             } elseif ($identifier === 'asset_manager') {
                 $this->models['asset_management'] = $model;
+            } elseif ($identifier === 'medical_care_facility') {
+                $this->models['medical_facility'] = $model;
             }
         }
     }

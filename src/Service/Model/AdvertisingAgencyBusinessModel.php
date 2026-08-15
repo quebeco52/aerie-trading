@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -11,18 +12,22 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Event\ShockEvent;
 
 /**
- * Earnings strategy for Advertising Agencies.
+ * Earnings strategy for Global Advertising Agencies & MarTech Networks.
  * 
  * Financial Physics:
  * - Asset light, human-capital intensive.
- * - Revenue driven by steady long-term corporate retainers (media buying, brand management).
- * - Sudden surges in revenue driven by highly lucrative, counter-cyclical crisis management mandates.
+ * - Tri-Stream Agency Architecture:
+ *      1. Media Buying Commissions: Programmatic take-rates on gross client ad spend; pro-cyclical to corporate earnings.
+ *      2. Creative Brand Retainers: High-margin, multi-year Agency of Record (AOR) brand management fees.
+ *      3. MarTech & Data Consulting: High-value enterprise marketing automation and customer analytics consulting.
+ * - High Operating Leverage: During economic expansions, programmatic ad spend surges rapidly over fixed creative payroll.
  */
 class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.25;
     public const BASE_COVERAGE_ERROR = 0.06;
+
     public function getModelThresholds(): array
     {
         return ['min_icr' => 3.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.5,  'dividend_crisis_icr' => 2.00, 'buyback_min_icr' => 3.00, 'reversion_speed' => 0.15, 'moat_spread' => 0.015, 'nwc_intensity' => 0.05, 'capex_completion_rate' => 0.20];
@@ -30,60 +35,74 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
 
     public function getSecularGrowthRate(Stock $stock): float { return 0.015; }
     
-    public function getCapexCyclicality(): float { return 0.1; }
+    public function getCapexCyclicality(): float { return 0.10; }
     
     public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.70, 'revenue_weight' => 0.30]; }
 
     // --- Stream Weights ---
-    public const RETAINER_WEIGHT = 0.85;
-    public const CRISIS_MANAGEMENT_WEIGHT = 0.15;
+    /** Baseline fraction of revenue derived from programmatic media buying commissions. */
+    public const MEDIA_BUYING_WEIGHT      = 0.50;
+    /** Baseline fraction of revenue derived from creative Agency of Record brand retainers. */
+    public const BRAND_RETAINER_WEIGHT     = 0.35;
+    /** Baseline fraction of revenue derived from marketing technology and data consulting. */
+    public const MARTECH_CONSULTING_WEIGHT = 0.15;
 
-    // --- Physics ---
-    public const RETAINER_VARIANCE_SCALAR = 0.15; // Stable but tied to corporate ad budgets
-    public const CRISIS_VARIANCE_SCALAR = 4.00; // Extremely volatile
-
-    public const CRISIS_BOOM_Z_SCORE = 2.00;
-    public const CRISIS_BOOM_MULT = 2.50; // +150% on this stream during a major corporate disaster
+    // --- Physics & Variances ---
+    public const MEDIA_VARIANCE_SCALAR   = 0.35; // Pro-cyclical to corporate ad spend
+    public const BRAND_VARIANCE_SCALAR   = 0.10; // Sticky multi-year retainers
+    public const MARTECH_VARIANCE_SCALAR = 0.20; // B2B technology consulting
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::MediaBuyingWeight->value       => self::MEDIA_BUYING_WEIGHT,
+            ModelParam::BrandRetainerWeight->value      => self::BRAND_RETAINER_WEIGHT,
+            ModelParam::MartechConsultingWeight->value => self::MARTECH_CONSULTING_WEIGHT,
+        ]);
+
+        $mediaWeight   = $params[ModelParam::MediaBuyingWeight];
+        $brandWeight   = $params[ModelParam::BrandRetainerWeight];
+        $martechWeight = $params[ModelParam::MartechConsultingWeight];
+
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $beta     = abs((float) $stock->getBeta());
 
-        // Retainers correlate slightly to macro (ad budgets expand in booms)
-        $macroBoost = $macroState->outputGapEma * 0.5;
+        // Ad budgets expand aggressively during GDP booms and contract sharply during recessions
+        $macroAdSpendShift = $macroState->outputGapEma * 1.8 * $beta;
 
-        $retainerZ = $streams->generateZ('retainer_media_buying', 0.40);
-        // Crisis management is completely random/uncorrelated
-        $crisisZ = $streams->generateZ('crisis_management', 0.05); 
+        $mediaZ   = $streams->generateZ('media_buying_commissions', 0.25);
+        $brandZ   = $streams->generateZ('creative_brand_retainers', 0.50);
+        $martechZ = $streams->generateZ('martech_consulting', 0.40);
 
-        $retainerRevenue = $expectedRevenue * self::RETAINER_WEIGHT * (1.0 + ($retainerZ * ($baselineVol * self::RETAINER_VARIANCE_SCALAR)) + $macroBoost);
-        $crisisRevenue = $expectedRevenue * self::CRISIS_MANAGEMENT_WEIGHT * (1.0 + ($crisisZ * ($baselineVol * self::CRISIS_VARIANCE_SCALAR)));
+        $mediaRevenue   = max(0.0, $expectedRevenue * $mediaWeight   * (1.0 + ($mediaZ * ($baselineVol * self::MEDIA_VARIANCE_SCALAR)) + $macroAdSpendShift));
+        $brandRevenue   = max(0.0, $expectedRevenue * $brandWeight   * (1.0 + ($brandZ * ($baselineVol * self::BRAND_VARIANCE_SCALAR))));
+        $martechRevenue = max(0.0, $expectedRevenue * $martechWeight * (1.0 + ($martechZ * ($baselineVol * self::MARTECH_VARIANCE_SCALAR)) + ($macroAdSpendShift * 0.4)));
 
-        $eventType = null;
-
-        if ($crisisZ > self::CRISIS_BOOM_Z_SCORE) {
-            $crisisRevenue *= self::CRISIS_BOOM_MULT;
-            $eventType = ShockEvent::CRISIS_MANAGEMENT_BOOM ?? 'crisis_management_boom';
-        }
-
-        $actualRevenue = max(0.0, $retainerRevenue + $crisisRevenue);
+        $actualRevenue = $mediaRevenue + $brandRevenue + $martechRevenue;
         $clampedMargin = $this->clampMargin($realizedVariableMargin);
 
-        $primaryShockZ = abs($crisisZ) > abs($retainerZ) ? $crisisZ : $retainerZ;
-        $observableShockZ = ($retainerZ * self::RETAINER_WEIGHT * ($baselineVol * self::RETAINER_VARIANCE_SCALAR)) + ($macroBoost * self::RETAINER_WEIGHT);
+        $primaryShockZ = abs($mediaZ) > abs($brandZ) ? $mediaZ : $brandZ;
+        if (abs($martechZ) > abs($primaryShockZ)) {
+            $primaryShockZ = $martechZ;
+        }
+
+        $observableShockZ = ($mediaZ * $mediaWeight * self::MEDIA_VARIANCE_SCALAR * $baselineVol) +
+            ($brandZ * $brandWeight * self::BRAND_VARIANCE_SCALAR * $baselineVol) +
+            ($macroAdSpendShift * $mediaWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
             primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
-            eventType: $eventType,
-            isPublicEvent: $eventType !== null ? true : null,
+            eventType: null,
+            isPublicEvent: null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: [
-                'retainer_media_buying' => $retainerRevenue,
-                'crisis_management'     => $crisisRevenue,
+                'media_buying_commissions' => $mediaRevenue,
+                'creative_brand_retainers' => $brandRevenue,
+                'martech_consulting'       => $martechRevenue,
             ],
         );
     }

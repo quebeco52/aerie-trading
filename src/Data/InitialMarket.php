@@ -1037,7 +1037,7 @@ class InitialMarket
             'ticker' => 'CLAW',
             'name' => 'Clear Rivers Law',
             'sector' => 'Industrials',
-            'industry' => 'Specialty Business Services',
+            'industry' => 'Legal Services',
             'systemic_importance' => 'none',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.18,

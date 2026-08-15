@@ -123,13 +123,15 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $pipelineWeight    = $params[ModelParam::PipelineDrugWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
 
         // Independent stream Z-scores with AR(1) persistence
-        $establishedZ = $mathUtility->generatePersistentZ($momentum['established'] ?? 0.0, 0.40); // Commercial prescription volume variance
-        $pipelineZ    = $mathUtility->generatePersistentZ($momentum['pipeline'] ?? 0.0, 0.10); // Clinical trial milestone readouts
+        $establishedZ = $streams->generateZ('commercial_therapeutics', 0.40); // Commercial prescription volume variance
+        $pipelineZ    = $streams->generateZ('pipeline_licensing_milestones', 0.10); // Clinical trial milestone readouts
+        $trialZ       = $streams->generateZ('trial', 0.05);
 
-        $establishedRevenue = $expectedRevenue * $establishedWeight * (1.0 + ($establishedZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
-        $pipelineRevenue    = $expectedRevenue * $pipelineWeight * (1.0 + ($pipelineZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
+        $establishedRevenue = max(0.0, $expectedRevenue * $establishedWeight * (1.0 + ($establishedZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
+        $pipelineRevenue    = max(0.0, $expectedRevenue * $pipelineWeight    * (1.0 + ($pipelineZ    * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
 
         // Patent Cliff vs. Blockbuster R&D Super-Cycle
         // Applies directly to the high-risk pipeline drug stream ($pipelineWeight).
@@ -138,7 +140,6 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $patentModifier = $continuousPipelineShift;
         $eventType = null;
 
-        $trialZ = $mathUtility->generatePersistentZ($momentum['trial'] ?? 0.0, 0.05);
         if ($trialZ > self::TRIAL_APPROVAL_Z_SCORE) {
             $pipelineRevenue *= self::TRIAL_APPROVAL_REV_MULT;
             $patentModifier += self::TRIAL_APPROVAL_MARGIN_BONUS * $pipelineWeight;
@@ -150,12 +151,10 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         }
 
         $actualRevenue = max(0.0, $establishedRevenue + $pipelineRevenue);
-
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $patentModifier);
 
         $primaryShockZ = abs($trialZ) > abs($establishedZ) ? $trialZ : $establishedZ;
-        // observableShockZ: blended stream shock visible to analysts
-        $observableShockZ = $establishedZ * $establishedWeight + $pipelineZ * $pipelineWeight;
+        $observableShockZ = ($establishedZ * $establishedWeight) + ($pipelineZ * $pipelineWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -164,14 +163,10 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
-            streamZ: [
-                'established' => $establishedZ,
-                'pipeline'    => $pipelineZ,
-                'trial'       => $trialZ,
-            ],
+            streamZ: $streams->getStreamZ(),
             streamRevenue: [
-                'established' => $establishedRevenue,
-                'pipeline'    => $pipelineRevenue,
+                'commercial_therapeutics'       => $establishedRevenue,
+                'pipeline_licensing_milestones' => $pipelineRevenue,
             ],
         );
     }

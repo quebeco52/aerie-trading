@@ -143,19 +143,33 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.35);
+        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+
         $params = $this->resolveModelParameters($stock, [
             ModelParam::MortgageOriginationWeight->value => 0.60,
             ModelParam::DirectLendingWeight->value       => 0.40,
         ]);
-        $mortgageWeight  = $params[ModelParam::MortgageOriginationWeight];
-        $lendingWeight   = $params[ModelParam::DirectLendingWeight];
+        $mortgageWeight = $params[ModelParam::MortgageOriginationWeight];
+        $lendingWeight  = $params[ModelParam::DirectLendingWeight];
 
-        $mortgageRevenue = $expectedRevenue * $mortgageWeight * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
-        $lendingRevenue  = $expectedRevenue * $lendingWeight * (1.0 + ($revenueZ * ($baselineVol * 0.8)));
+        // Independent stream Z-scores
+        $originationZ = $streams->generateZ('origination', 0.20);
+        $lendingZ     = $streams->generateZ('direct_lending', 0.45);
+        $creditZ      = $streams->generateZ('credit', 0.25);
+
+        // 1. Mortgage Origination Volume Channel:
+        // Spiking 30Y mortgage rates destroy refinancing demand and freeze home purchases.
+        $yield30y = $macroState->yield30yEma;
+        $mortgageRateDrag = max(0.0, ($yield30y - self::DEFAULT_30Y_YIELD_FALLBACK) * 4.0);
+
+        // 2. Direct Lending Floating-Rate Channel:
+        // Private debt / direct lending loans float on base policy rates (SOFR + spread), expanding yield during high-rate regimes.
+        $policyRate = $macroState->policyRateEma;
+        $directLendingRateBonus = max(0.0, ($policyRate - 0.03) * 1.5);
+
+        $mortgageRevenue = max(0.0, $expectedRevenue * $mortgageWeight * (1.0 + ($originationZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5)) - $mortgageRateDrag));
+        $lendingRevenue  = max(0.0, $expectedRevenue * $lendingWeight * (1.0 + ($lendingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.8)) + $directLendingRateBonus));
         $actualRevenue   = max(0.0, $mortgageRevenue + $lendingRevenue);
-
-        $creditZ = $mathUtility->generatePersistentZ($momentum['credit'] ?? 0.0, 0.25);
 
         // CECL Forward Provisioning & Default Shock:
         // Shadow Banks primarily hold highly leveraged mortgages and direct loans.
@@ -172,8 +186,6 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
                 : 0.0)) + $macroDefaultDrag + $ceclForwardProvision;
 
         // Shadow Bank NIM Squeeze (high VULNERABILITY):
-        $yield30y = $macroState->yield30yEma;
-        $policyRate = $macroState->policyRateEma;
         $mortgageSpread = $yield30y - $policyRate;
 
         if ($mortgageSpread < 0) {
@@ -194,19 +206,23 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             $eventType = ShockEvent::RESERVE_RELEASE;
         }
 
+        $primaryShockZ = abs($creditZ) > abs($originationZ) ? $creditZ : $originationZ;
+        if (abs($lendingZ) > abs($primaryShockZ)) {
+            $primaryShockZ = $lendingZ;
+        }
+
+        $observableShockZ = ($originationZ * $mortgageWeight * self::REVENUE_VARIANCE_SCALAR * 1.5) - ($mortgageRateDrag * $mortgageWeight);
+
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: abs($creditZ) > abs($revenueZ) ? $creditZ : $revenueZ,
-            observableShockZ: 0.0,
+            primaryShockZ: $primaryShockZ,
+            observableShockZ: $observableShockZ,
             eventType: $eventType,
-            streamZ: [
-                'revenue' => $revenueZ,
-                'credit'  => $creditZ,
-            ],
+            streamZ: $streams->getStreamZ(),
             streamRevenue: [
-                'net_interest_income' => $lendingRevenue,
-                'origination_fees'    => $mortgageRevenue,
+                'origination_fees' => $mortgageRevenue,
+                'direct_lending'   => $lendingRevenue,
             ],
         );
     }

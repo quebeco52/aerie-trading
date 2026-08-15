@@ -81,6 +81,9 @@ class ShockEvent
     public const SECURITY_BREACH = 'security_breach';
     public const GEOPOLITICAL_CONFLICT = 'geopolitical_conflict';
     public const LABOR_STRIKE = 'labor_strike';
+
+    public const MANDATORY_HEALTHCARE_EXPANSION = 'mandatory_healthcare_expansion';
+    public const HEALTHCARE_AUDIT_CLAWBACK = 'healthcare_audit_clawback';
 }
 
 

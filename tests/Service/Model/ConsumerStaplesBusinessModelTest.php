@@ -59,4 +59,46 @@ class ConsumerStaplesBusinessModelTest extends TestCase
         $this->assertGreaterThan(0.22, $expanded);
         $this->assertLessThanOrEqual(ConsumerStaplesBusinessModel::MAX_OPERATING_MARGIN_CEILING, $expanded);
     }
+
+    public function testWeaponizedProofDeskCommodityArbitrage(): void
+    {
+        $model = new ConsumerStaplesBusinessModel();
+        $mathUtility = new MathUtility();
+
+        $stock = new Stock();
+        $stock->setTicker('PINT');
+        $stock->setBeta('0.8');
+
+        $normalMacro = new \App\DTO\MacroStateDTO(inflationEma: 0.02, energyPriceIndexEma: 100.0);
+        $spikeMacro = new \App\DTO\MacroStateDTO(inflationEma: 0.06, energyPriceIndexEma: 150.0);
+
+        $normalResult = $model->computeActualFinancials(
+            $stock,
+            100_000_000.0,
+            0.40,
+            10_000_000.0,
+            0.0,
+            $normalMacro,
+            $mathUtility
+        );
+
+        $spikeResult = $model->computeActualFinancials(
+            $stock,
+            100_000_000.0,
+            0.40,
+            10_000_000.0,
+            0.0,
+            $spikeMacro,
+            $mathUtility
+        );
+
+        $this->assertArrayHasKey('commodity_trading', $normalResult->streamRevenue);
+        $this->assertArrayHasKey('commodity_trading', $spikeResult->streamRevenue);
+
+        // Under inflation/energy spike, the Proof Desk generates windfall commodity trading profits
+        $this->assertGreaterThan(
+            $normalResult->streamRevenue['commodity_trading'],
+            $spikeResult->streamRevenue['commodity_trading']
+        );
+    }
 }

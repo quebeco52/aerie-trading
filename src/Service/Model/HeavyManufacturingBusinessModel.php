@@ -37,6 +37,22 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         return 0.015;
     } // Slightly lower secular growth, highly cyclical
 
+    // --- Dual-Stream Architecture ---
+    /** Baseline fraction of revenue derived from large-ticket OEM capital equipment manufacturing. */
+    public const OEM_EQUIPMENT_WEIGHT = 0.65;
+    /** Baseline fraction of revenue derived from high-margin aftermarket MRO parts and service contracts. */
+    public const AFTERMARKET_MRO_WEIGHT = 0.35;
+
+    // --- Backlog & Variance Physics ---
+    /** Fraction of OEM revenue shocks absorbed by multi-quarter order backlogs. */
+    public const BACKLOG_DAMPING_FACTOR = 0.50;
+    /** Volatility multiplier for OEM capital equipment sales shocks. */
+    public const OEM_VARIANCE_SCALAR = 0.40;
+    /** Volatility multiplier for defensive aftermarket MRO consumables and repairs. */
+    public const MRO_VARIANCE_SCALAR = 0.10;
+    /** Structural variable cost ratio of high-margin aftermarket MRO parts. */
+    public const MRO_VARIABLE_COST_RATIO = 0.20;
+
     // --- Pricing Power & Macro Physics ---
     public const MIN_BETA_PRICING_POWER_FLOOR = 0.80; // Highly sensitive to macro shifts
 
@@ -61,39 +77,65 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            ModelParam::PricingPowerIndex->value => self::MIN_BETA_PRICING_POWER_FLOOR,
+            ModelParam::PricingPowerIndex->value   => self::MIN_BETA_PRICING_POWER_FLOOR,
+            ModelParam::OemEquipmentWeight->value  => self::OEM_EQUIPMENT_WEIGHT,
+            ModelParam::AftermarketMroWeight->value => self::AFTERMARKET_MRO_WEIGHT,
         ]);
 
-        $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
+        $oemWeight     = $params[ModelParam::OemEquipmentWeight];
+        $mroWeight     = $params[ModelParam::AftermarketMroWeight];
+        $pricingPower  = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
         $inflationMultiplier = 2.0 - ($pricingPower * 2.0);
-        $macroSensitivityMultiplier = 0.5 + $pricingPower;
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $revenueZ = $mathUtility->generatePersistentZ($momentum['revenue'] ?? 0.0, 0.25);
+        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
 
-        $revenueShock = ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR));
-        $actualRevenue = $expectedRevenue * (1.0 + $revenueShock);
+        // Independent stream Z-scores
+        $oemZ = $streams->generateZ('oem_equipment', 0.20);
+        $mroZ = $streams->generateZ('aftermarket_mro', 0.40);
 
-        // Supply Chain Energy Penalty
-        // Heavy industry relies heavily on energy and commodities. We use energyPriceIndexEma instead of general inflation.
+        $dampedOemShock = ($oemZ * ($baselineVol * self::OEM_VARIANCE_SCALAR)) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
+        $mroShock       = $mroZ * ($baselineVol * self::MRO_VARIANCE_SCALAR);
+
+        $oemRevenue = max(0.0, $expectedRevenue * $oemWeight * (1.0 + $dampedOemShock));
+        $mroRevenue = max(0.0, $expectedRevenue * $mroWeight * (1.0 + $mroShock));
+        $actualRevenue = max(0.0, $oemRevenue + $mroRevenue);
+
+        // Structural Margin Blending:
+        // MRO consumables operate at structurally low variable cost (high margin).
+        // OEM equipment carries the heavy direct manufacturing and metal/assembly cost.
+        $expectedMroRevenue = $expectedRevenue * $mroWeight;
+        $expectedOemRevenue = $expectedRevenue * $oemWeight;
+        $mroBaselineCosts   = $expectedMroRevenue * self::MRO_VARIABLE_COST_RATIO;
+        $targetTotalCosts   = $expectedRevenue * $realizedVariableMargin;
+        $oemBaselineCosts   = max(0.0, $targetTotalCosts - $mroBaselineCosts);
+        $oemVariableMargin  = $expectedOemRevenue > 0 ? ($oemBaselineCosts / $expectedOemRevenue) : $realizedVariableMargin;
+
+        $actualVariableCosts = ($mroRevenue * self::MRO_VARIABLE_COST_RATIO) + ($oemRevenue * $oemVariableMargin);
+
+        // Supply Chain Energy Penalty: Heavy industry relies heavily on energy and commodities.
         $energyShift = ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0;
         $baseInflationPenalty = $energyShift > 0 ? $energyShift * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0;
-
         $inflationPenalty = $baseInflationPenalty * $inflationMultiplier;
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $inflationPenalty);
+        $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
+        $clampedMargin = $this->clampMargin($effectiveMargin + $inflationPenalty);
+
+        $primaryShockZ = abs($oemZ) > abs($mroZ) ? $oemZ : $mroZ;
+        $observableShockZ = ($oemZ * $oemWeight * self::OEM_VARIANCE_SCALAR * (1.0 - self::BACKLOG_DAMPING_FACTOR)) +
+            ($mroZ * $mroWeight * self::MRO_VARIANCE_SCALAR);
+        $observableShockZ *= $baselineVol;
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $revenueZ,
-            observableShockZ: $revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR),
+            primaryShockZ: $primaryShockZ,
+            observableShockZ: $observableShockZ,
             eventType: null,
-            streamZ: [
-                'revenue' => $revenueZ,
-            ],
+            streamZ: $streams->getStreamZ(),
             streamRevenue: [
-                'core_business' => $actualRevenue,
+                'oem_equipment'   => $oemRevenue,
+                'aftermarket_mro' => $mroRevenue,
             ],
         );
     }

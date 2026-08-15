@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -14,15 +15,18 @@ use App\Service\Event\ShockEvent;
  * Earnings strategy for Steel & Raw Metal Manufacturing.
  * 
  * Financial Physics:
- * - Brutally cyclical and extremely capital-intensive (blast furnaces must run 24/7).
- * - Revenue is a mix of stable domestic supply contracts and volatile "export dumping" where surplus is sold at spot prices.
- * - Margins compress aggressively during recessions when global demand drops.
+ * - Brutally cyclical and capital-intensive (blast furnaces must run continuously).
+ * - Revenue is a mix of stable, long-term OEM supply contracts (Automotive, Heavy Machinery) 
+ *   and highly volatile Hot-Rolled Coil (HRC) spot market trading.
+ * - Metal Spread & Energy Drag: Steel production is exposed to raw metallurgical coal, iron ore,
+ *   and electricity costs. When energy prices spike, metal spreads compress.
  */
 class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.50;
     public const BASE_COVERAGE_ERROR = 0.08;
+
     public function getModelThresholds(): array
     {
         return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 2.5,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.10, 'moat_spread' => 0.010, 'nwc_intensity' => 0.20, 'capex_completion_rate' => 0.35];
@@ -35,8 +39,8 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
 
     public function getCapexCyclicality(): float
     {
-        return 0.8;
-    } // Massive fixed infrastructure
+        return 0.80; // Massive fixed blast furnace infrastructure
+    }
 
     public function getSurpriseBlendWeights(): array
     {
@@ -44,37 +48,49 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Stream Weights ---
-    public const DOMESTIC_WEIGHT = 0.60;
-    public const EXPORT_WEIGHT = 0.40;
+    /** Baseline fraction of revenue from long-term contracted automotive and industrial steel. */
+    public const CONTRACTED_OEM_WEIGHT = 0.55;
+    /** Baseline fraction of revenue from volatile spot hot-rolled coil (HRC) metal markets. */
+    public const SPOT_HRC_WEIGHT       = 0.45;
 
-    // --- Physics ---
-    public const DOMESTIC_VARIANCE_SCALAR = 0.40; // Cyclical but contracted
-    public const EXPORT_VARIANCE_SCALAR = 1.50; // Highly volatile spot market
+    // --- Physics & Variances ---
+    public const CONTRACT_VARIANCE_SCALAR = 0.20; // Stable, contracted pricing
+    public const SPOT_VARIANCE_SCALAR     = 0.60; // Highly volatile spot commodity market
+    public const ENERGY_INPUT_DRAG_SCALAR = 0.80; // Blast furnaces & EAFs consume massive energy
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::ContractOemWeight->value => self::CONTRACTED_OEM_WEIGHT,
+            ModelParam::SpotHrcWeight->value     => self::SPOT_HRC_WEIGHT,
+        ]);
+
+        $contractWeight = $params[ModelParam::ContractOemWeight];
+        $spotWeight     = $params[ModelParam::SpotHrcWeight];
+
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $beta     = abs((float) $stock->getBeta());
 
         // Strongly tied to macro output gap and energy prices
-        $macroBoost = $macroState->outputGapEma * 1.5;
-        $energyDrag = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0) * 1.00; // Blast furnaces use massive energy
+        $macroBoost = $macroState->outputGapEma * 1.5 * $beta;
+        $energyDrag = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0) * self::ENERGY_INPUT_DRAG_SCALAR;
 
-        $domesticZ = $streams->generateZ('domestic_production', 0.25);
-        $exportZ   = $streams->generateZ('export_dumping', 0.10);
+        $contractZ = $streams->generateZ('contracted_oem_steel', 0.35);
+        $spotZ     = $streams->generateZ('spot_hrc_market', 0.15);
 
-        $domesticRevenue = $expectedRevenue * self::DOMESTIC_WEIGHT * (1.0 + ($domesticZ * ($baselineVol * self::DOMESTIC_VARIANCE_SCALAR)) + $macroBoost - $energyDrag);
-        $exportRevenue   = $expectedRevenue * self::EXPORT_WEIGHT   * (1.0 + ($exportZ   * ($baselineVol * self::EXPORT_VARIANCE_SCALAR)) + ($macroBoost * 1.5));
+        $contractRevenue = max(0.0, $expectedRevenue * $contractWeight * (1.0 + ($contractZ * ($baselineVol * self::CONTRACT_VARIANCE_SCALAR)) + ($macroBoost * 0.5)));
+        $spotRevenue     = max(0.0, $expectedRevenue * $spotWeight     * (1.0 + ($spotZ     * ($baselineVol * self::SPOT_VARIANCE_SCALAR)) + ($macroBoost * 1.5)));
 
-        $actualRevenue = max(0.0, $domesticRevenue + $exportRevenue);
+        $actualRevenue = max(0.0, $contractRevenue + $spotRevenue);
 
-        // Cyclical Margin Compression
-        $clampedMargin = $this->clampMargin($realizedVariableMargin - ($energyDrag * 0.5));
+        // Cyclical Metal Spread & Energy Compression
+        $clampedMargin = $this->clampMargin($realizedVariableMargin - ($energyDrag * 0.50));
 
-        $primaryShockZ = abs($exportZ) > abs($domesticZ) ? $exportZ : $domesticZ;
-        $observableShockZ = (($domesticZ * self::DOMESTIC_WEIGHT * self::DOMESTIC_VARIANCE_SCALAR) * $baselineVol)
-            + (($macroBoost - $energyDrag) * self::DOMESTIC_WEIGHT)
-            + (($macroBoost * 1.5) * self::EXPORT_WEIGHT);
+        $primaryShockZ = abs($spotZ) > abs($contractZ) ? $spotZ : $contractZ;
+        $observableShockZ = ($contractZ * $contractWeight * self::CONTRACT_VARIANCE_SCALAR * $baselineVol)
+            + ($spotZ * $spotWeight * self::SPOT_VARIANCE_SCALAR * $baselineVol)
+            + ($macroBoost * self::SPOT_HRC_WEIGHT);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -85,8 +101,8 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: [
-                'domestic_production' => $domesticRevenue,
-                'export_dumping'      => $exportRevenue,
+                'contracted_oem_steel' => $contractRevenue,
+                'spot_hrc_market'      => $spotRevenue,
             ],
         );
     }

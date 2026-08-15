@@ -7,7 +7,7 @@
 *   **Core Stack:** PHP 8.4+, Symfony 8.0.*, Doctrine ORM, Twig, Tailwind CSS, Docker.
 
 ## No Invented Math
-Do not write custom mathematical formulas, approximations, or "game-like" logic. Only use real world financial models/formulas and centralize them in the `App\Service\Math\MathUtility` class if they are used in more then one place.
+Do not write custom mathematical formulas, approximations, or "game-like" logic. Only use real world financial models/formulas and centralize them in the `App\Service\Math\MathUtility` class if they can be used in more then one place.
 
 ## Defining Constants
 All financial parameters and thresholds must be defined as class constants (or placed in `FinancialConstants.php` if shared).
@@ -21,3 +21,7 @@ All financial parameters and thresholds must be defined as class constants (or p
 public const NIM_BASE_SPREAD_BUFFER = 0.005;
 
 ```
+
+## Testing
+* All tests must be written in PHPUnit.
+* After implementing a new model or a new feature, you must write a new test for it and test it.

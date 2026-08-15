@@ -14,7 +14,7 @@ class MacroEngine
     /** The Federal Reserve's long-term annual inflation target (2%). */
     public const TARGET_INFLATION = 0.02;
     /** The natural real rate of interest (r*) representing neutral monetary policy. */
-    public const NATURAL_RATE = 0.0125;
+    public const NATURAL_RATE = 0.021;
     /** The baseline corporate tax rate for standard physical companies. */
     public const BASE_CORPORATE_TAX_RATE = 0.21;
     /** The baseline historical equity risk premium expected over risk-free assets. */
@@ -27,17 +27,17 @@ class MacroEngine
     public const CASH_YIELD_SPREAD = 0.0025;
 
     // KALDOR-KALECKI CONSTANTS
-    public const KALDOR_MOMENTUM = 0.20;
-    public const KALDOR_CAPACITY = 200.0;
-    public const KALDOR_MONETARY_DRAG = 1.0;
+    public const KALDOR_MOMENTUM = 0.15;
+    public const KALDOR_CAPACITY = 180.0;
+    public const KALDOR_MONETARY_DRAG = 0.75;
     public const KALDOR_FISCAL_MULTIPLIER = 0.50;
     public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.010;
 
     // OKUN'S LAW (LABOR MARKET)
     public const NATURAL_UNEMPLOYMENT = 0.04;
     public const OKUNS_COEFFICIENT = 0.4;
-    public const OKUNS_HIRING_SPEED = 1.0;
-    public const OKUNS_FIRING_SPEED = 4.0;
+    public const OKUNS_HIRING_SPEED = 1.5;
+    public const OKUNS_FIRING_SPEED = 3.0;
 
 
 
@@ -92,7 +92,7 @@ class MacroEngine
     public const ZLB_PROXIMITY_THRESHOLD = 0.015;
 
     // NELSON-SIEGEL TERM PREMIUM CONSTANTS
-    public const NS_BASE_TERM_PREMIUM = 0.0225;
+    public const NS_BASE_TERM_PREMIUM = 0.0125;
     public const NS_GAP_TERM_PREMIUM_SCALE = -0.25;
 
     // NEW KEYNESIAN PHILLIPS CURVE CONSTANTS
@@ -102,23 +102,23 @@ class MacroEngine
 
     // MERTON STRUCTURAL CREDIT SPREAD CONSTANTS (Merton 1974)
     public const BASE_CREDIT_SPREAD = 0.020;        // 200 bps normal corporate spread
-    public const MERTON_LEVERAGE_SENSITIVITY = 6.0; // Sensitivity of default risk to GDP contractions
+    public const MERTON_LEVERAGE_SENSITIVITY = 4.0; // Sensitivity of default risk to GDP contractions
     public const MERTON_VOL_SENSITIVITY = 0.15;     // Sensitivity of default spreads to excess market volatility
     public const MAX_CREDIT_SPREAD = 0.10;          // 1000 bps crisis spread cap
     public const CREDIT_SPREAD_EXCESS_VOL_THRESHOLD = 0.20;
 
     // BARRO TAX-SMOOTHING & FISCAL STABILIZER CONSTANTS (Barro 1979)
-    public const TARGET_CORPORATE_TAX_RATE = 0.20;     // 20% structural baseline corporate tax rate
+    public const TARGET_CORPORATE_TAX_RATE = 0.21;     // 21% structural baseline corporate tax rate
     public const FISCAL_STABILIZER_SENSITIVITY = 1.0;  // Countercyclical tax response to output gap
-    public const FISCAL_ADJUSTMENT_SPEED = 0.15;        // Institutional speed of tax legislation (~4-5 yr half-life)
+    public const FISCAL_ADJUSTMENT_SPEED = 0.20;        // Institutional speed of tax legislation
     public const MIN_CORPORATE_TAX_RATE = 0.12;        // 12% statutory tax floor during deep recessions
     public const MAX_CORPORATE_TAX_RATE = 0.30;        // 30% statutory tax cap during overheating booms
 
     // --- CONSUMER SENTIMENT INDEX CONSTANTS ---
     public const SENTIMENT_BASELINE = 100.0;
-    public const SENTIMENT_MISERY_MULTIPLIER = 300.0;
+    public const SENTIMENT_MISERY_MULTIPLIER = 200.0;
     public const SENTIMENT_VOLATILITY_MULTIPLIER = 50.0;
-    public const SENTIMENT_MOMENTUM_MULTIPLIER = 500.0;
+    public const SENTIMENT_MOMENTUM_MULTIPLIER = 250.0;
     public const SENTIMENT_RATE_MULTIPLIER = 100.0;
     public const ANIMAL_SPIRITS_MEAN_REVERSION = 2.0; // Theta (Speed of return to reality)
     public const ANIMAL_SPIRITS_VOLATILITY = 2.5;     // Sigma (How irrational people get)
@@ -555,7 +555,7 @@ class MacroEngine
         // The "Rational" Target (Mu)
         $fundamentalSentiment = self::SENTIMENT_BASELINE - $miseryPenalty - $momentumPenalty - $fearPenalty - $ratePenalty - $gasPanic;
         if ($state->outputGap > 0.0) {
-            $fundamentalSentiment += ($state->outputGap * 200.0);
+            $fundamentalSentiment += ($state->outputGap * 450.0);
         }
 
         // 2. Apply Ornstein-Uhlenbeck (OU) Stochastic Process for "Animal Spirits"

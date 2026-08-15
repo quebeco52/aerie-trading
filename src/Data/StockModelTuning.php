@@ -64,10 +64,56 @@ class StockModelTuning
         ],
 
         // =====================================================================
-        // BANKING ARCHETYPES
+        // COMMERCIAL BANKING & CREDIT SERVICES ARCHETYPES
         // =====================================================================
 
+        // --- Lakebird Bank (LAKE) ---
+        // Universal banking behemoth with captive corporate Lakebird Syndicate dividend streams.
+        'LAKE' => [
+            ModelParam::ProprietaryDividendWeight->value => 0.20,
+            ModelParam::NiiRevenueWeight->value          => 0.60,
+            ModelParam::FeeRevenueWeight->value          => 0.20,
+            ModelParam::NimInversionSensitivity->value   => 8.0,
+            ModelParam::CreditRiskAppetite->value        => 0.40,
+        ],
 
+        // --- Riverstone Financial (RIVR) ---
+        // Agile regional lender poaching district SMEs. Pure NII model (90%) hyper-sensitive to NIM inversion.
+        'RIVR' => [
+            ModelParam::NiiRevenueWeight->value          => 0.90,
+            ModelParam::FeeRevenueWeight->value          => 0.10,
+            ModelParam::NimInversionSensitivity->value   => 12.0,
+            ModelParam::CreditRiskAppetite->value        => 0.60,
+        ],
+
+        // --- Talon Credit (TALN) ---
+        // Prime credit card & digital merchant payment rail network. Substantial swipe interchange fee tollbooth (45%).
+        'TALN' => [
+            ModelParam::LendingRevenueWeight->value  => 0.55,
+            ModelParam::NetworkRevenueWeight->value  => 0.45,
+            ModelParam::CeclSpreadSensitivity->value => 1.40,
+        ],
+
+        // --- Stork Consumer Credit (STRK) ---
+        // Subprime consumer finance & installment loan originator. Highly exposed to credit spread widening.
+        'STRK' => [
+            ModelParam::LendingRevenueWeight->value  => 0.95,
+            ModelParam::NetworkRevenueWeight->value  => 0.05,
+            ModelParam::CeclSpreadSensitivity->value => 2.20,
+        ],
+
+        // =====================================================================
+        // SHADOW BANKING ARCHETYPES
+        // =====================================================================
+
+        // --- Brine Pool Capital (POOL) ---
+        // High-risk mezzanine financing, subprime bridge loans, RMBS/CMBS securitization engine.
+        'POOL' => [
+            ModelParam::MortgageOriginationWeight->value => 0.60,
+            ModelParam::DirectLendingWeight->value       => 0.40,
+            ModelParam::RateSensitivityScalar->value     => 2.50,
+            ModelParam::PricingPowerIndex->value         => 0.40,
+        ],
 
         // =====================================================================
         // INSURANCE & REINSURANCE ARCHETYPES
@@ -75,20 +121,25 @@ class StockModelTuning
 
         // --- Safe Harbor Reinsurance (SAFE) ---
         // Institutional reinsurance titan that absorbs extreme systemic and catastrophe tail risk.
+        // Blends quota-share/excess-of-loss treaties with catastrophe risk bond ("True 10-Year Yield") issuances.
         'SAFE' => [
-            ModelParam::CatastropheZThreshold->value => -1.55,
-            ModelParam::CatastropheLossScalar->value => 0.20,
-            ModelParam::FloatEquityWeight->value     => 0.05,
-            ModelParam::EquityPortfolioVol->value    => 0.08,
+            ModelParam::TreatyReinsuranceWeight->value   => 0.60,
+            ModelParam::CatBondSpreadWeight->value       => 0.40,
+            ModelParam::CatastropheZThreshold->value     => -1.55,
+            ModelParam::CatastropheLossScalar->value     => 0.20,
+            ModelParam::FloatEquityWeight->value         => 0.05,
+            ModelParam::EquityPortfolioVol->value        => 0.08,
         ],
 
         // --- White Dove Insurance (DOVE) ---
         // Retail multi-line P&C and Life insurer spun out of Safe Harbor. Sheds tail risks to reinsurers.
         'DOVE' => [
-            ModelParam::CatastropheZThreshold->value => -1.80,
-            ModelParam::CatastropheLossScalar->value => 0.08,
-            ModelParam::FloatEquityWeight->value     => 0.10,
-            ModelParam::EquityPortfolioVol->value    => 0.10,
+            ModelParam::PropertyCasualtyWeight->value    => 0.55,
+            ModelParam::LifeAndAnnuityWeight->value      => 0.45,
+            ModelParam::CatastropheZThreshold->value     => -1.80,
+            ModelParam::CatastropheLossScalar->value     => 0.08,
+            ModelParam::FloatEquityWeight->value         => 0.10,
+            ModelParam::EquityPortfolioVol->value        => 0.10,
         ],
 
         // =====================================================================
@@ -105,43 +156,16 @@ class StockModelTuning
 
         // --- Vulture Capital Recovery (VULT) ---
         // Specialist distressed debt restructuring and turnaround equity sponsor.
+        // Counter-cyclical predator profiting from loan-to-own liquidations and restructuring advisory fees.
         'VULT' => [
-            ModelParam::AdvisoryFeeWeight->value      => 0.40,
-            ModelParam::AssetRecoveryWeight->value    => 0.30,
-            ModelParam::LoanToOwnGainsWeight->value => 0.30,
+            ModelParam::RestructuringAdvisoryWeight->value => 0.35,
+            ModelParam::TurnaroundGainsWeight->value       => 0.65,
+            ModelParam::AumMarketBetaScalar->value         => 0.30,
         ],
 
         // =====================================================================
-        // REAL ESTATE INVESTMENT TRUST (REIT) ARCHETYPES
+        // CLEARINGHOUSE & MARKET INFRASTRUCTURE ARCHETYPES
         // =====================================================================
-
-        // --- Lakeshore Living (SHOR) ---
-        // Residential multi-family apartment REIT with ultra-stable annual leases.
-        'SHOR' => [
-            ModelParam::StickyLeaseWeight->value          => 0.75,
-            ModelParam::VariableHospitalityWeight->value  => 0.10,
-            ModelParam::SecuritizationIncomeWeight->value => 0.15,
-        ],
-
-        // --- Plaza Civic River Trust (PLZA) ---
-        // Commercial & Class-A office REIT with mix of corporate leases and amenity parking/retail.
-        'PLZA' => [
-            ModelParam::StickyLeaseWeight->value         => 0.80,
-            ModelParam::VariableHospitalityWeight->value => 0.20,
-        ],
-
-        // --- Elderbird Retirement Services (ELDE) ---
-        // Healthcare & assisted living property REIT with long-duration institutional leases.
-        'ELDE' => [
-            ModelParam::StickyLeaseWeight->value         => 0.80,
-            ModelParam::VariableHospitalityWeight->value => 0.05,
-            ModelParam::LongevityBondYieldWeight->value => 0.15,
-        ],
-
-        'STG' => [
-            ModelParam::PncWeight->value          => 0.40,
-            ModelParam::LifeAnnuityWeight->value => 0.60,
-        ],
 
         // --- Aerie Central Clearing (ACC) ---
         // Systemically important central counterparty clearinghouse (CCP). 
@@ -177,97 +201,45 @@ class StockModelTuning
         ],
 
         // =====================================================================
-        // COMMERCIAL BANKING & CREDIT SERVICES ARCHETYPES
+        // REAL ESTATE INVESTMENT TRUST (REIT) ARCHETYPES
         // =====================================================================
 
-        // --- Lakebird Bank (LAKE) ---
-        // Universal banking behemoth.
-        'LAKE' => [
-            ModelParam::ProprietaryDividendWeight->value => 0.20,
-            ModelParam::NiiRevenueWeight->value          => 0.60,
-            ModelParam::FeeRevenueWeight->value          => 0.20,
-            ModelParam::NimInversionSensitivity->value   => 8.0,
-            ModelParam::CreditRiskAppetite->value        => 0.40,
+        // --- Lakeshore Living (SHOR) ---
+        // Residential multi-family apartment REIT with ultra-stable annual leases and securitization packaging.
+        'SHOR' => [
+            ModelParam::StickyLeaseWeight->value          => 0.75,
+            ModelParam::VariableHospitalityWeight->value  => 0.10,
+            ModelParam::SecuritizationIncomeWeight->value => 0.15,
         ],
 
-        // --- Riverstone Financial (RIVR) ---
-        // Agile regional lender poaching district SMEs. Pure NII model (90%) hyper-sensitive to NIM inversion.
-        'RIVR' => [
-            ModelParam::NiiRevenueWeight->value          => 0.90,
-            ModelParam::FeeRevenueWeight->value          => 0.10,
-            ModelParam::NimInversionSensitivity->value   => 12.0,
-            ModelParam::CreditRiskAppetite->value        => 0.60,
+        // --- Plaza Civic River Trust (PLZA) ---
+        // Commercial & Class-A office REIT with mix of corporate leases and amenity parking/retail.
+        'PLZA' => [
+            ModelParam::StickyLeaseWeight->value         => 0.80,
+            ModelParam::VariableHospitalityWeight->value => 0.20,
         ],
 
-        // --- Talon Credit (TALN) ---
-        // Prime credit card & digital merchant payment rail network. Substantial swipe interchange fee tollbooth (45%).
-        'TALN' => [
-            ModelParam::LendingRevenueWeight->value  => 0.55,
-            ModelParam::NetworkRevenueWeight->value  => 0.45,
-            ModelParam::CeclSpreadSensitivity->value => 1.40,
-        ],
-
-        // --- Stork Consumer Credit (STRK) ---
-        // Subprime consumer finance & installment loan originator. Highly exposed to credit spread widening.
-        'STRK' => [
-            ModelParam::LendingRevenueWeight->value  => 0.95,
-            ModelParam::NetworkRevenueWeight->value  => 0.05,
-            ModelParam::CeclSpreadSensitivity->value => 2.20,
+        // --- Elderbird Retirement Services (ELDE) ---
+        // Healthcare & assisted living property REIT with long-duration institutional leases and Longevity Yield Bonds.
+        'ELDE' => [
+            ModelParam::StickyLeaseWeight->value         => 0.80,
+            ModelParam::VariableHospitalityWeight->value => 0.05,
+            ModelParam::LongevityBondYieldWeight->value  => 0.15,
         ],
 
         // =====================================================================
-        // TECHNOLOGY & DIGITAL PLATFORM ARCHETYPES
+        // TECHNOLOGY, DIGITAL PLATFORMS & HARDWARE ARCHETYPES
         // =====================================================================
 
         // --- Hummingbird Interactive (HUMM) ---
-        // Consumer mobile OS & advertising giant. Heavily ad-supported platform usage (65%).
+        // Consumer mobile OS & advertising giant. Heavily ad-supported platform usage (45%) & cloud (40%).
         'HUMM' => [
             ModelParam::SubscriptionRevenueWeight->value => 0.15,
             ModelParam::AdvertisingRevenueWeight->value  => 0.45,
             ModelParam::CloudInfrastructureWeight->value => 0.40,
-            ModelParam::AdvertisingCyclicality->value     => 0.22,
-            ModelParam::MonopolyAggression->value         => 0.90, // Ruthless data monopoly, high margins, existential regulatory risk
+            ModelParam::AdvertisingCyclicality->value    => 0.22,
+            ModelParam::MonopolyAggression->value        => 0.90, // Ruthless data monopoly, high margins, existential regulatory risk
         ],
-
-        // =====================================================================
-        // COMMODITY MINING & EXTRACTION ARCHETYPES
-        // =====================================================================
-
-        // --- Sinking Shore Extraction (SINK) ---
-        // Deep-sea minerals & rare metals extraction. Skewed toward production volume (70%).
-        'SINK' => [
-            ModelParam::ExtractionRevenueWeight->value => 0.70,
-            ModelParam::SpotPriceWeight->value         => 0.30,
-            ModelParam::SpotPriceSensitivity->value    => 0.30, // Highly hedged to secure deep-sea financing
-        ],
-
-        // --- Cascade Minerals & Energy (CASC) ---
-        // Diversified global mining & metallurgical coal exporter. Balanced volume & spot exposure (50/50).
-        'CASC' => [
-            ModelParam::ExtractionRevenueWeight->value => 0.40,
-            ModelParam::SpotPriceWeight->value         => 0.40,
-            ModelParam::RefiningSpreadWeight->value    => 0.20,
-            ModelParam::SpotPriceSensitivity->value    => 0.50, // Standard 50% hedged production book
-        ],
-
-        // --- Condor Rare Earths (CNDR) ---
-        // Strategic lithium & rare earth refining operator. High spot commodity price sensitivity (60%).
-        'CNDR' => [
-            ModelParam::ExtractionRevenueWeight->value => 0.40,
-            ModelParam::SpotPriceWeight->value         => 0.60,
-            ModelParam::SpotPriceSensitivity->value    => 0.75, // Mostly unhedged wildcat, exposed to massive spot volatility
-        ],
-
-        // --- Steel Wings Smelting & Corp (WING) ---
-        // Industrial steel smelting & metallurgical production. Heavy physical production volume focus (80%).
-        'WING' => [
-            ModelParam::ExtractionRevenueWeight->value => 0.80,
-            ModelParam::SpotPriceWeight->value         => 0.20,
-        ],
-
-        // =====================================================================
-        // SEMICONDUCTOR ARCHETYPES
-        // =====================================================================
 
         // --- Silicon Creek Foundries (SILC) ---
         // Dedicated pure-play advanced silicon wafer foundry. Pure manufacturing capacity focus (85%).
@@ -276,190 +248,20 @@ class StockModelTuning
             ModelParam::DesignRevenueWeight->value  => 0.15,
         ],
 
-        // =====================================================================
-        // DEFENSE & AEROSPACE ARCHETYPES
-        // =====================================================================
-
-        // --- Gryphon Defense Systems (GRIP) ---
-        // Tier-1 sovereign aerospace & defense contractor. Heavily cost-plus domestic defense mandates.
-        'GRIP' => [
-            ModelParam::DomesticProcurementWeight->value   => 0.80,
-            ModelParam::ForeignMilitarySalesWeight->value => 0.20,
+        // --- Penguin Computing (PENG) ---
+        // High performance supercomputers and liquid cooling. High tech margins. Heavily weighted to enterprise.
+        'PENG' => [
+            ModelParam::PricingPowerIndex->value => 0.65,
+            ModelParam::EnterpriseWeight->value  => 0.85,
+            ModelParam::ConsumerWeight->value    => 0.15,
         ],
 
-        // =====================================================================
-        // SECURITY & PROTECTION SERVICES ARCHETYPES
-        // =====================================================================
-
-        // --- Bird Watch Security (WATCH) ---
-        // Premier domestic physical asset protection & municipal security retainers.
-        'WATCH' => [
-            ModelParam::GovernmentContractWeight->value => 0.40,
-            ModelParam::RetainerWeight->value            => 0.50,
-            ModelParam::ExpeditionaryWeight->value       => 0.10,
-        ],
-
-        // --- Osprey Global Vanguard (OSPR) ---
-        // Extraterritorial private military contractor & black-ops extraction.
-        'OSPR' => [
-            ModelParam::GovernmentContractWeight->value => 0.10,
-            ModelParam::RetainerWeight->value            => 0.10,
-            ModelParam::ExpeditionaryWeight->value       => 0.80,
-        ],
-
-        // =====================================================================
-        // MARINE SHIPPING & LOGISTICS ARCHETYPES
-        // =====================================================================
-
-        // --- Albatross Deepwaters (ALBT) ---
-        // Marine shipping freight operator. Heavily exposed to short-term spot ocean freight rates.
-        'ALBT' => [
-            ModelParam::SpotCharterWeight->value     => 0.75,
-            ModelParam::ContractCharterWeight->value => 0.25,
-        ],
-
-        // --- Canvasback Logistics (CANV) ---
-        // Integrated freight & logistics provider. Skewed toward dedicated multi-year enterprise contracts.
-        'CANV' => [
-            ModelParam::SpotCharterWeight->value     => 0.40,
-            ModelParam::ContractCharterWeight->value => 0.60,
-        ],
-
-        // --- Kestrel Civic Lines (KSTL) ---
-        // Railroad & dedicated freight line operator. Overwhelmingly long-term contracted rail lines (75%).
-        'KSTL' => [
-            ModelParam::SpotCharterWeight->value     => 0.25,
-            ModelParam::ContractCharterWeight->value => 0.75,
-        ],
-
-        // =====================================================================
-        // BIOTECHNOLOGY & PHARMACEUTICAL ARCHETYPES
-        // =====================================================================
-
-        // --- Ibis Pharmaceuticals (IBIS) ---
-        // Global biopharma giant. Skewed toward established commercial blockbuster portfolio (75%).
-        'IBIS' => [
-            ModelParam::EstablishedDrugWeight->value => 0.90,
-            ModelParam::PipelineDrugWeight->value    => 0.10,
-        ],
-
-        // --- Crane Medical Network (CRAN) ---
-        // Specialized clinical development and medical oncology network. Higher experimental R&D pipeline weighting (45%).
-        'CRAN' => [
-            ModelParam::EstablishedDrugWeight->value => 0.55,
-            ModelParam::PipelineDrugWeight->value    => 0.45,
-        ],
-
-        // =====================================================================
-        // LUXURY GOODS & FASHION ARCHETYPES
-        // =====================================================================
-
-        // --- Peacock Heritage Group (PEAC) ---
-        // Elite ultra-luxury French house archetype. Heavily Haute Couture & Maison leather goods (70%).
-        'PEAC' => [
-            ModelParam::HauteCoutureWeight->value     => 0.70,
-            ModelParam::AccessibleLuxuryWeight->value => 0.30,
-        ],
-
-        // =====================================================================
-        // CONSUMER STAPLES & PACKAGED GOODS ARCHETYPES
-        // =====================================================================
-
-        // --- Pheasant & Morris International (PHIL) ---
-        // Global tobacco and nicotine conglomerate. Overwhelmingly branded packaged staples (85%).
-        'PHIL' => [
-            ModelParam::BrandedStaplesWeight->value  => 0.85,
-            ModelParam::VolumeCommodityWeight->value => 0.15,
-        ],
-
-        // --- Sugarbird Confectionery (SGRB) ---
-        // Confectionery, snacks & packaged food leader. Skewed toward packaged branded staples (75%).
-        'SGRB' => [
-            ModelParam::BrandedStaplesWeight->value   => 0.65,
-            ModelParam::VolumeCommodityWeight->value  => 0.15,
-            ModelParam::CommodityTradingWeight->value => 0.10,
-            ModelParam::LandSpeculationWeight->value  => 0.10,
-        ],
-
-        // --- Copperhead Coffee Roasters (BREW) ---
-        // Retail coffee roasting & distribution. Heavy corporate footprint (90%) with minor franchise presence (10%).
-        'BREW' => [
-            ModelParam::CorporateWeight->value => 0.90,
-            ModelParam::FranchiseWeight->value => 0.10,
-        ],
-
-        // --- Poultry Crop Operations (CROP) ---
-        // Integrated poultry & agricultural producer. Skewed toward commodity volume agriculture (70%).
-        'CROP' => [
-            ModelParam::BrandedStaplesWeight->value   => 0.20,
-            ModelParam::VolumeCommodityWeight->value  => 0.50,
-            ModelParam::CommodityTradingWeight->value => 0.15,
-            ModelParam::LandSpeculationWeight->value  => 0.15,
-        ],
-
-        // --- Lark & Crest Brands (LARK) ---
-        // Household goods & personal hygiene giant (P&G / Kimberly-Clark archetype).
-        // Essential consumer staple with overwhelming brand dominance & pricing power (80% branded staples).
-        'LARK' => [
-            ModelParam::BrandedStaplesWeight->value  => 0.80,
-            ModelParam::VolumeCommodityWeight->value => 0.20,
-        ],
-
-        // --- Crossbill Precision Tooling (CBIL) ---
-        // Operates as an industrial tollbooth with incredibly high margins and ROIC due to absolute quality control.
-        // Extremely insulated from typical manufacturing boom/bust.
-        'CBIL' => [
-            ModelParam::ConsumerWeight->value   => 0.10, // Retail secondary market liquidations (volatile)
-            ModelParam::CommercialWeight->value => 0.90, // Unbreakable industrial fortress / premium tooling (sticky)
-        ],
-
-        // --- Pintail Beverage Group (PINT) ---
-        // Industrial ethanol syndicate & heritage alcohol cartel.
-        // Balances branded artisanal spirits with aggressive bulk ethanol/commodity trading via the 'Proof Desk'.
-        'PINT' => [
-            ModelParam::BrandedStaplesWeight->value  => 0.60,
-            ModelParam::VolumeCommodityWeight->value => 0.40,
-        ],
-
-        // =====================================================================
-        // UTILITY & MUNICIPAL INFRASTRUCTURE ARCHETYPES
-        // =====================================================================
-
-        // --- Bird Power Inc (BIRD) ---
-        // Integrated electric utility. Heavily regulated rate base transmission & distribution (80%), merchant renewables (20%).
-        'BIRD' => [
-            ModelParam::RegulatedBaseWeight->value       => 0.80,
-            ModelParam::UnregulatedMerchantWeight->value => 0.20,
-        ],
-
-        // --- Heron Regional Water (WADE) ---
-        // Regulated municipal water & wastewater utility. Pure regulated rate base monopoly (95%).
-        'WADE' => [
-            ModelParam::RegulatedBaseWeight->value       => 0.95,
-            ModelParam::UnregulatedMerchantWeight->value => 0.05,
-        ],
-
-        // =====================================================================
-        // TELECOMMUNICATIONS ARCHETYPES
-        // =====================================================================
-
-        // --- Loon Call Telecom (LOON) ---
-        // Regional telecom & fiber carrier. Skewed toward recurring wireless/broadband subscriptions (80%) with equipment sales (20%).
-        'LOON' => [
-            ModelParam::SubscriptionWeight->value => 0.80,
-            ModelParam::EquipmentWeight->value    => 0.20,
-        ],
-
-        // =====================================================================
-        // WASTE MANAGEMENT ARCHETYPES
-        // =====================================================================
-
-        // --- Cormorant Environmental (CORM) ---
-        // Municipal waste management & environmental services operator.
-        'CORM' => [
-            ModelParam::ResidentialWeight->value => 0.60,
-            ModelParam::CommercialWeight->value  => 0.30,
-            ModelParam::RecyclingWeight->value   => 0.10,
+        // --- Weaver Marketplace (WEAV) ---
+        // Massive third-party ecosystem (the profit engine) blended with volatile first-party retail (the scale engine).
+        'WEAV' => [
+            ModelParam::ThirdPartyWeight->value         => 0.45,
+            ModelParam::FirstPartyWeight->value         => 0.30,
+            ModelParam::DigitalAdsWeight->value         => 0.25,
         ],
 
         // =====================================================================
@@ -481,8 +283,238 @@ class StockModelTuning
         ],
 
         // =====================================================================
-        // RESORTS & CASINOS ARCHETYPES
+        // COMMODITY MINING & EXTRACTION ARCHETYPES
         // =====================================================================
+
+        // --- Sinking Shore Extraction (SINK) ---
+        // --- Sinking Shore Extraction (SINK) ---
+        // Pure-play upstream offshore deepwater oil & gas E&P. Violently leveraged to spot commodity prices & global energy cycles.
+        'SINK' => [
+            ModelParam::ExtractionRevenueWeight->value => 0.50, // Deepwater offshore drilling volume
+            ModelParam::SpotPriceWeight->value         => 0.50, // Heavy unhedged spot oil & gas price exposure
+            ModelParam::RefiningSpreadWeight->value    => 0.00,
+            ModelParam::SpotPriceSensitivity->value    => 0.85, // Aggressive unhedged price-taker
+        ],
+
+        // --- Cascade Refining & Marketing (CASC) ---
+        // Downstream high-conversion oil refinery & logistics network. Quant crack-spread arbitrage powerhouse.
+        'CASC' => [
+            ModelParam::ExtractionRevenueWeight->value => 0.25, // Physical refining throughput & logistics terminals
+            ModelParam::SpotPriceWeight->value         => 0.15, // Strategic physical crude storage inventory
+            ModelParam::RefiningSpreadWeight->value    => 0.60, // Algorithmic crack spread arbitrage (gasoline/diesel/jet fuel)
+            ModelParam::SpotPriceSensitivity->value    => 0.30, // Heavily hedged physical inventory
+        ],
+
+        // --- Condor Extraction (CNDR) ---
+        // Global base metals & rare earth open-pit strip mining titan. Ruthless physical anchor of the district.
+        'CNDR' => [
+            ModelParam::ExtractionRevenueWeight->value => 0.60, // Massive mechanized extraction volume
+            ModelParam::SpotPriceWeight->value         => 0.40, // Base metal / rare earth spot price super-cycle exposure
+            ModelParam::RefiningSpreadWeight->value    => 0.00,
+            ModelParam::SpotPriceSensitivity->value    => 0.70, // Semi-hedged sovereign concessions
+        ],
+
+        // =====================================================================
+        // HEAVY INDUSTRY & MANUFACTURING ARCHETYPES
+        // =====================================================================
+
+        // --- Steel Wings Smelting & Corp (WING) ---
+        // Industrial steel smelting & metallurgical production. Heavy contracted OEM supply (70%) with spot HRC spread (30%).
+        'WING' => [
+            ModelParam::ContractOemWeight->value  => 0.70,
+            ModelParam::SpotHrcWeight->value      => 0.30,
+            ModelParam::PricingPowerIndex->value  => 0.40,
+        ],
+
+        // --- Iron Beak Heavy Industries (IBHI) ---
+        // Massive physical architect. Captive builder for district civic megaprojects, commercial dry docks, and port infrastructure.
+        'IBHI' => [
+            ModelParam::CivilInfrastructureWeight->value   => 0.60, // Captive builder for LAKE/SWAN civic projects
+            ModelParam::CommercialEpcWeight->value         => 0.25, // Corporate commercial towers & fabrication yards
+            ModelParam::FacilitiesMaintenanceWeight->value => 0.15, // Municipal maintenance & dry dock upkeep
+            ModelParam::PricingPowerIndex->value           => 0.35, // High fixed-price contract exposure
+        ],
+
+        // --- River Stream Industries (RIVE) ---
+        // Robotics and automation manufacturer. Long-term service contracts and essential margin-expanding tools.
+        'RIVE' => [
+            ModelParam::PricingPowerIndex->value => 0.85,
+            ModelParam::EquipmentWeight->value   => 0.40,
+            ModelParam::ServicesWeight->value    => 0.60,
+        ],
+
+        // --- Crossbill Precision Tooling (CBIL) ---
+        // Operates as an industrial tollbooth with incredibly high margins and ROIC due to absolute quality control.
+        // Extremely insulated from typical manufacturing boom/bust.
+        'CBIL' => [
+            ModelParam::ConsumerWeight->value   => 0.10, // Retail secondary market liquidations (volatile)
+            ModelParam::CommercialWeight->value => 0.90, // Unbreakable industrial fortress / premium tooling (sticky)
+        ],
+
+        // --- Three Rivers Manufacturing (TRIV) ---
+        // Unsinkable, diversified industrial conglomerate with ubiquitous products.
+        'TRIV' => [
+            ModelParam::IndustrialConglomerateWeight->value => 0.60, // Ubiquitous multi-industrial manufacturing
+            ModelParam::DefensiveStaplesWeight->value       => 0.30, // Household & adhesive consumer staples
+            ModelParam::ContrarianFloatWeight->value        => 0.10, // Operating cash float
+            ModelParam::PricingPowerIndex->value            => 0.60,
+        ],
+
+        // --- Breakwater Trust (BRKW) ---
+        // Deeply entrenched multi-generational industrial conglomerate and value anchor.
+        'BRKW' => [
+            ModelParam::IndustrialConglomerateWeight->value => 0.30, // Entrenched industrial subsidiaries
+            ModelParam::DefensiveStaplesWeight->value       => 0.45, // Prime district real estate & infrastructure tollbooths
+            ModelParam::ContrarianFloatWeight->value        => 0.25, // High-yield catastrophe bond shadow liquidity
+            ModelParam::PricingPowerIndex->value            => 0.90,
+        ],
+
+        // =====================================================================
+        // DEFENSE & SECURITY ARCHETYPES
+        // =====================================================================
+
+        // --- Gryphon Defense Systems (GRIP) ---
+        // Tier-1 sovereign aerospace & defense contractor. Heavily cost-plus domestic defense mandates.
+        'GRIP' => [
+            ModelParam::DomesticProcurementWeight->value   => 0.80,
+            ModelParam::ForeignMilitarySalesWeight->value => 0.20,
+        ],
+
+        // --- Bird Watch Security (WATCH) ---
+        // Premier domestic physical asset protection & municipal security retainers.
+        'WATCH' => [
+            ModelParam::GovernmentContractWeight->value => 0.40,
+            ModelParam::RetainerWeight->value            => 0.50,
+            ModelParam::ExpeditionaryWeight->value       => 0.10,
+        ],
+
+        // --- Osprey Global Vanguard (OSPR) ---
+        // Extraterritorial private military contractor & black-ops extraction.
+        'OSPR' => [
+            ModelParam::GovernmentContractWeight->value => 0.10,
+            ModelParam::RetainerWeight->value            => 0.10,
+            ModelParam::ExpeditionaryWeight->value       => 0.80,
+        ],
+
+        // =====================================================================
+        // MARINE SHIPPING, FREIGHT & RAILROAD ARCHETYPES
+        // =====================================================================
+
+        // --- Albatross Deepwaters (ALBT) ---
+        // Marine shipping freight operator. Heavily exposed to short-term spot ocean freight rates.
+        'ALBT' => [
+            ModelParam::SpotCharterWeight->value     => 0.75,
+            ModelParam::ContractCharterWeight->value => 0.25,
+        ],
+
+        // --- Canvasback Logistics (CANV) ---
+        // Integrated freight & last-mile delivery provider. Skewed toward dedicated enterprise contracts & 3PL.
+        'CANV' => [
+            ModelParam::DedicatedFleetWeight->value => 0.55,
+            ModelParam::SpotBrokerageWeight->value  => 0.25,
+            ModelParam::Warehousing3plWeight->value => 0.20,
+            ModelParam::PricingPowerIndex->value    => 0.70,
+        ],
+
+        // --- Kestrel Civic Lines (KSTL) ---
+        // Class 1 freight & municipal rail transit operator. Preemptive track monopoly with intermodal & industrial carload focus.
+        'KSTL' => [
+            ModelParam::IntermodalFreightWeight->value => 0.50,
+            ModelParam::IndustrialCarloadsWeight->value => 0.30,
+            ModelParam::BulkCommoditiesWeight->value   => 0.20,
+            ModelParam::PricingPowerIndex->value       => 0.80,
+        ],
+
+        // =====================================================================
+        // BIOTECHNOLOGY & HEALTHCARE ARCHETYPES
+        // =====================================================================
+
+        // --- Ibis Pharmaceuticals (IBIS) ---
+        // Global biopharma giant. Skewed toward established commercial blockbuster portfolio (85%).
+        'IBIS' => [
+            ModelParam::CommercialTherapeuticsWeight->value => 0.85,
+            ModelParam::PipelineMilestonesWeight->value     => 0.15,
+        ],
+
+        // --- Crane Medical Network (CRAN) ---
+        // Ubiquitous healthcare provider and hospital network. Masters of algorithmic billing, insurance arbitrage, and inelastic acute care.
+        'CRAN' => [
+            ModelParam::InpatientCareWeight->value        => 0.50, // Inelastic trauma and acute inpatient admissions
+            ModelParam::ElectiveOutpatientWeight->value   => 0.30, // High-margin elective surgical & ambulatory procedures
+            ModelParam::InsuranceArbitrageWeight->value   => 0.20, // Algorithmic DRG coding optimization & insurer arbitration
+            ModelParam::PricingPowerIndex->value          => 0.80, // Regional hospital network monopoly leverage
+        ],
+
+        // =====================================================================
+        // CONSUMER STAPLES, LUXURY & RESTAURANT ARCHETYPES
+        // =====================================================================
+
+        // --- Peacock Heritage Group (PEAC) ---
+        // Elite ultra-luxury French house archetype. Heavily Haute Couture & Maison leather goods (70%).
+        'PEAC' => [
+            ModelParam::HauteCoutureWeight->value     => 0.70,
+            ModelParam::AccessibleLuxuryWeight->value => 0.30,
+        ],
+
+        // --- Pheasant & Morris International (PHIL) ---
+        // Global tobacco and nicotine conglomerate. Overwhelmingly branded packaged staples (85%).
+        'PHIL' => [
+            ModelParam::BrandedStaplesWeight->value  => 0.85,
+            ModelParam::VolumeCommodityWeight->value => 0.15,
+        ],
+
+        // --- Lark & Crest Brands (LARK) ---
+        // Household goods & personal hygiene giant (P&G / Kimberly-Clark archetype).
+        // Essential consumer staple with overwhelming brand dominance & pricing power (80% branded staples).
+        'LARK' => [
+            ModelParam::BrandedStaplesWeight->value  => 0.80,
+            ModelParam::VolumeCommodityWeight->value => 0.20,
+        ],
+
+        // --- Sugarbird Confectionery (SGRB) ---
+        // Confectionery giant & commodities cartel. Weaponizes raw cocoa/sugar physical storage to orchestrate short squeezes against hedge funds.
+        'SGRB' => [
+            ModelParam::BrandedStaplesWeight->value   => 0.55,
+            ModelParam::VolumeCommodityWeight->value  => 0.15,
+            ModelParam::CommodityTradingWeight->value => 0.30, // Raw cocoa/sugar physical storage short squeezes
+            ModelParam::PricingPowerIndex->value      => 0.75,
+        ],
+
+        // --- Poultry Crop Operations (CROP) ---
+        // Integrated poultry & agricultural producer. Skewed toward commodity volume agriculture (50%) and land speculation (15%).
+        'CROP' => [
+            ModelParam::BrandedStaplesWeight->value   => 0.20,
+            ModelParam::VolumeCommodityWeight->value  => 0.50,
+            ModelParam::CommodityTradingWeight->value => 0.15,
+            ModelParam::LandSpeculationWeight->value  => 0.15,
+        ],
+
+        // --- Pintail Beverage Group (PINT) ---
+        // Industrial ethanol syndicate & heritage alcohol cartel. Deploys the 'Proof Desk' to corner agricultural futures and packaging supply.
+        'PINT' => [
+            ModelParam::BrandedStaplesWeight->value   => 0.60,
+            ModelParam::VolumeCommodityWeight->value  => 0.15,
+            ModelParam::CommodityTradingWeight->value => 0.25, // Internal 'Proof Desk' agricultural futures & silica hoarding
+            ModelParam::PricingPowerIndex->value      => 0.85,
+        ],
+
+        // --- Copperhead Coffee Roasters (BREW) ---
+        // Retail coffee cafes & prime real estate holdings. High company-owned store footprint (70%) and prime leases (20%).
+        'BREW' => [
+            ModelParam::CompanyStoresWeight->value      => 0.70,
+            ModelParam::FranchiseRoyaltiesWeight->value => 0.10,
+            ModelParam::FranchiseLeaseWeight->value     => 0.20,
+            ModelParam::PricingPowerIndex->value        => 0.85,
+        ],
+
+        // --- Golden Swift Holdings (SWFT) ---
+        // Massive global fast-food franchise network. Master-franchise model with royalties (55%) and property leases (40%).
+        'SWFT' => [
+            ModelParam::CompanyStoresWeight->value      => 0.05,
+            ModelParam::FranchiseRoyaltiesWeight->value => 0.55,
+            ModelParam::FranchiseLeaseWeight->value     => 0.40,
+            ModelParam::PricingPowerIndex->value        => 0.60,
+        ],
 
         // --- Silver Gull Resorts (GULL) ---
         // VIP casino and resorts catering to oligarchs. Very high pricing power against inflation.
@@ -496,56 +528,38 @@ class StockModelTuning
         ],
 
         // =====================================================================
-        // STANDARD CORPORATE ARCHETYPES
+        // EDUCATION & PROFESSIONAL SERVICES ARCHETYPES
         // =====================================================================
 
-        // --- River Stream Industries (RIVE) ---
-        // Robotics and automation manufacturer. Long-term service contracts and essential margin-expanding tools.
-        'RIVE' => [
-            ModelParam::PricingPowerIndex->value => 0.85,
-            ModelParam::EquipmentWeight->value    => 0.40,
-            ModelParam::ServicesWeight->value     => 0.60,
+        // --- Starling Academic Systems (STAR) ---
+        // Elite corporate-subsidized education and talent placement engine with proprietary talent scoring algorithms.
+        'STAR' => [
+            ModelParam::DegreeTuitionWeight->value     => 0.40,
+            ModelParam::EnterpriseTrainingWeight->value => 0.40,
+            ModelParam::LmsLicensingWeight->value       => 0.20,
+            ModelParam::PricingPowerIndex->value        => 0.70,
         ],
 
-        // --- Three Rivers Manufacturing (TRIV) ---
-        // Unsinkable, diversified industrial conglomerate with ubiquitous products.
-        'TRIV' => [
-            ModelParam::PricingPowerIndex->value => 0.75,
+        // --- Lyrebird Media (LYRE) ---
+        // Premier advertising and perception management conglomerate. Floods airwaves with corporate crisis retainers & martech data ops.
+        'LYRE' => [
+            ModelParam::BrandRetainerWeight->value     => 0.50,
+            ModelParam::MartechConsultingWeight->value => 0.30,
+            ModelParam::MediaBuyingWeight->value       => 0.20,
+            ModelParam::PricingPowerIndex->value        => 0.75,
         ],
 
-        // --- Iron Beak Heavy Industries (IBHI) ---
-        // Massive physical architect. Captive builder with highly cyclical revenue and poor pricing power against inflation.
-        'IBHI' => [
-            ModelParam::PricingPowerIndex->value => 0.30,
-        ],
+        // =====================================================================
+        // LEGAL SERVICES ARCHETYPES
+        // =====================================================================
 
-
-        // --- Golden Swift Holdings (SWFT) ---
-        // Massive global fast-food franchise network. Almost entirely franchised (95%) for stable royalties.
-        'SWFT' => [
-            ModelParam::CorporateWeight->value => 0.05,
-            ModelParam::FranchiseWeight->value => 0.95,
-        ],
-
-        'APE' => [
-            ModelParam::ApparelWeight->value  => 0.45,
-            ModelParam::FootwearWeight->value => 0.55,
-        ],
-
-        // --- Weaver Marketplace (WEAV) ---
-        // Massive third-party ecosystem (the profit engine) blended with volatile first-party retail (the scale engine).
-        'WEAV' => [
-            ModelParam::ThirdPartyWeight->value         => 0.45,
-            ModelParam::FirstPartyWeight->value         => 0.30,
-            ModelParam::DigitalAdsWeight->value         => 0.25,
-        ],
-
-        // --- Penguin Computing (PENG) ---
-        // High performance supercomputers and liquid cooling. High tech margins. Heavily weighted to enterprise.
-        'PENG' => [
-            ModelParam::PricingPowerIndex->value => 0.65,
-            ModelParam::EnterpriseWeight->value   => 0.85,
-            ModelParam::ConsumerWeight->value     => 0.15,
+        // --- Clear Rivers Law / Claw & Talons Law (CLAW) ---
+        // Elite white-shoe litigation predator, corporate governance retainers & bankruptcy restructuring counsel.
+        'CLAW' => [
+            ModelParam::CorporateRetainerWeight->value     => 0.40, // Elite M&A and corporate governance retainers
+            ModelParam::LitigationContingencyWeight->value  => 0.35, // High-stakes corporate warfare & predatory settlements
+            ModelParam::RestructuringAdvisoryWeight->value  => 0.25, // Counter-cyclical corporate restructuring & workout fees
+            ModelParam::PricingPowerIndex->value            => 0.90,
         ],
 
         // =====================================================================
@@ -557,11 +571,44 @@ class StockModelTuning
         // ultra-luxury 'Apex Division' and inescapable software/telemetry tollbooths.
         // Extreme pricing power, but terrifyingly sensitive to macroeconomic liquidity crises.
         'FALC' => [
-            ModelParam::AutoSalesWeight->value        => 0.60,
-            ModelParam::AutoFinancingWeight->value    => 0.15,
-            ModelParam::SoftwareServicesWeight->value => 0.25, // Represents telemetry and software lock-ins
-            ModelParam::PricingPowerIndex->value      => 0.80, // Veblen good luxury pricing; immune to inflation but hyper-pro-cyclical
-            ModelParam::RateSensitivityScalar->value  => 3.00, // Highly sensitive to liquidity panics pausing elite consumption
+            ModelParam::AutoSalesWeight->value        => 0.55, // Predatory mass-market commuter fleet Trojan horse
+            ModelParam::ApexLuxuryWeight->value       => 0.25, // Hyper-exclusive Veblen hypercars (Apex Division cross-subsidy)
+            ModelParam::SoftwareServicesWeight->value => 0.20, // Inescapable telemetry, subscription tolls & captive finance
+            ModelParam::PricingPowerIndex->value      => 0.70,
+            ModelParam::RateSensitivityScalar->value  => 2.50,
+        ],
+
+        // =====================================================================
+        // UTILITY & MUNICIPAL INFRASTRUCTURE ARCHETYPES
+        // =====================================================================
+
+        // --- Bird Power Inc (BIRD) ---
+        // Integrated electric utility. Heavily regulated rate base transmission & distribution (80%), merchant renewables (20%).
+        'BIRD' => [
+            ModelParam::RegulatedBaseWeight->value       => 0.80,
+            ModelParam::UnregulatedMerchantWeight->value => 0.20,
+        ],
+
+        // --- Heron Regional Water (WADE) ---
+        // Regulated municipal water & wastewater utility. Pure regulated rate base monopoly (95%).
+        'WADE' => [
+            ModelParam::RegulatedBaseWeight->value       => 0.95,
+            ModelParam::UnregulatedMerchantWeight->value => 0.05,
+        ],
+
+        // --- Loon Call Telecom (LOON) ---
+        // Regional telecom & fiber carrier. Skewed toward recurring wireless/broadband subscriptions (80%) with equipment sales (20%).
+        'LOON' => [
+            ModelParam::SubscriptionWeight->value => 0.80,
+            ModelParam::EquipmentWeight->value    => 0.20,
+        ],
+
+        // --- Cormorant Environmental (CORM) ---
+        // Municipal waste management & environmental services operator.
+        'CORM' => [
+            ModelParam::ResidentialWeight->value => 0.60,
+            ModelParam::CommercialWeight->value  => 0.30,
+            ModelParam::RecyclingWeight->value   => 0.10,
         ],
     ];
 

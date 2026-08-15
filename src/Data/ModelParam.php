@@ -31,6 +31,10 @@ enum ModelParam: string
     case EquityPortfolioVol = 'equity_portfolio_vol';
     case PncWeight = 'pnc_weight';
     case LifeAnnuityWeight = 'life_annuity_weight';
+    case PropertyCasualtyWeight = 'property_casualty_weight';
+    case LifeAndAnnuityWeight = 'life_and_annuity_weight';
+    case TreatyReinsuranceWeight = 'treaty_reinsurance_weight';
+    case CatBondSpreadWeight = 'cat_bond_spread_weight';
 
     // --- Analyst Coverage Visibility ---
     case BaseVisibility = 'base_visibility';
@@ -51,6 +55,8 @@ enum ModelParam: string
     case AdvisoryFeeWeight = 'advisory_fee_weight';
     case AssetRecoveryWeight = 'asset_recovery_weight';
     case LoanToOwnGainsWeight = 'loan_to_own_gains_weight';
+    case RestructuringAdvisoryWeight = 'restructuring_advisory_weight';
+    case TurnaroundGainsWeight = 'turnaround_gains_weight';
 
     // --- Banking & Credit Services ---
     case NiiRevenueWeight = 'nii_revenue_weight';
@@ -80,6 +86,15 @@ enum ModelParam: string
     case ExtractionRevenueWeight = 'extraction_revenue_weight';
     case SpotPriceWeight = 'spot_price_weight';
     case RefiningSpreadWeight = 'refining_spread_weight';
+    case OemEquipmentWeight = 'oem_equipment_weight';
+    case AftermarketMroWeight = 'aftermarket_mro_weight';
+    case ContractOemWeight = 'contract_oem_weight';
+    case SpotHrcWeight = 'spot_hrc_weight';
+
+    // --- Construction & Engineering ---
+    case CivilInfrastructureWeight = 'civil_infrastructure_weight';
+    case CommercialEpcWeight = 'commercial_epc_weight';
+    case FacilitiesMaintenanceWeight = 'facilities_maintenance_weight';
 
     // --- Technology, Hardware & Telecom ---
     case SubscriptionRevenueWeight = 'subscription_revenue_weight';
@@ -102,15 +117,26 @@ enum ModelParam: string
     case RetainerWeight = 'retainer_weight';
     case ExpeditionaryWeight = 'expeditionary_weight';
 
-    // --- Shipping & Logistics ---
+    // --- Shipping, Logistics & Transportation ---
     case SpotCharterWeight = 'spot_charter_weight';
     case ContractCharterWeight = 'contract_charter_weight';
+    case IntermodalFreightWeight = 'intermodal_freight_weight';
+    case BulkCommoditiesWeight = 'bulk_commodities_weight';
+    case IndustrialCarloadsWeight = 'industrial_carloads_weight';
+    case DedicatedFleetWeight = 'dedicated_fleet_weight';
+    case SpotBrokerageWeight = 'spot_brokerage_weight';
+    case Warehousing3plWeight = 'warehousing_3pl_weight';
 
-    // --- Healthcare & Biopharma ---
+    // --- Healthcare, Biopharma & Medical Care Facilities ---
     case EstablishedDrugWeight = 'established_drug_weight';
     case PipelineDrugWeight = 'pipeline_drug_weight';
+    case CommercialTherapeuticsWeight = 'commercial_therapeutics_weight';
+    case PipelineMilestonesWeight = 'pipeline_milestones_weight';
+    case InpatientCareWeight = 'inpatient_care_weight';
+    case ElectiveOutpatientWeight = 'elective_outpatient_weight';
+    case InsuranceArbitrageWeight = 'insurance_arbitrage_weight';
 
-    // --- Consumer, Retail & Luxury ---
+    // --- Consumer, Retail, Hospitality & Services ---
     case HauteCoutureWeight = 'haute_couture_weight';
     case AccessibleLuxuryWeight = 'accessible_luxury_weight';
     case BrandedStaplesWeight = 'branded_staples_weight';
@@ -125,11 +151,30 @@ enum ModelParam: string
     case ThirdPartyWeight = 'third_party_weight';
     case FirstPartyWeight = 'first_party_weight';
     case DigitalAdsWeight = 'digital_ads_weight';
+    case CompanyStoresWeight = 'company_stores_weight';
+    case FranchiseRoyaltiesWeight = 'franchise_royalties_weight';
+    case FranchiseLeaseWeight = 'franchise_lease_weight';
+    case DegreeTuitionWeight = 'degree_tuition_weight';
+    case EnterpriseTrainingWeight = 'enterprise_training_weight';
+    case LmsLicensingWeight = 'lms_licensing_weight';
+    case MediaBuyingWeight = 'media_buying_weight';
+    case BrandRetainerWeight = 'brand_retainer_weight';
+    case MartechConsultingWeight = 'martech_consulting_weight';
 
     // --- Automotive ---
     case AutoSalesWeight = 'auto_sales_weight';
     case AutoFinancingWeight = 'auto_financing_weight';
     case SoftwareServicesWeight = 'software_services_weight';
+    case ApexLuxuryWeight = 'apex_luxury_weight';
+
+    // --- Conglomerates ---
+    case IndustrialConglomerateWeight = 'industrial_conglomerate_weight';
+    case DefensiveStaplesWeight = 'defensive_staples_weight';
+    case ContrarianFloatWeight = 'contrarian_float_weight';
+
+    // --- Legal Services ---
+    case CorporateRetainerWeight = 'corporate_retainer_weight';
+    case LitigationContingencyWeight = 'litigation_contingency_weight';
 
     // --- Utilities & Waste Management ---
     case RegulatedBaseWeight = 'regulated_base_weight';
