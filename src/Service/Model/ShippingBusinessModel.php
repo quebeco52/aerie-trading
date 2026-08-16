@@ -170,7 +170,11 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
 
         $primaryShockZ = abs($spotZ) > abs($contractZ) ? $spotZ : $contractZ;
         // observableShockZ: Baltic Dry Index and Harpex are public daily data (~75% visibility via getCoverageProfile)
-        $observableShockZ = ($spotZ * $spotWeight + $spotRateMultiplier * $spotWeight);
+        $spotBase = max(1.0, $expectedRevenue * $spotWeight);
+        $spotShock = ($spotRevenue - $spotBase) / $spotBase;
+        $contractBase = max(1.0, $expectedRevenue * $contractWeight);
+        $contractShock = ($contractRevenue - $contractBase) / $contractBase;
+        $observableShockZ = ($spotShock * $spotWeight) + ($contractShock * $contractWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

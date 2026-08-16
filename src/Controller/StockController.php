@@ -79,9 +79,10 @@ class StockController extends AbstractController
 
 
         if (!$isEtf) {
-            $marketCap = (float) $asset->getPrice() * (float) $asset->getSharesOutstanding();
-            $eps = (float) $asset->getEarningsPerShare();
-            $peRatio = ($eps > 0) ? ((float) $asset->getPrice() / $eps) : null;
+            $isBankrupt = $asset->isBankrupt();
+            $marketCap = $isBankrupt ? 0.0 : ((float) $asset->getPrice() * (float) $asset->getSharesOutstanding());
+            $eps = $isBankrupt ? 0.0 : (float) $asset->getEarningsPerShare();
+            $peRatio = (!$isBankrupt && $eps > 0) ? ((float) $asset->getPrice() / $eps) : null;
 
             $nominalGdpIndex = $macroState->nominalGdpIndex;
             $samRatio = (float) $asset->getSamRatio();
@@ -89,9 +90,9 @@ class StockController extends AbstractController
             $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$asset->getIndustry() ?? 'General']['business_model'] ?? 'none';
             $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
             $evaluationCapital = $isFinancial ? (float) $asset->getTotalEquity() : $asset->getInvestedCapital();
-            $investedCapital = (float) $asset->getInvestedCapital();
+            $investedCapital = $isBankrupt ? 0.0 : (float) $asset->getInvestedCapital();
 
-            $marketShare = min(0.9999, $corporateMetrics->calculateMarketShare($evaluationCapital, $nominalGdpIndex, $samRatio));
+            $marketShare = $isBankrupt ? 0.0 : min(0.9999, $corporateMetrics->calculateMarketShare($evaluationCapital, $nominalGdpIndex, $samRatio));
         }
 
         $generalInfo = $asset->getDescription();

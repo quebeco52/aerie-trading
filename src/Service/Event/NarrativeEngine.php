@@ -218,6 +218,16 @@ class NarrativeEngine
                 "Mass warehouse worker walkouts and picket lines halted regional package distribution.",
                 "Coordinated labor strikes across key fulfillment hubs triggered widespread delivery delays and emergency overtime costs."
             ]),
+            ShockEvent::GEOPOLITICAL_EXPORT_BAN => $this->getRandomPhrase([
+                "Targeted arms export embargoes and congressional export restrictions curtailed foreign shipments.",
+                "Geopolitical export licensing bans halted international military platform deliveries.",
+                "Foreign military sales were frozen following new congressional defense export sanctions."
+            ]),
+            ShockEvent::PROJECT_DELAY => $this->getRandomPhrase([
+                "Unanticipated engineering defects and schedule overruns triggered ASC 606 reach-forward project losses.",
+                "Complex developmental milestone delays and supply chain logjams led to programmatic forward loss charges.",
+                "Project delays on fixed-price development contracts resulted in significant cost overrun provisions."
+            ]),
 
             default => "Experienced an unexpected market event."
         };

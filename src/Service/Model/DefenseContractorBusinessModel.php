@@ -29,95 +29,95 @@ use App\Service\Math\MathUtility;
 class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Analyst Visibility & Forecasting ---
-    /** Base coverage visibility for defense contractors operating under transparent sovereign defense appropriations. */
+    /** Base coverage visibility for defense contractors from public appropriations. */
     public const BASE_COVERAGE_VISIBILITY = 0.60;
-    /** Base analyst forecasting error standard deviation for long-cycle defense programs. */
+    /** Base analyst forecasting error scalar for defense procurement schedules. */
     public const BASE_COVERAGE_ERROR = 0.08;
 
     // --- Tri-Stream Architecture Weights ---
-    /** Baseline fraction of revenue derived from long-term cost-plus sovereign defense procurement and sustainment lots. */
+    /** Baseline fraction of revenue from sovereign cost-plus procurement and sustainment contracts. */
     public const COST_PLUS_WEIGHT = 0.60;
-    /** Baseline fraction of revenue derived from fixed-price development, prototyping, and classified R&D. */
+    /** Baseline fraction of revenue from fixed-price engineering and classified development programs. */
     public const FIXED_PRICE_DEV_WEIGHT = 0.20;
-    /** Baseline fraction of revenue derived from foreign military sales (FMS) and direct commercial sales. */
+    /** Baseline fraction of revenue from high-margin foreign military sales (FMS) weapon exports. */
     public const FOREIGN_MILITARY_SALES_WEIGHT = 0.20;
 
     // --- Stream Variance & Volatility Scalars ---
-    /** Variance scalar for rock-solid, multi-year sovereign cost-plus defense procurement lots. */
+    /** Volatility multiplier for highly stable sovereign cost-plus appropriations. */
     public const COST_PLUS_VARIANCE_SCALAR = 0.04;
-    /** Variance scalar for engineering and manufacturing development contracts. */
+    /** Volatility multiplier for developmental milestones and prototype testing. */
     public const FIXED_PRICE_DEV_VARIANCE_SCALAR = 0.15;
-    /** Variance scalar for volatile, geopolitically sensitive foreign military sales. */
+    /** Volatility multiplier for international defense sales and export authorizations. */
     public const FMS_VARIANCE_SCALAR = 0.35;
 
     // --- Sovereign Procurement & Cost-Plus Physics ---
-    /** Top-line multiplier converting inflation above target into cost-plus contractual price escalators (FAR 16.3). */
+    /** Sensitivity multiplier for FAR 16.3 inflation indexation escalation clauses. */
     public const COST_PLUS_BONUS_SCALAR = 1.50;
-    /** Sovereign credit spread threshold above which budget ceiling standoffs and Continuing Resolutions freeze procurement. */
+    /** Sovereign credit spread threshold triggering Continuing Resolution (CR) budget freeze drag. */
     public const SOVEREIGN_STRESS_THRESHOLD = 0.030;
-    /** Top-line procurement drag scalar per unit of sovereign credit spread widen during Continuing Resolution standoffs. */
+    /** Revenue drag scalar applied to cost-plus lot allocations during debt ceiling freezes. */
     public const CR_BUDGET_DRAG_SCALAR = 2.50;
 
     // --- Fixed-Price Development Forward-Loss Physics ---
-    /** Negative Z-score threshold triggering ASC 606 reach-forward loss write-offs on development contracts. */
+    /** Negative Z-score threshold indicating development program overruns and reach-forward losses. */
     public const FORWARD_LOSS_Z_SCORE = -1.50;
-    /** Variable cost penalty applied to recognize forward losses and absorb engineering cost overruns. */
+    /** Variable margin penalty for ASC 606 reach-forward losses on fixed-price contracts. */
     public const FORWARD_LOSS_PENALTY = 0.08;
-    /** Sensitivity of fixed-price development margins to unhedged energy and industrial commodity inflation shocks. */
-    public const FIXED_PRICE_MATERIAL_DRAG_SCALAR = 0.40;
+    /** Sensitivity scalar for energy and raw material cost inflation on fixed-price programs. */
+    public const FIXED_PRICE_MATERIAL_DRAG_SCALAR = 0.30;
 
     // --- Geopolitical Sanctions & Conflict Tail Shocks ---
-    /** Negative Z-score threshold triggering congressional arms export license revocations or regional embargoes. */
+    /** Negative Z-score threshold indicating congressional foreign military export sanctions or bans. */
     public const CONGRESSIONAL_EXPORT_BAN_Z = -2.00;
-    /** Top-line revenue haircut applied to foreign military sales following congressional export bans. */
+    /** Revenue multiplier applied to international sales during arms export embargoes. */
     public const EXPORT_BAN_MULT = 0.50;
-    /** Positive Z-score threshold indicating acute geopolitical conflict and wartime munitions demand. */
+    /** Positive Z-score threshold indicating active regional conflict and munition restock surges. */
     public const GEOPOLITICAL_CONFLICT_Z = 2.00;
-    /** Revenue multiplier boost on foreign military sales during active geopolitical conflicts. */
+    /** Export revenue multiplier during active geopolitical conflict surges. */
     public const FMS_CONFLICT_BOOST = 1.50;
-    /** Variable margin drag from emergency supply chain expediting and critical titanium/alloy spot surcharges. */
+    /** Margin drag from emergency wartime supply chain expediting and component premiums. */
     public const WARTIME_SUPPLY_CHAIN_DRAG = 0.035;
 
     // --- Major Programmatic Contract Shocks ---
-    /** Negative Z-score threshold indicating catastrophic flagship platform structural flaw or fleet grounding. */
+    /** Negative Z-score threshold indicating cancellation or failure of a flagship weapon program. */
     public const FLAGSHIP_FAILURE_Z_SCORE = -2.50;
-    /** Top-line revenue multiplier haircut applied to domestic procurement following flagship program defects. */
+    /** Cost-plus revenue multiplier applied during major contract cancellations. */
     public const FLAGSHIP_FAILURE_MULT = 0.80;
-    /** Variable cost penalty required to remediate engineering defects during fleet groundings. */
+    /** Variable margin penalty from fleet groundings, redesign liabilities, and cancellation fees. */
     public const FLAGSHIP_FAILURE_PENALTY = 0.10;
-    /** Positive Z-score threshold indicating award of a major multi-year next-generation platform franchise. */
+    /** Positive Z-score threshold indicating a multi-decade prime platform franchise win. */
     public const MEGA_CONTRACT_WIN_Z_SCORE = 2.50;
-    /** Top-line revenue multiplier boost following a franchise mega-procurement contract award. */
+    /** Revenue multiplier applied to cost-plus stream upon securing prime contractor status. */
     public const MEGA_CONTRACT_WIN_MULT = 1.18;
 
     // --- Program Execution & Classified Tooling Physics ---
-    /** Operating margin elasticity per unit of programmatic execution and delivery performance. */
+    /** Margin efficiency elasticity per unit of contract execution momentum. */
     public const PROGRAM_EXECUTION_ELASTICITY = 0.015;
-    /** Quarterly margin decay rate per unit of underinvestment in classified tooling and secure fabrication facilities. */
+    /** Margin decay rate per unit of underinvestment in classified tooling and secure facilities. */
     public const DEFENSE_TOOLING_DECAY_RATE = 0.018;
-    /** Quarterly margin gain scalar per unit of logarithmic overinvestment in next-generation platform modernization. */
+    /** Margin gain rate per unit of logarithmic overinvestment in next-gen platforms. */
     public const CLASSIFIED_PLATFORM_GAIN_RATE = 0.009;
     /** Structural minimum operating margin floor under severe tooling tech debt. */
     public const MIN_OPERATING_MARGIN_FLOOR = 0.06;
-    /** Structural maximum operating margin ceiling for modernized classified production platforms. */
+    /** Structural maximum operating margin ceiling for next-gen platform franchises. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.22;
 
     // --- Working Capital & FAR Progress Payment Withholding ---
-    /** Standard defense sector net working capital intensity under regular milestone billing. */
+    /** Baseline net working capital intensity under standard FAR progress payment schedules. */
     public const BASE_NWC_INTENSITY = 0.10;
-    /** Elevated net working capital intensity under FAR progress payment withholding and unbilled WIP accumulation. */
+    /** Elevated net working capital intensity during FAR 32.503-6 progress payment withholding. */
     public const WITHHOLDING_NWC_INTENSITY = 0.18;
 
     // --- ROIC Annualization & Multi-Year Smoothing ---
-    /** Annualization multiplier converting quarterly NOPAT into annual returns. */
+    /** Multiplier to annualize quarterly NOPAT into annual economic return. */
     public const ROIC_ANNUALIZATION_MULT = 4.00;
-    /** Lower clamp for calculated ROIC. */
+    /** Lower bound clamp for dynamic ROIC to prevent numerical divergence. */
     public const MIN_ROIC_CLAMP = -0.50;
-    /** Upper clamp for calculated ROIC. */
+    /** Upper bound clamp for dynamic ROIC to prevent perpetual explosion. */
     public const MAX_ROIC_CLAMP = 1.00;
-    /** Weight given to current quarter post-tax return when updating programmatic TTM ROIC EMA. */
+    /** Weight assigned to the current quarter's annualized return in multi-year smoothing. */
     public const ROIC_TTM_EMA_WEIGHT = 0.20;
-    /** Weight given to historical TTM ROIC when updating programmatic TTM ROIC EMA. */
+    /** Weight assigned to historical TTM ROIC in multi-year defense procurement smoothing. */
     public const ROIC_TTM_HIST_WEIGHT = 0.80;
 
     public function getModelThresholds(): array
@@ -127,7 +127,8 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             'bankrupt_equity'          => 0.0,
             'distress_equity'          => 0.0,
             'warning_equity'           => 0.0,
-            'wholesale_leverage_limit' => 1.0,
+            // FIX 1: Raised to 2.0. Sovereign contractors can safely carry high debt without entering death spirals.
+            'wholesale_leverage_limit' => 2.0,
             'dividend_crisis_icr'      => 1.50,
             'buyback_min_icr'          => 2.00,
             'reversion_speed'          => 0.12,
@@ -141,12 +142,10 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     {
         return 0.30;
     }
-
     public function getSurpriseBlendWeights(): array
     {
         return ['eps_weight' => 0.70, 'revenue_weight' => 0.30];
     }
-
     public function getSecularGrowthRate(Stock $stock): float
     {
         return 0.02;
@@ -158,8 +157,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $fixedPriceZ = (float) ($momentum['fixed_price_development'] ?? 0.0);
         $eventZ = (float) ($momentum['event'] ?? 0.0);
 
-        // When a contractor faces development cost overruns or flagship platform groundings,
-        // the sovereign customer invokes FAR 32.503-6 progress payment withholding, tying up capital in unbilled receivables.
         if ($fixedPriceZ < self::FORWARD_LOSS_Z_SCORE || $eventZ < self::FLAGSHIP_FAILURE_Z_SCORE) {
             return self::WITHHOLDING_NWC_INTENSITY;
         }
@@ -170,13 +167,8 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
-
-        // Defense procurement is driven by sovereign security appropriations, immune to consumer output gap recessions.
         $physics['macro_demand_shift'] = 0.0;
-
-        // Cost-plus escalators and fixed-price loss models handle inflation dynamics directly in calculateSectorPhysics.
         $physics['pricing_power_multiplier'] = 1.0;
-
         return $physics;
     }
 
@@ -200,9 +192,9 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
-            'cost_plus_procurement'   => $params[ModelParam::CostPlusWeight],
-            'fixed_price_development' => $params[ModelParam::FixedPriceDevWeight],
-            'foreign_military_sales'  => $params[ModelParam::ForeignMilitarySalesWeight],
+            'cost_plus_procurement'   => $params[ModelParam::CostPlusWeight->value],
+            'fixed_price_development' => $params[ModelParam::FixedPriceDevWeight->value],
+            'foreign_military_sales'  => $params[ModelParam::ForeignMilitarySalesWeight->value],
         ]);
 
         $costPlusWeight   = $activeWeights['cost_plus_procurement'];
@@ -210,9 +202,9 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $fmsWeight        = $activeWeights['foreign_military_sales'];
 
         // Independent stream Z-scores
-        $costPlusZ   = $streams->generateZ('cost_plus_procurement', 0.70); // High persistence (multi-year appropriations)
-        $fixedPriceZ = $streams->generateZ('fixed_price_development', 0.30); // Moderate persistence (EMD development)
-        $fmsZ        = $streams->generateZ('foreign_military_sales', 0.20);  // Volatile geopolitical exports
+        $costPlusZ   = $streams->generateZ('cost_plus_procurement', 0.70);
+        $fixedPriceZ = $streams->generateZ('fixed_price_development', 0.30);
+        $fmsZ        = $streams->generateZ('foreign_military_sales', 0.20);
         $eventZ      = $streams->generateZ('event', 0.10);
 
         // --- Sovereign Procurement & Cost-Plus Fiscal Physics ---
@@ -221,16 +213,14 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             ? ($inflation - MacroEngine::TARGET_INFLATION) * self::COST_PLUS_BONUS_SCALAR
             : 0.0;
 
-        // Sovereign Fiscal Stress / Continuing Resolution (CR) Drag
         $creditSpread = $macroState->macroCreditSpreadEma;
         $crDrag = $creditSpread > self::SOVEREIGN_STRESS_THRESHOLD
             ? ($creditSpread - self::SOVEREIGN_STRESS_THRESHOLD) * self::CR_BUDGET_DRAG_SCALAR
             : 0.0;
 
-        // Fixed-Price Material / Energy Shock Squeeze
-        $energyShock = $macroState->energyPriceShock;
-        $materialDrag = $energyShock > 0.0
-            ? $energyShock * self::FIXED_PRICE_MATERIAL_DRAG_SCALAR
+        $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
+        $materialDrag = $energyShift > 0.0
+            ? $energyShift * self::FIXED_PRICE_MATERIAL_DRAG_SCALAR
             : 0.0;
 
         // --- Program Execution, Forward Losses & Tail Shocks ---
@@ -241,16 +231,13 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $forwardLossPenalty   = 0.0;
         $flagshipPenalty      = 0.0;
 
-        // Program Execution Efficiency (Better execution reduces cost of delivery on domestic lots)
         $executionEfficiencyShift = -self::PROGRAM_EXECUTION_ELASTICITY * $costPlusZ * $costPlusWeight;
 
-        // Fixed-Price Development Reach-Forward Loss (ASC 606)
         if ($fixedPriceZ < self::FORWARD_LOSS_Z_SCORE) {
             $forwardLossPenalty = self::FORWARD_LOSS_PENALTY;
             $eventType = ShockEvent::PROJECT_DELAY;
         }
 
-        // Flagship Platform Failure / Grounding vs Mega Contract Win vs Congressional Export Ban
         if ($eventZ < self::FLAGSHIP_FAILURE_Z_SCORE) {
             $costPlusMultiplier = self::FLAGSHIP_FAILURE_MULT;
             $flagshipPenalty = self::FLAGSHIP_FAILURE_PENALTY;
@@ -263,7 +250,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::GEOPOLITICAL_EXPORT_BAN;
         }
 
-        // Active Geopolitical Conflict Surge (overrides standard event)
         if ($fmsZ > self::GEOPOLITICAL_CONFLICT_Z) {
             $fmsMultiplier = self::FMS_CONFLICT_BOOST;
             $executionEfficiencyShift += self::WARTIME_SUPPLY_CHAIN_DRAG;
@@ -271,18 +257,9 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         }
 
         // --- Clamped Revenue Streams ---
-        $costPlusRevenue = max(
-            0.0,
-            $expectedRevenue * $costPlusWeight * (1.0 + ($costPlusZ * $baselineVol * self::COST_PLUS_VARIANCE_SCALAR) + $costPlusBonus) * $costPlusMultiplier
-        );
-        $fixedPriceRevenue = max(
-            0.0,
-            $expectedRevenue * $fixedPriceWeight * (1.0 + ($fixedPriceZ * $baselineVol * self::FIXED_PRICE_DEV_VARIANCE_SCALAR)) * $fixedPriceMultiplier
-        );
-        $fmsRevenue = max(
-            0.0,
-            $expectedRevenue * $fmsWeight * (1.0 + ($fmsZ * $baselineVol * self::FMS_VARIANCE_SCALAR)) * $fmsMultiplier
-        );
+        $costPlusRevenue = max(0.0, $expectedRevenue * $costPlusWeight * (1.0 + ($costPlusZ * $baselineVol * self::COST_PLUS_VARIANCE_SCALAR) + $costPlusBonus) * $costPlusMultiplier);
+        $fixedPriceRevenue = max(0.0, $expectedRevenue * $fixedPriceWeight * (1.0 + ($fixedPriceZ * $baselineVol * self::FIXED_PRICE_DEV_VARIANCE_SCALAR)) * $fixedPriceMultiplier);
+        $fmsRevenue = max(0.0, $expectedRevenue * $fmsWeight * (1.0 + ($fmsZ * $baselineVol * self::FMS_VARIANCE_SCALAR)) * $fmsMultiplier);
 
         $streamRevenues = [
             'cost_plus_procurement'   => $costPlusRevenue,
@@ -294,20 +271,21 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // --- Realized Variable Cost Margin ---
-        $rawMargin = $realizedVariableMargin + $executionEfficiencyShift + $forwardLossPenalty + $flagshipPenalty + $materialDrag;
+        // FIX 2: Correctly scale stream-specific margin penalties by their revenue weights!
+        // A cost overrun in a 20% division should not destroy 100% of the company's margins.
+        $rawMargin = $realizedVariableMargin
+            + $executionEfficiencyShift // (Already natively scaled by $costPlusWeight)
+            + ($forwardLossPenalty * $fixedPriceWeight)
+            + ($flagshipPenalty * $costPlusWeight)
+            + ($materialDrag * $fixedPriceWeight);
+
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // --- Shock Determination ---
         $primaryShockZ = $costPlusZ;
-        if (abs($fixedPriceZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $fixedPriceZ;
-        }
-        if (abs($fmsZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $fmsZ;
-        }
-        if (abs($eventZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $eventZ;
-        }
+        if (abs($fixedPriceZ) > abs($primaryShockZ)) $primaryShockZ = $fixedPriceZ;
+        if (abs($fmsZ) > abs($primaryShockZ)) $primaryShockZ = $fmsZ;
+        if (abs($eventZ) > abs($primaryShockZ)) $primaryShockZ = $eventZ;
 
         $costPlusShock   = (($costPlusZ * $baselineVol * self::COST_PLUS_VARIANCE_SCALAR) + $costPlusBonus) * $costPlusMultiplier + ($costPlusMultiplier - 1.0);
         $fixedPriceShock = ($fixedPriceZ * $baselineVol * self::FIXED_PRICE_DEV_VARIANCE_SCALAR) * $fixedPriceMultiplier + ($fixedPriceMultiplier - 1.0);
@@ -347,7 +325,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 
         $stock->setCurrentRoic((string) max(self::MIN_ROIC_CLAMP, min(self::MAX_ROIC_CLAMP, $truePostTaxReturn)));
 
-        // Multi-year contract smoothing prevents artificial P/E spikes from single-quarter milestone recognition.
         $oldTtm = (float) $stock->getRoicTtm();
         $newTtm = $oldTtm === 0.0
             ? $truePostTaxReturn
@@ -374,12 +351,10 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $currentMargin = (float) $stock->getOperatingMargin();
 
         if ($reinvestmentRatio < 1.0) {
-            // Classified tooling tech debt decay toward operating margin floor
             $decayRate = self::DEFENSE_TOOLING_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
             $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
             $stock->setOperatingMargin((string) $updatedMargin);
         } elseif ($reinvestmentRatio > 1.0) {
-            // Next-generation defense platform modernization expands margin ceiling
             $modGain = self::CLASSIFIED_PLATFORM_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
             $updatedMargin = min(
                 self::MAX_OPERATING_MARGIN_CEILING,
@@ -389,4 +364,3 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         }
     }
 }
-

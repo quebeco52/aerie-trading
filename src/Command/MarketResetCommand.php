@@ -242,7 +242,8 @@ class MarketResetCommand extends Command
                     last_dividend = :last_dividend,
                     description = :description,
                     sam_ratio = :sam_ratio,
-                    industry = :industry
+                    industry = :industry,
+                    is_bankrupt = 0
                 WHERE ticker = :ticker',
                 [
                     'price' => $neutralPrice,

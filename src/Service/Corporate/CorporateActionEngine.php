@@ -55,6 +55,14 @@ class CorporateActionEngine
      */
     public function processSplits(Stock $stock, float $newPrice, float $sharesOutstanding): array
     {
+        if ($stock->isBankrupt() || $newPrice <= 0.0001) {
+            return [
+                'price' => 0.0,
+                'shares' => max(1.0, $sharesOutstanding),
+                'event' => null
+            ];
+        }
+
         $splitEvent = null;
 
         if ($newPrice >= self::FORWARD_SPLIT_THRESHOLD) {
@@ -62,7 +70,7 @@ class CorporateActionEngine
             $newPrice = $result['price'];
             $sharesOutstanding = $result['shares'];
             $splitEvent = $result['event'];
-        } elseif ($newPrice < self::REVERSE_SPLIT_THRESHOLD && $sharesOutstanding >= self::MIN_SHARES_REVERSE_SPLIT) {
+        } elseif ($newPrice < self::REVERSE_SPLIT_THRESHOLD && $newPrice > 0.0001 && $sharesOutstanding >= self::MIN_SHARES_REVERSE_SPLIT) {
             $result = $this->executeReverseSplit($stock, $newPrice, (int) self::REVERSE_SPLIT_FACTOR);
             $newPrice = $result['price'];
             $sharesOutstanding = $result['shares'];
@@ -71,7 +79,7 @@ class CorporateActionEngine
 
         return [
             'price' => $newPrice,
-            'shares' => $sharesOutstanding,
+            'shares' => max(1.0, $sharesOutstanding),
             'event' => $splitEvent
         ];
     }
@@ -93,7 +101,7 @@ class CorporateActionEngine
             $splitFactor *= self::FORWARD_SPLIT_FACTOR;
         }
 
-        $sharesOutstanding *= $splitFactor;
+        $sharesOutstanding = max(1.0, $sharesOutstanding * $splitFactor);
 
         $oldDiv = (float) $stock->getLastDividend();
         $oldFcf = (float) $stock->getFreeCashFlowPerShare();
@@ -130,13 +138,13 @@ class CorporateActionEngine
     {
         $oldPrice = $newPrice;
         $splitFactor = 1;
-        while ($newPrice < self::REVERSE_SPLIT_THRESHOLD && $splitFactor <= self::MAX_SPLIT_MULTIPLIER && !is_infinite($newPrice)) {
+        while ($newPrice < self::REVERSE_SPLIT_THRESHOLD && $newPrice > 0.0001 && $splitFactor <= self::MAX_SPLIT_MULTIPLIER && !is_infinite($newPrice)) {
             $newPrice = $newPrice * self::REVERSE_SPLIT_FACTOR;
             $splitFactor *= (int) self::REVERSE_SPLIT_FACTOR;
         }
 
         $oldShares = (float) $stock->getSharesOutstanding();
-        $sharesOutstanding = (string) floor($oldShares / $splitFactor);
+        $sharesOutstanding = (string) max(1, (int) floor($oldShares / $splitFactor));
 
         $oldDiv = (float) $stock->getLastDividend();
         $oldFcf = (float) $stock->getFreeCashFlowPerShare();

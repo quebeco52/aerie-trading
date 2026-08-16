@@ -155,6 +155,10 @@ class MergerAndAcquisitionEngine
 
     public function evaluatePrivateAcquisition(Stock $acquirer, MacroStateDTO $macroState, float $dt): ?array
     {
+        if ($acquirer->isBankrupt()) {
+            return null;
+        }
+
         $ctx = new AcquisitionContext($acquirer, $macroState, $dt);
 
         $this->initializeAcquisitionContext($ctx);
@@ -433,6 +437,10 @@ class MergerAndAcquisitionEngine
 
     public function evaluateCorporateDivestiture(Stock $seller, MacroStateDTO $macroState, float $dt): ?array
     {
+        if ($seller->isBankrupt()) {
+            return null;
+        }
+
         $ctx = new DivestitureContext($seller, $macroState, $dt);
 
         $this->initializeDivestitureContext($ctx);

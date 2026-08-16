@@ -107,8 +107,8 @@ class MarketOperator
         $this->logger->info("BANKRUPTCY DETECTED: {$stock->getName()} ({$stock->getTicker()}) collapsed into insolvency. Company permanently terminated.");
 
         $stock->setIsBankrupt(true);
-        $stock->setPrice("0.00000000");
-        $stock->setCurrentVolatility("0.0000");
+        $stock->setPrice('0.00000000');
+        $stock->setCurrentVolatility('0.0000');
 
         // Cancel all OPEN trade orders for this ticker and refund BUY escrow
         $openOrders = $this->entityManager->getRepository(\App\Entity\TradeOrder::class)->findBy([
@@ -134,6 +134,9 @@ class MarketOperator
             'DELETE FROM user_stocks WHERE stock_id = :id',
             ['id' => $stock->getId()]
         );
+
+        $this->entityManager->persist($stock);
+        $this->entityManager->flush();
 
         // NOTE: We preserve stock_history, corporate_report, and stock_events.
         // Historical quarters, charts, and lore records remain frozen in place.

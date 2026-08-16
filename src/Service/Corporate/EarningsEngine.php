@@ -356,9 +356,10 @@ class EarningsEngine
         $ctx->expectedQuarterlyEps = $expectedAnnualEpsDrifted / 4.0;
         $ctx->surpriseAmountQuarterly = $ctx->actualQuarterlyEps - $ctx->expectedQuarterlyEps;
 
-        $epsSurprisePct = abs($ctx->expectedQuarterlyEps) > 0.01
+        $rawEpsSurprise = abs($ctx->expectedQuarterlyEps) > 0.01
             ? $ctx->surpriseAmountQuarterly / abs($ctx->expectedQuarterlyEps)
             : ($ctx->surpriseAmountQuarterly > 0 ? self::ZERO_BASE_SURPRISE_PCT : ($ctx->surpriseAmountQuarterly < 0 ? -self::ZERO_BASE_SURPRISE_PCT : 0.0));
+        $epsSurprisePct = max(-1.0, min(1.0, $rawEpsSurprise));
 
         $revenueSurprisePct = abs($ctx->analystExpectedRevenue) > 1.0
             ? ($ctx->actualRevenue - $ctx->analystExpectedRevenue) / abs($ctx->analystExpectedRevenue)
@@ -450,14 +451,15 @@ class EarningsEngine
         // Growth premium proxy: valuationPremium - 1.0 (so 1.0 -> 0 growth premium, 2.0 -> +1.0 growth premium)
         $growthPremium = max(0.0, $valuationPremium - 1.0);
 
-        // Calculate ERC-driven price gap
+        // Calculate ERC-driven price gap with empirical market dampening
         $priceGapPct = $this->mathUtility->calculateEarningsResponseCoefficient(
             $ctx->surprisePct,
             $beta,
             $growthPremium
         );
 
-        $ctx->priceGapPct = max(-FinancialConstants::MAX_PRICE_GAP, min(FinancialConstants::MAX_PRICE_GAP, $priceGapPct));
+        $dampedPriceGap = $priceGapPct * FinancialConstants::PRICE_GAP_DAMPENING;
+        $ctx->priceGapPct = max(-FinancialConstants::MAX_PRICE_GAP, min(FinancialConstants::MAX_PRICE_GAP, $dampedPriceGap));
         $ctx->totalShockPct = $ctx->priceGapPct;
         $ctx->corporateActionDescriptions = "";
 

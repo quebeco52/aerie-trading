@@ -124,7 +124,11 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
             $primaryShockZ = $catBondZ;
         }
 
-        $observableShockZ = ($treatyZ * $treatyWeight * self::TREATY_VARIANCE_SCALAR) + ($hardMarketPricingBonus * $treatyWeight);
+        $treatyBase = max(1.0, $expectedRevenue * $treatyWeight);
+        $treatyShock = ($treatyRevenue - $treatyBase) / $treatyBase;
+        $catBondBase = max(1.0, $expectedRevenue * $catBondWeight);
+        $catBondShock = ($catBondRevenue - $catBondBase) / $catBondBase;
+        $observableShockZ = ($treatyShock * $treatyWeight) + ($catBondShock * $catBondWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

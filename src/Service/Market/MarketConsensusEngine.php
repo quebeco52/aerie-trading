@@ -65,24 +65,18 @@ class MarketConsensusEngine
 
         $freshEstimate = $expectedRevenue * (1.0 + $actuals->observableShockZ * $dynamicVisibility);
 
-        // Bayesian Updating: Analysts anchor to prior quarter's consensus based on uncertainty
-        $lastEstimate = (float) $stock->getLastAnalystRevenue();
-        
-        if ($lastEstimate > 0.0) {
-            $priorVariance = \App\Service\Math\FinancialConstants::BAYESIAN_BASE_PRIOR_VARIANCE 
-                + ($marketVolatility * \App\Service\Math\FinancialConstants::BAYESIAN_VIX_SCALING_FACTOR);
-                
-            $signalVariance = max(0.01, $coverage->errorStdDev);
+        // Bayesian Updating: Analysts blend structural baseline capacity (prior) with noisy channel signals (fresh estimate)
+        $priorVariance = \App\Service\Math\FinancialConstants::BAYESIAN_BASE_PRIOR_VARIANCE 
+            + ($marketVolatility * \App\Service\Math\FinancialConstants::BAYESIAN_VIX_SCALING_FACTOR);
             
-            $analystExpectedRevenue = $mathUtility->calculateBayesianAnalystUpdate(
-                $lastEstimate,
-                $priorVariance,
-                $freshEstimate,
-                $signalVariance
-            );
-        } else {
-            $analystExpectedRevenue = $freshEstimate;
-        }
+        $signalVariance = max(0.0001, pow($coverage->errorStdDev, 2));
+        
+        $analystExpectedRevenue = $mathUtility->calculateBayesianAnalystUpdate(
+            $expectedRevenue,
+            $priorVariance,
+            $freshEstimate,
+            $signalVariance
+        );
 
         $stock->setLastAnalystRevenue((string) $analystExpectedRevenue);
 

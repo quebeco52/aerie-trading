@@ -242,8 +242,12 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         }
 
         $primaryShockZ = abs($defaultZ) > abs($lendingZ) ? $defaultZ : $lendingZ;
-        // observableShockZ: inflation bonus is fully public via CPI; idiosyncratic lending shock is partially visible
-        $observableShockZ = $inflationBonus;
+        // observableShockZ: inflation bonus and swipe volume are visible, lending is partially visible
+        $lendingBase = max(1.0, $expectedRevenue * $lendingWeight);
+        $lendingShock = ($lendingRevenue - $lendingBase) / $lendingBase;
+        $networkBase = max(1.0, $expectedRevenue * $networkWeight);
+        $networkShock = ($networkRevenue - $networkBase) / $networkBase;
+        $observableShockZ = ($lendingShock * $lendingWeight) + ($networkShock * $networkWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

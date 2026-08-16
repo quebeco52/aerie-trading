@@ -221,4 +221,37 @@ class BankruptcyTest extends TestCase
         $this->assertEquals(0.0, $update['market_cap']);
         $this->assertEquals(0.0, $result['total_cap']);
     }
+
+    public function testCorporateActionEngineNeverSplitsBankruptOrZeroPriceStock(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('DEAD');
+        $stock->setIsBankrupt(true);
+        $stock->setSharesOutstanding('1000000');
+
+        $ledger = $this->createMock(\App\Service\Corporate\CorporateLedgerService::class);
+        $redis = $this->createMock(\Redis::class);
+
+        $actionEngine = new \App\Service\Corporate\CorporateActionEngine(
+            $ledger,
+            $this->marketEventMock,
+            $redis
+        );
+
+        $result = $actionEngine->processSplits($stock, 0.0, 1000000.0);
+        $this->assertEquals(0.0, $result['price']);
+        $this->assertEquals(1000000.0, $result['shares']);
+        $this->assertNull($result['event']);
+
+        // Test non-bankrupt stock with $0.00 price also does not trigger reverse split
+        $aliveStock = new Stock();
+        $aliveStock->setTicker('ALIVE');
+        $aliveStock->setIsBankrupt(false);
+        $aliveStock->setSharesOutstanding('1000000');
+
+        $resultZero = $actionEngine->processSplits($aliveStock, 0.0, 1000000.0);
+        $this->assertEquals(0.0, $resultZero['price']);
+        $this->assertEquals(1000000.0, $resultZero['shares']);
+        $this->assertNull($resultZero['event']);
+    }
 }

@@ -170,7 +170,10 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $patentModifier);
 
         $primaryShockZ = abs($trialZ) > abs($establishedZ) ? $trialZ : $establishedZ;
-        $observableShockZ = ($establishedZ * $establishedWeight) + ($pipelineZ * $pipelineWeight);
+        $establishedShock = $establishedZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
+        $pipelineBase = max(1.0, $expectedRevenue * $pipelineWeight);
+        $pipelineShock = ($pipelineRevenue - $pipelineBase) / $pipelineBase;
+        $observableShockZ = ($establishedShock * $establishedWeight) + ($pipelineShock * $pipelineWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

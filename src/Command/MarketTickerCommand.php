@@ -153,6 +153,10 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                 // Limit Order Check
                 foreach ($allUpdates as $update) {
+                    if (!empty($update['is_bankrupt'])) {
+                        continue;
+                    }
+
                     $ticker = $update['ticker'];
                     $price = $update['price'];
 
@@ -199,6 +203,10 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $pipeline = $this->redis->multi(\Redis::PIPELINE);
 
                 foreach ($allUpdates as $update) {
+                    if (!empty($update['is_bankrupt'])) {
+                        continue; // Keep chart buffer frozen in place
+                    }
+
                     $cacheKey = "chart_buffer:{$update['ticker']}";
                     $point = json_encode(['price' => $update['price'], 'recorded_at' => $nowStr]);
 

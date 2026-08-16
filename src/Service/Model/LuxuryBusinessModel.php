@@ -170,7 +170,10 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
 
         // Analyst Visibility
         $primaryShockZ = abs($eventZ) > abs($hauteZ) ? $eventZ : $hauteZ;
-        $observableShockZ = $hauteZ * $hauteWeight + $accessibleZ * $accessibleWeight;
+        $hauteBase = max(1.0, $expectedRevenue * $hauteWeight);
+        $hauteShock = ($hauteRevenue - $hauteBase) / $hauteBase;
+        $accessibleShock = $accessibleZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
+        $observableShockZ = ($hauteShock * $hauteWeight) + ($accessibleShock * $accessibleWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

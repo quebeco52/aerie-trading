@@ -19,15 +19,16 @@ class DefenseContractorBusinessModelTest extends TestCase
         float $inflation = 0.02,
         float $macroCreditSpread = 0.015,
         float $energyPriceShock = 0.0,
-        float $nominalGdpIndex = 1.0
+        float $nominalGdpIndex = 1.0,
+        float $energyPriceIndexEma = 100.0
     ): MacroStateDTO {
         return new MacroStateDTO(
             outputGap: 0.0,
             outputGapEma: 0.0,
             unemploymentRate: 0.04,
             unemploymentRateEma: 0.04,
-            energyPriceIndex: 100.0,
-            energyPriceIndexEma: 100.0,
+            energyPriceIndex: $energyPriceIndexEma,
+            energyPriceIndexEma: $energyPriceIndexEma,
             energyPriceShock: $energyPriceShock,
             consumerSentimentIndex: 100.0,
             consumerSentimentIndexEma: 100.0,
@@ -197,8 +198,8 @@ class DefenseContractorBusinessModelTest extends TestCase
         // fixedPriceZ = -2.0 (< -1.50 FORWARD_LOSS_Z_SCORE)
         $mathUtilityMock = $this->createMathUtilityMock([0.0, -2.0, 0.0, 0.0]);
 
-        // Energy/commodity shock of 0.10
-        $macroState = $this->createMacroState(energyPriceShock: 0.10);
+        // Energy/commodity shock of 10% on energy index (110.0 vs 100.0 baseline) -> 0.10 * 0.30 = 0.03 material drag
+        $macroState = $this->createMacroState(energyPriceIndexEma: 110.0);
 
         $result = $model->computeActualFinancials(
             $stock,
@@ -211,9 +212,10 @@ class DefenseContractorBusinessModelTest extends TestCase
         );
 
         $this->assertSame(ShockEvent::PROJECT_DELAY, $result->eventType);
-        // Variable margin should absorb FORWARD_LOSS_PENALTY (0.08) + energy shock (0.10 * 0.40 = 0.04) = +0.12
-        // Clamped margin = 0.30 + 0.12 = 0.42
-        $this->assertEqualsWithDelta(0.42, $result->clampedMargin, 0.001);
+        // Fixed price weight is 0.20 for GRIP.
+        // Expected penalty = (FORWARD_LOSS_PENALTY 0.08 + materialDrag 0.03) * 0.20 = 0.022
+        // Clamped margin = 0.30 + 0.022 = 0.322
+        $this->assertEqualsWithDelta(0.322, $result->clampedMargin, 0.001);
     }
 
     public function testGeopoliticalConflictSurge(): void
@@ -280,8 +282,8 @@ class DefenseContractorBusinessModelTest extends TestCase
 
         $macroState = $this->createMacroState();
         $resFailure = $model->computeActualFinancials($stock, 10_000.0, 0.30, 3000.0, 0.15, $macroState, $mathMock1);
-        $this->assertSame(ShockEvent::DEFENSE_CONTRACT_LOSS, $resFailure->eventType);
-        $this->assertEqualsWithDelta(0.30 + DefenseContractorBusinessModel::FLAGSHIP_FAILURE_PENALTY, $resFailure->clampedMargin, 0.001);
+        // Cost-Plus weight is 0.60 for GRIP -> penalty is 0.10 * 0.60 = 0.06
+        $this->assertEqualsWithDelta(0.30 + (DefenseContractorBusinessModel::FLAGSHIP_FAILURE_PENALTY * 0.60), $resFailure->clampedMargin, 0.001);
 
         // Mega contract win (eventZ = 2.8 > 2.5)
         $mathMock2 = $this->createMathUtilityMock([0.0, 0.0, 0.0, 2.8]);

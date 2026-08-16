@@ -194,8 +194,12 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         if (abs($designZ) > abs($primaryShockZ)) {
             $primaryShockZ = $designZ;
         }
-        // observableShockZ: foundry demand visible via wafer shipment lead times and supply chain checks
-        $observableShockZ = $foundryZ * $foundryWeight + $utilizationMultiplier * $foundryWeight;
+        // observableShockZ: foundry and design demand visible via shipment lead times and supply chain checks
+        $foundryBase = max(1.0, $expectedRevenue * $foundryWeight);
+        $foundryShock = ($foundryRevenue - $foundryBase) / $foundryBase;
+        $designBase = max(1.0, $expectedRevenue * $designWeight);
+        $designShock = ($designRevenue - $designBase) / $designBase;
+        $observableShockZ = ($foundryShock * $foundryWeight) + ($designShock * $designWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
