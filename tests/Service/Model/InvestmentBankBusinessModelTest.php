@@ -73,4 +73,41 @@ class InvestmentBankBusinessModelTest extends TestCase
         // actual_revenue  = 250.0 + 900.0 = 1150.0
         $this->assertEqualsWithDelta(1150.0, $result->actualRevenue, 0.001);
     }
+
+    public function testExtremeVixSpikeIsCappedByVarLimits(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('GS');
+
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathMock->method('generateUniform')->willReturn(0.50);
+
+        // Extreme 2008-level VIX spike (0.80) -> vixGap = 0.62
+        // Effective VIX gap is capped at MAX_VIX_ARBITRAGE_GAP (0.30)
+        // volatilityArbitrage = 0.30 * 1.20 = 0.36
+        $macroState = \App\DTO\MacroStateDTO::fromArray([
+            'output_gap_ema' => 0.0,
+            'policy_rate_ema' => 0.04,
+            'yield_5y_ema' => 0.045,
+            'market_volatility_ema' => 0.80,
+        ]);
+
+        $result = $this->model->computeActualFinancials(
+            $stock,
+            1000.0,
+            0.50,
+            100.0,
+            0.14,
+            $macroState,
+            $mathMock
+        );
+
+        // Default weights: advisory = 0.40, trading = 0.60
+        // advisoryRevenue = 1000.0 * 0.40 = 400.0
+        // tradingRevenue = 1000.0 * 0.60 * (1.0 + 0.36) = 816.0
+        // total = 1216.0
+        // Without VaR cap, volatilityArbitrage would be 0.62 * 1.20 = 0.744 and total = 1446.4
+        $this->assertEqualsWithDelta(1216.0, $result->actualRevenue, 0.1);
+    }
 }

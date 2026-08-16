@@ -34,7 +34,7 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     public const FRANCHISE_LEASE_WEIGHT = 0.20;
 
     // --- Pricing Power & Macro Physics ---
-    public const MIN_BETA_PRICING_POWER_FLOOR = 0.40; 
+    public const MIN_BETA_PRICING_POWER_FLOOR = 0.40;
 
     // --- Revenue & Shock Physics ---
     public const REVENUE_VARIANCE_SCALAR = 0.40;
@@ -42,6 +42,10 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     public const LEASE_COST_INTENSITY     = 0.02;
     public const INFLATION_PENALTY_SCALAR = 1.50; // Massively exposed to food & labor inflation
     public const LEASE_INFLATION_CAPTURE  = 0.80; // CPI rent escalation clause
+
+    // --- Energy & Utility Physics ---
+    /** Variable margin penalty scalar applied to company-operated restaurant kitchens during energy/utility price spikes. */
+    public const UTILITY_ENERGY_DRAG_SCALAR = 0.20;
 
     // --- Tail Risk & Shock Events ---
     public const FOOD_SAFETY_SCANDAL_Z_SCORE = -2.20;
@@ -164,10 +168,14 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         $baseInflationPenalty = $inflation > MacroEngine::TARGET_INFLATION ? ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0;
         $inflationPenalty = $baseInflationPenalty * $inflationMultiplier;
 
+        // Energy & Utility Drag: Company-operated stores pay kitchen gas, power, and refrigeration utilities
+        $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
+        $energyDrag = $energyShift * self::UTILITY_ENERGY_DRAG_SCALAR * $corporateWeight;
+
         // Continuous Elasticity
         $elasticityShift = -self::FRANCHISE_SCALE_ELASTICITY * $franchiseZ * $franchiseWeight;
 
-        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $foodSafetyPenalty + $inflationPenalty + $elasticityShift;
+        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $foodSafetyPenalty + $inflationPenalty + $energyDrag + $elasticityShift;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         $primaryShockZ = ($corporateZ * $corporateWeight) + ($franchiseZ * $franchiseWeight);

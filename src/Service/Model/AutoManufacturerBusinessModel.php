@@ -140,14 +140,16 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         if ($policyRate > self::NEUTRAL_POLICY_RATE) {
             $ratePenalty = ($policyRate - self::NEUTRAL_POLICY_RATE) * $beta * $rateScalar;
         } else {
-            $ratePenalty = ($policyRate - self::NEUTRAL_POLICY_RATE) * $beta * ($rateScalar * 0.5);
+            // Capped boost when rates are ultra-low
+            $ratePenalty = max(-0.10, ($policyRate - self::NEUTRAL_POLICY_RATE) * $beta * ($rateScalar * 0.5));
         }
 
         $physics['macro_demand_shift'] -= $ratePenalty;
 
-        // Auto sales are highly exposed to consumer discretionary sentiment
+        // FIX: Tamed the sentiment multiplier from 1.50 to 0.40.
+        // A -40 point drop in sentiment for a 1.75 beta stock now results in a realistic -28% demand drop.
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
-        $physics['macro_demand_shift'] += $sentimentShift * $beta * 1.50;
+        $physics['macro_demand_shift'] += $sentimentShift * $beta * 0.40;
 
         return $physics;
     }

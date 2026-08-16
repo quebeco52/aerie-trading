@@ -46,10 +46,12 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     public const DCM_STEEPNESS_SCALAR       = 2.50;
     public const DCM_STEEPNESS_CLAMP        = 0.40;
 
-    // --- Proprietary Volatility Arbitrage (S&T Desk) ---
+    // --- S&T Volatility Arbitrage & VaR Limits ---
     public const VIX_ARBITRAGE_FLOOR        = 0.18;
     public const VIX_ARBITRAGE_SCALAR       = 1.20;
     public const DEFAULT_VIX_FALLBACK       = 0.20;
+    /** Maximum effective VIX gap capture before regulatory VaR and balance sheet risk limits constrain trading profits. */
+    public const MAX_VIX_ARBITRAGE_GAP      = 0.30;
 
     // --- Revenue Shock Physics ---
     public const REVENUE_VARIANCE_SCALAR    = 0.25;
@@ -144,12 +146,13 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             min(self::DCM_STEEPNESS_CLAMP, ($curveSlope - self::DCM_STEEPNESS_FLOOR) * self::DCM_STEEPNESS_SCALAR)
         );
 
-        // --- S&T Volatility Arbitrage ---
+        // --- S&T Volatility Arbitrage & VaR Limits ---
         $vixEma = $macroState->marketVolatilityEma;
         $vixGap = $vixEma - self::VIX_ARBITRAGE_FLOOR;
+        $effectiveVixGap = min(self::MAX_VIX_ARBITRAGE_GAP, $vixGap);
 
         $volatilityArbitrage = $vixGap >= 0.0
-            ? $vixGap * $vixScalar
+            ? $effectiveVixGap * $vixScalar
             : max(-0.15, $vixGap * ($vixScalar * 0.5));
 
         // --- Event Modifiers & Penalties ---

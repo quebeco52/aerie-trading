@@ -52,6 +52,10 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     public const SPOT_VARIANCE_SCALAR       = 0.60; // Highly volatile spot market
     public const WAREHOUSING_VARIANCE_SCALAR = 0.10; // Sticky long-term storage
 
+    // --- Fuel Surcharge & Energy Physics ---
+    /** Margin penalty scalar applied to fleet operations when energy/diesel prices spike faster than fuel surcharges adjust. */
+    public const FUEL_SURCHARGE_LAG_PENALTY = 0.35;
+
     public const SPOT_SURGE_Z_SCORE = 1.75;
     public const SPOT_SURGE_MULT    = 1.40; 
 
@@ -109,7 +113,12 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
         $actualRevenue = array_sum($streamRevenues);
         $streams->recordStreamShares($streamRevenues);
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin);
+        // Fuel Surcharge Lag Penalty: Fleet transport operations consume substantial diesel.
+        // When energy prices spike (> 0), margins compress temporarily before customer surcharges adjust.
+        $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
+        $fuelLagDrag = $energyShift * self::FUEL_SURCHARGE_LAG_PENALTY * ($fleetWeight + $spotWeight);
+
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $fuelLagDrag);
 
         $primaryShockZ = abs($spotZ) > abs($fleetZ) ? $spotZ : $fleetZ;
         if (abs($whZ) > abs($primaryShockZ)) {
@@ -118,7 +127,8 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
 
         $observableShockZ = ($fleetZ * $fleetWeight * self::DEDICATED_VARIANCE_SCALAR * $baselineVol) +
             ($spotZ * $spotWeight * self::SPOT_VARIANCE_SCALAR * $baselineVol) +
-            ($macroBoost * $fleetWeight);
+            ($macroBoost * $fleetWeight) -
+            ($fuelLagDrag * 0.5);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

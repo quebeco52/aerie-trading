@@ -71,6 +71,11 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     public const CAPEX_HURDLE_RATIO        = 0.40;
     /** Variable margin penalty applied when underinvestment degrades silicon wafer yields. */
     public const WAFER_SCRAP_PENALTY       = 0.08;
+
+    // --- Cleanroom Electricity & Energy Drag ---
+    /** Variable margin penalty scalar applied to physical cleanroom foundry operations during energy/electricity spikes. */
+    public const CLEANROOM_ENERGY_DRAG_SCALAR = 0.35;
+
     /** Upper clamp for realized variable margin. */
     public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
     /** Lower clamp for realized variable margin. */
@@ -188,7 +193,11 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
             $yieldModifier = self::WAFER_SCRAP_PENALTY * $foundryWeight; // Scaled by foundry weight
         }
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $yieldModifier);
+        // Cleanroom Energy Drag: Fabs and EUV lithography tools consume gigawatts of electricity
+        $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
+        $energyDrag = $energyShift * self::CLEANROOM_ENERGY_DRAG_SCALAR * $foundryWeight;
+
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $yieldModifier + $energyDrag);
 
         $primaryShockZ = abs($cycleZ) > abs($foundryZ) ? $cycleZ : $foundryZ;
         if (abs($designZ) > abs($primaryShockZ)) {

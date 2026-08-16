@@ -43,6 +43,8 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     public const PROMOTIONAL_COMP_DRAG_SCALAR = 0.15;
     /** Sensitivity scalar for supply chain inflation cost penalties. */
     public const INFLATION_PENALTY_SCALAR = 0.80;
+    /** Variable margin penalty scalar from 24/7 casino floor power, HVAC, and mega-resort utility costs during energy spikes. */
+    public const ENERGY_UTILITY_DRAG_SCALAR = 0.20;
 
     // --- Revenue Volatility & Stream Physics ---
     /** Volatility multiplier for top-line revenue shocks reflecting gaming hold and tourism swings. */
@@ -239,7 +241,11 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
         $promotionalDrag = $sentimentShift < 0.0 ? abs($sentimentShift) * abs((float) $stock->getBeta()) * self::PROMOTIONAL_COMP_DRAG_SCALAR : 0.0;
 
-        // 3. Structural Margin Blending
+        // 3. Energy & Utility Cost Drag (24/7 power, HVAC, lighting)
+        $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
+        $energyDrag = $energyShift * self::ENERGY_UTILITY_DRAG_SCALAR;
+
+        // 4. Structural Margin Blending
         // Gaming is high margin (low variable cost). Non-Gaming (F&B, Hotel, Leases) has higher variable cost.
         // We dynamically scale their costs against the total realizedVariableMargin to guarantee neither is ever negative.
         // CRE is assumed to have very low variable costs (similar to gaming)
@@ -253,7 +259,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
 
         $actualVariableCosts = ($nonGamingRevenue * $nonGamingVariableMargin) + ($gamingRevenue * $gamingVariableMargin) + ($creRevenue * $creVariableMargin);
 
-        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $inflationPenalty;
+        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $inflationPenalty + $energyDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock Z selection

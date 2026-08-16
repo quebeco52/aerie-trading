@@ -119,7 +119,7 @@ class MacroEngine
     public const SENTIMENT_MISERY_MULTIPLIER = 200.0;
     public const SENTIMENT_VOLATILITY_MULTIPLIER = 50.0;
     public const SENTIMENT_MOMENTUM_MULTIPLIER = 250.0;
-    public const SENTIMENT_RATE_MULTIPLIER = 100.0;
+    public const SENTIMENT_RATE_MULTIPLIER = 250.0;
     public const ANIMAL_SPIRITS_MEAN_REVERSION = 2.0; // Theta (Speed of return to reality)
     public const ANIMAL_SPIRITS_VOLATILITY = 2.5;     // Sigma (How irrational people get)
 
@@ -555,7 +555,7 @@ class MacroEngine
         // The "Rational" Target (Mu)
         $fundamentalSentiment = self::SENTIMENT_BASELINE - $miseryPenalty - $momentumPenalty - $fearPenalty - $ratePenalty - $gasPanic;
         if ($state->outputGap > 0.0) {
-            $fundamentalSentiment += ($state->outputGap * 450.0);
+            $fundamentalSentiment += ($state->outputGap * 300.0);
         }
 
         // 2. Apply Ornstein-Uhlenbeck (OU) Stochastic Process for "Animal Spirits"
