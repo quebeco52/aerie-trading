@@ -51,11 +51,17 @@ class ScreenerController extends AbstractController
                 'equity'       => $equity,
                 'debt'         => (float) $stock->getTotalDebt(),
                 'debtToEquity' => $debtToEquity,
+                'isBankrupt'   => $stock->isBankrupt(),
             ];
         }
 
-        // Sort by Market Cap descending by default to show the Titans first
-        usort($screenerData, fn($a, $b) => $b['marketCap'] <=> $a['marketCap']);
+        // Sort by active vs bankrupt first, then by Market Cap descending
+        usort($screenerData, function ($a, $b) {
+            if ($a['isBankrupt'] !== $b['isBankrupt']) {
+                return $a['isBankrupt'] ? 1 : -1;
+            }
+            return $b['marketCap'] <=> $a['marketCap'];
+        });
 
         return $this->render('screener/index.html.twig', [
             'stocks' => $screenerData,

@@ -81,12 +81,9 @@
 										{{ _self.tooltip(bmDesc, 'left', 'w-72 z-50', 'bottom') }}
 									</span>
 
-									{% if not isEtf and asset.ceoArchetype is defined %}
-										<span class="group relative cursor-help inline-flex items-center rounded-md bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-primary focus-visible:outline-none" tabindex="0">
-											<span class="border-b border-dotted border-primary/70 pb-0.5">CEO: {{ asset.ceoArchetype|replace({'_': ' '})|title }}</span>
-											{% set archetypeDescMap = constant('App\\Data\\CeoArchetypes::DESCRIPTIONS') %}
-											{% set archetypeDesc = archetypeDescMap[asset.ceoArchetype] ?? 'The personality of the current CEO.' %}
-											{{ _self.tooltip(archetypeDesc, 'left', 'w-64 z-50', 'bottom') }}
+									{% if not isEtf and asset.isBankrupt %}
+										<span class="inline-flex items-center rounded-md bg-red-500/10 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-red-400 border border-red-500/20">
+											BANKRUPT / DELISTED
 										</span>
 									{% endif %}
 								</div>
@@ -96,11 +93,16 @@
 						{# Right Side - Price #}
 						<div class="md:text-right shrink-0 flex flex-col md:items-end">
 							<div class="flex items-center md:justify-end gap-2 mb-1">
-								<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
-								<span class="text-[10px] font-bold tracking-widest text-secondary uppercase" id="live-indicator">Live Market</span>
+								{% if not isEtf and asset.isBankrupt %}
+									<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+									<span class="text-[10px] font-bold tracking-widest text-tertiary uppercase" id="live-indicator">BANKRUPT / DELISTED</span>
+								{% else %}
+									<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+									<span class="text-[10px] font-bold tracking-widest text-secondary uppercase" id="live-indicator">Live Market</span>
+								{% endif %}
 							</div>
-							<span class="block text-4xl md:text-5xl font-bold text-on-surface tracking-tighter transition-colors duration-300" id="big-price">
-								${{ asset.price|number_format(2) }}
+							<span class="block text-4xl md:text-5xl font-bold {{ not isEtf and asset.isBankrupt ? 'text-tertiary line-through' : 'text-on-surface' }} tracking-tighter transition-colors duration-300" id="big-price">
+								${{ (not isEtf and asset.isBankrupt ? 0.00 : asset.price)|number_format(2) }}
 							</span>
 						</div>
 					</div>
@@ -555,59 +557,76 @@
 						Execute Trade
 					</h3>
 
-					{% if userQuantity > 0 %}
-						<div class="mb-6 p-4 bg-surface-container-lowest/50 rounded-xl border border-outline-variant/10">
-							<div class="flex justify-between items-center">
-								<span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Your Position</span>
-								<span class="text-sm font-bold text-on-surface">{{ userQuantity|number_format }}
-									Shares</span>
+					{% if not isEtf and asset.isBankrupt %}
+						<div class="p-5 bg-red-950/20 border border-red-500/20 rounded-xl space-y-3 relative z-10">
+							<div class="flex items-center gap-2 text-red-400 font-bold text-xs uppercase tracking-wider">
+								<span class="material-symbols-outlined text-base">block</span>
+								Trading Halted
 							</div>
-							<div class="flex justify-between items-center mt-2">
-								<span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Market Value</span>
-								<span class="text-sm font-bold text-secondary" id="user-holding-value">${{ (userQuantity * asset.price)|number_format(2) }}</span>
+							<p class="text-xs text-on-surface-variant leading-relaxed">
+								This corporation has collapsed into insolvency and entered Chapter 7 bankruptcy liquidation. All shareholder equity has been cancelled and trading is permanently halted.
+							</p>
+							<div class="pt-2 border-t border-red-500/10 flex justify-between items-center text-[10px] font-mono text-red-400/80 uppercase tracking-widest">
+								<span>Status: Insolvent</span>
+								<span>Price: $0.00</span>
 							</div>
 						</div>
+					{% else %}
+						{% if userQuantity > 0 %}
+							<div class="mb-6 p-4 bg-surface-container-lowest/50 rounded-xl border border-outline-variant/10">
+								<div class="flex justify-between items-center">
+									<span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Your Position</span>
+									<span class="text-sm font-bold text-on-surface">{{ userQuantity|number_format }}
+										Shares</span>
+								</div>
+								<div class="flex justify-between items-center mt-2">
+									<span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Market Value</span>
+									<span class="text-sm font-bold text-secondary" id="user-holding-value">${{ (userQuantity * asset.price)|number_format(2) }}</span>
+								</div>
+							</div>
+						{% endif %}
+
+						<form action="/trade/execute" method="POST" class="space-y-5 relative z-10">
+							<input type="hidden" name="ticker" value="{{ asset.ticker }}">
+							<input type="hidden" name="_token" value="{{ csrf_token('execute_trade') }}">
+
+							<div class="flex gap-2">
+								<label class="flex-1 cursor-pointer">
+									<input type="radio" name="orderType" value="MARKET" class="peer sr-only" checked onchange="document.getElementById('limitPriceContainer').style.display='none'">
+									<div class="rounded-xl px-3 py-2 text-center text-[10px] font-bold uppercase tracking-widest text-on-surface-variant border border-outline-variant/30 peer-checked:bg-primary/10 peer-checked:text-primary peer-checked:border-primary/30 transition-all">Market</div>
+								</label>
+								<label class="flex-1 cursor-pointer">
+									<input type="radio" name="orderType" value="LIMIT" class="peer sr-only" onchange="document.getElementById('limitPriceContainer').style.display='block'">
+									<div class="rounded-xl px-3 py-2 text-center text-[10px] font-bold uppercase tracking-widest text-on-surface-variant border border-outline-variant/30 peer-checked:bg-primary/10 peer-checked:text-primary peer-checked:border-primary/30 transition-all">Limit</div>
+								</label>
+							</div>
+
+							<div>
+								<label class="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">Quantity ({{ asset.ticker }})</label>
+								<div class="relative">
+									<input type="number" name="quantity" min="1" value="10" class="w-full bg-surface-container-highest border-none rounded-xl text-lg font-bold text-on-surface focus:ring-1 focus:ring-primary py-4 px-4 transition-all">
+								</div>
+							</div>
+
+							<div id="limitPriceContainer" style="display:none">
+								<label class="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">Limit Price ($)</label>
+								<div class="relative">
+									<input type="number" name="limitPrice" min="0.01" step="0.01" placeholder="{{ asset.price|number_format(2) }}" class="w-full bg-surface-container-highest border-none rounded-xl text-lg font-bold text-on-surface focus:ring-1 focus:ring-primary py-4 px-4 transition-all">
+								</div>
+							</div>
+
+							<div class="grid grid-cols-2 gap-3 pt-2">
+								<button type="submit" name="action" value="BUY" class="flex w-full justify-center rounded-xl bg-secondary px-3 py-3.5 text-sm font-bold text-[#002113] shadow-lg shadow-secondary/20 hover:brightness-110 active:scale-95 transition-all">
+									BUY
+								</button>
+								<button type="submit" name="action" value="SELL" class="flex w-full justify-center rounded-xl bg-surface-container-high px-3 py-3.5 text-sm font-bold text-on-surface hover:bg-surface-bright active:scale-95 transition-all">
+									SELL
+								</button>
+							</div>
+						</form>
 					{% endif %}
-
-					<form action="/trade/execute" method="POST" class="space-y-5 relative z-10">
-						<input type="hidden" name="ticker" value="{{ asset.ticker }}">
-						<input type="hidden" name="_token" value="{{ csrf_token('execute_trade') }}">
-
-						<div class="flex gap-2">
-							<label class="flex-1 cursor-pointer">
-								<input type="radio" name="orderType" value="MARKET" class="peer sr-only" checked onchange="document.getElementById('limitPriceContainer').style.display='none'">
-								<div class="rounded-xl px-3 py-2 text-center text-[10px] font-bold uppercase tracking-widest text-on-surface-variant border border-outline-variant/30 peer-checked:bg-primary/10 peer-checked:text-primary peer-checked:border-primary/30 transition-all">Market</div>
-							</label>
-							<label class="flex-1 cursor-pointer">
-								<input type="radio" name="orderType" value="LIMIT" class="peer sr-only" onchange="document.getElementById('limitPriceContainer').style.display='block'">
-								<div class="rounded-xl px-3 py-2 text-center text-[10px] font-bold uppercase tracking-widest text-on-surface-variant border border-outline-variant/30 peer-checked:bg-primary/10 peer-checked:text-primary peer-checked:border-primary/30 transition-all">Limit</div>
-							</label>
-						</div>
-
-						<div>
-							<label class="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">Quantity ({{ asset.ticker }})</label>
-							<div class="relative">
-								<input type="number" name="quantity" min="1" value="10" class="w-full bg-surface-container-highest border-none rounded-xl text-lg font-bold text-on-surface focus:ring-1 focus:ring-primary py-4 px-4 transition-all">
-							</div>
-						</div>
-
-						<div id="limitPriceContainer" style="display:none">
-							<label class="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">Limit Price ($)</label>
-							<div class="relative">
-								<input type="number" name="limitPrice" min="0.01" step="0.01" placeholder="{{ asset.price|number_format(2) }}" class="w-full bg-surface-container-highest border-none rounded-xl text-lg font-bold text-on-surface focus:ring-1 focus:ring-primary py-4 px-4 transition-all">
-							</div>
-						</div>
-
-						<div class="grid grid-cols-2 gap-3 pt-2">
-							<button type="submit" name="action" value="BUY" class="flex w-full justify-center rounded-xl bg-secondary px-3 py-3.5 text-sm font-bold text-[#002113] shadow-lg shadow-secondary/20 hover:brightness-110 active:scale-95 transition-all">
-								BUY
-							</button>
-							<button type="submit" name="action" value="SELL" class="flex w-full justify-center rounded-xl bg-surface-container-high px-3 py-3.5 text-sm font-bold text-on-surface hover:bg-surface-bright active:scale-95 transition-all">
-								SELL
-							</button>
-						</div>
-					</form>
 				</div>
+
 
 				{% if openOrders|length > 0 %}
 				<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15">

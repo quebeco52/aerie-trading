@@ -15,22 +15,6 @@ use App\Service\Event\MarketEventPublisher;
  */
 class MarketOperator
 {
-    // --- Corporate Governance ---
-    /** Probability of a CEO naturally retiring per check. */
-    private const GOVERNANCE_RETIRE_PROBABILITY = 0.002;
-    /** Probability of firing a CEO if returns are absolutely abysmal. */
-    private const GOVERNANCE_FIRE_PROBABILITY_ABYSMAL = 0.028;
-    /** Probability of firing a CEO if returns are negative. */
-    private const GOVERNANCE_FIRE_PROBABILITY_UNDERPERFORM = 0.005;
-    /** Performance spread vs Hurdle Rate (< -10%) where the Board considers performance abysmal. */
-    private const GOVERNANCE_PERFORMANCE_ABYSMAL_SPREAD = -0.10;
-    /** Performance spread vs Hurdle Rate (< -5%) where the Board considers performance underperforming. */
-    private const GOVERNANCE_PERFORMANCE_UNDERPERFORM_SPREAD = -0.05;
-
-    private const SHOCK_FIRE_MIN = 2.0;
-    private const SHOCK_FIRE_MAX = 5.0;
-    private const SHOCK_RETIRE_MIN = -3.0;
-    private const SHOCK_RETIRE_MAX = 1.0;
 
     public function __construct(
         private EntityManagerInterface $entityManager,
@@ -43,24 +27,35 @@ class MarketOperator
     /**
      * Wakes up periodically to enforce the laws of game-design physics.
      *
-     * @param array<Stock> $stocks An array of stock entities to review.
-     * @param MacroStateDTO $macroState Current macro state for context-aware decisions.
-     * @return array<mixed> Generated market events resulting from restructuring actions.
+     * Iterates over all stocks to prevent runaway balance sheet feedback loops:
+     * 1. Evaluates companies for potential bankruptcy restructuring.
+     * 2. Damps extreme instantaneous volatility spikes back towards safety bounds.
+     *
+     * @param Stock[]       $stocks     List of all active stock entities.
+     * @param MacroStateDTO $macroState The current macroeconomic state.
+     * @return array List of generated market events to broadcast.
      */
     public function enforceMarketStability(array $stocks, MacroStateDTO $macroState): array
     {
         $this->logger->info("The Market Operator is reviewing the district...");
         $generatedEvents = [];
 
-        // Calculate the Total Market Cap of the entire district on the fly
+        // Calculate the Total Market Cap of active companies in the district on the fly
         $totalMarketCap = 0;
         foreach ($stocks as $stock) {
+            if ($stock->isBankrupt()) {
+                continue;
+            }
             $totalMarketCap += ((float) $stock->getPrice()) * ((int) $stock->getSharesOutstanding());
         }
         // Fallback to prevent division by zero in case of total economic collapse
         if ($totalMarketCap <= 0) $totalMarketCap = 1;
 
         foreach ($stocks as $stock) {
+            if ($stock->isBankrupt()) {
+                continue;
+            }
+
             $price = (float) $stock->getPrice();
             $shares = (int) $stock->getSharesOutstanding();
             $marketCap = $price * $shares;
@@ -70,11 +65,6 @@ class MarketOperator
             if ($restructureEvents !== null) {
                 $generatedEvents = array_merge($generatedEvents, $restructureEvents);
                 continue;
-            }
-
-            $governanceEvents = $this->evaluateCorporateGovernance($stock, $macroState);
-            if ($governanceEvents !== null) {
-                $generatedEvents = array_merge($generatedEvents, $governanceEvents);
             }
 
             // RULE : Volatility Dampening
@@ -89,16 +79,19 @@ class MarketOperator
     }
 
     /**
-     * Evaluates and applies bankruptcy restructuring for failing companies.
+     * Evaluates and applies permanent bankruptcy for failing companies.
      *
-     * If a company's market cap falls below $1B, it undergoes either a hostile
-     * takeover (liquidation) or a white knight bailout, resetting its financials.
+     * If a company fails the Altman Z''-score insolvency test, it is permanently killed:
+     * - Status marked as bankrupt, share price drops to 0, volatility drops to 0.
+     * - Open orders are cancelled (refunding cash for buy orders).
+     * - Shareholder equity is wiped (user holdings deleted).
+     * - All historical quarters, financial reports, lore events, and charts remain frozen in place.
      *
-     * @param Stock  $stock     The failing stock to restructure.
-     * @param float  $marketCap The current market capitalization.
-     * @param string $name      The name of the company.
+     * @param Stock         $stock     The failing stock to evaluate.
+     * @param float         $marketCap The current market capitalization.
+     * @param string        $name      The name of the company.
      * @param MacroStateDTO $macroState The current macroeconomic state.
-     * @return array|null Returns generated market events if a restructuring occurred, otherwise null.
+     * @return array|null Returns generated market events if bankruptcy occurred, otherwise null.
      */
     private function applyRestructuringRule(Stock $stock, float $marketCap, string $name, MacroStateDTO $macroState): ?array
     {
@@ -108,140 +101,48 @@ class MarketOperator
 
         $zScoreData = $this->debtEngine->calculateAltmanZScore($stock, $ebit, $revenue, (float) $stock->getPrice());
         if (!$zScoreData['is_bankrupt']) {
-            return null; // The company is surviving; abort the restructuring
+            return null; // The company is surviving; abort bankruptcy
         }
 
-        $industry = $stock->getIndustry() ?: 'General';
-        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $this->logger->info("BANKRUPTCY DETECTED: {$stock->getName()} ({$stock->getTicker()}) collapsed into insolvency. Company permanently terminated.");
 
-        $isHostile = $this->mathUtility->checkProbability(0.5);
+        $stock->setIsBankrupt(true);
+        $stock->setPrice("0.00000000");
+        $stock->setCurrentVolatility("0.0000");
 
-        if ($isHostile) {
-            $this->logger->info("BANKRUPTCY DETECTED: {$stock->getTicker()} collapsed. Black Swan Capital initiating hostile liquidation.");
-            $event1Desc = "{$name} ({$stock->getTicker()}) was liquidated in a hostile takeover by Black Swan Capital. Shareholder equity wiped to 0.";
-            $event2Desc = "Black Swan Capital has stripped {$stock->getTicker()} of its assets and relisted the hollowed-out shell at $50.00.";
-        } else {
-            $this->logger->info("BANKRUPTCY IMMINENT: {$stock->getTicker()} collapsing. Lakebird Bank initiating a bailout.");
-            $event1Desc = "{$name} ({$stock->getTicker()}) secured a last-minute emergency bailout from Lakebird Bank. Retail shares diluted to secure funding.";
-            $event2Desc = "Lakebird Bank has stabilized {$stock->getTicker()}'s balance sheet. Trading resumes at $50.00.";
+        // Cancel all OPEN trade orders for this ticker and refund BUY escrow
+        $openOrders = $this->entityManager->getRepository(\App\Entity\TradeOrder::class)->findBy([
+            'ticker' => $stock->getTicker(),
+            'status' => 'OPEN'
+        ]);
+
+        foreach ($openOrders as $order) {
+            if ($order->getAction() === 'BUY' && $order->getLimitPrice()) {
+                $user = $order->getUser();
+                if ($user) {
+                    $escrowCashStr = \bcmul((string) $order->getLimitPrice(), (string) $order->getQuantity(), 4);
+                    $user->setCashBalance(\bcadd((string) $user->getCashBalance(), $escrowCashStr, 4));
+                    $this->entityManager->persist($user);
+                }
+            }
+            $order->setStatus('CANCELLED');
+            $this->entityManager->persist($order);
         }
 
+        // Wipe user stock positions as shareholder equity is wiped out to 0
         $this->entityManager->getConnection()->executeStatement(
             'DELETE FROM user_stocks WHERE stock_id = :id',
             ['id' => $stock->getId()]
         );
 
-        $stock->setPrice("50.00");
-        $stock->setSharesOutstanding("1000000000");
-        $stock->setEarningsPerShare((string) $this->mathUtility->generateUniformBetween(3.25, 4.33));
-        $stock->setFreeCashFlowPerShare("0.00");
-        $stock->setCurrentRoic($stock->getBaselineRoic());
-        $stock->setRoicTtm($stock->getBaselineRoic());
-        $stock->setCurrentRoe($stock->getBaselineRoe());
-        $stock->setRoeTtm($stock->getBaselineRoe());
-        $stock->setHistoricalFixedRate("0.05");
-        $stock->setCorporateTreasury("5000000000.00");
-        $stock->setTotalEquity((string) ($this->mathUtility->generateUniformBetween(10, 100) * 1000000000));
-        $stock->setRetainedEarnings("0.00");
-        $stock->setWholesaleDebt("10000000000.00"); // Give the restructured company a healthy 0.5x D/E ratio
+        // NOTE: We preserve stock_history, corporate_report, and stock_events.
+        // Historical quarters, charts, and lore records remain frozen in place.
 
-        // Fire the old CEO and install a new random one
-        $newArchetype = \App\Data\CeoArchetypes::getRandomArchetype($macroState);
-        $stock->setCeoArchetype($newArchetype);
-
-        if (in_array($businessModel, ['commercial_bank', 'insurance', 'credit_services'])) {
-            // For a restructured bank or insurance company, assume 85% of its new debt is deposits/float.
-            $stock->setCustomerDeposits("8500000000.00");
-            $stock->setWholesaleDebt("1500000000.00"); // The remaining 1.5B is Wholesale
-        } else {
-            $stock->setCustomerDeposits("0.00");
-        }
-
-        $this->entityManager->getConnection()->executeStatement(
-            'DELETE FROM stock_history WHERE stock_id = :id',
-            ['id' => $stock->getId()]
-        );
-
-        $this->entityManager->getConnection()->executeStatement(
-            'DELETE FROM corporate_report WHERE stock_id = :id',
-            ['id' => $stock->getId()]
-        );
-
-        $this->entityManager->getConnection()->executeStatement(
-            'DELETE FROM stock_events WHERE stock_id = :id',
-            ['id' => $stock->getId()]
-        );
+        $eventDesc = "{$name} ({$stock->getTicker()}) has collapsed into insolvency and filed for Chapter 7 bankruptcy liquidation. Shareholder equity wiped to 0 and trading permanently halted.";
 
         return [
-            $this->marketEvent->publish($stock, 'BANKRUPTCY', $event1Desc, -100.00),
-            $this->marketEvent->publish($stock, 'BAILOUT', $event2Desc, 0.00)
-        ];
-    }
-
-    /**
-     * Evaluates whether the CEO should be fired for poor performance or naturally retire.
-     */
-    private function evaluateCorporateGovernance(Stock $stock, MacroStateDTO $macroState): ?array
-    {
-        $industry = $stock->getIndustry() ?: 'General';
-        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
-
-        $trueReturn = $isFinancial ? (float) $stock->getRoeTtm() : (float) $stock->getRoicTtm();
-
-        $debtHealth = $this->debtEngine->analyzeDebtHealth($stock, $macroState);
-        $hurdleRate = $isFinancial ? $debtHealth->costOfEquity : $debtHealth->wacc;
-        
-        $performanceSpread = $trueReturn - $hurdleRate;
-
-        $firingProbability = 0.0;
-        $retireProbability = self::GOVERNANCE_RETIRE_PROBABILITY;
-
-        if ($performanceSpread < self::GOVERNANCE_PERFORMANCE_ABYSMAL_SPREAD) {
-            // Abysmal performance, Board is angry
-            $firingProbability += self::GOVERNANCE_FIRE_PROBABILITY_ABYSMAL;
-        } elseif ($performanceSpread < self::GOVERNANCE_PERFORMANCE_UNDERPERFORM_SPREAD) {
-            // Underperforming
-            $firingProbability += self::GOVERNANCE_FIRE_PROBABILITY_UNDERPERFORM;
-        }
-
-        $isFired = $this->mathUtility->checkProbability($firingProbability);
-        $isRetired = !$isFired && $this->mathUtility->checkProbability($retireProbability);
-
-        if (!$isFired && !$isRetired) {
-            return null;
-        }
-
-
-        $oldArchetype = $stock->getCeoArchetype();
-        $newArchetype = \App\Data\CeoArchetypes::getRandomArchetype($macroState);
-
-        // Ensure they actually change archetypes or at least "refresh" with the same one
-        if ($newArchetype === $oldArchetype && $this->mathUtility->checkProbability(0.5)) {
-            $newArchetype = \App\Data\CeoArchetypes::getRandomArchetype($macroState);
-        }
-
-        $stock->setCeoArchetype($newArchetype);
-
-        $newTitle = \App\Data\CeoArchetypes::getTitle($newArchetype);
-        $name = $stock->getName();
-        $ticker = $stock->getTicker();
-
-        $shock = 0.0;
-        if ($isFired) {
-            // The market usually cheers a terrible CEO getting fired
-            $shock = $this->mathUtility->generateUniformBetween(self::SHOCK_FIRE_MIN, self::SHOCK_FIRE_MAX);
-            $desc = "The Board of Directors at {$name} ({$ticker}) has ousted the CEO after dismal performance. The new CEO is known as {$newTitle}.";
-        } else {
-            // Retirement creates uncertainty
-            $shock = $this->mathUtility->generateUniformBetween(self::SHOCK_RETIRE_MIN, self::SHOCK_RETIRE_MAX);
-            $desc = "The CEO of {$name} ({$ticker}) has announced their unexpected retirement. The Board has appointed {$newTitle} as the successor.";
-        }
-
-        $this->logger->info("CORPORATE GOVERNANCE: " . $desc);
-
-        return [
-            $this->marketEvent->publish($stock, 'GOVERNANCE', $desc, $shock)
+            $this->marketEvent->publish($stock, 'BANKRUPTCY', $eventDesc, -100.00)
         ];
     }
 }
+

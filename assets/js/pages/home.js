@@ -53,9 +53,18 @@ function initHome() {
             const priceEl = document.getElementById(`price-${stock.ticker}`);
             const mcapEl = document.getElementById(`mcap-${stock.ticker}`);
             const rowEl = document.getElementById(`row-${stock.ticker}`);
-            const debtRatioEl = document.getElementById(`debt-ratio-${stock.ticker}`);
 
             if (priceEl && mcapEl && rowEl) {
+                if (stock.is_bankrupt) {
+                    rowEl.setAttribute('data-bankrupt', 'true');
+                    rowEl.setAttribute('data-mcap', '0');
+                    priceEl.innerText = '$0.00';
+                    priceEl.classList.add('text-tertiary', 'line-through');
+                    mcapEl.innerText = '$0.00';
+                    rowEl.classList.add('opacity-50', 'bg-red-950/10');
+                    return;
+                }
+
                 // Get the old price to check if it went up or down
                 const newPrice = parseFloat(stock.price);
                 const oldPrice = previousPrices[stock.ticker] || newPrice;
@@ -102,10 +111,15 @@ function initHome() {
         // Get all rows as an array
         const rows = Array.from(tbody.querySelectorAll('tr'));
 
-        // Sort them by the data-mcap attribute we are updating live
+        // Sort them: active first by data-mcap descending, bankrupt at the bottom
         rows.sort((a, b) => {
-            const mcapA = parseFloat(a.getAttribute('data-mcap'));
-            const mcapB = parseFloat(b.getAttribute('data-mcap'));
+            const aBankrupt = a.getAttribute('data-bankrupt') === 'true';
+            const bBankrupt = b.getAttribute('data-bankrupt') === 'true';
+            if (aBankrupt !== bBankrupt) {
+                return aBankrupt ? 1 : -1;
+            }
+            const mcapA = parseFloat(a.getAttribute('data-mcap')) || 0;
+            const mcapB = parseFloat(b.getAttribute('data-mcap')) || 0;
             return mcapB - mcapA; // Descending (Highest cap at the top)
         });
 

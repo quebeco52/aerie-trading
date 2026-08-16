@@ -6,7 +6,6 @@ namespace App\DTO;
 
 use App\Entity\Stock;
 use App\Service\Model\BusinessModelInterface;
-use App\Service\Model\CeoArchetypeInterface;
 
 /**
  * Context object used to pass simulation state through the EarningsEngine pipeline.

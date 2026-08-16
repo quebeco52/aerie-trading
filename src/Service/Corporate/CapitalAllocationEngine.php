@@ -145,10 +145,7 @@ class CapitalAllocationEngine
         $targetPayout = (float) $stock->getTargetPayoutRatio();
         $speed = (float) $stock->getDividendSpeed();
         $lastDividend = (float) $stock->getLastDividend();
-        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
-
         $isAristocrat = $speed <= 0.03;
-        $targetPayout = $archetypeStrategy->modifyTargetPayoutRatio($targetPayout);
 
         $customDepreciation = (float) $stock->getDepreciationRate();
         $depRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($ctx->industry);
@@ -198,21 +195,15 @@ class CapitalAllocationEngine
         $crisisThreshold = $modelThresholds['dividend_crisis_icr'];
         $isLiquidityCrisis = $ctx->health->interestCoverage < 1.0 || ($ctx->health->interestCoverage < $crisisThreshold && !$hasCashBuffer);
 
-        $resistsCut = $archetypeStrategy->shouldResistDividendCut($isLiquidityCrisis, $isRegulatoryDividendHalt, $isDeepDistress);
-
-        if ($resistsCut) {
-            $targetDividend = max($targetDividend, $lastDividend);
-        } else {
-            if ($isLiquidityCrisis || $isRegulatoryDividendHalt) {
-                $targetDividend = 0.0;
-                $speed = 1.0;
-            } elseif ($isDeepDistress) {
-                $targetDividend = $isAristocrat ? min($calculatedTarget, $lastDividend * self::ARISTOCRAT_DISTRESS_REBASE_RATIO) : 0.0;
-                $speed = min(1.0, $speed + 0.25);
-            } elseif ($isModerateDistressNoCash || ($isCriticalCash && $calculatedTarget < $lastDividend)) {
-                $targetDividend = min($calculatedTarget, $lastDividend * self::MODERATE_DISTRESS_REBASE_RATIO);
-                $speed = min(1.0, $speed + 0.15);
-            }
+        if ($isLiquidityCrisis || $isRegulatoryDividendHalt) {
+            $targetDividend = 0.0;
+            $speed = 1.0;
+        } elseif ($isDeepDistress) {
+            $targetDividend = $isAristocrat ? min($calculatedTarget, $lastDividend * self::ARISTOCRAT_DISTRESS_REBASE_RATIO) : 0.0;
+            $speed = min(1.0, $speed + 0.25);
+        } elseif ($isModerateDistressNoCash || ($isCriticalCash && $calculatedTarget < $lastDividend)) {
+            $targetDividend = min($calculatedTarget, $lastDividend * self::MODERATE_DISTRESS_REBASE_RATIO);
+            $speed = min(1.0, $speed + 0.15);
         }
 
         if ($lastDividend > 0 && $isAristocrat) {
@@ -276,7 +267,6 @@ class CapitalAllocationEngine
         }
 
         $stock = $ctx->stock;
-        
         $canEasilyCoverDebt = $ctx->excessCash > ((float) $stock->getTotalDebt() * 2.0);
 
         if ($ctx->isFinancial) {
@@ -293,8 +283,6 @@ class CapitalAllocationEngine
         $excessCash = $hoardStatus['excess_cash'];
         $isHoarder = $hoardStatus['is_hoarder'];
         $isMegaHoarder = $hoardStatus['is_mega_hoarder'];
-
-        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
 
         $isUnderLeveraged = $ctx->health->isUnderLeveraged ?? false;
 
@@ -326,8 +314,6 @@ class CapitalAllocationEngine
             $marketCap = $ctx->sharesOutstanding * max($ctx->currentPrice, 0.01);
             $maxRegulatorySpend = $marketCap * ($isMegaHoarder ? 0.075 : ($isHoarder ? 0.05 : 0.015));
 
-            $isUnderLeveraged = $ctx->health->isUnderLeveraged ?? false;
-
             if ($isUnderLeveraged) {
                 // Under-leveraged financials must crush equity bloat via buybacks to restore ROE.
                 // They can fund this from retained earnings even when idle excess cash is zero.
@@ -342,19 +328,23 @@ class CapitalAllocationEngine
             $maxEquitySpend = max(0.0, $currentEquity * 0.50);
             $absoluteMaxSpend = min($absoluteMaxSpend, $maxEquitySpend);
 
+            // Hard Solvency Constraint: Cannot spend more cash than physically available in treasury above min operating buffer
+            $minOperatingCash = $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
+            $availableCashBuffer = max(0.0, $ctx->newTreasury - $minOperatingCash);
+            $absoluteMaxSpend = min($absoluteMaxSpend, $availableCashBuffer);
+
             $valuationDiscount = max(0.0, ($fairValuePE - $ctx->currentPE) / max(1.0, $fairValuePE));
             $aggression = $isMegaHoarder ? 1.0 : min(1.0, 0.50 + $valuationDiscount);
-            $aggression = $archetypeStrategy->modifyBuybackAggression($aggression);
 
             $actualSpend = $absoluteMaxSpend * $aggression * ($isHoarder ? 1.0 : (mt_rand(50, 100) / 100.0));
             $sharesRepurchased = (int) floor($actualSpend / max($ctx->currentPrice, 0.01));
             
-            // CRITICAL FIX: Prevent buying back more shares than exist (which causes negative shares and unsigned bigint wraparound)
             // Cap buybacks at 95% of currently outstanding shares per quarter.
             $maxSharesToBuy = (int) floor($ctx->sharesOutstanding * 0.95);
             $sharesRepurchased = min($sharesRepurchased, $maxSharesToBuy);
 
             if ($sharesRepurchased > 0) {
+                $ctx->totalCashSpent = $sharesRepurchased * max($ctx->currentPrice, 0.01);
                 $newSharesVal = max(1.0, (float) $stock->getSharesOutstanding() - $sharesRepurchased);
                 $sharesStr = (string) $newSharesVal;
                 $stock->setSharesOutstanding($sharesStr);

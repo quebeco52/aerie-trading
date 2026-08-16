@@ -6,6 +6,7 @@ use App\Entity\Stock;
 use App\Data\Sectors;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Crud;
 use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractCrudController;
+use EasyCorp\Bundle\EasyAdminBundle\Field\BooleanField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\ChoiceField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\FormField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\NumberField;
@@ -64,6 +65,7 @@ class StockCrudController extends AbstractCrudController
             FormField::addFieldset('Live Market Data (Protected)')->setIcon('fas fa-chart-line')
                 ->setHelp('These values are actively managed by the simulation engine and cannot be edited manually.'),
             
+            BooleanField::new('isBankrupt', 'Bankrupt')->setDisabled(),
             NumberField::new('price')->setDisabled(),
             
             NumberField::new('totalNetIncome', 'Total Net Income ($)')

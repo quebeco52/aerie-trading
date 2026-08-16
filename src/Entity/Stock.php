@@ -169,11 +169,6 @@ class Stock
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 2, nullable: true, options: ['default' => '1.00'])]
     private ?string $beta = '1.00';
 
-    /**
-     * @var string The personality and behavioral archetype of the company's CEO.
-     */
-    #[ORM\Column(length: 50, options: ['default' => \App\Data\CeoArchetypes::OPPORTUNIST])]
-    private string $ceoArchetype = \App\Data\CeoArchetypes::OPPORTUNIST;
 
     /**
      * @var string|null Jump intensity (Lambda) - expected number of market shocks per year (Merton Jump Diffusion).
@@ -303,6 +298,13 @@ class Stock
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
     private ?string $lastAnalystRevenue = null;
+
+    /**
+     * @var bool Whether the company has collapsed into bankruptcy and is permanently defunct.
+     */
+    #[ORM\Column(type: Types::BOOLEAN, options: ['default' => false])]
+    private bool $isBankrupt = false;
+
 
 
     public static function cleanBcStr(int|float|string|null $val, int $scale = 4): string
@@ -517,16 +519,6 @@ class Stock
         return $this;
     }
 
-    public function getCeoArchetype(): ?string
-    {
-        return $this->ceoArchetype;
-    }
-
-    public function setCeoArchetype(?string $ceoArchetype): static
-    {
-        $this->ceoArchetype = $ceoArchetype;
-        return $this;
-    }
 
     public function getDescription(): ?string
     {
@@ -1018,4 +1010,16 @@ class Stock
         $this->lastAnalystRevenue = $lastAnalystRevenue !== null ? self::cleanBcStr($lastAnalystRevenue, 4) : null;
         return $this;
     }
+
+    public function isBankrupt(): bool
+    {
+        return $this->isBankrupt;
+    }
+
+    public function setIsBankrupt(bool $isBankrupt): static
+    {
+        $this->isBankrupt = $isBankrupt;
+        return $this;
+    }
 }
+

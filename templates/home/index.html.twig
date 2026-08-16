@@ -82,24 +82,26 @@
 					</thead>
 					<tbody id="market-table-body" class="divide-y divide-outline-variant/5 text-sm relative">
 						{% for stock in stocks|default([]) %}
-							{# ADD IDs and data-mcap #}
-							<tr id="row-{{ stock.ticker }}" data-mcap="{{ stock.marketCap }}" class="hover:bg-surface-container-high/40 transition-colors cursor-pointer group" onclick="window.location.href='/stock/{{ stock.ticker }}'">
+							<tr id="row-{{ stock.ticker }}" data-mcap="{{ stock.isBankrupt ? 0 : stock.marketCap }}" data-bankrupt="{{ stock.isBankrupt ? 'true' : 'false' }}" class="{{ stock.isBankrupt ? 'opacity-50 hover:opacity-80 bg-red-950/10' : 'hover:bg-surface-container-high/40' }} transition-colors cursor-pointer group" onclick="window.location.href='/stock/{{ stock.ticker }}'">
 								<td class="px-4 md:px-8 py-5">
 									<div class="flex flex-col">
-										<div class="font-bold text-on-surface text-base group-hover:text-primary transition-colors">{{ stock.name }}</div>
+										<div class="flex items-center gap-2">
+											<span class="font-bold text-on-surface text-base group-hover:text-primary transition-colors">{{ stock.name }}</span>
+											{% if stock.isBankrupt %}
+												<span class="inline-flex items-center rounded bg-red-500/10 px-1.5 py-0.5 text-[9px] font-bold text-red-400 border border-red-500/20 uppercase tracking-widest">BANKRUPT</span>
+											{% endif %}
+										</div>
 										<div class="text-on-surface-variant text-[12px] uppercase tracking-widest mt-0.5">{{ stock.ticker }}</div>
 									</div>
 								</td>
 								<td class="px-4 md:px-6 py-5 hidden sm:table-cell text-on-surface-variant">
 									{{ stock.sector }}
 								</td>
-								{# ADD price ID #}
-								<td id="price-{{ stock.ticker }}" class="px-4 md:px-6 py-5 text-right font-bold text-on-surface transition-colors duration-300">
-									${{ stock.price|number_format(2) }}
+								<td id="price-{{ stock.ticker }}" class="px-4 md:px-6 py-5 text-right font-bold {{ stock.isBankrupt ? 'text-tertiary line-through' : 'text-on-surface' }} transition-colors duration-300">
+									${{ (stock.isBankrupt ? 0.00 : stock.price)|number_format(2) }}
 								</td>
-								{# ADD mcap ID #}
 								<td id="mcap-{{ stock.ticker }}" class="px-4 md:px-8 py-5 text-right font-medium text-on-surface-variant transition-colors duration-300">
-									${{ (stock.marketCap / 1000000000)|number_format(2) }}B
+									${{ stock.isBankrupt ? '0.00' : ((stock.marketCap / 1000000000)|number_format(2) ~ 'B') }}
 								</td>
 							</tr>
 						{% endfor %}

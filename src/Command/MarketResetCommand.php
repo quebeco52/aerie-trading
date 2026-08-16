@@ -242,7 +242,6 @@ class MarketResetCommand extends Command
                     last_dividend = :last_dividend,
                     description = :description,
                     sam_ratio = :sam_ratio,
-                    ceo_archetype = :ceo_archetype,
                     industry = :industry
                 WHERE ticker = :ticker',
                 [
@@ -283,7 +282,6 @@ class MarketResetCommand extends Command
                     'sector' => $stockData['sector'],
                     'description' => \App\Data\StockInfo::DESCRIPTIONS[$stockData['ticker']] ?? null,
                     'sam_ratio' => $stockData['sam_ratio'] ?? 1.00,
-                    'ceo_archetype' => $stockData['ceo_archetype'] ?? \App\Data\CeoArchetypes::OPPORTUNIST,
                     'industry' => $stockData['industry'] ?? null,
                     'ticker' => $stockData['ticker']
                 ]

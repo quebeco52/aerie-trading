@@ -32,7 +32,12 @@ class HomeController extends AbstractController
         $macroState = $macroEngine->getLiveState();
 
         $marketData = $this->buildBaseMarketData($stocks);
-        usort($marketData, fn($a, $b) => $b['marketCap'] <=> $a['marketCap']);
+        usort($marketData, function ($a, $b) {
+            if ($a['isBankrupt'] !== $b['isBankrupt']) {
+                return $a['isBankrupt'] ? 1 : -1;
+            }
+            return $b['marketCap'] <=> $a['marketCap'];
+        });
 
         // If the user is not logged in, render a dedicated landing page
         if (!$this->getUser()) {
@@ -81,10 +86,16 @@ class HomeController extends AbstractController
                 'treasury'     => $formatLarge($row['treasury']),
                 'equity'       => $formatLarge($row['equity']),
                 'currentRoic'  => $row['currentRoic'],
+                'is_bankrupt'  => $row['isBankrupt'],
             ];
         }
 
-        usort($marketData, fn($a, $b) => $b['marketCapRaw'] <=> $a['marketCapRaw']);
+        usort($marketData, function ($a, $b) {
+            if ($a['is_bankrupt'] !== $b['is_bankrupt']) {
+                return $a['is_bankrupt'] ? 1 : -1;
+            }
+            return $b['marketCapRaw'] <=> $a['marketCapRaw'];
+        });
 
         return $this->json([
             'etf'    => ['price' => $etf ? number_format((float) $etf->getPrice(), 2) : '0.00'],
@@ -96,7 +107,7 @@ class HomeController extends AbstractController
      * Builds the base market data array shared across page and API endpoints.
      *
      * @param Stock[] $stocks
-     * @return array<int, array{ticker: string, name: string, sector: string, price: float, shares: float, marketCap: float, treasury: float, equity: float, currentRoic: float}>
+     * @return array<int, array{ticker: string, name: string, sector: string, price: float, shares: float, marketCap: float, treasury: float, equity: float, currentRoic: float, isBankrupt: bool}>
      */
     private function buildBaseMarketData(array $stocks): array
     {
@@ -122,8 +133,10 @@ class HomeController extends AbstractController
                 'treasury'    => (float) $stock->getCorporateTreasury(),
                 'equity'      => (float) $stock->getTotalEquity(),
                 'currentRoic' => $effectiveRoic,
+                'isBankrupt'  => $stock->isBankrupt(),
             ];
         }
         return $marketData;
     }
+
 }

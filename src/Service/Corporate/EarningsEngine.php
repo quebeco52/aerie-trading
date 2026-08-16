@@ -75,7 +75,7 @@ class EarningsEngine
 
     public function calculate(Stock $stock, \App\DTO\MacroStateDTO $macroState, int $tickCount = 0, int $ticksPerYear = 252): ?array
     {
-        if (!$this->checkReportingEligibility($stock, $tickCount, $ticksPerYear)) {
+        if ($stock->isBankrupt() || !$this->checkReportingEligibility($stock, $tickCount, $ticksPerYear)) {
             return null;
         }
 

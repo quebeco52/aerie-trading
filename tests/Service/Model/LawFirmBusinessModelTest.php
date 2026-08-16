@@ -103,6 +103,10 @@ class LawFirmBusinessModelTest extends TestCase
 
         $macro = new MacroStateDTO(outputGapEma: 0.0, macroCreditSpread: 0.015);
 
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+
         $result = $this->model->computeActualFinancials(
             $stock,
             100_000_000.0,
@@ -110,7 +114,7 @@ class LawFirmBusinessModelTest extends TestCase
             10_000_000.0,
             0.0,
             $macro,
-            $this->mathUtility
+            $mathMock
         );
 
         // CLAW: 40% Retainers, 35% Litigation, 25% Restructuring

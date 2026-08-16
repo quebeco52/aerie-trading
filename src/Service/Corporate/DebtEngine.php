@@ -384,12 +384,8 @@ class DebtEngine
         $icrBuffer = $strategy->getRequiredIcrBuffer();
         $canIssueDebt = $interestCoverage >= ($minIcr + $icrBuffer);
 
-        // Macro-Economic CFO Tolerance
-        // Pass the pure D/E target limit and effective cost of debt to the CFO to calculate their personalized elasticity
-        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
-
-        // Financial institutions have regulatory leverage limits that should not be crushed by CEO personality.
-        $macroDebtTolerance = $isFinancial ? $equityLimit : $archetypeStrategy->modifyDebtToleranceLimit($equityLimit, $effectiveCostOfDebt);
+        // Macro-Economic Leverage Tolerance
+        $macroDebtTolerance = $equityLimit;
 
         $currentDebtRatio = $currentDebt / max(1.0, $equity);
         $isUnderLeveraged = $strategy->isUnderLeveraged(

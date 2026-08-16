@@ -34,7 +34,6 @@ class InitialMarket
             'customer_deposits' => 23_500_000_000_000.00,
             'wholesale_debt' => 500_000_000_000.00,
             'retained_earnings' => 1_750_000_000_000.00,
-            'ceo_archetype' => \App\Data\CeoArchetypes::CONSERVATIVE
         ],
         [
             'ticker' => 'SWAN',
@@ -65,7 +64,6 @@ class InitialMarket
             'customer_deposits' => 0.00,
             'wholesale_debt' => 4_800_000_000_000.00,
             'retained_earnings' => 500_000_000_000.00,
-            'ceo_archetype' => \App\Data\CeoArchetypes::EMPIRE_BUILDER
         ],
         [
             'ticker' => 'HUMM',
@@ -96,7 +94,6 @@ class InitialMarket
             'customer_deposits' => 0.00,
             'wholesale_debt' => 0.00,
             'retained_earnings' => 800_000_000_000.00,
-            'ceo_archetype' => \App\Data\CeoArchetypes::CONSERVATIVE
         ],
         [
             'ticker' => 'OWLS',
@@ -127,7 +124,6 @@ class InitialMarket
             'customer_deposits' => 0.00,
             'wholesale_debt' => 0.00,
             'retained_earnings' => 200_000_000_000.00,
-            'ceo_archetype' => \App\Data\CeoArchetypes::YIELD_KING
         ],
         [
             'ticker' => 'KING',
@@ -158,7 +154,6 @@ class InitialMarket
             'customer_deposits' => 0.00,
             'wholesale_debt' => 2_000_789_000_000.00,
             'retained_earnings' => 75_000_000_000.00,
-            'ceo_archetype' => \App\Data\CeoArchetypes::DEALMAKER
         ],
         [
             'ticker' => 'PERE',
@@ -189,7 +184,6 @@ class InitialMarket
             'customer_deposits' => 0.00,
             'wholesale_debt' => 751_389_000_000.00,
             'retained_earnings' => 45_000_000_000.00,
-            'ceo_archetype' => \App\Data\CeoArchetypes::OPPORTUNIST
         ],
         [
             'ticker' => 'CORV',
@@ -220,7 +214,6 @@ class InitialMarket
             'customer_deposits' => 0.00,
             'wholesale_debt' => 700_000_000_000.00,
             'retained_earnings' => 55_000_000_000.00,
-            'ceo_archetype' => \App\Data\CeoArchetypes::OPPORTUNIST
         ],
         [
             'ticker' => 'RIVR',
@@ -251,7 +244,6 @@ class InitialMarket
             'customer_deposits' => 700_000_000_000.00,
             'wholesale_debt'    => 35_000_000_000.00,
             'retained_earnings' => 20_000_000_000.00,
-            'ceo_archetype' => \App\Data\CeoArchetypes::CONSERVATIVE
         ],
         [
             'ticker' => 'SAFE',
@@ -1602,7 +1594,6 @@ class InitialMarket
             'customer_deposits' => 1_300_000_000_000.00,
             'wholesale_debt' => 40_000_000_000.00,
             'retained_earnings' => 100_000_000_000.00,
-            'ceo_archetype' => \App\Data\CeoArchetypes::CONSERVATIVE
         ],
         [
             'ticker' => 'ALBT',
@@ -1633,7 +1624,6 @@ class InitialMarket
             'customer_deposits' => 0.00,
             'wholesale_debt' => 380_000_000_000.00,
             'retained_earnings' => 160_000_000_000.00,
-            'ceo_archetype' => \App\Data\CeoArchetypes::EMPIRE_BUILDER
         ],
         [
             'ticker' => 'IBIS',
@@ -1664,7 +1654,6 @@ class InitialMarket
             'customer_deposits' => 0.00,
             'wholesale_debt' => 180_000_000_000.00,
             'retained_earnings' => 220_000_000_000.00,
-            'ceo_archetype' => \App\Data\CeoArchetypes::DEALMAKER
         ],
         [
             'ticker' => 'PEAC',
@@ -1695,7 +1684,6 @@ class InitialMarket
             'customer_deposits' => 0.00,
             'wholesale_debt' => 40_000_000_000.00,
             'retained_earnings' => 110_000_000_000.00,
-            'ceo_archetype' => \App\Data\CeoArchetypes::EMPIRE_BUILDER
         ],
         [
             'ticker' => 'LARK',
@@ -1726,7 +1714,6 @@ class InitialMarket
             'customer_deposits' => 0.00,
             'wholesale_debt' => 120_000_000_000.00,
             'retained_earnings' => 180_000_000_000.00,
-            'ceo_archetype' => \App\Data\CeoArchetypes::CONSERVATIVE
         ],
         [
             'ticker' => 'CBIL',
@@ -1757,7 +1744,6 @@ class InitialMarket
             'customer_deposits' => 0.00,
             'wholesale_debt' => 50_000_000_000.00,
             'retained_earnings' => 150_000_000_000.00,
-            'ceo_archetype' => \App\Data\CeoArchetypes::CONSERVATIVE
         ],
         [
             'ticker' => 'PINT',
@@ -1788,7 +1774,6 @@ class InitialMarket
             'customer_deposits' => 0.00,
             'wholesale_debt' => 20_000_000_000.00,
             'retained_earnings' => 12_000_000_000.00,
-            'ceo_archetype' => \App\Data\CeoArchetypes::YIELD_KING
         ],
     ];
 

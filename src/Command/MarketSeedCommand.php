@@ -189,7 +189,6 @@ class MarketSeedCommand extends Command
             $stock->setSector($stockData['sector']);
             $stock->setIndustry($stockData['industry'] ?? null);
             $stock->setDescription(\App\Data\StockInfo::DESCRIPTIONS[$stockData['ticker']] ?? null);
-            $stock->setCeoArchetype($stockData['ceo_archetype'] ?? \App\Data\CeoArchetypes::OPPORTUNIST);
 
             $this->entityManager->persist($stock);
         }

@@ -26,17 +26,24 @@
             </thead>
             <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
                 {% for stock in stocks %}
-                    <tr class="bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
+                    <tr class="{{ stock.isBankrupt ? 'bg-red-50/50 dark:bg-red-950/20 opacity-60' : 'bg-white dark:bg-gray-800' }} hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
                         <td class="px-4 py-4 font-bold text-gray-900 whitespace-nowrap dark:text-white" data-value="{{ stock.ticker }}">
-                            <a href="{{ path('app_stock_view', {ticker: stock.ticker}) }}" class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline">
-                                {{ stock.ticker }}
-                            </a>
+                            <div class="flex items-center gap-1.5">
+                                <a href="{{ path('app_stock_view', {ticker: stock.ticker}) }}" class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline">
+                                    {{ stock.ticker }}
+                                </a>
+                                {% if stock.isBankrupt %}
+                                    <span class="px-1.5 py-0.5 bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 rounded text-[9px] font-bold tracking-wider">BANKRUPT</span>
+                                {% endif %}
+                            </div>
                         </td>
                         <td class="px-4 py-4 max-w-[200px] truncate font-medium text-gray-800 dark:text-gray-200" data-value="{{ stock.name }}" title="{{ stock.name }}">{{ stock.name }}</td>
                         <td class="px-4 py-4 whitespace-nowrap" data-value="{{ stock.sector }}"><span class="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs">{{ stock.sector }}</span></td>
-                        <td class="px-4 py-4 whitespace-nowrap text-right font-medium text-gray-900 dark:text-gray-100" data-value="{{ stock.price }}">${{ stock.price|number_format(2) }}</td>
-                        <td class="px-4 py-4 whitespace-nowrap text-right" data-value="{{ stock.marketCap }}">
-                            {% if stock.marketCap >= 1000000000000 %}
+                        <td class="px-4 py-4 whitespace-nowrap text-right font-medium {{ stock.isBankrupt ? 'text-red-500 line-through' : 'text-gray-900 dark:text-gray-100' }}" data-value="{{ stock.isBankrupt ? 0 : stock.price }}">${{ (stock.isBankrupt ? 0.00 : stock.price)|number_format(2) }}</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-right" data-value="{{ stock.isBankrupt ? 0 : stock.marketCap }}">
+                            {% if stock.isBankrupt %}
+                                $0.00
+                            {% elseif stock.marketCap >= 1000000000000 %}
                                 ${{ (stock.marketCap / 1000000000000)|number_format(2) }}T
                             {% elseif stock.marketCap >= 1000000000 %}
                                 ${{ (stock.marketCap / 1000000000)|number_format(2) }}B
@@ -44,11 +51,11 @@
                                 ${{ (stock.marketCap / 1000000)|number_format(2) }}M
                             {% endif %}
                         </td>
-                        <td class="px-4 py-4 whitespace-nowrap text-right" data-value="{{ stock.peRatio|default(0) }}">
-                            {{ stock.peRatio is not null ? stock.peRatio|number_format(2) ~ 'x' : '<span class="text-gray-400">-</span>'|raw }}
+                        <td class="px-4 py-4 whitespace-nowrap text-right" data-value="{{ stock.isBankrupt ? 0 : stock.peRatio|default(0) }}">
+                            {{ not stock.isBankrupt and stock.peRatio is not null ? stock.peRatio|number_format(2) ~ 'x' : '<span class="text-gray-400">-</span>'|raw }}
                         </td>
                         <td class="px-4 py-4 whitespace-nowrap text-right" data-value="{{ stock.eps }}">${{ stock.eps|number_format(2) }}</td>
-                        <td class="px-4 py-4 whitespace-nowrap text-right" data-value="{{ stock.dividendYield }}">{{ stock.dividendYield|number_format(2) }}%</td>
+                        <td class="px-4 py-4 whitespace-nowrap text-right" data-value="{{ stock.isBankrupt ? 0 : stock.dividendYield }}">{{ (stock.isBankrupt ? 0 : stock.dividendYield)|number_format(2) }}%</td>
                         <td class="px-4 py-4 whitespace-nowrap text-right {{ stock.currentRoic > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400' }}" data-value="{{ stock.currentRoic }}">
                             {{ (stock.currentRoic * 100)|number_format(2) }}%
                         </td>
@@ -74,6 +81,7 @@
                             {{ stock.debtToEquity is not null ? stock.debtToEquity|number_format(2) ~ 'x' : '<span class="text-gray-400">-</span>'|raw }}
                         </td>
                     </tr>
+
                 {% else %}
                     <tr>
                         <td colspan="12" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">No stocks available in the market.</td>

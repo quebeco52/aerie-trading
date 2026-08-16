@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Tests\Service;
 
-use App\Data\CeoArchetypes;
 use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
@@ -95,7 +94,6 @@ class CapitalAllocationEngineTest extends TestCase
         $stock->setDividendSpeed('1.00');
         $stock->setLastDividend('0.00');
         $stock->setRetainedEarnings('50000000.00');
-        $stock->setCeoArchetype(CeoArchetypes::OPPORTUNIST);
         $stock->setDepreciationRate('0.05');
         $stock->setTotalRevenue('10000000.00');
         $stock->setOperatingMargin('0.20');
@@ -127,7 +125,6 @@ class CapitalAllocationEngineTest extends TestCase
         $stock->setTargetPayoutRatio('0.50');
         $stock->setDividendSpeed('1.00');
         $stock->setLastDividend('1.00');
-        $stock->setCeoArchetype(CeoArchetypes::OPPORTUNIST);
         $stock->setTotalRevenue('10000000.00');
         $stock->setOperatingMargin('0.20');
         $stock->setWholesaleDebt('10000000.00');

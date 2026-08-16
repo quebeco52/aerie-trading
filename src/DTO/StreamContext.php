@@ -107,7 +107,7 @@ class StreamContext
                     $minFloor,
                     $maxCeiling
                 );
-                $rawWeights[$key] = $raw > 0.0 ? $raw : $targetWeight;
+                $rawWeights[$key] = $raw;
             }
             $activeWeights = $this->mathUtility->normalizeWeightsSimplex($rawWeights) ?: $rawWeights;
         } else {

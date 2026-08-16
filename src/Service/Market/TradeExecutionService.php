@@ -41,6 +41,10 @@ class TradeExecutionService
                 throw new \Exception('Asset not found.');
             }
 
+            if ($stock && $stock->isBankrupt()) {
+                throw new \Exception("Trading is halted for {$stock->getTicker()}. The company is bankrupt.");
+            }
+
             $asset = $stock ?? $etf;
             $assetType = $stock ? 'STOCK' : 'ETF';
             $livePrice = (float) $asset->getPrice();

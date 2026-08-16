@@ -117,9 +117,7 @@ class TreasuryEngine
 
         $evaluationCapital = $ctx->strategy->getEvaluationCapital($preBuybackEquity, $liveInvestedCapital);
 
-        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
         $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $ctx->macroState);
-        $saturationPenalty = $archetypeStrategy->modifySaturationPenalty($saturationPenalty);
         $marginalReturn = $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $saturationPenalty, $evaluationCapital, $ctx->macroState);
 
         // Financials aggressively use isUnderLeveraged for stock buybacks to crush equity bloat, 
@@ -209,13 +207,10 @@ class TreasuryEngine
         $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
         $evaluationCapital = $ctx->strategy->getEvaluationCapital($preBuybackEquity, $liveInvestedCapital);
 
-        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
         $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $ctx->macroState);
-        $saturationPenalty = $archetypeStrategy->modifySaturationPenalty($saturationPenalty);
         $marginalReturn = $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $saturationPenalty, $evaluationCapital, $ctx->macroState);
 
         $investmentProbability = min(0.95, max(0.10, 0.20 + ($marginalReturn * 2.0)));
-        $investmentProbability = $archetypeStrategy->modifyInvestmentProbability($investmentProbability, $marginalReturn);
 
         $isRecap = $ctx->recapActionTaken;
         $forcedExpansion = $ctx->debtActionTaken && !$isRecap;
@@ -428,8 +423,6 @@ class TreasuryEngine
         $totalDebt = $ctx->wholesaleDebt + $ctx->customerDeposits;
 
         $targetOperatingCash = $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt);
-        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
-        $targetOperatingCash = $archetypeStrategy->modifyTargetOperatingCash($targetOperatingCash);
 
         if (!$ctx->debtActionTaken && $ctx->wholesaleDebt > 0.0 && $ctx->newTreasury > $targetOperatingCash) {
             $excessCash = $ctx->newTreasury - $targetOperatingCash;
@@ -438,14 +431,6 @@ class TreasuryEngine
             $evalDebt = $ctx->strategy->getDeleveragingEvaluationDebt($totalDebt, $ctx->wholesaleDebt);
             $modelThresholds = $ctx->strategy->getModelThresholds();
             $evalLimit = $ctx->strategy->getDeleveragingEvaluationLimit($modelThresholds, $macroDebtTolerance);
-
-            if (isset($modelThresholds['wholesale_leverage_limit'])) {
-                // Financial institutions: the wholesale_leverage_limit is a regulatory ceiling,
-                // not subject to CEO personality adjustments. Archetypes should not crush it.
-            } else {
-                $effectiveCostOfDebt = $ctx->health->effectiveCost ?? 0.05;
-                $evalLimit = $archetypeStrategy->modifyDebtToleranceLimit($evalLimit, $effectiveCostOfDebt);
-            }
 
             $currentDebtRatio = $evalDebt / max(1.0, $newEquity);
 

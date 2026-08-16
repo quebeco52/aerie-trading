@@ -235,9 +235,8 @@ class MergerAndAcquisitionEngine
         $ctx->priceToBook = $ctx->price / $ctx->bookValuePerShare;
         $ctx->isOvervalued = $ctx->economicSpread > 0.0 && $ctx->currentPE > ($ctx->fairValuePE * 1.5) && $ctx->currentPE > 25.0 && $ctx->priceToBook > 2.0;
         
-        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
-        $ctx->aggression = $archetypeStrategy->modifyAcquisitionAggression(1.0);
-        $ctx->isEmpireBuilder = $ctx->aggression >= 2.0;
+        $ctx->aggression = 1.0;
+        $ctx->isEmpireBuilder = false;
         
         $config = match (true) {
             $ctx->isOvervalued => [
@@ -359,14 +358,9 @@ class MergerAndAcquisitionEngine
     private function applyAcquisitionSynergies(AcquisitionContext $ctx): void
     {
         $stock = $ctx->acquirer;
-        $archetypeStrategy = \App\Data\CeoArchetypes::getStrategy($stock);
-        $synergyRange = $archetypeStrategy->modifyMAndASynergyRange(1.0, 1.0);
-        
-        $muShift = (($synergyRange['min'] + $synergyRange['max']) / 2.0) - 1.0;
-        $sigmaShift = ($synergyRange['max'] - $synergyRange['min']) / 2.0;
 
-        $mu = self::MA_SYNERGY_MU + $muShift;
-        $sigma = self::MA_SYNERGY_SIGMA + $sigmaShift;
+        $mu = self::MA_SYNERGY_MU;
+        $sigma = self::MA_SYNERGY_SIGMA;
 
         $ctx->synergyMultiplier = $this->mathUtility->calculateLogNormalSynergy($mu, $sigma);
 

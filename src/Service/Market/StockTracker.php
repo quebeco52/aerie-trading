@@ -75,8 +75,30 @@ class StockTracker
         $marketVol = $macroDTO->marketVolatility;
 
         foreach ($stocks as $stock) {
-
             $sectorName = $stock->getSector();
+
+            if ($stock->isBankrupt()) {
+                $stockUpdates[] = [
+                    'ticker' => $stock->getTicker(),
+                    'sector' => $sectorName,
+                    'industry' => $stock->getIndustry() ?: 'General',
+                    'price' => 0.0,
+                    'market_cap' => 0.0,
+                    'current_volatility' => 0.0,
+                    'current_roic' => (float) $stock->getCurrentRoic(),
+                    'current_roe' => (float) $stock->getCurrentRoe(),
+                    'shares' => (float) $stock->getSharesOutstanding(),
+                    'eps' => (float) $stock->getEarningsPerShare(),
+                    'treasury' => (float) $stock->getCorporateTreasury(),
+                    'equity' => (float) $stock->getTotalEquity(),
+                    'invested_capital' => $stock->getInvestedCapital(),
+                    'debt_ratio' => (float) $stock->getDebtToEquityRatio(),
+                    'analyst_targets' => [],
+                    'perceived_fair_value' => 0.0,
+                    'is_bankrupt' => true,
+                ];
+                continue;
+            }
 
             // Determine Volatility
             $baselineVol = (float) $stock->getVolatility();
@@ -219,6 +241,7 @@ class StockTracker
                 'debt_ratio' => (float) $stock->getDebtToEquityRatio(),
                 'analyst_targets' => $calculation['analyst_targets'],
                 'perceived_fair_value' => $calculation['perceived_fair_value'],
+                'is_bankrupt' => false,
             ];
 
 

@@ -1,0 +1,224 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Service;
+
+use App\DTO\MacroStateDTO;
+use App\Entity\Stock;
+use App\Entity\TradeOrder;
+use App\Entity\User;
+use App\Entity\UserStock;
+use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\EarningsEngine;
+use App\Service\Event\MarketEventPublisher;
+use App\Service\Market\MarketOperator;
+use App\Service\Market\StockTracker;
+use App\Service\Market\TradeExecutionService;
+use App\Service\Math\MathUtility;
+use App\Service\User\Portfolio;
+use Doctrine\DBAL\Connection;
+use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\EntityRepository;
+use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\TestCase;
+use Psr\Log\LoggerInterface;
+
+class BankruptcyTest extends TestCase
+{
+    private EntityManagerInterface|MockObject $entityManagerMock;
+    private LoggerInterface|MockObject $loggerMock;
+    private MarketEventPublisher|MockObject $marketEventMock;
+    private DebtEngine|MockObject $debtEngineMock;
+    private MathUtility|MockObject $mathUtilityMock;
+    private Connection|MockObject $connectionMock;
+    private EntityRepository|MockObject $tradeOrderRepoMock;
+
+    protected function setUp(): void
+    {
+        $this->entityManagerMock = $this->createMock(EntityManagerInterface::class);
+        $this->loggerMock = $this->createMock(LoggerInterface::class);
+        $this->marketEventMock = $this->createMock(MarketEventPublisher::class);
+        $this->debtEngineMock = $this->createMock(DebtEngine::class);
+        $this->mathUtilityMock = $this->createMock(MathUtility::class);
+        $this->connectionMock = $this->createMock(Connection::class);
+        $this->tradeOrderRepoMock = $this->createMock(EntityRepository::class);
+
+        $this->entityManagerMock->method('getConnection')->willReturn($this->connectionMock);
+    }
+
+    public function testMarketOperatorKillsInsolventCompanyAndCancelsOrdersWithRefund(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('DEAD');
+        $stock->setName('Dead Corp');
+        $stock->setPrice('10.00');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setOperatingMargin('0.10');
+        $stock->setTotalRevenue('1000000');
+
+        $this->assertFalse($stock->isBankrupt());
+
+        // Insolvent Altman Z-Score
+        $this->debtEngineMock->method('calculateAltmanZScore')->willReturn([
+            'z_score' => -1.5,
+            'zone' => 'Distress',
+            'is_bankrupt' => true,
+        ]);
+
+        // Mock open buy order with escrow
+        $buyer = new User();
+        $buyer->setCashBalance('500.00');
+
+        $buyOrder = new TradeOrder();
+        $buyOrder->setUser($buyer);
+        $buyOrder->setTicker('DEAD');
+        $buyOrder->setAction('BUY');
+        $buyOrder->setOrderType('LIMIT');
+        $buyOrder->setQuantity(10);
+        $buyOrder->setLimitPrice('10.00');
+        $buyOrder->setStatus('OPEN');
+
+        $sellOrder = new TradeOrder();
+        $sellOrder->setUser($buyer);
+        $sellOrder->setTicker('DEAD');
+        $sellOrder->setAction('SELL');
+        $sellOrder->setOrderType('LIMIT');
+        $sellOrder->setQuantity(5);
+        $sellOrder->setLimitPrice('12.00');
+        $sellOrder->setStatus('OPEN');
+
+        $this->entityManagerMock->method('getRepository')
+            ->with(TradeOrder::class)
+            ->willReturn($this->tradeOrderRepoMock);
+
+        $this->tradeOrderRepoMock->method('findBy')
+            ->with(['ticker' => 'DEAD', 'status' => 'OPEN'])
+            ->willReturn([$buyOrder, $sellOrder]);
+
+        // Connection should only execute DELETE on user_stocks, NOT on corporate_report, stock_history, stock_events
+        $this->connectionMock->expects($this->once())
+            ->method('executeStatement')
+            ->with(
+                $this->stringContains('DELETE FROM user_stocks'),
+                $this->anything()
+            );
+
+        $this->marketEventMock->expects($this->once())
+            ->method('publish')
+            ->with($stock, 'BANKRUPTCY', $this->stringContains('Dead Corp'), -100.00)
+            ->willReturn(['type' => 'BANKRUPTCY']);
+
+        $operator = new MarketOperator(
+            $this->entityManagerMock,
+            $this->loggerMock,
+            $this->marketEventMock,
+            $this->debtEngineMock,
+            $this->mathUtilityMock
+        );
+
+        $events = $operator->enforceMarketStability([$stock], new MacroStateDTO());
+
+        $this->assertCount(1, $events);
+        $this->assertTrue($stock->isBankrupt());
+        $this->assertEquals('0.00000000', $stock->getPrice());
+        $this->assertEquals('0.0000', $stock->getCurrentVolatility());
+        $this->assertEquals('CANCELLED', $buyOrder->getStatus());
+        $this->assertEquals('CANCELLED', $sellOrder->getStatus());
+        // Buyer got refunded $100 (10 * $10.00) added to $500 = $600
+        $this->assertEquals('600.0000', (string) $buyer->getCashBalance());
+    }
+
+    public function testMarketOperatorSkipsAlreadyBankruptStock(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('DEAD');
+        $stock->setName('Dead Corp');
+        $stock->setIsBankrupt(true);
+
+        $this->debtEngineMock->expects($this->never())->method('calculateAltmanZScore');
+
+        $operator = new MarketOperator(
+            $this->entityManagerMock,
+            $this->loggerMock,
+            $this->marketEventMock,
+            $this->debtEngineMock,
+            $this->mathUtilityMock
+        );
+
+        $events = $operator->enforceMarketStability([$stock], new MacroStateDTO());
+        $this->assertEmpty($events);
+    }
+
+    public function testTradeExecutionServiceBlocksTradingOnBankruptStock(): void
+    {
+        $user = new User();
+        $user->setCashBalance('1000.00');
+
+        $stock = new Stock();
+        $stock->setTicker('DEAD');
+        $stock->setIsBankrupt(true);
+
+        $stockRepo = $this->createMock(EntityRepository::class);
+        $stockRepo->method('findOneBy')->with(['ticker' => 'DEAD'])->willReturn($stock);
+
+        $this->entityManagerMock->method('getRepository')
+            ->with(Stock::class)
+            ->willReturn($stockRepo);
+
+        $portfolio = $this->createMock(Portfolio::class);
+        $redis = $this->createMock(\Redis::class);
+
+        $tradeService = new TradeExecutionService(
+            $this->entityManagerMock,
+            $portfolio,
+            $redis
+        );
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Trading is halted for DEAD. The company is bankrupt.');
+
+        $tradeService->executeOrder($user, 'DEAD', 'BUY', 'MARKET', 10);
+    }
+
+    public function testStockTrackerBypassesSimulationForBankruptStock(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('DEAD');
+        $stock->setSector('Technology');
+        $stock->setIsBankrupt(true);
+        $stock->setPrice('0.00');
+        $stock->setSharesOutstanding('1000000');
+
+        $marketEngine = $this->createMock(\App\Service\Market\MarketEngine::class);
+        $earningsEngine = $this->createMock(EarningsEngine::class);
+        $corpActionEngine = $this->createMock(\App\Service\Corporate\CorporateActionEngine::class);
+        $maEngine = $this->createMock(\App\Service\Corporate\MergerAndAcquisitionEngine::class);
+        $corpMetrics = $this->createMock(\App\Service\Math\CorporateMetrics::class);
+
+        $marketEngine->expects($this->never())->method('calculateNextPrice');
+        $earningsEngine->expects($this->never())->method('calculate');
+        $corpActionEngine->expects($this->never())->method('processSplits');
+
+        $tracker = new StockTracker(
+            $this->entityManagerMock,
+            $marketEngine,
+            $earningsEngine,
+            $corpActionEngine,
+            $maEngine,
+            $this->marketEventMock,
+            $this->debtEngineMock,
+            $this->mathUtilityMock,
+            $corpMetrics
+        );
+
+        $result = $tracker->updateStocks([$stock], 0.01, false);
+
+        $this->assertCount(1, $result['updates']);
+        $update = $result['updates'][0];
+        $this->assertTrue($update['is_bankrupt']);
+        $this->assertEquals(0.0, $update['price']);
+        $this->assertEquals(0.0, $update['market_cap']);
+        $this->assertEquals(0.0, $result['total_cap']);
+    }
+}
