@@ -437,7 +437,7 @@ class InitialMarket
             'jump_intensity' => 1.25,
             'jump_mean' => 0.04,
             'jump_vol' => 0.15,
-            'baseline_roic' => 0.27,
+            'baseline_roic' => 0.29,
             'capex_ratio' => 0.50,
             'target_payout_ratio' => 0.10,
             'dividendSpeed' => 0.15,
@@ -450,9 +450,9 @@ class InitialMarket
             'credit_spread' => 0.0180,
             'depreciation_rate' => 0.15,
             'corporate_treasury' => 4_500_000_000.00,
-            'total_equity'      => 35_000_000_000.00,
+            'total_equity'      => 65_000_000_000.00,
             'customer_deposits' => 0.00,
-            'wholesale_debt'    => 15_000_000_000.00,
+            'wholesale_debt'    => 25_000_000_000.00,
             'retained_earnings' => 10_000_000_000.00
         ],
         [

@@ -35,6 +35,9 @@ class MarketPricingContext
         public float $baselineIndustryPE = 20.0,
         public float $revenuePerShare = 0.0,
         public string $businessModel = 'none',
-        public float $liveCostOfEquity = 0.10
+        public float $liveCostOfEquity = 0.10,
+        public float $netDebtPerShare = 0.0,
+        public float $recentPriceTrend = 0.0,
+        public float $secularGrowth = 0.02
     ) {}
 }

@@ -96,6 +96,9 @@ class MarketEngine
         $revenuePerShare = $ctx->revenuePerShare;
         $businessModel = $ctx->businessModel;
         $liveCostOfEquity = $ctx->liveCostOfEquity;
+        $netDebtPerShare = $ctx->netDebtPerShare;
+        $recentPriceTrend = $ctx->recentPriceTrend;
+        $secularGrowth = $ctx->secularGrowth;
 
         // CAPM & MACRO TRANSMISSION MECHANISM
 
@@ -173,7 +176,9 @@ class MarketEngine
             $revenuePerShare,
             $businessModel,
             $liveCostOfEquity,
-            $currentVolatility
+            $currentVolatility,
+            $netDebtPerShare,
+            $secularGrowth
         );
 
         $perceivedFairValue = $fundamentalState['perceived_fair_value'];
@@ -181,7 +186,10 @@ class MarketEngine
 
         // Exact Ornstein-Uhlenbeck Mean Reversion in Log-Space
         // Using exp(-kappa * dt) mathematically guarantees the price never overshoots the fair value.
-        $reversionWeight = exp(-$dynamicReversion * $dt);
+        // Concept: If recent price action > 0, generate an opposing momentum drift that fights reversion
+        $momentumFactor = 0.10;
+        $momentumDrift = $recentPriceTrend * $momentumFactor;
+        $reversionWeight = max(0.0, min(1.0, exp(-$dynamicReversion * $dt) - $momentumDrift));
 
         // Pure Geometric Brownian Motion (GBM) Step
         $idiosyncraticShock = $this->mathUtility->generateStandardNormal();
@@ -274,7 +282,9 @@ class MarketEngine
         float $revenuePerShare = 0.0,
         string $businessModel = 'none',
         float $liveCostOfEquity = 0.10,
-        float $currentVolatility = 0.20
+        float $currentVolatility = 0.20,
+        float $netDebtPerShare = 0.0,
+        float $secularGrowth = 0.02
     ): array {
 
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
@@ -290,9 +300,13 @@ class MarketEngine
         $systemicStressIndex = $recessionStress + $inflationStress;
 
         // 1. MACRO FORWARD GUIDANCE & FUNDAMENTAL P/E
-        // We use the Gordon Growth Model derivation for Fair Value P/E.
-        // Expected perpetual growth rate is tied to inflation and beta-adjusted output gap, capped at 2.5% (long-run nominal GDP growth).
-        $expectedGrowth = max(0.0, min(0.025, $inflation + ($outputGap * 0.5 * abs($beta))));
+        // Cyclical macro adjustment: scales with inflation and the output gap (respecting negative beta)
+        $cyclicalAdjustment = $inflation + ($outputGap * 0.5 * $beta);
+        
+        // Combine secular and cyclical forces. 
+        // We cap the terminal growth rate at 5% (0.05) to prevent Gordon Growth Model divergence 
+        // where Growth >= WACC, which would cause an infinite valuation.
+        $expectedGrowth = max(0.0, min(0.05, $secularGrowth + $cyclicalAdjustment));
 
         $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $structuralRoic, $expectedGrowth);
 
@@ -329,17 +343,20 @@ class MarketEngine
 
         // THE ZOMBIE FIX: Revenue Floor (Margin-Adjusted Price-to-Sales)
         // High-turnover physical corporations (retail, grocers) have thin net margins and cannot support software-like P/S multiples.
-        $impliedMargin = $revenuePerShare > 0.0
-            ? max(0.01, min(0.30, abs($safeStructuralEps) / max(0.01, $revenuePerShare)))
-            : 0.10;
+        $trueMargin = $trueStructuralEps > 0 
+            ? $trueStructuralEps / max(0.01, $revenuePerShare) 
+            : 0.01; 
+        $impliedMargin = max(0.01, min(0.30, $trueMargin));
+        
         $psMultiple = max(
             FinancialConstants::MIN_PS_FALLBACK_MULT,
             min(FinancialConstants::MAX_PS_FALLBACK_MULT, max(10.0, $fairValuePE) * $impliedMargin)
         );
         $revenueFloorValue = $revenuePerShare * $psMultiple;
+        $revenueFloorEquityValue = max(0.01, $revenueFloorValue - $netDebtPerShare);
 
         // THE BANKING DCF BYPASS
-        $earningsValue = $strategy->calculateEarningsValue($revenueFloorValue, $peFairValue, $fcfPerShare, $liveWacc, $this->mathUtility);
+        $earningsValue = $strategy->calculateEarningsValue($revenueFloorEquityValue, $peFairValue, $fcfPerShare, $liveWacc, $this->mathUtility);
 
         // Dividend Yield Support (The Dividend Discount Model)
         $dividendSupportValue = 0.0;

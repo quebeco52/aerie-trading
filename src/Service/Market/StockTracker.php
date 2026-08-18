@@ -146,6 +146,13 @@ class StockTracker
                 ? (float) $stock->getRoeTtm()
                 : (float) $stock->getRoicTtm();
 
+            $totalDebt = (float) $stock->getTotalDebt();
+            $corporateTreasury = (float) $stock->getCorporateTreasury();
+            $netDebtPerShare = max(0.0, ($totalDebt - $corporateTreasury) / $shares);
+
+            $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+            $secularGrowth = $strategy->getSecularGrowthRate($stock);
+
             $pricingCtx = new \App\DTO\MarketPricingContext(
                 currentPrice: (float) $stock->getPrice(),
                 currentVolatility: $currentVol,
@@ -168,7 +175,10 @@ class StockTracker
                 baselineIndustryPE: $baselineIndustryPE,
                 revenuePerShare: $revenuePerShare,
                 businessModel: $businessModel,
-                liveCostOfEquity: $health->costOfEquity ?? 0.10
+                liveCostOfEquity: $health->costOfEquity ?? 0.10,
+                netDebtPerShare: $netDebtPerShare,
+                recentPriceTrend: 0.0,
+                secularGrowth: $secularGrowth
             );
 
             // Calculate new price (GBM + SVJJ)
