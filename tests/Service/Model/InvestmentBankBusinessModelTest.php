@@ -110,4 +110,10 @@ class InvestmentBankBusinessModelTest extends TestCase
         // Without VaR cap, volatilityArbitrage would be 0.62 * 1.20 = 0.744 and total = 1446.4
         $this->assertEqualsWithDelta(1216.0, $result->actualRevenue, 0.1);
     }
+
+    public function testWholesaleLeverageLimitMatchesOperatingCapacity(): void
+    {
+        $thresholds = $this->model->getModelThresholds();
+        $this->assertSame(8.0, $thresholds['wholesale_leverage_limit']);
+    }
 }

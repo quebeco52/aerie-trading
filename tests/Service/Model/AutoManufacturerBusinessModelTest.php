@@ -83,23 +83,45 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(20_000_000.0, $result->streamRevenue['software_telematics'], 1.0);
     }
 
-    public function testApexLuxurySurgesDuringBoom(): void
+    public function testApexLuxurySurgesDuringMarketWealthAndQELiquidityBoom(): void
     {
         $stock = new Stock();
         $stock->setTicker('FALC');
         $stock->setBeta('1.75');
 
-        $flatMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, policyRateEma: 0.03, yield10yEma: 0.04, yield2yEma: 0.03);
-        $boomMacro = new MacroStateDTO(outputGapEma: 0.03, inflationEma: 0.02, policyRateEma: 0.03, yield10yEma: 0.04, yield2yEma: 0.03);
+        $neutralMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, policyRateEma: 0.03, equityRiskPremium: 0.045, qeActive: false);
+        $wealthBoomMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, policyRateEma: 0.03, equityRiskPremium: 0.035, qeActive: true, qeIntensity: 1.0);
 
-        $flatResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 25_000_000.0, 0.0, $flatMacro, $this->mathUtility);
-        $boomResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 25_000_000.0, 0.0, $boomMacro, $this->mathUtility);
+        $neutralResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 25_000_000.0, 0.0, $neutralMacro, $this->mathUtility);
+        $wealthBoomResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 25_000_000.0, 0.0, $wealthBoomMacro, $this->mathUtility);
 
-        // Apex luxury revenue expands in economic booms
+        // Apex luxury revenue expands when financial asset wealth (ERP compression) and central bank liquidity surge
         $this->assertGreaterThan(
-            $flatResult->streamRevenue['apex_luxury'],
-            $boomResult->streamRevenue['apex_luxury']
+            $neutralResult->streamRevenue['apex_luxury'],
+            $wealthBoomResult->streamRevenue['apex_luxury']
         );
+        // Specifically: 25M base * (1.0 + (0.010 * 35.0) + (1.0 * 0.15)) = 25M * 1.50 = 37.50M
+        $this->assertEqualsWithDelta(37_500_000.0, $wealthBoomResult->streamRevenue['apex_luxury'], 1.0);
+    }
+
+    public function testApexLuxuryVeblenInflationPricingPower(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('FALC');
+        $stock->setBeta('1.75');
+
+        $baselineMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, policyRateEma: 0.03);
+        $inflationMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.06, policyRateEma: 0.03);
+
+        $baselineResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 25_000_000.0, 0.0, $baselineMacro, $this->mathUtility);
+        $inflationResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 25_000_000.0, 0.0, $inflationMacro, $this->mathUtility);
+
+        // Apex luxury hypercars exert Veblen pricing power when inflation exceeds target (0.04 excess * 0.80 = +3.2%)
+        $this->assertGreaterThan(
+            $baselineResult->streamRevenue['apex_luxury'],
+            $inflationResult->streamRevenue['apex_luxury']
+        );
+        $this->assertEqualsWithDelta(25_800_000.0, $inflationResult->streamRevenue['apex_luxury'], 1.0);
     }
 
     public function testLaborStrikeObservableShockBounded(): void

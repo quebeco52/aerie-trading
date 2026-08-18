@@ -165,4 +165,10 @@ class BrokerageBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(0.014, $macroPhysics['macro_demand_shift'], 0.0001);
         $this->assertSame(1.0, $macroPhysics['pricing_power_multiplier']);
     }
+
+    public function testWholesaleLeverageLimitMatchesOperatingCapacity(): void
+    {
+        $thresholds = $this->model->getModelThresholds();
+        $this->assertSame(8.0, $thresholds['wholesale_leverage_limit']);
+    }
 }

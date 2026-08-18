@@ -91,6 +91,11 @@ trait FinancialPhysicsTrait
         return $currentDebtRatio < ($equityLimit * 0.50);
     }
 
+    public function supportsUnderleveragedDebtExpansion(): bool
+    {
+        return false;
+    }
+
     public function processPassiveLiabilityGrowth(Stock $stock, \App\DTO\MacroStateDTO $macroState, array &$state, \App\Service\Math\MathUtility $mathUtility): void {}
 
     public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array

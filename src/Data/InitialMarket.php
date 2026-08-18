@@ -433,7 +433,7 @@ class InitialMarket
             'systemic_importance' => 'none',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.40,
-            'beta' => 1.85,
+            'beta' => 1.55,
             'jump_intensity' => 1.25,
             'jump_mean' => 0.04,
             'jump_vol' => 0.15,

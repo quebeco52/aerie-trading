@@ -29,7 +29,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     public const BASE_COVERAGE_ERROR = 0.10;
     public function getModelThresholds(): array
     {
-        return ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => null, 'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.18, 'moat_spread' => 0.005, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 1.0];
+        return ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => 8.0,  'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.18, 'moat_spread' => 0.005, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 1.0];
     }
     // --- ROE & Target Architecture ---
     /** Weight given to historical baseline ROE when blending with TTM ROE. */
@@ -240,5 +240,13 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
         );
+    }
+
+    /**
+     * Shadow banks lack customer deposits and fund their entire loan portfolio via wholesale debt and repo facilities.
+     */
+    public function supportsUnderleveragedDebtExpansion(): bool
+    {
+        return true;
     }
 }

@@ -120,10 +120,10 @@ class TreasuryEngine
         $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $ctx->macroState);
         $marginalReturn = $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $saturationPenalty, $evaluationCapital, $ctx->macroState);
 
-        // Financials aggressively use isUnderLeveraged for stock buybacks to crush equity bloat, 
-        // but they should NEVER issue massive amounts of expensive wholesale bonds just to increase leverage.
-        $triggerWholesaleDebt = $ctx->isFinancial ? false : $ctx->health->isUnderLeveraged;
-        $isUnderLeveragedForDebt = $triggerWholesaleDebt && !$ctx->health->isSevereNegativeCarry;
+        $isUnderLeveraged = $ctx->health->isUnderLeveraged ?? false;
+        $isUnderLeveragedForDebt = $isUnderLeveraged
+            && $ctx->strategy->supportsUnderleveragedDebtExpansion()
+            && !$ctx->health->isSevereNegativeCarry;
 
         if (($marginalReturn > $hurdleRate || $isUnderLeveragedForDebt) && $ctx->health->canIssueDebt) {
             $newBorrowingRate = $ctx->health->rawMetrics->currentMarketRate ?? 0.05;
@@ -442,10 +442,10 @@ class TreasuryEngine
 
             $shouldSweep = $currentDebtRatio > $evalLimit;
 
-            // Commercial banks and insurers have structural, regulatory-driven balance sheets 
-            // where "cash hoarding" is just normal float/deposits, and junk status on marginal debt 
-            // shouldn't force them to liquidate their structural funding.
-            if (!in_array($ctx->businessModel, ['commercial_bank', 'insurance'])) {
+            // Financial institutions (Banks, Brokerages, Insurers) have structural, regulatory-driven balance sheets 
+            // where "cash hoarding" is just normal float/deposits/trading buffers, and junk status on marginal debt 
+            // shouldn't force them to liquidate their structural core funding.
+            if (!$ctx->isFinancial) {
                 if ($isJunkBondStatus || $hoardStatus['is_hoarder']) {
                     $shouldSweep = true;
                 }

@@ -83,6 +83,16 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Scalar for demand destruction per 100bps of policy rate above neutral. */
     public const RATE_SENSITIVITY_SCALAR = 2.50;
 
+    // --- Apex Luxury & Veblen Wealth Effect ---
+    /** Sensitivity of ultra-luxury hypercar deliveries to equity risk premium compression (asset wealth expansion). */
+    public const APEX_ERP_COMPRESSION_SCALAR = 35.0;
+
+    /** Top-line revenue boost multiplier during central bank Quantitative Easing liquidity surges. */
+    public const APEX_QE_LIQUIDITY_BOOST = 0.15;
+
+    /** Veblen pricing power boost scalar when inflation exceeds the central bank target. */
+    public const APEX_VEBLEN_INFLATION_SCALAR = 0.80;
+
     // --- Structural Gross Margin Cost Intensities for Cross-Subsidization ---
     /** Relative variable cost intensity of mass-market commuter fleet (low margin / predatory baseline). */
     public const MASS_MARKET_COST_INTENSITY = 1.35;
@@ -209,9 +219,16 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             $recallPenalty = self::MASSIVE_RECALL_PENALTY;
         }
 
-        // --- Macro Sensitivities & Apex Luxury Veblen Dynamics ---
-        $outputGap = $macroState->outputGapEma;
-        $apexMacroBoost = max(0.0, $outputGap * 1.50 * $beta);
+        // --- Apex Luxury Veblen & Asset Wealth Physics ---
+        // Hypercar demand decouples from mass-market GDP: driven by equity asset wealth (ERP compression), QE liquidity, and Veblen pricing power
+        $erpCompression = max(0.0, MacroEngine::BASE_EQUITY_RISK_PREMIUM - $macroState->equityRiskPremium);
+        $wealthEffect = $erpCompression * self::APEX_ERP_COMPRESSION_SCALAR;
+        $qeLiquidityBoost = $macroState->qeActive ? ($macroState->qeIntensity * self::APEX_QE_LIQUIDITY_BOOST) : 0.0;
+        $veblenInflationPower = $macroState->inflationEma > MacroEngine::TARGET_INFLATION
+            ? ($macroState->inflationEma - MacroEngine::TARGET_INFLATION) * self::APEX_VEBLEN_INFLATION_SCALAR
+            : 0.0;
+
+        $apexMacroBoost = $wealthEffect + $qeLiquidityBoost + $veblenInflationPower;
 
         // Supply chain inflation & energy cost penalty on physical manufacturing
         $inflation = $macroState->inflationEma;

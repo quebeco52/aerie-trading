@@ -41,6 +41,10 @@ trait StandardDebtPhysicsTrait
         return $currentDebtRatio < ($targetDebtTolerance * 0.75);
     }
     
+    public function supportsUnderleveragedDebtExpansion(): bool {
+        return true;
+    }
+    
     public function getHurdleRate(DebtHealthDTO $health): float {
         return $health->wacc ?? 0.08;
     }

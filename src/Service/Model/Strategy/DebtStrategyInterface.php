@@ -18,6 +18,7 @@ interface DebtStrategyInterface
     public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): array;
     public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float;
     public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool;
+    public function supportsUnderleveragedDebtExpansion(): bool;
     public function getHurdleRate(DebtHealthDTO $health): float;
     public function getExpansionCapacityBasis(float $equity, float $totalDebt, float $investedCapital): float;
     public function calculateDebtExpansionCapacity(float $equity, float $totalDebt, float $wholesaleDebt, DebtHealthDTO $health, float $newBorrowingRate, float $ebit, float $depreciation): float;
