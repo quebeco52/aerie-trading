@@ -141,7 +141,8 @@ trait StandardOperatingPhysicsTrait
         }
 
         $math = new MathUtility();
-        $newTtm += $math->calculateReversionPull($newTtm, $wacc - $saturationPenalty, $scaledKappa, $moatSpread);
+        $effectiveMoat = max(0.0, $moatSpread - $saturationPenalty);
+        $newTtm += $math->calculateReversionPull($newTtm, $wacc, $scaledKappa, $effectiveMoat);
         $stock->setRoicTtm((string) max(-0.50, min(1.0, $newTtm)));
 
         return $truePostTaxReturn;

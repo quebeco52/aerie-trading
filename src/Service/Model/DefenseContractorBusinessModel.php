@@ -339,7 +339,8 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, abs($investedCapital), $macroState);
         }
 
-        $newTtm += $math->calculateReversionPull($newTtm, $wacc - $saturationPenalty, $scaledKappa, $moatSpread);
+        $effectiveMoat = max(0.0, $moatSpread - $saturationPenalty);
+        $newTtm += $math->calculateReversionPull($newTtm, $wacc, $scaledKappa, $effectiveMoat);
         $stock->setRoicTtm((string) max(self::MIN_ROIC_CLAMP, min(self::MAX_ROIC_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;

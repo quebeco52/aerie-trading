@@ -56,7 +56,8 @@ trait FinancialPhysicsTrait
             $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
         }
 
-        $newTtm += $math->calculateReversionPull($newTtm, $costOfEquity - $saturationPenalty, $scaledKappa, $moatSpread);
+        $effectiveMoat = max(0.0, $moatSpread - $saturationPenalty);
+        $newTtm += $math->calculateReversionPull($newTtm, $costOfEquity, $scaledKappa, $effectiveMoat);
         $stock->setRoeTtm((string) max(-0.50, min(1.0, $newTtm)));
 
         return $truePostTaxReturn;

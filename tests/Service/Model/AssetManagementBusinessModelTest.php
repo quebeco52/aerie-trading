@@ -76,4 +76,23 @@ class AssetManagementBusinessModelTest extends TestCase
         $this->assertArrayHasKey('baseline_roic', $metrics);
         $this->assertEqualsWithDelta(290.0, $metrics['invested_capital'], 0.01);
     }
+
+    public function testSupportsUnderleveragedDebtExpansion(): void
+    {
+        $assetManagerModel = new AssetManagementBusinessModel();
+        $this->assertFalse($assetManagerModel->supportsUnderleveragedDebtExpansion());
+
+        $peModel = new PrivateEquityBusinessModel();
+        $this->assertTrue($peModel->supportsUnderleveragedDebtExpansion());
+    }
+
+    public function testPrivateEquityIsUnderLeveragedThreshold(): void
+    {
+        $peModel = new PrivateEquityBusinessModel();
+
+        // PE default equity limit is 2.5 (from getModelThresholds wholesale_leverage_limit) or 1.0 default
+        // 85% of 1.0 (default) is 0.85
+        $this->assertTrue($peModel->isUnderLeveraged(0.80, 1.0, 5.0, 1.05, 0.12, 0.05));
+        $this->assertFalse($peModel->isUnderLeveraged(0.90, 1.0, 5.0, 1.05, 0.12, 0.05));
+    }
 }

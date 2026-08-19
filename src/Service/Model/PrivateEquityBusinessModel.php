@@ -413,7 +413,8 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
             $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
         }
 
-        $newTtm += $math->calculateReversionPull($newTtm, $costOfEquity - $saturationPenalty, $scaledKappa, $moatSpread);
+        $effectiveMoat = max(0.0, $moatSpread - $saturationPenalty);
+        $newTtm += $math->calculateReversionPull($newTtm, $costOfEquity, $scaledKappa, $effectiveMoat);
         $stock->setRoeTtm((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;
@@ -482,5 +483,14 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         // Actual debt issuance is gated by calculateDebtExpansionCapacity during credit freezes.
         $equityLimit = $this->getModelThresholds()['equity_limit'] ?? self::DEFAULT_EQUITY_LIMIT;
         return $currentDebtRatio < ($equityLimit * 0.85);
+    }
+
+    /**
+     * Private equity firms actively utilize wholesale debt and subscription credit facilities
+     * to fund leveraged buyouts (LBOs) and balance-sheet portfolio acquisitions.
+     */
+    public function supportsUnderleveragedDebtExpansion(): bool
+    {
+        return true;
     }
 }

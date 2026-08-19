@@ -291,4 +291,17 @@ class StockModelTuningTest extends TestCase
             );
         }
     }
+
+    public function testAllBusinessModelsHaveLoreDescription(): void
+    {
+        foreach (\App\Data\Sectors::INDUSTRY_METRICS as $industry => $metrics) {
+            $modelKey = $metrics['business_model'];
+            $this->assertArrayHasKey(
+                $modelKey,
+                \App\Data\Sectors::BUSINESS_MODEL_DESCRIPTIONS,
+                sprintf("Business model key '%s' (for industry '%s') is missing from Sectors::BUSINESS_MODEL_DESCRIPTIONS", $modelKey, $industry)
+            );
+        }
+    }
 }
+

@@ -117,7 +117,7 @@ class MathUtility
     {
         $innovation = $this->generateStandardNormal();
         $innovationScale = sqrt(max(0.0, 1.0 - ($phi * $phi)));
-        
+
         return ($phi * $previousZ) + ($innovationScale * $innovation);
     }
 
@@ -656,29 +656,23 @@ class MathUtility
     {
         $currentPrice = max(0.0001, $currentPrice);
         $currentLogPrice = log($currentPrice);
-        
+
         // The long term mean of the log-price needs an Ito correction to match the expected level of the spot price
         $alpha = log($theta) - ($sigma * $sigma) / (2.0 * max(0.0001, $kappa));
-        
+
         // Exact solution for OU process to prevent Euler discretization errors for large kappa * dt
         $expKappaDt = exp(-$kappa * $dt);
         $drift = $currentLogPrice * $expKappaDt + $alpha * (1.0 - $expKappaDt);
-        
+
         // The exact variance of the OU process over dt
         $variance = ($sigma * $sigma / (2.0 * max(0.0001, $kappa))) * (1.0 - exp(-2.0 * $kappa * $dt));
         $diffusion = sqrt($variance) * $dW;
-        
+
         $nextLogPrice = $drift + $diffusion;
-        
+
         return exp($nextLogPrice);
     }
 
-    /**
-     * Computes a quarterly Ornstein-Uhlenbeck reversion pull with three real-world refinements:
-     * 1. Moat-adjusted equilibrium
-     * 2. Asymmetric speed above equilibrium
-     * 3. Non-linear distress below zero
-     */
     public function calculateReversionPull(
         float $currentReturn,
         float $wacc,
@@ -690,8 +684,10 @@ class MathUtility
     ): float {
         $equilibrium = $wacc + $moatSpread;
 
+        $safeEquilibriumDivisor = max(0.01, abs($equilibrium));
+
         if ($currentReturn > $equilibrium) {
-            $excessRatio = ($currentReturn - $equilibrium) / max(0.01, $equilibrium);
+            $excessRatio = ($currentReturn - $equilibrium) / $safeEquilibriumDivisor;
             $effectiveKappa = $baseKappa * (1.0 + $erosionAlpha * $excessRatio);
         } elseif ($currentReturn < 0.0) {
             $distressRatio = abs($currentReturn) / max(0.01, $wacc);
@@ -700,7 +696,12 @@ class MathUtility
             $effectiveKappa = $baseKappa * $distressPersistence;
         }
 
-        return $effectiveKappa * ($equilibrium - $currentReturn) * 0.25;
+        // EXACT DISCRETIZATION: Use the exponential solution (1 - e^(-kappa * dt))
+        // This acts as a dampener. Even if effectiveKappa approaches infinity, 
+        // the weight naturally caps at 1.0, mathematically preventing target overshooting.
+        $reversionWeight = 1.0 - exp(-$effectiveKappa * 0.25);
+
+        return ($equilibrium - $currentReturn) * $reversionWeight;
     }
 
     /**
@@ -717,7 +718,7 @@ class MathUtility
         // High beta (risk) means more noise, reducing the ERC
         // High growth premium implies higher persistence of earnings, increasing the ERC
         $ercBeta = max(0.1, 1.0 + (FinancialConstants::ERC_BETA_SENSITIVITY * $beta) + (FinancialConstants::ERC_GROWTH_SENSITIVITY * $growthPremium));
-        
+
         return FinancialConstants::ERC_BASE_ALPHA + ($ercBeta * $sue);
     }
 
@@ -735,10 +736,10 @@ class MathUtility
         // Prevent division by zero
         $priorPrecision = 1.0 / max(0.0001, $priorVariance);
         $signalPrecision = 1.0 / max(0.0001, $signalVariance);
-        
+
         // Posterior is the precision-weighted average of the prior and the new signal
         $posteriorEstimate = (($priorEstimate * $priorPrecision) + ($newSignal * $signalPrecision)) / ($priorPrecision + $signalPrecision);
-        
+
         return $posteriorEstimate;
     }
 

@@ -461,8 +461,6 @@ class CommercialBankBusinessModel implements BusinessModelInterface
      */
     public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float
     {
-        $industry = $stock->getIndustry() ?: 'General';
-        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
         $thresholds = $this->getModelThresholds();
         $kappa = $thresholds['reversion_speed'] ?? 0.18;
         $moatSpread = $thresholds['moat_spread'] ?? 0.01;
@@ -484,7 +482,8 @@ class CommercialBankBusinessModel implements BusinessModelInterface
             $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
         }
 
-        $newTtm += $math->calculateReversionPull($newTtm, $costOfEquity - $saturationPenalty, $scaledKappa, $moatSpread);
+        $effectiveMoat = max(0.0, $moatSpread - $saturationPenalty);
+        $newTtm += $math->calculateReversionPull($newTtm, $costOfEquity, $scaledKappa, $effectiveMoat);
         $stock->setRoeTtm((string) max(-0.50, min(1.0, $newTtm)));
 
         return $truePostTaxReturn;

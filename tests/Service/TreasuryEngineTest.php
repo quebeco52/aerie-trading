@@ -30,6 +30,7 @@ class TreasuryEngineTest extends TestCase
 
     protected function setUp(): void
     {
+        mt_srand(42);
         $this->corporateMetrics = $this->createMock(CorporateMetrics::class);
         $this->debtEngine = $this->createMock(DebtEngine::class);
         $this->capExEngine = $this->createMock(CapExEngine::class);
