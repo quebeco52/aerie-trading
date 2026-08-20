@@ -91,9 +91,11 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         $hardMarketPricingBonus = min(0.35, $surplusDeficitRatio * 0.40 * $catRiskBeta);
 
         // Cat Bond Principal / Yield Haircut during extreme catastrophe attachment
+        // When attachment points breach, Cat Bond principal shields the reinsurer's balance sheet from catastrophic shock
         $catBondMultiplier = 1.0;
         if ($claimZ < self::REINSURANCE_ATTACHMENT_Z) {
             $catBondMultiplier = (1.0 - self::CAT_BOND_DEFAULT_HAIRCUT);
+            $underwritingShock = min($underwritingShock, self::MAX_REINSURED_LOSS_SHOCK * $treatyWeight);
         }
 
         $treatyRevenue  = max(0.0, $expectedRevenue * $treatyWeight * (1.0 + ($treatyZ * ($baselineVol * self::TREATY_VARIANCE_SCALAR)) + $hardMarketPricingBonus));
@@ -107,7 +109,7 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $underwritingShock - $hardMarketPricingBonus);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $underwritingShock);
 
         $eventType = null;
         if ($claimZ < self::REINSURANCE_ATTACHMENT_Z) {

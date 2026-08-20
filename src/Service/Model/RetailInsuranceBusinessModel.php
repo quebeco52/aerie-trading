@@ -121,7 +121,13 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
             $primaryShockZ = $lifeZ;
         }
 
-        $observableShockZ = ($pcZ * $pcWeight * self::PC_VARIANCE_SCALAR) + ($lifeSpreadBonus * $lifeWeight);
+        $pcBase = max(1.0, $expectedRevenue * $pcWeight);
+        $pcShock = ($pcRevenue - $pcBase) / $pcBase;
+
+        $lifeBase = max(1.0, $expectedRevenue * $lifeWeight);
+        $lifeShock = ($lifeRevenue - $lifeBase) / $lifeBase;
+
+        $observableShockZ = ($pcShock * $pcWeight) + ($lifeShock * $lifeWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

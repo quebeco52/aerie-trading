@@ -78,15 +78,15 @@ class DefenseContractorBusinessModelTest extends TestCase
         return $mock;
     }
 
-    public function testProgramExecutionElasticityImprovesVariableMargin(): void
+    public function testWrightsLawLearningCurveImprovesVariableMargin(): void
     {
         $model = new DefenseContractorBusinessModel();
         $stock = new Stock();
         $stock->setTicker('GRIP');
         $stock->setBeta('0.7');
 
-        // costPlusZ = 2.0 (strong sovereign execution), fixedPriceZ = 0.0, fmsZ = 0.0, eventZ = 0.0
-        $mathUtilityMock = $this->createMathUtilityMock([2.0, 0.0, 0.0, 0.0]);
+        // costPlusZ = 0.0, fixedPriceZ = 0.0, fmsZ = 2.0 (high mature production volume), eventZ = 0.0
+        $mathUtilityMock = $this->createMathUtilityMock([0.0, 0.0, 2.0, 0.0]);
 
         $macroState = $this->createMacroState();
 
@@ -100,8 +100,9 @@ class DefenseContractorBusinessModelTest extends TestCase
             $mathUtilityMock
         );
 
-        // Strong contract performance reduces cost overruns -> actual variable costs lower than baseline 65%
-        $this->assertLessThan(1000.0 * 0.65, $result->actualVariableCosts);
+        // Wright's Law scale efficiency on FMS volume reduces variable cost margin below baseline 65%
+        $this->assertLessThan(0.65, $result->clampedMargin);
+        $this->assertEqualsWithDelta(0.642, $result->clampedMargin, 0.001);
     }
 
     public function testRevenueNotDistortedByCumulativeNominalGdpGrowth(): void
@@ -189,7 +190,7 @@ class DefenseContractorBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(9_700.0, $result->actualRevenue, 1.0);
     }
 
-    public function testFixedPriceForwardLossAndMaterialSqueeze(): void
+    public function testFixedPriceForwardLossAndInflationSqueeze(): void
     {
         $model = new DefenseContractorBusinessModel();
         $stock = new Stock();
@@ -198,8 +199,8 @@ class DefenseContractorBusinessModelTest extends TestCase
         // fixedPriceZ = -2.0 (< -1.50 FORWARD_LOSS_Z_SCORE)
         $mathUtilityMock = $this->createMathUtilityMock([0.0, -2.0, 0.0, 0.0]);
 
-        // Energy/commodity shock of 10% on energy index (110.0 vs 100.0 baseline) -> 0.10 * 0.30 = 0.03 material drag
-        $macroState = $this->createMacroState(energyPriceIndexEma: 110.0);
+        // Inflation running at 4% (2% in excess of 2% target) -> 0.02 * 0.50 = 0.01 fixed-price inflation drag
+        $macroState = $this->createMacroState(inflation: 0.04);
 
         $result = $model->computeActualFinancials(
             $stock,
@@ -213,9 +214,9 @@ class DefenseContractorBusinessModelTest extends TestCase
 
         $this->assertSame(ShockEvent::PROJECT_DELAY, $result->eventType);
         // Fixed price weight is 0.20 for GRIP.
-        // Expected penalty = (FORWARD_LOSS_PENALTY 0.08 + materialDrag 0.03) * 0.20 = 0.022
-        // Clamped margin = 0.30 + 0.022 = 0.322
-        $this->assertEqualsWithDelta(0.322, $result->clampedMargin, 0.001);
+        // Expected penalty = (FORWARD_LOSS_PENALTY 0.08 + fixedPriceInflationDrag 0.01) * 0.20 = 0.018
+        // Clamped margin = 0.30 + 0.018 = 0.318
+        $this->assertEqualsWithDelta(0.318, $result->clampedMargin, 0.001);
     }
 
     public function testGeopoliticalConflictSurge(): void
@@ -240,9 +241,12 @@ class DefenseContractorBusinessModelTest extends TestCase
         );
 
         $this->assertSame(ShockEvent::GEOPOLITICAL_CONFLICT, $result->eventType);
-        // FMS revenue boosted by 1.50 multiplier + wartime supply chain drag on variable margin
+        // FMS revenue boosted by 1.50 multiplier
         $this->assertGreaterThan(2000.0, $result->streamRevenue['foreign_military_sales']);
-        $this->assertEqualsWithDelta(0.30 + DefenseContractorBusinessModel::WARTIME_SUPPLY_CHAIN_DRAG, $result->clampedMargin, 0.001);
+        // learningCurveShift = -0.020 * 2.5 * 0.20 = -0.010
+        // wartimeSupplyDrag = 0.035 * 0.20 = 0.007
+        // Net clamped margin = 0.30 - 0.010 + 0.007 = 0.297
+        $this->assertEqualsWithDelta(0.297, $result->clampedMargin, 0.001);
     }
 
     public function testCongressionalExportBan(): void
@@ -409,4 +413,3 @@ class DefenseContractorBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(1.0, $totalActiveWeight, 0.0001);
     }
 }
-

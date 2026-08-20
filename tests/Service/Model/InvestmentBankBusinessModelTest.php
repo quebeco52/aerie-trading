@@ -7,6 +7,7 @@ namespace App\Tests\Service\Model;
 use PHPUnit\Framework\TestCase;
 use App\Service\Model\InvestmentBankBusinessModel;
 use App\Service\Math\MathUtility;
+use App\Service\Macro\MacroEngine;
 use App\Entity\Stock;
 use App\Data\InitialMarket;
 use App\Data\StockInfo;
@@ -48,12 +49,14 @@ class InvestmentBankBusinessModelTest extends TestCase
         $mathMock->method('generateStandardNormal')->willReturn(0.0);
         $mathMock->method('generateUniform')->willReturn(0.50); // No regulatory fine
 
-        // High VIX environment to test CORV's vix_arbitrage_scalar = 2.00
+        // Neutral macro baseline with VIX = 0.28 (10% above VIX_ARBITRAGE_FLOOR 0.18, within BASEL_VAR_VOL_TARGET 0.30)
         $macroState = \App\DTO\MacroStateDTO::fromArray([
-            'output_gap_ema' => 0.0,
-            'policy_rate_ema' => 0.04,
-            'yield_5y_ema' => 0.045, // Neutral DCM curve slope (0.0050 spread over policy rate)
-            'market_volatility_ema' => 0.28, // 10% above VIX_ARBITRAGE_FLOOR (0.18)
+            'output_gap_ema'          => 0.0,
+            'policy_rate_ema'         => 0.04,
+            'yield_5y_ema'            => 0.04, // Neutral curve slope (0.0)
+            'market_volatility_ema'   => 0.28,
+            'macro_credit_spread_ema' => InvestmentBankBusinessModel::DEAL_BASELINE_CREDIT_SPREAD, // Neutral spread (0.02)
+            'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM, // Neutral ERP (0.05)
         ]);
 
         $result = $this->model->computeActualFinancials(
@@ -67,14 +70,14 @@ class InvestmentBankBusinessModelTest extends TestCase
         );
 
         // CORV overrides: advisory_weight = 0.25, trading_weight = 0.75, vix_arbitrage_scalar = 2.00
-        // volatilityArbitrage = (0.28 - 0.18) * 2.00 = 0.20
         // advisoryRevenue = 1000.0 * 0.25 * 1.0 = 250.0
+        // volatilityArbitrage = (0.28 - 0.18) * 2.00 * 1.0 (varDeleverageFactor = 1.0) = 0.20
         // tradingRevenue  = 1000.0 * 0.75 * (1.0 + 0.20) = 900.0
-        // actual_revenue  = 250.0 + 900.0 = 1150.0
+        // actualRevenue   = 250.0 + 900.0 = 1150.0
         $this->assertEqualsWithDelta(1150.0, $result->actualRevenue, 0.001);
     }
 
-    public function testExtremeVixSpikeIsCappedByVarLimits(): void
+    public function testExtremeVixSpikeIsCappedByBaselFrtbVarLimits(): void
     {
         $stock = new Stock();
         $stock->setTicker('GS');
@@ -83,14 +86,16 @@ class InvestmentBankBusinessModelTest extends TestCase
         $mathMock->method('generateStandardNormal')->willReturn(0.0);
         $mathMock->method('generateUniform')->willReturn(0.50);
 
-        // Extreme 2008-level VIX spike (0.80) -> vixGap = 0.62
-        // Effective VIX gap is capped at MAX_VIX_ARBITRAGE_GAP (0.30)
-        // volatilityArbitrage = 0.30 * 1.20 = 0.36
+        // Extreme 2008-level VIX panic (0.80) -> vixGap = 0.62
+        // Basel FRTB volatility targeting deleveraging: varDeleverageFactor = 0.30 / 0.80 = 0.375
+        // volatilityArbitrage = (0.62 * 1.20) * 0.375 = 0.279
         $macroState = \App\DTO\MacroStateDTO::fromArray([
-            'output_gap_ema' => 0.0,
-            'policy_rate_ema' => 0.04,
-            'yield_5y_ema' => 0.045,
-            'market_volatility_ema' => 0.80,
+            'output_gap_ema'          => 0.0,
+            'policy_rate_ema'         => 0.04,
+            'yield_5y_ema'            => 0.04,
+            'market_volatility_ema'   => 0.80,
+            'macro_credit_spread_ema' => InvestmentBankBusinessModel::DEAL_BASELINE_CREDIT_SPREAD,
+            'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
         ]);
 
         $result = $this->model->computeActualFinancials(
@@ -104,11 +109,87 @@ class InvestmentBankBusinessModelTest extends TestCase
         );
 
         // Default weights: advisory = 0.40, trading = 0.60
-        // advisoryRevenue = 1000.0 * 0.40 = 400.0
-        // tradingRevenue = 1000.0 * 0.60 * (1.0 + 0.36) = 816.0
-        // total = 1216.0
-        // Without VaR cap, volatilityArbitrage would be 0.62 * 1.20 = 0.744 and total = 1446.4
-        $this->assertEqualsWithDelta(1216.0, $result->actualRevenue, 0.1);
+        // advisoryRevenue = 1000.0 * 0.40 * 1.0 = 400.0
+        // tradingRevenue  = 1000.0 * 0.60 * (1.0 + 0.279) = 767.4
+        // total           = 400.0 + 767.4 = 1167.4
+        // Without VaR deleveraging, tradingRevenue would be 1000 * 0.60 * (1 + 0.744) = 1046.4, total = 1446.4
+        $this->assertEqualsWithDelta(1167.4, $result->actualRevenue, 0.01);
+    }
+
+    public function testOptionsDeskVegaAndIsolatedGammaPhysics(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('PERE'); // PERE: advisory = 0.0, trading = 0.40, options_premium_income = 0.60, vix_scalar = 1.80
+
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathMock->method('generateUniform')->willReturn(0.50);
+
+        $macroState = \App\DTO\MacroStateDTO::fromArray([
+            'output_gap_ema'          => 0.0,
+            'policy_rate_ema'         => 0.04,
+            'yield_5y_ema'            => 0.04,
+            'market_volatility_ema'   => 0.28, // vixGap = 0.10
+            'macro_credit_spread_ema' => InvestmentBankBusinessModel::DEAL_BASELINE_CREDIT_SPREAD,
+            'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
+        ]);
+
+        $result = $this->model->computeActualFinancials(
+            $stock,
+            1000.0,
+            0.50,
+            100.0,
+            0.14,
+            $macroState,
+            $mathMock
+        );
+
+        // optionsVegaBonus = 0.10 * 1.50 = 0.15 -> optionsRevenue = 1000 * 0.60 * 1.15 = 690.0
+        // tradingRevenue  = 1000 * 0.40 * (1 + 0.10 * 1.80) = 472.0
+        // actualRevenue   = 690.0 + 472.0 = 1162.0
+        $this->assertEqualsWithDelta(1162.0, $result->actualRevenue, 0.01);
+
+        // gammaHedgingCost = (0.10 * 0.60) * 0.60 (optionsWeight) = 0.036
+        // rawMargin = 0.50 + 0.036 = 0.536 (variable cost ratio)
+        // Check clamped margin in result
+        $this->assertEqualsWithDelta(0.536, $result->clampedMargin, 0.001);
+        $this->assertEqualsWithDelta(1162.0 * 0.536, $result->actualVariableCosts, 0.01);
+    }
+
+    public function testCostOfCapitalAndMacroElasticityStimulatesAdvisoryRevenue(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('KING'); // KING: advisory = 0.75, trading = 0.25
+
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathMock->method('generateUniform')->willReturn(0.50);
+
+        // Boom conditions: +2% output gap, ERP down 100bps, Credit spreads tight by 50bps, curve steep by 200bps
+        $macroState = \App\DTO\MacroStateDTO::fromArray([
+            'output_gap_ema'          => 0.02,  // mnaOutputGap = 0.02 * 3.00 = 0.06
+            'equity_risk_premium'     => 0.04,  // erpGap = (0.05 - 0.04) * 5.00 = 0.05
+            'macro_credit_spread_ema' => 0.015, // creditSpreadGap = (0.020 - 0.015) * 10.0 = 0.05
+            'policy_rate_ema'         => 0.03,
+            'yield_5y_ema'            => 0.05,  // curveSlope = (0.05 - 0.03) * 2.50 = 0.05
+            'market_volatility_ema'   => 0.18,  // neutral VIX floor
+        ]);
+
+        $result = $this->model->computeActualFinancials(
+            $stock,
+            1000.0,
+            0.50,
+            100.0,
+            0.14,
+            $macroState,
+            $mathMock
+        );
+
+        // advisoryMacroFactor = mnaStimulus (0.06 + 0.025) + dcmStimulus (0.05 + 0.05) = +0.185 (+18.5% stimulus)
+        // advisoryRevenue = 1000.0 * 0.75 * (1.0 + 0.185) = 888.75
+        // tradingRevenue  = 1000.0 * 0.25 * 1.0 = 250.0
+        // actualRevenue   = 888.75 + 250.0 = 1138.75
+        $this->assertEqualsWithDelta(1138.75, $result->actualRevenue, 0.01);
     }
 
     public function testWholesaleLeverageLimitMatchesOperatingCapacity(): void

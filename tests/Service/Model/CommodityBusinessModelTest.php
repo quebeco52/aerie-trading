@@ -6,6 +6,7 @@ namespace App\Tests\Service\Model;
 
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
 use App\Service\Model\CommodityBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -88,7 +89,7 @@ class CommodityBusinessModelTest extends TestCase
             mathUtility: $this->mathUtility
         );
 
-        // Spot price revenue surges aggressively under high inflation + energy spike
+        // Spot price revenue surges aggressively under high inflation + energy spike (Schwartz convenience yield)
         $this->assertGreaterThan(
             $normalResult->streamRevenue['spot_price'] * 1.5,
             $spikeResult->streamRevenue['spot_price']
@@ -168,5 +169,185 @@ class CommodityBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(60_000_000.0, $cndrRes->streamRevenue['extraction_volume'], 1.0);
         $this->assertEqualsWithDelta(40_000_000.0, $cndrRes->streamRevenue['spot_price'], 1.0);
         $this->assertEqualsWithDelta(0.0, $cndrRes->streamRevenue['refining_spread'], 1.0);
+    }
+
+    public function testRicardianMarginalCostIncreasesVariableCostRatioOnExtractionSurge(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('GEN_COMMODITY');
+        $stock->setBeta('1.0');
+
+        $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 100.0);
+
+        // Neutral run: Z = 0 across all streams
+        $mathNeutral = $this->createMock(MathUtility::class);
+        $mathNeutral->method('generatePersistentZ')->willReturn(0.0);
+
+        $resNeutral = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 20_000_000.0,
+            baselineVol: 0.10,
+            macroState: $macro,
+            mathUtility: $mathNeutral
+        );
+
+        // Surge extraction volume: extraction_volume Z = 2.0, other streams = 0.0
+        $mathSurge = $this->createMock(MathUtility::class);
+        $mathSurge->method('generatePersistentZ')->willReturnOnConsecutiveCalls(
+            2.0, // extraction_volume
+            0.0, // spot_price
+            0.0, // refining_spread
+            0.0  // event
+        );
+
+        $resSurge = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 20_000_000.0,
+            baselineVol: 0.10,
+            macroState: $macro,
+            mathUtility: $mathSurge
+        );
+
+        // Ricardian friction increases the variable cost ratio (clampedMargin)
+        $this->assertGreaterThan($resNeutral->clampedMargin, $resSurge->clampedMargin);
+    }
+
+    public function testEnergyPriceSpikeSqueezesRefiningCrackSpreadMargin(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('CASC');
+        $stock->setBeta('1.0');
+
+        // Neutral energy vs heavy energy feedstock price spike with neutral demand (outputGap = 0)
+        $neutralMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 100.0);
+        $spikeMacro   = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 180.0);
+
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $neutralRes = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $neutralMacro, $mathMock);
+        $spikeRes   = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $spikeMacro, $mathMock);
+
+        // Input drag reduces downstream refining spread revenue during an energy price spike
+        $this->assertGreaterThan($spikeRes->streamRevenue['refining_spread'], $neutralRes->streamRevenue['refining_spread']);
+    }
+
+    public function testEnvironmentalDisasterImposesPenaltyAndExtractionThrottling(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('GEN_COMMODITY');
+        $stock->setBeta('1.0');
+
+        $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 100.0);
+
+        $mathDisaster = $this->createMock(MathUtility::class);
+        $mathDisaster->method('generatePersistentZ')->willReturnOnConsecutiveCalls(
+            0.0,   // extraction_volume
+            0.0,   // spot_price
+            0.0,   // refining_spread
+            -2.70  // event Z < -2.60 (ENVIRONMENTAL_DISASTER)
+        );
+
+        $result = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 20_000_000.0,
+            baselineVol: 0.0,
+            macroState: $macro,
+            mathUtility: $mathDisaster
+        );
+
+        $this->assertSame(ShockEvent::ENVIRONMENTAL_DISASTER, $result->eventType);
+        $this->assertTrue($result->isPublicEvent);
+
+        // Baseline extraction revenue without disaster would be 100M * 0.45 = 45M.
+        // With disaster multiplier 0.85: 45M * 0.85 = 38.25M.
+        $this->assertEqualsWithDelta(38_250_000.0, $result->streamRevenue['extraction_volume'], 1.0);
+
+        // Disaster penalty adds 0.08 on top of the physical extraction/refining cost base (0.2883 + 0.08 = 0.3683)
+        $this->assertEqualsWithDelta(0.3683, $result->clampedMargin, 0.001);
+    }
+
+    public function testGeopoliticalSanctionsThrottlesExtractionVolume(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('GEN_COMMODITY');
+        $stock->setBeta('1.0');
+
+        $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 100.0);
+
+        $mathSanctions = $this->createMock(MathUtility::class);
+        $mathSanctions->method('generatePersistentZ')->willReturnOnConsecutiveCalls(
+            0.0,   // extraction_volume
+            0.0,   // spot_price
+            0.0,   // refining_spread
+            -2.30  // event Z < -2.20 and > -2.60 (GEOPOLITICAL_SANCTIONS)
+        );
+
+        $result = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 20_000_000.0,
+            baselineVol: 0.0,
+            macroState: $macro,
+            mathUtility: $mathSanctions
+        );
+
+        $this->assertSame(ShockEvent::GEOPOLITICAL_SANCTIONS, $result->eventType);
+        // Baseline 45M * 0.75 = 33.75M
+        $this->assertEqualsWithDelta(33_750_000.0, $result->streamRevenue['extraction_volume'], 1.0);
+    }
+
+    public function testGeopoliticalExportBanSurgesSpotPrices(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('GEN_COMMODITY');
+        $stock->setBeta('1.0');
+
+        $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 100.0);
+
+        $mathExportBan = $this->createMock(MathUtility::class);
+        $mathExportBan->method('generatePersistentZ')->willReturnOnConsecutiveCalls(
+            0.0,  // extraction_volume
+            0.0,  // spot_price
+            0.0,  // refining_spread
+            2.50  // event Z > 2.40 (GEOPOLITICAL_EXPORT_BAN)
+        );
+
+        $result = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 20_000_000.0,
+            baselineVol: 0.0,
+            macroState: $macro,
+            mathUtility: $mathExportBan
+        );
+
+        $this->assertSame(ShockEvent::GEOPOLITICAL_EXPORT_BAN, $result->eventType);
+        // Baseline spot revenue 100M * 0.35 = 35M. With 1.30 mult = 45.5M.
+        $this->assertEqualsWithDelta(45_500_000.0, $result->streamRevenue['spot_price'], 1.0);
+    }
+
+    public function testAssetDepreciationDecayAndModernizationGain(): void
+    {
+        $stock = new Stock();
+        $stock->setOperatingMargin('0.20');
+
+        // Underinvestment (reinvestmentRatio = 0.50)
+        $this->model->applyAssetDepreciationDecay($stock, 0.50, 0.25);
+        $decayedMargin = (float) $stock->getOperatingMargin();
+        $this->assertLessThan(0.20, $decayedMargin);
+
+        // Overinvestment (reinvestmentRatio = 1.50)
+        $this->model->applyAssetDepreciationDecay($stock, 1.50, 0.25);
+        $modernizedMargin = (float) $stock->getOperatingMargin();
+        $this->assertGreaterThan($decayedMargin, $modernizedMargin);
     }
 }

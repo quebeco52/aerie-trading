@@ -67,6 +67,9 @@ class AutoManufacturerBusinessModelTest extends TestCase
 
         $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, policyRateEma: 0.03, yield10yEma: 0.04, yield2yEma: 0.03);
 
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
         $result = $this->model->computeActualFinancials(
             $stock,
             expectedRevenue: 100_000_000.0,
@@ -74,7 +77,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
             fixedCosts: 25_000_000.0,
             baselineVol: 0.0,
             macroState: $macro,
-            mathUtility: $this->mathUtility
+            mathUtility: $mathMock
         );
 
         // FALC tuned: 55% Mass Market Fleet, 25% Apex Luxury, 20% Software Telematics
@@ -89,11 +92,14 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $stock->setTicker('FALC');
         $stock->setBeta('1.75');
 
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
         $neutralMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, policyRateEma: 0.03, equityRiskPremium: 0.045, qeActive: false);
         $wealthBoomMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, policyRateEma: 0.03, equityRiskPremium: 0.035, qeActive: true, qeIntensity: 1.0);
 
-        $neutralResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 25_000_000.0, 0.0, $neutralMacro, $this->mathUtility);
-        $wealthBoomResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 25_000_000.0, 0.0, $wealthBoomMacro, $this->mathUtility);
+        $neutralResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 25_000_000.0, 0.0, $neutralMacro, $mathMock);
+        $wealthBoomResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 25_000_000.0, 0.0, $wealthBoomMacro, $mathMock);
 
         // Apex luxury revenue expands when financial asset wealth (ERP compression) and central bank liquidity surge
         $this->assertGreaterThan(
@@ -110,11 +116,14 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $stock->setTicker('FALC');
         $stock->setBeta('1.75');
 
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
         $baselineMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, policyRateEma: 0.03);
         $inflationMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.06, policyRateEma: 0.03);
 
-        $baselineResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 25_000_000.0, 0.0, $baselineMacro, $this->mathUtility);
-        $inflationResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 25_000_000.0, 0.0, $inflationMacro, $this->mathUtility);
+        $baselineResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 25_000_000.0, 0.0, $baselineMacro, $mathMock);
+        $inflationResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 25_000_000.0, 0.0, $inflationMacro, $mathMock);
 
         // Apex luxury hypercars exert Veblen pricing power when inflation exceeds target (0.04 excess * 0.80 = +3.2%)
         $this->assertGreaterThan(

@@ -17,7 +17,9 @@ use App\Service\Macro\MacroEngine;
 class ReitBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Analyst Visibility & Error ---
+    /** Base analyst visibility into predictable contracted commercial real estate cash flows. */
     public const BASE_COVERAGE_VISIBILITY = 0.70;
+    /** Standard deviation of Wall Street analyst error when estimating REIT revenues. */
     public const BASE_COVERAGE_ERROR = 0.10;
 
     public function getModelThresholds(): array
@@ -26,63 +28,106 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     }
 
     // --- Cap Rate & Portfolio Turnover Rails ---
+    /** Fraction of property portfolio acquired/divested per quarter adjusting baseline cap rate. */
     public const PORTFOLIO_TURNOVER_RATE    = 0.025;
+    /** Fallback benchmark 10-year Treasury yield when macro state yield is unavailable. */
     public const DEFAULT_10Y_YIELD_FALLBACK = 0.04;
+    /** Absolute maximum cap rate clamp floor to prevent unrealistically high property yields. */
     public const MAX_CAP_RATE_CLAMP         = 0.15;
+    /** Maximum spread buffer above 10-year Treasury yield allowed for market cap rates. */
     public const CAP_RATE_CEILING_SPREAD    = 0.12;
+    /** Default annual property depreciation rate for real estate asset write-offs. */
     public const DEFAULT_DEPRECIATION_RATE  = 0.05;
 
     // --- EBIT Yield & ROIC Blending ---
+    /** Weight of target net operating income yield when blending with historical ROIC. */
     public const TARGET_EBIT_WEIGHT         = 0.50;
+    /** Weight of trailing twelve month ROIC when blending with target EBIT yield. */
     public const TTM_ROIC_WEIGHT            = 0.50;
+    /** Annualization multiplier applied to quarterly Net Operating Income / Invested Capital. */
     public const ROIC_ANNUALIZATION_MULT    = 4.00;
+    /** Minimum allowable ROIC floor for distressed real estate portfolios. */
     public const MIN_ROIC_CLAMP             = -0.50;
+    /** Maximum allowable ROIC ceiling to prevent unrealistic runaway property yields. */
     public const MAX_ROIC_CLAMP             = 1.00;
+    /** Weight given to current quarter NOI return when updating ROIC EMA. */
     public const ROIC_TTM_EMA_WEIGHT        = 0.25;
+    /** Weight given to historical trailing twelve month ROIC when updating ROIC EMA. */
     public const ROIC_TTM_HIST_WEIGHT       = 0.75;
 
     // --- Revenue & Vacancy Shock Physics ---
-    public const REVENUE_VARIANCE_SCALAR    = 0.05;
-    public const HOSPITALITY_VARIANCE_SCALAR = 1.50; // Extracted magic number
-    public const SECURITIZATION_VARIANCE_SCALAR = 2.00; // Extracted magic number
-    public const LONGEVITY_VARIANCE_SCALAR = 0.25; // Extracted magic number
+    /** Base volatility scalar applied to sticky commercial lease revenues. */
+    public const REVENUE_VARIANCE_SCALAR        = 0.05;
+    /** Volatility multiplier for daily-rate hospitality and hotel revenues. */
+    public const HOSPITALITY_VARIANCE_SCALAR    = 1.50;
+    /** Volatility multiplier for securitized mortgage and debt packaging income. */
+    public const SECURITIZATION_VARIANCE_SCALAR = 2.00;
+    /** Volatility multiplier for longevity-linked bond yields and pension assets. */
+    public const LONGEVITY_VARIANCE_SCALAR      = 0.25;
 
-    public const RENT_ESCALATOR_CAPTURE     = 0.80;
-    public const VACANCY_Z_THRESHOLD        = -1.50;
-    public const VACANCY_LOSS_SCALAR        = 0.08;
-    public const BENIGN_LEASING_Z_FLOOR     = 1.00;
-    public const LEASING_BONUS_SCALE        = 0.015;
-    public const CAP_RATE_SPREAD_SENSITIVITY = 1.20;
-    public const REFINANCING_WALL_DRAG      = 0.25;
-    public const MIN_EFFICIENCY_RATIO       = 0.35;
-    public const MAX_VARIABLE_MARGIN_CLAMP  = 1.50;
-    public const MIN_VARIABLE_MARGIN_CLAMP  = 0.01;
+    /** Fraction of excess CPI inflation captured via contractual rent escalators. */
+    public const RENT_ESCALATOR_CAPTURE         = 0.80;
+    /** Z-score threshold below which elevated tenant defaults and vacancies trigger margin penalties. */
+    public const VACANCY_Z_THRESHOLD            = -1.50;
+    /** Scalar applied to tenant default Z-score severity to determine vacancy margin loss. */
+    public const VACANCY_LOSS_SCALAR            = 0.08;
+    /** Z-score floor above which strong leasing demand generates operational efficiency bonuses. */
+    public const BENIGN_LEASING_Z_FLOOR         = 1.00;
+    /** Scalar applied to leasing bonus Z-score above floor. */
+    public const LEASING_BONUS_SCALE            = 0.015;
+    /** Sensitivity of market cap rates to macroeconomic credit spread fluctuations. */
+    public const CAP_RATE_SPREAD_SENSITIVITY    = 1.20;
+    /** Operating margin drag per 100bps of 10-year Treasury yield above default fallback. */
+    public const REFINANCING_WALL_DRAG          = 0.25;
+    /** Minimum operating efficiency ratio (operating revenue / fixed costs) floor. */
+    public const MIN_EFFICIENCY_RATIO           = 0.35;
+    /** Upper clamp for realized variable margin. */
+    public const MAX_VARIABLE_MARGIN_CLAMP      = 1.50;
+    /** Lower clamp for realized variable margin. */
+    public const MIN_VARIABLE_MARGIN_CLAMP      = 0.01;
 
     // --- Event Lore Thresholds ---
+    /** Severe tenant default Z-score triggering catastrophic commercial bankruptcy lore. */
     public const LORE_ANCHOR_BANKRUPTCY_Z   = -2.00;
+    /** Moderate vacancy Z-score triggering elevated lease vacancy lore. */
     public const LORE_ELEVATED_VACANCY_Z    = -1.50;
 
     // --- REIT Reversion & Valuation ---
+    /** IRC Section 857 corporate tax rate exemption for qualifying pass-through REITs. */
     public const PASS_THROUGH_TAX_RATE      = 0.00;
+    /** Fallback positive interest coverage ratio when interest expense is zero. */
     public const INFINITE_ICR_POS_FALLBACK  = 999.0;
+    /** Fallback negative interest coverage ratio when operating income and interest expense are zero/negative. */
     public const INFINITE_ICR_NEG_FALLBACK  = -999.0;
 
     // --- Capital Reinvestment & Asset Depreciation Physics ---
+    /** Annual margin decay rate when capital reinvestment falls below depreciation maintenance. */
     public const DEPRECIATION_DECAY_RATE      = 0.015;
+    /** Annual margin gain rate from property modernization when reinvestment exceeds depreciation. */
     public const MODERNIZATION_GAIN_RATE      = 0.008;
+    /** Minimum structural operating margin floor after extended asset degradation. */
     public const MIN_OPERATING_MARGIN_FLOOR   = 0.05;
+    /** Maximum structural operating margin ceiling achievable through property modernization. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.45;
 
     // --- Aggressive Property Acquisition Borrowing ---
+    /** Base probability of REIT expanding balance sheet debt to fund property acquisitions. */
     public const DEBT_EXPANSION_BASE_PROB   = 0.80;
+    /** Sensitivity of debt expansion probability to favorable yield spread multiplier. */
     public const DEBT_EXPANSION_PROB_MULT   = 0.20;
+    /** Base fraction of debt capacity utilized during property acquisition cycle. */
     public const DEBT_EXPANSION_BASE_AGGR   = 0.15;
+    /** Sensitivity of debt expansion utilization to positive yield spreads. */
     public const DEBT_EXPANSION_AGGR_MULT   = 0.35;
 
     // --- Valuation & Lease Resistance Moat ---
+    /** Weight given to earnings capitalization in REIT intrinsic fair value blending. */
     public const FAIR_VALUE_EARNINGS_WEIGHT = 0.30;
+    /** Weight given to net asset value (P/B) in REIT intrinsic fair value blending. */
     public const FAIR_VALUE_BOOK_WEIGHT     = 0.40;
+    /** Weight given to dividend discount model (DDM) in REIT intrinsic fair value blending. */
     public const FAIR_VALUE_DDM_WEIGHT      = 0.30;
+    /** Half-life speed (quarters) at which long-term lease margins revert toward sector equilibrium. */
     public const LEASE_REVERSION_SPEED      = 2.0;
 
     public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
@@ -134,7 +179,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             ModelParam::StickyLeaseWeight->value            => 0.85,
             ModelParam::VariableHospitalityWeight->value    => 0.15,
             ModelParam::SecuritizationIncomeWeight->value   => 0.00,
-            ModelParam::LongevityBondYieldWeight->value    => 0.00,
+            ModelParam::LongevityBondYieldWeight->value     => 0.00,
         ]);
 
         $rawSecuritizationWeight = $params[ModelParam::SecuritizationIncomeWeight];
@@ -162,7 +207,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $securitizationWeight = $activeWeights['securitization_income'] ?? 0.0;
         $longevityWeight      = $activeWeights['longevity_bond_yield'] ?? 0.0;
 
-        $revenueZ = $streams->generateZ('lease', 0.25);
+        $revenueZ     = $streams->generateZ('lease', 0.25);
         $hospitalityZ = $streams->generateZ('hospitality', 0.25);
 
         // Core Revenue Shocks
@@ -184,18 +229,22 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         ];
 
         $securitizationRevenue = 0.0;
-        $securitizationZ = 0.0;
+        $securitizationZ       = 0.0;
+        $securitizationShock   = 0.0;
         if ($securitizationWeight > 0.0) {
-            $securitizationZ = $streams->generateZ('securitization_income', 0.40);
-            $securitizationRevenue = max(0.0, $expectedRevenue * $securitizationWeight * (1.0 + ($securitizationZ * $baselineVol * self::SECURITIZATION_VARIANCE_SCALAR)));
+            $securitizationZ       = $streams->generateZ('securitization_income', 0.40);
+            $securitizationShock   = $securitizationZ * $baselineVol * self::SECURITIZATION_VARIANCE_SCALAR;
+            $securitizationRevenue = max(0.0, $expectedRevenue * $securitizationWeight * (1.0 + $securitizationShock));
             $streamRevenues['securitization_income'] = $securitizationRevenue;
         }
 
         $longevityRevenue = 0.0;
-        $longevityZ = 0.0;
+        $longevityZ       = 0.0;
+        $longevityShock   = 0.0;
         if ($longevityWeight > 0.0) {
-            $longevityZ = $streams->generateZ('longevity_bond_yield', 0.60);
-            $longevityRevenue = max(0.0, $expectedRevenue * $longevityWeight * (1.0 + ($longevityZ * $baselineVol * self::LONGEVITY_VARIANCE_SCALAR)));
+            $longevityZ       = $streams->generateZ('longevity_bond_yield', 0.60);
+            $longevityShock   = $longevityZ * $baselineVol * self::LONGEVITY_VARIANCE_SCALAR;
+            $longevityRevenue = max(0.0, $expectedRevenue * $longevityWeight * (1.0 + $longevityShock));
             $streamRevenues['longevity_bond_yield'] = $longevityRevenue;
         }
 
@@ -223,15 +272,37 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::REIT_ELEVATED_VACANCIES;
         }
 
-        // FIX: Combine all shocks so analysts can actually predict the outcome
-        $observableShockZ = ($leaseShock * $leaseWeight * 0.8) +
-            ($hospitalityShock * $hospitalityWeight * 0.6) +
-            $rentEscalator;
+        // Aggregate observable revenue shock percentage across active streams (MarketConsensusEngine applies coverage visibility)
+        $observableShockZ = 
+            (($leaseShock + $rentEscalator) * $leaseWeight) +
+            ($hospitalityShock * $hospitalityWeight) +
+            ($securitizationShock * $securitizationWeight) +
+            ($longevityShock * $longevityWeight);
+
+        // Determine primary shock Z across dominant stream or tenant default
+        $primaryShockZ = $revenueZ;
+        $maxAbsZ = abs($revenueZ);
+
+        if (abs($hospitalityZ) > $maxAbsZ) {
+            $maxAbsZ = abs($hospitalityZ);
+            $primaryShockZ = $hospitalityZ;
+        }
+        if ($securitizationWeight > 0.0 && abs($securitizationZ) > $maxAbsZ) {
+            $maxAbsZ = abs($securitizationZ);
+            $primaryShockZ = $securitizationZ;
+        }
+        if ($longevityWeight > 0.0 && abs($longevityZ) > $maxAbsZ) {
+            $maxAbsZ = abs($longevityZ);
+            $primaryShockZ = $longevityZ;
+        }
+        if (abs($tenantDefaultZ) > $maxAbsZ) {
+            $primaryShockZ = $tenantDefaultZ;
+        }
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: abs($tenantDefaultZ) > abs($revenueZ) ? $tenantDefaultZ : $revenueZ,
+            primaryShockZ: $primaryShockZ,
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,

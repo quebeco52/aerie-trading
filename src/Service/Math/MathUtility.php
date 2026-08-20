@@ -594,6 +594,94 @@ class MathUtility
     }
 
     /**
+     * Calculates the inverse of the standard normal cumulative distribution function (Probit function).
+     * Uses Peter J. Acklam's high-precision rational approximation (maximum error < 1.15e-9).
+     *
+     * @param float $p Probability value in (0, 1). Clamped to [1e-12, 1 - 1e-12] to prevent NaN/Inf.
+     * @return float The standard normal quantile z corresponding to probability p.
+     */
+    public function calculateInverseNormalCDF(float $p): float
+    {
+        $p = max(1e-12, min(1.0 - 1e-12, $p));
+
+        // Coefficients in rational approximations
+        $a1 = -3.969683028665376e+01;
+        $a2 =  2.209460984245205e+02;
+        $a3 = -2.759285104469687e+02;
+        $a4 =  1.383577518672690e+02;
+        $a5 = -3.066479806614716e+01;
+        $a6 =  2.506628277459239e+00;
+
+        $b1 = -5.447609879822406e+01;
+        $b2 =  1.615858368580409e+02;
+        $b3 = -1.556989798598866e+02;
+        $b4 =  6.680131188771972e+01;
+        $b5 = -1.328068155288572e+01;
+
+        $c1 = -7.784894002430293e-03;
+        $c2 = -3.223964580411365e-01;
+        $c3 = -2.400758277161838e+00;
+        $c4 = -2.549732539343734e+00;
+        $c5 =  4.374664141464968e+00;
+        $c6 =  2.938163982698783e+00;
+
+        $d1 =  7.784695709041462e-03;
+        $d2 =  3.224671290700398e-01;
+        $d3 =  2.445134137142996e+00;
+        $d4 =  3.754408661907416e+00;
+
+        $pLow  = 0.02425;
+        $pHigh = 1.0 - $pLow;
+
+        if ($p < $pLow) {
+            // Rational approximation for lower tail
+            $q = sqrt(-2.0 * log($p));
+            return (((((($c1 * $q + $c2) * $q + $c3) * $q + $c4) * $q + $c5) * $q + $c6) /
+                (((($d1 * $q + $d2) * $q + $d3) * $q + $d4) * $q + 1.0));
+        }
+
+        if ($p <= $pHigh) {
+            // Rational approximation for central region
+            $q = $p - 0.5;
+            $r = $q * $q;
+            return (((((($a1 * $r + $a2) * $r + $a3) * $r + $a4) * $r + $a5) * $r + $a6) * $q) /
+                (((((($b1 * $r + $b2) * $r + $b3) * $r + $b4) * $r + $b5) * $r + 1.0));
+        }
+
+        // Rational approximation for upper tail
+        $q = sqrt(-2.0 * log(1.0 - $p));
+        return -(((((($c1 * $q + $c2) * $q + $c3) * $q + $c4) * $q + $c5) * $q + $c6) /
+            (((($d1 * $q + $d2) * $q + $d3) * $q + $d4) * $q + 1.0));
+    }
+
+    /**
+     * Calculates portfolio Expected Loss using the Basel II/III Asymptotic Single Risk Factor (ASRF) Vasicek model.
+     *
+     * Formula: PD(Z) = \Phi( (\Phi^{-1}(PD_LRA) - \sqrt{\rho} * Z) / \sqrt{1 - \rho} )
+     *          EL(Z) = PD(Z) * LGD
+     *
+     * @param float $macroZ Macroeconomic credit shock Z-score (Z < 0 is recession/distress; Z > 0 is economic boom).
+     * @param float $pdLra  Long-run average (through-the-cycle) probability of default.
+     * @param float $rho    Asset correlation factor (\rho \in (0, 1)).
+     * @param float $lgd    Loss given default (\in [0, 1]).
+     * @return float Expected credit loss rate on the portfolio.
+     */
+    public function calculateVasicekExpectedLoss(float $macroZ, float $pdLra, float $rho, float $lgd): float
+    {
+        $pdLra = max(1e-6, min(0.999, $pdLra));
+        $rho   = max(0.001, min(0.999, $rho));
+        $lgd   = max(0.0, min(1.0, $lgd));
+
+        $invPd = $this->calculateInverseNormalCDF($pdLra);
+        $numerator = $invPd - (sqrt($rho) * $macroZ);
+        $denominator = sqrt(1.0 - $rho);
+
+        $conditionalPd = $this->calculateNormalCDF($numerator / $denominator);
+
+        return $conditionalPd * $lgd;
+    }
+
+    /**
      * Calculates the Distance to Default (DD) using Merton's Structural Model.
      *
      * @param float $assetValue      The total value of the firm's assets (V).

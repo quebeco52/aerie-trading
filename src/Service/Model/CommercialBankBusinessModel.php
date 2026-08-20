@@ -54,16 +54,16 @@ class CommercialBankBusinessModel implements BusinessModelInterface
     public const REVENUE_VARIANCE_SCALAR = 0.15;
     /** LGD (Loss-Given-Default) multiplier: collateralized loans suffer lower realized losses than unsecured credit. */
     public const MACRO_DEFAULT_LGD_DRAG  = 0.40;
-    /** Provision charge per z-unit when the default z-score breaches the stress threshold. */
-    public const LOSS_PROVISION_Z_FACTOR = 0.04;
+    /** Maximum quarterly reserve release clamp (4% of revenue — avoids unlimited reversal). */
+    public const MAX_PROVISION_REVERSAL  = 0.04;
 
-    // --- Provision Reserve Release (Scaled, Replaces Flat Reversal) ---
-    /** Z-score threshold above which benign credit conditions trigger a reserve release. */
-    public const PROVISION_RELEASE_Z_FLOOR    = 1.00;
-    /** Cost reduction per z-unit of benign credit conditions above the release threshold. */
-    public const PROVISION_REVERSAL_SCALE      = 0.015;
-    /** Maximum quarterly reserve release clamp (4% of revenue — avoids 2021-style unlimited reversal). */
-    public const MAX_PROVISION_REVERSAL        = 0.04;
+    // --- Basel III Vasicek ASRF Credit Model ---
+    /** Long-run average (through-the-cycle) annual default probability for prime bank loan portfolios (~1.5%). */
+    public const LRA_DEFAULT_RATE              = 0.015;
+    /** Asset correlation factor under Basel II/III internal ratings-based approach (IRB) for corporate/commercial exposures. */
+    public const ASSET_CORRELATION_RHO         = 0.15;
+    /** Baseline Loss Given Default (LGD) for senior secured / collateralized bank credit facilities. */
+    public const LGD_BASELINE                  = 0.45;
 
     // --- CECL Forward Provisioning (Credit Spread Channel) ---
     /** Baseline investment-grade corporate credit spread (~200bps). Widening above this triggers proactive reserve builds. */
@@ -71,16 +71,18 @@ class CommercialBankBusinessModel implements BusinessModelInterface
     /** Variable cost add-on per unit of spread widening above baseline. +100bps widening = +8% cost add-on. */
     public const CECL_SPREAD_SENSITIVITY       = 0.80;
 
-    // --- NIM (Net Interest Margin) Squeeze ---
+    // --- Macaulay Duration Gap & IRRBB NIM Physics ---
+    /** Weighted average Macaulay duration of bank loan and mortgage assets in years. */
+    public const ASSET_DURATION_YEARS          = 4.5;
+    /** Weighted average Macaulay duration of customer deposit and wholesale liabilities in years. */
+    public const LIABILITY_DURATION_YEARS      = 1.5;
+    /** Floating-rate asset/liability natural hedge effectiveness dampening duration mismatch exposure. */
+    public const FLOATING_HEDGE_EFFICIENCY     = 0.50;
     /** Break-even NIM floor (~50bps). Steep curve = profit; flat or inverted curve = squeeze. */
     public const NIM_BASE_SPREAD_BUFFER        = 0.005;
-    /** Calibrated so a -100bps inversion produces ~10% variable cost add-on. Tune with NIM_QUADRATIC_COEFF. */
+    /** Calibrated baseline sensitivity for NIM duration gap exposure before company-specific ALM adjustments. */
     public const NIM_INVERSION_SENSITIVITY     = 10.0;
-    /** Quadratic amplifier at extreme inversions. Formula: pow(abs(spread) * SENSITIVITY, 2) * COEFF. */
-    public const NIM_QUADRATIC_COEFF           = 0.10;
-    /** Structural minimum efficiency ratio: the lowest cost-to-revenue ratio any bank can reach, even at perfect NIM.
-     *  Grounded in the fixed portion of bank costs (personnel, tech, compliance ~50-55% of total costs).
-     *  Even JPMorgan's best quarter never broke below ~62%. 0.55 is a theoretical minimum for the leanest operators. */
+    /** Structural minimum efficiency ratio: the lowest cost-to-revenue ratio any bank can reach, even at perfect NIM. */
     public const MIN_EFFICIENCY_RATIO          = 0.55;
 
     // --- Analyst Visibility & Error ---
@@ -373,21 +375,28 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // Loan Loss Provisions (Idiosyncratic Credit Cycle):
-        // Collateralized loans (prime mortgages, corporate debt) have lower LGD than unsecured credit.
+        // Balance sheet loan book (Earning Assets) deployed into credit
+        $equity = (float) $stock->getTotalEquity();
+        $totalDebt = (float) $stock->getTotalDebt();
+        $treasury = (float) $stock->getCorporateTreasury();
+        $effectiveEquity = max(1.0, $equity);
+        $earningAssets = max($effectiveEquity, $effectiveEquity + $totalDebt - $treasury);
+
+        // Basel II/III Vasicek ASRF Credit Risk Physics:
+        // Expected loss on the loan portfolio under macroeconomic credit shock $defaultZ.
+        $baselineEl = $mathUtility->calculateVasicekExpectedLoss(0.0, self::LRA_DEFAULT_RATE, self::ASSET_CORRELATION_RHO, self::LGD_BASELINE);
+        $conditionalEl = $mathUtility->calculateVasicekExpectedLoss($defaultZ, self::LRA_DEFAULT_RATE, self::ASSET_CORRELATION_RHO, self::LGD_BASELINE);
+        $annualLossDelta = $conditionalEl - $baselineEl;
+
+        // Convert annual loan loss rate delta to quarterly dollar credit provision shock
+        $quarterlyDollarLoss = ($annualLossDelta / 4.0) * $earningAssets;
+        $provisionCostAddon = $quarterlyDollarLoss / max(1.0, $actualRevenue);
+
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
         $macroDefaultDrag = $sentimentShift < 0.0 ? abs($sentimentShift) * self::MACRO_DEFAULT_LGD_DRAG : 0.0;
 
-        if ($defaultZ < self::SECTOR_SHOCK_ELEVATED_DEFAULT_Z) {
-            $provisionShock = abs($defaultZ) * self::LOSS_PROVISION_Z_FACTOR;
-        } elseif ($defaultZ > self::PROVISION_RELEASE_Z_FLOOR) {
-            // Scaled reserve release: scales with how benign conditions are, not a flat 1%.
-            // Models CECL reserve releases: 2021-style large releases when credit is pristine.
-            $provisionShock = -min(self::MAX_PROVISION_REVERSAL, ($defaultZ - self::PROVISION_RELEASE_Z_FLOOR) * self::PROVISION_REVERSAL_SCALE);
-        } else {
-            $provisionShock = 0.0;
-        }
-        $lossProvisionShock = ($provisionShock + $macroDefaultDrag);
+        // Clamp reserve release to MAX_PROVISION_REVERSAL to avoid unbounded write-backs
+        $lossProvisionShock = max(-self::MAX_PROVISION_REVERSAL, $provisionCostAddon) + $macroDefaultDrag;
 
         // CECL Forward Provisioning (Credit Spread Channel):
         // Under CECL accounting, banks must provision against EXPECTED future losses.
@@ -395,23 +404,20 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $creditSpread = $macroState->macroCreditSpreadEma;
         $ceclDrag = max(0.0, ($creditSpread - self::CECL_BASELINE_CREDIT_SPREAD) * self::CECL_SPREAD_SENSITIVITY);
 
-        // Net Interest Margin (NIM) Squeeze:
-        // Banks borrow short-term (deposits) and lend long-term (mortgages/commercial).
-        // A steep yield curve is highly profitable. An inversion collapses the spread.
+        // Macaulay Duration Gap & IRRBB NIM Physics:
+        // Bank assets (long-term loans/mortgages) have higher duration than liabilities (short-term deposits/repo).
+        // Banks utilize interest rate swaps & natural floating-rate debt to hedge a portion of this duration gap.
         $yield10y = $macroState->yield10yEma;
         $yield2y  = $macroState->yield2yEma;
         $bankSpread = $yield10y - $yield2y;
 
-        if ($bankSpread < 0) {
-            $nimSqueeze = (self::NIM_BASE_SPREAD_BUFFER - $bankSpread)
-                + pow(abs($bankSpread) * $inversionSensitivity, 2) * self::NIM_QUADRATIC_COEFF;
-        } else {
-            // Duration Beta: scales steep-curve term premium gain by duration risk exposure.
-            // Eliminates "free money parameter" exploit where low inversionSensitivity had no upside trade-off.
-            $durationBeta = $inversionSensitivity / self::NIM_INVERSION_SENSITIVITY;
-            $spreadGain = max(0.0, $bankSpread - self::NIM_BASE_SPREAD_BUFFER);
-            $nimSqueeze = self::NIM_BASE_SPREAD_BUFFER - ($bankSpread + ($spreadGain * ($durationBeta - 1.0)));
-        }
+        $rawDurationGap = max(0.0, self::ASSET_DURATION_YEARS - self::LIABILITY_DURATION_YEARS);
+        $floatingRatio = (float) $stock->getFloatingDebtRatio();
+        $hedgeMultiplier = ($inversionSensitivity / self::NIM_INVERSION_SENSITIVITY) * (1.0 - ($floatingRatio * self::FLOATING_HEDGE_EFFICIENCY));
+        $effectiveDurationGap = $rawDurationGap * max(0.10, $hedgeMultiplier);
+
+        $curveDeviation = $bankSpread - self::NIM_BASE_SPREAD_BUFFER;
+        $nimSqueeze = - ($curveDeviation * $effectiveDurationGap);
 
         // Physics-grounded Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
         // Crucially, NIM squeeze and CECL provision charges apply proportionally to the NII revenue share ($niiWeight),

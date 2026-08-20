@@ -11,7 +11,6 @@ use App\DTO\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
-use App\Service\Math\CorporateMetrics;
 use App\Service\Math\MathUtility;
 
 /**
@@ -19,11 +18,11 @@ use App\Service\Math\MathUtility;
  * 
  * Financial Physics:
  * - Tri-Stream Defense Engine:
- *      1. Cost-Plus Sovereign Procurement & Sustainment: Multi-year appropriations, high persistence, dynamic FAR 16.3 inflation escalators.
- *      2. Fixed-Price Development & Classified R&D: Engineering & manufacturing development (EMD) subject to ASC 606 reach-forward losses.
- *      3. Foreign Military Sales (FMS): High-margin international exports driven by geopolitical threat levels and export licensing.
- * - Sovereign Fiscal Physics: Immune to consumer recessions, but exposed to Continuing Resolution (CR) budget freezes during debt ceiling stress.
- * - FAR Progress Payment Withholding: Program overruns/defects trigger working capital expansion (FAR 32.503-6) compressing FCF.
+ *      1. Cost-Plus Sovereign Procurement: Protected by FAR 16.3 inflation escalators.
+ *      2. Fixed-Price Development (EMD): ASC 606 reach-forward losses; vulnerable to general inflation.
+ *      3. Foreign Military Sales (FMS): High-margin exports where Wright's Law drives margin expansion.
+ * - Sovereign Fiscal Physics: Immune to consumer recessions; exposed to Continuing Resolution (CR) budget freezes.
+ * - FAR Progress Payment Withholding: Program overruns/defects trigger working capital expansion (FAR 32.503-6).
  * - Classified Tooling & Platform Modernization: Multi-decade tooling tech debt vs next-gen franchise margin expansion.
  */
 class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
@@ -57,14 +56,18 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     public const SOVEREIGN_STRESS_THRESHOLD = 0.030;
     /** Revenue drag scalar applied to cost-plus lot allocations during debt ceiling freezes. */
     public const CR_BUDGET_DRAG_SCALAR = 2.50;
+    /** Maximum allowable revenue multiplier drag during a severe Continuing Resolution freeze. */
+    public const MAX_CR_BUDGET_DRAG = 0.50;
 
-    // --- Fixed-Price Development Forward-Loss Physics ---
+    // --- Fixed-Price ASC 606 & Production Physics ---
     /** Negative Z-score threshold indicating development program overruns and reach-forward losses. */
     public const FORWARD_LOSS_Z_SCORE = -1.50;
     /** Variable margin penalty for ASC 606 reach-forward losses on fixed-price contracts. */
     public const FORWARD_LOSS_PENALTY = 0.08;
-    /** Sensitivity scalar for energy and raw material cost inflation on fixed-price programs. */
-    public const FIXED_PRICE_MATERIAL_DRAG_SCALAR = 0.30;
+    /** Sensitivity scalar translating excess macroeconomic inflation into fixed-price engineering overruns. */
+    public const FIXED_PRICE_INFLATION_DRAG_SCALAR = 0.50;
+    /** Margin efficiency elasticity (Wright's Law) applied to mature FMS production volume scale. */
+    public const PRODUCTION_LEARNING_CURVE_ELASTICITY = 0.020;
 
     // --- Geopolitical Sanctions & Conflict Tail Shocks ---
     /** Negative Z-score threshold indicating congressional foreign military export sanctions or bans. */
@@ -91,8 +94,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     public const MEGA_CONTRACT_WIN_MULT = 1.18;
 
     // --- Program Execution & Classified Tooling Physics ---
-    /** Margin efficiency elasticity per unit of contract execution momentum. */
-    public const PROGRAM_EXECUTION_ELASTICITY = 0.015;
     /** Margin decay rate per unit of underinvestment in classified tooling and secure facilities. */
     public const DEFENSE_TOOLING_DECAY_RATE = 0.018;
     /** Margin gain rate per unit of logarithmic overinvestment in next-gen platforms. */
@@ -108,18 +109,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     /** Elevated net working capital intensity during FAR 32.503-6 progress payment withholding. */
     public const WITHHOLDING_NWC_INTENSITY = 0.18;
 
-    // --- ROIC Annualization & Multi-Year Smoothing ---
-    /** Multiplier to annualize quarterly NOPAT into annual economic return. */
-    public const ROIC_ANNUALIZATION_MULT = 4.00;
-    /** Lower bound clamp for dynamic ROIC to prevent numerical divergence. */
-    public const MIN_ROIC_CLAMP = -0.50;
-    /** Upper bound clamp for dynamic ROIC to prevent perpetual explosion. */
-    public const MAX_ROIC_CLAMP = 1.00;
-    /** Weight assigned to the current quarter's annualized return in multi-year smoothing. */
-    public const ROIC_TTM_EMA_WEIGHT = 0.20;
-    /** Weight assigned to historical TTM ROIC in multi-year defense procurement smoothing. */
-    public const ROIC_TTM_HIST_WEIGHT = 0.80;
-
     public function getModelThresholds(): array
     {
         return [
@@ -127,7 +116,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             'bankrupt_equity'          => 0.0,
             'distress_equity'          => 0.0,
             'warning_equity'           => 0.0,
-            // FIX 1: Raised to 2.0. Sovereign contractors can safely carry high debt without entering death spirals.
             'wholesale_leverage_limit' => 2.0,
             'dividend_crisis_icr'      => 1.50,
             'buyback_min_icr'          => 2.00,
@@ -142,10 +130,12 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     {
         return 0.30;
     }
+
     public function getSurpriseBlendWeights(): array
     {
         return ['eps_weight' => 0.70, 'revenue_weight' => 0.30];
     }
+
     public function getSecularGrowthRate(Stock $stock): float
     {
         return 0.02;
@@ -157,6 +147,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $fixedPriceZ = (float) ($momentum['fixed_price_development'] ?? 0.0);
         $eventZ = (float) ($momentum['event'] ?? 0.0);
 
+        // FAR 32.503-6 Suspension/Reduction of Progress Payments due to programmatic failures
         if ($fixedPriceZ < self::FORWARD_LOSS_Z_SCORE || $eventZ < self::FLAGSHIP_FAILURE_Z_SCORE) {
             return self::WITHHOLDING_NWC_INTENSITY;
         }
@@ -166,10 +157,10 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
-        $physics = parent::getMacroPhysics($stock, $macroState);
-        $physics['macro_demand_shift'] = 0.0;
-        $physics['pricing_power_multiplier'] = 1.0;
-        return $physics;
+        return [
+            'macro_demand_shift'       => 0.0,
+            'pricing_power_multiplier' => 1.0,
+        ];
     }
 
     protected function calculateSectorPhysics(
@@ -190,7 +181,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = new StreamContext($momentum, $mathUtility);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Dynamic Revenue Mix Drift ---
         $activeWeights = $streams->resolveActiveStreamWeights([
             'cost_plus_procurement'   => $params[ModelParam::CostPlusWeight->value],
             'fixed_price_development' => $params[ModelParam::FixedPriceDevWeight->value],
@@ -201,37 +192,42 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $fixedPriceWeight = $activeWeights['fixed_price_development'];
         $fmsWeight        = $activeWeights['foreign_military_sales'];
 
-        // Independent stream Z-scores
-        $costPlusZ   = $streams->generateZ('cost_plus_procurement', 0.70);
+        $costPlusZ   = $streams->generateZ('cost_plus_procurement', 0.70); // High multi-year appropriation persistence
         $fixedPriceZ = $streams->generateZ('fixed_price_development', 0.30);
         $fmsZ        = $streams->generateZ('foreign_military_sales', 0.20);
         $eventZ      = $streams->generateZ('event', 0.10);
 
         // --- Sovereign Procurement & Cost-Plus Fiscal Physics ---
         $inflation = $macroState->inflationEma;
+
+        // FAR 16.3 Cost-Plus contracts pass through excess inflation as nominal revenue growth
         $costPlusBonus = $inflation > MacroEngine::TARGET_INFLATION
             ? ($inflation - MacroEngine::TARGET_INFLATION) * self::COST_PLUS_BONUS_SCALAR
             : 0.0;
 
+        // Sovereign credit spreads indicate debt ceiling crises triggering Continuing Resolutions (CRs)
         $creditSpread = $macroState->macroCreditSpreadEma;
         $crDrag = $creditSpread > self::SOVEREIGN_STRESS_THRESHOLD
             ? ($creditSpread - self::SOVEREIGN_STRESS_THRESHOLD) * self::CR_BUDGET_DRAG_SCALAR
             : 0.0;
 
-        $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
-        $materialDrag = $energyShift > 0.0
-            ? $energyShift * self::FIXED_PRICE_MATERIAL_DRAG_SCALAR
+        // Excess inflation aggressively squeezes margins on fixed-price EMD contracts
+        $excessInflation = max(0.0, $inflation - MacroEngine::TARGET_INFLATION);
+        $fixedPriceInflationDrag = $excessInflation > 0.0
+            ? $excessInflation * self::FIXED_PRICE_INFLATION_DRAG_SCALAR
             : 0.0;
 
         // --- Program Execution, Forward Losses & Tail Shocks ---
-        $costPlusMultiplier   = max(0.50, 1.0 - $crDrag);
+        $costPlusMultiplier   = max(self::MAX_CR_BUDGET_DRAG, 1.0 - $crDrag);
         $fixedPriceMultiplier = 1.0;
         $fmsMultiplier        = 1.0;
         $eventType            = null;
         $forwardLossPenalty   = 0.0;
         $flagshipPenalty      = 0.0;
+        $wartimeSupplyDrag    = 0.0;
 
-        $executionEfficiencyShift = -self::PROGRAM_EXECUTION_ELASTICITY * $costPlusZ * $costPlusWeight;
+        // Wright's Law: Learning curve applies to mature FMS export volume
+        $learningCurveShift = -self::PRODUCTION_LEARNING_CURVE_ELASTICITY * $fmsZ * $fmsWeight;
 
         if ($fixedPriceZ < self::FORWARD_LOSS_Z_SCORE) {
             $forwardLossPenalty = self::FORWARD_LOSS_PENALTY;
@@ -252,7 +248,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 
         if ($fmsZ > self::GEOPOLITICAL_CONFLICT_Z) {
             $fmsMultiplier = self::FMS_CONFLICT_BOOST;
-            $executionEfficiencyShift += self::WARTIME_SUPPLY_CHAIN_DRAG;
+            $wartimeSupplyDrag = self::WARTIME_SUPPLY_CHAIN_DRAG;
             $eventType = ShockEvent::GEOPOLITICAL_CONFLICT;
         }
 
@@ -271,13 +267,12 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // --- Realized Variable Cost Margin ---
-        // FIX 2: Correctly scale stream-specific margin penalties by their revenue weights!
-        // A cost overrun in a 20% division should not destroy 100% of the company's margins.
         $rawMargin = $realizedVariableMargin
-            + $executionEfficiencyShift // (Already natively scaled by $costPlusWeight)
+            + $learningCurveShift
             + ($forwardLossPenalty * $fixedPriceWeight)
+            + ($fixedPriceInflationDrag * $fixedPriceWeight)
             + ($flagshipPenalty * $costPlusWeight)
-            + ($materialDrag * $fixedPriceWeight);
+            + ($wartimeSupplyDrag * $fmsWeight);
 
         $clampedMargin = $this->clampMargin($rawMargin);
 
@@ -303,47 +298,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
         );
-    }
-
-    public function updateDynamicRoic(
-        Stock $stock,
-        float $actualTotalNetIncome,
-        float $investedCapital,
-        float $ebit,
-        float $corporateTaxRate,
-        float $wacc = 0.08,
-        float $costOfEquity = 0.10,
-        ?MacroStateDTO $macroState = null
-    ): float {
-        $thresholds = $this->getModelThresholds();
-        $kappa = $thresholds['reversion_speed'] ?? 0.12;
-        $moatSpread = $thresholds['moat_spread'] ?? 0.020;
-
-        $nopatProxy = $ebit > 0 ? $ebit * (1.0 - $corporateTaxRate) : $ebit;
-        $effectiveCapital = max(1.0, abs($investedCapital));
-        $truePostTaxReturn = ($nopatProxy / $effectiveCapital) * self::ROIC_ANNUALIZATION_MULT;
-
-        $stock->setCurrentRoic((string) max(self::MIN_ROIC_CLAMP, min(self::MAX_ROIC_CLAMP, $truePostTaxReturn)));
-
-        $oldTtm = (float) $stock->getRoicTtm();
-        $newTtm = $oldTtm === 0.0
-            ? $truePostTaxReturn
-            : ($truePostTaxReturn * self::ROIC_TTM_EMA_WEIGHT) + ($oldTtm * self::ROIC_TTM_HIST_WEIGHT);
-
-        $scaledKappa = $kappa / self::TTM_ROIC_WEIGHT;
-        $math = new MathUtility();
-
-        $saturationPenalty = 0.0;
-        if ($macroState !== null) {
-            $metrics = new CorporateMetrics();
-            $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, abs($investedCapital), $macroState);
-        }
-
-        $effectiveMoat = max(0.0, $moatSpread - $saturationPenalty);
-        $newTtm += $math->calculateReversionPull($newTtm, $wacc, $scaledKappa, $effectiveMoat);
-        $stock->setRoicTtm((string) max(self::MIN_ROIC_CLAMP, min(self::MAX_ROIC_CLAMP, $newTtm)));
-
-        return $truePostTaxReturn;
     }
 
     public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void

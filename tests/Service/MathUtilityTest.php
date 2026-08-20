@@ -231,4 +231,59 @@ class MathUtilityTest extends TestCase
         $this->assertEqualsWithDelta(0.20, $norm2['b'], 0.0001);
         $this->assertEqualsWithDelta(0.20, $norm2['c'], 0.0001);
     }
+
+    public function testCalculateInverseNormalCDF(): void
+    {
+        // Symmetry around 0.5
+        $this->assertEqualsWithDelta(0.0, $this->mathUtility->calculateInverseNormalCDF(0.50), 0.0001);
+
+        // Standard normal quantiles
+        $this->assertEqualsWithDelta(-2.3263, $this->mathUtility->calculateInverseNormalCDF(0.01), 0.001);
+        $this->assertEqualsWithDelta(-1.6449, $this->mathUtility->calculateInverseNormalCDF(0.05), 0.001);
+        $this->assertEqualsWithDelta(-1.2816, $this->mathUtility->calculateInverseNormalCDF(0.10), 0.001);
+        $this->assertEqualsWithDelta(1.2816, $this->mathUtility->calculateInverseNormalCDF(0.90), 0.001);
+        $this->assertEqualsWithDelta(1.6449, $this->mathUtility->calculateInverseNormalCDF(0.95), 0.001);
+        $this->assertEqualsWithDelta(2.3263, $this->mathUtility->calculateInverseNormalCDF(0.99), 0.001);
+
+        // Invariance round-trip: Phi(Phi^-1(p)) = p
+        $probabilities = [0.001, 0.01, 0.05, 0.20, 0.50, 0.80, 0.95, 0.99, 0.999];
+        foreach ($probabilities as $p) {
+            $z = $this->mathUtility->calculateInverseNormalCDF($p);
+            $recoveredP = $this->mathUtility->calculateNormalCDF($z);
+            $this->assertEqualsWithDelta($p, $recoveredP, 0.0005, "Round trip failed for p = $p");
+        }
+
+        // Boundary safety clamps
+        $this->assertFalse(is_nan($this->mathUtility->calculateInverseNormalCDF(0.0)));
+        $this->assertFalse(is_nan($this->mathUtility->calculateInverseNormalCDF(1.0)));
+        $this->assertFalse(is_infinite($this->mathUtility->calculateInverseNormalCDF(0.0)));
+        $this->assertFalse(is_infinite($this->mathUtility->calculateInverseNormalCDF(1.0)));
+    }
+
+    public function testCalculateVasicekExpectedLoss(): void
+    {
+        $pdLra = 0.015; // 1.5% through-the-cycle PD
+        $rho = 0.15;   // 15% asset correlation
+        $lgd = 0.45;   // 45% LGD
+
+        // Neutral macro shock (Z = 0) -> Conditional PD is Phi(Phi^-1(PD_LRA) / sqrt(1 - rho))
+        // Due to convexity (Jensen's inequality), conditional median at Z=0 is lower than TTC mean
+        $baselineEl = $this->mathUtility->calculateVasicekExpectedLoss(0.0, $pdLra, $rho, $lgd);
+        $invPd = $this->mathUtility->calculateInverseNormalCDF($pdLra);
+        $expectedConditionalPd = $this->mathUtility->calculateNormalCDF($invPd / sqrt(1.0 - $rho));
+        $this->assertEqualsWithDelta($expectedConditionalPd * $lgd, $baselineEl, 0.00001);
+
+        // Severe economic downturn / credit crunch (Z = -3.0) -> Tail risk non-linear surge
+        $stressedEl = $this->mathUtility->calculateVasicekExpectedLoss(-3.0, $pdLra, $rho, $lgd);
+        $this->assertGreaterThan($baselineEl * 5.0, $stressedEl, 'Stressed loss should be non-linearly higher than baseline.');
+
+        // Benign economic boom (Z = +2.0) -> Defaults fall below TTC baseline
+        $boomEl = $this->mathUtility->calculateVasicekExpectedLoss(2.0, $pdLra, $rho, $lgd);
+        $this->assertLessThan($baselineEl, $boomEl, 'Boom loss should be lower than baseline.');
+        $this->assertGreaterThan(0.0, $boomEl);
+
+        // Higher asset correlation increases tail loss under stress
+        $highRhoEl = $this->mathUtility->calculateVasicekExpectedLoss(-3.0, $pdLra, 0.30, $lgd);
+        $this->assertGreaterThan($stressedEl, $highRhoEl, 'Higher asset correlation should amplify stressed tail losses.');
+    }
 }

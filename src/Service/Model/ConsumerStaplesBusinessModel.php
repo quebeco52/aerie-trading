@@ -5,97 +5,183 @@ declare(strict_types=1);
 namespace App\Service\Model;
 
 use App\Data\ModelParam;
+use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
+use App\DTO\StreamContext;
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\MathUtility;
 
 /**
- * Earnings strategy for Consumer Staples (Food, Tobacco, Household Goods).
- * 
+ * Earnings strategy for Consumer Staples (Food, Beverage, Tobacco, Household Goods).
+ *
  * Financial Physics:
- * - Inelastic demand: Consumers must buy these products regardless of the economic cycle.
- * - High pricing power: They can pass supply chain inflation directly to consumers without losing sales volume.
- * - Extremely low top-line volatility compared to discretionary retail.
+ * - Price Elasticity of Demand (PED): Staples are highly inelastic. Recessions (output gap drops) barely hurt volume.
+ * - Pass-Through Pricing Power: Inflation is passed to consumers, expanding nominal revenue.
+ * - Cost-Push Inflation Squeeze (COGS): Variable margins are squeezed by agricultural input spikes and packaging/freight costs.
+ * - Dynamic Working Capital Float: Branded goods generate float (-5% NWC) while bulk commodity storage ties up cash (+5% NWC).
+ * - Brand Equity Decay: Underinvesting in marketing/CapEx causes permanent operating margin erosion to generic private labels.
  */
 class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Analyst Visibility & Error ---
+    /** Base coverage visibility for consumer staples analysts. */
     public const BASE_COVERAGE_VISIBILITY = 0.30;
+    /** Base coverage forecasting error given steady, predictable cash flows. */
     public const BASE_COVERAGE_ERROR = 0.05;
-    public function getModelThresholds(): array
-    {
-        return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.15, 'moat_spread' => 0.015, 'nwc_intensity' => 0.05, 'capex_completion_rate' => 0.33];
-    }
-    public function getSecularGrowthRate(Stock $stock): float
-    {
-        return 0.03;
-    }
-    public function getCapexCyclicality(): float
-    {
-        return 0.8;
-    }
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.75, 'revenue_weight' => 0.25];
-    }
+
+    // --- Core Sector Structural Constants ---
+    /** Baseline secular growth rate tethered to steady population growth and nominal GDP. */
+    public const STAPLES_SECULAR_GROWTH = 0.03;
+    /** Mild CapEx cyclicality; staples upgrade facilities but avoid heavy industrial boom/bust cycles. */
+    public const STAPLES_CAPEX_CYCLICALITY = 0.80;
+    /** Weight assigned to EPS surprises (Staples trade on reliable bottom-line earnings). */
+    public const SURPRISE_EPS_WEIGHT = 0.75;
+    /** Weight assigned to Revenue surprises. */
+    public const SURPRISE_REVENUE_WEIGHT = 0.25;
+    /** Operating margin mean reversion speed: fast speed reflects intense retail shelf-space price competition. */
+    public const STAPLES_REVERSION_SPEED = 5.0;
+
+    // --- Working Capital Intensity Physics ---
+    /** Working capital intensity for branded consumer staples with negative cash conversion cycle float. */
+    public const BRANDED_NWC_INTENSITY = -0.05;
+    /** Working capital intensity for bulk agricultural commodity storage and processing. */
+    public const VOLUME_NWC_INTENSITY = 0.05;
 
     // --- Dual-Stream Consumer Staples Architecture ---
     /** Baseline fraction of revenue derived from premium packaged branded staples and inelastic consumer goods. */
-    public const BRANDED_STAPLES_WEIGHT  = 0.65;
+    public const BRANDED_STAPLES_WEIGHT = 0.65;
     /** Baseline fraction of revenue derived from bulk commodity food processing and agricultural volume. */
     public const VOLUME_COMMODITY_WEIGHT = 0.35;
 
-    // --- Inelastic Demand & Shock Physics ---
+    // --- Inelastic Demand & Macro Physics ---
+    /** Baseline Price Elasticity of Demand (PED). < 1.0 means highly inelastic. */
+    public const BASELINE_PRICE_ELASTICITY_OF_DEMAND = 0.30;
     /** Volatility multiplier for top-line revenue shocks in stable consumer staples models. */
-    public const REVENUE_VARIANCE_SCALAR   = 0.05;
-    /** Upper clamp for realized variable margin. */
-    public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
-    /** Lower clamp for realized variable margin. */
-    public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
+    public const REVENUE_VARIANCE_SCALAR = 0.05;
+    /** Revenue volatility amplifier for commodity trading desks. */
+    public const COMMODITY_TRADING_VOL_SCALAR = 2.50;
+    /** Revenue volatility dampener for slow-moving land speculation streams. */
+    public const LAND_SPECULATION_VOL_SCALAR = 0.50;
 
-    // --- Product Recall & Regulatory Lore Thresholds ---
-    /** Negative z-score threshold indicating severe supply chain contamination and massive product recall. */
-    public const RECALL_SEVERE_Z_SCORE     = -2.50;
-    /** Variable cost penalty applied during massive product recalls and inventory write-offs. */
-    public const RECALL_SEVERE_PENALTY     = 0.08;
-    /** Negative z-score threshold indicating sudden health regulatory scrutiny and fines. */
-    public const RECALL_MODERATE_Z_SCORE   = -2.00;
-    /** Variable cost penalty applied during moderate regulatory fines and legal fees. */
-    public const RECALL_MODERATE_PENALTY   = 0.03;
-
-    // --- Analyst Visibility & Error ---
-    // Moved to getCoverageProfile() — see MarketConsensusEngine.
-
-    // --- Reversion & Working Capital ---
-    /** Operating margin mean reversion speed: fast speed reflects intense retail price competition. */
-    public const STAPLES_REVERSION_SPEED   = 5.0;
-
-    // --- Agricultural & Packaging Commodity Input Elasticity ---
-    /** Variable margin sensitivity to agricultural and packaging commodity input cost shocks. */
-    public const COMMODITY_INPUT_ELASTICITY   = 0.015;
+    // --- Cost-Push Inflation & COGS Squeeze ---
+    /** Variable margin cost penalty scalar for agricultural inflation (Producer Price Index proxy). */
+    public const AGRI_INFLATION_COST_SCALAR = 0.015;
+    /** Idiosyncratic agricultural harvest shock sensitivity scalar on variable costs. */
+    public const AGRI_HARVEST_SHOCK_SCALAR = 0.010;
+    /** Variable margin cost penalty scalar for energy-driven logistics, freight, and packaging costs. */
+    public const PACKAGING_ENERGY_COST_SCALAR = 0.12;
 
     // --- Weaponized Proof Desk & Commodity Arbitrage Physics ---
     /** Revenue expansion scalar on commodity trading desk when global inflation accelerates. */
     public const COMMODITY_INFLATION_ALPHA_SCALAR = 2.50;
     /** Revenue expansion scalar on commodity trading desk during energy & packaging price spikes. */
-    public const COMMODITY_ENERGY_ALPHA_SCALAR    = 0.40;
+    public const COMMODITY_ENERGY_ALPHA_SCALAR = 0.40;
     /** Maximum fraction of logistics & packaging drag mitigated by physical inventory hoarding. */
-    public const MAX_COMMODITY_HEDGE_MITIGATION   = 0.80;
+    public const MAX_COMMODITY_HEDGE_MITIGATION = 0.80;
+    /** Inventory hedging multiplier representing effectiveness of the commodity trading desk. */
+    public const COMMODITY_HEDGE_MULTIPLIER = 2.50;
+
+    // --- Product Recall & Regulatory Lore Thresholds ---
+    /** Negative z-score threshold indicating severe supply chain contamination and massive product recall. */
+    public const RECALL_SEVERE_Z_SCORE = -2.50;
+    /** Variable cost penalty applied during massive product recalls and inventory write-offs. */
+    public const RECALL_SEVERE_PENALTY = 0.08;
+    /** Negative z-score threshold indicating sudden health regulatory scrutiny and fines. */
+    public const RECALL_MODERATE_Z_SCORE = -2.00;
+    /** Variable cost penalty applied during moderate regulatory fines and legal fees. */
+    public const RECALL_MODERATE_PENALTY = 0.03;
 
     // --- Brand Equity Amortization & Marketing Reinvestment Physics ---
     /** Quarterly margin decay rate per unit of underinvestment below brand maintenance CapEx. */
-    public const BRAND_EQUITY_DECAY_RATE      = 0.020;
+    public const BRAND_EQUITY_DECAY_RATE = 0.020;
     /** Quarterly margin gain scalar per unit of logarithmic brand marketing super-cycle investment. */
-    public const BRAND_MARKETING_GAIN_RATE    = 0.010;
+    public const BRAND_MARKETING_GAIN_RATE = 0.010;
     /** Structural minimum operating margin floor under private-label generic retail competition. */
-    public const MIN_OPERATING_MARGIN_FLOOR   = 0.10;
+    public const MIN_OPERATING_MARGIN_FLOOR = 0.10;
     /** Structural maximum operating margin ceiling for dominant global consumer staple brands. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.35;
 
-    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
+    public function getModelThresholds(): array
     {
+        return [
+            'min_icr'                  => 2.00,
+            'bankrupt_equity'          => 0.0,
+            'distress_equity'          => 0.0,
+            'warning_equity'           => 0.0,
+            'wholesale_leverage_limit' => 1.0,
+            'dividend_crisis_icr'      => 1.50,
+            'buyback_min_icr'          => 2.00,
+            'reversion_speed'          => 0.15,
+            'moat_spread'              => 0.015,
+            'nwc_intensity'            => self::BRANDED_NWC_INTENSITY,
+            'capex_completion_rate'    => 0.33,
+        ];
+    }
+
+    public function getSecularGrowthRate(Stock $stock): float
+    {
+        return self::STAPLES_SECULAR_GROWTH;
+    }
+
+    public function getCapexCyclicality(): float
+    {
+        return self::STAPLES_CAPEX_CYCLICALITY;
+    }
+
+    public function getSurpriseBlendWeights(): array
+    {
+        return ['eps_weight' => self::SURPRISE_EPS_WEIGHT, 'revenue_weight' => self::SURPRISE_REVENUE_WEIGHT];
+    }
+
+    public function getMarginReversionSpeed(): float
+    {
+        return self::STAPLES_REVERSION_SPEED;
+    }
+
+    public function getWorkingCapitalIntensity(Stock $stock): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::BrandedStaplesWeight->value  => self::BRANDED_STAPLES_WEIGHT,
+            ModelParam::VolumeCommodityWeight->value => self::VOLUME_COMMODITY_WEIGHT,
+        ]);
+
+        $brandedWeight = $params[ModelParam::BrandedStaplesWeight];
+        $volumeWeight  = $params[ModelParam::VolumeCommodityWeight];
+        $totalWeight   = max(0.01, $brandedWeight + $volumeWeight);
+
+        // Branded FMCG generates float (-5%); bulk commodity storage ties up cash (+5%)
+        return (($brandedWeight * self::BRANDED_NWC_INTENSITY) + ($volumeWeight * self::VOLUME_NWC_INTENSITY)) / $totalWeight;
+    }
+
+    public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::PricingPowerIndex->value => 0.50,
+        ]);
+        $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
+
+        // Modulate elasticity by pricing power: strong brand equity lowers PED further
+        $effectivePed = self::BASELINE_PRICE_ELASTICITY_OF_DEMAND * (1.5 - $pricingPower);
+
+        $beta = abs((float) $stock->getBeta());
+
+        return [
+            'macro_demand_shift'       => $macroState->outputGapEma * $beta * $effectivePed,
+            'pricing_power_multiplier' => 1.0 + ($macroState->inflationEma * (1.0 - $effectivePed)),
+        ];
+    }
+
+    protected function calculateSectorPhysics(
+        Stock $stock,
+        float $expectedRevenue,
+        float $realizedVariableMargin,
+        float $fixedCosts,
+        float $baselineVol,
+        MacroStateDTO $macroState,
+        MathUtility $mathUtility
+    ): SectorPhysicsResult {
         $params = $this->resolveModelParameters($stock, [
             ModelParam::BrandedStaplesWeight->value   => self::BRANDED_STAPLES_WEIGHT,
             ModelParam::VolumeCommodityWeight->value  => self::VOLUME_COMMODITY_WEIGHT,
@@ -107,7 +193,7 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         $rawLandWeight      = $params[ModelParam::LandSpeculationWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = new StreamContext($momentum, $mathUtility);
 
         $targetWeights = [
             'branded' => $params[ModelParam::BrandedStaplesWeight],
@@ -129,23 +215,22 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         $landWeight      = $activeWeights['land_speculation'] ?? 0.0;
 
         // Independent stream Z-scores with AR(1) persistence
-        $brandedZ = $streams->generateZ('branded', 0.15); // Core branded consumer products
-        $volumeZ  = $streams->generateZ('volume', 0.15); // Unbranded bulk volume / wholesale processing
+        $brandedZ = $streams->generateZ('branded', 0.15);
+        $volumeZ  = $streams->generateZ('volume', 0.15);
         $eventZ   = $streams->generateZ('event', 0.05);
 
         $brandedRevenue = max(0.0, $expectedRevenue * $brandedWeight * (1.0 + ($brandedZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
         $volumeRevenue  = max(0.0, $expectedRevenue * $volumeWeight * (1.0 + ($volumeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
 
         // Tail Risk: Product Recalls and Health Regulations
-        // Scaled proportionally to packaged branded consumer staples ($brandedWeight).
         $eventType = null;
-        $recallPenalty = 0.0;
+        $recallCostPenalty = 0.0;
 
         if ($eventZ < self::RECALL_SEVERE_Z_SCORE) {
-            $recallPenalty = self::RECALL_SEVERE_PENALTY * $brandedWeight;
+            $recallCostPenalty = self::RECALL_SEVERE_PENALTY * $brandedWeight;
             $eventType = ShockEvent::PRODUCT_RECALL;
         } elseif ($eventZ < self::RECALL_MODERATE_Z_SCORE) {
-            $recallPenalty = self::RECALL_MODERATE_PENALTY * $brandedWeight;
+            $recallCostPenalty = self::RECALL_MODERATE_PENALTY * $brandedWeight;
             $eventType = ShockEvent::REGULATORY_FINE;
         }
 
@@ -154,46 +239,50 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
             'volume'  => $volumeRevenue,
         ];
 
-        $commodityRevenue = 0.0;
         $commodityZ = 0.0;
         if ($commodityWeight > 0.0) {
             $commodityZ = $streams->generateZ('commodity_trading', 0.20);
 
-            // Physical inventory hoarding & Proof Desk short squeezes profit from supply bottlenecks & inflation panics
             $inflationExcess = max(0.0, $macroState->inflationEma - MacroEngine::TARGET_INFLATION);
             $energyExcess = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
             $commoditySqueezeBonus = ($inflationExcess * self::COMMODITY_INFLATION_ALPHA_SCALAR) + ($energyExcess * self::COMMODITY_ENERGY_ALPHA_SCALAR);
 
-            $commodityRevenue = max(0.0, $expectedRevenue * $commodityWeight * (1.0 + ($commodityZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 2.5) + $commoditySqueezeBonus));
+            $commodityRevenue = max(0.0, $expectedRevenue * $commodityWeight * (1.0 + ($commodityZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::COMMODITY_TRADING_VOL_SCALAR) + $commoditySqueezeBonus));
             $streamRevenues['commodity_trading'] = $commodityRevenue;
         }
 
-        $landRevenue = 0.0;
         $landZ = 0.0;
         if ($landWeight > 0.0) {
             $landZ = $streams->generateZ('land_speculation', 0.50);
-            $landRevenue = max(0.0, $expectedRevenue * $landWeight * (1.0 + ($landZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.5)));
+            $landRevenue = max(0.0, $expectedRevenue * $landWeight * (1.0 + ($landZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::LAND_SPECULATION_VOL_SCALAR)));
             $streamRevenues['land_speculation'] = $landRevenue;
         }
 
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // Agricultural & Packaging Commodity Input Cost Elasticity:
-        // Fluctuations in bulk agricultural processing ($volumeZ) smoothly shift variable input costs.
-        $commodityInputShift = self::COMMODITY_INPUT_ELASTICITY * $volumeZ * $volumeWeight;
+        // --- Cost-Push Inflation & COGS Squeeze ---
+        $inflationExcess = max(0.0, $macroState->inflationEma - MacroEngine::TARGET_INFLATION);
+        $agriculturalCostSqueeze = ($inflationExcess * self::AGRI_INFLATION_COST_SCALAR * $volumeWeight)
+            - ($volumeZ * self::AGRI_HARVEST_SHOCK_SCALAR * $volumeWeight);
 
-        // Supply Chain & Packaging Penalty (Energy Price Index)
+        // Supply Chain, Freight & Packaging Penalty (Energy Price Index)
         $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
-        $rawLogisticsPenalty = $energyShift * abs((float) $stock->getBeta()) * 0.50; // Plastic packaging & freight cost spike
+        $beta = abs((float) $stock->getBeta());
+        $rawLogisticsPenalty = $energyShift * $beta * self::PACKAGING_ENERGY_COST_SCALAR;
 
         // Physical inventory hoarding buffers input costs and mitigates packaging bottlenecks
-        $logisticsPenalty = $rawLogisticsPenalty * (1.0 - min(self::MAX_COMMODITY_HEDGE_MITIGATION, $commodityWeight * 2.5));
+        $logisticsPenalty = $rawLogisticsPenalty * (1.0 - min(self::MAX_COMMODITY_HEDGE_MITIGATION, $commodityWeight * self::COMMODITY_HEDGE_MULTIPLIER));
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $recallPenalty + $commodityInputShift + $logisticsPenalty);
+        $rawMargin = $realizedVariableMargin + $recallCostPenalty + $agriculturalCostSqueeze + $logisticsPenalty;
+        $clampedMargin = $this->clampMargin($rawMargin);
 
         $primaryShockZ = abs($eventZ) > abs($brandedZ) ? $eventZ : $brandedZ;
-        $observableShockZ = ($brandedZ * $brandedWeight + $volumeZ * $volumeWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
+
+        $observableShockZ = ($brandedZ * $brandedWeight * $baselineVol * self::REVENUE_VARIANCE_SCALAR)
+            + ($volumeZ * $volumeWeight * $baselineVol * self::REVENUE_VARIANCE_SCALAR)
+            + ($commodityZ * $commodityWeight * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::COMMODITY_TRADING_VOL_SCALAR)
+            + ($landZ * $landWeight * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::LAND_SPECULATION_VOL_SCALAR);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -205,16 +294,6 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
         );
-    }
-
-    public function getMarginReversionSpeed(): float
-    {
-        return self::STAPLES_REVERSION_SPEED; // High retail competition and consumer price sensitivity cause rapid margin mean reversion
-    }
-
-    public function getWorkingCapitalIntensity(Stock $stock): float
-    {
-        return -0.05; // Negative working capital cycle (supermarket customer upfront payment vs 60-day vendor payables float)
     }
 
     public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
@@ -238,3 +317,4 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         }
     }
 }
+
