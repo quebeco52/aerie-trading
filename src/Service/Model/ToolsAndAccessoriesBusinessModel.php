@@ -119,9 +119,10 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         $macroSensitivityMultiplier = 0.5 + $pricingPower;
 
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
+        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
 
-        $commercialMacroVolumeShock = $macroState->outputGapEma * $macroSensitivityMultiplier * abs((float) $stock->getBeta());
-        $consumerMacroVolumeShock = $sentimentShift * $macroSensitivityMultiplier * abs((float) $stock->getBeta());
+        $commercialMacroVolumeShock = ($macroState->outputGapEma * $macroSensitivityMultiplier * abs((float) $stock->getBeta())) - ($fxShift * 0.10);
+        $consumerMacroVolumeShock = ($sentimentShift * $macroSensitivityMultiplier * abs((float) $stock->getBeta())) - ($fxShift * 0.10);
 
         // Tail Risk Events
         $cycleMultiplier = 1.0;
@@ -166,8 +167,11 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
 
         // Re-implementing Inflation Penalty (dropped from Standard Corporate model)
         $inflation = $macroState->inflationEma;
+        $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
+        $metalsCostDrag = max(0.0, $metalsShift) * 0.05;
+
         $inflationMultiplier = 2.0 - ($pricingPower * 2.0);
-        $baseInflationPenalty = $inflation > MacroEngine::TARGET_INFLATION ? ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0;
+        $baseInflationPenalty = ($inflation > MacroEngine::TARGET_INFLATION ? ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0) + $metalsCostDrag;
         $inflationPenalty = $baseInflationPenalty * $inflationMultiplier;
 
         // Continuous Elasticity

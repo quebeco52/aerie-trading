@@ -110,9 +110,10 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
         $outputGap = $macroState->outputGapEma;
         $inflation = $macroState->inflationEma;
         $beta = (float) $stock->getBeta();
+        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
 
         return [
-            'macro_demand_shift' => $outputGap * $macroSensitivityMultiplier * $beta,
+            'macro_demand_shift' => ($outputGap * $macroSensitivityMultiplier * $beta) - ($fxShift * 0.05 * $beta),
             'pricing_power_multiplier' => 1.0 + ($inflation * max(self::MIN_BETA_PRICING_POWER_FLOOR, $beta)),
         ];
     }

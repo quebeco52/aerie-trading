@@ -27,8 +27,8 @@ class MacroEngine
     public const CASH_YIELD_SPREAD = 0.0025;
 
     // KALDOR-KALECKI CONSTANTS
-    public const KALDOR_MOMENTUM = 0.15;
-    public const KALDOR_CAPACITY = 180.0;
+    public const KALDOR_MOMENTUM = 0.30;
+    public const KALDOR_CAPACITY = 150.0;
     public const KALDOR_MONETARY_DRAG = 0.75;
     public const KALDOR_FISCAL_MULTIPLIER = 0.50;
     public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.010;
@@ -97,7 +97,7 @@ class MacroEngine
 
     // NEW KEYNESIAN PHILLIPS CURVE CONSTANTS
     public const PHILLIPS_SLOPE = 0.15;
-    public const PHILLIPS_BOTTLENECK_COEFF = 0.25;
+    public const PHILLIPS_BOTTLENECK_COEFF = 0.10;
     public const INFLATION_MEAN_REVERSION = 0.50;
 
     // MERTON STRUCTURAL CREDIT SPREAD CONSTANTS (Merton 1974)
@@ -131,6 +131,134 @@ class MacroEngine
     public const QE_RAMP_SPEED = 1.0;
     public const INFLATION_LEVEL_WEIGHT = 0.5;
 
+    // --- MUNDELL-FLEMING OPEN ECONOMY (IS-LM-BOP) ---
+    /** G7 average policy rate proxy for Uncovered Interest Parity (UIP) baseline. */
+    public const GLOBAL_BASELINE_RATE = 0.025;
+    /** Baseline exchange rate index (100 = neutral purchasing power). */
+    public const EXCHANGE_RATE_BASELINE = 100.0;
+    /** UIP sensitivity: exchange rate response to domestic-foreign interest rate differential. */
+    public const UIP_SENSITIVITY = 3.0;
+    /** Mean-reversion speed of exchange rate toward purchasing power parity equilibrium. */
+    public const EXCHANGE_RATE_MEAN_REVERSION = 0.60;
+    /** Stochastic volatility of exchange rate fluctuations (FX market noise). */
+    public const EXCHANGE_RATE_VOLATILITY = 0.08;
+
+    // --- 2-FACTOR CORRELATED OU INDUSTRIAL COMMODITIES ---
+    /** Baseline industrial metals index value (100 = neutral equilibrium). */
+    public const METALS_BASELINE = 100.0;
+    /** Mean-reversion speed of short-term supply disruptions (strikes, logistics). */
+    public const METALS_SHORT_TERM_KAPPA = 1.50;
+    /** Mean-reversion speed of long-term industrial metals supercycle equilibrium shifts. */
+    public const METALS_LONG_TERM_KAPPA = 0.20;
+    /** Volatility of short-term supply disruption shocks. */
+    public const METALS_SHORT_TERM_SIGMA = 0.30;
+    /** Volatility of long-term supercycle equilibrium shifts. */
+    public const METALS_LONG_TERM_SIGMA = 0.08;
+    /** Correlation between short-term disruptions and long-term shifts. */
+    public const METALS_RHO = -0.30;
+    /** Sensitivity of long-term metals equilibrium target to the macroeconomic output gap. */
+    public const METALS_OUTPUT_GAP_SENSITIVITY = 0.50;
+
+    // --- GOVERNMENT SPENDING & FISCAL APPROPRIATIONS ---
+    /** Baseline government spending index (100 = normal peacetime budget). */
+    public const GOVT_SPENDING_BASELINE = 100.0;
+    /** Counter-cyclical fiscal multiplier: spending rises when output gap contracts. */
+    public const GOVT_COUNTERCYCLICAL_SENSITIVITY = 80.0;
+    /** Mean-reversion speed of government spending toward structural baseline. */
+    public const GOVT_SPENDING_MEAN_REVERSION = 0.30;
+    /** Stochastic volatility of annual budget appropriation fluctuations. */
+    public const GOVT_SPENDING_VOLATILITY = 0.06;
+    /** Poisson intensity of major geopolitical events triggering spending surges (lambda per year). */
+    public const GEOPOLITICAL_JUMP_PROBABILITY = 0.08;
+    /** Mean log-return magnitude of a geopolitical spending surge. */
+    public const GEOPOLITICAL_JUMP_MEAN = 0.15;
+    /** Volatility of geopolitical jump size. */
+    public const GEOPOLITICAL_JUMP_VOL = 0.08;
+
+    // --- DIPASQUALE-WHEATON COMMERCIAL REAL ESTATE (2-QUADRANT) ---
+    /** Baseline commercial property index (100 = neutral valuation). */
+    public const CRE_BASELINE = 100.0;
+    /** Sensitivity of occupancy/rent demand factor to excess unemployment (DiPasquale-Wheaton spatial market). */
+    public const CRE_OCCUPANCY_UNEMPLOYMENT_SENSITIVITY = 3.0;
+    /** Structural risk premium spread above 10Y yield for CRE cap rate derivation. */
+    public const CRE_CAP_RATE_RISK_PREMIUM = 0.02;
+    /** Pre-calibrated neutral cap rate at macro equilibrium: yield10y(5.64%) + creditSpread(2.0%) + riskPremium(2.0%). */
+    public const CRE_NEUTRAL_CAP_RATE = 0.0964;
+    /** Mean-reversion speed of commercial property values toward fundamental equilibrium. */
+    public const CRE_MEAN_REVERSION = 0.25;
+    /** Stochastic volatility of commercial property valuations. */
+    public const CRE_VOLATILITY = 0.10;
+    /** Minimum cap rate floor to prevent division instability in extreme rate environments. */
+    public const CRE_MIN_CAP_RATE = 0.03;
+
+    // --- VASICEK ASRF RETAIL DEFAULT RATE ---
+    /** Baseline long-run average through-the-cycle retail consumer probability of default (2.5%). */
+    public const RETAIL_DEFAULT_BASELINE = 0.025;
+    /** Basel II/III consumer asset correlation factor for retail exposures. */
+    public const RETAIL_ASRF_RHO = 0.12;
+    /** Sensitivity of consumer macro credit Z-score to unemployment rate deviations from natural rate. */
+    public const RETAIL_UNEMPLOYMENT_SENSITIVITY = 40.0;
+    /** Sensitivity of consumer macro credit Z-score to inflation deviations from target. */
+    public const RETAIL_INFLATION_SENSITIVITY = 25.0;
+    /** Stochastic volatility of idiosyncratic consumer credit shocks. */
+    public const RETAIL_CREDIT_VOLATILITY = 0.35;
+
+    // --- 2-FACTOR CORRELATED OU AGRICULTURAL COMMODITIES & WEATHER JUMPS ---
+    /** Baseline agricultural commodity index value (100 = neutral crop harvest). */
+    public const AGRI_BASELINE = 100.0;
+    /** Mean-reversion speed of short-term agricultural supply disruptions (frost, harvest delays). */
+    public const AGRI_SHORT_TERM_KAPPA = 1.80;
+    /** Mean-reversion speed of long-term agricultural equilibrium supercycles toward baseline. */
+    public const AGRI_LONG_TERM_KAPPA = 0.25;
+    /** Volatility of short-term agricultural supply shocks. */
+    public const AGRI_SHORT_TERM_SIGMA = 0.25;
+    /** Volatility of long-term agricultural equilibrium shifts. */
+    public const AGRI_LONG_TERM_SIGMA = 0.06;
+    /** Correlation between short-term disruptions and long-term agricultural shifts. */
+    public const AGRI_RHO = -0.20;
+    /** Amplitude of annual seasonal harvest cycle price oscillation (percentage of index). */
+    public const AGRI_SEASONALITY_AMPLITUDE = 0.06;
+    /** Poisson intensity of major climate/weather shocks such as droughts or El Niño events (lambda per year). */
+    public const AGRI_WEATHER_JUMP_PROBABILITY = 0.10;
+    /** Mean log-return price jump magnitude resulting from an extreme weather shock. */
+    public const AGRI_WEATHER_JUMP_MEAN = 0.18;
+    /** Volatility of climate jump shock magnitude. */
+    public const AGRI_WEATHER_JUMP_VOL = 0.08;
+
+    // --- COBWEB THEOREM FREIGHT RATE INDEX (BALTIC DRY) ---
+    /** Baseline ocean freight index value (100 = balanced fleet capacity and trade volume). */
+    public const FREIGHT_BASELINE = 100.0;
+    /** Elasticity of instantaneous shipping demand to macroeconomic output gap. */
+    public const FREIGHT_DEMAND_GAP_SENSITIVITY = 3.5;
+    /** Sensitivity of bulk shipping demand to industrial metals production and raw material flows. */
+    public const FREIGHT_DEMAND_METALS_SENSITIVITY = 0.30;
+    /** Elasticity of desired fleet capacity orders to prevailing freight charter profitability. */
+    public const FREIGHT_SUPPLY_ORDER_ELASTICITY = 0.80;
+    /** Time constant in years for multi-year shipyard shipbuilding capacity adjustments (3-year lag). */
+    public const FREIGHT_SUPPLY_LAG_YEARS = 3.0;
+    /** Inelasticity exponent amplifying freight spot rates when capacity utilization exceeds 1.0. */
+    public const FREIGHT_CAPACITY_INELASTICITY = 2.0;
+    /** Mean-reversion speed of spot charter rates toward capacity-clearing equilibrium. */
+    public const FREIGHT_MEAN_REVERSION = 1.50;
+    /** Stochastic volatility of spot charter market fluctuations. */
+    public const FREIGHT_VOLATILITY = 0.25;
+
+    // --- JORGENSON USER COST RESIDENTIAL REAL ESTATE ---
+    /** Baseline residential property index value (100 = neutral home affordability). */
+    public const RESIDENTIAL_BASELINE = 100.0;
+    /** Structural mortgage spread above 30Y Treasury yield for prime residential mortgages. */
+    public const RESIDENTIAL_MORTGAGE_SPREAD = 0.018;
+    /** Structural property tax, insurance, and maintenance depreciation rate. */
+    public const RESIDENTIAL_DEPRECIATION_TAX_RATE = 0.025;
+    /** Baseline equilibrium user cost of housing capital: yield30y(6.08%) + spread(1.8%) + deprec(2.5%) - inflation(2%). */
+    public const RESIDENTIAL_NEUTRAL_USER_COST = 0.0838;
+    /** Sensitivity of housing demand to unemployment rate shocks (foreclosure and affordability drag). */
+    public const RESIDENTIAL_UNEMPLOYMENT_SENSITIVITY = 5.0;
+    /** Mean-reversion speed of residential property valuations toward fundamental user-cost equilibrium. */
+    public const RESIDENTIAL_MEAN_REVERSION = 0.08;
+    /** Stochastic volatility of residential home prices. */
+    public const RESIDENTIAL_VOLATILITY = 0.06;
+
     public function __construct(
         private MathUtility $mathUtility,
         private LoggerInterface $logger,
@@ -151,6 +279,9 @@ class MacroEngine
     {
         $rawState = $this->redis->get(self::REDIS_MACRO_STATE);
         $state = $rawState ? MacroState::fromArray(json_decode($rawState, true)) : new MacroState();
+
+        // Advance physical simulation time in years
+        $state->totalTime += $dt;
 
         $state->targetRate = $this->calculateTargetRate($state, self::TARGET_INFLATION, self::NATURAL_RATE);
         $state->policyRate = $this->updatePolicyRate($state, $state->targetRate, $dt);
@@ -183,6 +314,14 @@ class MacroEngine
 
         $this->calculateUnemployment($state, $dt);
         $this->calculateEnergyShock($state, $dt);
+        $this->calculateExchangeRate($state, $dt);
+        $this->calculateIndustrialMetalsIndex($state, $dt);
+        $this->calculateGovernmentSpending($state, $dt);
+        $this->calculateCommercialPropertyIndex($state, $dt);
+        $this->calculateRetailDefaultRate($state, $dt);
+        $this->calculateAgriculturalCommodityIndex($state, $dt);
+        $this->calculateFreightRateIndex($state, $dt);
+        $this->calculateResidentialPropertyIndex($state, $dt);
 
         $state->inflation = $this->calculateInflation($state, self::TARGET_INFLATION, $stressMultiplier, $dt);
         $state->marketVolatility = $this->calculateMarketVolatility($state, $dt);
@@ -205,8 +344,8 @@ class MacroEngine
     {
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
         $conn->executeStatement(
-            "INSERT INTO macro_report (recorded_at, inflation, inflation_ema, output_gap, output_gap_ema, policy_rate, policy_rate_ema, yield2y, yield2y_ema, yield5y, yield5y_ema, yield10y, yield10y_ema, yield30y, yield30y_ema, corporate_tax_rate, equity_risk_premium, nominal_gdp_index, market_volatility, macro_credit_spread, macro_credit_spread_ema, unemployment_rate, unemployment_rate_ema, energy_price_index, energy_price_index_ema, consumer_sentiment_index, consumer_sentiment_index_ema) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO macro_report (recorded_at, inflation, inflation_ema, output_gap, output_gap_ema, policy_rate, policy_rate_ema, yield2y, yield2y_ema, yield5y, yield5y_ema, yield10y, yield10y_ema, yield30y, yield30y_ema, corporate_tax_rate, equity_risk_premium, nominal_gdp_index, market_volatility, macro_credit_spread, macro_credit_spread_ema, unemployment_rate, unemployment_rate_ema, energy_price_index, energy_price_index_ema, consumer_sentiment_index, consumer_sentiment_index_ema, exchange_rate_index, exchange_rate_index_ema, industrial_metals_index, industrial_metals_index_ema, government_spending_index, government_spending_index_ema, commercial_property_index, commercial_property_index_ema, residential_property_index, residential_property_index_ema, retail_default_rate, retail_default_rate_ema, agricultural_commodity_index, agricultural_commodity_index_ema, freight_rate_index, freight_rate_index_ema) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 $now,
                 $macroState->inflation,
@@ -235,6 +374,22 @@ class MacroEngine
                 $macroState->energyPriceIndexEma,
                 $macroState->consumerSentimentIndex,
                 $macroState->consumerSentimentIndexEma,
+                $macroState->exchangeRateIndex,
+                $macroState->exchangeRateIndexEma,
+                $macroState->industrialMetalsIndex,
+                $macroState->industrialMetalsIndexEma,
+                $macroState->governmentSpendingIndex,
+                $macroState->governmentSpendingIndexEma,
+                $macroState->commercialPropertyIndex,
+                $macroState->commercialPropertyIndexEma,
+                $macroState->residentialPropertyIndex,
+                $macroState->residentialPropertyIndexEma,
+                $macroState->retailDefaultRate,
+                $macroState->retailDefaultRateEma,
+                $macroState->agriculturalCommodityIndex,
+                $macroState->agriculturalCommodityIndexEma,
+                $macroState->freightRateIndex,
+                $macroState->freightRateIndexEma,
             ]
         );
     }
@@ -448,6 +603,14 @@ class MacroEngine
         $state->unemploymentRateEma += $emaWeight * ($state->unemploymentRate - $state->unemploymentRateEma);
         $state->energyPriceIndexEma += $emaWeight * ($state->energyPriceIndex - $state->energyPriceIndexEma);
         $state->consumerSentimentIndexEma += $emaWeight * ($state->consumerSentimentIndex - $state->consumerSentimentIndexEma);
+        $state->exchangeRateIndexEma += $emaWeight * ($state->exchangeRateIndex - $state->exchangeRateIndexEma);
+        $state->industrialMetalsIndexEma += $emaWeight * ($state->industrialMetalsIndex - $state->industrialMetalsIndexEma);
+        $state->governmentSpendingIndexEma += $emaWeight * ($state->governmentSpendingIndex - $state->governmentSpendingIndexEma);
+        $state->commercialPropertyIndexEma += $emaWeight * ($state->commercialPropertyIndex - $state->commercialPropertyIndexEma);
+        $state->residentialPropertyIndexEma += $emaWeight * ($state->residentialPropertyIndex - $state->residentialPropertyIndexEma);
+        $state->retailDefaultRateEma += $emaWeight * ($state->retailDefaultRate - $state->retailDefaultRateEma);
+        $state->agriculturalCommodityIndexEma += $emaWeight * ($state->agriculturalCommodityIndex - $state->agriculturalCommodityIndexEma);
+        $state->freightRateIndexEma += $emaWeight * ($state->freightRateIndex - $state->freightRateIndexEma);
     }
 
     private function calculateDynamicFiscalPolicy(MacroState $state, float $dt): void
@@ -494,7 +657,7 @@ class MacroEngine
         $unemploymentGap = $targetUnemployment - $state->unemploymentRate;
 
         // Asymmetric speed of adjustment
-        $adjustmentSpeed = $unemploymentGap > 0 ? self::OKUNS_FIRING_SPEED : self::OKUNS_HIRING_SPEED; // 4x faster to fire than to hire
+        $adjustmentSpeed = $unemploymentGap > 0 ? self::OKUNS_FIRING_SPEED : self::OKUNS_HIRING_SPEED;
 
         $state->unemploymentRate += $adjustmentSpeed * $unemploymentGap * $dt;
     }
@@ -570,5 +733,231 @@ class MacroEngine
 
         // 3. Apply final bounds
         $state->consumerSentimentIndex = max(40.0, min(120.0, $newSentiment));
+    }
+
+    private function calculateExchangeRate(MacroState $state, float $dt): void
+    {
+        // Mundell-Fleming Open Economy Model (IS-LM-BOP) via Uncovered Interest Parity (UIP)
+        // Interest rate differential relative to global baseline drives the equilibrium FX target
+        $rateDiff = $state->policyRate - self::GLOBAL_BASELINE_RATE;
+        $targetFx = self::EXCHANGE_RATE_BASELINE * exp(self::UIP_SENSITIVITY * $rateDiff);
+
+        $dW = $this->mathUtility->generateStandardNormal();
+        $newFx = $this->mathUtility->calculateSchwartz1Factor(
+            currentPrice: $state->exchangeRateIndex,
+            kappa: self::EXCHANGE_RATE_MEAN_REVERSION,
+            theta: $targetFx,
+            sigma: self::EXCHANGE_RATE_VOLATILITY,
+            dt: $dt,
+            dW: $dW
+        );
+
+        $state->exchangeRateIndex = max(60.0, min(160.0, $newFx));
+    }
+
+    private function calculateIndustrialMetalsIndex(MacroState $state, float $dt): void
+    {
+        // Output gap dynamically shifts the long-term structural target (theta), not raw drift
+        $baselineLog = log(self::METALS_BASELINE);
+        $shiftedThetaXi = $baselineLog + ($state->outputGapEma * self::METALS_OUTPUT_GAP_SENSITIVITY);
+
+        $result = $this->mathUtility->calculateTwoFactorOU(
+            chi: $state->metalsChi,
+            xi: $state->metalsXi,
+            kappaChi: self::METALS_SHORT_TERM_KAPPA,
+            kappaXi: self::METALS_LONG_TERM_KAPPA,
+            thetaChi: 0.0,
+            thetaXi: $shiftedThetaXi,
+            sigChi: self::METALS_SHORT_TERM_SIGMA,
+            sigXi: self::METALS_LONG_TERM_SIGMA,
+            rho: self::METALS_RHO,
+            dt: $dt
+        );
+
+        $state->metalsChi = $result['chi'];
+        $state->metalsXi = $result['xi'];
+        $state->industrialMetalsIndex = max(20.0, min(400.0, $result['spot']));
+    }
+
+    private function calculateGovernmentSpending(MacroState $state, float $dt): void
+    {
+        // Counter-cyclical Fiscal Spending Rule with Exogenous Geopolitical Poisson Jumps
+        // Recessions trigger automatic stabilizers; booms prompt fiscal restraint
+        $cyclicalTarget = self::GOVT_SPENDING_BASELINE - ($state->outputGapEma * self::GOVT_COUNTERCYCLICAL_SENSITIVITY);
+        $targetSpending = max(60.0, min(160.0, $cyclicalTarget));
+
+        $dW = $this->mathUtility->generateStandardNormal();
+        $baseProcess = $this->mathUtility->calculateSchwartz1Factor(
+            currentPrice: $state->governmentSpendingIndex,
+            kappa: self::GOVT_SPENDING_MEAN_REVERSION,
+            theta: $targetSpending,
+            sigma: self::GOVT_SPENDING_VOLATILITY,
+            dt: $dt,
+            dW: $dW
+        );
+
+        // Exogenous Poisson Jump Shocks (e.g. Geopolitical conflict, defense appropriations)
+        $jumpData = $this->mathUtility->calculateJumpDiffusion(
+            lambda: self::GEOPOLITICAL_JUMP_PROBABILITY,
+            jumpMean: self::GEOPOLITICAL_JUMP_MEAN,
+            jumpVol: self::GEOPOLITICAL_JUMP_VOL,
+            dt: $dt
+        );
+
+        $jumpAmount = 0.0;
+        if ($jumpData['multiplier'] !== 1.0) {
+            $jumpAmount = $baseProcess * ($jumpData['multiplier'] - 1.0);
+        }
+
+        $newSpending = $baseProcess + $jumpAmount;
+        $state->governmentSpendingIndex = max(60.0, min(200.0, $newSpending));
+    }
+
+    private function calculateCommercialPropertyIndex(MacroState $state, float $dt): void
+    {
+        // DiPasquale-Wheaton (1996) 2-Quadrant Commercial Real Estate Model
+        // Quadrant 1 (Spatial Market): Occupancy factor contracts with excess unemployment
+        $excessUnemployment = $state->unemploymentRateEma - self::NATURAL_UNEMPLOYMENT;
+        $occupancyFactor = 1.0 - ($excessUnemployment * self::CRE_OCCUPANCY_UNEMPLOYMENT_SENSITIVITY);
+        $occupancyFactor = max(0.30, min(1.80, $occupancyFactor));
+
+        // Quadrant 2 (Asset Market): Cap rate driven by 10Y yield + macro credit spread + CRE risk premium
+        $capRate = max(self::CRE_MIN_CAP_RATE, $state->yield10y + $state->macroCreditSpread + self::CRE_CAP_RATE_RISK_PREMIUM);
+        $fundamentalValue = self::CRE_BASELINE * $occupancyFactor * (self::CRE_NEUTRAL_CAP_RATE / $capRate);
+
+        // Valuation adjusts toward fundamental value with physical market delay
+        $dW = $this->mathUtility->generateStandardNormal();
+        $newIndex = $this->mathUtility->calculateSchwartz1Factor(
+            currentPrice: $state->commercialPropertyIndex,
+            kappa: self::CRE_MEAN_REVERSION,
+            theta: $fundamentalValue,
+            sigma: self::CRE_VOLATILITY,
+            dt: $dt,
+            dW: $dW
+        );
+
+        $state->commercialPropertyIndex = max(30.0, min(250.0, $newIndex));
+    }
+
+    private function calculateRetailDefaultRate(MacroState $state, float $dt): void
+    {
+        // Basel II/III Vasicek Asymptotic Single Risk Factor (ASRF) Consumer Credit Model
+        // Macroeconomic shock Z is driven by Okun's Law unemployment and real wage inflation destruction
+        $unemploymentShock = ($state->unemploymentRateEma - self::NATURAL_UNEMPLOYMENT) * self::RETAIL_UNEMPLOYMENT_SENSITIVITY;
+        $inflationShock = ($state->inflationEma - self::TARGET_INFLATION) * self::RETAIL_INFLATION_SENSITIVITY;
+
+        $dW = $this->mathUtility->generateStandardNormal();
+        $macroZ = - ($unemploymentShock + $inflationShock) + ($dW * self::RETAIL_CREDIT_VOLATILITY);
+
+        // Expected retail default rate: conditional PD derived via Vasicek ASRF with LGD = 1.0
+        $conditionalPd = $this->mathUtility->calculateVasicekExpectedLoss(
+            macroZ: $macroZ,
+            pdLra: self::RETAIL_DEFAULT_BASELINE,
+            rho: self::RETAIL_ASRF_RHO,
+            lgd: 1.0
+        );
+
+        $state->retailDefaultRate = max(0.005, min(0.20, $conditionalPd));
+    }
+
+    private function calculateAgriculturalCommodityIndex(MacroState $state, float $dt): void
+    {
+        // Two-Factor Correlated Ornstein-Uhlenbeck (OU) Model with Harvest Seasonality and Poisson Weather Jumps
+        $result = $this->mathUtility->calculateTwoFactorOU(
+            chi: $state->agriChi,
+            xi: $state->agriXi,
+            kappaChi: self::AGRI_SHORT_TERM_KAPPA,
+            kappaXi: self::AGRI_LONG_TERM_KAPPA,
+            thetaChi: 0.0,
+            thetaXi: log(self::AGRI_BASELINE),
+            sigChi: self::AGRI_SHORT_TERM_SIGMA,
+            sigXi: self::AGRI_LONG_TERM_SIGMA,
+            rho: self::AGRI_RHO,
+            dt: $dt
+        );
+
+        // Exogenous Poisson Weather Jumps (Droughts, Frost, El Niño)
+        $jumpData = $this->mathUtility->calculateJumpDiffusion(
+            lambda: self::AGRI_WEATHER_JUMP_PROBABILITY,
+            jumpMean: self::AGRI_WEATHER_JUMP_MEAN,
+            jumpVol: self::AGRI_WEATHER_JUMP_VOL,
+            dt: $dt
+        );
+
+        $chi = $result['chi'];
+        if ($jumpData['multiplier'] !== 1.0) {
+            $chi += log($jumpData['multiplier']);
+        }
+
+        $state->agriChi = $chi;
+        $state->agriXi = $result['xi'];
+
+        // Deterministic Harvest Seasonality: annual sine wave oscillation representing autumn harvest supply peaks vs spring planting troughs
+        $timeOfYear = fmod($state->totalTime, 1.0);
+        $seasonalMultiplier = 1.0 + (self::AGRI_SEASONALITY_AMPLITUDE * sin(2.0 * M_PI * $timeOfYear));
+
+        $spot = exp($state->agriChi + $state->agriXi) * $seasonalMultiplier;
+        $state->agriculturalCommodityIndex = max(20.0, min(400.0, $spot));
+    }
+
+    private function calculateFreightRateIndex(MacroState $state, float $dt): void
+    {
+        // Cobweb Theorem / Stopford Maritime Shipping Model (Stopford 2009)
+        // 1. Current Instantaneous Demand for Global Ocean Freight (Ton-Miles)
+        $metalsShift = ($state->industrialMetalsIndexEma - self::METALS_BASELINE) / 100.0;
+        $demandFactor = 1.0 + ($state->outputGapEma * self::FREIGHT_DEMAND_GAP_SENSITIVITY) + ($metalsShift * self::FREIGHT_DEMAND_METALS_SENSITIVITY);
+        $demand = self::FREIGHT_BASELINE * max(0.20, $demandFactor);
+
+        // 2. Cobweb Fleet Capacity (Supply): Shipowners order new vessels when charter rates are profitable
+        // Multi-year shipyard construction lag (~3 years) creates delayed fleet deliveries
+        $profitabilityRatio = max(0.10, $state->freightRateIndexEma / self::FREIGHT_BASELINE);
+        $targetSupply = self::FREIGHT_BASELINE * pow($profitabilityRatio, self::FREIGHT_SUPPLY_ORDER_ELASTICITY);
+
+        $slowEmaWeight = min(1.0, $dt / self::FREIGHT_SUPPLY_LAG_YEARS);
+        $state->freightSupplyEma += $slowEmaWeight * ($targetSupply - $state->freightSupplyEma);
+        $supply = max(20.0, $state->freightSupplyEma);
+
+        // 3. Market Clearing Rate: Inelastic capacity creates convex supercycles
+        $utilization = $demand / $supply;
+        $equilibriumRate = self::FREIGHT_BASELINE * pow($utilization, self::FREIGHT_CAPACITY_INELASTICITY);
+
+        // 4. Spot Rate Mean Reversion with Stochastic Volatility (Schwartz 1-Factor)
+        $dW = $this->mathUtility->generateStandardNormal();
+        $newFreight = $this->mathUtility->calculateSchwartz1Factor(
+            currentPrice: $state->freightRateIndex,
+            kappa: self::FREIGHT_MEAN_REVERSION,
+            theta: $equilibriumRate,
+            sigma: self::FREIGHT_VOLATILITY,
+            dt: $dt,
+            dW: $dW
+        );
+
+        $state->freightRateIndex = max(20.0, min(500.0, $newFreight));
+    }
+
+    private function calculateResidentialPropertyIndex(MacroState $state, float $dt): void
+    {
+        // Jorgenson User Cost of Capital Model (1963) for Residential Housing
+        // User cost of housing capital: U = Mortgage Rate + Property Tax/Maintenance - Expected Inflation
+        $mortgageRate = $state->yield30yEma + self::RESIDENTIAL_MORTGAGE_SPREAD;
+        $userCost = max(0.015, $mortgageRate + self::RESIDENTIAL_DEPRECIATION_TAX_RATE - $state->inflationEma);
+
+        // Housing Affordability & Spatial Demand Equilibrium
+        $excessUnemployment = max(0.0, $state->unemploymentRateEma - self::NATURAL_UNEMPLOYMENT);
+        $affordabilityFactor = (self::RESIDENTIAL_NEUTRAL_USER_COST / $userCost) * (1.0 - ($excessUnemployment * self::RESIDENTIAL_UNEMPLOYMENT_SENSITIVITY));
+        $fundamentalPrice = self::RESIDENTIAL_BASELINE * max(0.30, min(2.50, $affordabilityFactor));
+
+        // Sticky physical housing price mean-reversion toward user cost equilibrium
+        $dW = $this->mathUtility->generateStandardNormal();
+        $newIndex = $this->mathUtility->calculateSchwartz1Factor(
+            currentPrice: $state->residentialPropertyIndex,
+            kappa: self::RESIDENTIAL_MEAN_REVERSION,
+            theta: $fundamentalPrice,
+            sigma: self::RESIDENTIAL_VOLATILITY,
+            dt: $dt,
+            dW: $dW
+        );
+
+        $state->residentialPropertyIndex = max(30.0, min(300.0, $newIndex));
     }
 }

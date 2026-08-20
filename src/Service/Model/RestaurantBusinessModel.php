@@ -172,10 +172,14 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
         $energyDrag = $energyShift * self::UTILITY_ENERGY_DRAG_SCALAR * $corporateWeight;
 
+        // Food Commodity Drag (Agri Index): Company-operated stores pay direct food ingredient costs
+        $agriShift = max(0.0, ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0);
+        $foodCommodityDrag = $agriShift * 0.20 * (1.0 - ($pricingPower * 0.50)) * $corporateWeight;
+
         // Continuous Elasticity
         $elasticityShift = -self::FRANCHISE_SCALE_ELASTICITY * $franchiseZ * $franchiseWeight;
 
-        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $foodSafetyPenalty + $inflationPenalty + $energyDrag + $elasticityShift;
+        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $foodSafetyPenalty + $inflationPenalty + $energyDrag + $foodCommodityDrag + $elasticityShift;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         $primaryShockZ = ($corporateZ * $corporateWeight) + ($franchiseZ * $franchiseWeight);

@@ -96,6 +96,54 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $consumerSentimentIndexEma = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $exchangeRateIndex = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $exchangeRateIndexEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $industrialMetalsIndex = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $industrialMetalsIndexEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $governmentSpendingIndex = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $governmentSpendingIndexEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $commercialPropertyIndex = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $commercialPropertyIndexEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $residentialPropertyIndex = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $residentialPropertyIndexEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $retailDefaultRate = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $retailDefaultRateEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $agriculturalCommodityIndex = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $agriculturalCommodityIndexEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $freightRateIndex = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $freightRateIndexEma = null;
+
     // --- Standard Getters & Setters ---
 
     public function getId(): ?int { return $this->id; }
@@ -182,4 +230,52 @@ class MacroReport
 
     public function getConsumerSentimentIndexEma(): ?string { return $this->consumerSentimentIndexEma; }
     public function setConsumerSentimentIndexEma(string $consumerSentimentIndexEma): self { $this->consumerSentimentIndexEma = $consumerSentimentIndexEma; return $this; }
+
+    public function getExchangeRateIndex(): ?string { return $this->exchangeRateIndex; }
+    public function setExchangeRateIndex(string $exchangeRateIndex): self { $this->exchangeRateIndex = $exchangeRateIndex; return $this; }
+
+    public function getExchangeRateIndexEma(): ?string { return $this->exchangeRateIndexEma; }
+    public function setExchangeRateIndexEma(string $exchangeRateIndexEma): self { $this->exchangeRateIndexEma = $exchangeRateIndexEma; return $this; }
+
+    public function getIndustrialMetalsIndex(): ?string { return $this->industrialMetalsIndex; }
+    public function setIndustrialMetalsIndex(string $industrialMetalsIndex): self { $this->industrialMetalsIndex = $industrialMetalsIndex; return $this; }
+
+    public function getIndustrialMetalsIndexEma(): ?string { return $this->industrialMetalsIndexEma; }
+    public function setIndustrialMetalsIndexEma(string $industrialMetalsIndexEma): self { $this->industrialMetalsIndexEma = $industrialMetalsIndexEma; return $this; }
+
+    public function getGovernmentSpendingIndex(): ?string { return $this->governmentSpendingIndex; }
+    public function setGovernmentSpendingIndex(string $governmentSpendingIndex): self { $this->governmentSpendingIndex = $governmentSpendingIndex; return $this; }
+
+    public function getGovernmentSpendingIndexEma(): ?string { return $this->governmentSpendingIndexEma; }
+    public function setGovernmentSpendingIndexEma(string $governmentSpendingIndexEma): self { $this->governmentSpendingIndexEma = $governmentSpendingIndexEma; return $this; }
+
+    public function getCommercialPropertyIndex(): ?string { return $this->commercialPropertyIndex; }
+    public function setCommercialPropertyIndex(string $commercialPropertyIndex): self { $this->commercialPropertyIndex = $commercialPropertyIndex; return $this; }
+
+    public function getCommercialPropertyIndexEma(): ?string { return $this->commercialPropertyIndexEma; }
+    public function setCommercialPropertyIndexEma(string $commercialPropertyIndexEma): self { $this->commercialPropertyIndexEma = $commercialPropertyIndexEma; return $this; }
+
+    public function getResidentialPropertyIndex(): ?string { return $this->residentialPropertyIndex; }
+    public function setResidentialPropertyIndex(string $residentialPropertyIndex): self { $this->residentialPropertyIndex = $residentialPropertyIndex; return $this; }
+
+    public function getResidentialPropertyIndexEma(): ?string { return $this->residentialPropertyIndexEma; }
+    public function setResidentialPropertyIndexEma(string $residentialPropertyIndexEma): self { $this->residentialPropertyIndexEma = $residentialPropertyIndexEma; return $this; }
+
+    public function getRetailDefaultRate(): ?string { return $this->retailDefaultRate; }
+    public function setRetailDefaultRate(string $retailDefaultRate): self { $this->retailDefaultRate = $retailDefaultRate; return $this; }
+
+    public function getRetailDefaultRateEma(): ?string { return $this->retailDefaultRateEma; }
+    public function setRetailDefaultRateEma(string $retailDefaultRateEma): self { $this->retailDefaultRateEma = $retailDefaultRateEma; return $this; }
+
+    public function getAgriculturalCommodityIndex(): ?string { return $this->agriculturalCommodityIndex; }
+    public function setAgriculturalCommodityIndex(string $agriculturalCommodityIndex): self { $this->agriculturalCommodityIndex = $agriculturalCommodityIndex; return $this; }
+
+    public function getAgriculturalCommodityIndexEma(): ?string { return $this->agriculturalCommodityIndexEma; }
+    public function setAgriculturalCommodityIndexEma(string $agriculturalCommodityIndexEma): self { $this->agriculturalCommodityIndexEma = $agriculturalCommodityIndexEma; return $this; }
+
+    public function getFreightRateIndex(): ?string { return $this->freightRateIndex; }
+    public function setFreightRateIndex(string $freightRateIndex): self { $this->freightRateIndex = $freightRateIndex; return $this; }
+
+    public function getFreightRateIndexEma(): ?string { return $this->freightRateIndexEma; }
+    public function setFreightRateIndexEma(string $freightRateIndexEma): self { $this->freightRateIndexEma = $freightRateIndexEma; return $this; }
 }

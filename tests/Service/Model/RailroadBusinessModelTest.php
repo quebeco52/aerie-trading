@@ -59,4 +59,30 @@ class RailroadBusinessModelTest extends TestCase
             1.0
         );
     }
+
+    public function testFreightAndAgriCommodityIndexShifts(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('UNP');
+        $stock->setBeta('1.0');
+
+        $baseMacro = new MacroStateDTO(
+            freightRateIndexEma: 100.0,
+            agriculturalCommodityIndexEma: 100.0
+        );
+
+        $surgeMacro = new MacroStateDTO(
+            freightRateIndexEma: 140.0,
+            agriculturalCommodityIndexEma: 130.0
+        );
+
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $baseResult = $this->model->computeActualFinancials($stock, 1_000_000.0, 0.40, 200_000.0, 0.0, $baseMacro, $mathMock);
+        $surgeResult = $this->model->computeActualFinancials($stock, 1_000_000.0, 0.40, 200_000.0, 0.0, $surgeMacro, $mathMock);
+
+        $this->assertGreaterThan($baseResult->streamRevenue['intermodal_freight'], $surgeResult->streamRevenue['intermodal_freight']);
+        $this->assertGreaterThan($baseResult->streamRevenue['bulk_commodities'], $surgeResult->streamRevenue['bulk_commodities']);
+    }
 }

@@ -200,8 +200,12 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         $excessInflation = max(0.0, $inflation - MacroEngine::TARGET_INFLATION);
         $inflationBonus = $excessInflation * $beta * self::INFLATION_BONUS_SCALAR * $spotSensitivity;
 
-        // High energyShift implies high convenience yield (tight spot market inventory)
-        $convenienceYieldBonus = max(0.0, $energyShift) * self::INFLATION_BONUS_SCALAR * $spotSensitivity;
+        // High energy/metals/agri shifts imply high convenience yield (tight spot market inventory)
+        $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
+        $agriShift = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
+        
+        $commodityTightness = max(0.0, $energyShift) + max(0.0, $metalsShift * 0.50) + max(0.0, $agriShift * 0.50);
+        $convenienceYieldBonus = $commodityTightness * self::INFLATION_BONUS_SCALAR * $spotSensitivity;
 
         // --- 3-2-1 Crack Spread Physics ---
         // Refineries buy raw energy (energyShift) and sell end products governed by industrial demand (outputGapEma).

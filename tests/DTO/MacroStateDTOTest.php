@@ -19,6 +19,10 @@ class MacroStateDTOTest extends TestCase
         $this->assertEquals(MacroEngine::TARGET_INFLATION, $dto->inflationEma);
         $this->assertEquals(0.02, $dto->outputGap);
         $this->assertEquals(0.15, $dto->marketVolatility);
+        $this->assertEquals(100.0, $dto->exchangeRateIndex);
+        $this->assertEquals(100.0, $dto->industrialMetalsIndex);
+        $this->assertEquals(100.0, $dto->governmentSpendingIndex);
+        $this->assertEquals(100.0, $dto->commercialPropertyIndex);
         $this->assertFalse($dto->qeActive);
         $this->assertNull($dto->eventType);
     }
@@ -41,6 +45,14 @@ class MacroStateDTOTest extends TestCase
             'yield_10y_ema' => 0.049,
             'yield_30y' => 0.052,
             'yield_30y_ema' => 0.051,
+            'exchange_rate_index' => 105.5,
+            'exchange_rate_index_ema' => 104.2,
+            'industrial_metals_index' => 112.0,
+            'industrial_metals_index_ema' => 110.0,
+            'government_spending_index' => 95.0,
+            'government_spending_index_ema' => 96.0,
+            'commercial_property_index' => 88.5,
+            'commercial_property_index_ema' => 90.0,
             'market_volatility' => 0.22,
             'market_volatility_ema' => 0.20,
             'market_z' => 1.2,
@@ -61,11 +73,19 @@ class MacroStateDTOTest extends TestCase
         $dto = MacroStateDTO::fromArray($payload);
 
         $this->assertEquals(0.03, $dto->outputGap);
+        $this->assertEquals(105.5, $dto->exchangeRateIndex);
+        $this->assertEquals(112.0, $dto->industrialMetalsIndex);
+        $this->assertEquals(95.0, $dto->governmentSpendingIndex);
+        $this->assertEquals(88.5, $dto->commercialPropertyIndex);
         $this->assertTrue($dto->qeActive);
         $this->assertEquals('TIGHTENING', $dto->eventType);
 
         $exported = $dto->toArray();
         $this->assertEquals($payload['output_gap'], $exported['output_gap']);
+        $this->assertEquals($payload['exchange_rate_index'], $exported['exchange_rate_index']);
+        $this->assertEquals($payload['industrial_metals_index'], $exported['industrial_metals_index']);
+        $this->assertEquals($payload['government_spending_index'], $exported['government_spending_index']);
+        $this->assertEquals($payload['commercial_property_index'], $exported['commercial_property_index']);
         $this->assertEquals($payload['qe_active'], $exported['qe_active']);
         $this->assertEquals($payload['event_type'], $exported['event_type']);
     }
@@ -75,6 +95,10 @@ class MacroStateDTOTest extends TestCase
         $state = new MacroState();
         $state->outputGap = 0.04;
         $state->inflation = 0.03;
+        $state->exchangeRateIndex = 108.0;
+        $state->industrialMetalsIndex = 115.0;
+        $state->governmentSpendingIndex = 92.0;
+        $state->commercialPropertyIndex = 85.0;
         $state->qeActive = true;
         $state->eventType = 'STIMULUS';
 
@@ -82,6 +106,10 @@ class MacroStateDTOTest extends TestCase
 
         $this->assertEquals(0.04, $dto->outputGap);
         $this->assertEquals(0.03, $dto->inflation);
+        $this->assertEquals(108.0, $dto->exchangeRateIndex);
+        $this->assertEquals(115.0, $dto->industrialMetalsIndex);
+        $this->assertEquals(92.0, $dto->governmentSpendingIndex);
+        $this->assertEquals(85.0, $dto->commercialPropertyIndex);
         $this->assertTrue($dto->qeActive);
         $this->assertEquals('STIMULUS', $dto->eventType);
     }

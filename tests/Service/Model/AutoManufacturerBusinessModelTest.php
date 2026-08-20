@@ -163,4 +163,19 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $this->assertGreaterThan(-0.25, $result->observableShockZ);
         $this->assertLessThan(0.0, $result->observableShockZ);
     }
+
+    public function testExchangeRateExportDragOnMacroPhysics(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('GEN_AUTO');
+        $stock->setBeta('1.2');
+
+        $baseMacro = new MacroStateDTO(exchangeRateIndexEma: 100.0);
+        $strongDollarMacro = new MacroStateDTO(exchangeRateIndexEma: 120.0);
+
+        $basePhysics = $this->model->getMacroPhysics($stock, $baseMacro);
+        $strongDollarPhysics = $this->model->getMacroPhysics($stock, $strongDollarMacro);
+
+        $this->assertLessThan($basePhysics['macro_demand_shift'], $strongDollarPhysics['macro_demand_shift']);
+    }
 }

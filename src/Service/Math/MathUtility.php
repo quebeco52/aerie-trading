@@ -650,7 +650,7 @@ class MathUtility
 
         // Rational approximation for upper tail
         $q = sqrt(-2.0 * log(1.0 - $p));
-        return -(((((($c1 * $q + $c2) * $q + $c3) * $q + $c4) * $q + $c5) * $q + $c6) /
+        return - (((((($c1 * $q + $c2) * $q + $c3) * $q + $c4) * $q + $c5) * $q + $c6) /
             (((($d1 * $q + $d2) * $q + $d3) * $q + $d4) * $q + 1.0));
     }
 
@@ -759,6 +759,128 @@ class MathUtility
         $nextLogPrice = $drift + $diffusion;
 
         return exp($nextLogPrice);
+    }
+
+    /**
+     * Schwartz-Smith 2-Factor Model (2000) for industrial commodity pricing.
+     * Decomposes log-price into a mean-reverting short-term deviation (chi)
+     * and a drifting long-term equilibrium (xi).
+     *
+     * @param float $chi     Current short-term log-deviation state.
+     * @param float $xi      Current long-term log-equilibrium state.
+     * @param float $kappa   Mean-reversion speed of short-term deviation.
+     * @param float $muXi    Drift rate of long-term equilibrium (supercycle trend).
+     * @param float $sigChi  Volatility of short-term deviation.
+     * @param float $sigXi   Volatility of long-term equilibrium.
+     * @param float $rho     Correlation between chi and xi innovations.
+     * @param float $dt      Time step in years.
+     * @param float|null $dW1 Optional standard normal draw for short-term factor.
+     * @param float|null $dW2 Optional standard normal draw for long-term factor uncorrected component.
+     * @return array{chi: float, xi: float, spot: float}
+     */
+    public function calculateSchwartz2Factor(
+        float $chi,
+        float $xi,
+        float $kappa,
+        float $muXi,
+        float $sigChi,
+        float $sigXi,
+        float $rho,
+        float $dt,
+        ?float $dW1 = null,
+        ?float $dW2 = null
+    ): array {
+        $dW1 ??= $this->generateStandardNormal();
+        $dW2 ??= $this->generateStandardNormal();
+
+        $clampedRho = max(-0.99, min(0.99, $rho));
+        $safeKappa = max(0.0001, $kappa);
+
+        // Correlated standard normal innovations
+        $zChi = $dW1;
+        $zXi = ($clampedRho * $dW1) + (sqrt(1.0 - ($clampedRho * $clampedRho)) * $dW2);
+
+        // Exact discretization of OU process for chi (mean-reverting to 0)
+        $expKappaDt = exp(-$safeKappa * $dt);
+        $chiDrift = $chi * $expKappaDt;
+        $chiVariance = ($sigChi * $sigChi / (2.0 * $safeKappa)) * (1.0 - exp(-2.0 * $safeKappa * $dt));
+        $nextChi = $chiDrift + sqrt($chiVariance) * $zChi;
+
+        // Long-term equilibrium drift (Arithmetic Brownian Motion for log-equilibrium)
+        $nextXi = $xi + ($muXi * $dt) + ($sigXi * sqrt($dt) * $zXi);
+
+        $spot = exp($nextChi + $nextXi);
+
+        return [
+            'chi'  => $nextChi,
+            'xi'   => $nextXi,
+            'spot' => $spot,
+        ];
+    }
+
+    /**
+     * Two-Factor Correlated Ornstein-Uhlenbeck (OU) Process.
+     * Models a spot price derived from two distinct mean-reverting log-state variables.
+     * Ideal for bounded index simulations (e.g., short-term shocks vs long-term structural cycles).
+     *
+     * @param float $chi       Current state of Factor 1 (e.g., short-term).
+     * @param float $xi        Current state of Factor 2 (e.g., long-term).
+     * @param float $kappaChi  Mean-reversion speed of Factor 1.
+     * @param float $kappaXi   Mean-reversion speed of Factor 2.
+     * @param float $thetaChi  Equilibrium target of Factor 1.
+     * @param float $thetaXi   Equilibrium target of Factor 2.
+     * @param float $sigChi    Volatility of Factor 1.
+     * @param float $sigXi     Volatility of Factor 2.
+     * @param float $rho       Correlation coefficient between the two factors [-1, 1].
+     * @param float $dt        Time step in years.
+     * @param float|null $dW1  Optional standard normal draw for Factor 1.
+     * @param float|null $dW2  Optional standard normal draw for Factor 2.
+     * @return array{chi: float, xi: float, spot: float}
+     */
+    public function calculateTwoFactorOU(
+        float $chi,
+        float $xi,
+        float $kappaChi,
+        float $kappaXi,
+        float $thetaChi,
+        float $thetaXi,
+        float $sigChi,
+        float $sigXi,
+        float $rho,
+        float $dt,
+        ?float $dW1 = null,
+        ?float $dW2 = null
+    ): array {
+        $dW1 ??= $this->generateStandardNormal();
+        $dW2 ??= $this->generateStandardNormal();
+
+        $clampedRho = max(-0.99, min(0.99, $rho));
+        $safeKappaChi = max(0.0001, $kappaChi);
+        $safeKappaXi = max(0.0001, $kappaXi);
+
+        // Correlated standard normal innovations
+        $zChi = $dW1;
+        $zXi = ($clampedRho * $dW1) + (sqrt(1.0 - ($clampedRho * $clampedRho)) * $dW2);
+
+        // Exact discretization for Factor 1 (Chi)
+        $expKappaChiDt = exp(-$safeKappaChi * $dt);
+        $chiDrift = ($chi * $expKappaChiDt) + ($thetaChi * (1.0 - $expKappaChiDt));
+        $chiVariance = ($sigChi * $sigChi / (2.0 * $safeKappaChi)) * (1.0 - exp(-2.0 * $safeKappaChi * $dt));
+        $nextChi = $chiDrift + sqrt($chiVariance) * $zChi;
+
+        // Exact discretization for Factor 2 (Xi)
+        $expKappaXiDt = exp(-$safeKappaXi * $dt);
+        $xiDrift = ($xi * $expKappaXiDt) + ($thetaXi * (1.0 - $expKappaXiDt));
+        $xiVariance = ($sigXi * $sigXi / (2.0 * $safeKappaXi)) * (1.0 - exp(-2.0 * $safeKappaXi * $dt));
+        $nextXi = $xiDrift + sqrt($xiVariance) * $zXi;
+
+        $spot = exp($nextChi + $nextXi);
+
+        return [
+            'chi'  => $nextChi,
+            'xi'   => $nextXi,
+            'spot' => $spot,
+        ];
     }
 
     public function calculateReversionPull(

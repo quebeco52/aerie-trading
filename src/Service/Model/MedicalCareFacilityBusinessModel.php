@@ -193,11 +193,12 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         }
 
         // --- Tri-Stream Revenue Calculation ---
+        $govShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
         $inpatientShock  = $inpatientZ * ($baselineVol * self::INPATIENT_VARIANCE_SCALAR);
         $outpatientShock = $outpatientZ * ($baselineVol * self::OUTPATIENT_VARIANCE_SCALAR);
         $arbitrageShock  = $arbitrageZ * ($baselineVol * self::ARBITRAGE_VARIANCE_SCALAR);
 
-        $inpatientRevenue  = max(0.0, $expectedRevenue * $inpatientWeight * (1.0 + $inpatientShock) * $spendingMultiplier);
+        $inpatientRevenue  = max(0.0, $expectedRevenue * $inpatientWeight * (1.0 + $inpatientShock + ($govShift * 0.30)) * $spendingMultiplier);
         $outpatientRevenue = max(0.0, $expectedRevenue * $outpatientWeight * (1.0 + $outpatientShock + $outpatientMacroBoost));
         $arbitrageRevenue  = max(0.0, $expectedRevenue * $arbitrageWeight * (1.0 + $arbitrageShock + $arbitrageInflationBoost));
 

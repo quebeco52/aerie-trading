@@ -56,4 +56,22 @@ class EducationBusinessModelTest extends TestCase
             1.0
         );
     }
+
+    public function testGovernmentSpendingGrantsBoostEnrollment(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('STRA');
+        $stock->setBeta('1.0');
+
+        $baseMacro = new MacroStateDTO(governmentSpendingIndexEma: 100.0);
+        $expansionMacro = new MacroStateDTO(governmentSpendingIndexEma: 130.0);
+
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $baseMacro, $mathMock);
+        $expansionResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $expansionMacro, $mathMock);
+
+        $this->assertGreaterThan($baseResult->streamRevenue['degree_tuition_enrollment'], $expansionResult->streamRevenue['degree_tuition_enrollment']);
+    }
 }

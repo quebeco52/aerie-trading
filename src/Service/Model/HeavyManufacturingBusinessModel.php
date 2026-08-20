@@ -106,7 +106,9 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         $dampedOemShock = ($oemZ * ($baselineVol * self::OEM_VARIANCE_SCALAR)) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
         $mroShock       = $mroZ * ($baselineVol * self::MRO_VARIANCE_SCALAR);
 
-        $oemRevenue = max(0.0, $expectedRevenue * $oemWeight * (1.0 + $dampedOemShock));
+        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
+
+        $oemRevenue = max(0.0, $expectedRevenue * $oemWeight * (1.0 + $dampedOemShock - ($fxShift * 0.15)));
         $mroRevenue = max(0.0, $expectedRevenue * $mroWeight * (1.0 + $mroShock));
         $streamRevenues = [
             'oem_equipment'   => $oemRevenue,
@@ -128,9 +130,12 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
 
         $actualVariableCosts = ($mroRevenue * self::MRO_VARIABLE_COST_RATIO) + ($oemRevenue * $oemVariableMargin);
 
-        // Supply Chain Energy Penalty: Heavy industry relies heavily on energy and commodities.
+        // Supply Chain Energy & Freight Penalty: Heavy industry relies heavily on energy, metals, and transit logistics.
         $energyShift = ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0;
-        $baseInflationPenalty = $energyShift > 0 ? $energyShift * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0;
+        $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
+        $freightShift = max(0.0, ($macroState->freightRateIndexEma - 100.0) / 100.0);
+        $combinedCommodityDrag = max(0.0, $energyShift + $metalsShift + ($freightShift * 0.30));
+        $baseInflationPenalty = $combinedCommodityDrag > 0 ? $combinedCommodityDrag * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0;
         $inflationPenalty = $baseInflationPenalty * $inflationMultiplier;
 
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;

@@ -171,9 +171,12 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $targetTotalCosts = $expectedRevenue * $realizedVariableMargin;
         $fpBaselineCosts = max(0.0, $targetTotalCosts - $tpCosts - $adsCosts);
         $fpVariableMargin = $expectedRevenue * $fpWeight > 0 ? $fpBaselineCosts / ($expectedRevenue * $fpWeight) : $realizedVariableMargin;
+        
+        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
+        $fpCostSavings = $fpRevenue * $fxShift * 0.15;
 
         // Re-blend actual costs based on shocked revenue
-        $actualVariableCosts = $tpCosts + $adsCosts + ($fpRevenue * $fpVariableMargin);
+        $actualVariableCosts = $tpCosts + $adsCosts + ($fpRevenue * $fpVariableMargin) - $fpCostSavings;
 
         // --- Inflation & Labor Penalties ---
         $inflation = $macroState->inflationEma;
@@ -189,7 +192,11 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
             ? (0.04 - $unemployment) * self::WAGE_INFLATION_SCALAR // Tight labor market forces wage hikes
             : 0.0;
 
-        $totalMacroCostDrag = ($goodsInflationDrag * $fpWeight) + ($wageInflationDrag * ($fpWeight + $tpWeight));
+        // Global ocean & logistics freight spikes increase 1P import and 3P fulfillment delivery costs
+        $freightShift = max(0.0, ($macroState->freightRateIndexEma - 100.0) / 100.0);
+        $freightCostDrag = $freightShift * 0.05 * ($fpWeight + $tpWeight);
+
+        $totalMacroCostDrag = ($goodsInflationDrag * $fpWeight) + ($wageInflationDrag * ($fpWeight + $tpWeight)) + $freightCostDrag;
 
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
 

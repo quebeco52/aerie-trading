@@ -96,7 +96,9 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         $inflation = $macroState->inflationEma;
         $beta = (float) $stock->getBeta();
 
-        $blendedMacroShift = ($outputGap * 0.4) + ($sentimentShift * 0.6);
+        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
+        $resShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0; // Wealth effect from property
+        $blendedMacroShift = ($outputGap * 0.4) + ($sentimentShift * 0.6) + ($resShift * 0.20) - ($fxShift * 0.15);
 
         // Luxury goods benefit from Veblen pricing power during inflation
         $inflationBonus = $inflation > MacroEngine::TARGET_INFLATION ? ($inflation - MacroEngine::TARGET_INFLATION) * self::VEBLEN_INFLATION_SCALAR : 0.0;

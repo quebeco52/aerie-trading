@@ -4,6 +4,7 @@ namespace App\Service\Macro;
 
 class MacroState
 {
+    public float $totalTime = 0.0;
     public float $inflation = MacroEngine::TARGET_INFLATION;
     public float $inflationEma = MacroEngine::TARGET_INFLATION;
     public float $outputGap = 0.015;
@@ -17,6 +18,35 @@ class MacroState
     public float $energyPriceShock = 0.0;
     public float $consumerSentimentIndex = 108.0;
     public float $consumerSentimentIndexEma = 108.0;
+
+    public float $exchangeRateIndex = 100.0;
+    public float $exchangeRateIndexEma = 100.0;
+
+    public float $industrialMetalsIndex = 100.0;
+    public float $industrialMetalsIndexEma = 100.0;
+    public float $metalsChi = 0.0;
+    public float $metalsXi = 4.60517;
+
+    public float $governmentSpendingIndex = 100.0;
+    public float $governmentSpendingIndexEma = 100.0;
+
+    public float $commercialPropertyIndex = 100.0;
+    public float $commercialPropertyIndexEma = 100.0;
+
+    public float $residentialPropertyIndex = 100.0;
+    public float $residentialPropertyIndexEma = 100.0;
+
+    public float $retailDefaultRate = 0.0250;
+    public float $retailDefaultRateEma = 0.0250;
+
+    public float $agriculturalCommodityIndex = 100.0;
+    public float $agriculturalCommodityIndexEma = 100.0;
+    public float $agriChi = 0.0;
+    public float $agriXi = 4.60517;
+
+    public float $freightRateIndex = 100.0;
+    public float $freightRateIndexEma = 100.0;
+    public float $freightSupplyEma = 100.0;
 
     public float $targetRate = 0.0250;
     public float $policyRate = 0.0250;
@@ -61,6 +91,7 @@ class MacroState
     {
         $state = new self();
 
+        $state->totalTime = (float) ($data['total_time'] ?? 0.0);
         $state->inflation = $data['inflation'] ?? MacroEngine::TARGET_INFLATION;
         $state->inflationEma = $data['inflation_ema'] ?? $state->inflation;
         $state->outputGap = $data['output_gap'] ?? 0.015;
@@ -74,6 +105,35 @@ class MacroState
         $state->energyPriceShock = $data['energy_price_shock'] ?? 0.0;
         $state->consumerSentimentIndex = $data['consumer_sentiment_index'] ?? 108.0;
         $state->consumerSentimentIndexEma = $data['consumer_sentiment_index_ema'] ?? $state->consumerSentimentIndex;
+
+        $state->exchangeRateIndex = $data['exchange_rate_index'] ?? 100.0;
+        $state->exchangeRateIndexEma = $data['exchange_rate_index_ema'] ?? $state->exchangeRateIndex;
+
+        $state->industrialMetalsIndex = $data['industrial_metals_index'] ?? 100.0;
+        $state->industrialMetalsIndexEma = $data['industrial_metals_index_ema'] ?? $state->industrialMetalsIndex;
+        $state->metalsChi = $data['metals_chi'] ?? 0.0;
+        $state->metalsXi = $data['metals_xi'] ?? 4.60517;
+
+        $state->governmentSpendingIndex = $data['government_spending_index'] ?? 100.0;
+        $state->governmentSpendingIndexEma = $data['government_spending_index_ema'] ?? $state->governmentSpendingIndex;
+
+        $state->commercialPropertyIndex = $data['commercial_property_index'] ?? 100.0;
+        $state->commercialPropertyIndexEma = $data['commercial_property_index_ema'] ?? $state->commercialPropertyIndex;
+
+        $state->residentialPropertyIndex = $data['residential_property_index'] ?? 100.0;
+        $state->residentialPropertyIndexEma = $data['residential_property_index_ema'] ?? $state->residentialPropertyIndex;
+
+        $state->retailDefaultRate = $data['retail_default_rate'] ?? 0.0250;
+        $state->retailDefaultRateEma = $data['retail_default_rate_ema'] ?? $state->retailDefaultRate;
+
+        $state->agriculturalCommodityIndex = $data['agricultural_commodity_index'] ?? 100.0;
+        $state->agriculturalCommodityIndexEma = $data['agricultural_commodity_index_ema'] ?? $state->agriculturalCommodityIndex;
+        $state->agriChi = $data['agri_chi'] ?? 0.0;
+        $state->agriXi = $data['agri_xi'] ?? 4.60517;
+
+        $state->freightRateIndex = $data['freight_rate_index'] ?? 100.0;
+        $state->freightRateIndexEma = $data['freight_rate_index_ema'] ?? $state->freightRateIndex;
+        $state->freightSupplyEma = $data['freight_supply_ema'] ?? 100.0;
 
         $state->targetRate = $data['target_rate'] ?? 0.0250;
         $state->policyRate = $data['policy_rate'] ?? 0.0250;
@@ -120,6 +180,7 @@ class MacroState
     public function toArray(): array
     {
         return [
+            'total_time' => $this->totalTime,
             'inflation' => $this->inflation,
             'inflation_ema' => $this->inflationEma,
             'output_gap' => $this->outputGap,
@@ -131,6 +192,27 @@ class MacroState
             'energy_price_shock' => $this->energyPriceShock,
             'consumer_sentiment_index' => $this->consumerSentimentIndex,
             'consumer_sentiment_index_ema' => $this->consumerSentimentIndexEma,
+            'exchange_rate_index' => $this->exchangeRateIndex,
+            'exchange_rate_index_ema' => $this->exchangeRateIndexEma,
+            'industrial_metals_index' => $this->industrialMetalsIndex,
+            'industrial_metals_index_ema' => $this->industrialMetalsIndexEma,
+            'metals_chi' => $this->metalsChi,
+            'metals_xi' => $this->metalsXi,
+            'government_spending_index' => $this->governmentSpendingIndex,
+            'government_spending_index_ema' => $this->governmentSpendingIndexEma,
+            'commercial_property_index' => $this->commercialPropertyIndex,
+            'commercial_property_index_ema' => $this->commercialPropertyIndexEma,
+            'residential_property_index' => $this->residentialPropertyIndex,
+            'residential_property_index_ema' => $this->residentialPropertyIndexEma,
+            'retail_default_rate' => $this->retailDefaultRate,
+            'retail_default_rate_ema' => $this->retailDefaultRateEma,
+            'agricultural_commodity_index' => $this->agriculturalCommodityIndex,
+            'agricultural_commodity_index_ema' => $this->agriculturalCommodityIndexEma,
+            'agri_chi' => $this->agriChi,
+            'agri_xi' => $this->agriXi,
+            'freight_rate_index' => $this->freightRateIndex,
+            'freight_rate_index_ema' => $this->freightRateIndexEma,
+            'freight_supply_ema' => $this->freightSupplyEma,
             'target_rate' => $this->targetRate,
             'policy_rate' => $this->policyRate,
             'policy_rate_ema' => $this->policyRateEma,

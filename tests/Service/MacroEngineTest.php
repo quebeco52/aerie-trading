@@ -61,10 +61,18 @@ class MacroEngineTest extends TestCase
         $result = $this->engine->updateMacroState(1.0);
 
         $this->assertInstanceOf(\App\DTO\MacroStateDTO::class, $result);
-        
+
         // Starting in a 0.02 boom pulls the initial target rate up, raising the policy rate from 0.02 to ~0.04
         $this->assertEqualsWithDelta(0.04, $result->policyRate, 0.01);
         $this->assertEqualsWithDelta(0.02, $result->inflation, 0.01);
+        $this->assertGreaterThan(0.0, $result->exchangeRateIndex);
+        $this->assertGreaterThan(0.0, $result->industrialMetalsIndex);
+        $this->assertGreaterThan(0.0, $result->governmentSpendingIndex);
+        $this->assertGreaterThan(0.0, $result->commercialPropertyIndex);
+        $this->assertGreaterThan(0.0, $result->residentialPropertyIndex);
+        $this->assertGreaterThan(0.0, $result->retailDefaultRate);
+        $this->assertGreaterThan(0.0, $result->agriculturalCommodityIndex);
+        $this->assertGreaterThan(0.0, $result->freightRateIndex);
     }
 
     public function testUpdateMacroStateWithExistingStateAndRecessionShock()
@@ -91,20 +99,20 @@ class MacroEngineTest extends TestCase
         $result = $this->engine->updateMacroState(0.25); // Advance by 1 quarter
 
         $this->assertInstanceOf(\App\DTO\MacroStateDTO::class, $result);
-        
+
         // Output gap should drop below 0 due to the negative shock
         $this->assertLessThan(0.0, $result->outputGap, 'Recession shock should drive output gap negative.');
-        
+
         // Because output gap is negative, ERP should increase
         $this->assertGreaterThan(MacroEngine::BASE_EQUITY_RISK_PREMIUM, $result->equityRiskPremium, 'ERP should rise during a recession.');
     }
-    
+
     public function testUpdateMacroStateDuringSevereInflationBoom()
     {
         $existingState = [
             'inflation' => 0.08, // Massive 8% inflation
             'output_gap' => 0.05, // 5% positive output gap (overheated)
-            'policy_rate' => 0.05, 
+            'policy_rate' => 0.05,
             'inflation_ema' => 0.07,
             'output_gap_ema' => 0.04,
             'policy_rate_ema' => 0.05,
@@ -122,14 +130,416 @@ class MacroEngineTest extends TestCase
         $result = $this->engine->updateMacroState(0.05);
 
         $this->assertInstanceOf(\App\DTO\MacroStateDTO::class, $result);
-        
+
         // Central bank should aggressively hike target rates
         $this->assertGreaterThan(0.05, $result->targetRate, 'Central Bank should aggressively hike rates during an inflationary boom.');
-        
+
         // Corporate tax rate should increase to cool the economy
         $this->assertGreaterThan(MacroEngine::BASE_CORPORATE_TAX_RATE, $result->corporateTaxRate, 'Fiscal policy should hike taxes to cool an overheated economy.');
-        
+
         // ERP should drop due to complacency in a boom
         $this->assertLessThan(MacroEngine::BASE_EQUITY_RISK_PREMIUM, $result->equityRiskPremium, 'ERP should drop during an economic boom due to market complacency.');
+    }
+
+    public function testExchangeRateAppreciatesDuringHighDomesticRates(): void
+    {
+        $existingState = [
+            'policy_rate' => 0.06, // 6% policy rate (well above 2.5% global baseline)
+            'policy_rate_ema' => 0.06,
+            'exchange_rate_index' => 100.0,
+            'exchange_rate_index_ema' => 100.0,
+            'inflation' => 0.02,
+            'inflation_ema' => 0.02,
+            'output_gap' => 0.0,
+            'output_gap_ema' => 0.0,
+            'yield5y' => 0.06,
+            'yield10y' => 0.065,
+        ];
+
+        $this->redisMock->expects($this->once())
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturn(json_encode($existingState));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.25);
+
+        $this->assertGreaterThan(100.0, $result->exchangeRateIndex, 'High domestic policy rate should drive currency appreciation via UIP.');
+        $this->assertGreaterThan(100.0, $result->exchangeRateIndexEma);
+    }
+
+    public function testExchangeRateDepreciatesDuringLowDomesticRates(): void
+    {
+        $existingState = [
+            'policy_rate' => 0.005, // 0.5% policy rate (well below 2.5% global baseline)
+            'policy_rate_ema' => 0.005,
+            'exchange_rate_index' => 100.0,
+            'exchange_rate_index_ema' => 100.0,
+            'inflation' => 0.02,
+            'inflation_ema' => 0.02,
+            'output_gap' => 0.0,
+            'output_gap_ema' => 0.0,
+            'yield5y' => 0.01,
+            'yield10y' => 0.02,
+        ];
+
+        $this->redisMock->expects($this->once())
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturn(json_encode($existingState));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.25);
+
+        $this->assertLessThan(100.0, $result->exchangeRateIndex, 'Low domestic policy rate should drive currency depreciation via UIP.');
+    }
+
+    public function testIndustrialMetalsRiseDuringBoom(): void
+    {
+        $existingState = [
+            'output_gap' => 0.04,
+            'output_gap_ema' => 0.04,
+            'industrial_metals_index' => 100.0,
+            'industrial_metals_index_ema' => 100.0,
+            'metals_chi' => 0.0,
+            'metals_xi' => 4.60517, // ln(100)
+            'inflation' => 0.02,
+            'inflation_ema' => 0.02,
+            'policy_rate' => 0.03,
+            'policy_rate_ema' => 0.03,
+            'yield5y' => 0.035,
+            'yield10y' => 0.04,
+        ];
+
+        $this->redisMock->expects($this->once())
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturn(json_encode($existingState));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.50);
+
+        $this->assertGreaterThan(100.0, $result->industrialMetalsIndex, 'Positive output gap should drive positive supercycle drift in metals.');
+    }
+
+    public function testGovernmentSpendingRisesDuringRecession(): void
+    {
+        $existingState = [
+            'output_gap' => -0.04,
+            'output_gap_ema' => -0.04,
+            'government_spending_index' => 100.0,
+            'government_spending_index_ema' => 100.0,
+            'inflation' => 0.02,
+            'inflation_ema' => 0.02,
+            'policy_rate' => 0.02,
+            'policy_rate_ema' => 0.02,
+            'yield5y' => 0.025,
+            'yield10y' => 0.03,
+        ];
+
+        $this->redisMock->expects($this->once())
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturn(json_encode($existingState));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.25);
+
+        $this->assertGreaterThan(MacroEngine::GOVT_SPENDING_BASELINE, $result->governmentSpendingIndex, 'Recession should trigger countercyclical automatic fiscal stabilizers.');
+    }
+
+    public function testGovernmentSpendingFallsDuringBoom(): void
+    {
+        $existingState = [
+            'output_gap' => 0.04,
+            'output_gap_ema' => 0.04,
+            'government_spending_index' => 100.0,
+            'government_spending_index_ema' => 100.0,
+            'inflation' => 0.02,
+            'inflation_ema' => 0.02,
+            'policy_rate' => 0.04,
+            'policy_rate_ema' => 0.04,
+            'yield5y' => 0.045,
+            'yield10y' => 0.05,
+        ];
+
+        $this->redisMock->expects($this->once())
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturn(json_encode($existingState));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.25);
+
+        $this->assertLessThan(MacroEngine::GOVT_SPENDING_BASELINE, $result->governmentSpendingIndex, 'Economic boom should reduce government spending index.');
+    }
+
+    public function testCommercialPropertyCollapsesDuringHighRatesAndUnemployment(): void
+    {
+        $existingState = [
+            'unemployment_rate' => 0.08,
+            'unemployment_rate_ema' => 0.08,
+            'yield10y' => 0.08,
+            'yield10y_ema' => 0.08,
+            'macro_credit_spread' => 0.05,
+            'macro_credit_spread_ema' => 0.05,
+            'commercial_property_index' => 100.0,
+            'commercial_property_index_ema' => 100.0,
+            'inflation' => 0.02,
+            'inflation_ema' => 0.02,
+            'output_gap' => -0.05,
+            'output_gap_ema' => -0.05,
+            'policy_rate' => 0.06,
+            'policy_rate_ema' => 0.06,
+            'yield5y' => 0.075,
+        ];
+
+        $this->redisMock->expects($this->once())
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturn(json_encode($existingState));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.25);
+
+        $this->assertLessThan(100.0, $result->commercialPropertyIndex, 'Elevated cap rates and high unemployment should crush commercial property valuations.');
+    }
+
+    public function testRetailDefaultRateSpikesDuringUnemploymentAndInflation(): void
+    {
+        $existingState = [
+            'unemployment_rate' => 0.09,
+            'unemployment_rate_ema' => 0.09,
+            'inflation' => 0.08,
+            'inflation_ema' => 0.08,
+            'policy_rate' => 0.06,
+            'policy_rate_ema' => 0.06,
+            'yield5y' => 0.07,
+            'yield10y' => 0.075,
+            'output_gap' => -0.04,
+            'output_gap_ema' => -0.04,
+            'retail_default_rate' => 0.025,
+            'retail_default_rate_ema' => 0.025,
+        ];
+
+        $this->redisMock->expects($this->once())
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturn(json_encode($existingState));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.25);
+
+        $this->assertGreaterThan(MacroEngine::RETAIL_DEFAULT_BASELINE, $result->retailDefaultRate, 'High unemployment and inflation should spike retail defaults via Vasicek ASRF.');
+    }
+
+    public function testAgriculturalCommoditiesFluctuateWithSeasonality(): void
+    {
+        $existingState = [
+            'output_gap' => 0.01,
+            'output_gap_ema' => 0.01,
+            'agricultural_commodity_index' => 100.0,
+            'agricultural_commodity_index_ema' => 100.0,
+            'agri_chi' => 0.0,
+            'agri_xi' => 4.60517,
+            'nominal_gdp_index' => 1.0,
+            'inflation' => 0.02,
+            'inflation_ema' => 0.02,
+            'policy_rate' => 0.03,
+            'policy_rate_ema' => 0.03,
+            'yield5y' => 0.04,
+            'yield10y' => 0.045,
+        ];
+
+        $this->redisMock->expects($this->once())
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturn(json_encode($existingState));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.25);
+
+        $this->assertGreaterThan(0.0, $result->agriculturalCommodityIndex);
+        $this->assertGreaterThan(0.0, $result->agriculturalCommodityIndexEma);
+    }
+
+    public function testFreightRateIndexMaintainsEquilibriumAtNeutralState(): void
+    {
+        $neutralState = [
+            'output_gap' => 0.0,
+            'output_gap_ema' => 0.0,
+            'industrial_metals_index' => 100.0,
+            'industrial_metals_index_ema' => 100.0,
+            'freight_rate_index' => 100.0,
+            'freight_rate_index_ema' => 100.0,
+            'freight_supply_ema' => 100.0,
+            'inflation' => MacroEngine::TARGET_INFLATION,
+            'inflation_ema' => MacroEngine::TARGET_INFLATION,
+            'policy_rate' => 0.041,
+            'policy_rate_ema' => 0.041,
+            'yield5y' => 0.05,
+            'yield10y' => 0.0564,
+        ];
+
+        $this->redisMock->expects($this->once())
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturn(json_encode($neutralState));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.25);
+
+        $this->assertEqualsWithDelta(100.0, $result->freightRateIndex, 1.0, 'Freight rate index should remain at baseline 100 in neutral macro conditions.');
+    }
+
+    public function testFreightRateIndexSurgesDuringTradeBoom(): void
+    {
+        $existingState = [
+            'output_gap' => 0.05,
+            'output_gap_ema' => 0.05,
+            'industrial_metals_index' => 120.0,
+            'industrial_metals_index_ema' => 120.0,
+            'freight_rate_index' => 100.0,
+            'freight_rate_index_ema' => 100.0,
+            'freight_supply_ema' => 100.0,
+            'inflation' => 0.02,
+            'inflation_ema' => 0.02,
+            'policy_rate' => 0.03,
+            'policy_rate_ema' => 0.03,
+            'yield5y' => 0.04,
+            'yield10y' => 0.045,
+        ];
+
+        $this->redisMock->expects($this->once())
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturn(json_encode($existingState));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.25);
+
+        $this->assertGreaterThan(MacroEngine::FREIGHT_BASELINE, $result->freightRateIndex, 'Strong output gap and metals demand should push freight rates above baseline.');
+    }
+
+    public function testFreightRateIndexDepressedDuringFleetCapacityGlut(): void
+    {
+        // When fleet capacity exceeds demand (e.g. following post-boom shipbuilding deliveries), utilization drops and rates fall
+        $glutState = [
+            'output_gap' => -0.02,
+            'output_gap_ema' => -0.02,
+            'industrial_metals_index' => 90.0,
+            'industrial_metals_index_ema' => 90.0,
+            'freight_rate_index' => 100.0,
+            'freight_rate_index_ema' => 100.0,
+            'freight_supply_ema' => 120.0, // Excess fleet capacity
+            'inflation' => 0.02,
+            'inflation_ema' => 0.02,
+            'policy_rate' => 0.03,
+            'policy_rate_ema' => 0.03,
+            'yield5y' => 0.04,
+            'yield10y' => 0.045,
+        ];
+
+        $this->redisMock->expects($this->once())
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturn(json_encode($glutState));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.25);
+
+        $this->assertLessThan(MacroEngine::FREIGHT_BASELINE, $result->freightRateIndex, 'Fleet capacity overhang during trade contraction should depress freight rates.');
+    }
+
+    public function testResidentialHousingRespondsToUserCostOfCapital(): void
+    {
+        // High 30Y mortgage yields should increase user cost and reduce residential valuations
+        $existingState = [
+            'yield_30y' => 0.09,
+            'yield_30y_ema' => 0.09,
+            'inflation' => 0.02,
+            'inflation_ema' => 0.02,
+            'unemployment_rate' => 0.07,
+            'unemployment_rate_ema' => 0.07,
+            'residential_property_index' => 100.0,
+            'residential_property_index_ema' => 100.0,
+            'policy_rate' => 0.06,
+            'policy_rate_ema' => 0.06,
+            'yield_5y' => 0.07,
+            'yield_10y' => 0.08,
+            'output_gap' => -0.02,
+            'output_gap_ema' => -0.02,
+        ];
+
+        $this->redisMock->expects($this->once())
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturn(json_encode($existingState));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.25);
+
+        $this->assertLessThan(100.0, $result->residentialPropertyIndex, 'High mortgage rates and elevated unemployment should depress residential housing index.');
+    }
+
+    public function testCommercialPropertyMaintainsEquilibriumAtNeutralState(): void
+    {
+        $neutralState = [
+            'unemployment_rate' => MacroEngine::NATURAL_UNEMPLOYMENT,
+            'unemployment_rate_ema' => MacroEngine::NATURAL_UNEMPLOYMENT,
+            'yield_10y' => 0.0564,
+            'yield_10y_ema' => 0.0564,
+            'macro_credit_spread' => MacroEngine::BASE_CREDIT_SPREAD,
+            'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD,
+            'commercial_property_index' => 100.0,
+            'commercial_property_index_ema' => 100.0,
+            'inflation' => MacroEngine::TARGET_INFLATION,
+            'inflation_ema' => MacroEngine::TARGET_INFLATION,
+            'output_gap' => 0.0,
+            'output_gap_ema' => 0.0,
+            'policy_rate' => 0.041,
+            'policy_rate_ema' => 0.041,
+            'yield_5y' => 0.05,
+        ];
+
+        $this->redisMock->expects($this->once())
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturn(json_encode($neutralState));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.25);
+
+        $this->assertEqualsWithDelta(100.0, $result->commercialPropertyIndex, 0.5, 'Commercial property index should remain at 100 in neutral macro conditions.');
+    }
+
+    public function testResidentialPropertyMaintainsEquilibriumAtNeutralState(): void
+    {
+        $neutralState = [
+            'yield_30y' => 0.0608,
+            'yield_30y_ema' => 0.0608,
+            'inflation' => MacroEngine::TARGET_INFLATION,
+            'inflation_ema' => MacroEngine::TARGET_INFLATION,
+            'unemployment_rate' => MacroEngine::NATURAL_UNEMPLOYMENT,
+            'unemployment_rate_ema' => MacroEngine::NATURAL_UNEMPLOYMENT,
+            'residential_property_index' => 100.0,
+            'residential_property_index_ema' => 100.0,
+            'policy_rate' => 0.041,
+            'policy_rate_ema' => 0.041,
+            'yield_5y' => 0.05,
+            'yield_10y' => 0.0564,
+            'output_gap' => 0.0,
+            'output_gap_ema' => 0.0,
+        ];
+
+        $this->redisMock->expects($this->once())
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturn(json_encode($neutralState));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.25);
+
+        $this->assertEqualsWithDelta(100.0, $result->residentialPropertyIndex, 0.5, 'Residential property index should remain at 100 in neutral macro conditions.');
     }
 }

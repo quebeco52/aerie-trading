@@ -286,4 +286,110 @@ class MathUtilityTest extends TestCase
         $highRhoEl = $this->mathUtility->calculateVasicekExpectedLoss(-3.0, $pdLra, 0.30, $lgd);
         $this->assertGreaterThan($stressedEl, $highRhoEl, 'Higher asset correlation should amplify stressed tail losses.');
     }
+
+    public function testCalculateSchwartz2FactorReturnsPositiveSpot(): void
+    {
+        $result = $this->mathUtility->calculateSchwartz2Factor(
+            chi: 0.0,
+            xi: 4.60517, // ln(100)
+            kappa: 1.5,
+            muXi: 0.01,
+            sigChi: 0.30,
+            sigXi: 0.08,
+            rho: -0.30,
+            dt: 0.25,
+            dW1: 0.0,
+            dW2: 0.0
+        );
+
+        $this->assertArrayHasKey('chi', $result);
+        $this->assertArrayHasKey('xi', $result);
+        $this->assertArrayHasKey('spot', $result);
+        $this->assertGreaterThan(0.0, $result['spot']);
+        $this->assertEqualsWithDelta(100.0 * exp(0.01 * 0.25), $result['spot'], 0.1);
+    }
+
+    public function testCalculateSchwartz2FactorShortTermMeanReverts(): void
+    {
+        // With a high short-term shock (chi = 0.50) and zero noise, chi should decay toward 0
+        $result = $this->mathUtility->calculateSchwartz2Factor(
+            chi: 0.50,
+            xi: 4.60517,
+            kappa: 2.0,
+            muXi: 0.0,
+            sigChi: 0.20,
+            sigXi: 0.05,
+            rho: 0.0,
+            dt: 0.50,
+            dW1: 0.0,
+            dW2: 0.0
+        );
+
+        $this->assertLessThan(0.50, $result['chi'], 'Short-term deviation should mean-revert toward zero.');
+        $this->assertEqualsWithDelta(0.50 * exp(-2.0 * 0.50), $result['chi'], 0.0001);
+    }
+
+    public function testCalculateSchwartz2FactorLongTermDrifts(): void
+    {
+        // With positive muXi and zero noise, xi should drift upwards
+        $initialXi = 4.0;
+        $muXi = 0.10;
+        $dt = 1.0;
+
+        $result = $this->mathUtility->calculateSchwartz2Factor(
+            chi: 0.0,
+            xi: $initialXi,
+            kappa: 1.0,
+            muXi: $muXi,
+            sigChi: 0.10,
+            sigXi: 0.05,
+            rho: 0.0,
+            dt: $dt,
+            dW1: 0.0,
+            dW2: 0.0
+        );
+
+        $this->assertEqualsWithDelta($initialXi + ($muXi * $dt), $result['xi'], 0.0001, 'Long-term equilibrium should drift with muXi.');
+        $this->assertEqualsWithDelta(exp($result['chi'] + $result['xi']), $result['spot'], 0.0001);
+    }
+
+    public function testCalculateTwoFactorOUReturnsPositiveSpotAndMeanRevertsBothFactors(): void
+    {
+        // Factor 1 elevated (chi = 0.50), Factor 2 elevated (xi = 5.20, ~181 price level)
+        // Both should mean-revert toward their respective thetas (thetaChi = 0, thetaXi = ln(100) = 4.60517)
+        $initialChi = 0.50;
+        $initialXi = 5.20;
+        $thetaChi = 0.0;
+        $thetaXi = 4.60517;
+        $kappaChi = 2.0;
+        $kappaXi = 0.25;
+        $dt = 1.0;
+
+        $result = $this->mathUtility->calculateTwoFactorOU(
+            chi: $initialChi,
+            xi: $initialXi,
+            kappaChi: $kappaChi,
+            kappaXi: $kappaXi,
+            thetaChi: $thetaChi,
+            thetaXi: $thetaXi,
+            sigChi: 0.20,
+            sigXi: 0.06,
+            rho: -0.20,
+            dt: $dt,
+            dW1: 0.0,
+            dW2: 0.0
+        );
+
+        $expectedChi = $initialChi * exp(-$kappaChi * $dt) + $thetaChi * (1.0 - exp(-$kappaChi * $dt));
+        $expectedXi = $initialXi * exp(-$kappaXi * $dt) + $thetaXi * (1.0 - exp(-$kappaXi * $dt));
+
+        $this->assertArrayHasKey('chi', $result);
+        $this->assertArrayHasKey('xi', $result);
+        $this->assertArrayHasKey('spot', $result);
+        $this->assertLessThan($initialChi, $result['chi'], 'Short-term factor should mean-revert toward zero.');
+        $this->assertLessThan($initialXi, $result['xi'], 'Long-term equilibrium factor should mean-revert toward baseline.');
+        $this->assertEqualsWithDelta($expectedChi, $result['chi'], 0.0001);
+        $this->assertEqualsWithDelta($expectedXi, $result['xi'], 0.0001);
+        $this->assertEqualsWithDelta(exp($result['chi'] + $result['xi']), $result['spot'], 0.0001);
+    }
 }

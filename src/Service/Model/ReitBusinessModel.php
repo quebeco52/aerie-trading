@@ -218,10 +218,13 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $inflation = $macroState->inflationEma;
         $excessInflation = max(0.0, $inflation - MacroEngine::TARGET_INFLATION);
         $rentEscalator = $excessInflation * self::RENT_ESCALATOR_CAPTURE;
+        $creShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;
+        $resShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
+        $blendedPropertyShift = ($creShift * 0.70) + ($resShift * 0.30);
 
         // --- Clamped Revenue Streams ---
-        $leaseRevenue       = max(0.0, $expectedRevenue * $leaseWeight * (1.0 + $leaseShock + $rentEscalator));
-        $hospitalityRevenue = max(0.0, $expectedRevenue * $hospitalityWeight * (1.0 + $hospitalityShock));
+        $leaseRevenue       = max(0.0, $expectedRevenue * $leaseWeight * (1.0 + $leaseShock + $rentEscalator + $blendedPropertyShift));
+        $hospitalityRevenue = max(0.0, $expectedRevenue * $hospitalityWeight * (1.0 + $hospitalityShock + ($creShift * 0.5)));
 
         $streamRevenues = [
             'lease'       => $leaseRevenue,

@@ -166,9 +166,10 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         $effectivePed = self::BASELINE_PRICE_ELASTICITY_OF_DEMAND * (1.5 - $pricingPower);
 
         $beta = abs((float) $stock->getBeta());
+        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
 
         return [
-            'macro_demand_shift'       => $macroState->outputGapEma * $beta * $effectivePed,
+            'macro_demand_shift'       => ($macroState->outputGapEma * $beta * $effectivePed) - ($fxShift * 0.05),
             'pricing_power_multiplier' => 1.0 + ($macroState->inflationEma * (1.0 - $effectivePed)),
         ];
     }
@@ -245,7 +246,8 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
 
             $inflationExcess = max(0.0, $macroState->inflationEma - MacroEngine::TARGET_INFLATION);
             $energyExcess = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
-            $commoditySqueezeBonus = ($inflationExcess * self::COMMODITY_INFLATION_ALPHA_SCALAR) + ($energyExcess * self::COMMODITY_ENERGY_ALPHA_SCALAR);
+            $agriExcess = max(0.0, ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0);
+            $commoditySqueezeBonus = ($inflationExcess * self::COMMODITY_INFLATION_ALPHA_SCALAR) + ($energyExcess * self::COMMODITY_ENERGY_ALPHA_SCALAR) + ($agriExcess * 0.30);
 
             $commodityRevenue = max(0.0, $expectedRevenue * $commodityWeight * (1.0 + ($commodityZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::COMMODITY_TRADING_VOL_SCALAR) + $commoditySqueezeBonus));
             $streamRevenues['commodity_trading'] = $commodityRevenue;
@@ -263,13 +265,16 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
 
         // --- Cost-Push Inflation & COGS Squeeze ---
         $inflationExcess = max(0.0, $macroState->inflationEma - MacroEngine::TARGET_INFLATION);
+        $agriShift = max(0.0, ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0);
         $agriculturalCostSqueeze = ($inflationExcess * self::AGRI_INFLATION_COST_SCALAR * $volumeWeight)
+            + ($agriShift * 0.15 * $volumeWeight)
             - ($volumeZ * self::AGRI_HARVEST_SHOCK_SCALAR * $volumeWeight);
 
-        // Supply Chain, Freight & Packaging Penalty (Energy Price Index)
+        // Supply Chain, Freight & Packaging Penalty (Energy & Freight Price Indices)
         $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
+        $freightShift = max(0.0, ($macroState->freightRateIndexEma - 100.0) / 100.0);
         $beta = abs((float) $stock->getBeta());
-        $rawLogisticsPenalty = $energyShift * $beta * self::PACKAGING_ENERGY_COST_SCALAR;
+        $rawLogisticsPenalty = ($energyShift * $beta * self::PACKAGING_ENERGY_COST_SCALAR) + ($freightShift * $beta * 0.05);
 
         // Physical inventory hoarding buffers input costs and mitigates packaging bottlenecks
         $logisticsPenalty = $rawLogisticsPenalty * (1.0 - min(self::MAX_COMMODITY_HEDGE_MITIGATION, $commodityWeight * self::COMMODITY_HEDGE_MULTIPLIER));

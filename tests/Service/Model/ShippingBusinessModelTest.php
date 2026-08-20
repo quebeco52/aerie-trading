@@ -67,4 +67,39 @@ class ShippingBusinessModelTest extends TestCase
         $this->assertGreaterThan(0.25, $expanded);
         $this->assertLessThanOrEqual(ShippingBusinessModel::MAX_OPERATING_MARGIN_CEILING, $expanded);
     }
+
+    public function testFreightRateIndexSurgeBoostsShippingRevenue(): void
+    {
+        $model = new ShippingBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('SHIP');
+        $stock->setBeta('1.0');
+
+        $mathUtilityMock = $this->createMock(MathUtility::class);
+        $mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $baseMacro = new \App\DTO\MacroStateDTO(freightRateIndexEma: 100.0);
+        $surgeMacro = new \App\DTO\MacroStateDTO(freightRateIndexEma: 140.0);
+
+        $baseResult = $model->computeActualFinancials($stock, 1000.0, 0.40, 50.0, 0.15, $baseMacro, $mathUtilityMock);
+        $surgeResult = $model->computeActualFinancials($stock, 1000.0, 0.40, 50.0, 0.15, $surgeMacro, $mathUtilityMock);
+
+        $this->assertGreaterThan($baseResult->streamRevenue['spot'], $surgeResult->streamRevenue['spot']);
+    }
+
+    public function testFxShiftOnMacroPhysics(): void
+    {
+        $model = new ShippingBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('SHIP');
+        $stock->setBeta('1.0');
+
+        $baseMacro = new \App\DTO\MacroStateDTO(exchangeRateIndexEma: 100.0);
+        $strongDollarMacro = new \App\DTO\MacroStateDTO(exchangeRateIndexEma: 120.0);
+
+        $basePhysics = $model->getMacroPhysics($stock, $baseMacro);
+        $strongDollarPhysics = $model->getMacroPhysics($stock, $strongDollarMacro);
+
+        $this->assertLessThan($basePhysics['macro_demand_shift'], $strongDollarPhysics['macro_demand_shift']);
+    }
 }

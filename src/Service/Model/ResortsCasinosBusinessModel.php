@@ -131,7 +131,8 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
         $beta = (float) $stock->getBeta();
 
-        $physics['macro_demand_shift'] += $sentimentShift * $beta * self::SENTIMENT_SENSITIVITY_SCALAR;
+        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
+        $physics['macro_demand_shift'] += ($sentimentShift * $beta * self::SENTIMENT_SENSITIVITY_SCALAR) - ($fxShift * 0.15);
 
         return $physics;
     }
@@ -214,7 +215,11 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         if ($creWeight > 0.0) {
             $creZ = $streams->generateZ('cre', 0.50);
 
-            $creDemandShock = $macroState->outputGapEma * abs((float) $stock->getBeta()) * self::CRE_DEMAND_ELASTICITY;
+            $creShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;
+            $resShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
+            $blendedPropertyShift = ($creShift * 0.70) + ($resShift * 0.30);
+            
+            $creDemandShock = ($macroState->outputGapEma * abs((float) $stock->getBeta()) * self::CRE_DEMAND_ELASTICITY) + ($blendedPropertyShift * 0.50);
 
             $excessInflation = max(0.0, $macroState->inflationEma - MacroEngine::TARGET_INFLATION);
             $rentEscalator = $excessInflation * self::CRE_RENT_ESCALATOR_CAPTURE;

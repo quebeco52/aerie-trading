@@ -80,9 +80,10 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
         $enterpriseWeight = $activeWeights['enterprise_b2b_training'];
         $lmsWeight        = $activeWeights['digital_lms_licensing'];
 
-        // Counter-cyclical student enrollment boost during recessions
+        // Counter-cyclical student enrollment boost during recessions and government subsidies
         $outputGap = $macroState->outputGapEma;
-        $counterCyclicalEnrollmentBoost = $outputGap < 0.0 ? abs($outputGap) * 1.2 * $beta : -($outputGap * 0.4);
+        $govShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
+        $counterCyclicalEnrollmentBoost = ($outputGap < 0.0 ? abs($outputGap) * 1.2 * $beta : -($outputGap * 0.4)) + ($govShift * 0.40);
         $proCyclicalEnterpriseShift     = $outputGap * 1.5 * $beta;
 
         $tuitionZ    = $streams->generateZ('degree_tuition_enrollment', 0.50);

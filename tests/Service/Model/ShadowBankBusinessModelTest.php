@@ -66,4 +66,30 @@ class ShadowBankBusinessModelTest extends TestCase
         $thresholds = $this->model->getModelThresholds();
         $this->assertSame(8.0, $thresholds['wholesale_leverage_limit']);
     }
+
+    public function testRetailDefaultAndCommercialPropertyDistressIncreasesProvisionDrag(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('RITM');
+        $stock->setBeta('1.0');
+
+        $baseMacro = new MacroStateDTO(
+            retailDefaultRateEma: 0.025,
+            commercialPropertyIndexEma: 100.0
+        );
+
+        $distressMacro = new MacroStateDTO(
+            retailDefaultRateEma: 0.050, // Elevated defaults
+            commercialPropertyIndexEma: 80.0 // CRE valuation collapse
+        );
+
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $baseMacro, $mathMock);
+        $distressResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $distressMacro, $mathMock);
+
+        // Distress increases default drag and provisions, increasing the variable cost ratio (clampedMargin)
+        $this->assertGreaterThan($baseResult->clampedMargin, $distressResult->clampedMargin);
+    }
 }

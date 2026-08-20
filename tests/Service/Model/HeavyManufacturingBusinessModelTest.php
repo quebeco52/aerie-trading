@@ -52,4 +52,23 @@ class HeavyManufacturingBusinessModelTest extends TestCase
             1.0
         );
     }
+
+    public function testExchangeRateExportDragAndFreightCostPenalty(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('CATP');
+        $stock->setBeta('1.2');
+
+        $baseMacro = new MacroStateDTO(exchangeRateIndexEma: 100.0, freightRateIndexEma: 100.0);
+        $shockMacro = new MacroStateDTO(exchangeRateIndexEma: 120.0, freightRateIndexEma: 140.0);
+
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $baseMacro, $mathMock);
+        $shockResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $shockMacro, $mathMock);
+
+        $this->assertLessThan($baseResult->streamRevenue['oem_equipment'], $shockResult->streamRevenue['oem_equipment']);
+        $this->assertGreaterThan($baseResult->clampedMargin, $shockResult->clampedMargin);
+    }
 }

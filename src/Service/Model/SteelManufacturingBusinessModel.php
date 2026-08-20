@@ -84,12 +84,13 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         // Strongly tied to macro output gap and energy prices
         $macroBoost = $macroState->outputGapEma * 1.5 * $beta;
         $energyDrag = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0) * self::ENERGY_INPUT_DRAG_SCALAR;
+        $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
 
         $contractZ = $streams->generateZ('contracted_oem_steel', 0.35);
         $spotZ     = $streams->generateZ('spot_hrc_market', 0.15);
 
         $contractRevenue = max(0.0, $expectedRevenue * $contractWeight * (1.0 + ($contractZ * ($baselineVol * self::CONTRACT_VARIANCE_SCALAR)) + ($macroBoost * 0.5)));
-        $spotRevenue     = max(0.0, $expectedRevenue * $spotWeight     * (1.0 + ($spotZ     * ($baselineVol * self::SPOT_VARIANCE_SCALAR)) + ($macroBoost * 1.5)));
+        $spotRevenue     = max(0.0, $expectedRevenue * $spotWeight     * (1.0 + ($spotZ     * ($baselineVol * self::SPOT_VARIANCE_SCALAR)) + ($metalsShift * 0.50) + ($macroBoost * 0.5)));
 
         $streamRevenues = [
             'contracted_oem_steel' => $contractRevenue,
@@ -99,8 +100,10 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // Cyclical Metal Spread & Energy Compression
-        $clampedMargin = $this->clampMargin($realizedVariableMargin - ($energyDrag * 0.50));
+        // Cyclical Metal Spread, Energy & Freight Logistics Compression
+        $freightShift = max(0.0, ($macroState->freightRateIndexEma - 100.0) / 100.0);
+        $freightDrag = $freightShift * 0.05;
+        $clampedMargin = $this->clampMargin($realizedVariableMargin - ($energyDrag * 0.40) - $freightDrag);
 
         $primaryShockZ = abs($spotZ) > abs($contractZ) ? $spotZ : $contractZ;
         $observableShockZ = ($contractZ * $contractWeight * self::CONTRACT_VARIANCE_SCALAR * $baselineVol)

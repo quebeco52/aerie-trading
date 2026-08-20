@@ -174,10 +174,13 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         // --- Macro Sensitivities (Damped by Order Backlog) ---
         $outputGap = $macroState->outputGapEma;
         $policyRate = $macroState->policyRateEma;
+        $residentialShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
+        $commercialPropertyShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;
 
-        $commercialMacroBoost = ($outputGap * 1.5 * $beta) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
+        $commercialMacroBoost = (($outputGap * 1.5 * $beta) + ($commercialPropertyShift * 0.30) + ($residentialShift * 0.20)) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
         $commercialCreditDrag = max(0.0, ($policyRate - MacroEngine::NATURAL_RATE) * 2.0 * $beta) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
         $maintenanceMacroBoost = ($outputGap * 0.3 * $beta);
+        $govSpendShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
 
         // --- Tail Risk Events ---
         $dealMultiplier = 1.0;
@@ -197,7 +200,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $commercialShock = $commercialZ * ($baselineVol * self::COMMERCIAL_EPC_VARIANCE_SCALAR) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
         $maintenanceShock = $maintenanceZ * ($baselineVol * self::FACILITIES_MAINTENANCE_VARIANCE_SCALAR);
 
-        $civilRevenue = max(0.0, $expectedRevenue * $civilWeight * (1.0 + $civilShock) * $dealMultiplier);
+        $civilRevenue = max(0.0, $expectedRevenue * $civilWeight * (1.0 + $civilShock + ($govSpendShift * 0.30)) * $dealMultiplier);
         $commercialRevenue = max(0.0, $expectedRevenue * $commercialWeight * (1.0 + $commercialShock + $commercialMacroBoost - $commercialCreditDrag));
         $maintenanceRevenue = max(0.0, $expectedRevenue * $maintenanceWeight * (1.0 + $maintenanceShock + $maintenanceMacroBoost));
 
@@ -218,7 +221,8 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
             ? ($inflation - MacroEngine::TARGET_INFLATION) * $beta * self::INFLATION_PENALTY_SCALAR
             : 0.0;
 
-        $rawMaterialCostDrag = $baseInflationPenalty + ($energyShift * self::ENERGY_COST_SCALAR);
+        $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
+        $rawMaterialCostDrag = $baseInflationPenalty + ($energyShift * self::ENERGY_COST_SCALAR) + ($metalsShift * self::ENERGY_COST_SCALAR * 1.5);
 
         // Pricing power enables contractual cost-plus escalation clauses, mitigating the fixed-price margin squeeze
         $effectiveMaterialCostDrag = $rawMaterialCostDrag * (1.0 - ($pricingPower * self::MAX_PRICING_POWER_MITIGATION));

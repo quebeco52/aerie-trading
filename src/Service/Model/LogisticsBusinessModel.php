@@ -47,17 +47,43 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     /** Baseline fraction of revenue derived from 3PL warehousing and automated cross-docking. */
     public const WAREHOUSING_3PL_WEIGHT = 0.10;
 
-    // --- Physics & Variances ---
-    public const DEDICATED_VARIANCE_SCALAR  = 0.20; // Stable contracted freight
-    public const SPOT_VARIANCE_SCALAR       = 0.60; // Highly volatile spot market
-    public const WAREHOUSING_VARIANCE_SCALAR = 0.10; // Sticky long-term storage
+    // --- Macroeconomic & Pricing Rails ---
+    /** Macroeconomic demand shift sensitivity to global trade and domestic GDP output gap. */
+    public const MACRO_DEMAND_SCALAR = 1.40;
+    /** Minimum beta floor applied when calculating fuel surcharge inflation pass-through. */
+    public const MIN_PRICING_BETA_FLOOR = 0.50;
+
+    // --- Stream Physics & Spot Freight Sensitivity ---
+    /** Sensitivity of spot freight brokerage revenue to market-clearing ocean and overland spot freight rates. */
+    public const SPOT_FREIGHT_SENSITIVITY = 0.60;
+    /** Idiosyncratic revenue variance scalar for stable contracted dedicated fleets. */
+    public const DEDICATED_VARIANCE_SCALAR = 0.20;
+    /** Idiosyncratic revenue variance scalar for volatile spot freight brokerage. */
+    public const SPOT_VARIANCE_SCALAR = 0.60;
+    /** Idiosyncratic revenue variance scalar for sticky 3PL warehousing and storage. */
+    public const WAREHOUSING_VARIANCE_SCALAR = 0.10;
+    /** Z-score threshold required to trigger logistics surge pricing shock event. */
+    public const SPOT_SURGE_Z_SCORE = 1.75;
+    /** Multiplier applied to spot brokerage revenue during surge pricing crunches. */
+    public const SPOT_SURGE_MULT = 1.40;
 
     // --- Fuel Surcharge & Energy Physics ---
     /** Margin penalty scalar applied to fleet operations when energy/diesel prices spike faster than fuel surcharges adjust. */
     public const FUEL_SURCHARGE_LAG_PENALTY = 0.35;
+    /** Weight of variable margin drag attributed to energy/diesel fuel lag in observable shock Z. */
+    public const OBSERVABLE_FUEL_DRAG_WEIGHT = 0.50;
 
-    public const SPOT_SURGE_Z_SCORE = 1.75;
-    public const SPOT_SURGE_MULT    = 1.40; 
+    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    {
+        $outputGap = $macroState->outputGapEma;
+        $inflation = $macroState->inflationEma;
+        $beta = (float) $stock->getBeta();
+
+        return [
+            'macro_demand_shift' => ($outputGap * $beta * self::MACRO_DEMAND_SCALAR),
+            'pricing_power_multiplier' => 1.0 + ($inflation * max(self::MIN_PRICING_BETA_FLOOR, $beta)),
+        ];
+    }
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
@@ -73,7 +99,6 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
-        $beta     = abs((float) $stock->getBeta());
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -86,8 +111,9 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
         $spotWeight  = $activeWeights['spot_freight_brokerage'];
         $whWeight    = $activeWeights['value_added_warehousing'];
 
-        // Macro GDP sensitivity
-        $macroBoost = $macroState->outputGapEma * 1.5 * $beta;
+        // Spot Freight Rate pricing power (applied strictly to market-clearing spot brokerage)
+        $freightShift = ($macroState->freightRateIndexEma - 100.0) / 100.0;
+        $spotFreightBoost = $freightShift * self::SPOT_FREIGHT_SENSITIVITY;
 
         $fleetZ = $streams->generateZ('dedicated_fleet_contracts', 0.40);
         $spotZ  = $streams->generateZ('spot_freight_brokerage', 0.15);
@@ -100,8 +126,8 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::LOGISTICS_SURGE_PRICING ?? 'logistics_surge_pricing';
         }
 
-        $fleetRevenue = max(0.0, $expectedRevenue * $fleetWeight * (1.0 + ($fleetZ * ($baselineVol * self::DEDICATED_VARIANCE_SCALAR)) + ($macroBoost * 0.8)));
-        $spotRevenue  = max(0.0, $expectedRevenue * $spotWeight  * (1.0 + ($spotZ  * ($baselineVol * self::SPOT_VARIANCE_SCALAR)) + ($macroBoost * 1.5)) * $spotMultiplier);
+        $fleetRevenue = max(0.0, $expectedRevenue * $fleetWeight * (1.0 + ($fleetZ * ($baselineVol * self::DEDICATED_VARIANCE_SCALAR))));
+        $spotRevenue  = max(0.0, $expectedRevenue * $spotWeight  * (1.0 + ($spotZ  * ($baselineVol * self::SPOT_VARIANCE_SCALAR)) + $spotFreightBoost) * $spotMultiplier);
         $whRevenue    = max(0.0, $expectedRevenue * $whWeight    * (1.0 + ($whZ    * ($baselineVol * self::WAREHOUSING_VARIANCE_SCALAR))));
 
         $streamRevenues = [
@@ -127,8 +153,8 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
 
         $observableShockZ = ($fleetZ * $fleetWeight * self::DEDICATED_VARIANCE_SCALAR * $baselineVol) +
             ($spotZ * $spotWeight * self::SPOT_VARIANCE_SCALAR * $baselineVol) +
-            ($macroBoost * $fleetWeight) -
-            ($fuelLagDrag * 0.5);
+            ($spotFreightBoost * $spotWeight) -
+            ($fuelLagDrag * self::OBSERVABLE_FUEL_DRAG_WEIGHT);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

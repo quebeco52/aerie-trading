@@ -90,11 +90,15 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
         $industrialZ = $streams->generateZ('industrial_carloads', 0.30);
 
         // Macro cyclicality
-        $intermodalMacroShift = $macroState->outputGapEma * 1.6 * $beta;
+        $freightShift = ($macroState->freightRateIndexEma - 100.0) / 100.0;
+        $agriShift = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
+
+        $intermodalMacroShift = ($macroState->outputGapEma * 1.6 * $beta) + ($freightShift * 0.20);
         $industrialMacroShift = $macroState->outputGapEma * 1.2 * $beta;
+        $bulkMacroShift = $agriShift * 0.30;
 
         $intermodalRevenue = max(0.0, $expectedRevenue * $intermodalWeight * (1.0 + ($intermodalZ * ($baselineVol * self::INTERMODAL_VARIANCE_SCALAR)) + $intermodalMacroShift));
-        $bulkRevenue       = max(0.0, $expectedRevenue * $bulkWeight       * (1.0 + ($bulkZ * ($baselineVol * self::BULK_VARIANCE_SCALAR))));
+        $bulkRevenue       = max(0.0, $expectedRevenue * $bulkWeight       * (1.0 + ($bulkZ * ($baselineVol * self::BULK_VARIANCE_SCALAR)) + $bulkMacroShift));
         $industrialRevenue = max(0.0, $expectedRevenue * $industrialWeight * (1.0 + ($industrialZ * ($baselineVol * self::INDUSTRIAL_VARIANCE_SCALAR)) + $industrialMacroShift));
 
         $streamRevenues = [

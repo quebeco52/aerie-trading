@@ -98,11 +98,12 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     {
         $outputGap = $macroState->outputGapEma;
         $inflation = $macroState->inflationEma;
+        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         $beta = (float) $stock->getBeta();
 
         // Extreme sensitivity to global economic momentum and trade volume
         return [
-            'macro_demand_shift' => $outputGap * $beta * self::MACRO_DEMAND_SCALAR,
+            'macro_demand_shift' => ($outputGap * $beta * self::MACRO_DEMAND_SCALAR) - ($fxShift * 0.10),
             'pricing_power_multiplier' => 1.0 + ($inflation * max(self::MIN_PRICING_BETA_FLOOR, $beta)),
         ];
     }
@@ -136,7 +137,10 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         // Spot Rate Super-Cycle vs. Capacity Glut
         // Crucially, spot rate elasticity applies continuously to spot charter revenue ($spotWeight).
         $outputGap = $macroState->outputGapEma;
-        $spotRateMultiplier = $outputGap * self::CONTINUOUS_SPOT_RATE_SCALAR;
+        $freightShift = ($macroState->freightRateIndexEma - 100.0) / 100.0;
+        $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
+        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
+        $spotRateMultiplier = ($outputGap * self::CONTINUOUS_SPOT_RATE_SCALAR) + ($freightShift * 0.50) + ($metalsShift * 0.15);
         $eventType = null;
 
         if ($outputGap > self::SPOT_BOOM_GAP_THRESHOLD && $spotZ > self::LORE_CONGESTION_Z_SCORE) {
@@ -146,8 +150,8 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         }
 
         $spotRevenue     = max(0.0, $expectedRevenue * $spotWeight * (1.0 + ($spotZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $spotRateMultiplier));
-        $contractRevenue = max(0.0, $expectedRevenue * $contractWeight * (1.0 + ($contractZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
-        
+        $contractRevenue = max(0.0, $expectedRevenue * $contractWeight * (1.0 + ($contractZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) - ($fxShift * 0.10)));
+
         $streamRevenues = [
             'spot'     => $spotRevenue,
             'contract' => $contractRevenue,

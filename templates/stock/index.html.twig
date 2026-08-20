@@ -474,7 +474,7 @@
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Systemic Risk</span>
-									{{ _self.tooltip('Visualizes the broader Market Volatility (VIX), Equity Risk Premium, and Corporate Tax Rate.', 'left', 'w-64') }}
+									{{ _self.tooltip('Visualizes the broader Market Volatility (VIX), Equity Risk Premium, Corporate Borrowing Rate, and Corporate Tax Rate.', 'right', 'w-64') }}
 								</h3>
 								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
 									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
@@ -487,51 +487,64 @@
 						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Nominal GDP Expansion</span>
-									{{ _self.tooltip('The total nominal value of all goods and services produced in the Aerie over time.', 'right', 'w-64') }}
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Labor & Consumer Credit Health</span>
+									{{ _self.tooltip('Tracks Okun\'s Law Unemployment Rate against Basel II/III ASRF Consumer Default Rate (%). Visualizes the direct link between joblessness, real wage erosion, and retail loan default spikes.', 'left', 'w-64') }}
 								</h3>
 								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
 									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
 								</button>
 							</div>
 							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="macroGdpChart"></canvas>
+								<canvas id="macroLaborCreditChart"></canvas>
 							</div>
 						</div>
 						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Labor Market</span>
-									{{ _self.tooltip('Tracks the unemployment rate relative to the natural rate.', 'right', 'w-64') }}
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Commodities & Raw Materials</span>
+									{{ _self.tooltip('Schwartz-Smith multi-factor commodity indices (Baseline 100). Compares Energy, Industrial Metals, and Agricultural commodities to track input cost inflation and supply shocks across manufacturing, dining, and consumer goods.', 'right', 'w-64') }}
 								</h3>
 								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
 									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
 								</button>
 							</div>
 							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="macroLaborChart"></canvas>
+								<canvas id="macroCommoditiesChart"></canvas>
 							</div>
 						</div>
-
 						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Commodity & Energy Prices</span>
-									{{ _self.tooltip('Tracks the baseline energy price index for modeling exogenous cost-push inflation shocks.', 'right', 'w-64') }}
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Real Estate & Property Valuation</span>
+									{{ _self.tooltip('Property valuation indices (Baseline 100). Connects DiPasquale-Wheaton Commercial Real Estate (CRE cap rates & spatial rent) and Jorgenson Residential User Cost of Capital (mortgage rates & housing affordability).', 'left', 'w-64') }}
 								</h3>
 								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
 									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
 								</button>
 							</div>
 							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="macroEnergyChart"></canvas>
+								<canvas id="macroPropertyChart"></canvas>
+							</div>
+						</div>
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
+							<div class="flex justify-between items-center mb-6">
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Global Trade & Freight Logistics</span>
+									{{ _self.tooltip('Indices of international commerce (Baseline 100). Combines the Mundell-Fleming Exchange Rate Index (currency strength vs export competitiveness) and Cobweb Theorem Global Freight Rates (shipping capacity utilization & spot charter volatility).', 'right', 'w-64') }}
+								</h3>
+								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
+								</button>
+							</div>
+							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
+								<canvas id="macroTradeLogisticsChart"></canvas>
 							</div>
 						</div>
 						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Consumer Sentiment Index</span>
-									{{ _self.tooltip('Tracks consumer sentiment driven by the Misery Index (Inflation + Unemployment) and market volatility.', 'right', 'w-64') }}
+									{{ _self.tooltip('Tracks consumer sentiment driven by the Misery Index (Inflation + Unemployment) and market volatility.', 'left', 'w-64') }}
 								</h3>
 								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
 									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
@@ -539,6 +552,20 @@
 							</div>
 							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
 								<canvas id="macroSentimentChart"></canvas>
+							</div>
+						</div>
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
+							<div class="flex justify-between items-center mb-6">
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
+									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Fiscal & Defense Appropriations</span>
+									{{ _self.tooltip('Tracks structural government spending and automatic stabilizers (Baseline 100). Counter-cyclical policy expands spending during recessions and contracts during booms, with exogenous Poisson jumps capturing defense surges.', 'right', 'w-64') }}
+								</h3>
+								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
+									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
+								</button>
+							</div>
+							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
+								<canvas id="macroGovtSpendingChart"></canvas>
 							</div>
 						</div>
 					</div>

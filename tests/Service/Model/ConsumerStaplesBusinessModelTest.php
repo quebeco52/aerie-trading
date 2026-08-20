@@ -274,5 +274,21 @@ class ConsumerStaplesBusinessModelTest extends TestCase
             $spikeResult->streamRevenue['commodity_trading']
         );
     }
+
+    public function testExchangeRateDragOnMacroPhysics(): void
+    {
+        $model = new ConsumerStaplesBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('STD_STAPLE');
+        $stock->setBeta('0.8');
+
+        $baseMacro = new MacroStateDTO(exchangeRateIndexEma: 100.0);
+        $strongDollarMacro = new MacroStateDTO(exchangeRateIndexEma: 120.0);
+
+        $basePhysics = $model->getMacroPhysics($stock, $baseMacro);
+        $strongDollarPhysics = $model->getMacroPhysics($stock, $strongDollarMacro);
+
+        $this->assertLessThan($basePhysics['macro_demand_shift'], $strongDollarPhysics['macro_demand_shift']);
+    }
 }
 

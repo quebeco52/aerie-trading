@@ -393,7 +393,13 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $provisionCostAddon = $quarterlyDollarLoss / max(1.0, $actualRevenue);
 
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
-        $macroDefaultDrag = $sentimentShift < 0.0 ? abs($sentimentShift) * self::MACRO_DEFAULT_LGD_DRAG : 0.0;
+        $retailDefaultShift = max(0.0, ($macroState->retailDefaultRateEma - MacroEngine::RETAIL_DEFAULT_BASELINE) / MacroEngine::RETAIL_DEFAULT_BASELINE);
+        
+        $creShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;
+        $residentialShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
+        $propertyDrag = ($creShift < 0.0 ? abs($creShift) * 0.05 : 0.0) + ($residentialShift < 0.0 ? abs($residentialShift) * 0.05 : 0.0);
+
+        $macroDefaultDrag = ($sentimentShift < 0.0 ? abs($sentimentShift) * self::MACRO_DEFAULT_LGD_DRAG : 0.0) + ($retailDefaultShift * 0.05) + $propertyDrag;
 
         // Clamp reserve release to MAX_PROVISION_REVERSAL to avoid unbounded write-backs
         $lossProvisionShock = max(-self::MAX_PROVISION_REVERSAL, $provisionCostAddon) + $macroDefaultDrag;

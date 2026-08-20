@@ -199,6 +199,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 
         // --- Sovereign Procurement & Cost-Plus Fiscal Physics ---
         $inflation = $macroState->inflationEma;
+        $govSpendShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
 
         // FAR 16.3 Cost-Plus contracts pass through excess inflation as nominal revenue growth
         $costPlusBonus = $inflation > MacroEngine::TARGET_INFLATION
@@ -253,9 +254,13 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         }
 
         // --- Clamped Revenue Streams ---
-        $costPlusRevenue = max(0.0, $expectedRevenue * $costPlusWeight * (1.0 + ($costPlusZ * $baselineVol * self::COST_PLUS_VARIANCE_SCALAR) + $costPlusBonus) * $costPlusMultiplier);
-        $fixedPriceRevenue = max(0.0, $expectedRevenue * $fixedPriceWeight * (1.0 + ($fixedPriceZ * $baselineVol * self::FIXED_PRICE_DEV_VARIANCE_SCALAR)) * $fixedPriceMultiplier);
-        $fmsRevenue = max(0.0, $expectedRevenue * $fmsWeight * (1.0 + ($fmsZ * $baselineVol * self::FMS_VARIANCE_SCALAR)) * $fmsMultiplier);
+        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
+        $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
+        $metalsCostDrag = max(0.0, $metalsShift) * 0.05 * $fixedPriceWeight;
+
+        $costPlusRevenue = max(0.0, $expectedRevenue * $costPlusWeight * (1.0 + ($costPlusZ * $baselineVol * self::COST_PLUS_VARIANCE_SCALAR) + $costPlusBonus + ($govSpendShift * 0.40)) * $costPlusMultiplier);
+        $fixedPriceRevenue = max(0.0, $expectedRevenue * $fixedPriceWeight * (1.0 + ($fixedPriceZ * $baselineVol * self::FIXED_PRICE_DEV_VARIANCE_SCALAR) + ($govSpendShift * 0.40)) * $fixedPriceMultiplier);
+        $fmsRevenue = max(0.0, $expectedRevenue * $fmsWeight * (1.0 + ($fmsZ * $baselineVol * self::FMS_VARIANCE_SCALAR) - ($fxShift * 0.15)) * $fmsMultiplier);
 
         $streamRevenues = [
             'cost_plus_procurement'   => $costPlusRevenue,
@@ -272,7 +277,8 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             + ($forwardLossPenalty * $fixedPriceWeight)
             + ($fixedPriceInflationDrag * $fixedPriceWeight)
             + ($flagshipPenalty * $costPlusWeight)
-            + ($wartimeSupplyDrag * $fmsWeight);
+            + ($wartimeSupplyDrag * $fmsWeight)
+            + $metalsCostDrag;
 
         $clampedMargin = $this->clampMargin($rawMargin);
 

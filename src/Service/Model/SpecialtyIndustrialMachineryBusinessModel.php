@@ -152,9 +152,10 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         }
 
         // --- Clamped Stream Revenue Calculation ---
+        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         $dampedEquipmentShock = $equipmentZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
 
-        $equipmentRevenue = max(0.0, $expectedRevenue * $equipmentWeight * (1.0 + $dampedEquipmentShock + $macroEquipmentBoost) * $dealMultiplier);
+        $equipmentRevenue = max(0.0, $expectedRevenue * $equipmentWeight * (1.0 + $dampedEquipmentShock + $macroEquipmentBoost - ($fxShift * 0.10)) * $dealMultiplier);
         $servicesRevenue  = max(0.0, $expectedRevenue * $servicesWeight * (1.0 + ($servicesZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::SERVICES_VARIANCE_RATIO))));
 
         $streamRevenues = [
@@ -162,7 +163,7 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
             'aftermarket_services' => $servicesRevenue,
         ];
 
-        $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $actualRevenue = array_sum($streamRevenues);
         $streams->recordStreamShares($streamRevenues);
 
         // --- Structural Razor/Razorblade Margin Blending ---
@@ -176,10 +177,13 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         $equipmentVariableMargin = $expectedEquipmentRevenue > 0 ? ($equipmentBaselineCosts / $expectedEquipmentRevenue) : $realizedVariableMargin;
         $actualVariableCosts = ($servicesRevenue * self::SERVICES_VARIABLE_COST_RATIO) + ($equipmentRevenue * $equipmentVariableMargin);
 
-        // --- Energy Price Inflation Penalty ---
+        // --- Energy & Metals Price Inflation Penalty ---
         $energyShift = ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0;
+        $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
+        $metalsCostDrag = max(0.0, $metalsShift) * 0.05;
+
         $inflationMultiplier = 2.0 - ($pricingPower * 2.0);
-        $baseInflationPenalty = $energyShift > 0 ? ($energyShift * $beta * self::INFLATION_PENALTY_SCALAR) : 0.0;
+        $baseInflationPenalty = ($energyShift > 0 ? ($energyShift * $beta * self::INFLATION_PENALTY_SCALAR) : 0.0) + $metalsCostDrag;
         $inflationPenalty = $baseInflationPenalty * $inflationMultiplier;
 
         // Effective blended variable cost ratio

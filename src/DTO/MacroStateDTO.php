@@ -14,6 +14,7 @@ use App\Service\Macro\MacroState;
 readonly class MacroStateDTO
 {
     public function __construct(
+        public float $totalTime = 0.0,
         public float $outputGap = 0.0,
         public float $outputGapEma = 0.0,
         public float $unemploymentRate = 0.04,
@@ -23,6 +24,27 @@ readonly class MacroStateDTO
         public float $energyPriceShock = 0.0,
         public float $consumerSentimentIndex = 100.0,
         public float $consumerSentimentIndexEma = 100.0,
+        public float $exchangeRateIndex = 100.0,
+        public float $exchangeRateIndexEma = 100.0,
+        public float $industrialMetalsIndex = 100.0,
+        public float $industrialMetalsIndexEma = 100.0,
+        public float $metalsChi = 0.0,
+        public float $metalsXi = 4.60517,
+        public float $governmentSpendingIndex = 100.0,
+        public float $governmentSpendingIndexEma = 100.0,
+        public float $commercialPropertyIndex = 100.0,
+        public float $commercialPropertyIndexEma = 100.0,
+        public float $residentialPropertyIndex = 100.0,
+        public float $residentialPropertyIndexEma = 100.0,
+        public float $retailDefaultRate = 0.0250,
+        public float $retailDefaultRateEma = 0.0250,
+        public float $agriculturalCommodityIndex = 100.0,
+        public float $agriculturalCommodityIndexEma = 100.0,
+        public float $agriChi = 0.0,
+        public float $agriXi = 4.60517,
+        public float $freightRateIndex = 100.0,
+        public float $freightRateIndexEma = 100.0,
+        public float $freightSupplyEma = 100.0,
         public float $inflation = 0.02,
         public float $inflationEma = 0.02,
         public float $policyRate = 0.02,
@@ -60,6 +82,7 @@ readonly class MacroStateDTO
      */
     public static function fromArray(array $data): self
     {
+        $totalTime = (float) ($data['total_time'] ?? 0.0);
         $inflation = (float) ($data['inflation'] ?? MacroEngine::TARGET_INFLATION);
         $inflationEma = (float) ($data['inflation_ema'] ?? $inflation);
         $outputGap = (float) ($data['output_gap'] ?? 0.02);
@@ -73,6 +96,28 @@ readonly class MacroStateDTO
         $energyPriceShock = (float) ($data['energy_price_shock'] ?? 0.0);
         $consumerSentimentIndex = (float) ($data['consumer_sentiment_index'] ?? 100.0);
         $consumerSentimentIndexEma = (float) ($data['consumer_sentiment_index_ema'] ?? $consumerSentimentIndex);
+
+        $exchangeRateIndex = (float) ($data['exchange_rate_index'] ?? 100.0);
+        $exchangeRateIndexEma = (float) ($data['exchange_rate_index_ema'] ?? $exchangeRateIndex);
+        $industrialMetalsIndex = (float) ($data['industrial_metals_index'] ?? 100.0);
+        $industrialMetalsIndexEma = (float) ($data['industrial_metals_index_ema'] ?? $industrialMetalsIndex);
+        $metalsChi = (float) ($data['metals_chi'] ?? 0.0);
+        $metalsXi = (float) ($data['metals_xi'] ?? 4.60517);
+        $governmentSpendingIndex = (float) ($data['government_spending_index'] ?? 100.0);
+        $governmentSpendingIndexEma = (float) ($data['government_spending_index_ema'] ?? $governmentSpendingIndex);
+        $commercialPropertyIndex = (float) ($data['commercial_property_index'] ?? 100.0);
+        $commercialPropertyIndexEma = (float) ($data['commercial_property_index_ema'] ?? $commercialPropertyIndex);
+        $residentialPropertyIndex = (float) ($data['residential_property_index'] ?? 100.0);
+        $residentialPropertyIndexEma = (float) ($data['residential_property_index_ema'] ?? $residentialPropertyIndex);
+        $retailDefaultRate = (float) ($data['retail_default_rate'] ?? 0.0250);
+        $retailDefaultRateEma = (float) ($data['retail_default_rate_ema'] ?? $retailDefaultRate);
+        $agriculturalCommodityIndex = (float) ($data['agricultural_commodity_index'] ?? 100.0);
+        $agriculturalCommodityIndexEma = (float) ($data['agricultural_commodity_index_ema'] ?? $agriculturalCommodityIndex);
+        $agriChi = (float) ($data['agri_chi'] ?? 0.0);
+        $agriXi = (float) ($data['agri_xi'] ?? 4.60517);
+        $freightRateIndex = (float) ($data['freight_rate_index'] ?? 100.0);
+        $freightRateIndexEma = (float) ($data['freight_rate_index_ema'] ?? $freightRateIndex);
+        $freightSupplyEma = (float) ($data['freight_supply_ema'] ?? 100.0);
         
         $policyRate = (float) ($data['policy_rate'] ?? 0.02);
         $policyRateEma = (float) ($data['policy_rate_ema'] ?? $policyRate);
@@ -109,6 +154,7 @@ readonly class MacroStateDTO
         $eventType = isset($data['event_type']) ? (string) $data['event_type'] : null;
 
         return new self(
+            totalTime: $totalTime,
             outputGap: $outputGap,
             outputGapEma: $outputGapEma,
             unemploymentRate: $unemploymentRate,
@@ -118,6 +164,27 @@ readonly class MacroStateDTO
             energyPriceShock: $energyPriceShock,
             consumerSentimentIndex: $consumerSentimentIndex,
             consumerSentimentIndexEma: $consumerSentimentIndexEma,
+            exchangeRateIndex: $exchangeRateIndex,
+            exchangeRateIndexEma: $exchangeRateIndexEma,
+            industrialMetalsIndex: $industrialMetalsIndex,
+            industrialMetalsIndexEma: $industrialMetalsIndexEma,
+            metalsChi: $metalsChi,
+            metalsXi: $metalsXi,
+            governmentSpendingIndex: $governmentSpendingIndex,
+            governmentSpendingIndexEma: $governmentSpendingIndexEma,
+            commercialPropertyIndex: $commercialPropertyIndex,
+            commercialPropertyIndexEma: $commercialPropertyIndexEma,
+            residentialPropertyIndex: $residentialPropertyIndex,
+            residentialPropertyIndexEma: $residentialPropertyIndexEma,
+            retailDefaultRate: $retailDefaultRate,
+            retailDefaultRateEma: $retailDefaultRateEma,
+            agriculturalCommodityIndex: $agriculturalCommodityIndex,
+            agriculturalCommodityIndexEma: $agriculturalCommodityIndexEma,
+            agriChi: $agriChi,
+            agriXi: $agriXi,
+            freightRateIndex: $freightRateIndex,
+            freightRateIndexEma: $freightRateIndexEma,
+            freightSupplyEma: $freightSupplyEma,
             inflation: $inflation,
             inflationEma: $inflationEma,
             policyRate: $policyRate,
@@ -157,6 +224,7 @@ readonly class MacroStateDTO
     public static function fromMacroState(MacroState $state): self
     {
         return new self(
+            totalTime: $state->totalTime,
             outputGap: $state->outputGap,
             outputGapEma: $state->outputGapEma,
             unemploymentRate: $state->unemploymentRate,
@@ -166,6 +234,27 @@ readonly class MacroStateDTO
             energyPriceShock: $state->energyPriceShock,
             consumerSentimentIndex: $state->consumerSentimentIndex,
             consumerSentimentIndexEma: $state->consumerSentimentIndexEma,
+            exchangeRateIndex: $state->exchangeRateIndex,
+            exchangeRateIndexEma: $state->exchangeRateIndexEma,
+            industrialMetalsIndex: $state->industrialMetalsIndex,
+            industrialMetalsIndexEma: $state->industrialMetalsIndexEma,
+            metalsChi: $state->metalsChi,
+            metalsXi: $state->metalsXi,
+            governmentSpendingIndex: $state->governmentSpendingIndex,
+            governmentSpendingIndexEma: $state->governmentSpendingIndexEma,
+            commercialPropertyIndex: $state->commercialPropertyIndex,
+            commercialPropertyIndexEma: $state->commercialPropertyIndexEma,
+            residentialPropertyIndex: $state->residentialPropertyIndex,
+            residentialPropertyIndexEma: $state->residentialPropertyIndexEma,
+            retailDefaultRate: $state->retailDefaultRate,
+            retailDefaultRateEma: $state->retailDefaultRateEma,
+            agriculturalCommodityIndex: $state->agriculturalCommodityIndex,
+            agriculturalCommodityIndexEma: $state->agriculturalCommodityIndexEma,
+            agriChi: $state->agriChi,
+            agriXi: $state->agriXi,
+            freightRateIndex: $state->freightRateIndex,
+            freightRateIndexEma: $state->freightRateIndexEma,
+            freightSupplyEma: $state->freightSupplyEma,
             inflation: $state->inflation,
             inflationEma: $state->inflationEma,
             policyRate: $state->policyRate,
@@ -205,6 +294,7 @@ readonly class MacroStateDTO
     public function toArray(): array
     {
         return [
+            'total_time' => $this->totalTime,
             'output_gap' => $this->outputGap,
             'output_gap_ema' => $this->outputGapEma,
             'unemployment_rate' => $this->unemploymentRate,
@@ -214,6 +304,27 @@ readonly class MacroStateDTO
             'energy_price_shock' => $this->energyPriceShock,
             'consumer_sentiment_index' => $this->consumerSentimentIndex,
             'consumer_sentiment_index_ema' => $this->consumerSentimentIndexEma,
+            'exchange_rate_index' => $this->exchangeRateIndex,
+            'exchange_rate_index_ema' => $this->exchangeRateIndexEma,
+            'industrial_metals_index' => $this->industrialMetalsIndex,
+            'industrial_metals_index_ema' => $this->industrialMetalsIndexEma,
+            'metals_chi' => $this->metalsChi,
+            'metals_xi' => $this->metalsXi,
+            'government_spending_index' => $this->governmentSpendingIndex,
+            'government_spending_index_ema' => $this->governmentSpendingIndexEma,
+            'commercial_property_index' => $this->commercialPropertyIndex,
+            'commercial_property_index_ema' => $this->commercialPropertyIndexEma,
+            'residential_property_index' => $this->residentialPropertyIndex,
+            'residential_property_index_ema' => $this->residentialPropertyIndexEma,
+            'retail_default_rate' => $this->retailDefaultRate,
+            'retail_default_rate_ema' => $this->retailDefaultRateEma,
+            'agricultural_commodity_index' => $this->agriculturalCommodityIndex,
+            'agricultural_commodity_index_ema' => $this->agriculturalCommodityIndexEma,
+            'agri_chi' => $this->agriChi,
+            'agri_xi' => $this->agriXi,
+            'freight_rate_index' => $this->freightRateIndex,
+            'freight_rate_index_ema' => $this->freightRateIndexEma,
+            'freight_supply_ema' => $this->freightSupplyEma,
             'inflation' => $this->inflation,
             'inflation_ema' => $this->inflationEma,
             'policy_rate' => $this->policyRate,

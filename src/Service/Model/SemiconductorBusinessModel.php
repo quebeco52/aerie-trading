@@ -119,8 +119,9 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         $beta = (float) $stock->getBeta();
 
         // Semiconductors are highly cyclical and levered to global tech capital expenditure cycles
+        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         return [
-            'macro_demand_shift' => $outputGap * $beta * self::MACRO_DEMAND_SCALAR,
+            'macro_demand_shift' => ($outputGap * $beta * self::MACRO_DEMAND_SCALAR) - ($fxShift * 0.10),
             'pricing_power_multiplier' => 1.0 + ($inflation * max(self::MIN_PRICING_BETA_FLOOR, $beta * self::PRICING_BETA_SCALAR)),
         ];
     }
@@ -193,9 +194,10 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
             $yieldModifier = self::WAFER_SCRAP_PENALTY * $foundryWeight; // Scaled by foundry weight
         }
 
-        // Cleanroom Energy Drag: Fabs and EUV lithography tools consume gigawatts of electricity
+        // Cleanroom Energy & Metals Drag: Fabs consume massive electricity and raw materials
         $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
-        $energyDrag = $energyShift * self::CLEANROOM_ENERGY_DRAG_SCALAR * $foundryWeight;
+        $metalsShift = max(0.0, ($macroState->industrialMetalsIndexEma - 100.0) / 100.0);
+        $energyDrag = (($energyShift * self::CLEANROOM_ENERGY_DRAG_SCALAR) + ($metalsShift * 0.10)) * $foundryWeight;
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $yieldModifier + $energyDrag);
 

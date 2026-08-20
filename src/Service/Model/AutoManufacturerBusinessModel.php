@@ -159,7 +159,8 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         // FIX: Tamed the sentiment multiplier from 1.50 to 0.40.
         // A -40 point drop in sentiment for a 1.75 beta stock now results in a realistic -28% demand drop.
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
-        $physics['macro_demand_shift'] += $sentimentShift * $beta * 0.40;
+        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
+        $physics['macro_demand_shift'] += ($sentimentShift * $beta * 0.40) - ($fxShift * 0.15);
 
         return $physics;
     }
@@ -233,12 +234,14 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         // Supply chain inflation & energy cost penalty on physical manufacturing
         $inflation = $macroState->inflationEma;
         $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
+        $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
         $baseInflationPenalty = max(0.0, $inflation - MacroEngine::TARGET_INFLATION) * $beta * self::INFLATION_PENALTY_SCALAR;
-        $inflationCostPenalty = ($baseInflationPenalty + ($energyShift * 0.05)) * (1.0 - ($pricingPower * 0.50));
+        $inflationCostPenalty = ($baseInflationPenalty + ($energyShift * 0.05) + ($metalsShift * 0.15)) * (1.0 - ($pricingPower * 0.50));
 
         // Captive Finance NIM Squeeze & Subprime Provisioning
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
-        $macroDefaultDrag = $sentimentShift < 0.0 ? abs($sentimentShift) * self::MACRO_DEFAULT_SCALAR : 0.0;
+        $retailDefaultShift = max(0.0, ($macroState->retailDefaultRateEma - MacroEngine::RETAIL_DEFAULT_BASELINE) / MacroEngine::RETAIL_DEFAULT_BASELINE);
+        $macroDefaultDrag = ($sentimentShift < 0.0 ? abs($sentimentShift) * self::MACRO_DEFAULT_SCALAR : 0.0) + ($retailDefaultShift * 0.05);
 
         $creditSpread = $macroState->macroCreditSpread;
         $ceclDrag = $creditSpread > self::CECL_BASELINE_CREDIT_SPREAD
@@ -260,8 +263,9 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $salesShock    = $salesZ    * ($baselineVol * self::SALES_VARIANCE_SCALAR);
         $apexShock     = $apexZ     * ($baselineVol * self::APEX_VARIANCE_SCALAR);
         $softwareShock = $softwareZ * ($baselineVol * self::SOFTWARE_VARIANCE_SCALAR);
+        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
 
-        $salesRevenue    = max(0.0, $expectedRevenue * $salesWeight    * (1.0 + $salesShock) * $salesMultiplier);
+        $salesRevenue    = max(0.0, $expectedRevenue * $salesWeight    * (1.0 + $salesShock - ($fxShift * 0.5)) * $salesMultiplier);
         $apexRevenue     = max(0.0, $expectedRevenue * $apexWeight     * (1.0 + $apexShock + $apexMacroBoost));
         $softwareRevenue = max(0.0, $expectedRevenue * $softwareWeight * (1.0 + $softwareShock));
 

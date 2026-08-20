@@ -124,4 +124,32 @@ class ConstructionBusinessModelTest extends TestCase
         $this->assertGreaterThan(0.30, $resultDefault->clampedMargin);
         $this->assertLessThan(1.50, $resultDefault->clampedMargin);
     }
+
+    public function testGovernmentSpendingAndPropertyIndicesBoostConstruction(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('IBHI');
+        $stock->setBeta('1.0');
+
+        $baseMacro = new MacroStateDTO(
+            governmentSpendingIndexEma: 100.0,
+            commercialPropertyIndexEma: 100.0,
+            residentialPropertyIndexEma: 100.0
+        );
+
+        $boostMacro = new MacroStateDTO(
+            governmentSpendingIndexEma: 120.0,
+            commercialPropertyIndexEma: 110.0,
+            residentialPropertyIndexEma: 110.0
+        );
+
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 10_000_000.0, 0.0, $baseMacro, $mathMock);
+        $boostResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 10_000_000.0, 0.0, $boostMacro, $mathMock);
+
+        $this->assertGreaterThan($baseResult->streamRevenue['civil_infrastructure'], $boostResult->streamRevenue['civil_infrastructure']);
+        $this->assertGreaterThan($baseResult->streamRevenue['commercial_epc'], $boostResult->streamRevenue['commercial_epc']);
+    }
 }

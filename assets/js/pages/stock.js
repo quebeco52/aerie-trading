@@ -116,9 +116,16 @@ function initStockPage() {
     }
     const destroyChart = (inst) => { if (inst) { try { inst.destroy(); } catch (e) { } } return null; };
     etfPieChart = destroyChart(etfPieChart);
-    macroLaborChartInstance = destroyChart(macroLaborChartInstance);
-    macroMoneyChartInstance = destroyChart(macroMoneyChartInstance);
-    macroEnergyChartInstance = destroyChart(macroEnergyChartInstance);
+    macroEconomyChartInstance = destroyChart(macroEconomyChartInstance);
+    macroRatesChartInstance = destroyChart(macroRatesChartInstance);
+    macroMortgageChartInstance = destroyChart(macroMortgageChartInstance);
+    macroRiskChartInstance = destroyChart(macroRiskChartInstance);
+    macroLaborCreditChartInstance = destroyChart(macroLaborCreditChartInstance);
+    macroCommoditiesChartInstance = destroyChart(macroCommoditiesChartInstance);
+    macroPropertyChartInstance = destroyChart(macroPropertyChartInstance);
+    macroTradeLogisticsChartInstance = destroyChart(macroTradeLogisticsChartInstance);
+    macroSentimentChartInstance = destroyChart(macroSentimentChartInstance);
+    macroGovtSpendingChartInstance = destroyChart(macroGovtSpendingChartInstance);
     profitEngineChartInstance = destroyChart(profitEngineChartInstance);
     debtEquityChartInstance = destroyChart(debtEquityChartInstance);
     creditHealthChartInstance = destroyChart(creditHealthChartInstance);
@@ -1221,10 +1228,12 @@ let macroEconomyChartInstance = null;
 let macroRatesChartInstance = null;
 let macroMortgageChartInstance = null;
 let macroRiskChartInstance = null;
-let macroGdpChartInstance = null;
-let macroLaborChartInstance = null;
-let macroMoneyChartInstance = null;
-let macroEnergyChartInstance = null;
+let macroLaborCreditChartInstance = null;
+let macroCommoditiesChartInstance = null;
+let macroPropertyChartInstance = null;
+let macroTradeLogisticsChartInstance = null;
+let macroSentimentChartInstance = null;
+let macroGovtSpendingChartInstance = null;
 
 function updateMacroCharts() {
     if (!rawReports || rawReports.length === 0) return;
@@ -1234,9 +1243,10 @@ function updateMacroCharts() {
     let policyRateData = [], yield2yData = [], yield5yData = [], yield10yData = [], yield30yData = [];
     let spread2s10sData = [], spread30yData = [];
     let erpData = [], volData = [], taxData = [];
-    let gdpData = [];
     let unemploymentData = [], energyPriceData = [];
     let sentimentData = [];
+    let fxEmaData = [], metalsEmaData = [], govtSpendingEmaData = [], creEmaData = [];
+    let retailDefaultData = [], agriEmaData = [], freightEmaData = [], residentialEmaData = [];
 
     // Expand and cap the macro charts to show exactly the last 100 quarters (25 years)
     const slicedReports = rawReports.slice(-100);
@@ -1279,22 +1289,30 @@ function updateMacroCharts() {
         volData.push(parseFloat(report.market_volatility) * 100);
         taxData.push(parseFloat(report.corporate_tax_rate) * 100);
 
-        // Base GDP in the system is $25 Trillion
-        gdpData.push(parseFloat(report.nominal_gdp_index) * 25.0);
-
         unemploymentData.push(parseFloat(report.unemployment_rate) * 100);
         energyPriceData.push(parseFloat(report.energy_price_index_ema || report.energy_price_index || 100.0));
         sentimentData.push(parseFloat(report.consumer_sentiment_index_ema || report.consumer_sentiment_index || 100.0));
+
+        fxEmaData.push(parseFloat(report.exchange_rate_index_ema || report.exchange_rate_index || 100.0));
+        metalsEmaData.push(parseFloat(report.industrial_metals_index_ema || report.industrial_metals_index || 100.0));
+        govtSpendingEmaData.push(parseFloat(report.government_spending_index_ema || report.government_spending_index || 100.0));
+        creEmaData.push(parseFloat(report.commercial_property_index_ema || report.commercial_property_index || 100.0));
+        retailDefaultData.push(parseFloat(report.retail_default_rate_ema || report.retail_default_rate || 0.025) * 100);
+        agriEmaData.push(parseFloat(report.agricultural_commodity_index_ema || report.agricultural_commodity_index || 100.0));
+        freightEmaData.push(parseFloat(report.freight_rate_index_ema || report.freight_rate_index || 100.0));
+        residentialEmaData.push(parseFloat(report.residential_property_index_ema || report.residential_property_index || 100.0));
     });
 
     renderMacroEconomyChart(labels, inflationData, outputGapData);
     renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData, yield10yData, spread2s10sData);
     renderMacroMortgageChart(labels, policyRateData, yield30yData, spread30yData);
     renderMacroRiskChart(labels, erpData, volData, taxData, corpBorrowingData);
-    renderMacroGdpChart(labels, gdpData);
-    renderMacroLaborChart(labels, unemploymentData);
-    renderMacroEnergyChart(labels, energyPriceData);
+    renderMacroLaborCreditChart(labels, unemploymentData, retailDefaultData);
+    renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agriEmaData);
+    renderMacroPropertyChart(labels, creEmaData, residentialEmaData);
+    renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData);
     renderMacroSentimentChart(labels, sentimentData);
+    renderMacroGovtSpendingChart(labels, govtSpendingEmaData);
 }
 
 function renderMacroEconomyChart(labels, inflationData, outputGapData) {
@@ -1509,35 +1527,6 @@ function renderMacroRiskChart(labels, erpData, volData, taxData, corpBorrowingDa
     });
 }
 
-function renderMacroGdpChart(labels, gdpData) {
-    if (macroGdpChartInstance) macroGdpChartInstance.destroy();
-    const ctx = document.getElementById('macroGdpChart').getContext('2d');
-    macroGdpChartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [
-                {
-                    label: 'Nominal GDP',
-                    data: gdpData,
-                    borderColor: COLORS.positive,
-                    backgroundColor: 'rgba(78, 222, 163, 0.2)',
-                    borderWidth: 2,
-                    tension: 0.3,
-                    fill: true,
-                    pointRadius: labels.length > 50 ? 0 : 2
-                }
-            ]
-        },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `$${ctx.raw.toFixed(2)}T` } } },
-            scales: { y: { ticks: { callback: (val) => '$' + val + 'T' } } }
-        }
-    });
-}
-
 function renderMacroLaborChart(labels, unemploymentData) {
     if (macroLaborChartInstance) macroLaborChartInstance.destroy();
     const ctx = document.getElementById('macroLaborChart').getContext('2d');
@@ -1568,10 +1557,55 @@ function renderMacroLaborChart(labels, unemploymentData) {
 }
 
 
-function renderMacroEnergyChart(labels, energyPriceData) {
-    if (macroEnergyChartInstance) macroEnergyChartInstance.destroy();
-    const ctx = document.getElementById('macroEnergyChart').getContext('2d');
-    macroEnergyChartInstance = new Chart(ctx, {
+function renderMacroLaborCreditChart(labels, unemploymentData, retailDefaultData) {
+    if (macroLaborCreditChartInstance) macroLaborCreditChartInstance.destroy();
+    const ctx = document.getElementById('macroLaborCreditChart');
+    if (!ctx) return;
+
+    macroLaborCreditChartInstance = new Chart(ctx.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Unemployment Rate',
+                    data: unemploymentData,
+                    borderColor: '#f43f5e',
+                    backgroundColor: 'rgba(244, 63, 94, 0.15)',
+                    borderWidth: 2,
+                    tension: 0.2,
+                    fill: true,
+                    pointRadius: labels.length > 50 ? 0 : 2
+                },
+                {
+                    label: 'Consumer Default Rate',
+                    data: retailDefaultData,
+                    borderColor: '#f59e0b',
+                    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                    borderWidth: 2,
+                    tension: 0.2,
+                    pointRadius: labels.length > 50 ? 0 : 2
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
+            },
+            scales: { y: { ticks: { callback: (val) => val.toFixed(1) + '%' }, title: { display: true, text: 'Percentage' } } }
+        }
+    });
+}
+
+function renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agriEmaData) {
+    if (macroCommoditiesChartInstance) macroCommoditiesChartInstance.destroy();
+    const ctx = document.getElementById('macroCommoditiesChart');
+    if (!ctx) return;
+
+    macroCommoditiesChartInstance = new Chart(ctx.getContext('2d'), {
         type: 'line',
         data: {
             labels: labels,
@@ -1580,10 +1614,27 @@ function renderMacroEnergyChart(labels, energyPriceData) {
                     label: 'Energy Price Index',
                     data: energyPriceData,
                     borderColor: '#eab308',
-                    backgroundColor: 'rgba(234, 179, 8, 0.2)',
+                    backgroundColor: 'rgba(234, 179, 8, 0.15)',
                     borderWidth: 2,
                     tension: 0.2,
-                    fill: true,
+                    pointRadius: labels.length > 50 ? 0 : 2
+                },
+                {
+                    label: 'Industrial Metals Index',
+                    data: metalsEmaData,
+                    borderColor: '#fb923c',
+                    backgroundColor: 'rgba(251, 146, 60, 0.15)',
+                    borderWidth: 2,
+                    tension: 0.2,
+                    pointRadius: labels.length > 50 ? 0 : 2
+                },
+                {
+                    label: 'Agricultural Commodities',
+                    data: agriEmaData,
+                    borderColor: '#a3e635',
+                    backgroundColor: 'rgba(163, 230, 53, 0.15)',
+                    borderWidth: 2,
+                    tension: 0.2,
                     pointRadius: labels.length > 50 ? 0 : 2
                 }
             ]
@@ -1591,13 +1642,99 @@ function renderMacroEnergyChart(labels, energyPriceData) {
         options: {
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
-            plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `Index: ${ctx.raw.toFixed(2)}` } } },
-            scales: { y: { ticks: { callback: (val) => val } } }
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}` } }
+            },
+            scales: { y: { ticks: { callback: (val) => val }, title: { display: true, text: 'Index (Base 100)' } } }
         }
     });
 }
 
-let macroSentimentChartInstance = null;
+function renderMacroPropertyChart(labels, creEmaData, residentialEmaData) {
+    if (macroPropertyChartInstance) macroPropertyChartInstance.destroy();
+    const ctx = document.getElementById('macroPropertyChart');
+    if (!ctx) return;
+
+    macroPropertyChartInstance = new Chart(ctx.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Commercial Property Index (CRE)',
+                    data: creEmaData,
+                    borderColor: '#f472b6',
+                    backgroundColor: 'rgba(244, 114, 182, 0.15)',
+                    borderWidth: 2,
+                    tension: 0.2,
+                    pointRadius: labels.length > 50 ? 0 : 2
+                },
+                {
+                    label: 'Residential Property Index',
+                    data: residentialEmaData,
+                    borderColor: '#c084fc',
+                    backgroundColor: 'rgba(192, 132, 252, 0.15)',
+                    borderWidth: 2,
+                    tension: 0.2,
+                    pointRadius: labels.length > 50 ? 0 : 2
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}` } }
+            },
+            scales: { y: { ticks: { callback: (val) => val }, title: { display: true, text: 'Index (Base 100)' } } }
+        }
+    });
+}
+
+function renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData) {
+    if (macroTradeLogisticsChartInstance) macroTradeLogisticsChartInstance.destroy();
+    const ctx = document.getElementById('macroTradeLogisticsChart');
+    if (!ctx) return;
+
+    macroTradeLogisticsChartInstance = new Chart(ctx.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Exchange Rate Index (FX)',
+                    data: fxEmaData,
+                    borderColor: '#38bdf8',
+                    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+                    borderWidth: 2,
+                    tension: 0.2,
+                    pointRadius: labels.length > 50 ? 0 : 2
+                },
+                {
+                    label: 'Freight Rate Index',
+                    data: freightEmaData,
+                    borderColor: '#f97316',
+                    backgroundColor: 'rgba(249, 115, 22, 0.15)',
+                    borderWidth: 2,
+                    tension: 0.2,
+                    pointRadius: labels.length > 50 ? 0 : 2
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}` } }
+            },
+            scales: { y: { ticks: { callback: (val) => val }, title: { display: true, text: 'Index (Base 100)' } } }
+        }
+    });
+}
+
 function renderMacroSentimentChart(labels, sentimentData) {
     if (macroSentimentChartInstance) macroSentimentChartInstance.destroy();
     const ctx = document.getElementById('macroSentimentChart');
@@ -1636,6 +1773,37 @@ function renderMacroSentimentChart(labels, sentimentData) {
                     ticks: { maxTicksLimit: 10, color: 'rgba(255, 255, 255, 0.5)' }
                 }
             }
+        }
+    });
+}
+
+function renderMacroGovtSpendingChart(labels, govtSpendingEmaData) {
+    if (macroGovtSpendingChartInstance) macroGovtSpendingChartInstance.destroy();
+    const ctx = document.getElementById('macroGovtSpendingChart');
+    if (!ctx) return;
+
+    macroGovtSpendingChartInstance = new Chart(ctx.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Fiscal Spending Index',
+                    data: govtSpendingEmaData,
+                    borderColor: '#34d399',
+                    backgroundColor: 'rgba(52, 211, 153, 0.15)',
+                    borderWidth: 2,
+                    tension: 0.2,
+                    fill: true,
+                    pointRadius: labels.length > 50 ? 0 : 2
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}` } } },
+            scales: { y: { ticks: { callback: (val) => val } } }
         }
     });
 }

@@ -412,4 +412,31 @@ class DefenseContractorBusinessModelTest extends TestCase
             + $result1->streamZ['weight:foreign_military_sales'];
         $this->assertEqualsWithDelta(1.0, $totalActiveWeight, 0.0001);
     }
+
+    public function testGovernmentSpendingAndFmsFxSensitivity(): void
+    {
+        $model = new DefenseContractorBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('GRIP');
+        $stock->setBeta('0.8');
+
+        $baseMacro = new MacroStateDTO(
+            governmentSpendingIndexEma: 100.0,
+            exchangeRateIndexEma: 100.0
+        );
+
+        $shockMacro = new MacroStateDTO(
+            governmentSpendingIndexEma: 120.0,
+            exchangeRateIndexEma: 120.0 // Strong dollar creates FMS export headwind
+        );
+
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $baseResult = $model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $baseMacro, $mathMock);
+        $shockResult = $model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $shockMacro, $mathMock);
+
+        $this->assertGreaterThan($baseResult->streamRevenue['cost_plus_procurement'], $shockResult->streamRevenue['cost_plus_procurement']);
+        $this->assertLessThan($baseResult->streamRevenue['foreign_military_sales'], $shockResult->streamRevenue['foreign_military_sales']);
+    }
 }

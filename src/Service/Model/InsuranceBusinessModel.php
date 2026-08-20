@@ -338,9 +338,14 @@ class InsuranceBusinessModel implements BusinessModelInterface
         $severityBeta  = $catScalar / self::CATASTROPHE_LOSS_SCALAR;
         $catRiskBeta   = $frequencyBeta * $severityBeta;
         $benignBonus   = self::BENIGN_CLAIM_BONUS * $catRiskBeta;
-        $underwritingShock = $claimZ < $catThreshold
+        // Incorporate Property Valuation Inflation on claim costs
+        $creShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;
+        $resShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
+        $propertyClaimInflation = max(0.0, ($creShift * 0.50) + ($resShift * 0.50)) * 0.05; // Modest drag on variable margin when property replacement values surge
+
+        $underwritingShock = ($claimZ < $catThreshold
             ? abs($claimZ) * $catScalar
-            : ($claimZ > self::BENIGN_CLAIM_Z_FLOOR ? $benignBonus : 0.0);
+            : ($claimZ > self::BENIGN_CLAIM_Z_FLOOR ? $benignBonus : 0.0)) + $propertyClaimInflation;
 
         // 3. Cummins & Danzon (1997) Soft-Market Underwriting Offset:
         // When interest rates and float yields boom above baseline, price competition intensifies across the industry
