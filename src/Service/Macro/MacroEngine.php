@@ -27,8 +27,8 @@ class MacroEngine
     public const CASH_YIELD_SPREAD = 0.0025;
 
     // KALDOR-KALECKI CONSTANTS
-    public const KALDOR_MOMENTUM = 0.30;
-    public const KALDOR_CAPACITY = 150.0;
+    public const KALDOR_MOMENTUM = 0.15;
+    public const KALDOR_CAPACITY = 110.0;
     public const KALDOR_MONETARY_DRAG = 0.75;
     public const KALDOR_FISCAL_MULTIPLIER = 0.50;
     public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.010;
@@ -49,7 +49,7 @@ class MacroEngine
     public const ENERGY_VOLATILITY = 0.25;       // Log-price volatility (Schwartz 1-factor sigma)
     public const ENERGY_JUMP_MEAN = 0.20;        // Mean log-return of energy shock (20% avg spike)
     public const ENERGY_JUMP_VOL = 0.10;         // Volatility of the jump size
-    public const ENERGY_COST_PUSH_TRANSMISSION = 0.025;
+    public const ENERGY_COST_PUSH_TRANSMISSION = 0.015;
 
     // --- GARCH-MIDAS Macroeconomic Volatility Constants (Engle, Ghysels, & Sohn 2013 Eq. 5) ---
     /** Long-run equilibrium baseline volatility (~15% VIX) during neutral economic conditions. */
@@ -82,8 +82,8 @@ class MacroEngine
 
     // TAYLOR RULE & MONETARY POLICY CONSTANTS
     public const TAYLOR_INFLATION_WEIGHT = 0.50;
-    public const TAYLOR_BOOM_WEIGHT = 0.50;
-    public const TAYLOR_RECESSION_SCALE = 5.0;
+    public const TAYLOR_BOOM_WEIGHT = 0.30;
+    public const TAYLOR_RECESSION_SCALE = 15.0;
     public const CB_SMOOTHING_SPEED = 1.0;
     public const CB_INFLATION_PANIC_SCALE = 50.0;
     public const CB_RECESSION_PANIC_SCALE = 100.0;
@@ -93,11 +93,10 @@ class MacroEngine
 
     // NELSON-SIEGEL TERM PREMIUM CONSTANTS
     public const NS_BASE_TERM_PREMIUM = 0.0125;
-    public const NS_GAP_TERM_PREMIUM_SCALE = -0.25;
+    public const NS_GAP_TERM_PREMIUM_SCALE = -0.15;
 
     // NEW KEYNESIAN PHILLIPS CURVE CONSTANTS
     public const PHILLIPS_SLOPE = 0.15;
-    public const PHILLIPS_BOTTLENECK_COEFF = 0.10;
     public const INFLATION_MEAN_REVERSION = 0.50;
 
     // MERTON STRUCTURAL CREDIT SPREAD CONSTANTS (Merton 1974)
@@ -124,8 +123,8 @@ class MacroEngine
     public const ANIMAL_SPIRITS_VOLATILITY = 2.5;     // Sigma (How irrational people get)
 
     // --- QE & Yield Curve Constants ---
-    public const QE_ACTIVATION_ZLB_THRESHOLD = 0.90;
-    public const QE_ACTIVATION_GAP_THRESHOLD = -0.02;
+    public const QE_ACTIVATION_ZLB_THRESHOLD = 0.60;
+    public const QE_ACTIVATION_GAP_THRESHOLD = -0.01;
     public const QE_MAX_SUPPRESSION = 0.02;
     public const QE_SEVERITY_MULTIPLIER = 0.5;
     public const QE_RAMP_SPEED = 1.0;
@@ -426,7 +425,7 @@ class MacroEngine
         }
 
         $rawMove = $cbSpeed * ($targetRate - $currentPolicyRate);
-        $clampedMove = max(-0.06, min(0.06, $rawMove)); // Tightened max annual velocity to -600 bps to +600 bps/year
+        $clampedMove = max(-0.08, min(0.05, $rawMove)); // Tightened max annual velocity to -800 bps to +500 bps/year
 
         $newRate = $currentPolicyRate + $clampedMove * $dt;
         $newRate = max(0.00, min(0.20, $newRate)); // Explicit bounds
@@ -525,10 +524,6 @@ class MacroEngine
         $inflationDrift = self::INFLATION_MEAN_REVERSION * ($targetInflation - $state->inflation) * $dt;
 
         $phillipsSlope = $state->outputGap * self::PHILLIPS_SLOPE;
-
-        if ($state->outputGap > 0.0) {
-            $phillipsSlope += self::PHILLIPS_BOTTLENECK_COEFF * pow($state->outputGap, 2);
-        }
 
         // Add energy cost-push inflation
         $energyCostPush = ($state->energyPriceShock / 100.0) * self::ENERGY_COST_PUSH_TRANSMISSION; // Moderated transmission of energy shock

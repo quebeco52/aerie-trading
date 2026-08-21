@@ -169,12 +169,14 @@ class InsuranceBusinessModel implements BusinessModelInterface
     public const CATASTROPHE_EQUITY_CORRELATION = 0.30;
 
     // --- Valuation & Fair Value Weights ---
-    /** Weight given to book value in fair value calculations when normalized EPS is positive. */
-    public const FAIR_VALUE_BOOK_POS_EPS  = 0.40;
-    /** Weight given to book value in fair value calculations when normalized EPS is negative or zero. */
-    public const FAIR_VALUE_BOOK_NEG_EPS  = 0.80;
+    /** Weight given to book value in profitable quarters (50% Book / 35% Earnings / 15% DDM). */
+    public const FAIR_VALUE_BOOK_POS_EPS        = 0.50;
+    /** Weight given to book value in catastrophe loss quarters (100% Book Value anchor). */
+    public const FAIR_VALUE_BOOK_NEG_EPS        = 1.00;
     /** Weight given to Dividend Discount Model yield support when blending insurance fair value. */
-    public const FAIR_VALUE_DDM_WEIGHT    = 0.15;
+    public const FAIR_VALUE_DDM_WEIGHT          = 0.15;
+    /** Franchise floor multiplier applied to revenue floor value for sticky premium & float franchise. */
+    public const PREMIUM_FRANCHISE_FLOOR_MULT   = 0.70;
 
     // --- Passive Liability Growth & Float Expansion ---
     /** Default annual inflation rate fallback for systemic float growth calculations. */
@@ -651,13 +653,21 @@ class InsuranceBusinessModel implements BusinessModelInterface
     }
     public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float
     {
-        return $peFairValue;
+        $franchiseFloor = $revenueFloorValue * self::PREMIUM_FRANCHISE_FLOOR_MULT;
+        return max($franchiseFloor, $peFairValue);
     }
 
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
     {
-        $bookWeight = $normalizedEps > 0 ? self::FAIR_VALUE_BOOK_POS_EPS : self::FAIR_VALUE_BOOK_NEG_EPS;
-        $baseConsensus = ($earningsValue * (1.0 - $bookWeight)) + ($pbFairValue * $bookWeight);
+        if ($normalizedEps > 0.0) {
+            $bookWeight = self::FAIR_VALUE_BOOK_POS_EPS;
+            $earningsWeight = 1.0 - $bookWeight;
+            $baseConsensus = ($earningsValue * $earningsWeight) + ($pbFairValue * $bookWeight);
+        } else {
+            // Loss quarter: Full 100% anchor to Book Value (do NOT discard value by multiplying by 0.80)
+            $baseConsensus = $pbFairValue;
+        }
+
         return $dividendSupportValue > 0.0
             ? ($baseConsensus * (1.0 - self::FAIR_VALUE_DDM_WEIGHT)) + ($dividendSupportValue * self::FAIR_VALUE_DDM_WEIGHT)
             : $baseConsensus;

@@ -79,4 +79,35 @@ class InsuranceBusinessModelTest extends TestCase
         // Variable costs (claims) should be significantly elevated due to catastrophe loss
         $this->assertGreaterThan(50_000_000_000.0 * 0.60, $result->actualVariableCosts);
     }
+
+    public function testCalculateEarningsValueWithFranchiseFloor(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $mathUtility = new MathUtility();
+
+        // 1. When PE fair value is healthy ($100), returns PE fair value
+        $earningsValNormal = $model->calculateEarningsValue(50.0, 100.0, 5.0, 0.08, $mathUtility);
+        $this->assertEquals(100.0, $earningsValNormal);
+
+        // 2. When PE fair value collapses to $0 (e.g. catastrophe claims), franchise floor cushions value (0.70 * $50 = $35)
+        $earningsValLoss = $model->calculateEarningsValue(50.0, 0.0, -10.0, 0.08, $mathUtility);
+        $this->assertEquals(35.0, $earningsValLoss);
+    }
+
+    public function testCalculateFairValueProfitableVsLossRegimes(): void
+    {
+        $model = new InsuranceBusinessModel();
+
+        // 1. Profitable regime (normalized EPS > 0): 50% Book ($100) / 35% Earnings ($120) / 15% DDM ($80)
+        // Base consensus = (120 * 0.50) + (100 * 0.50) = 60 + 50 = 110
+        // Blended with DDM = (110 * 0.85) + (80 * 0.15) = 93.5 + 12 = 105.5
+        $fairValProfit = $model->calculateFairValue(120.0, 100.0, 5.0, 80.0);
+        $this->assertEquals(105.5, $fairValProfit);
+
+        // 2. Catastrophe loss regime (normalized EPS <= 0): 100% Book ($100) blended with DDM ($80)
+        // Base consensus = 100
+        // Blended with DDM = (100 * 0.85) + (80 * 0.15) = 85 + 12 = 97.0
+        $fairValLoss = $model->calculateFairValue(0.0, 100.0, -2.0, 80.0);
+        $this->assertEquals(97.0, $fairValLoss);
+    }
 }
