@@ -79,8 +79,9 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
         $brandWeight   = $activeWeights['creative_brand_retainers'];
         $martechWeight = $activeWeights['martech_consulting'];
 
-        // Ad budgets expand aggressively during GDP booms and contract sharply during recessions
-        $macroAdSpendShift = $macroState->outputGapEma * 1.8 * $beta;
+        // Ad budgets expand aggressively during GDP booms and contract sharply during recessions and consumer sentiment drops
+        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
+        $macroAdSpendShift = ($macroState->outputGapEma * 1.5 * $beta) + ($sentimentShift * 0.50 * $beta);
 
         $mediaZ   = $streams->generateZ('media_buying_commissions', 0.25);
         $brandZ   = $streams->generateZ('creative_brand_retainers', 0.50);

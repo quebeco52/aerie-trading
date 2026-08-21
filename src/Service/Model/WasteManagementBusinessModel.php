@@ -131,9 +131,10 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         $excessInflation = max(0.0, $macroState->inflationEma - MacroEngine::TARGET_INFLATION);
         $cpiEscalatorBoost = $excessInflation * self::CPI_ESCALATOR_CAPTURE; // Passive revenue boost
 
-        // Recycling is driven entirely by global commodity/energy prices
+        // Recycling is driven entirely by global commodity, energy, and scrap metal prices
         $energyShift = ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0;
-        $recyclingCommodityBoost = $energyShift * 0.50;
+        $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
+        $recyclingCommodityBoost = ($energyShift * 0.30) + ($metalsShift * 0.30);
 
         // --- Tail Risk Events ---
         $eventType = null;

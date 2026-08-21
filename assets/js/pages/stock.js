@@ -1239,7 +1239,7 @@ function updateMacroCharts() {
     if (!rawReports || rawReports.length === 0) return;
 
     let labels = [];
-    let inflationData = [], outputGapData = [], corpBorrowingData = [];
+    let inflationData = [], outputGapData = [], capitalOverhangData = [], corpBorrowingData = [];
     let policyRateData = [], yield2yData = [], yield5yData = [], yield10yData = [], yield30yData = [];
     let spread2s10sData = [], spread30yData = [];
     let erpData = [], volData = [], taxData = [];
@@ -1258,6 +1258,9 @@ function updateMacroCharts() {
 
         inflationData.push(parseFloat(report.inflation_ema) * 100);
         outputGapData.push(parseFloat(report.output_gap_ema) * 100);
+
+        let rawCap = report.capital_stock_overhang_ema ?? report.capital_stock_overhang ?? report.capitalStockOverhangEma ?? report.capitalStockOverhang ?? 0.0;
+        capitalOverhangData.push(parseFloat(rawCap) * 100);
 
         let pr = parseFloat(report.policy_rate_ema) * 100;
         let y10 = parseFloat(report.yield10y_ema) * 100;
@@ -1303,7 +1306,7 @@ function updateMacroCharts() {
         residentialEmaData.push(parseFloat(report.residential_property_index_ema || report.residential_property_index || 100.0));
     });
 
-    renderMacroEconomyChart(labels, inflationData, outputGapData);
+    renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOverhangData);
     renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData, yield10yData, spread2s10sData);
     renderMacroMortgageChart(labels, policyRateData, yield30yData, spread30yData);
     renderMacroRiskChart(labels, erpData, volData, taxData, corpBorrowingData);
@@ -1315,7 +1318,7 @@ function updateMacroCharts() {
     renderMacroGovtSpendingChart(labels, govtSpendingEmaData);
 }
 
-function renderMacroEconomyChart(labels, inflationData, outputGapData) {
+function renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOverhangData) {
     if (macroEconomyChartInstance) macroEconomyChartInstance.destroy();
     const ctx = document.getElementById('macroEconomyChart').getContext('2d');
     macroEconomyChartInstance = new Chart(ctx, {
@@ -1329,6 +1332,17 @@ function renderMacroEconomyChart(labels, inflationData, outputGapData) {
                     data: inflationData,
                     borderColor: '#facc15',
                     backgroundColor: '#facc15',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: labels.length > 50 ? 0 : 1,
+                    yAxisID: 'y'
+                },
+                {
+                    type: 'line',
+                    label: 'Capital Overhang (EMA)',
+                    data: capitalOverhangData,
+                    borderColor: '#c084fc',
+                    backgroundColor: '#c084fc',
                     borderWidth: 2,
                     tension: 0.3,
                     pointRadius: labels.length > 50 ? 0 : 1,

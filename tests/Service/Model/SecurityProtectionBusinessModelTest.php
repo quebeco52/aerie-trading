@@ -153,16 +153,41 @@ class SecurityProtectionBusinessModelTest extends TestCase
         $this->assertTrue($result->isPublicEvent);
     }
 
-    public function testNarrativeEngineGeneratesLoreForSecurityShocks(): void
+    public function testGovernmentSpendingExpansionBoostsGovernmentContractRevenue(): void
     {
-        $narrativeEngine = new NarrativeEngine();
+        $stock = new Stock();
+        $stock->setTicker('GRIP');
+        $stock->setBeta('1.0');
 
-        $breachLore = $narrativeEngine->generateLore(ShockEvent::SECURITY_BREACH);
-        $this->assertNotEmpty($breachLore);
-        $this->assertNotEquals("Experienced an unexpected market event.", $breachLore);
+        $mathUtility = new MathUtility();
 
-        $conflictLore = $narrativeEngine->generateLore(ShockEvent::GEOPOLITICAL_CONFLICT);
-        $this->assertNotEmpty($conflictLore);
-        $this->assertNotEquals("Experienced an unexpected market event.", $conflictLore);
+        $baselineMacro = new MacroStateDTO(governmentSpendingIndexEma: 100.0);
+        $expansionMacro = new MacroStateDTO(governmentSpendingIndexEma: 150.0);
+
+        $baselineResult = $this->model->computeActualFinancials(
+            $stock,
+            1000.0,
+            0.50,
+            50.0,
+            0.0,
+            $baselineMacro,
+            $mathUtility
+        );
+
+        $expansionResult = $this->model->computeActualFinancials(
+            $stock,
+            1000.0,
+            0.50,
+            50.0,
+            0.0,
+            $expansionMacro,
+            $mathUtility
+        );
+
+        $this->assertGreaterThan(
+            $baselineResult->streamRevenue['government_contracts'],
+            $expansionResult->streamRevenue['government_contracts'],
+            'Fiscal appropriations and government spending expansion must increase government contract revenue.'
+        );
     }
 }

@@ -647,6 +647,32 @@ class MacroEngineTest extends TestCase
         $this->assertSame(0.00, $result->targetRate, 'Evans Rule must override Taylor Rule and return 0.00% target rate when unemployment is above 5.0% and inflation is below 2.5%.');
     }
 
+    public function testEvansRuleUsesTrendUnemploymentRatherThanHighFrequencyNoise(): void
+    {
+        // Raw unemployment drops below 5.0% due to 1-period noise, but trend (EMA) is still elevated at 5.4%
+        $noisyRecoveryState = [
+            'unemployment_rate' => 0.048,
+            'unemployment_rate_ema' => 0.054,
+            'inflation' => 0.020,
+            'inflation_ema' => 0.020,
+            'output_gap' => -0.010,
+            'output_gap_ema' => -0.010,
+            'policy_rate' => 0.01,
+            'policy_rate_ema' => 0.01,
+            'yield_5y' => 0.02,
+        ];
+
+        $this->redisMock->expects($this->once())
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturn(json_encode($noisyRecoveryState));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.25);
+
+        $this->assertSame(0.00, $result->targetRate, 'Evans Rule must anchor on trend unemployment (EMA) to avoid premature liftoff from single-period noise.');
+    }
+
     public function testCapitalOverhangDragsOutputGap(): void
     {
         // State with positive capital overhang (excess capacity / boom overbuild)
@@ -689,6 +715,79 @@ class MacroEngineTest extends TestCase
             $resultNegative->outputGap,
             $resultPositive->outputGap,
             'Positive capital overhang must exert drag on the output gap compared to negative overhang which provides an autonomous recovery impulse.'
+        );
+    }
+
+    public function testConsumerSentimentAnchorsAtBaselineInNeutralMacro(): void
+    {
+        $neutralState = [
+            'inflation' => MacroEngine::TARGET_INFLATION,
+            'inflation_ema' => MacroEngine::TARGET_INFLATION,
+            'unemployment_rate' => MacroEngine::NATURAL_UNEMPLOYMENT,
+            'unemployment_rate_ema' => MacroEngine::NATURAL_UNEMPLOYMENT,
+            'output_gap' => 0.0,
+            'output_gap_ema' => 0.0,
+            'policy_rate' => 0.035,
+            'policy_rate_ema' => 0.035,
+            'yield10y' => 0.0475,
+            'yield10y_ema' => 0.0475,
+            'market_volatility' => MacroEngine::MACRO_VOL_BASE_ANCHOR,
+            'market_volatility_ema' => MacroEngine::MACRO_VOL_BASE_ANCHOR,
+            'consumer_sentiment_index' => 100.0,
+            'consumer_sentiment_index_ema' => 100.0,
+            'energy_price_index' => 100.0,
+            'energy_price_index_ema' => 100.0,
+        ];
+
+        $this->redisMock->expects($this->once())
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturn(json_encode($neutralState));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.25);
+
+        $this->assertEqualsWithDelta(
+            MacroEngine::SENTIMENT_BASELINE,
+            $result->consumerSentimentIndex,
+            1.0,
+            'Consumer sentiment index must remain near 100 in neutral macroeconomic equilibrium.'
+        );
+    }
+
+    public function testConsumerSentimentDepressedDuringStagflationAndVolatility(): void
+    {
+        $crisisState = [
+            'inflation' => 0.07,
+            'inflation_ema' => 0.05,
+            'unemployment_rate' => 0.07,
+            'unemployment_rate_ema' => 0.05,
+            'output_gap' => -0.04,
+            'output_gap_ema' => -0.02,
+            'policy_rate' => 0.06,
+            'policy_rate_ema' => 0.05,
+            'yield10y' => 0.07,
+            'yield10y_ema' => 0.06,
+            'market_volatility' => 0.35,
+            'market_volatility_ema' => 0.30,
+            'consumer_sentiment_index' => 100.0,
+            'consumer_sentiment_index_ema' => 100.0,
+            'energy_price_index' => 160.0,
+            'energy_price_index_ema' => 140.0,
+        ];
+
+        $this->redisMock->expects($this->once())
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturn(json_encode($crisisState));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.25);
+
+        $this->assertLessThan(
+            80.0,
+            $result->consumerSentimentIndex,
+            'Stagflation, surging energy costs, and high market volatility should heavily depress consumer sentiment.'
         );
     }
 }

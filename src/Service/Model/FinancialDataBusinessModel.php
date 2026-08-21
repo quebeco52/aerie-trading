@@ -7,6 +7,7 @@ namespace App\Service\Model;
 use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 
 /**
@@ -109,8 +110,16 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         $subscriptionZ = $streams->generateZ('subscription', 0.50); // Recurring seat subscriptions & data licenses
         $transactionZ  = $streams->generateZ('transaction', 0.15); // Debt issuance credit rating mandates & API usage
 
+        // DCM Debt Rating & Data Feed API Macro Channel:
+        // Rating issuance mandates (SHRK) surge when corporate debt syndication booms (tight credit spreads + positive output gap).
+        // Market data API feeds (TICK) see elevated transaction volume during high-volatility regimes (VIX > 20%).
+        $creditSpreadGap = MacroEngine::BASE_CREDIT_SPREAD - $macroState->macroCreditSpreadEma;
+        $dcmIssuanceBoost = ($creditSpreadGap * 2.0) + ($macroState->outputGapEma * 1.5 * abs((float) $stock->getBeta()));
+        $vixVolBoost = max(0.0, ($macroState->marketVolatilityEma - 0.20) * 0.50);
+        $transactionMacroBonus = $dcmIssuanceBoost + $vixVolBoost;
+
         $subscriptionRevenue = max(0.0, $expectedRevenue * $subscriptionWeight * (1.0 + ($subscriptionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
-        $transactionRevenue  = max(0.0, $expectedRevenue * $transactionWeight * (1.0 + ($transactionZ * ($baselineVol * (self::REVENUE_VARIANCE_SCALAR * 5.0)))));
+        $transactionRevenue  = max(0.0, $expectedRevenue * $transactionWeight * (1.0 + ($transactionZ * ($baselineVol * (self::REVENUE_VARIANCE_SCALAR * 5.0))) + $transactionMacroBonus));
         
         $streamRevenues = [
             'subscription' => $subscriptionRevenue,
@@ -127,7 +136,8 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $operatingLeverageShift);
 
         $primaryShockZ = abs($transactionZ) > abs($subscriptionZ) ? $transactionZ : $subscriptionZ;
-        $observableShockZ = ($subscriptionZ * $subscriptionWeight + $transactionZ * $transactionWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
+        $observableShockZ = (($subscriptionZ * $subscriptionWeight + $transactionZ * $transactionWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))
+            + ($transactionMacroBonus * $transactionWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

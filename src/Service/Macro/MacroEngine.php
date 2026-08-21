@@ -28,38 +28,46 @@ class MacroEngine
 
     // --- KALDOR-KALECKI 2D LIMIT CYCLE ---
     /** Linear momentum of aggregate demand feedback loop. */
-    public const KALDOR_MOMENTUM = 0.15;
+    public const KALDOR_MOMENTUM = 0.22;
     /** Cubic stabilization factor bounding extreme boom/bust expansions. */
-    public const KALDOR_CAPACITY = 180.0;
+    public const KALDOR_CAPACITY = 160.0;
     /** Sensitivity of aggregate demand to real interest rate deviations from natural rate. */
-    public const KALDOR_MONETARY_DRAG = 0.75;
+    public const KALDOR_MONETARY_DRAG = 1.25;
     /** Countercyclical fiscal stimulus multiplier from corporate tax rate cuts. */
     public const KALDOR_FISCAL_MULTIPLIER = 0.50;
     /** Sensitivity of the output gap to physical capital stock overhang (excess capacity drags down growth). */
-    public const KALDOR_CAPITAL_DRAG = 0.25;
+    public const KALDOR_CAPITAL_DRAG = 0.40;
     /** The rate at which business investment (output gap) accumulates into the physical capital stock. */
     public const CAPITAL_ACCUMULATION_RATE = 0.50;
     /** The rate at which physical capital depreciates, organically clearing overhangs and creating pent-up demand. */
-    public const CAPITAL_DECAY_RATE = 0.15;
+    public const CAPITAL_DECAY_RATE = 0.25;
     /** Stochastic diffusion volatility of the macroeconomic output gap. */
     public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.010;
 
-    // OKUN'S LAW (LABOR MARKET)
+    // --- Okun's Law (Labor Market Dynamics) ---
+    /** Structural Non-Accelerating Inflation Rate of Unemployment (NAIRU) baseline (4.0%). */
     public const NATURAL_UNEMPLOYMENT = 0.04;
-    public const OKUNS_COEFFICIENT = 0.4;
+    /** Okun's beta: sensitivity of equilibrium unemployment deviation to the GDP output gap (~0.40). */
+    public const OKUNS_COEFFICIENT = 0.5;
+    /** Annual adjustment speed of employment expansion during economic recoveries (search & matching friction). */
     public const OKUNS_HIRING_SPEED = 1.5;
+    /** Annual adjustment speed of workforce reduction during economic contractions (rapid labor shedding). */
     public const OKUNS_FIRING_SPEED = 3.0;
 
-
-
-    // ENERGY SHOCK JUMP DIFFUSION
-    /** Baseline index value for energy prices. */
+    // --- Energy Shock Jump-Diffusion (Schwartz 1997 Commodity Dynamics) ---
+    /** Baseline index value for energy prices (100 = neutral commodity equilibrium). */
     public const ENERGY_BASELINE = 100.0;
-    public const ENERGY_JUMP_PROBABILITY = 0.05; // 5% chance of severe shock per year
-    public const ENERGY_MEAN_REVERSION = 0.8;    // Speed of reversion to 100 baseline
-    public const ENERGY_VOLATILITY = 0.25;       // Log-price volatility (Schwartz 1-factor sigma)
-    public const ENERGY_JUMP_MEAN = 0.20;        // Mean log-return of energy shock (20% avg spike)
-    public const ENERGY_JUMP_VOL = 0.10;         // Volatility of the jump size
+    /** Poisson annual jump arrival intensity for geopolitical and OPEC energy supply shocks (5%/year). */
+    public const ENERGY_JUMP_PROBABILITY = 0.05;
+    /** Mean-reversion speed (kappa) of energy prices reverting to long-run baseline. */
+    public const ENERGY_MEAN_REVERSION = 0.8;
+    /** Schwartz 1-factor log-price volatility (diffusion sigma). */
+    public const ENERGY_VOLATILITY = 0.25;
+    /** Expected mean log-return magnitude of an energy price spike (+20%). */
+    public const ENERGY_JUMP_MEAN = 0.20;
+    /** Volatility of energy jump shock magnitude. */
+    public const ENERGY_JUMP_VOL = 0.10;
+    /** Cost-push transmission coefficient passing energy price spikes into headline inflation. */
     public const ENERGY_COST_PUSH_TRANSMISSION = 0.015;
 
     // --- GARCH-MIDAS Macroeconomic Volatility Constants (Engle, Ghysels, & Sohn 2013 Eq. 5) ---
@@ -75,27 +83,34 @@ class MacroEngine
     public const MACRO_VOL_MIN_BASELINE           = 0.10;
     /** Upper clamp for macro-driven baseline volatility to prevent infinite variance explosion. */
     public const MACRO_VOL_MAX_BASELINE           = 0.45;
+    /** Mean-reversion speed (kappa) of the continuous macroeconomic variance process. */
     public const MACRO_VOL_KAPPA                  = 2.0;
+    /** Volatility of volatility (sigma) in the macroeconomic variance diffusion. */
     public const MACRO_VOL_SIGMA                  = 0.30;
 
-    // SVJJ JUMP DIFFUSION CONSTANTS
+    // --- SVJJ Stochastic Volatility & Contemporaneous Jumps (Duffie, Pan, & Singleton 2000) ---
+    /** Annual Poisson arrival intensity of market-wide volatility jump shocks. */
     public const SVJJ_LAMBDA = 0.80;
+    /** Probability of an upward market return jump given a Poisson jump event. */
     public const SVJJ_P_UP = 0.35;
+    /** Exponential decay rate parameter for positive return jumps (eta+). */
     public const SVJJ_ETA_UP = 10.0;
+    /** Exponential decay rate parameter for negative return crashes (eta-). */
     public const SVJJ_ETA_DOWN = 5.0;
+    /** Mean exponential jump size added directly to instantaneous variance (mu_v). */
     public const SVJJ_MU_V = 0.05;
 
-
-
-    // YIELD WEIGHTS
+    // --- Effective Corporate Borrowing Cost Weights ---
+    /** Weight assigned to the short-term policy rate in aggregate corporate borrowing cost. */
     public const BORROWING_POLICY_WEIGHT = 0.70;
+    /** Weight assigned to the 5-year benchmark Treasury yield in aggregate corporate borrowing cost. */
     public const BORROWING_YIELD5Y_WEIGHT = 0.30;
 
-    // --- TAYLOR RULE & THE EVANS RULE (FORWARD GUIDANCE) ---
+    // --- Taylor Rule & The Evans Rule (Forward Guidance) ---
     /** Weight on inflation deviations from the 2% target in the Taylor Rule. */
     public const TAYLOR_INFLATION_WEIGHT = 0.50;
     /** Weight on positive output gap during economic expansions. */
-    public const TAYLOR_BOOM_WEIGHT = 0.50;
+    public const TAYLOR_BOOM_WEIGHT = 0.25;
     /** Non-linear scaling factor amplifying rate cuts during deep recessions. */
     public const TAYLOR_RECESSION_SCALE = 5.0;
     /** Evans Rule forward guidance: Unemployment threshold (5.0% = natural rate + 1.0%) required before lifting off from ZLB. */
@@ -115,43 +130,74 @@ class MacroEngine
     /** Policy rate threshold determining proximity to the Zero Lower Bound. */
     public const ZLB_PROXIMITY_THRESHOLD = 0.015;
 
-    // NELSON-SIEGEL TERM PREMIUM CONSTANTS
+    // --- Nelson-Siegel Term Premium Dynamics ---
+    /** Baseline structural term premium for long-term Treasury yields (125 bps). */
     public const NS_BASE_TERM_PREMIUM = 0.0125;
+    /** Countercyclical sensitivity of term premium to output gap (recessions compress term premium). */
     public const NS_GAP_TERM_PREMIUM_SCALE = -0.15;
 
-    // NEW KEYNESIAN PHILLIPS CURVE CONSTANTS
+    // --- New Keynesian Phillips Curve Dynamics ---
+    /** Phillips curve slope: sensitivity of headline inflation to the output gap. */
     public const PHILLIPS_SLOPE = 0.15;
+    /** Speed of inflation expectations mean-reverting toward central bank target (anchored expectations). */
     public const INFLATION_MEAN_REVERSION = 0.50;
 
-    // MERTON STRUCTURAL CREDIT SPREAD CONSTANTS (Merton 1974)
-    public const BASE_CREDIT_SPREAD = 0.020;        // 200 bps normal corporate spread
-    public const MERTON_LEVERAGE_SENSITIVITY = 4.0; // Sensitivity of default risk to GDP contractions
-    public const MERTON_VOL_SENSITIVITY = 0.15;     // Sensitivity of default spreads to excess market volatility
-    public const MAX_CREDIT_SPREAD = 0.10;          // 1000 bps crisis spread cap
+    // --- Merton Structural Corporate Credit Spreads (Merton 1974) ---
+    /** Baseline investment-grade corporate credit spread (200 bps) over risk-free rate. */
+    public const BASE_CREDIT_SPREAD = 0.020;
+    /** Sensitivity of corporate credit spreads to GDP contraction (leverage & distance-to-default channel). */
+    public const MERTON_LEVERAGE_SENSITIVITY = 4.0;
+    /** Sensitivity of corporate credit spreads to excess macroeconomic equity volatility. */
+    public const MERTON_VOL_SENSITIVITY = 0.15;
+    /** Statutory ceiling cap for aggregate corporate credit spread during systemic credit crunches (1000 bps). */
+    public const MAX_CREDIT_SPREAD = 0.10;
+    /** Macroeconomic volatility threshold above which excess volatility widens corporate credit spreads. */
     public const CREDIT_SPREAD_EXCESS_VOL_THRESHOLD = 0.20;
 
-    // BARRO TAX-SMOOTHING & FISCAL STABILIZER CONSTANTS (Barro 1979)
-    public const TARGET_CORPORATE_TAX_RATE = 0.21;     // 21% structural baseline corporate tax rate
-    public const FISCAL_STABILIZER_SENSITIVITY = 1.0;  // Countercyclical tax response to output gap
-    public const FISCAL_ADJUSTMENT_SPEED = 0.20;        // Institutional speed of tax legislation
-    public const MIN_CORPORATE_TAX_RATE = 0.12;        // 12% statutory tax floor during deep recessions
-    public const MAX_CORPORATE_TAX_RATE = 0.30;        // 30% statutory tax cap during overheating booms
+    // --- Barro Tax-Smoothing & Automatic Fiscal Stabilizers (Barro 1979) ---
+    /** Structural baseline statutory corporate tax rate (21%). */
+    public const TARGET_CORPORATE_TAX_RATE = 0.21;
+    /** Countercyclical statutory tax response sensitivity to output gap deviations. */
+    public const FISCAL_STABILIZER_SENSITIVITY = 1.0;
+    /** Institutional legislative adjustment speed of corporate tax rate changes. */
+    public const FISCAL_ADJUSTMENT_SPEED = 0.20;
+    /** Statutory corporate tax rate floor during deep economic recessions (12%). */
+    public const MIN_CORPORATE_TAX_RATE = 0.12;
+    /** Statutory corporate tax rate ceiling during overheating economic booms (30%). */
+    public const MAX_CORPORATE_TAX_RATE = 0.30;
 
-    // --- CONSUMER SENTIMENT INDEX CONSTANTS ---
+    // --- Consumer Sentiment Index & Animal Spirits ---
+    /** Baseline consumer sentiment index value (100 = neutral consumer confidence). */
     public const SENTIMENT_BASELINE = 100.0;
+    /** Sensitivity of consumer misery index (unemployment and inflation) on sentiment. */
     public const SENTIMENT_MISERY_MULTIPLIER = 200.0;
+    /** Sensitivity of financial market volatility on consumer sentiment confidence. */
     public const SENTIMENT_VOLATILITY_MULTIPLIER = 50.0;
+    /** Momentum sensitivity of worsening inflation and unemployment shifts on consumer confidence. */
     public const SENTIMENT_MOMENTUM_MULTIPLIER = 250.0;
+    /** Sensitivity of interest rate environment on consumer sentiment borrowing costs. */
     public const SENTIMENT_RATE_MULTIPLIER = 250.0;
-    public const ANIMAL_SPIRITS_MEAN_REVERSION = 2.0; // Theta (Speed of return to reality)
-    public const ANIMAL_SPIRITS_VOLATILITY = 2.5;     // Sigma (How irrational people get)
+    /** Sensitivity of consumer sentiment expansion boost during positive GDP output gaps. */
+    public const SENTIMENT_EXPANSION_MULTIPLIER = 300.0;
+    /** Sensitivity coefficient penalizing consumer sentiment during retail energy price shocks. */
+    public const SENTIMENT_ENERGY_PANIC_SCALE = 0.15;
+    /** Mean-reversion speed (theta) of psychological animal spirits returning to fundamentals. */
+    public const ANIMAL_SPIRITS_MEAN_REVERSION = 2.0;
+    /** Stochastic diffusion volatility (sigma) of consumer animal spirits. */
+    public const ANIMAL_SPIRITS_VOLATILITY = 2.5;
 
-    // --- QE & Yield Curve Constants ---
+    // --- Quantitative Easing (QE) & Yield Curve Suppression ---
+    /** Proximity threshold to Zero Lower Bound required before activating QE asset purchases. */
     public const QE_ACTIVATION_ZLB_THRESHOLD = 0.60;
+    /** Negative output gap threshold below which central bank initiates QE bond purchases (-1.0%). */
     public const QE_ACTIVATION_GAP_THRESHOLD = -0.01;
+    /** Maximum yield suppression capacity achieved under full-scale QE (200 bps). */
     public const QE_MAX_SUPPRESSION = 0.02;
+    /** Sensitivity multiplier scaling QE bond purchase intensity with recession depth. */
     public const QE_SEVERITY_MULTIPLIER = 0.5;
+    /** Annual ramp speed of central bank balance sheet expansion and contraction. */
     public const QE_RAMP_SPEED = 1.0;
+    /** Nelson-Siegel level weighting on target inflation vs expected inflation. */
     public const INFLATION_LEVEL_WEIGHT = 0.5;
 
     // --- MUNDELL-FLEMING OPEN ECONOMY (IS-LM-BOP) ---
@@ -431,7 +477,7 @@ class MacroEngine
         // The Evans Rule (2012): Institutional Forward Guidance.
         // If unemployment is high and inflation is contained, the central bank 
         // explicitly overrides the Taylor Rule and locks the target rate at the ZLB.
-        if ($state->unemploymentRate > self::EVANS_RULE_UNEMPLOYMENT && $trendInflation < self::EVANS_RULE_INFLATION_CAP) {
+        if ($state->unemploymentRateEma > self::EVANS_RULE_UNEMPLOYMENT && $trendInflation < self::EVANS_RULE_INFLATION_CAP) {
             return 0.00;
         }
 
@@ -539,17 +585,29 @@ class MacroEngine
         $borrowingCost = (self::BORROWING_POLICY_WEIGHT * $state->policyRate) + (self::BORROWING_YIELD5Y_WEIGHT * $yield5y);
         $realRate = $borrowingCost - $state->inflation;
 
+        // --- NEUTRAL REAL RATE BENCHMARK FIX ---
+        // 1. Calculate the exact structural term premium for the 5Y tenor at neutral (output gap = 0)
+        $neutral5yDurationScale = (1.0 - exp(-5.0 / 10.0)) / (1.0 - exp(-1.0));
+        $neutral5yYield = $naturalRate + self::TARGET_INFLATION + (self::NS_BASE_TERM_PREMIUM * $neutral5yDurationScale);
+
+        // 2. Calculate the blended neutral nominal borrowing rate
+        $neutralBorrowingRate = (self::BORROWING_POLICY_WEIGHT * ($naturalRate + self::TARGET_INFLATION))
+            + (self::BORROWING_YIELD5Y_WEIGHT * $neutral5yYield);
+
+        // 3. Derive the true duration-adjusted neutral real rate
+        $neutralRealRate = $neutralBorrowingRate - self::TARGET_INFLATION;
+
         $momentum = self::KALDOR_MOMENTUM * $y;
         $cubicConstraint = self::KALDOR_CAPACITY * pow($y, 3);
-        $monetaryDrag = self::KALDOR_MONETARY_DRAG * ($realRate - $naturalRate);
 
-        // Fiscal stimulus: Tax cuts below the target rate boost aggregate demand.
+        // Compare actual real rate against the true neutral benchmark
+        $monetaryDrag = self::KALDOR_MONETARY_DRAG * ($realRate - $neutralRealRate);
+
         $fiscalStimulus = self::KALDOR_FISCAL_MULTIPLIER * (self::TARGET_CORPORATE_TAX_RATE - $state->corporateTaxRate);
 
         // The 2D Kaldor Force: Overcapacity drags the economy down; Pent-up depreciation forces a recovery.
         $capitalDrag = self::KALDOR_CAPITAL_DRAG * $state->capitalStockOverhang;
 
-        // QE automatically lowers monetary drag through the reduced $yield5y in the borrowing cost calculation.
         $drift = ($momentum - $cubicConstraint - $monetaryDrag + $fiscalStimulus - $capitalDrag) * $dt;
         $volatility = self::OUTPUT_GAP_DIFFUSION_SIGMA * $stressMultiplier * sqrt($dt) * $outZ;
 
@@ -735,7 +793,7 @@ class MacroEngine
 
     private function calculateConsumerSentiment(MacroState $state, float $dt): void
     {
-        // 1. Calculate the "Rational" Fundamental Sentiment (The math we just tuned)
+        // 1. Calculate the "Rational" Fundamental Sentiment
         $excessInflation = max(0.0, $state->inflation - self::TARGET_INFLATION);
         $excessUnemployment = max(0.0, $state->unemploymentRate - self::NATURAL_UNEMPLOYMENT);
         $miseryPenalty = ($excessInflation + $excessUnemployment) * self::SENTIMENT_MISERY_MULTIPLIER;
@@ -747,19 +805,21 @@ class MacroEngine
         $excessVolatility = max(0.0, $state->marketVolatility - self::MACRO_VOL_BASE_ANCHOR);
         $fearPenalty = $excessVolatility * self::SENTIMENT_VOLATILITY_MULTIPLIER;
 
-        $excessYield = max(0.0, $state->yield10y - (self::NATURAL_RATE + self::TARGET_INFLATION));
+        // Benchmark 10Y yield against neutral 10Y (Natural Rate + Target Inflation + Base Term Premium)
+        $neutral10yYield = self::NATURAL_RATE + self::TARGET_INFLATION + self::NS_BASE_TERM_PREMIUM;
+        $excessYield = max(0.0, $state->yield10y - $neutral10yYield);
         $ratePenalty = $excessYield * self::SENTIMENT_RATE_MULTIPLIER;
 
-        $gasPanic = max(0.0, $state->energyPriceShock) * 0.15;
+        $gasPanic = max(0.0, $state->energyPriceShock) * self::SENTIMENT_ENERGY_PANIC_SCALE;
 
         // The "Rational" Target (Mu)
         $fundamentalSentiment = self::SENTIMENT_BASELINE - $miseryPenalty - $momentumPenalty - $fearPenalty - $ratePenalty - $gasPanic;
         if ($state->outputGap > 0.0) {
-            $fundamentalSentiment += ($state->outputGap * 300.0);
+            $fundamentalSentiment += ($state->outputGap * self::SENTIMENT_EXPANSION_MULTIPLIER);
         }
 
         // 2. Apply Ornstein-Uhlenbeck (OU) Stochastic Process for "Animal Spirits"
-        $currentSentiment = $state->consumerSentimentIndex ?? 100.0;
+        $currentSentiment = $state->consumerSentimentIndex ?? self::SENTIMENT_BASELINE;
         $dW = $this->mathUtility->generateStandardNormal(); // Wiener process increment
 
         // OU Equation: dX = Theta * (Mu - X) * dt + Sigma * sqrt(dt) * dW
@@ -768,7 +828,7 @@ class MacroEngine
 
         $newSentiment = $currentSentiment + $drift + $diffusion;
 
-        // 3. Apply final bounds
+        // 3. Apply final bounds (University of Michigan historical bounds ~40.0 to 120.0)
         $state->consumerSentimentIndex = max(40.0, min(120.0, $newSentiment));
     }
 

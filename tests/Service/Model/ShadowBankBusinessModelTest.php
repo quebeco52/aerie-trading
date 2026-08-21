@@ -92,4 +92,34 @@ class ShadowBankBusinessModelTest extends TestCase
         // Distress increases default drag and provisions, increasing the variable cost ratio (clampedMargin)
         $this->assertGreaterThan($baseResult->clampedMargin, $distressResult->clampedMargin);
     }
+
+    public function testResidentialPropertyIndexDrivesMortgageOriginationAndProvisions(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('SHOR');
+        $stock->setBeta('1.0');
+
+        $depressedMacro = new MacroStateDTO(residentialPropertyIndexEma: 75.0);
+        $boomMacro = new MacroStateDTO(residentialPropertyIndexEma: 130.0);
+
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $depressedResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $depressedMacro, $mathMock);
+        $boomResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $boomMacro, $mathMock);
+
+        // High residential property values stimulate mortgage origination
+        $this->assertGreaterThan(
+            $depressedResult->streamRevenue['origination_fees'],
+            $boomResult->streamRevenue['origination_fees'],
+            'Residential property index growth should expand mortgage origination fee volume.'
+        );
+
+        // Depressed residential property values increase collateral loss provision drag
+        $this->assertGreaterThan(
+            $boomResult->clampedMargin,
+            $depressedResult->clampedMargin,
+            'Depressed residential property values must increase credit provision costs on mortgage portfolios.'
+        );
+    }
 }

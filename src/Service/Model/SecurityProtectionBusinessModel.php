@@ -147,12 +147,13 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         // DIVERGENT MACRO PULLS
         // =========================================================================
 
-        // 1. Government Contracts -> Rock Solid + Cost-Plus Inflation Capture
-        // Ignores GDP output gap completely. Inflation running above target boosts revenue directly via cost-plus escalation clauses.
+        // 1. Government Contracts -> Rock Solid + Fiscal Appropriations + Cost-Plus Inflation Capture
+        // Inflation running above target boosts revenue via cost-plus escalation, and state appropriations scale the baseline budget.
         $inflation = $macroState->inflationEma;
         $costPlusBonus = $inflation > MacroEngine::TARGET_INFLATION
             ? ($inflation - MacroEngine::TARGET_INFLATION) * self::COST_PLUS_BONUS_SCALAR
             : 0.0;
+        $govSpendShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
 
         // 2. Corporate Retainers -> Mild GDP Expansion (Corporate HQ footprint expansion)
         // Mildly increases when the economy expands (companies build new facilities needing guards).
@@ -183,8 +184,8 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
 
         // --- Clamped Tri-Stream Revenue Calculation ---
 
-        // STREAM 1: Government (Rock Solid)
-        $govRevenue = max(0.0, $expectedRevenue * $govWeight * (1.0 + ($govZ * $baselineVol * self::GOVERNMENT_VARIANCE_SCALAR) + $costPlusBonus));
+        // STREAM 1: Government (Rock Solid + Appropriations)
+        $govRevenue = max(0.0, $expectedRevenue * $govWeight * (1.0 + ($govZ * $baselineVol * self::GOVERNMENT_VARIANCE_SCALAR) + $costPlusBonus + ($govSpendShift * 0.30)));
 
         // STREAM 2: Corporate Retainers (Changes a little bit)
         $retainerRevenue = max(0.0, $expectedRevenue * $retainerWeight * (1.0 + ($retainerZ * $baselineVol * self::RETAINER_VARIANCE_SCALAR) + $corporateExpansionShift) * $retainerMultiplier);
@@ -214,7 +215,8 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         // Visibility: Government cost-plus inflation is fully public, Retainers are moderately public, Expeditionary Black Ops are opaque.
         $observableShockZ = ($govZ * $govWeight * self::GOVERNMENT_VARIANCE_SCALAR * 1.0) +
             ($retainerZ * $retainerWeight * self::RETAINER_VARIANCE_SCALAR * 0.50) +
-            ($expeditionaryZ * $expeditionaryWeight * self::EXPEDITIONARY_VARIANCE_SCALAR * 0.05);
+            ($expeditionaryZ * $expeditionaryWeight * self::EXPEDITIONARY_VARIANCE_SCALAR * 0.05) +
+            ($govSpendShift * $govWeight * 0.30);
         $observableShockZ *= $baselineVol;
 
         return new SectorPhysicsResult(

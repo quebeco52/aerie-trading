@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model;
 
+use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\FinancialDataBusinessModel;
@@ -90,6 +91,39 @@ class FinancialDataBusinessModelTest extends TestCase
                 0.09,
                 0.05
             )
+        );
+    }
+
+    public function testDcmIssuanceAndVixVolExpandsTransactionRevenue(): void
+    {
+        $model = new FinancialDataBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('SHRK');
+        $stock->setBeta('1.0');
+
+        $mathUtility = new MathUtility();
+
+        // Baseline macro: normal spreads, neutral output gap, calm VIX (0.15)
+        $normalMacro = new MacroStateDTO(
+            outputGapEma: 0.0,
+            macroCreditSpreadEma: 0.020,
+            marketVolatilityEma: 0.15
+        );
+
+        // Boom & Volatility macro: tight credit spreads (0.010 = +100bps DCM syndication boom), positive output gap (+2%), and high VIX (0.35)
+        $boomMacro = new MacroStateDTO(
+            outputGapEma: 0.02,
+            macroCreditSpreadEma: 0.010,
+            marketVolatilityEma: 0.35
+        );
+
+        $normalResult = $model->computeActualFinancials($stock, 1000.0, 0.35, 50.0, 0.0, $normalMacro, $mathUtility);
+        $boomResult = $model->computeActualFinancials($stock, 1000.0, 0.35, 50.0, 0.0, $boomMacro, $mathUtility);
+
+        $this->assertGreaterThan(
+            $normalResult->streamRevenue['transaction'],
+            $boomResult->streamRevenue['transaction'],
+            'Tight credit spreads and elevated VIX volatility must expand transaction/rating revenue.'
         );
     }
 }

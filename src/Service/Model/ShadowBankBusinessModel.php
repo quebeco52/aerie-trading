@@ -166,15 +166,18 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
 
         // 1. Mortgage Origination Volume Channel:
         // Spiking 30Y mortgage rates destroy refinancing demand and freeze home purchases.
+        // Strong residential property values stimulate cash-out refinancings and equity extraction.
         $yield30y = $macroState->yield30yEma;
         $mortgageRateDrag = max(0.0, ($yield30y - self::DEFAULT_30Y_YIELD_FALLBACK) * 4.0);
+        $residentialShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
+        $propertyOriginationBoost = $residentialShift * 0.20;
 
         // 2. Direct Lending Floating-Rate Channel:
         // Private debt / direct lending loans float on base policy rates (SOFR + spread), expanding yield during high-rate regimes.
         $policyRate = $macroState->policyRateEma;
         $directLendingRateBonus = max(0.0, ($policyRate - 0.03) * 1.5);
 
-        $mortgageRevenue = max(0.0, $expectedRevenue * $mortgageWeight * (1.0 + ($originationZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5)) - $mortgageRateDrag));
+        $mortgageRevenue = max(0.0, $expectedRevenue * $mortgageWeight * (1.0 + ($originationZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5)) - $mortgageRateDrag + $propertyOriginationBoost));
         $lendingRevenue  = max(0.0, $expectedRevenue * $lendingWeight * (1.0 + ($lendingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.8)) + $directLendingRateBonus));
         
         $streamRevenues = [
@@ -191,7 +194,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         $retailDefaultShift = max(0.0, ($macroState->retailDefaultRateEma - MacroEngine::RETAIL_DEFAULT_BASELINE) / MacroEngine::RETAIL_DEFAULT_BASELINE);
         $creShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;
         
-        $propertyDrag = $creShift < 0.0 ? abs($creShift) * 0.10 : 0.0;
+        $propertyDrag = ($creShift < 0.0 ? abs($creShift) * 0.05 : 0.0) + ($residentialShift < 0.0 ? abs($residentialShift) * 0.05 : 0.0);
         $macroDefaultDrag = ($outputGap < 0.0 ? abs($outputGap) * self::MACRO_DEFAULT_SCALAR : 0.0) + ($retailDefaultShift * 0.10) + $propertyDrag;
 
         $creditSpread = $macroState->macroCreditSpreadEma;
