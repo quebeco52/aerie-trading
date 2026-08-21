@@ -14,7 +14,7 @@ class MacroEngine
     /** The Federal Reserve's long-term annual inflation target (2%). */
     public const TARGET_INFLATION = 0.02;
     /** The natural real rate of interest (r*) representing neutral monetary policy. */
-    public const NATURAL_RATE = 0.021;
+    public const NATURAL_RATE = 0.015;
     /** The baseline corporate tax rate for standard physical companies. */
     public const BASE_CORPORATE_TAX_RATE = 0.21;
     /** The baseline historical equity risk premium expected over risk-free assets. */
@@ -26,11 +26,22 @@ class MacroEngine
     /** The discount to the policy rate representing the yield on corporate treasury cash. */
     public const CASH_YIELD_SPREAD = 0.0025;
 
-    // KALDOR-KALECKI CONSTANTS
+    // --- KALDOR-KALECKI 2D LIMIT CYCLE ---
+    /** Linear momentum of aggregate demand feedback loop. */
     public const KALDOR_MOMENTUM = 0.15;
-    public const KALDOR_CAPACITY = 110.0;
+    /** Cubic stabilization factor bounding extreme boom/bust expansions. */
+    public const KALDOR_CAPACITY = 180.0;
+    /** Sensitivity of aggregate demand to real interest rate deviations from natural rate. */
     public const KALDOR_MONETARY_DRAG = 0.75;
+    /** Countercyclical fiscal stimulus multiplier from corporate tax rate cuts. */
     public const KALDOR_FISCAL_MULTIPLIER = 0.50;
+    /** Sensitivity of the output gap to physical capital stock overhang (excess capacity drags down growth). */
+    public const KALDOR_CAPITAL_DRAG = 0.25;
+    /** The rate at which business investment (output gap) accumulates into the physical capital stock. */
+    public const CAPITAL_ACCUMULATION_RATE = 0.50;
+    /** The rate at which physical capital depreciates, organically clearing overhangs and creating pent-up demand. */
+    public const CAPITAL_DECAY_RATE = 0.15;
+    /** Stochastic diffusion volatility of the macroeconomic output gap. */
     public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.010;
 
     // OKUN'S LAW (LABOR MARKET)
@@ -80,15 +91,28 @@ class MacroEngine
     public const BORROWING_POLICY_WEIGHT = 0.70;
     public const BORROWING_YIELD5Y_WEIGHT = 0.30;
 
-    // TAYLOR RULE & MONETARY POLICY CONSTANTS
+    // --- TAYLOR RULE & THE EVANS RULE (FORWARD GUIDANCE) ---
+    /** Weight on inflation deviations from the 2% target in the Taylor Rule. */
     public const TAYLOR_INFLATION_WEIGHT = 0.50;
-    public const TAYLOR_BOOM_WEIGHT = 0.30;
-    public const TAYLOR_RECESSION_SCALE = 15.0;
+    /** Weight on positive output gap during economic expansions. */
+    public const TAYLOR_BOOM_WEIGHT = 0.50;
+    /** Non-linear scaling factor amplifying rate cuts during deep recessions. */
+    public const TAYLOR_RECESSION_SCALE = 5.0;
+    /** Evans Rule forward guidance: Unemployment threshold (5.0% = natural rate + 1.0%) required before lifting off from ZLB. */
+    public const EVANS_RULE_UNEMPLOYMENT = 0.050;
+    /** Evans Rule forward guidance: Maximum inflation ceiling (2.5%) tolerated while holding rates at ZLB. */
+    public const EVANS_RULE_INFLATION_CAP = 0.025;
+    /** Central bank baseline interest rate smoothing speed per year. */
     public const CB_SMOOTHING_SPEED = 1.0;
+    /** Inflation panic reaction multiplier accelerating rate hikes during inflation spikes. */
     public const CB_INFLATION_PANIC_SCALE = 50.0;
+    /** Recession panic reaction multiplier accelerating emergency cuts during downturns. */
     public const CB_RECESSION_PANIC_SCALE = 100.0;
-    public const CB_MAX_HIKE_PANIC_SPEED = 3.0; // Volcker-style inflation panic speed cap (enforces Taylor Principle during stagflation)
-    public const CB_MAX_CUT_PANIC_SPEED = 10.0; // Emergency crisis cut speed cap (financial crises crash faster than booms build)
+    /** Maximum annual rate hike velocity cap (Volcker-style panic speed cap). */
+    public const CB_MAX_HIKE_PANIC_SPEED = 3.0;
+    /** Maximum annual rate cut velocity cap during financial crises. */
+    public const CB_MAX_CUT_PANIC_SPEED = 10.0;
+    /** Policy rate threshold determining proximity to the Zero Lower Bound. */
     public const ZLB_PROXIMITY_THRESHOLD = 0.015;
 
     // NELSON-SIEGEL TERM PREMIUM CONSTANTS
@@ -181,8 +205,8 @@ class MacroEngine
     public const CRE_OCCUPANCY_UNEMPLOYMENT_SENSITIVITY = 3.0;
     /** Structural risk premium spread above 10Y yield for CRE cap rate derivation. */
     public const CRE_CAP_RATE_RISK_PREMIUM = 0.02;
-    /** Pre-calibrated neutral cap rate at macro equilibrium: yield10y(5.64%) + creditSpread(2.0%) + riskPremium(2.0%). */
-    public const CRE_NEUTRAL_CAP_RATE = 0.0964;
+    /** Pre-calibrated neutral cap rate at macro equilibrium: yield10y(5.04%) + creditSpread(2.0%) + riskPremium(2.0%). */
+    public const CRE_NEUTRAL_CAP_RATE = 0.0904;
     /** Mean-reversion speed of commercial property values toward fundamental equilibrium. */
     public const CRE_MEAN_REVERSION = 0.25;
     /** Stochastic volatility of commercial property valuations. */
@@ -249,8 +273,8 @@ class MacroEngine
     public const RESIDENTIAL_MORTGAGE_SPREAD = 0.018;
     /** Structural property tax, insurance, and maintenance depreciation rate. */
     public const RESIDENTIAL_DEPRECIATION_TAX_RATE = 0.025;
-    /** Baseline equilibrium user cost of housing capital: yield30y(6.08%) + spread(1.8%) + deprec(2.5%) - inflation(2%). */
-    public const RESIDENTIAL_NEUTRAL_USER_COST = 0.0838;
+    /** Baseline equilibrium user cost of housing capital: yield30y(5.48%) + spread(1.8%) + deprec(2.5%) - inflation(2%). */
+    public const RESIDENTIAL_NEUTRAL_USER_COST = 0.0778;
     /** Sensitivity of housing demand to unemployment rate shocks (foreclosure and affordability drag). */
     public const RESIDENTIAL_UNEMPLOYMENT_SENSITIVITY = 5.0;
     /** Mean-reversion speed of residential property valuations toward fundamental user-cost equilibrium. */
@@ -308,6 +332,11 @@ class MacroEngine
 
         $state->marketZ = $this->mathUtility->generateStandardNormal();
 
+        // 2D Kaldor Phase Space: Capital Stock tracking
+        // Booms build excess capacity (+k); Recessions cause physical depreciation and pent-up demand (-k).
+        $state->capitalStockOverhang += (($state->outputGap * self::CAPITAL_ACCUMULATION_RATE) - (self::CAPITAL_DECAY_RATE * $state->capitalStockOverhang)) * $dt;
+        $state->capitalStockOverhang = max(-0.15, min(0.15, $state->capitalStockOverhang));
+
         $stressMultiplier = 1.0 + (abs($state->outputGap) * 10.0);
         $state->outputGap = $this->calculateOutputGap($state, $state->yield5y, self::NATURAL_RATE, $dt, $stressMultiplier);
 
@@ -343,8 +372,8 @@ class MacroEngine
     {
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
         $conn->executeStatement(
-            "INSERT INTO macro_report (recorded_at, inflation, inflation_ema, output_gap, output_gap_ema, policy_rate, policy_rate_ema, yield2y, yield2y_ema, yield5y, yield5y_ema, yield10y, yield10y_ema, yield30y, yield30y_ema, corporate_tax_rate, equity_risk_premium, nominal_gdp_index, market_volatility, macro_credit_spread, macro_credit_spread_ema, unemployment_rate, unemployment_rate_ema, energy_price_index, energy_price_index_ema, consumer_sentiment_index, consumer_sentiment_index_ema, exchange_rate_index, exchange_rate_index_ema, industrial_metals_index, industrial_metals_index_ema, government_spending_index, government_spending_index_ema, commercial_property_index, commercial_property_index_ema, residential_property_index, residential_property_index_ema, retail_default_rate, retail_default_rate_ema, agricultural_commodity_index, agricultural_commodity_index_ema, freight_rate_index, freight_rate_index_ema) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO macro_report (recorded_at, inflation, inflation_ema, output_gap, output_gap_ema, policy_rate, policy_rate_ema, yield2y, yield2y_ema, yield5y, yield5y_ema, yield10y, yield10y_ema, yield30y, yield30y_ema, corporate_tax_rate, equity_risk_premium, nominal_gdp_index, market_volatility, macro_credit_spread, macro_credit_spread_ema, unemployment_rate, unemployment_rate_ema, energy_price_index, energy_price_index_ema, consumer_sentiment_index, consumer_sentiment_index_ema, exchange_rate_index, exchange_rate_index_ema, industrial_metals_index, industrial_metals_index_ema, government_spending_index, government_spending_index_ema, commercial_property_index, commercial_property_index_ema, residential_property_index, residential_property_index_ema, retail_default_rate, retail_default_rate_ema, agricultural_commodity_index, agricultural_commodity_index_ema, freight_rate_index, freight_rate_index_ema, capital_stock_overhang, capital_stock_overhang_ema) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 $now,
                 $macroState->inflation,
@@ -389,6 +418,8 @@ class MacroEngine
                 $macroState->agriculturalCommodityIndexEma,
                 $macroState->freightRateIndex,
                 $macroState->freightRateIndexEma,
+                $macroState->capitalStockOverhang,
+                $macroState->capitalStockOverhangEma,
             ]
         );
     }
@@ -396,6 +427,13 @@ class MacroEngine
     private function calculateTargetRate(MacroState $state, float $targetInflation, float $naturalRate): float
     {
         $trendInflation = $state->inflationEma;
+
+        // The Evans Rule (2012): Institutional Forward Guidance.
+        // If unemployment is high and inflation is contained, the central bank 
+        // explicitly overrides the Taylor Rule and locks the target rate at the ZLB.
+        if ($state->unemploymentRate > self::EVANS_RULE_UNEMPLOYMENT && $trendInflation < self::EVANS_RULE_INFLATION_CAP) {
+            return 0.00;
+        }
 
         if ($state->outputGap < 0.0) {
             $gapWeight = self::TAYLOR_INFLATION_WEIGHT + min(self::TAYLOR_INFLATION_WEIGHT, abs($state->outputGap) * self::TAYLOR_RECESSION_SCALE);
@@ -508,8 +546,11 @@ class MacroEngine
         // Fiscal stimulus: Tax cuts below the target rate boost aggregate demand.
         $fiscalStimulus = self::KALDOR_FISCAL_MULTIPLIER * (self::TARGET_CORPORATE_TAX_RATE - $state->corporateTaxRate);
 
+        // The 2D Kaldor Force: Overcapacity drags the economy down; Pent-up depreciation forces a recovery.
+        $capitalDrag = self::KALDOR_CAPITAL_DRAG * $state->capitalStockOverhang;
+
         // QE automatically lowers monetary drag through the reduced $yield5y in the borrowing cost calculation.
-        $drift = ($momentum - $cubicConstraint - $monetaryDrag + $fiscalStimulus) * $dt;
+        $drift = ($momentum - $cubicConstraint - $monetaryDrag + $fiscalStimulus - $capitalDrag) * $dt;
         $volatility = self::OUTPUT_GAP_DIFFUSION_SIGMA * $stressMultiplier * sqrt($dt) * $outZ;
 
         $newGap = $y + $drift + $volatility;
@@ -606,6 +647,7 @@ class MacroEngine
         $state->retailDefaultRateEma += $emaWeight * ($state->retailDefaultRate - $state->retailDefaultRateEma);
         $state->agriculturalCommodityIndexEma += $emaWeight * ($state->agriculturalCommodityIndex - $state->agriculturalCommodityIndexEma);
         $state->freightRateIndexEma += $emaWeight * ($state->freightRateIndex - $state->freightRateIndexEma);
+        $state->capitalStockOverhangEma += $emaWeight * ($state->capitalStockOverhang - $state->capitalStockOverhangEma);
     }
 
     private function calculateDynamicFiscalPolicy(MacroState $state, float $dt): void

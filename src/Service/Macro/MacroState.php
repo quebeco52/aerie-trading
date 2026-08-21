@@ -9,6 +9,8 @@ class MacroState
     public float $inflationEma = MacroEngine::TARGET_INFLATION;
     public float $outputGap = 0.015;
     public float $outputGapEma = 0.015;
+    public float $capitalStockOverhang = 0.0;
+    public float $capitalStockOverhangEma = 0.0;
 
     public float $unemploymentRate = 0.038;
     public float $unemploymentRateEma = 0.038;
@@ -96,6 +98,8 @@ class MacroState
         $state->inflationEma = $data['inflation_ema'] ?? $state->inflation;
         $state->outputGap = $data['output_gap'] ?? 0.015;
         $state->outputGapEma = $data['output_gap_ema'] ?? $state->outputGap;
+        $state->capitalStockOverhang = (float) ($data['capital_stock_overhang'] ?? 0.0);
+        $state->capitalStockOverhangEma = (float) ($data['capital_stock_overhang_ema'] ?? $state->capitalStockOverhang);
 
         $state->unemploymentRate = $data['unemployment_rate'] ?? 0.038;
         $state->unemploymentRateEma = $data['unemployment_rate_ema'] ?? $state->unemploymentRate;
@@ -185,6 +189,8 @@ class MacroState
             'inflation_ema' => $this->inflationEma,
             'output_gap' => $this->outputGap,
             'output_gap_ema' => $this->outputGapEma,
+            'capital_stock_overhang' => $this->capitalStockOverhang,
+            'capital_stock_overhang_ema' => $this->capitalStockOverhangEma,
             'unemployment_rate' => $this->unemploymentRate,
             'unemployment_rate_ema' => $this->unemploymentRateEma,
             'energy_price_index' => $this->energyPriceIndex,

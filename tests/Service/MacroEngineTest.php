@@ -487,8 +487,8 @@ class MacroEngineTest extends TestCase
         $neutralState = [
             'unemployment_rate' => MacroEngine::NATURAL_UNEMPLOYMENT,
             'unemployment_rate_ema' => MacroEngine::NATURAL_UNEMPLOYMENT,
-            'yield_10y' => 0.0564,
-            'yield_10y_ema' => 0.0564,
+            'yield_10y' => 0.0504,
+            'yield_10y_ema' => 0.0504,
             'macro_credit_spread' => MacroEngine::BASE_CREDIT_SPREAD,
             'macro_credit_spread_ema' => MacroEngine::BASE_CREDIT_SPREAD,
             'commercial_property_index' => 100.0,
@@ -497,9 +497,9 @@ class MacroEngineTest extends TestCase
             'inflation_ema' => MacroEngine::TARGET_INFLATION,
             'output_gap' => 0.0,
             'output_gap_ema' => 0.0,
-            'policy_rate' => 0.041,
-            'policy_rate_ema' => 0.041,
-            'yield_5y' => 0.05,
+            'policy_rate' => 0.035,
+            'policy_rate_ema' => 0.035,
+            'yield_5y' => 0.044,
         ];
 
         $this->redisMock->expects($this->once())
@@ -516,18 +516,18 @@ class MacroEngineTest extends TestCase
     public function testResidentialPropertyMaintainsEquilibriumAtNeutralState(): void
     {
         $neutralState = [
-            'yield_30y' => 0.0608,
-            'yield_30y_ema' => 0.0608,
+            'yield_30y' => 0.0548,
+            'yield_30y_ema' => 0.0548,
             'inflation' => MacroEngine::TARGET_INFLATION,
             'inflation_ema' => MacroEngine::TARGET_INFLATION,
             'unemployment_rate' => MacroEngine::NATURAL_UNEMPLOYMENT,
             'unemployment_rate_ema' => MacroEngine::NATURAL_UNEMPLOYMENT,
             'residential_property_index' => 100.0,
             'residential_property_index_ema' => 100.0,
-            'policy_rate' => 0.041,
-            'policy_rate_ema' => 0.041,
-            'yield_5y' => 0.05,
-            'yield_10y' => 0.0564,
+            'policy_rate' => 0.035,
+            'policy_rate_ema' => 0.035,
+            'yield_5y' => 0.044,
+            'yield_10y' => 0.0504,
             'output_gap' => 0.0,
             'output_gap_ema' => 0.0,
         ];
@@ -541,5 +541,154 @@ class MacroEngineTest extends TestCase
         $result = $this->engine->updateMacroState(0.25);
 
         $this->assertEqualsWithDelta(100.0, $result->residentialPropertyIndex, 0.5, 'Residential property index should remain at 100 in neutral macro conditions.');
+    }
+
+    public function testEvansRuleLocksTargetRateAtZlbDuringElevatedUnemployment(): void
+    {
+        // Unemployment > 5.0% and Inflation < 2.5% -> Evans Rule forces target rate to 0% (ZLB)
+        $recessionRecoveryState = [
+            'unemployment_rate' => 0.055,
+            'unemployment_rate_ema' => 0.055,
+            'inflation' => 0.020,
+            'inflation_ema' => 0.020,
+            'output_gap' => -0.010,
+            'output_gap_ema' => -0.010,
+            'policy_rate' => 0.01,
+            'policy_rate_ema' => 0.01,
+            'yield_5y' => 0.02,
+        ];
+
+        $this->redisMock->expects($this->once())
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturn(json_encode($recessionRecoveryState));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.25);
+
+        $this->assertEquals(0.00, $result->targetRate, 'Evans Rule must lock target rate at 0.00% while unemployment exceeds 5.0% and inflation is below 2.5%.');
+    }
+
+    public function testEvansRuleLiftsOffWhenInflationBreachesThreshold(): void
+    {
+        // Unemployment > 5.0% but Inflation > 2.5% -> Evans Rule allows lift-off to protect price stability
+        $stagflationState = [
+            'unemployment_rate' => 0.055,
+            'unemployment_rate_ema' => 0.055,
+            'inflation' => 0.030,
+            'inflation_ema' => 0.030,
+            'output_gap' => -0.010,
+            'output_gap_ema' => -0.010,
+            'policy_rate' => 0.02,
+            'policy_rate_ema' => 0.02,
+            'yield_5y' => 0.04,
+        ];
+
+        $this->redisMock->expects($this->once())
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturn(json_encode($stagflationState));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.25);
+
+        $this->assertGreaterThan(0.00, $result->targetRate, 'Target rate must lift off from ZLB when inflation exceeds the 2.5% Evans Rule threshold.');
+    }
+
+    public function testEvansRuleLiftsOffWhenUnemploymentNormalizes(): void
+    {
+        // Unemployment <= 5.0% and normal inflation -> standard Taylor Rule applies
+        $normalizedLaborState = [
+            'unemployment_rate' => 0.045,
+            'unemployment_rate_ema' => 0.045,
+            'inflation' => 0.020,
+            'inflation_ema' => 0.020,
+            'output_gap' => 0.00,
+            'output_gap_ema' => 0.00,
+            'policy_rate' => 0.03,
+            'policy_rate_ema' => 0.03,
+            'yield_5y' => 0.04,
+        ];
+
+        $this->redisMock->expects($this->once())
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturn(json_encode($normalizedLaborState));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.25);
+
+        $this->assertGreaterThan(0.00, $result->targetRate, 'Target rate must calculate normally when unemployment is <= 5.0%.');
+    }
+
+    public function testEvansRuleOverridesTaylorRule(): void
+    {
+        // When unemployment is > 5.0% and inflation < 2.5%, calculateTargetRate returns exactly 0.00
+        $recoveryState = [
+            'unemployment_rate' => 0.052,
+            'unemployment_rate_ema' => 0.052,
+            'inflation' => 0.021,
+            'inflation_ema' => 0.021,
+            'output_gap' => -0.010,
+            'output_gap_ema' => -0.010,
+            'policy_rate' => 0.015,
+            'policy_rate_ema' => 0.015,
+            'yield_5y' => 0.025,
+        ];
+
+        $this->redisMock->expects($this->once())
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturn(json_encode($recoveryState));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.25);
+
+        $this->assertSame(0.00, $result->targetRate, 'Evans Rule must override Taylor Rule and return 0.00% target rate when unemployment is above 5.0% and inflation is below 2.5%.');
+    }
+
+    public function testCapitalOverhangDragsOutputGap(): void
+    {
+        // State with positive capital overhang (excess capacity / boom overbuild)
+        $positiveOverhangState = [
+            'output_gap' => 0.0,
+            'output_gap_ema' => 0.0,
+            'capital_stock_overhang' => 0.10,
+            'inflation' => 0.02,
+            'inflation_ema' => 0.02,
+            'policy_rate' => 0.035,
+            'policy_rate_ema' => 0.035,
+            'yield_5y' => 0.044,
+        ];
+
+        // State with negative capital overhang (depreciation / pent-up replacement demand)
+        $negativeOverhangState = [
+            'output_gap' => 0.0,
+            'output_gap_ema' => 0.0,
+            'capital_stock_overhang' => -0.10,
+            'inflation' => 0.02,
+            'inflation_ema' => 0.02,
+            'policy_rate' => 0.035,
+            'policy_rate_ema' => 0.035,
+            'yield_5y' => 0.044,
+        ];
+
+        $this->redisMock->expects($this->exactly(2))
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturnOnConsecutiveCalls(
+                json_encode($positiveOverhangState),
+                json_encode($negativeOverhangState)
+            );
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $resultPositive = $this->engine->updateMacroState(0.25);
+        $resultNegative = $this->engine->updateMacroState(0.25);
+
+        $this->assertLessThan(
+            $resultNegative->outputGap,
+            $resultPositive->outputGap,
+            'Positive capital overhang must exert drag on the output gap compared to negative overhang which provides an autonomous recovery impulse.'
+        );
     }
 }

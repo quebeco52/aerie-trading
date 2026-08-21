@@ -95,6 +95,11 @@ class StreamContext
         if ($hasPreviousShares) {
             $rawWeights = [];
             foreach ($normalizedTargets as $key => $targetWeight) {
+                if ($targetWeight <= 0.0) {
+                    $rawWeights[$key] = 0.0;
+                    continue;
+                }
+
                 $prevWeight = (float) ($this->previousMomentum["weight:{$key}"] ?? $targetWeight);
                 $prevShare  = (float) $this->previousMomentum["share:{$key}"];
 
@@ -113,6 +118,10 @@ class StreamContext
         } else {
             $activeWeights = [];
             foreach ($normalizedTargets as $key => $targetWeight) {
+                if ($targetWeight <= 0.0) {
+                    $activeWeights[$key] = 0.0;
+                    continue;
+                }
                 $activeWeights[$key] = (float) ($this->previousMomentum["weight:{$key}"] ?? $targetWeight);
             }
             $activeWeights = $this->mathUtility->normalizeWeightsSimplex($activeWeights) ?: $activeWeights;

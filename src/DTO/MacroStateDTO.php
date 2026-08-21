@@ -17,6 +17,8 @@ readonly class MacroStateDTO
         public float $totalTime = 0.0,
         public float $outputGap = 0.0,
         public float $outputGapEma = 0.0,
+        public float $capitalStockOverhang = 0.0,
+        public float $capitalStockOverhangEma = 0.0,
         public float $unemploymentRate = 0.04,
         public float $unemploymentRateEma = 0.04,
         public float $energyPriceIndex = 100.0,
@@ -87,6 +89,8 @@ readonly class MacroStateDTO
         $inflationEma = (float) ($data['inflation_ema'] ?? $inflation);
         $outputGap = (float) ($data['output_gap'] ?? 0.02);
         $outputGapEma = (float) ($data['output_gap_ema'] ?? $outputGap);
+        $capitalStockOverhang = (float) ($data['capital_stock_overhang'] ?? 0.0);
+        $capitalStockOverhangEma = (float) ($data['capital_stock_overhang_ema'] ?? $capitalStockOverhang);
         
         $unemploymentRate = (float) ($data['unemployment_rate'] ?? 0.04);
         $unemploymentRateEma = (float) ($data['unemployment_rate_ema'] ?? $unemploymentRate);
@@ -157,6 +161,8 @@ readonly class MacroStateDTO
             totalTime: $totalTime,
             outputGap: $outputGap,
             outputGapEma: $outputGapEma,
+            capitalStockOverhang: $capitalStockOverhang,
+            capitalStockOverhangEma: $capitalStockOverhangEma,
             unemploymentRate: $unemploymentRate,
             unemploymentRateEma: $unemploymentRateEma,
             energyPriceIndex: $energyPriceIndex,
@@ -227,6 +233,8 @@ readonly class MacroStateDTO
             totalTime: $state->totalTime,
             outputGap: $state->outputGap,
             outputGapEma: $state->outputGapEma,
+            capitalStockOverhang: $state->capitalStockOverhang,
+            capitalStockOverhangEma: $state->capitalStockOverhangEma,
             unemploymentRate: $state->unemploymentRate,
             unemploymentRateEma: $state->unemploymentRateEma,
             energyPriceIndex: $state->energyPriceIndex,
@@ -297,6 +305,8 @@ readonly class MacroStateDTO
             'total_time' => $this->totalTime,
             'output_gap' => $this->outputGap,
             'output_gap_ema' => $this->outputGapEma,
+            'capital_stock_overhang' => $this->capitalStockOverhang,
+            'capital_stock_overhang_ema' => $this->capitalStockOverhangEma,
             'unemployment_rate' => $this->unemploymentRate,
             'unemployment_rate_ema' => $this->unemploymentRateEma,
             'energy_price_index' => $this->energyPriceIndex,

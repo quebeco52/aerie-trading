@@ -204,13 +204,20 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         }
 
         // --- Stream Revenue Calculation ---
-        $advisoryRevenue = max(0.0, $expectedRevenue * $advisoryWeight * (1.0 + ($advisoryZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR) + $advisoryMacroFactor) * $advisoryEventMultiplier);
-        $tradingRevenue  = max(0.0, $expectedRevenue * $tradingWeight * (1.0 + ($tradingZ * $baselineVol * self::TRADING_VARIANCE_SCALAR) + $volatilityArbitrage));
+        $advisoryRevenue = $advisoryWeight > 0.0
+            ? max(0.0, $expectedRevenue * $advisoryWeight * (1.0 + ($advisoryZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR) + $advisoryMacroFactor) * $advisoryEventMultiplier)
+            : 0.0;
+        $tradingRevenue  = $tradingWeight > 0.0
+            ? max(0.0, $expectedRevenue * $tradingWeight * (1.0 + ($tradingZ * $baselineVol * self::TRADING_VARIANCE_SCALAR) + $volatilityArbitrage))
+            : 0.0;
 
-        $streamRevenues = [
-            'advisory' => $advisoryRevenue,
-            'trading'  => $tradingRevenue,
-        ];
+        $streamRevenues = [];
+        if ($advisoryWeight > 0.0) {
+            $streamRevenues['advisory'] = $advisoryRevenue;
+        }
+        if ($tradingWeight > 0.0) {
+            $streamRevenues['trading'] = $tradingRevenue;
+        }
 
         // --- Black-Scholes Options Physics ---
         $gammaHedgingCost = 0.0;
@@ -239,18 +246,18 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
 
         // --- Event Lore Classification ---
         if ($eventType === null) {
-            if ($macroState->outputGapEma > self::LORE_BOOM_OUTPUT_GAP && $advisoryZ > self::LORE_BOOM_Z_SCORE) {
+            if ($advisoryWeight > 0.0 && $macroState->outputGapEma > self::LORE_BOOM_OUTPUT_GAP && $advisoryZ > self::LORE_BOOM_Z_SCORE) {
                 $eventType = ShockEvent::IB_MNA_SYNDICATION_BOOM;
-            } elseif ($creditSpreadGap > self::LORE_DCM_SPREAD_TIGHTENING) {
+            } elseif ($advisoryWeight > 0.0 && $creditSpreadGap > self::LORE_DCM_SPREAD_TIGHTENING) {
                 $eventType = ShockEvent::IB_DCM_UNDERWRITING_BOOM;
             } elseif ($vixEma > self::LORE_PANIC_VIX) {
                 $eventType = ShockEvent::IB_PROP_TRADING_SURGE;
-            } elseif ($macroState->outputGapEma < self::LORE_DROUGHT_OUTPUT_GAP && $advisoryZ < self::LORE_DROUGHT_Z_SCORE) {
+            } elseif ($advisoryWeight > 0.0 && $macroState->outputGapEma < self::LORE_DROUGHT_OUTPUT_GAP && $advisoryZ < self::LORE_DROUGHT_Z_SCORE) {
                 $eventType = ShockEvent::ADVISORY_CRASH;
             }
         }
 
-        $primaryShockZ = $advisoryZ;
+        $primaryShockZ = $advisoryWeight > 0.0 ? $advisoryZ : $tradingZ;
         if (abs($tradingZ) > abs($primaryShockZ)) $primaryShockZ = $tradingZ;
         if (abs($eventZ)   > abs($primaryShockZ)) $primaryShockZ = $eventZ;
 

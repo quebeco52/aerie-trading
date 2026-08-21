@@ -243,6 +243,7 @@ class MarketResetCommand extends Command
                     description = :description,
                     sam_ratio = :sam_ratio,
                     industry = :industry,
+                    earnings_momentum_z = NULL,
                     is_bankrupt = 0
                 WHERE ticker = :ticker',
                 [

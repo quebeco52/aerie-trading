@@ -158,4 +158,78 @@ class StreamContextTest extends TestCase
         $this->assertEqualsWithDelta(0.20, $streamZ['share:stream_b'], 0.0001);
         $this->assertEqualsWithDelta(0.20, $streamZ['share:stream_c'], 0.0001);
     }
+
+    public function testResolveActiveStreamWeightsWithZeroTargetWeightDoesNotClampToFloor(): void
+    {
+        // Quarter 2 with past momentum for a pure-play firm with a 0% stream (e.g., PERE with 0% advisory)
+        $previousMomentum = [
+            'weight:advisory'               => 0.00,
+            'weight:trading'                => 0.40,
+            'weight:options_premium_income' => 0.60,
+            'share:advisory'                => 0.00,
+            'share:trading'                 => 0.40,
+            'share:options_premium_income'  => 0.60,
+        ];
+
+        $context = new StreamContext($previousMomentum, $this->mathUtility);
+
+        $targets = [
+            'advisory'               => 0.00,
+            'trading'                => 0.40,
+            'options_premium_income' => 0.60,
+        ];
+
+        $active = $context->resolveActiveStreamWeights($targets);
+
+        $this->assertSame(0.0, $active['advisory'], 'Stream with 0.0 target must remain strictly 0.0 and never clamp to the 5% floor.');
+        $this->assertEqualsWithDelta(0.40, $active['trading'], 0.0001);
+        $this->assertEqualsWithDelta(0.60, $active['options_premium_income'], 0.0001);
+        $this->assertEqualsWithDelta(1.0, array_sum($active), 0.0001);
+    }
+
+    public function testResolveActiveStreamWeightsWithSubFloorTargetWeight(): void
+    {
+        // Target weight of 2% (0.02) which is below the default 5% minFloor
+        $previousMomentum = [
+            'weight:core'  => 0.98,
+            'weight:niche' => 0.02,
+            'share:core'   => 0.98,
+            'share:niche'  => 0.02,
+        ];
+
+        $context = new StreamContext($previousMomentum, $this->mathUtility);
+
+        $targets = [
+            'core'  => 0.98,
+            'niche' => 0.02,
+        ];
+
+        $active = $context->resolveActiveStreamWeights($targets);
+
+        $this->assertEqualsWithDelta(0.02, $active['niche'], 0.0001, 'A 2% target stream must not be artificially forced up to 5%.');
+        $this->assertEqualsWithDelta(0.98, $active['core'], 0.0001);
+    }
+
+    public function testResolveActiveStreamWeightsWithHighConcentrationTarget(): void
+    {
+        // Target weight of 90% (0.90) which is above the default 85% maxCeiling
+        $previousMomentum = [
+            'weight:dominant'  => 0.90,
+            'weight:secondary' => 0.10,
+            'share:dominant'   => 0.90,
+            'share:secondary'  => 0.10,
+        ];
+
+        $context = new StreamContext($previousMomentum, $this->mathUtility);
+
+        $targets = [
+            'dominant'  => 0.90,
+            'secondary' => 0.10,
+        ];
+
+        $active = $context->resolveActiveStreamWeights($targets);
+
+        $this->assertEqualsWithDelta(0.90, $active['dominant'], 0.0001, 'A 90% dominant target stream must not be capped at 85%.');
+        $this->assertEqualsWithDelta(0.10, $active['secondary'], 0.0001);
+    }
 }

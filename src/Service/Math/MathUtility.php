@@ -963,8 +963,8 @@ class MathUtility
      * @param float $targetWeight  Long-term strategic anchor theta
      * @param float $alpha         Adaptation speed parameter [0, 1]
      * @param float $kappa         Mean reversion pull speed [0, 1]
-     * @param float $minFloor      Minimum structural floor clamp
-     * @param float $maxCeiling    Maximum structural ceiling clamp
+     * @param float $minFloor      Minimum structural floor clamp for active diversified segments
+     * @param float $maxCeiling    Maximum structural ceiling clamp for diversified segments
      * @return float Clamped updated weight before simplex normalization
      */
     public function calculateMeanRevertingWeight(
@@ -973,14 +973,17 @@ class MathUtility
         float $targetWeight,
         float $alpha,
         float $kappa,
-        float $minFloor = 0.05,
-        float $maxCeiling = 0.85
+        float $minFloor = FinancialConstants::DEFAULT_MIN_STREAM_WEIGHT_FLOOR,
+        float $maxCeiling = FinancialConstants::DEFAULT_MAX_STREAM_WEIGHT_CEILING
     ): float {
         $drift = $alpha * ($realizedShare - $currentWeight);
         $reversion = $kappa * ($targetWeight - $currentWeight);
         $raw = $currentWeight + $drift + $reversion;
 
-        return max($minFloor, min($maxCeiling, $raw));
+        $effectiveMinFloor = $targetWeight <= 0.0 ? 0.0 : min($minFloor, $targetWeight);
+        $effectiveMaxCeiling = max($maxCeiling, $targetWeight);
+
+        return max($effectiveMinFloor, min($effectiveMaxCeiling, $raw));
     }
 
     /**

@@ -197,4 +197,54 @@ class InvestmentBankBusinessModelTest extends TestCase
         $thresholds = $this->model->getModelThresholds();
         $this->assertSame(8.0, $thresholds['wholesale_leverage_limit']);
     }
+
+    public function testPereOptionWritingPurePlayWithZeroAdvisoryMaintainsZeroAdvisoryAcrossQuarters(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('PERE'); // PERE: advisory = 0.0, trading = 0.40, options_premium_income = 0.60
+        // Simulate previous quarter's momentum
+        $stock->setEarningsMomentumZ([
+            'weight:advisory'               => 0.00,
+            'weight:trading'                => 0.40,
+            'weight:options_premium_income' => 0.60,
+            'share:advisory'                => 0.00,
+            'share:trading'                 => 0.40,
+            'share:options_premium_income'  => 0.60,
+            'advisory'                      => 0.0,
+            'trading'                       => 0.0,
+            'options_premium_income'        => 0.0,
+            'event'                         => 0.0,
+        ]);
+
+        $mathMock = $this->getMockBuilder(MathUtility::class)
+            ->onlyMethods(['generateStandardNormal', 'generateUniform'])
+            ->getMock();
+        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathMock->method('generateUniform')->willReturn(0.50);
+
+        $macroState = \App\DTO\MacroStateDTO::fromArray([
+            'output_gap_ema'          => 0.02, // Positive macro boom that would otherwise stimulate advisory
+            'equity_risk_premium'     => 0.04,
+            'macro_credit_spread_ema' => InvestmentBankBusinessModel::DEAL_BASELINE_CREDIT_SPREAD,
+            'policy_rate_ema'         => 0.04,
+            'yield_5y_ema'            => 0.04,
+            'market_volatility_ema'   => 0.28,
+        ]);
+
+        $result = $this->model->computeActualFinancials(
+            $stock,
+            1000.0,
+            0.50,
+            100.0,
+            0.14,
+            $macroState,
+            $mathMock
+        );
+
+        // optionsVegaBonus = 0.10 * 1.50 = 0.15 -> optionsRevenue = 1000 * 0.60 * 1.15 = 690.0
+        // tradingRevenue  = 1000 * 0.40 * (1 + 0.10 * 1.80) = 472.0
+        $this->assertEqualsWithDelta(1162.0, $result->actualRevenue, 0.01);
+        $this->assertSame(0.0, $result->streamZ['weight:advisory'] ?? null);
+        $this->assertArrayNotHasKey('advisory', $result->streamRevenue);
+    }
 }

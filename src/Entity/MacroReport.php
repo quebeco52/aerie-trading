@@ -144,6 +144,12 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $freightRateIndexEma = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $capitalStockOverhang = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $capitalStockOverhangEma = null;
+
     // --- Standard Getters & Setters ---
 
     public function getId(): ?int { return $this->id; }
@@ -278,4 +284,10 @@ class MacroReport
 
     public function getFreightRateIndexEma(): ?string { return $this->freightRateIndexEma; }
     public function setFreightRateIndexEma(string $freightRateIndexEma): self { $this->freightRateIndexEma = $freightRateIndexEma; return $this; }
+
+    public function getCapitalStockOverhang(): ?string { return $this->capitalStockOverhang; }
+    public function setCapitalStockOverhang(string $capitalStockOverhang): self { $this->capitalStockOverhang = $capitalStockOverhang; return $this; }
+
+    public function getCapitalStockOverhangEma(): ?string { return $this->capitalStockOverhangEma; }
+    public function setCapitalStockOverhangEma(string $capitalStockOverhangEma): self { $this->capitalStockOverhangEma = $capitalStockOverhangEma; return $this; }
 }
