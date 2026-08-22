@@ -6,8 +6,8 @@ namespace App\Tests\Service\Model;
 
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
-use App\Service\Model\AssetManagementBusinessModel;
-use App\Service\Model\PrivateEquityBusinessModel;
+use App\Service\Model\Sector\AssetManagementBusinessModel;
+use App\Service\Model\Sector\PrivateEquityBusinessModel;
 use PHPUnit\Framework\TestCase;
 
 class AssetManagementBusinessModelTest extends TestCase

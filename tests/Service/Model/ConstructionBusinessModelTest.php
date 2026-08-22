@@ -9,7 +9,7 @@ use App\Data\StockModelTuning;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
-use App\Service\Model\ConstructionBusinessModel;
+use App\Service\Model\Sector\ConstructionBusinessModel;
 use PHPUnit\Framework\TestCase;
 
 class ConstructionBusinessModelTest extends TestCase

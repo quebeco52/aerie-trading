@@ -7,7 +7,7 @@ namespace App\Tests\Service\Model;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
-use App\Service\Model\MedicalCareFacilityBusinessModel;
+use App\Service\Model\Sector\MedicalCareFacilityBusinessModel;
 use PHPUnit\Framework\TestCase;
 
 class MedicalCareFacilityBusinessModelTest extends TestCase

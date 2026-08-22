@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model;
 
 use PHPUnit\Framework\TestCase;
-use App\Service\Model\BrokerageBusinessModel;
+use App\Service\Model\Sector\BrokerageBusinessModel;
 use App\Service\Math\MathUtility;
 use App\Entity\Stock;
 use App\Data\InitialMarket;

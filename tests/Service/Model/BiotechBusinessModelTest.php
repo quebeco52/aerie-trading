@@ -6,7 +6,7 @@ namespace App\Tests\Service\Model;
 
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
-use App\Service\Model\BiotechBusinessModel;
+use App\Service\Model\Sector\BiotechBusinessModel;
 use PHPUnit\Framework\TestCase;
 
 class BiotechBusinessModelTest extends TestCase

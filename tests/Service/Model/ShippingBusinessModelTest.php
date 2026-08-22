@@ -6,7 +6,7 @@ namespace App\Tests\Service\Model;
 
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
-use App\Service\Model\ShippingBusinessModel;
+use App\Service\Model\Sector\ShippingBusinessModel;
 use PHPUnit\Framework\TestCase;
 
 class ShippingBusinessModelTest extends TestCase

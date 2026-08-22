@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Service\Model;
 
 use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
+use App\Service\Model\Sector\AssetManagementBusinessModel;
+use App\Service\Model\Sector\StandardCorporateBusinessModel;
 
 /**
  * Registry service for business model strategies.

@@ -8,7 +8,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
-use App\Service\Model\CommodityBusinessModel;
+use App\Service\Model\Sector\CommodityBusinessModel;
 use PHPUnit\Framework\TestCase;
 
 class CommodityBusinessModelTest extends TestCase

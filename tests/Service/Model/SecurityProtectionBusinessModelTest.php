@@ -9,7 +9,7 @@ use App\Entity\Stock;
 use App\Service\Event\NarrativeEngine;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
-use App\Service\Model\SecurityProtectionBusinessModel;
+use App\Service\Model\Sector\SecurityProtectionBusinessModel;
 use PHPUnit\Framework\TestCase;
 
 class SecurityProtectionBusinessModelTest extends TestCase

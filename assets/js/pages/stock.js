@@ -754,6 +754,7 @@ function updateCharts(timeframe) {
     // Revenue Streams
     let revenueStreamsKeys = new Set();
     let revenueStreamsDataRaw = [];
+    let streamDetailsDataRaw = [];
 
 
     // Balance Sheet
@@ -820,6 +821,12 @@ function updateCharts(timeframe) {
             } catch (e) { }
             Object.keys(streams).forEach(k => revenueStreamsKeys.add(k));
             revenueStreamsDataRaw.push(streams);
+
+            let details = {};
+            try {
+                details = typeof report.stream_details === 'string' ? JSON.parse(report.stream_details) : (report.stream_details || {});
+            } catch (e) { }
+            streamDetailsDataRaw.push(details);
 
             revenueData.push(rev);
             netIncomeData.push(inc);
@@ -948,6 +955,12 @@ function updateCharts(timeframe) {
             }
             revenueStreamsDataRaw.unshift(sumStreams);
 
+            let latestYearDetails = {};
+            try {
+                latestYearDetails = typeof report.stream_details === 'string' ? JSON.parse(report.stream_details) : (report.stream_details || {});
+            } catch (e) { }
+            streamDetailsDataRaw.unshift(latestYearDetails);
+
             revenueData.unshift(sumRev);
             netIncomeData.unshift(sumInc);
             capexData.unshift(-sumCapEx);
@@ -1039,7 +1052,7 @@ function updateCharts(timeframe) {
     });
 
     renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, displayMarginData, marginLabel);
-    renderRevenueStreamsChart(labels, revenueStreamsKeys, revenueStreamsDataRaw);
+    renderRevenueStreamsChart(labels, revenueStreamsKeys, revenueStreamsDataRaw, streamDetailsDataRaw);
     renderDebtEquityChart(labels, debtData, equityData, treasuryData);
     renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData, cashYieldData, depositApyData);
     renderCapitalReturnChart(labels, dividendData, buybackData, dividendYieldData);
@@ -1177,7 +1190,7 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
     });
 }
 
-function renderRevenueStreamsChart(labels, streamsKeysSet, rawStreamsData) {
+function renderRevenueStreamsChart(labels, streamsKeysSet, rawStreamsData, streamDetailsData = []) {
     if (revenueStreamsChartInstance) revenueStreamsChartInstance.destroy();
 
     const ctx = document.getElementById('revenueStreamsChart');
@@ -1210,6 +1223,7 @@ function renderRevenueStreamsChart(labels, streamsKeysSet, rawStreamsData) {
         return {
             type: 'bar',
             label: key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+            streamKey: key,
             data: rawStreamsData.map(d => parseFloat(d[key] || 0)),
             backgroundColor: color,
             borderRadius: 2,
@@ -1237,7 +1251,39 @@ function renderRevenueStreamsChart(labels, streamsKeysSet, rawStreamsData) {
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => `${ctx.dataset.label}: $${formatLarge(ctx.raw)}`
+                        label: (ctx) => `${ctx.dataset.label}: $${formatLarge(ctx.raw)}`,
+                        afterLabel: (ctx) => {
+                            const idx = ctx.dataIndex;
+                            const streamKey = ctx.dataset.streamKey;
+                            const details = streamDetailsData[idx]?.[streamKey];
+                            if (!details) return [];
+
+                            const lines = [];
+                            if (details.qoq_delta !== undefined && details.qoq_delta !== 0) {
+                                const delta = details.qoq_delta;
+                                const deltaSign = delta >= 0 ? '+' : '';
+                                lines.push(`  QoQ Trend: ${deltaSign}${(delta * 100).toFixed(1)}%`);
+                            }
+                            if (details.share !== undefined && details.share > 0) {
+                                lines.push(`  Mix: ${(details.share * 100).toFixed(1)}% of total`);
+                            }
+                            if (details.event) {
+                                lines.push(`  ⚡ Shock: ${details.event}`);
+                            }
+                            if (Array.isArray(details.drivers) && details.drivers.length > 0) {
+                                lines.push('  Key Drivers:');
+                                details.drivers.forEach(d => {
+                                    const isPos = (d.impact || 0) >= 0;
+                                    const sign = isPos ? '+' : '';
+                                    const metric = d.type === 'momentum' 
+                                        ? `(Z=${d.z !== undefined ? d.z : '0'})` 
+                                        : `${sign}${((d.impact || 0) * 100).toFixed(1)}%`;
+                                    const icon = d.type === 'macro' ? '• ' : '• ';
+                                    lines.push(`    ${icon}${d.label}: ${metric}`);
+                                });
+                            }
+                            return lines;
+                        }
                     }
                 }
             }

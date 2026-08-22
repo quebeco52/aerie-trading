@@ -14,10 +14,10 @@ use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Math\MathUtility;
-use App\Service\Model\CommercialBankBusinessModel;
-use App\Service\Model\InvestmentBankBusinessModel;
-use App\Service\Model\ShadowBankBusinessModel;
-use App\Service\Model\StandardCorporateBusinessModel;
+use App\Service\Model\Sector\CommercialBankBusinessModel;
+use App\Service\Model\Sector\InvestmentBankBusinessModel;
+use App\Service\Model\Sector\ShadowBankBusinessModel;
+use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use PHPUnit\Framework\TestCase;
 
 class TreasuryEngineTest extends TestCase

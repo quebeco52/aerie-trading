@@ -10,7 +10,7 @@ use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
-use App\Service\Model\ReitBusinessModel;
+use App\Service\Model\Sector\ReitBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 

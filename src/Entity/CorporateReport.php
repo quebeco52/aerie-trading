@@ -40,6 +40,9 @@ class CorporateReport
     #[ORM\Column(type: 'json', nullable: true)]
     private ?array $revenueStreams = null;
 
+    #[ORM\Column(type: 'json', nullable: true)]
+    private ?array $streamDetails = null;
+
     #[ORM\Column(type: Types::BIGINT, nullable: true)]
     private ?string $shares = null;
 
@@ -267,6 +270,18 @@ class CorporateReport
     public function setRevenueStreams(?array $revenueStreams): static
     {
         $this->revenueStreams = $revenueStreams;
+
+        return $this;
+    }
+
+    public function getStreamDetails(): ?array
+    {
+        return $this->streamDetails;
+    }
+
+    public function setStreamDetails(?array $streamDetails): static
+    {
+        $this->streamDetails = $streamDetails;
 
         return $this;
     }

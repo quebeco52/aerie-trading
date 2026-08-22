@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model;
 
 use App\Entity\Stock;
-use App\Service\Model\CommodityBusinessModel;
-use App\Service\Model\ReitBusinessModel;
-use App\Service\Model\SemiconductorBusinessModel;
-use App\Service\Model\StandardCorporateBusinessModel;
-use App\Service\Model\UtilityBusinessModel;
+use App\Service\Model\Sector\CommodityBusinessModel;
+use App\Service\Model\Sector\ReitBusinessModel;
+use App\Service\Model\Sector\SemiconductorBusinessModel;
+use App\Service\Model\Sector\StandardCorporateBusinessModel;
+use App\Service\Model\Sector\UtilityBusinessModel;
 use PHPUnit\Framework\TestCase;
 
 class AssetDepreciationDecayTest extends TestCase

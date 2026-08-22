@@ -7,7 +7,7 @@ namespace App\Tests\Service\Model;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
-use App\Service\Model\LuxuryBusinessModel;
+use App\Service\Model\Sector\LuxuryBusinessModel;
 use PHPUnit\Framework\TestCase;
 
 class LuxuryBusinessModelTest extends TestCase

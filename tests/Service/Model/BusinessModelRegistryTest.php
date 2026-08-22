@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model;
 
 use App\Service\Model\BusinessModelRegistry;
-use App\Service\Model\CommercialBankBusinessModel;
-use App\Service\Model\StandardCorporateBusinessModel;
-use App\Service\Model\TechBusinessModel;
+use App\Service\Model\Sector\CommercialBankBusinessModel;
+use App\Service\Model\Sector\StandardCorporateBusinessModel;
+use App\Service\Model\Sector\TechBusinessModel;
 use PHPUnit\Framework\TestCase;
 
 class BusinessModelRegistryTest extends TestCase
@@ -33,5 +33,37 @@ class BusinessModelRegistryTest extends TestCase
         // Fallback for unknown model
         $fallback = $registry->get('unknown_business_model');
         $this->assertSame($corporate, $fallback);
+    }
+
+    public function testAllSectorModelsResolveCorrectly(): void
+    {
+        $dir = dirname(__DIR__, 3) . '/src/Service/Model/Sector';
+        $files = glob($dir . '/*BusinessModel.php');
+
+        $instances = [];
+        foreach ($files as $file) {
+            $class = 'App\\Service\\Model\\Sector\\' . basename($file, '.php');
+            $this->assertTrue(class_exists($class), "Class $class should exist");
+            $instances[] = new $class();
+        }
+
+        $registry = new BusinessModelRegistry($instances);
+
+        $this->assertGreaterThanOrEqual(44, count($files));
+        foreach ($files as $file) {
+            $class = 'App\\Service\\Model\\Sector\\' . basename($file, '.php');
+            $shortName = basename($file, '.php');
+            $expectedKey = strtolower((string) preg_replace('/(?<!^)[A-Z]/', '_$0', preg_replace('/BusinessModel$/', '', $shortName)));
+
+            if ($shortName === 'StandardCorporateBusinessModel') {
+                $expectedKey = 'none';
+            } elseif ($shortName === 'AssetManagementBusinessModel') {
+                $expectedKey = 'asset_manager';
+            }
+
+            $this->assertTrue($registry->has($expectedKey), "Registry should have key: $expectedKey");
+            $resolved = $registry->get($expectedKey);
+            $this->assertInstanceOf($class, $resolved);
+        }
     }
 }

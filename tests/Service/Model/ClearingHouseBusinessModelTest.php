@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model;
 
 use PHPUnit\Framework\TestCase;
-use App\Service\Model\ClearingHouseBusinessModel;
+use App\Service\Model\Sector\ClearingHouseBusinessModel;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Math\MathUtility;
 

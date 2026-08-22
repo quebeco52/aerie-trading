@@ -25,12 +25,12 @@ class BusinessModelContractMatrixTest extends TestCase
 
     public static function businessModelProvider(): array
     {
-        $dir = dirname(__DIR__, 3) . '/src/Service/Model';
+        $dir = dirname(__DIR__, 3) . '/src/Service/Model/Sector';
         $files = glob($dir . '/*BusinessModel.php');
         $models = [];
 
         foreach ($files as $file) {
-            $className = 'App\\Service\\Model\\' . basename($file, '.php');
+            $className = 'App\\Service\\Model\\Sector\\' . basename($file, '.php');
             if (!class_exists($className)) {
                 continue;
             }

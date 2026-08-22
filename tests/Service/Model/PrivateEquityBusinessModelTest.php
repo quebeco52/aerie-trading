@@ -10,7 +10,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
-use App\Service\Model\PrivateEquityBusinessModel;
+use App\Service\Model\Sector\PrivateEquityBusinessModel;
 use PHPUnit\Framework\TestCase;
 
 class PrivateEquityBusinessModelTest extends TestCase

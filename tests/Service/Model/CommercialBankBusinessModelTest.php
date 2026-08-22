@@ -9,7 +9,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
-use App\Service\Model\CommercialBankBusinessModel;
+use App\Service\Model\Sector\CommercialBankBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 

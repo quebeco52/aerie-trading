@@ -7,7 +7,7 @@ namespace App\Tests\Service\Model;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
-use App\Service\Model\ShadowBankBusinessModel;
+use App\Service\Model\Sector\ShadowBankBusinessModel;
 use PHPUnit\Framework\TestCase;
 
 class ShadowBankBusinessModelTest extends TestCase

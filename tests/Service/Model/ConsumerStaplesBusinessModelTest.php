@@ -10,7 +10,7 @@ use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
-use App\Service\Model\ConsumerStaplesBusinessModel;
+use App\Service\Model\Sector\ConsumerStaplesBusinessModel;
 use PHPUnit\Framework\TestCase;
 
 class ConsumerStaplesBusinessModelTest extends TestCase

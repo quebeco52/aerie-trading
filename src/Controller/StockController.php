@@ -368,12 +368,22 @@ class StockController extends AbstractController
 
         // Dynamically add revenue streams if present
         $revenueStreams = isset($latestReport['revenue_streams']) ? json_decode($latestReport['revenue_streams'], true) : null;
+        $streamDetails = isset($latestReport['stream_details']) ? json_decode($latestReport['stream_details'], true) : null;
         if (is_array($revenueStreams) && count($revenueStreams) > 0) {
             foreach ($revenueStreams as $streamName => $streamValue) {
                 $value = (float) $streamValue;
                 if ($value > 0) {
                     $formattedName = ucwords(str_replace('_', ' ', $streamName)) . ' Revenue';
-                    $nodes[] = ['name' => $formattedName, 'itemStyle' => ['color' => '#0284c7']]; // sky blue
+                    $nodeData = ['name' => $formattedName, 'itemStyle' => ['color' => '#0284c7']]; // sky blue
+                    if (is_array($streamDetails) && isset($streamDetails[$streamName])) {
+                        $nodeData['streamKey'] = $streamName;
+                        $nodeData['qoq_delta'] = $streamDetails[$streamName]['qoq_delta'] ?? 0;
+                        $nodeData['drivers'] = $streamDetails[$streamName]['drivers'] ?? [];
+                        if (!empty($streamDetails[$streamName]['event'])) {
+                            $nodeData['event'] = $streamDetails[$streamName]['event'];
+                        }
+                    }
+                    $nodes[] = $nodeData;
                     $addLink($formattedName, 'Total Revenue', $value);
                 }
             }

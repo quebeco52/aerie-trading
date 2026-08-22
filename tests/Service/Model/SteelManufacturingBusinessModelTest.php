@@ -7,7 +7,7 @@ namespace App\Tests\Service\Model;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
-use App\Service\Model\SteelManufacturingBusinessModel;
+use App\Service\Model\Sector\SteelManufacturingBusinessModel;
 use PHPUnit\Framework\TestCase;
 
 class SteelManufacturingBusinessModelTest extends TestCase
