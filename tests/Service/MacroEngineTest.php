@@ -543,6 +543,36 @@ class MacroEngineTest extends TestCase
         $this->assertEqualsWithDelta(100.0, $result->residentialPropertyIndex, 0.5, 'Residential property index should remain at 100 in neutral macro conditions.');
     }
 
+    public function testResidentialPropertyExpandsAboveBaselineDuringTightLaborMarket(): void
+    {
+        $boomState = [
+            'yield_30y' => 0.0548,
+            'yield_30y_ema' => 0.0548,
+            'inflation' => MacroEngine::TARGET_INFLATION,
+            'inflation_ema' => MacroEngine::TARGET_INFLATION,
+            'unemployment_rate' => 0.025,
+            'unemployment_rate_ema' => 0.025,
+            'residential_property_index' => 100.0,
+            'residential_property_index_ema' => 100.0,
+            'policy_rate' => 0.035,
+            'policy_rate_ema' => 0.035,
+            'yield_5y' => 0.044,
+            'yield_10y' => 0.0504,
+            'output_gap' => 0.02,
+            'output_gap_ema' => 0.02,
+        ];
+
+        $this->redisMock->expects($this->once())
+            ->method('get')
+            ->with('macroeconomic_state')
+            ->willReturn(json_encode($boomState));
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $result = $this->engine->updateMacroState(0.25);
+
+        $this->assertGreaterThan(100.0, $result->residentialPropertyIndex, 'Tight labor market should expand residential housing index above neutral baseline.');
+    }
+
     public function testEvansRuleLocksTargetRateAtZlbDuringElevatedUnemployment(): void
     {
         // Unemployment > 5.0% and Inflation < 2.5% -> Evans Rule forces target rate to 0% (ZLB)
@@ -947,21 +977,13 @@ class MacroEngineTest extends TestCase
         $this->assertEqualsWithDelta(0.0425, $dtoRecession->capitalStockOverhang, 0.0001);
     }
 
-    public function testSolowSwanTfpJumpsExpandPotentialGdp(): void
+    public function testSolowSwanSmoothPotentialGdpGrowth(): void
     {
         $mathUtility = $this->createMock(MathUtility::class);
         $logger = $this->createMock(\Psr\Log\LoggerInterface::class);
         $redis = $this->createMock(\Redis::class);
 
-        // Suppress continuous noise
         $mathUtility->method('generateStandardNormal')->willReturn(0.0);
-
-        // Force a 20% Paradigm-Shifting Tech Jump (e.g., AGI / Major Breakthrough)
-        $mathUtility->method('calculateJumpDiffusion')->willReturn([
-            'multiplier' => 1.20,
-            'shock_pct'  => 20.0,
-            'exponent'   => 0.18,
-        ]);
 
         $macroEngine = new MacroEngine($mathUtility, $logger, $redis);
 
@@ -974,15 +996,19 @@ class MacroEngineTest extends TestCase
         $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculatePotentialAndNominalGdp');
         $reflectionMethod->invoke($macroEngine, $state, 0.25);
 
-        // Assert TFP captured the 20% jump
-        $this->assertGreaterThan(119.0, $state->totalFactorProductivityIndex, 'TFP Index must capture the positive technological jump.');
+        // Expected TFP: 100 * exp(0.015 * 0.25) ~= 100.3757
+        $expectedTfp = 100.0 * exp(MacroEngine::TFP_DRIFT * 0.25);
+        $this->assertEqualsWithDelta($expectedTfp, $state->totalFactorProductivityIndex, 0.0001, 'TFP Index must compound with continuous secular drift.');
 
-        // Assert Potential GDP permanently expands following a TFP jump (~1.21)
-        $this->assertGreaterThan(1.15, $state->potentialGdpIndex, 'Potential GDP must permanently expand following a TFP jump.');
-        $this->assertEquals($state->potentialGdpIndex, $state->nominalGdpIndex, 'Nominal GDP should match Potential GDP when output gap is 0.');
+        // Expected Potential GDP: 1.0 * exp((0.005 + 0.015) * 0.25) ~= 1.00501
+        $expectedPotential = 1.0 * exp((MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT) * 0.25);
+        $this->assertEqualsWithDelta($expectedPotential, $state->potentialGdpIndex, 0.0001, 'Potential GDP must grow by real labor + TFP growth.');
+
+        // When output gap is 0, Nominal GDP should equal Real Potential GDP
+        $this->assertEqualsWithDelta($expectedPotential, $state->nominalGdpIndex, 0.0001, 'Nominal GDP must match Real Potential GDP when output gap is 0.');
     }
 
-    public function testSolowSwanTfpNegativeJumpClampedToPositive(): void
+    public function testSolowSwanOutputGapImpactsNominalGdp(): void
     {
         $mathUtility = $this->createMock(MathUtility::class);
         $logger = $this->createMock(\Psr\Log\LoggerInterface::class);
@@ -990,26 +1016,39 @@ class MacroEngineTest extends TestCase
 
         $mathUtility->method('generateStandardNormal')->willReturn(0.0);
 
-        // Simulate a downward jump (which should be clamped as technology cannot un-invent itself)
-        $mathUtility->method('calculateJumpDiffusion')->willReturn([
-            'multiplier' => 0.80,
-            'shock_pct'  => -20.0,
-            'exponent'   => -0.22,
-        ]);
-
         $macroEngine = new MacroEngine($mathUtility, $logger, $redis);
 
         $state = new \App\Service\Macro\MacroState();
         $state->totalFactorProductivityIndex = 100.0;
         $state->potentialGdpIndex = 1.0;
-        $state->outputGap = 0.0;
+        $state->outputGap = 0.05; // 5% positive output gap (economic boom)
         $state->inflationEma = 0.02;
 
         $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculatePotentialAndNominalGdp');
         $reflectionMethod->invoke($macroEngine, $state, 0.25);
 
-        // TFP should not decrease below 100.0
-        $this->assertGreaterThanOrEqual(100.0, $state->totalFactorProductivityIndex, 'TFP jump multiplier must be clamped to >= 1.0.');
+        $expectedPotential = 1.0 * exp((MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT) * 0.25);
+        $expectedNominal = $expectedPotential * 1.05;
+
+        $this->assertEqualsWithDelta($expectedPotential, $state->potentialGdpIndex, 0.0001);
+        $this->assertEqualsWithDelta($expectedNominal, $state->nominalGdpIndex, 0.0001, 'Nominal GDP must scale with cyclical output gap.');
+    }
+
+    public function testSolowSwanKnowledgeFrontierMonotonic(): void
+    {
+        $mathUtility = $this->createMock(MathUtility::class);
+        $logger = $this->createMock(\Psr\Log\LoggerInterface::class);
+        $redis = $this->createMock(\Redis::class);
+
+        $macroEngine = new MacroEngine($mathUtility, $logger, $redis);
+
+        $state = new \App\Service\Macro\MacroState();
+        $state->totalFactorProductivityIndex = 120.0;
+
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateTotalFactorProductivity');
+        $reflectionMethod->invoke($macroEngine, $state, 0.25);
+
+        $this->assertGreaterThanOrEqual(120.0, $state->totalFactorProductivityIndex, 'TFP index must never decline.');
     }
 }
 

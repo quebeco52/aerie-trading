@@ -204,7 +204,7 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
 
         // --- Cost & Margin Physics ---
         // Apply the tactical failure legal penalty directly to the baseline variable margin
-        $rawMargin = $realizedVariableMargin - $tacticalFailurePenalty;
+        $rawMargin = $realizedVariableMargin + $tacticalFailurePenalty;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock is whichever stream deviated the most, overridden by tail events

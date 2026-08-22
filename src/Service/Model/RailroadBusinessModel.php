@@ -115,7 +115,7 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
         $energyShift = ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0;
         $fuelLagDrag = $energyShift > 0 ? $energyShift * self::FUEL_SURCHARGE_LAG_PENALTY : 0.0;
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin - $fuelLagDrag);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $fuelLagDrag);
 
         // Max magnitude shock
         $primaryShockZ = abs($intermodalZ) > abs($bulkZ) ? $intermodalZ : $bulkZ;

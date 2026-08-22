@@ -42,6 +42,15 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
     /** Haircut applied to cat bond collateral spread revenues when major attachment points breach. */
     public const CAT_BOND_DEFAULT_HAIRCUT = 0.50;
 
+    // --- Margin Clamps ---
+    /** Maximum variable margin clamp for reinsurers to allow extreme tail-risk claim payouts to materialize. */
+    public const MAX_REINSURANCE_MARGIN_CLAMP = 5.00;
+
+    public function clampMargin(float $rawMargin, float $minMargin = 0.01, float $maxMargin = self::MAX_REINSURANCE_MARGIN_CLAMP): float
+    {
+        return min($maxMargin, max($minMargin, $rawMargin));
+    }
+
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
@@ -91,11 +100,10 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         $hardMarketPricingBonus = min(0.35, $surplusDeficitRatio * 0.40 * $catRiskBeta);
 
         // Cat Bond Principal / Yield Haircut during extreme catastrophe attachment
-        // When attachment points breach, Cat Bond principal shields the reinsurer's balance sheet from catastrophic shock
+        // When attachment points breach, Cat Bond principal shields the ILS tranche, but the treaty line absorbs tail severity
         $catBondMultiplier = 1.0;
         if ($claimZ < self::REINSURANCE_ATTACHMENT_Z) {
             $catBondMultiplier = (1.0 - self::CAT_BOND_DEFAULT_HAIRCUT);
-            $underwritingShock = min($underwritingShock, self::MAX_REINSURED_LOSS_SHOCK * $treatyWeight);
         }
 
         $treatyRevenue  = max(0.0, $expectedRevenue * $treatyWeight * (1.0 + ($treatyZ * ($baselineVol * self::TREATY_VARIANCE_SCALAR)) + $hardMarketPricingBonus));

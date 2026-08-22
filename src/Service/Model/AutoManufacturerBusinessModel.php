@@ -49,6 +49,8 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
 
     /** Baseline pricing power across OEM vehicle model lines. */
     public const PRICING_POWER_INDEX = 0.65;
+    /** Variable margin cost drag per unit of ocean shipping and maritime freight rate inflation. */
+    public const FREIGHT_COST_DRAG_SCALAR = 0.05;
 
     // --- Stream Volatility Scalars ---
     /** Volatility multiplier for mass-market fleet volume. */
@@ -235,8 +237,9 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $inflation = $macroState->inflationEma;
         $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
+        $freightShift = max(0.0, ($macroState->freightRateIndexEma - 100.0) / 100.0);
         $baseInflationPenalty = max(0.0, $inflation - MacroEngine::TARGET_INFLATION) * $beta * self::INFLATION_PENALTY_SCALAR;
-        $inflationCostPenalty = ($baseInflationPenalty + ($energyShift * 0.05) + ($metalsShift * 0.15)) * (1.0 - ($pricingPower * 0.50));
+        $inflationCostPenalty = ($baseInflationPenalty + ($energyShift * 0.05) + ($metalsShift * 0.15) + ($freightShift * self::FREIGHT_COST_DRAG_SCALAR)) * (1.0 - ($pricingPower * 0.50));
 
         // Captive Finance NIM Squeeze & Subprime Provisioning
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;

@@ -179,7 +179,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
 
         // --- Margin Aggregation ---
         // Apply all structurally driven cost penalties directly to the baseline margin
-        $clampedMargin = $this->clampMargin($realizedVariableMargin - $regulatoryLagPenalty - $sparkSpreadCrush - $disasterPenalty - $refinancingDrag);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $regulatoryLagPenalty + $sparkSpreadCrush + $disasterPenalty + $refinancingDrag);
 
         // Primary shock is whichever stream deviated the most, overridden by tail events
         $primaryShockZ = abs($unregulatedZ) > abs($weatherZ) ? $unregulatedZ : $weatherZ;

@@ -103,7 +103,7 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         // Cyclical Metal Spread, Energy & Freight Logistics Compression
         $freightShift = max(0.0, ($macroState->freightRateIndexEma - 100.0) / 100.0);
         $freightDrag = $freightShift * 0.05;
-        $clampedMargin = $this->clampMargin($realizedVariableMargin - ($energyDrag * 0.40) - $freightDrag);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + ($energyDrag * 0.40) + $freightDrag);
 
         $primaryShockZ = abs($spotZ) > abs($contractZ) ? $spotZ : $contractZ;
         $observableShockZ = ($contractZ * $contractWeight * self::CONTRACT_VARIANCE_SCALAR * $baselineVol)

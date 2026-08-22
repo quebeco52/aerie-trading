@@ -55,6 +55,8 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
 
     // --- Pricing Power & Macro Physics ---
     public const MIN_BETA_PRICING_POWER_FLOOR = 0.80; // Highly sensitive to macro shifts
+    /** Sensitivity of OEM capital equipment orders to aggregate industrial capital capacity overhang. */
+    public const CAPITAL_OVERHANG_SCALAR = 0.15;
 
     // --- Revenue & Shock Physics ---
     public const REVENUE_VARIANCE_SCALAR = 0.35; // Volatile sales
@@ -107,8 +109,9 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         $mroShock       = $mroZ * ($baselineVol * self::MRO_VARIANCE_SCALAR);
 
         $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
+        $overhangDrag = $macroState->capitalStockOverhangEma * self::CAPITAL_OVERHANG_SCALAR;
 
-        $oemRevenue = max(0.0, $expectedRevenue * $oemWeight * (1.0 + $dampedOemShock - ($fxShift * 0.15)));
+        $oemRevenue = max(0.0, $expectedRevenue * $oemWeight * (1.0 + $dampedOemShock - ($fxShift * 0.15) - $overhangDrag));
         $mroRevenue = max(0.0, $expectedRevenue * $mroWeight * (1.0 + $mroShock));
         $streamRevenues = [
             'oem_equipment'   => $oemRevenue,

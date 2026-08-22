@@ -102,11 +102,13 @@ class CapitalAllocationEngineTest extends TestCase
 
         $macroState = new MacroStateDTO(corporateTaxRate: 0.21);
 
-        // Actual annual EPS is 4.00 ($1.00 quarterly). With Invested Capital 100M and Dep 5%, quarterly dep is $1.25M ($1.25/share).
-        // FFO per share = 1.00 + 1.25 = 2.25. Payout target 80% = 1.80 per share.
-        $result = $this->engine->allocateCapital($stock, 4.00, 2.00, 100.00, 1000000.0, $macroState);
+        // In EarningsEngine, actual annual EPS for REITs is computed as FFO per share (Net Income + Depreciation).
+        // For 1M shares with $1.00 quarterly net income and $1.25 quarterly depreciation, FFO per share is $2.25 quarterly ($9.00 annual).
+        // With an 80% target payout ratio on FFO, target quarterly dividend is $1.80 per share.
+        $annualFfoEps = 9.00;
+        $result = $this->engine->allocateCapital($stock, $annualFfoEps, 2.00, 100.00, 1000000.0, $macroState);
 
-        $this->assertGreaterThan(1.00, $result['dividend_paid'], 'REIT dividend should reflect FFO rather than raw GAAP EPS');
+        $this->assertEqualsWithDelta(1.80, $result['dividend_paid'], 0.0001, 'REIT dividend should reflect 80% target payout on FFO');
     }
 
     public function testDividendDistributionCallsLedgerService(): void

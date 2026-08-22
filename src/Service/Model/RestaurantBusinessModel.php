@@ -35,6 +35,8 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
 
     // --- Pricing Power & Macro Physics ---
     public const MIN_BETA_PRICING_POWER_FLOOR = 0.40;
+    /** Variable margin cost drag from labor tightness and kitchen wage pressure when unemployment is below natural rate. */
+    public const LABOR_TIGHTNESS_WAGE_SCALAR = 0.50;
 
     // --- Revenue & Shock Physics ---
     public const REVENUE_VARIANCE_SCALAR = 0.40;
@@ -176,10 +178,14 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         $agriShift = max(0.0, ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0);
         $foodCommodityDrag = $agriShift * 0.20 * (1.0 - ($pricingPower * 0.50)) * $corporateWeight;
 
+        // Labor Market Tightness: Kitchen wage inflation when unemployment drops below natural rate
+        $laborTightness = max(0.0, MacroEngine::NATURAL_UNEMPLOYMENT - $macroState->unemploymentRateEma);
+        $laborTightnessDrag = $laborTightness * self::LABOR_TIGHTNESS_WAGE_SCALAR * $corporateWeight;
+
         // Continuous Elasticity
         $elasticityShift = -self::FRANCHISE_SCALE_ELASTICITY * $franchiseZ * $franchiseWeight;
 
-        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $foodSafetyPenalty + $inflationPenalty + $energyDrag + $foodCommodityDrag + $elasticityShift;
+        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $foodSafetyPenalty + $inflationPenalty + $energyDrag + $foodCommodityDrag + $laborTightnessDrag + $elasticityShift;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         $primaryShockZ = ($corporateZ * $corporateWeight) + ($franchiseZ * $franchiseWeight);

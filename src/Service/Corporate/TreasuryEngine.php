@@ -76,7 +76,7 @@ class TreasuryEngine
         $stock->setRetainedEarnings($newRetainedStr);
 
         // TOTAL EQUITY (Clean Surplus Accounting)
-        // physicalAssetAppreciation represents organic macro inflation scaling PLUS REIT depreciation offsets
+        // physicalAssetAppreciation represents organic macro inflation scaling of physical fixed capital
         $currentEquityStr = $this->formatBc($stock->getTotalEquity());
         $reApprecStr = $this->formatBc($ctx->physicalAssetAppreciation);
         $totalCashSpentStr = $this->formatBc($totalCashSpent);

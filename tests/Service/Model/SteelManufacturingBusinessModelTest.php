@@ -89,7 +89,8 @@ class SteelManufacturingBusinessModelTest extends TestCase
         $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $baseMacro, $mathMock);
         $costSpikeResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $costSpikeMacro, $mathMock);
 
-        // Energy and freight drag compress variable margin (lowering the margin profit factor / increasing cost ratio)
-        $this->assertLessThan($baseResult->clampedMargin, $costSpikeResult->clampedMargin);
+        // Energy and freight cost spikes increase the variable cost ratio (clampedMargin) and compress operating income (EBIT)
+        $this->assertGreaterThan($baseResult->clampedMargin, $costSpikeResult->clampedMargin);
+        $this->assertLessThan($baseResult->ebit, $costSpikeResult->ebit);
     }
 }

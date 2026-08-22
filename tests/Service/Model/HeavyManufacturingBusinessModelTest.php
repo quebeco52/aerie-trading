@@ -71,4 +71,26 @@ class HeavyManufacturingBusinessModelTest extends TestCase
         $this->assertLessThan($baseResult->streamRevenue['oem_equipment'], $shockResult->streamRevenue['oem_equipment']);
         $this->assertGreaterThan($baseResult->clampedMargin, $shockResult->clampedMargin);
     }
+
+    public function testCapitalStockOverhangDampensOemEquipmentDemand(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('CATP');
+        $stock->setBeta('1.0');
+
+        $scarcityMacro = new MacroStateDTO(capitalStockOverhangEma: -0.10);
+        $overhangMacro = new MacroStateDTO(capitalStockOverhangEma: 0.10);
+
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $scarcityResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $scarcityMacro, $mathMock);
+        $overhangResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $overhangMacro, $mathMock);
+
+        $this->assertGreaterThan(
+            $overhangResult->streamRevenue['oem_equipment'],
+            $scarcityResult->streamRevenue['oem_equipment'],
+            'Industrial capital capacity overhang must dampen OEM equipment demand relative to capital scarcity.'
+        );
+    }
 }

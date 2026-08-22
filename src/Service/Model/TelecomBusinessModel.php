@@ -166,7 +166,7 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         $refinancingDrag = max(0.0, ($yield10y - self::DEFAULT_10Y_YIELD_FALLBACK) * self::REFINANCING_WALL_DRAG);
 
         // Apply structurally driven penalties directly to the baseline margin
-        $rawMargin = $realizedVariableMargin - $priceWarPenalty + $sacDrag - $refinancingDrag;
+        $rawMargin = $realizedVariableMargin + $priceWarPenalty + $sacDrag + $refinancingDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock is whichever stream deviated the most, overridden by tail events

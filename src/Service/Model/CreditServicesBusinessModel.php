@@ -83,6 +83,8 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public const REVENUE_VARIANCE_SCALAR   = 0.20;
     /** Macroeconomic default scalar translating negative output gaps into unsecured loan defaults. */
     public const MACRO_DEFAULT_SCALAR      = 0.35;
+    /** Macro default scalar translating elevated unemployment rates into revolving credit card charge-offs. */
+    public const UNEMPLOYMENT_CHARGE_OFF_SCALAR = 0.50;
     /** Severe credit z-score threshold triggering elevated unsecured default provisions. */
     public const CREDIT_STRESS_Z_THRESHOLD = -1.50;
     /** Loss provision multiplier applied to credit stress severity. */
@@ -190,7 +192,10 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         // Credit card debt is unsecured. Consumers default on cards long before mortgages during recessions.
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
         $retailDefaultShift = max(0.0, ($macroState->retailDefaultRateEma - MacroEngine::RETAIL_DEFAULT_BASELINE) / MacroEngine::RETAIL_DEFAULT_BASELINE);
-        $macroDefaultDrag = ($sentimentShift < 0.0 ? abs($sentimentShift) * self::MACRO_DEFAULT_SCALAR : 0.0) + ($retailDefaultShift * 0.15);
+        $unemploymentShift = max(0.0, ($macroState->unemploymentRateEma - MacroEngine::NATURAL_UNEMPLOYMENT) / MacroEngine::NATURAL_UNEMPLOYMENT);
+        $macroDefaultDrag = ($sentimentShift < 0.0 ? abs($sentimentShift) * self::MACRO_DEFAULT_SCALAR : 0.0)
+            + ($retailDefaultShift * 0.15)
+            + ($unemploymentShift * self::UNEMPLOYMENT_CHARGE_OFF_SCALAR * 0.10);
 
         if ($defaultZ < self::CREDIT_STRESS_Z_THRESHOLD) {
             $provisionShock = abs($defaultZ) * self::LOSS_PROVISION_SCALAR;

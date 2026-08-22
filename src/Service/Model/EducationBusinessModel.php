@@ -52,6 +52,8 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
     public const TUITION_VARIANCE_SCALAR    = 0.10; // Stable enrollment base
     public const ENTERPRISE_VARIANCE_SCALAR = 0.40; // Pro-cyclical corporate training
     public const LMS_VARIANCE_SCALAR        = 0.08; // Highly sticky software ARR
+    /** Countercyclical sensitivity of degree enrollment to elevated unemployment rates (workforce retraining). */
+    public const UNEMPLOYMENT_RETRAINING_SCALAR = 0.80;
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
@@ -80,10 +82,13 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
         $enterpriseWeight = $activeWeights['enterprise_b2b_training'];
         $lmsWeight        = $activeWeights['digital_lms_licensing'];
 
-        // Counter-cyclical student enrollment boost during recessions and government subsidies
+        // Counter-cyclical student enrollment boost during recessions, unemployment spikes, and government subsidies
         $outputGap = $macroState->outputGapEma;
         $govShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
-        $counterCyclicalEnrollmentBoost = ($outputGap < 0.0 ? abs($outputGap) * 1.2 * $beta : -($outputGap * 0.4)) + ($govShift * 0.40);
+        $unemploymentSurge = max(0.0, $macroState->unemploymentRateEma - MacroEngine::NATURAL_UNEMPLOYMENT);
+        $counterCyclicalEnrollmentBoost = ($outputGap < 0.0 ? abs($outputGap) * 1.2 * $beta : -($outputGap * 0.4))
+            + ($govShift * 0.40)
+            + ($unemploymentSurge * self::UNEMPLOYMENT_RETRAINING_SCALAR * $beta);
         $proCyclicalEnterpriseShift     = $outputGap * 1.5 * $beta;
 
         $tuitionZ    = $streams->generateZ('degree_tuition_enrollment', 0.50);

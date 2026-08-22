@@ -95,4 +95,55 @@ class RestaurantBusinessModelTest extends TestCase
         $this->assertGreaterThan($resultBaseline->clampedMargin, $resultSpike->clampedMargin);
         $this->assertLessThan($resultBaseline->ebit, $resultSpike->ebit);
     }
+
+    public function testLaborMarketTightnessIncreasesKitchenWageCost(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('MCD');
+        $stock->setBeta('1.0');
+
+        $mathUtilityMock = $this->createMock(MathUtility::class);
+        $mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $macroNormalLabor = new MacroStateDTO(
+            consumerSentimentIndexEma: 100.0,
+            energyPriceIndexEma: 100.0,
+            inflationEma: 0.02,
+            unemploymentRateEma: 0.050
+        );
+
+        $macroTightLabor = new MacroStateDTO(
+            consumerSentimentIndexEma: 100.0,
+            energyPriceIndexEma: 100.0,
+            inflationEma: 0.02,
+            unemploymentRateEma: 0.030
+        );
+
+        $resultNormal = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 10_000_000.0,
+            realizedVariableMargin: 0.25,
+            fixedCosts: 1_000_000.0,
+            baselineVol: 0.0,
+            macroState: $macroNormalLabor,
+            mathUtility: $mathUtilityMock
+        );
+
+        $resultTight = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 10_000_000.0,
+            realizedVariableMargin: 0.25,
+            fixedCosts: 1_000_000.0,
+            baselineVol: 0.0,
+            macroState: $macroTightLabor,
+            mathUtility: $mathUtilityMock
+        );
+
+        $this->assertGreaterThan(
+            $resultNormal->clampedMargin,
+            $resultTight->clampedMargin,
+            'Tight labor markets (unemployment < natural rate) must increase restaurant kitchen wage costs and raise variable margin.'
+        );
+        $this->assertLessThan($resultNormal->ebit, $resultTight->ebit);
+    }
 }

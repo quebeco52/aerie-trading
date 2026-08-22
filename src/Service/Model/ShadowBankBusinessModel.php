@@ -207,7 +207,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
                 : 0.0)) + $macroDefaultDrag + $ceclForwardProvision;
 
         // Shadow Bank NIM Squeeze (high VULNERABILITY):
-        $mortgageSpread = $yield30y - $policyRate;
+        $mortgageSpread = $yield30y - ($policyRate + $macroState->interbankLiquiditySpreadEma);
 
         if ($mortgageSpread < 0) {
             $nimSqueeze = (self::TARGET_MORTGAGE_SPREAD - $mortgageSpread) * self::NIM_LINEAR_SENSITIVITY + pow(abs($mortgageSpread) * (FinancialConstants::YIELD_CURVE_INVERSION_SENSITIVITY * self::NIM_INVERSION_SCALAR), 2) * self::NIM_QUADRATIC_COEFF;

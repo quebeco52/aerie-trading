@@ -178,4 +178,27 @@ class AutoManufacturerBusinessModelTest extends TestCase
 
         $this->assertLessThan($basePhysics['macro_demand_shift'], $strongDollarPhysics['macro_demand_shift']);
     }
+
+    public function testFreightRateSpikeIncreasesAutomotiveLogisticsCost(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('GEN_AUTO');
+        $stock->setBeta('1.0');
+
+        $calmFreightMacro = new MacroStateDTO(freightRateIndexEma: 100.0, inflationEma: 0.02, energyPriceIndexEma: 100.0, industrialMetalsIndexEma: 100.0);
+        $spikeFreightMacro = new MacroStateDTO(freightRateIndexEma: 160.0, inflationEma: 0.02, energyPriceIndexEma: 100.0, industrialMetalsIndexEma: 100.0);
+
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $calmResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $calmFreightMacro, $mathMock);
+        $spikeResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $spikeFreightMacro, $mathMock);
+
+        $this->assertGreaterThan(
+            $calmResult->clampedMargin,
+            $spikeResult->clampedMargin,
+            'Maritime freight rate spikes must increase automotive ocean shipping variable costs and raise clampedMargin.'
+        );
+        $this->assertLessThan($calmResult->ebit, $spikeResult->ebit);
+    }
 }

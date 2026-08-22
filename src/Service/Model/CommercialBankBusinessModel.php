@@ -243,7 +243,7 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $depositBeta = $this->calculateDepositBeta($totalDebt, $equity, $equityLimit, $customerDeposits);
         $depositRate = max(0.001, $policyRate * $depositBeta);
 
-        $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
+        $blendedWholesaleRate = ($floatingRatio * ($policyRate + $macroState->interbankLiquiditySpreadEma)) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
 
         // --- THE CLEAR BALANCE SHEET MATH ---
         // We derive the structural asset yield using the bank's ACTUAL deployed leverage (capped at regulatory limits).
@@ -415,7 +415,7 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         // Banks utilize interest rate swaps & natural floating-rate debt to hedge a portion of this duration gap.
         $yield10y = $macroState->yield10yEma;
         $yield2y  = $macroState->yield2yEma;
-        $bankSpread = $yield10y - $yield2y;
+        $bankSpread = $yield10y - ($yield2y + $macroState->interbankLiquiditySpreadEma);
 
         $rawDurationGap = max(0.0, self::ASSET_DURATION_YEARS - self::LIABILITY_DURATION_YEARS);
         $floatingRatio = (float) $stock->getFloatingDebtRatio();

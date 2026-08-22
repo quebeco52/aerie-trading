@@ -272,4 +272,63 @@ class CommercialBankBusinessModelTest extends TestCase
             'Hedged bank with higher floating ratio and ALM tuning must suffer less margin compression during inversion.'
         );
     }
+
+    public function testInterbankLiquiditySpreadCompressesNIM(): void
+    {
+        $bank = new Stock();
+        $bank->setTicker('BANK');
+        $bank->setBeta('1.0');
+        $bank->setTotalEquity('10000000000');
+        $bank->setCustomerDeposits('50000000000');
+        $bank->setWholesaleDebt('20000000000');
+        $bank->setCorporateTreasury('2000000000');
+        $bank->setFloatingDebtRatio('0.50');
+
+        $calmMacro = new MacroStateDTO(
+            outputGapEma: 0.0,
+            policyRateEma: 0.03,
+            yield2yEma: 0.03,
+            yield10yEma: 0.05,
+            macroCreditSpreadEma: 0.02,
+            interbankLiquiditySpreadEma: 0.0010
+        );
+
+        $tedBlowoutMacro = new MacroStateDTO(
+            outputGapEma: 0.0,
+            policyRateEma: 0.03,
+            yield2yEma: 0.03,
+            yield10yEma: 0.05,
+            macroCreditSpreadEma: 0.02,
+            interbankLiquiditySpreadEma: 0.0150
+        );
+
+        $mathMock = $this->createMathUtilityMock([0.0, 0.0, 0.0]);
+
+        $calmResult = $this->model->computeActualFinancials(
+            $bank,
+            expectedRevenue: 1_000_000_000.0,
+            realizedVariableMargin: 0.50,
+            fixedCosts: 200_000_000.0,
+            baselineVol: 0.0,
+            macroState: $calmMacro,
+            mathUtility: $mathMock
+        );
+
+        $tedResult = $this->model->computeActualFinancials(
+            $bank,
+            expectedRevenue: 1_000_000_000.0,
+            realizedVariableMargin: 0.50,
+            fixedCosts: 200_000_000.0,
+            baselineVol: 0.0,
+            macroState: $tedBlowoutMacro,
+            mathUtility: $mathMock
+        );
+
+        $this->assertGreaterThan(
+            $calmResult->clampedMargin,
+            $tedResult->clampedMargin,
+            'TED spread spike must increase wholesale borrowing costs, compress NIM, and raise the variable cost ratio.'
+        );
+        $this->assertLessThan($calmResult->ebit, $tedResult->ebit);
+    }
 }

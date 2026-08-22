@@ -28,7 +28,7 @@ class MacroEngine
 
     // --- KALDOR-KALECKI 2D LIMIT CYCLE ---
     /** Linear momentum of aggregate demand feedback loop. */
-    public const KALDOR_MOMENTUM = 0.22;
+    public const KALDOR_MOMENTUM = 0.15;
     /** Cubic stabilization factor bounding extreme boom/bust expansions. */
     public const KALDOR_CAPACITY = 160.0;
     /** Sensitivity of aggregate demand to real interest rate deviations from natural rate. */
@@ -44,7 +44,7 @@ class MacroEngine
     /** The rate at which physical capital depreciates, organically clearing overhangs and creating pent-up demand. */
     public const CAPITAL_DECAY_RATE = 0.25;
     /** Stochastic diffusion volatility of the macroeconomic output gap. */
-    public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.015;
+    public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.010;
 
     // --- Okun's Law (Labor Market Dynamics) ---
     /** Structural Non-Accelerating Inflation Rate of Unemployment (NAIRU) baseline (4.0%). */
@@ -70,7 +70,7 @@ class MacroEngine
     /** Volatility of energy jump shock magnitude. */
     public const ENERGY_JUMP_VOL = 0.10;
     /** Cost-push transmission coefficient passing energy price spikes into headline inflation. */
-    public const ENERGY_COST_PUSH_TRANSMISSION = 0.015;
+    public const ENERGY_COST_PUSH_TRANSMISSION = 0.010;
 
     // --- GARCH-MIDAS Macroeconomic Volatility Constants (Engle, Ghysels, & Sohn 2013 Eq. 5) ---
     /** Long-run equilibrium baseline volatility (~15% VIX) during neutral economic conditions. */
@@ -112,7 +112,7 @@ class MacroEngine
     /** Weight on inflation deviations from the 2% target in the Taylor Rule. */
     public const TAYLOR_INFLATION_WEIGHT = 0.50;
     /** Weight on positive output gap during economic expansions. */
-    public const TAYLOR_BOOM_WEIGHT = 0.25;
+    public const TAYLOR_BOOM_WEIGHT = 0.15;
     /** Non-linear scaling factor amplifying rate cuts during deep recessions. */
     public const TAYLOR_RECESSION_SCALE = 5.0;
     /** Evans Rule forward guidance: Unemployment threshold (5.0% = natural rate + 1.0%) required before lifting off from ZLB. */
@@ -325,10 +325,20 @@ class MacroEngine
     public const RESIDENTIAL_NEUTRAL_USER_COST = 0.0778;
     /** Sensitivity of housing demand to unemployment rate shocks (foreclosure and affordability drag). */
     public const RESIDENTIAL_UNEMPLOYMENT_SENSITIVITY = 5.0;
+    /** Elasticity of residential housing purchasing power to real macroeconomic income and GDP growth. */
+    public const RESIDENTIAL_INCOME_ELASTICITY = 2.0;
+    /** Lower bound multiplier on residential spatial labor demand during deep labor distress. */
+    public const RESIDENTIAL_MIN_LABOR_FACTOR = 0.30;
+    /** Upper bound multiplier on residential spatial labor demand during peak labor market expansions. */
+    public const RESIDENTIAL_MAX_LABOR_FACTOR = 1.80;
     /** Mean-reversion speed of residential property valuations toward fundamental user-cost equilibrium. */
     public const RESIDENTIAL_MEAN_REVERSION = 0.08;
     /** Stochastic volatility of residential home prices. */
     public const RESIDENTIAL_VOLATILITY = 0.06;
+    /** Structural lower floor for the residential property index value. */
+    public const RESIDENTIAL_MIN_INDEX = 30.0;
+    /** Structural upper ceiling for the residential property index value. */
+    public const RESIDENTIAL_MAX_INDEX = 300.0;
 
     // --- INTERBANK LIQUIDITY SPREAD (CIR PROCESS & JUMPS) ---
     /** Baseline interbank liquidity spread (FRA-OIS / TED Spread proxy) under normal conditions (15 bps). */
@@ -349,22 +359,12 @@ class MacroEngine
     public const TFP_BASELINE = 100.0;
     /** Secular annual drift rate of continuous technological progress (1.5% base innovation rate). */
     public const TFP_DRIFT = 0.015;
-    /** Stochastic volatility of continuous technological innovation. */
-    public const TFP_VOLATILITY = 0.02;
-    /** Poisson intensity of paradigm-shifting technological breakthroughs (lambda per year, e.g., 2%). */
-    public const TFP_JUMP_PROBABILITY = 0.02;
-    /** Mean log-return magnitude of a technological breakthrough (+15% permanent capacity expansion). */
-    public const TFP_JUMP_MEAN = 0.15;
-    /** Volatility of the technological breakthrough magnitude. */
-    public const TFP_JUMP_VOL = 0.05;
     /** Structural baseline demographic and labor force growth rate (0.5%). */
     public const STRUCTURAL_LABOR_GROWTH_RATE = 0.005;
 
     // --- Continuous EMA Indicator Smoothing Horizons ---
     /** Standard quarterly macro indicator EMA smoothing horizon (0.25 years). */
     public const STANDARD_EMA_HORIZON_YEARS = 0.25;
-    /** Long-term structural physical asset EMA smoothing horizon for property and capital overhang (3.0 years). */
-    public const REAL_ESTATE_EMA_HORIZON_YEARS = 3.0;
 
     public function __construct(
         private MathUtility $mathUtility,
@@ -653,7 +653,6 @@ class MacroEngine
 
         // --- Modigliani Wealth Effect ---
         // Household consumption scales with perceived housing wealth (Case, Quigley, and Shiller 2005).
-        // A 20% drop in home values destroys aggregate demand proportionally based on the MPC out of wealth (4%).
         $housingWealthEffect = (($state->residentialPropertyIndexEma / self::RESIDENTIAL_BASELINE) - 1.0) * self::KALDOR_WEALTH_EFFECT_ELASTICITY;
 
         // Inject the Wealth Effect directly into the macroeconomic drift
@@ -724,25 +723,12 @@ class MacroEngine
     {
         $currentTfp = $state->totalFactorProductivityIndex ?? self::TFP_BASELINE;
 
-        // 1. Continuous innovation drift (Deterministic Secular Growth)
-        // Brownian diffusion is removed because continuous stochastic processes with non-negative constraints
-        // create explosive artificial growth as dt -> 0 (stochastic calculus artifact).
+        // Continuous innovation drift (Deterministic Secular Growth)
         // Technology grows secularly at the exact structural drift rate.
         $continuousMultiplier = exp(self::TFP_DRIFT * $dt);
 
-        // 2. Paradigm-shifting technology jumps (e.g., Internet, AI)
-        $jumpData = $this->mathUtility->calculateJumpDiffusion(
-            lambda: self::TFP_JUMP_PROBABILITY,
-            jumpMean: self::TFP_JUMP_MEAN,
-            jumpVol: self::TFP_JUMP_VOL,
-            dt: $dt
-        );
-
-        // Technology does not un-invent itself. The jump multiplier must be strictly positive (>= 1.0).
-        $jumpMultiplier = max(1.0, $jumpData['multiplier']);
-
-        // 3. New TFP Level (Monotonically non-decreasing knowledge frontier)
-        $state->totalFactorProductivityIndex = max($currentTfp, $currentTfp * $continuousMultiplier * $jumpMultiplier);
+        // Monotonically non-decreasing knowledge frontier
+        $state->totalFactorProductivityIndex = max($currentTfp, $currentTfp * $continuousMultiplier);
     }
 
     private function calculatePotentialAndNominalGdp(MacroState $state, float $dt): void
@@ -757,18 +743,17 @@ class MacroEngine
         $tfpGrowthRate = log($newTfp / max(0.01, $oldTfp)) / $dt;
         $realPotentialGrowth = self::STRUCTURAL_LABOR_GROWTH_RATE + $tfpGrowthRate;
 
-        // 3. Nominal Potential GDP Growth (Real + Expected Inflation)
-        $nominalPotentialGrowth = $realPotentialGrowth + $state->inflationEma;
-
+        // 3. Real Potential GDP Capacity (Real Output Capacity)
         $currentPotential = $state->potentialGdpIndex > 0.0 ? $state->potentialGdpIndex : 1.0;
-        $state->potentialGdpIndex = max(0.10, $currentPotential * exp($nominalPotentialGrowth * $dt));
+        $state->potentialGdpIndex = max(0.10, $currentPotential * exp($realPotentialGrowth * $dt));
+
+        // 4. Nominal GDP Index tracks real potential capacity adjusted for cyclical output gap
         $state->nominalGdpIndex = $state->potentialGdpIndex * (1.0 + $state->outputGap);
     }
 
     private function updateExponentialMovingAverages(MacroState $state, float $dt): void
     {
         $emaWeight = 1.0 - exp(-$dt / self::STANDARD_EMA_HORIZON_YEARS);
-        $slowEmaWeight = 1.0 - exp(-$dt / self::REAL_ESTATE_EMA_HORIZON_YEARS);
 
         $state->outputGapEma += $emaWeight * ($state->outputGap - $state->outputGapEma);
         $state->policyRateEma += $emaWeight * ($state->policyRate - $state->policyRateEma);
@@ -794,10 +779,8 @@ class MacroEngine
         $state->interbankLiquiditySpreadEma += $emaWeight * ($state->interbankLiquiditySpread - $state->interbankLiquiditySpreadEma);
         $state->totalFactorProductivityIndexEma += $emaWeight * ($state->totalFactorProductivityIndex - $state->totalFactorProductivityIndexEma);
         $state->capitalStockOverhangEma += $emaWeight * ($state->capitalStockOverhang - $state->capitalStockOverhangEma);
-
-        // Long-term EMAs for physical real estate and structural capital stock overhang
-        $state->residentialPropertyIndexEma += $slowEmaWeight * ($state->residentialPropertyIndex - $state->residentialPropertyIndexEma);
-        $state->commercialPropertyIndexEma += $slowEmaWeight * ($state->commercialPropertyIndex - $state->commercialPropertyIndexEma);
+        $state->residentialPropertyIndexEma += $emaWeight * ($state->residentialPropertyIndex - $state->residentialPropertyIndexEma);
+        $state->commercialPropertyIndexEma += $emaWeight * ($state->commercialPropertyIndex - $state->commercialPropertyIndexEma);
     }
 
     private function calculateDynamicFiscalPolicy(MacroState $state, float $dt): void
@@ -1169,9 +1152,13 @@ class MacroEngine
         $mortgageRate = $state->yield30yEma + self::RESIDENTIAL_MORTGAGE_SPREAD;
         $userCost = max(0.015, $mortgageRate + self::RESIDENTIAL_DEPRECIATION_TAX_RATE - $state->inflationEma);
 
-        // Housing Affordability & Spatial Demand Equilibrium
-        $excessUnemployment = max(0.0, $state->unemploymentRateEma - self::NATURAL_UNEMPLOYMENT);
-        $affordabilityFactor = (self::RESIDENTIAL_NEUTRAL_USER_COST / $userCost) * (1.0 - ($excessUnemployment * self::RESIDENTIAL_UNEMPLOYMENT_SENSITIVITY));
+        // Housing Affordability & Spatial Demand Equilibrium (Labor Market Tightness + Real Income Growth)
+        $excessUnemployment = $state->unemploymentRateEma - self::NATURAL_UNEMPLOYMENT;
+        $laborFactor = 1.0 - ($excessUnemployment * self::RESIDENTIAL_UNEMPLOYMENT_SENSITIVITY);
+        $incomeFactor = 1.0 + ($state->outputGapEma * self::RESIDENTIAL_INCOME_ELASTICITY);
+        $demandMultiplier = max(self::RESIDENTIAL_MIN_LABOR_FACTOR, min(self::RESIDENTIAL_MAX_LABOR_FACTOR, $laborFactor * $incomeFactor));
+
+        $affordabilityFactor = (self::RESIDENTIAL_NEUTRAL_USER_COST / $userCost) * $demandMultiplier;
         $fundamentalPrice = self::RESIDENTIAL_BASELINE * max(0.30, min(2.50, $affordabilityFactor));
 
         // Sticky physical housing price mean-reversion toward user cost equilibrium
@@ -1185,6 +1172,6 @@ class MacroEngine
             dW: $dW
         );
 
-        $state->residentialPropertyIndex = max(30.0, min(300.0, $newIndex));
+        $state->residentialPropertyIndex = max(self::RESIDENTIAL_MIN_INDEX, min(self::RESIDENTIAL_MAX_INDEX, $newIndex));
     }
 }

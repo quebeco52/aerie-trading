@@ -433,7 +433,7 @@
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Economic Engine</span>
-									{{ _self.tooltip('Tracks the District\'s Inflation, Output Gap, and Physical Capital Stock Overhang over time.', 'left', 'w-64') }}
+									{{ _self.tooltip('Headline inflation, output gap (cyclical economic deviation from potential capacity), and structural physical capital stock overhang.', 'left', 'w-64') }}
 								</h3>
 								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
 									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
@@ -447,7 +447,7 @@
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Interest Rates</span>
-									{{ _self.tooltip('Tracks various bond yields. The background bar shows the 2s10s Spread (10Y-2Y), the classic indicator of yield curve inversion.', 'right', 'w-64') }}
+									{{ _self.tooltip('Sovereign yield curve across key benchmark tenors (Policy Rate, 2Y, 5Y, 10Y, 30Y) alongside the benchmark 2s10s yield curve slope.', 'right', 'w-64') }}
 								</h3>
 								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
 									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
@@ -461,7 +461,7 @@
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Mortgage Market</span>
-									{{ _self.tooltip('Tracks the 30-Year Mortgage Yield against the Policy Rate. The background bar shows the spread (Shadow Bank profitability).', 'left', 'w-64') }}
+									{{ _self.tooltip('Long-term 30-year fixed residential mortgage yields compared against the central policy benchmark and origination spreads.', 'left', 'w-64') }}
 								</h3>
 								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
 									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
@@ -475,7 +475,7 @@
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Systemic Risk</span>
-									{{ _self.tooltip('Visualizes the broader Market Volatility (VIX), Equity Risk Premium, Corporate Borrowing Rate, and Corporate Tax Rate.', 'right', 'w-64') }}
+									{{ _self.tooltip('Composite market risk metrics: equity volatility index, equity risk premium (ERP), corporate borrowing benchmarks, and statutory corporate tax rates.', 'right', 'w-64') }}
 								</h3>
 								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
 									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
@@ -489,7 +489,7 @@
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Labor & Consumer Credit Health</span>
-									{{ _self.tooltip('Tracks Okun\'s Law Unemployment Rate against Basel II/III ASRF Consumer Default Rate (%). Visualizes the direct link between joblessness, real wage erosion, and retail loan default spikes.', 'left', 'w-64') }}
+									{{ _self.tooltip('Macroeconomic labor market unemployment rate alongside consumer and retail credit default rates.', 'left', 'w-64') }}
 								</h3>
 								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
 									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
@@ -503,7 +503,7 @@
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Commodities & Raw Materials</span>
-									{{ _self.tooltip('Schwartz-Smith multi-factor commodity indices (Baseline 100). Compares Energy, Industrial Metals, and Agricultural commodities to track input cost inflation and supply shocks across manufacturing, dining, and consumer goods.', 'right', 'w-64') }}
+									{{ _self.tooltip('Commodity price indices tracking energy, industrial metals, and agricultural raw materials.', 'right', 'w-64') }}
 								</h3>
 								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
 									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
@@ -517,7 +517,7 @@
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Real Estate & Property Valuation</span>
-									{{ _self.tooltip('Property valuation indices (Baseline 100). Connects DiPasquale-Wheaton Commercial Real Estate (CRE cap rates & spatial rent) and Jorgenson Residential User Cost of Capital (mortgage rates & housing affordability).', 'left', 'w-64') }}
+									{{ _self.tooltip('Commercial real estate (CRE) and residential property price indices evaluating asset valuation and housing market trends.', 'left', 'w-64') }}
 								</h3>
 								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
 									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
@@ -531,7 +531,7 @@
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Global Trade & Freight Logistics</span>
-									{{ _self.tooltip('Indices of international commerce (Baseline 100). Combines the Mundell-Fleming Exchange Rate Index (currency strength vs export competitiveness) and Cobweb Theorem Global Freight Rates (shipping capacity utilization & spot charter volatility).', 'right', 'w-64') }}
+									{{ _self.tooltip('Foreign exchange currency valuation index and global ocean freight spot charter rate indices.', 'right', 'w-64') }}
 								</h3>
 								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
 									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
@@ -545,7 +545,7 @@
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Consumer Sentiment Index</span>
-									{{ _self.tooltip('Tracks consumer sentiment driven by the Misery Index (Inflation + Unemployment) and market volatility.', 'left', 'w-64') }}
+									{{ _self.tooltip('Consumer sentiment index measuring household financial confidence, economic outlook, and consumer demand conditions.', 'left', 'w-64') }}
 								</h3>
 								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
 									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
@@ -559,7 +559,7 @@
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Fiscal & Defense Appropriations</span>
-									{{ _self.tooltip('Tracks structural government spending and automatic stabilizers (Baseline 100). Counter-cyclical policy expands spending during recessions and contracts during booms, with exogenous Poisson jumps capturing defense surges.', 'right', 'w-64') }}
+									{{ _self.tooltip('Government fiscal appropriations index tracking public sector expenditure and budget outlays.', 'right', 'w-64') }}
 								</h3>
 								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
 									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
@@ -573,7 +573,7 @@
 							<div class="flex justify-between items-center mb-6">
 								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
 									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Interbank Liquidity & Credit Plumbing</span>
-									{{ _self.tooltip('Tracks the Interbank Liquidity Spread (FRA-OIS / TED Spread proxy in bps) and Corporate Credit Spread (bps). Cox-Ingersoll-Ross mean reversion ensures a positive baseline (15 bps), while Poisson jumps simulate overnight interbank freezes during market stress.', 'left', 'w-64') }}
+									{{ _self.tooltip('Interbank liquidity spread (FRA-OIS / TED spread proxy) and benchmark corporate investment-grade credit spreads.', 'left', 'w-64') }}
 								</h3>
 								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
 									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
@@ -581,20 +581,6 @@
 							</div>
 							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
 								<canvas id="macroInterbankLiquidityChart"></canvas>
-							</div>
-						</div>
-						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Technology & Total Factor Productivity</span>
-									{{ _self.tooltip('Solow-Swan Neoclassical Growth Model (Baseline 100). Geometric Brownian Motion drives continuous technological innovation (1.5%/yr drift), while Poisson jumps model paradigm shifts (e.g. AI, Internet) that permanently expand the economy\'s potential GDP capacity frontier.', 'right', 'w-64') }}
-								</h3>
-								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-								</button>
-							</div>
-							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="macroTfpChart"></canvas>
 							</div>
 						</div>
 					</div>

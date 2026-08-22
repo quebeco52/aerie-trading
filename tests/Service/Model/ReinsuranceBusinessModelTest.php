@@ -98,7 +98,7 @@ class ReinsuranceBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($realizedVariableMargin, $result->clampedMargin, 0.0001);
     }
 
-    public function testCatBondAttachmentBreachAndRetrocessionShielding(): void
+    public function testCatBondAttachmentBreachAbsorbsUncappedTailRisk(): void
     {
         $stock = new Stock();
         $stock->setTicker('REIN');
@@ -135,9 +135,47 @@ class ReinsuranceBusinessModelTest extends TestCase
         $expectedCatBondRevenue = $expectedRevenue * ReinsuranceBusinessModel::CAT_BOND_WEIGHT * (1.0 - ReinsuranceBusinessModel::CAT_BOND_DEFAULT_HAIRCUT);
         $this->assertEqualsWithDelta($expectedCatBondRevenue, $result->streamRevenue['catastrophe_bonds'], 1.0);
 
-        // Underwriting loss should be capped by retrocession shielding (MAX_REINSURED_LOSS_SHOCK * treatyWeight)
-        $maxShock = ReinsuranceBusinessModel::MAX_REINSURED_LOSS_SHOCK * ReinsuranceBusinessModel::TREATY_REINSURANCE_WEIGHT;
-        $expectedMaxMargin = $realizedVariableMargin + $maxShock;
-        $this->assertLessThanOrEqual($expectedMaxMargin + 0.001, $result->clampedMargin);
+        // Reinsurers absorb full uncapped tail severity (Z = -3.0 * CATASTROPHE_LOSS_SCALAR 0.15 = 0.45 shock)
+        $expectedShock = 3.0 * ReinsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR;
+        $expectedMargin = $realizedVariableMargin + $expectedShock;
+        $this->assertEqualsWithDelta($expectedMargin, $result->clampedMargin, 0.0001);
+    }
+
+    public function testExtremeCatastropheExpandsVariableMarginBeyondStandardCap(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('REIN');
+        $stock->setBeta('0.9');
+        $stock->setTotalEquity('30000000000');
+
+        $mathMock = $this->createMock(MathUtility::class);
+        // Extreme black swan catastrophe: claimZ = -8.0
+        $mathMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, 0.0, -8.0);
+        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $macro = new MacroStateDTO(
+            outputGapEma: 0.0,
+            yield10yEma: 0.04,
+            policyRateEma: 0.02
+        );
+
+        $expectedRevenue = 10_000_000_000.0;
+        $realizedVariableMargin = 0.60;
+
+        $result = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: $expectedRevenue,
+            realizedVariableMargin: $realizedVariableMargin,
+            fixedCosts: 1_000_000_000.0,
+            baselineVol: 0.10,
+            macroState: $macro,
+            mathUtility: $mathMock
+        );
+
+        // 0.60 baseline + (8.0 * 0.15 = 1.20 shock) = 1.80 variable margin (exceeds default standard cap 1.50)
+        $expectedMargin = 0.60 + (8.0 * ReinsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR);
+        $this->assertGreaterThan(1.50, $result->clampedMargin);
+        $this->assertEqualsWithDelta($expectedMargin, $result->clampedMargin, 0.0001);
+        $this->assertLessThanOrEqual(ReinsuranceBusinessModel::MAX_REINSURANCE_MARGIN_CLAMP, $result->clampedMargin);
     }
 }

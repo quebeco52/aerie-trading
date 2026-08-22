@@ -67,11 +67,31 @@ class EducationBusinessModelTest extends TestCase
         $expansionMacro = new MacroStateDTO(governmentSpendingIndexEma: 130.0);
 
         $mathMock = $this->createMock(MathUtility::class);
-        $mathMock->method('generatePersistentZ')->willReturn(0.0);
-
         $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $baseMacro, $mathMock);
         $expansionResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $expansionMacro, $mathMock);
 
         $this->assertGreaterThan($baseResult->streamRevenue['degree_tuition_enrollment'], $expansionResult->streamRevenue['degree_tuition_enrollment']);
+    }
+
+    public function testUnemploymentSpikeBoostsDegreeEnrollment(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('STRA');
+        $stock->setBeta('1.0');
+
+        $lowUnemploymentMacro = new MacroStateDTO(unemploymentRateEma: 0.040);
+        $highUnemploymentMacro = new MacroStateDTO(unemploymentRateEma: 0.080);
+
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $lowUnemploymentMacro, $mathMock);
+        $surgeResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $highUnemploymentMacro, $mathMock);
+
+        $this->assertGreaterThan(
+            $baseResult->streamRevenue['degree_tuition_enrollment'],
+            $surgeResult->streamRevenue['degree_tuition_enrollment'],
+            'Elevated unemployment must drive countercyclical workforce retraining and boost degree tuition enrollment.'
+        );
     }
 }

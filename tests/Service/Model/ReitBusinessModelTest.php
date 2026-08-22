@@ -356,13 +356,11 @@ class ReitBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setSharesOutstanding('10000000'); // 10M shares
 
-        // Sustainable Dividend Base: EPS + quarterly depreciation per share
-        // Invested capital = $800M, depRate = 5% => annual dep = $40M => quarterly dep = $10M
-        // Quarterly dep per share = $10M / 10M shares = $1.00
-        // Quarterly EPS = $0.50 => Sustainable base = $0.50 + $1.00 = $1.50
+        // In EarningsEngine, quarterlyEps for a REIT is already reported as FFO per share (Net Income + Depreciation).
+        // Therefore, the sustainable dividend base is exactly quarterlyEps without double-adding depreciation.
         $sustainableBase = $model->getSustainableDividendBase(
             $stock,
-            quarterlyEps: 0.50,
+            quarterlyEps: 1.50,
             investedCapital: 800000000.0,
             depRate: 0.05
         );
@@ -380,5 +378,115 @@ class ReitBusinessModelTest extends TestCase
             dividendSupportValue: 70.0
         );
         $this->assertEqualsWithDelta(59.0, $fairValue, 0.0001);
+    }
+
+    public function testDynamicRoicDoesNotDoubleCountDepreciation(): void
+    {
+        $model = new ReitBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('PLZA');
+        $stock->setTotalEquity('500000000');
+        $stock->setWholesaleDebt('500000000');
+        $stock->setCorporateTreasury('0');
+
+        // ebit = 20M quarterly on 1B invested capital => 8% annualized NOI return
+        $ebit = 20_000_000.0;
+        $investedCapital = 1_000_000_000.0;
+        $taxRate = 0.00;
+
+        $return = $model->updateDynamicRoic($stock, $ebit, $investedCapital, $ebit, $taxRate);
+
+        // truePostTaxReturn must be exactly 8% (0.08), NOT 8% + 4% dep = 12%
+        $this->assertEqualsWithDelta(0.08, $return, 0.0001);
+        $this->assertEqualsWithDelta(0.08, (float) $stock->getCurrentRoic(), 0.0001);
+
+        $econReturn = $model->calculateEconomicReturn($stock, $ebit, $investedCapital);
+        $this->assertEqualsWithDelta(0.08, $econReturn, 0.0001);
+    }
+
+    public function testSaturationPenaltyEffectivelyReducesEffectiveRoic(): void
+    {
+        $model = new ReitBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('PLZA');
+        $stock->setBaselineRoic('0.08');
+        // Scaled invested capital: 800 Billion
+        $stock->setTotalEquity('450000000000');
+        $stock->setWholesaleDebt('350000000000');
+        $stock->setCorporateTreasury('0');
+
+        $macro = $this->createMacroState(yield10y: 0.04, equityRiskPremium: 0.045);
+        $math = new MathUtility();
+
+        $metrics = $model->getTargetMetrics($stock, $macro, $math);
+
+        // Baseline Cap Rate ~ 8.5%, but with scale saturation penalty, effectiveRoic must be reduced
+        $this->assertLessThan(0.085, $metrics['baseline_roic']);
+        $this->assertGreaterThan(0.01, $metrics['baseline_roic']);
+    }
+
+    public function testMultiQuarterReitCapitalAllocationRemainsStable(): void
+    {
+        $ledgerService = $this->createMock(\App\Service\Corporate\CorporateLedgerService::class);
+        $metrics = new \App\Service\Math\CorporateMetrics();
+        $math = new MathUtility();
+        $debtEngine = new \App\Service\Corporate\DebtEngine($math, $metrics);
+        $capExEngine = new \App\Service\Corporate\CapExEngine();
+        $treasuryEngine = new \App\Service\Corporate\TreasuryEngine($metrics, $debtEngine, $capExEngine, $math);
+        $allocEngine = new \App\Service\Corporate\CapitalAllocationEngine(
+            $ledgerService,
+            $metrics,
+            $debtEngine,
+            $math,
+            $treasuryEngine
+        );
+
+        $stock = new Stock();
+        $stock->setTicker('PLZA');
+        $stock->setIndustry('REIT - Office');
+        $stock->setTotalEquity('450000000000.00');
+        $stock->setWholesaleDebt('350000000000.00');
+        $stock->setCorporateTreasury('50000000000.00');
+        $stock->setRetainedEarnings('50000000000.00');
+        $stock->setSharesOutstanding('1000000000');
+        $stock->setPrice('100.00');
+        $stock->setTargetPayoutRatio('0.85');
+        $stock->setDividendSpeed('0.02');
+        $stock->setDepreciationRate('0.04');
+        $stock->setBaselineRoic('0.08');
+        $stock->setOperatingMargin('0.55');
+
+        $macro = $this->createMacroState();
+
+        $initialEquity = (float) $stock->getTotalEquity();
+
+        // Simulate 20 quarters (5 years) of capital allocation cycles
+        for ($q = 0; $q < 20; $q++) {
+            $quarterlyNopat = 10_000_000_000.0; // $10B quarterly NOI
+            $quarterlyEps = $quarterlyNopat / 1_000_000_000; // $10/share
+            $annualEps = $quarterlyEps * 4.0;
+            $fcfPerShare = $quarterlyEps * 0.80; // $8/share FCF
+
+            $allocEngine->allocateCapital(
+                $stock,
+                $annualEps,
+                $fcfPerShare,
+                (float) $stock->getPrice(),
+                (float) $stock->getSharesOutstanding(),
+                $macro,
+                $quarterlyNopat
+            );
+        }
+
+        $finalEquity = (float) $stock->getTotalEquity();
+        $finalDebt = (float) $stock->getWholesaleDebt();
+
+        // Equity should grow organically with inflation and retained earnings, but NOT explode 5x-10x
+        $this->assertLessThan($initialEquity * 2.5, $finalEquity, 'REIT equity must not explode exponentially.');
+        $this->assertGreaterThan($initialEquity * 0.5, $finalEquity, 'REIT equity should remain solvent.');
+
+        // Debt should stay within reasonable bounds relative to equity
+        $deRatio = $finalDebt / max(1.0, $finalEquity);
+        $this->assertLessThan(3.0, $deRatio, 'Debt to equity ratio must remain within healthy industry limits.');
     }
 }

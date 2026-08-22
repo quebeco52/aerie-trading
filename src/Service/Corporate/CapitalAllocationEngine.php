@@ -121,13 +121,6 @@ class CapitalAllocationEngine
         $dt = 0.25;
         $ctx->physicalAssetAppreciation = $ctx->investedCapital * ($ctx->macroState->inflationEma * $dt);
         
-        if ($ctx->businessModel === 'reit') {
-            $customDepreciation = (float) $stock->getDepreciationRate();
-            $depRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($ctx->industry);
-            $absoluteDepreciation = $ctx->investedCapital * $depRate;
-            $ctx->physicalAssetAppreciation += ($absoluteDepreciation / 4.0);
-        }
-        
         $ctx->health = $this->debtEngine->analyzeDebtHealth($stock, $ctx->macroState);
         
         $ebit = $ctx->health->rawMetrics->ebit ?? 0.0;

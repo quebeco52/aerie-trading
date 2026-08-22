@@ -45,6 +45,8 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     public const SERVICES_VARIANCE_RATIO = 0.20;
     /** Fraction of energy price spikes passed through based on specialty pricing power. */
     public const INFLATION_PENALTY_SCALAR = 0.60;
+    /** Low scalar sensitivity of machinery equipment orders to aggregate industrial capital capacity overhang. */
+    public const CAPITAL_OVERHANG_SCALAR = 0.15;
 
     // --- Tail Risk & Shock Events ---
     /** Negative z-score threshold indicating a severe specialty supply chain or parts disruption. */
@@ -135,7 +137,8 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
 
         // --- Macro Sensitivities ---
         // Equipment is highly exposed to GDP, but cushioned by the backlog
-        $macroEquipmentBoost = ($macroState->outputGapEma * self::MACRO_GDP_SENSITIVITY * $beta) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
+        $overhangDrag = ($macroState->capitalStockOverhangEma * self::CAPITAL_OVERHANG_SCALAR) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
+        $macroEquipmentBoost = (($macroState->outputGapEma * self::MACRO_GDP_SENSITIVITY * $beta) * (1.0 - self::BACKLOG_DAMPING_FACTOR)) - $overhangDrag;
 
         // --- Tail Risk Events ---
         $dealMultiplier = 1.0;

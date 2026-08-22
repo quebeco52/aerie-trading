@@ -79,4 +79,26 @@ class SpecialtyIndustrialMachineryBusinessModelTest extends TestCase
             $shockResult->clampedMargin
         );
     }
+
+    public function testCapitalStockOverhangDampensEquipmentSales(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('SPEC_MACH');
+        $stock->setBeta('1.0');
+
+        $scarcityMacro = new MacroStateDTO(capitalStockOverhangEma: -0.10);
+        $overhangMacro = new MacroStateDTO(capitalStockOverhangEma: 0.10);
+
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $scarcityResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $scarcityMacro, $mathMock);
+        $overhangResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $overhangMacro, $mathMock);
+
+        $this->assertGreaterThan(
+            $overhangResult->streamRevenue['equipment_sales'],
+            $scarcityResult->streamRevenue['equipment_sales'],
+            'Excess capital capacity overhang must dampen specialty equipment orders relative to capital scarcity.'
+        );
+    }
 }

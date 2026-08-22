@@ -115,11 +115,42 @@ class ShadowBankBusinessModelTest extends TestCase
             'Residential property index growth should expand mortgage origination fee volume.'
         );
 
-        // Depressed residential property values increase collateral loss provision drag
         $this->assertGreaterThan(
             $boomResult->clampedMargin,
             $depressedResult->clampedMargin,
             'Depressed residential property values must increase credit provision costs on mortgage portfolios.'
         );
+    }
+
+    public function testInterbankLiquiditySpreadCompressesShadowBankMortgageNIM(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('RITM');
+        $stock->setBeta('1.0');
+
+        $calmMacro = new MacroStateDTO(
+            policyRateEma: 0.04,
+            yield30yEma: 0.06,
+            interbankLiquiditySpreadEma: 0.0010
+        );
+
+        $tedSpikeMacro = new MacroStateDTO(
+            policyRateEma: 0.04,
+            yield30yEma: 0.06,
+            interbankLiquiditySpreadEma: 0.0200
+        );
+
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $calmResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $calmMacro, $mathMock);
+        $spikeResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $tedSpikeMacro, $mathMock);
+
+        $this->assertGreaterThan(
+            $calmResult->clampedMargin,
+            $spikeResult->clampedMargin,
+            'TED spread spike raises shadow bank repo borrowing costs, squeezes mortgage NIM, and expands variable cost ratio.'
+        );
+        $this->assertLessThan($calmResult->ebit, $spikeResult->ebit);
     }
 }

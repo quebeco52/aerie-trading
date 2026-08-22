@@ -112,13 +112,13 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
     // --- Aggressive Property Acquisition Borrowing ---
     /** Base probability of REIT expanding balance sheet debt to fund property acquisitions. */
-    public const DEBT_EXPANSION_BASE_PROB   = 0.80;
+    public const DEBT_EXPANSION_BASE_PROB   = 0.40;
     /** Sensitivity of debt expansion probability to favorable yield spread multiplier. */
-    public const DEBT_EXPANSION_PROB_MULT   = 0.20;
+    public const DEBT_EXPANSION_PROB_MULT   = 0.50;
     /** Base fraction of debt capacity utilized during property acquisition cycle. */
-    public const DEBT_EXPANSION_BASE_AGGR   = 0.15;
+    public const DEBT_EXPANSION_BASE_AGGR   = 0.10;
     /** Sensitivity of debt expansion utilization to positive yield spreads. */
-    public const DEBT_EXPANSION_AGGR_MULT   = 0.35;
+    public const DEBT_EXPANSION_AGGR_MULT   = 0.25;
 
     // --- Valuation & Lease Resistance Moat ---
     /** Weight given to earnings capitalization in REIT intrinsic fair value blending. */
@@ -144,11 +144,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $blendedCapRate = min($maxCapRate, ($baselineRoic * (1.0 - $portfolioTurnoverRate)) + ($targetCapRate * $portfolioTurnoverRate));
         $stock->setBaselineRoic((string) max(0.01, $blendedCapRate));
 
-        $industry = $stock->getIndustry() ?: 'General';
-        $customDepreciation = (float) $stock->getDepreciationRate();
-        $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : (\App\Data\Sectors::INDUSTRY_METRICS[$industry]['depreciation'] ?? self::DEFAULT_DEPRECIATION_RATE);
-
-        $targetEbitYield = max(0.01, $blendedCapRate - $depreciationRate);
+        $targetEbitYield = $blendedCapRate;
 
         $ttmRoic = (float) $stock->getRoicTtm();
         if ($ttmRoic !== 0.0) {
@@ -157,8 +153,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
         $metrics = new \App\Service\Math\CorporateMetrics();
         $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, $investedCapital, $macroState);
-        $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
-        $effectiveRoic = max($waccBase, $targetEbitYield - $saturationPenalty);
+        $effectiveRoic = max(0.01, $targetEbitYield - $saturationPenalty);
 
         return [
             'invested_capital' => $investedCapital,
@@ -221,10 +216,11 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $creShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;
         $resShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
         $blendedPropertyShift = ($creShift * 0.70) + ($resShift * 0.30);
+        $marketLeaseReversion = $blendedPropertyShift * self::PORTFOLIO_TURNOVER_RATE;
 
         // --- Clamped Revenue Streams ---
-        $leaseRevenue       = max(0.0, $expectedRevenue * $leaseWeight * (1.0 + $leaseShock + $rentEscalator + $blendedPropertyShift));
-        $hospitalityRevenue = max(0.0, $expectedRevenue * $hospitalityWeight * (1.0 + $hospitalityShock + ($creShift * 0.5)));
+        $leaseRevenue       = max(0.0, $expectedRevenue * $leaseWeight * (1.0 + $leaseShock + $rentEscalator + $marketLeaseReversion));
+        $hospitalityRevenue = max(0.0, $expectedRevenue * $hospitalityWeight * (1.0 + $hospitalityShock + ($creShift * 0.25)));
 
         $streamRevenues = [
             'lease'       => $leaseRevenue,
@@ -316,20 +312,14 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
     public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float
     {
-        $industry = $stock->getIndustry() ?: 'General';
         $thresholds = $this->getModelThresholds();
         $kappa = $thresholds['reversion_speed'] ?? 0.20;
         $moatSpread = $thresholds['moat_spread'] ?? 0.005;
 
-        $customDepreciation = (float) $stock->getDepreciationRate();
-        $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : (\App\Data\Sectors::INDUSTRY_METRICS[$industry]['depreciation'] ?? self::DEFAULT_DEPRECIATION_RATE);
-
-        $absoluteDepreciation = $investedCapital * $depreciationRate;
-        $quarterlyDepreciation = $absoluteDepreciation / 4.0;
-
-        $noi = $ebit + $quarterlyDepreciation;
-
-        $truePostTaxReturn = $investedCapital > 0 ? ($noi / $investedCapital) * self::ROIC_ANNUALIZATION_MULT : 0.0;
+        // In EarningsEngine, $ebit is calculated as actualRevenue - (variableCosts + fixedCosts) without deducting depreciation.
+        // Therefore, $ebit already represents Net Operating Income (NOI).
+        $effectiveCapital = max(1.0, abs($investedCapital));
+        $truePostTaxReturn = ($ebit / $effectiveCapital) * self::ROIC_ANNUALIZATION_MULT;
 
         $stock->setCurrentRoic((string) max(self::MIN_ROIC_CLAMP, min(self::MAX_ROIC_CLAMP, $truePostTaxReturn)));
 
@@ -358,15 +348,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
     public function calculateEconomicReturn(Stock $stock, float $quarterlyNopat, float $investedCapital): float
     {
-        $industry = $stock->getIndustry() ?: 'General';
-        $customDepreciation = (float) $stock->getDepreciationRate();
-        $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : (\App\Data\Sectors::INDUSTRY_METRICS[$industry]['depreciation'] ?? self::DEFAULT_DEPRECIATION_RATE);
-
-        $absoluteDepreciation = $investedCapital * $depreciationRate;
-        $quarterlyDepreciation = $absoluteDepreciation / 4.0;
-        $noi = $quarterlyNopat + $quarterlyDepreciation;
-
-        return $investedCapital > 0 ? ($noi / $investedCapital) * self::ROIC_ANNUALIZATION_MULT : 0.0;
+        return $investedCapital > 0 ? ($quarterlyNopat / $investedCapital) * self::ROIC_ANNUALIZATION_MULT : 0.0;
     }
 
     public function getInterestCoverage(float $ebit, float $interestExpense, float $depreciation = 0.0, float $interestIncome = 0.0): float
@@ -417,9 +399,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
     public function getSustainableDividendBase(Stock $stock, float $quarterlyEps, float $investedCapital, float $depRate): float
     {
-        $shares = max(1.0, (float) $stock->getSharesOutstanding());
-        $quarterlyDepreciationPerShare = (($investedCapital * $depRate) / $shares) / 4.0;
-        return $quarterlyEps + $quarterlyDepreciationPerShare;
+        return $quarterlyEps;
     }
 
     public function getMarginReversionSpeed(): float

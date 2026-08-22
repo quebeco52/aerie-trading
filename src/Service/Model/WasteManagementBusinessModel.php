@@ -165,7 +165,7 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         $fuelLagDrag = $energyShift > 0.0 ? ($energyShift * self::FUEL_SURCHARGE_LAG_PENALTY * $beta) : 0.0;
 
         // Apply structurally driven penalties directly to the baseline variable margin
-        $rawMargin = $realizedVariableMargin - $fuelLagDrag - $disasterPenalty;
+        $rawMargin = $realizedVariableMargin + $fuelLagDrag + $disasterPenalty;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock is whichever stream deviated the most, overridden by tail events
