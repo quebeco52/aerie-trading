@@ -392,4 +392,31 @@ class MathUtilityTest extends TestCase
         $this->assertEqualsWithDelta($expectedXi, $result['xi'], 0.0001);
         $this->assertEqualsWithDelta(exp($result['chi'] + $result['xi']), $result['spot'], 0.0001);
     }
+
+    public function testCalculateReversionPullWithCustomDt(): void
+    {
+        $currentReturn = 0.20;
+        $wacc = 0.08;
+        $moatSpread = 0.02;
+        $baseKappa = 0.40;
+        $dtQuarterly = 0.25;
+
+        $pullQuarter = $this->mathUtility->calculateReversionPull(
+            currentReturn: $currentReturn,
+            wacc: $wacc,
+            baseKappa: $baseKappa,
+            moatSpread: $moatSpread,
+            dt: $dtQuarterly
+        );
+
+        $equilibrium = $wacc + $moatSpread; // 0.10
+        $excessRatio = ($currentReturn - $equilibrium) / $equilibrium; // (0.20 - 0.10) / 0.10 = 1.0
+        $effectiveKappa = $baseKappa * (1.0 + 0.50 * $excessRatio); // 0.40 * 1.50 = 0.60
+        $expectedWeight = 1.0 - exp(-$effectiveKappa * $dtQuarterly); // 1 - exp(-0.15) ≈ 0.139292
+        $expectedPull = ($equilibrium - $currentReturn) * $expectedWeight;
+
+        $this->assertEqualsWithDelta($expectedPull, $pullQuarter, 0.00001);
+        $this->assertLessThan(0.0, $pullQuarter, 'Excess return above equilibrium should pull return downwards.');
+    }
 }
+

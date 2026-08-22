@@ -58,6 +58,86 @@
         </div>
     </div>
 
+    <h4 class="mb-3">Interbank Plumbing & Systemic Risk</h4>
+    <div class="row mb-5">
+        <div class="col-md-3">
+            <div class="card text-white {{ macro_state.interbank_liquidity_spread|default(0.0015) > 0.005 ? 'bg-danger' : 'bg-info' }} mb-3">
+                <div class="card-header">TED / Interbank Spread</div>
+                <div class="card-body">
+                    <h2 class="card-title">{{ (macro_state.interbank_liquidity_spread|default(0.0015) * 10000)|number_format(0) }} bps</h2>
+                    <p class="card-text small">Baseline: 15 bps (CIR Drift)</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning text-dark mb-3">
+                <div class="card-header">Corporate Credit Spread</div>
+                <div class="card-body">
+                    <h2 class="card-title">{{ (macro_state.macro_credit_spread|default(0.02) * 10000)|number_format(0) }} bps</h2>
+                    <p class="card-text small">Merton IG Spread</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-danger mb-3">
+                <div class="card-header">Market Volatility (VIX)</div>
+                <div class="card-body">
+                    <h2 class="card-title">{{ (macro_state.market_volatility|default(0.15) * 100)|number_format(2) }}%</h2>
+                    <p class="card-text small">Macro Vol Anchor: 15.0%</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-success mb-3">
+                <div class="card-header">Retail Default Rate</div>
+                <div class="card-body">
+                    <h2 class="card-title">{{ (macro_state.retail_default_rate|default(0.025) * 100)|number_format(2) }}%</h2>
+                    <p class="card-text small">Vasicek ASRF Consumer PD</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <h4 class="mb-3">Solow-Swan Neoclassical Growth & Technology</h4>
+    <div class="row mb-5">
+        <div class="col-md-3">
+            <div class="card text-white bg-info mb-3">
+                <div class="card-header">TFP Index (Live)</div>
+                <div class="card-body">
+                    <h2 class="card-title">{{ (macro_state.total_factor_productivity_index|default(100.0))|number_format(2) }}</h2>
+                    <p class="card-text small">Baseline: 100.0 (GBM + Jumps)</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-primary mb-3">
+                <div class="card-header">TFP Index (EMA)</div>
+                <div class="card-body">
+                    <h2 class="card-title">{{ (macro_state.total_factor_productivity_index_ema|default(100.0))|number_format(2) }}</h2>
+                    <p class="card-text small">Smoothed Tech Frontier</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-success mb-3">
+                <div class="card-header">Potential GDP Index</div>
+                <div class="card-body">
+                    <h2 class="card-title">{{ (macro_state.potential_gdp_index|default(1.0))|number_format(3) }}x</h2>
+                    <p class="card-text small">Real Labor (0.5%) + TFP Growth</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-dark mb-3">
+                <div class="card-header">District Nominal GDP</div>
+                <div class="card-body">
+                    <h2 class="card-title">${{ (50.00 * macro_state.nominal_gdp_index|default(1.0))|number_format(2) }}T</h2>
+                    <p class="card-text small">Potential * (1 + Output Gap)</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <h4 class="mb-3">Live Sector Multiples (P/E)</h4>
     <div class="card">
         <div class="card-body p-0">

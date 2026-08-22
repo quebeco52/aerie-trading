@@ -25,3 +25,6 @@ public const NIM_BASE_SPREAD_BUFFER = 0.005;
 ## Testing
 * All tests must be written in PHPUnit.
 * After implementing a new model or a new feature, you must write a new test for it and test it.
+
+## DO NOT make migration files only make entity changes, doctrine will create the migration files.
+

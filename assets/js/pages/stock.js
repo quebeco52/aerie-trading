@@ -126,6 +126,8 @@ function initStockPage() {
     macroTradeLogisticsChartInstance = destroyChart(macroTradeLogisticsChartInstance);
     macroSentimentChartInstance = destroyChart(macroSentimentChartInstance);
     macroGovtSpendingChartInstance = destroyChart(macroGovtSpendingChartInstance);
+    macroInterbankLiquidityChartInstance = destroyChart(macroInterbankLiquidityChartInstance);
+    macroTfpChartInstance = destroyChart(macroTfpChartInstance);
     profitEngineChartInstance = destroyChart(profitEngineChartInstance);
     debtEquityChartInstance = destroyChart(debtEquityChartInstance);
     creditHealthChartInstance = destroyChart(creditHealthChartInstance);
@@ -240,6 +242,30 @@ function initStockPage() {
             if (gdpEl && payload.macro.nominal_gdp_index !== undefined) {
                 const gdpValue = 50.00 * payload.macro.nominal_gdp_index;
                 gdpEl.textContent = '$' + gdpValue.toFixed(2) + 'T';
+            }
+
+            const tedEl = document.getElementById('macro-interbank-spread');
+            if (tedEl && payload.macro.interbank_liquidity_spread !== undefined) {
+                const tedBps = payload.macro.interbank_liquidity_spread * 10000;
+                tedEl.textContent = tedBps.toFixed(0) + ' bps';
+                if (tedBps > 100) {
+                    tedEl.className = 'text-lg font-bold text-tertiary animate-pulse';
+                } else if (tedBps > 40) {
+                    tedEl.className = 'text-lg font-bold text-yellow-400';
+                } else {
+                    tedEl.className = 'text-lg font-bold text-on-surface';
+                }
+            }
+
+            const creditSpreadEl = document.getElementById('macro-credit-spread');
+            if (creditSpreadEl && payload.macro.macro_credit_spread !== undefined) {
+                const csBps = payload.macro.macro_credit_spread * 10000;
+                creditSpreadEl.textContent = csBps.toFixed(0) + ' bps';
+            }
+
+            const tfpEl = document.getElementById('macro-tfp');
+            if (tfpEl && payload.macro.total_factor_productivity_index !== undefined) {
+                tfpEl.textContent = parseFloat(payload.macro.total_factor_productivity_index).toFixed(1);
             }
         }
 
@@ -1234,6 +1260,8 @@ let macroPropertyChartInstance = null;
 let macroTradeLogisticsChartInstance = null;
 let macroSentimentChartInstance = null;
 let macroGovtSpendingChartInstance = null;
+let macroInterbankLiquidityChartInstance = null;
+let macroTfpChartInstance = null;
 
 function updateMacroCharts() {
     if (!rawReports || rawReports.length === 0) return;
@@ -1247,6 +1275,8 @@ function updateMacroCharts() {
     let sentimentData = [];
     let fxEmaData = [], metalsEmaData = [], govtSpendingEmaData = [], creEmaData = [];
     let retailDefaultData = [], agriEmaData = [], freightEmaData = [], residentialEmaData = [];
+    let interbankSpreadBpsData = [], creditSpreadBpsData = [];
+    let tfpEmaData = [], potentialGdpData = [];
 
     // Expand and cap the macro charts to show exactly the last 100 quarters (25 years)
     const slicedReports = rawReports.slice(-100);
@@ -1304,6 +1334,20 @@ function updateMacroCharts() {
         agriEmaData.push(parseFloat(report.agricultural_commodity_index_ema || report.agricultural_commodity_index || 100.0));
         freightEmaData.push(parseFloat(report.freight_rate_index_ema || report.freight_rate_index || 100.0));
         residentialEmaData.push(parseFloat(report.residential_property_index_ema || report.residential_property_index || 100.0));
+
+        let rawInterbank = report.interbank_liquidity_spread_ema ?? report.interbank_liquidity_spread ?? report.interbankLiquiditySpreadEma ?? report.interbankLiquiditySpread ?? 0.0015;
+        interbankSpreadBpsData.push(parseFloat(rawInterbank) * 10000);
+
+        let rawCreditSpread = report.macro_credit_spread_ema ?? report.macro_credit_spread ?? report.macroCreditSpreadEma ?? report.macroCreditSpread ?? 0.020;
+        creditSpreadBpsData.push(parseFloat(rawCreditSpread) * 10000);
+
+        let rawTfp = report.total_factor_productivity_index_ema ?? report.total_factor_productivity_index ?? report.totalFactorProductivityIndexEma ?? report.totalFactorProductivityIndex ?? 100.0;
+        tfpEmaData.push(parseFloat(rawTfp));
+
+        let nomGdp = parseFloat(report.nominal_gdp_index ?? 1.0);
+        let outGap = parseFloat(report.output_gap ?? 0.0);
+        let potGdp = report.potential_gdp_index ? parseFloat(report.potential_gdp_index) : (nomGdp / (1.0 + outGap));
+        potentialGdpData.push(potGdp * 100);
     });
 
     renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOverhangData);
@@ -1316,6 +1360,8 @@ function updateMacroCharts() {
     renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData);
     renderMacroSentimentChart(labels, sentimentData);
     renderMacroGovtSpendingChart(labels, govtSpendingEmaData);
+    renderMacroInterbankLiquidityChart(labels, interbankSpreadBpsData, creditSpreadBpsData);
+    renderMacroTfpChart(labels, tfpEmaData, potentialGdpData);
 }
 
 function renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOverhangData) {
@@ -1818,6 +1864,113 @@ function renderMacroGovtSpendingChart(labels, govtSpendingEmaData) {
             interaction: { mode: 'index', intersect: false },
             plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}` } } },
             scales: { y: { ticks: { callback: (val) => val } } }
+        }
+    });
+}
+
+function renderMacroInterbankLiquidityChart(labels, interbankSpreadBpsData, creditSpreadBpsData) {
+    if (macroInterbankLiquidityChartInstance) macroInterbankLiquidityChartInstance.destroy();
+    const ctx = document.getElementById('macroInterbankLiquidityChart');
+    if (!ctx) return;
+
+    macroInterbankLiquidityChartInstance = new Chart(ctx.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'TED / Interbank Spread',
+                    data: interbankSpreadBpsData,
+                    borderColor: '#38bdf8',
+                    backgroundColor: 'rgba(56, 189, 248, 0.20)',
+                    borderWidth: 2,
+                    tension: 0.2,
+                    fill: true,
+                    pointRadius: labels.length > 50 ? 0 : 2
+                },
+                {
+                    label: 'Corporate Credit Spread',
+                    data: creditSpreadBpsData,
+                    borderColor: '#f43f5e',
+                    backgroundColor: 'rgba(244, 63, 94, 0.10)',
+                    borderWidth: 2,
+                    borderDash: [4, 4],
+                    tension: 0.2,
+                    pointRadius: labels.length > 50 ? 0 : 2
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(0)} bps (${(ctx.raw / 100).toFixed(2)}%)`
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    ticks: { callback: (val) => val + ' bps' },
+                    title: { display: true, text: 'Basis Points (bps)' }
+                }
+            }
+        }
+    });
+}
+
+function renderMacroTfpChart(labels, tfpEmaData, potentialGdpData) {
+    if (macroTfpChartInstance) macroTfpChartInstance.destroy();
+    const ctx = document.getElementById('macroTfpChart');
+    if (!ctx) return;
+
+    macroTfpChartInstance = new Chart(ctx.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'TFP Index (Solow-Swan Technology)',
+                    data: tfpEmaData,
+                    borderColor: '#06b6d4',
+                    backgroundColor: 'rgba(6, 182, 212, 0.18)',
+                    borderWidth: 2,
+                    tension: 0.2,
+                    fill: true,
+                    pointRadius: labels.length > 50 ? 0 : 2
+                },
+                {
+                    label: 'Potential GDP Capacity (Base 100)',
+                    data: potentialGdpData,
+                    borderColor: '#818cf8',
+                    backgroundColor: 'rgba(129, 140, 248, 0.10)',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    tension: 0.2,
+                    pointRadius: labels.length > 50 ? 0 : 2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}`
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    ticks: { callback: (val) => val },
+                    title: { display: true, text: 'Index Level (Base 100)' }
+                }
+            }
         }
     });
 }

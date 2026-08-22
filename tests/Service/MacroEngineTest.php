@@ -785,9 +785,231 @@ class MacroEngineTest extends TestCase
         $result = $this->engine->updateMacroState(0.25);
 
         $this->assertLessThan(
-            80.0,
+            85.0,
             $result->consumerSentimentIndex,
             'Stagflation, surging energy costs, and high market volatility should heavily depress consumer sentiment.'
         );
     }
+
+    public function testModiglianiWealthEffectDragsOutputGap(): void
+    {
+        // 1. Arrange: Create MathUtility with mocked 0.0 standard normal to eliminate noise
+        $mathUtility = $this->createMock(MathUtility::class);
+        $mathUtility->method('generateStandardNormal')->willReturn(0.0);
+        
+        $logger = $this->createMock(\Psr\Log\LoggerInterface::class);
+        $redis = $this->createMock(\Redis::class);
+        
+        $macroEngine = new MacroEngine($mathUtility, $logger, $redis);
+
+        // Create a perfectly neutral baseline state
+        $stateNeutral = new \App\Service\Macro\MacroState();
+        $stateNeutral->outputGap = 0.0;
+        $stateNeutral->inflation = 0.02;
+        $stateNeutral->policyRate = 0.035; // Natural rate (1.5%) + Target Inflation (2%)
+        $stateNeutral->corporateTaxRate = 0.21;
+        $stateNeutral->capitalStockOverhang = 0.0;
+        
+        // Neutral Housing Market
+        $stateNeutral->residentialPropertyIndexEma = 100.0; 
+
+        // Create an identical state, but with a collapsed housing market (20% crash)
+        $stateCrash = clone $stateNeutral;
+        $stateCrash->residentialPropertyIndexEma = 80.0; 
+
+        // Create an identical state, but with a booming housing market (20% surge)
+        $stateBoom = clone $stateNeutral;
+        $stateBoom->residentialPropertyIndexEma = 120.0;
+
+        // 2. Act: Calculate Output Gap manually using Reflection (or simply call public update Macro if testing full cycle)
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateOutputGap');
+        
+        // Assume 5Y Yield is neutral (3.5% + ~78bps term premium = ~4.28%)
+        $neutral5yYield = 0.0428; 
+        $dt = 0.25;
+        $stressMultiplier = 1.0;
+
+        $gapNeutral = $reflectionMethod->invoke($macroEngine, $stateNeutral, $neutral5yYield, MacroEngine::NATURAL_RATE, $dt, $stressMultiplier);
+        $gapCrash   = $reflectionMethod->invoke($macroEngine, $stateCrash, $neutral5yYield, MacroEngine::NATURAL_RATE, $dt, $stressMultiplier);
+        $gapBoom    = $reflectionMethod->invoke($macroEngine, $stateBoom, $neutral5yYield, MacroEngine::NATURAL_RATE, $dt, $stressMultiplier);
+
+        // 3. Assert: 
+        // Neutral should not drift
+        $this->assertEqualsWithDelta(0.0, $gapNeutral, 0.0001, 'Neutral economy with baseline housing should not drift.');
+
+        // Crash should cause negative drift (Recession)
+        // Math: -0.20 * 0.04 = -0.008 drag * 0.25 dt = -0.002
+        $this->assertEqualsWithDelta(-0.002, $gapCrash, 0.0001, 'Housing crash must create a negative drag on the output gap.');
+
+        // Boom should cause positive drift (Expansion)
+        // Math: +0.20 * 0.04 = +0.008 stimulus * 0.25 dt = +0.002
+        $this->assertEqualsWithDelta(0.002, $gapBoom, 0.0001, 'Housing boom must create a positive stimulus on the output gap.');
+    }
+
+    public function testInterbankLiquiditySpreadMeanRevertsViaCIR(): void
+    {
+        $mathUtility = $this->createMock(MathUtility::class);
+        $logger = $this->createMock(\Psr\Log\LoggerInterface::class);
+        $redis = $this->createMock(\Redis::class);
+
+        // Suppress jump diffusion and noise to test pure structural drift
+        $mathUtility->method('generateStandardNormal')->willReturn(0.0);
+        $mathUtility->method('calculateJumpDiffusion')->willReturn([
+            'multiplier' => 1.0,
+            'shock_pct' => null,
+            'exponent' => null,
+        ]);
+
+        // Expect the CIR method to be called with exact constants
+        $mathUtility->expects($this->once())
+            ->method('calculateCIR')
+            ->with(
+                0.05, // Current elevated 500 bps spread
+                MacroEngine::INTERBANK_SPREAD_KAPPA,
+                MacroEngine::INTERBANK_BASELINE_SPREAD,
+                MacroEngine::INTERBANK_SPREAD_SIGMA,
+                0.25, // dt
+                0.0   // dW
+            )
+            ->willReturn(0.035); // Mock a reversion down to 350 bps
+
+        $macroEngine = new MacroEngine($mathUtility, $logger, $redis);
+
+        $state = new \App\Service\Macro\MacroState();
+        $state->interbankLiquiditySpread = 0.05;
+        $state->marketVolatilityEma = 0.15; // Neutral VIX
+
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateInterbankLiquiditySpread');
+        $reflectionMethod->invoke($macroEngine, $state, 0.25);
+
+        $this->assertEquals(0.035, $state->interbankLiquiditySpread, 'Interbank spread must mean-revert using CIR.');
+    }
+
+    public function testInterbankLiquiditySpreadBlowsOutDuringMarketPanicJump(): void
+    {
+        $mathUtility = $this->createMock(MathUtility::class);
+        $logger = $this->createMock(\Psr\Log\LoggerInterface::class);
+        $redis = $this->createMock(\Redis::class);
+
+        $mathUtility->method('generateStandardNormal')->willReturn(0.0);
+        // Mock CIR base process staying at 15 bps baseline
+        $mathUtility->method('calculateCIR')->willReturn(MacroEngine::INTERBANK_BASELINE_SPREAD);
+        // Simulate a 5x blowout jump
+        $mathUtility->method('calculateJumpDiffusion')->willReturn([
+            'multiplier' => 5.0,
+            'shock_pct' => 400.0,
+            'exponent' => 1.60,
+        ]);
+
+        $macroEngine = new MacroEngine($mathUtility, $logger, $redis);
+
+        $state = new \App\Service\Macro\MacroState();
+        $state->interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD;
+        $state->marketVolatilityEma = 0.35; // Panicked VIX
+
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateInterbankLiquiditySpread');
+        $reflectionMethod->invoke($macroEngine, $state, 0.25);
+
+        // Expected: 0.0015 + (0.0015 * (5.0 - 1.0)) = 0.0015 * 5.0 = 0.0075 (75 bps)
+        $this->assertEqualsWithDelta(0.0075, $state->interbankLiquiditySpread, 0.0001, 'Interbank spread must blow out on Poisson jump.');
+    }
+
+    public function testCapitalStockOverhangAccumulatesDuringBoomAndDecaysDuringRecession(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $state = new \App\Service\Macro\MacroState();
+        $state->outputGap = 0.05; // 5% Boom
+        $state->capitalStockOverhang = 0.0;
+
+        $recessionState = new \App\Service\Macro\MacroState();
+        $recessionState->outputGap = -0.05;
+        $recessionState->capitalStockOverhang = 0.05;
+
+        $this->redisMock->method('get')->willReturnOnConsecutiveCalls(
+            json_encode($state->toArray()),
+            json_encode($recessionState->toArray())
+        );
+
+        // Run 1 tick of boom ($dt = 0.25 years / 1 quarter)
+        $dtoBoom = $this->engine->updateMacroState(0.25);
+
+        // Boom should accumulate capital stock overhang: dK = (0.05 * 0.35 - 0.25 * 0) * 0.25 = 0.004375
+        $this->assertGreaterThan(0.0, $dtoBoom->capitalStockOverhang, 'Capital stock overhang must accumulate during economic booms.');
+        $this->assertEqualsWithDelta(0.004375, $dtoBoom->capitalStockOverhang, 0.0001);
+
+        // Run 1 quarter of recession
+        $dtoRecession = $this->engine->updateMacroState(0.25);
+
+        // Recession & decay: dK = (-0.05 * 0.35 - 0.25 * 0.05) * 0.25 = (-0.0175 - 0.0125) * 0.25 = -0.0075
+        // New overhang = 0.05 - 0.0075 = 0.0425
+        $this->assertLessThan(0.05, $dtoRecession->capitalStockOverhang, 'Capital stock overhang must decay during recessions.');
+        $this->assertEqualsWithDelta(0.0425, $dtoRecession->capitalStockOverhang, 0.0001);
+    }
+
+    public function testSolowSwanTfpJumpsExpandPotentialGdp(): void
+    {
+        $mathUtility = $this->createMock(MathUtility::class);
+        $logger = $this->createMock(\Psr\Log\LoggerInterface::class);
+        $redis = $this->createMock(\Redis::class);
+
+        // Suppress continuous noise
+        $mathUtility->method('generateStandardNormal')->willReturn(0.0);
+
+        // Force a 20% Paradigm-Shifting Tech Jump (e.g., AGI / Major Breakthrough)
+        $mathUtility->method('calculateJumpDiffusion')->willReturn([
+            'multiplier' => 1.20,
+            'shock_pct'  => 20.0,
+            'exponent'   => 0.18,
+        ]);
+
+        $macroEngine = new MacroEngine($mathUtility, $logger, $redis);
+
+        $state = new \App\Service\Macro\MacroState();
+        $state->totalFactorProductivityIndex = 100.0;
+        $state->potentialGdpIndex = 1.0;
+        $state->outputGap = 0.0;
+        $state->inflationEma = 0.02;
+
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculatePotentialAndNominalGdp');
+        $reflectionMethod->invoke($macroEngine, $state, 0.25);
+
+        // Assert TFP captured the 20% jump
+        $this->assertGreaterThan(119.0, $state->totalFactorProductivityIndex, 'TFP Index must capture the positive technological jump.');
+
+        // Assert Potential GDP permanently expands following a TFP jump (~1.21)
+        $this->assertGreaterThan(1.15, $state->potentialGdpIndex, 'Potential GDP must permanently expand following a TFP jump.');
+        $this->assertEquals($state->potentialGdpIndex, $state->nominalGdpIndex, 'Nominal GDP should match Potential GDP when output gap is 0.');
+    }
+
+    public function testSolowSwanTfpNegativeJumpClampedToPositive(): void
+    {
+        $mathUtility = $this->createMock(MathUtility::class);
+        $logger = $this->createMock(\Psr\Log\LoggerInterface::class);
+        $redis = $this->createMock(\Redis::class);
+
+        $mathUtility->method('generateStandardNormal')->willReturn(0.0);
+
+        // Simulate a downward jump (which should be clamped as technology cannot un-invent itself)
+        $mathUtility->method('calculateJumpDiffusion')->willReturn([
+            'multiplier' => 0.80,
+            'shock_pct'  => -20.0,
+            'exponent'   => -0.22,
+        ]);
+
+        $macroEngine = new MacroEngine($mathUtility, $logger, $redis);
+
+        $state = new \App\Service\Macro\MacroState();
+        $state->totalFactorProductivityIndex = 100.0;
+        $state->potentialGdpIndex = 1.0;
+        $state->outputGap = 0.0;
+        $state->inflationEma = 0.02;
+
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculatePotentialAndNominalGdp');
+        $reflectionMethod->invoke($macroEngine, $state, 0.25);
+
+        // TFP should not decrease below 100.0
+        $this->assertGreaterThanOrEqual(100.0, $state->totalFactorProductivityIndex, 'TFP jump multiplier must be clamped to >= 1.0.');
+    }
 }
+

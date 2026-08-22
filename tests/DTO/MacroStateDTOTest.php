@@ -23,6 +23,10 @@ class MacroStateDTOTest extends TestCase
         $this->assertEquals(100.0, $dto->industrialMetalsIndex);
         $this->assertEquals(100.0, $dto->governmentSpendingIndex);
         $this->assertEquals(100.0, $dto->commercialPropertyIndex);
+        $this->assertEquals(MacroEngine::INTERBANK_BASELINE_SPREAD, $dto->interbankLiquiditySpread);
+        $this->assertEquals(MacroEngine::INTERBANK_BASELINE_SPREAD, $dto->interbankLiquiditySpreadEma);
+        $this->assertEquals(MacroEngine::TFP_BASELINE, $dto->totalFactorProductivityIndex);
+        $this->assertEquals(MacroEngine::TFP_BASELINE, $dto->totalFactorProductivityIndexEma);
         $this->assertFalse($dto->qeActive);
         $this->assertNull($dto->eventType);
     }
@@ -67,6 +71,10 @@ class MacroStateDTOTest extends TestCase
             'ns_curvature' => 0.005,
             'potential_gdp_index' => 1.05,
             'nominal_gdp_index' => 1.08,
+            'interbank_liquidity_spread' => 0.0035,
+            'interbank_liquidity_spread_ema' => 0.0030,
+            'total_factor_productivity_index' => 105.0,
+            'total_factor_productivity_index_ema' => 104.0,
             'event_type' => 'TIGHTENING',
         ];
 
@@ -77,6 +85,10 @@ class MacroStateDTOTest extends TestCase
         $this->assertEquals(112.0, $dto->industrialMetalsIndex);
         $this->assertEquals(95.0, $dto->governmentSpendingIndex);
         $this->assertEquals(88.5, $dto->commercialPropertyIndex);
+        $this->assertEquals(0.0035, $dto->interbankLiquiditySpread);
+        $this->assertEquals(0.0030, $dto->interbankLiquiditySpreadEma);
+        $this->assertEquals(105.0, $dto->totalFactorProductivityIndex);
+        $this->assertEquals(104.0, $dto->totalFactorProductivityIndexEma);
         $this->assertTrue($dto->qeActive);
         $this->assertEquals('TIGHTENING', $dto->eventType);
 
@@ -86,6 +98,10 @@ class MacroStateDTOTest extends TestCase
         $this->assertEquals($payload['industrial_metals_index'], $exported['industrial_metals_index']);
         $this->assertEquals($payload['government_spending_index'], $exported['government_spending_index']);
         $this->assertEquals($payload['commercial_property_index'], $exported['commercial_property_index']);
+        $this->assertEquals($payload['interbank_liquidity_spread'], $exported['interbank_liquidity_spread']);
+        $this->assertEquals($payload['interbank_liquidity_spread_ema'], $exported['interbank_liquidity_spread_ema']);
+        $this->assertEquals($payload['total_factor_productivity_index'], $exported['total_factor_productivity_index']);
+        $this->assertEquals($payload['total_factor_productivity_index_ema'], $exported['total_factor_productivity_index_ema']);
         $this->assertEquals($payload['qe_active'], $exported['qe_active']);
         $this->assertEquals($payload['event_type'], $exported['event_type']);
     }
@@ -99,6 +115,10 @@ class MacroStateDTOTest extends TestCase
         $state->industrialMetalsIndex = 115.0;
         $state->governmentSpendingIndex = 92.0;
         $state->commercialPropertyIndex = 85.0;
+        $state->interbankLiquiditySpread = 0.0040;
+        $state->interbankLiquiditySpreadEma = 0.0038;
+        $state->totalFactorProductivityIndex = 110.0;
+        $state->totalFactorProductivityIndexEma = 108.5;
         $state->qeActive = true;
         $state->eventType = 'STIMULUS';
 
@@ -110,6 +130,10 @@ class MacroStateDTOTest extends TestCase
         $this->assertEquals(115.0, $dto->industrialMetalsIndex);
         $this->assertEquals(92.0, $dto->governmentSpendingIndex);
         $this->assertEquals(85.0, $dto->commercialPropertyIndex);
+        $this->assertEquals(0.0040, $dto->interbankLiquiditySpread);
+        $this->assertEquals(0.0038, $dto->interbankLiquiditySpreadEma);
+        $this->assertEquals(110.0, $dto->totalFactorProductivityIndex);
+        $this->assertEquals(108.5, $dto->totalFactorProductivityIndexEma);
         $this->assertTrue($dto->qeActive);
         $this->assertEquals('STIMULUS', $dto->eventType);
     }

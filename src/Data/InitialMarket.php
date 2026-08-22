@@ -47,7 +47,7 @@ class InitialMarket
             'jump_intensity' => 1.25,
             'jump_mean' => 0.02,
             'jump_vol' => 0.10,
-            'baseline_roe' => 0.23,
+            'baseline_roe' => 0.26,
             'capex_ratio' => 0.05,
             'target_payout_ratio' => 0.40,
             'dividendSpeed' => 0.50,

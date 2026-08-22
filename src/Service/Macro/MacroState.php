@@ -86,6 +86,12 @@ class MacroState
     public float $macroCreditSpread = 0.015;
     public float $macroCreditSpreadEma = 0.015;
 
+    public float $interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD;
+    public float $interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD;
+
+    public float $totalFactorProductivityIndex = MacroEngine::TFP_BASELINE;
+    public float $totalFactorProductivityIndexEma = MacroEngine::TFP_BASELINE;
+
     /**
      * Initializes the MacroState from a decoded JSON array payload.
      */
@@ -175,6 +181,12 @@ class MacroState
         $state->macroCreditSpread = $data['macro_credit_spread'] ?? 0.015;
         $state->macroCreditSpreadEma = $data['macro_credit_spread_ema'] ?? $state->macroCreditSpread;
 
+        $state->interbankLiquiditySpread = $data['interbank_liquidity_spread'] ?? MacroEngine::INTERBANK_BASELINE_SPREAD;
+        $state->interbankLiquiditySpreadEma = $data['interbank_liquidity_spread_ema'] ?? $state->interbankLiquiditySpread;
+
+        $state->totalFactorProductivityIndex = (float) ($data['total_factor_productivity_index'] ?? MacroEngine::TFP_BASELINE);
+        $state->totalFactorProductivityIndexEma = (float) ($data['total_factor_productivity_index_ema'] ?? $state->totalFactorProductivityIndex);
+
         return $state;
     }
 
@@ -247,7 +259,11 @@ class MacroState
             'market_volatility_ema' => $this->marketVolatilityEma,
             'market_z' => $this->marketZ,
             'macro_credit_spread' => $this->macroCreditSpread,
-            'macro_credit_spread_ema' => $this->macroCreditSpreadEma
+            'macro_credit_spread_ema' => $this->macroCreditSpreadEma,
+            'interbank_liquidity_spread' => $this->interbankLiquiditySpread,
+            'interbank_liquidity_spread_ema' => $this->interbankLiquiditySpreadEma,
+            'total_factor_productivity_index' => $this->totalFactorProductivityIndex,
+            'total_factor_productivity_index_ema' => $this->totalFactorProductivityIndexEma
         ];
     }
 }

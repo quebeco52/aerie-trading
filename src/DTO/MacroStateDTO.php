@@ -67,6 +67,10 @@ readonly class MacroStateDTO
         public float $equityRiskPremium = MacroEngine::BASE_EQUITY_RISK_PREMIUM,
         public float $macroCreditSpread = 0.02,
         public float $macroCreditSpreadEma = 0.02,
+        public float $interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD,
+        public float $interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD,
+        public float $totalFactorProductivityIndex = MacroEngine::TFP_BASELINE,
+        public float $totalFactorProductivityIndexEma = MacroEngine::TFP_BASELINE,
         public bool $qeActive = false,
         public float $qeIntensity = 0.0,
         public float $inversionDuration = 0.0,
@@ -144,6 +148,10 @@ readonly class MacroStateDTO
         $equityRiskPremium = (float) ($data['equity_risk_premium'] ?? MacroEngine::BASE_EQUITY_RISK_PREMIUM);
         $macroCreditSpread = (float) ($data['macro_credit_spread'] ?? 0.02);
         $macroCreditSpreadEma = (float) ($data['macro_credit_spread_ema'] ?? $macroCreditSpread);
+        $interbankLiquiditySpread = (float) ($data['interbank_liquidity_spread'] ?? MacroEngine::INTERBANK_BASELINE_SPREAD);
+        $interbankLiquiditySpreadEma = (float) ($data['interbank_liquidity_spread_ema'] ?? $interbankLiquiditySpread);
+        $totalFactorProductivityIndex = (float) ($data['total_factor_productivity_index'] ?? MacroEngine::TFP_BASELINE);
+        $totalFactorProductivityIndexEma = (float) ($data['total_factor_productivity_index_ema'] ?? $totalFactorProductivityIndex);
 
         $qeActive = (bool) ($data['qe_active'] ?? false);
         $qeIntensity = (float) ($data['qe_intensity'] ?? 0.0);
@@ -211,6 +219,10 @@ readonly class MacroStateDTO
             equityRiskPremium: $equityRiskPremium,
             macroCreditSpread: $macroCreditSpread,
             macroCreditSpreadEma: $macroCreditSpreadEma,
+            interbankLiquiditySpread: $interbankLiquiditySpread,
+            interbankLiquiditySpreadEma: $interbankLiquiditySpreadEma,
+            totalFactorProductivityIndex: $totalFactorProductivityIndex,
+            totalFactorProductivityIndexEma: $totalFactorProductivityIndexEma,
             qeActive: $qeActive,
             qeIntensity: $qeIntensity,
             inversionDuration: $inversionDuration,
@@ -283,6 +295,10 @@ readonly class MacroStateDTO
             equityRiskPremium: $state->equityRiskPremium,
             macroCreditSpread: $state->macroCreditSpread,
             macroCreditSpreadEma: $state->macroCreditSpreadEma,
+            interbankLiquiditySpread: $state->interbankLiquiditySpread,
+            interbankLiquiditySpreadEma: $state->interbankLiquiditySpreadEma,
+            totalFactorProductivityIndex: $state->totalFactorProductivityIndex,
+            totalFactorProductivityIndexEma: $state->totalFactorProductivityIndexEma,
             qeActive: $state->qeActive,
             qeIntensity: $state->qeIntensity,
             inversionDuration: $state->inversionDuration,
@@ -355,6 +371,10 @@ readonly class MacroStateDTO
             'equity_risk_premium' => $this->equityRiskPremium,
             'macro_credit_spread' => $this->macroCreditSpread,
             'macro_credit_spread_ema' => $this->macroCreditSpreadEma,
+            'interbank_liquidity_spread' => $this->interbankLiquiditySpread,
+            'interbank_liquidity_spread_ema' => $this->interbankLiquiditySpreadEma,
+            'total_factor_productivity_index' => $this->totalFactorProductivityIndex,
+            'total_factor_productivity_index_ema' => $this->totalFactorProductivityIndexEma,
             'qe_active' => $this->qeActive,
             'qe_intensity' => $this->qeIntensity,
             'inversion_duration' => $this->inversionDuration,

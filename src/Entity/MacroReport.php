@@ -150,6 +150,18 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $capitalStockOverhangEma = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $interbankLiquiditySpread = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $interbankLiquiditySpreadEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $totalFactorProductivityIndex = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
+    private ?string $totalFactorProductivityIndexEma = null;
+
     // --- Standard Getters & Setters ---
 
     public function getId(): ?int { return $this->id; }
@@ -290,4 +302,16 @@ class MacroReport
 
     public function getCapitalStockOverhangEma(): ?string { return $this->capitalStockOverhangEma; }
     public function setCapitalStockOverhangEma(string $capitalStockOverhangEma): self { $this->capitalStockOverhangEma = $capitalStockOverhangEma; return $this; }
+
+    public function getInterbankLiquiditySpread(): ?string { return $this->interbankLiquiditySpread; }
+    public function setInterbankLiquiditySpread(string $interbankLiquiditySpread): self { $this->interbankLiquiditySpread = $interbankLiquiditySpread; return $this; }
+
+    public function getInterbankLiquiditySpreadEma(): ?string { return $this->interbankLiquiditySpreadEma; }
+    public function setInterbankLiquiditySpreadEma(string $interbankLiquiditySpreadEma): self { $this->interbankLiquiditySpreadEma = $interbankLiquiditySpreadEma; return $this; }
+
+    public function getTotalFactorProductivityIndex(): ?string { return $this->totalFactorProductivityIndex; }
+    public function setTotalFactorProductivityIndex(string $totalFactorProductivityIndex): self { $this->totalFactorProductivityIndex = $totalFactorProductivityIndex; return $this; }
+
+    public function getTotalFactorProductivityIndexEma(): ?string { return $this->totalFactorProductivityIndexEma; }
+    public function setTotalFactorProductivityIndexEma(string $totalFactorProductivityIndexEma): self { $this->totalFactorProductivityIndexEma = $totalFactorProductivityIndexEma; return $this; }
 }

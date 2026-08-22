@@ -888,6 +888,7 @@ class MathUtility
         float $wacc,
         float $baseKappa,
         float $moatSpread,
+        float $dt = 0.25,
         float $erosionAlpha = 0.50,
         float $distressPersistence = 0.60,
         float $distressGamma = 1.00
@@ -909,7 +910,7 @@ class MathUtility
         // EXACT DISCRETIZATION: Use the exponential solution (1 - e^(-kappa * dt))
         // This acts as a dampener. Even if effectiveKappa approaches infinity, 
         // the weight naturally caps at 1.0, mathematically preventing target overshooting.
-        $reversionWeight = 1.0 - exp(-$effectiveKappa * 0.25);
+        $reversionWeight = 1.0 - exp(-$effectiveKappa * $dt);
 
         return ($equilibrium - $currentReturn) * $reversionWeight;
     }

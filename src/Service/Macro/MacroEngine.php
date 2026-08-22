@@ -37,12 +37,14 @@ class MacroEngine
     public const KALDOR_FISCAL_MULTIPLIER = 0.50;
     /** Sensitivity of the output gap to physical capital stock overhang (excess capacity drags down growth). */
     public const KALDOR_CAPITAL_DRAG = 0.40;
+    /** Elasticity of aggregate demand to household wealth deviations (Modigliani Wealth Effect, ~4% MPC). */
+    public const KALDOR_WEALTH_EFFECT_ELASTICITY = 0.04;
     /** The rate at which business investment (output gap) accumulates into the physical capital stock. */
-    public const CAPITAL_ACCUMULATION_RATE = 0.50;
+    public const CAPITAL_ACCUMULATION_RATE = 0.35;
     /** The rate at which physical capital depreciates, organically clearing overhangs and creating pent-up demand. */
     public const CAPITAL_DECAY_RATE = 0.25;
     /** Stochastic diffusion volatility of the macroeconomic output gap. */
-    public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.010;
+    public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.015;
 
     // --- Okun's Law (Labor Market Dynamics) ---
     /** Structural Non-Accelerating Inflation Rate of Unemployment (NAIRU) baseline (4.0%). */
@@ -328,6 +330,42 @@ class MacroEngine
     /** Stochastic volatility of residential home prices. */
     public const RESIDENTIAL_VOLATILITY = 0.06;
 
+    // --- INTERBANK LIQUIDITY SPREAD (CIR PROCESS & JUMPS) ---
+    /** Baseline interbank liquidity spread (FRA-OIS / TED Spread proxy) under normal conditions (15 bps). */
+    public const INTERBANK_BASELINE_SPREAD = 0.0015;
+    /** Speed of mean reversion (kappa) for the interbank liquidity spread toward baseline. */
+    public const INTERBANK_SPREAD_KAPPA = 2.50;
+    /** Volatility (sigma) of the continuous interbank liquidity spread diffusion. */
+    public const INTERBANK_SPREAD_SIGMA = 0.02;
+    /** Poisson intensity of severe interbank credit freeze/panic events (lambda per year). */
+    public const INTERBANK_JUMP_PROBABILITY = 0.05;
+    /** Mean log-return magnitude of an interbank liquidity panic jump (~5x spread blowout calibrated). */
+    public const INTERBANK_JUMP_MEAN = 1.60;
+    /** Volatility of the interbank panic jump magnitude. */
+    public const INTERBANK_JUMP_VOL = 0.50;
+
+    // --- SOLOW-SWAN TOTAL FACTOR PRODUCTIVITY (TFP) ---
+    /** Baseline index value for Total Factor Productivity (100 = neutral technology baseline). */
+    public const TFP_BASELINE = 100.0;
+    /** Secular annual drift rate of continuous technological progress (1.5% base innovation rate). */
+    public const TFP_DRIFT = 0.015;
+    /** Stochastic volatility of continuous technological innovation. */
+    public const TFP_VOLATILITY = 0.02;
+    /** Poisson intensity of paradigm-shifting technological breakthroughs (lambda per year, e.g., 2%). */
+    public const TFP_JUMP_PROBABILITY = 0.02;
+    /** Mean log-return magnitude of a technological breakthrough (+15% permanent capacity expansion). */
+    public const TFP_JUMP_MEAN = 0.15;
+    /** Volatility of the technological breakthrough magnitude. */
+    public const TFP_JUMP_VOL = 0.05;
+    /** Structural baseline demographic and labor force growth rate (0.5%). */
+    public const STRUCTURAL_LABOR_GROWTH_RATE = 0.005;
+
+    // --- Continuous EMA Indicator Smoothing Horizons ---
+    /** Standard quarterly macro indicator EMA smoothing horizon (0.25 years). */
+    public const STANDARD_EMA_HORIZON_YEARS = 0.25;
+    /** Long-term structural physical asset EMA smoothing horizon for property and capital overhang (3.0 years). */
+    public const REAL_ESTATE_EMA_HORIZON_YEARS = 3.0;
+
     public function __construct(
         private MathUtility $mathUtility,
         private LoggerInterface $logger,
@@ -402,8 +440,9 @@ class MacroEngine
 
         $this->updateExponentialMovingAverages($state, $dt);
         $this->calculateMacroCreditSpread($state);
+        $this->calculateInterbankLiquiditySpread($state, $dt);
 
-        $this->calculatePotentialAndNominalGdp($state, self::NATURAL_RATE, $dt);
+        $this->calculatePotentialAndNominalGdp($state, $dt);
         $this->calculateDynamicFiscalPolicy($state, $dt);
         $this->calculateEquityRiskPremium($state);
         $this->calculateConsumerSentiment($state, $dt);
@@ -418,8 +457,8 @@ class MacroEngine
     {
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
         $conn->executeStatement(
-            "INSERT INTO macro_report (recorded_at, inflation, inflation_ema, output_gap, output_gap_ema, policy_rate, policy_rate_ema, yield2y, yield2y_ema, yield5y, yield5y_ema, yield10y, yield10y_ema, yield30y, yield30y_ema, corporate_tax_rate, equity_risk_premium, nominal_gdp_index, market_volatility, macro_credit_spread, macro_credit_spread_ema, unemployment_rate, unemployment_rate_ema, energy_price_index, energy_price_index_ema, consumer_sentiment_index, consumer_sentiment_index_ema, exchange_rate_index, exchange_rate_index_ema, industrial_metals_index, industrial_metals_index_ema, government_spending_index, government_spending_index_ema, commercial_property_index, commercial_property_index_ema, residential_property_index, residential_property_index_ema, retail_default_rate, retail_default_rate_ema, agricultural_commodity_index, agricultural_commodity_index_ema, freight_rate_index, freight_rate_index_ema, capital_stock_overhang, capital_stock_overhang_ema) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO macro_report (recorded_at, inflation, inflation_ema, output_gap, output_gap_ema, policy_rate, policy_rate_ema, yield2y, yield2y_ema, yield5y, yield5y_ema, yield10y, yield10y_ema, yield30y, yield30y_ema, corporate_tax_rate, equity_risk_premium, nominal_gdp_index, market_volatility, macro_credit_spread, macro_credit_spread_ema, unemployment_rate, unemployment_rate_ema, energy_price_index, energy_price_index_ema, consumer_sentiment_index, consumer_sentiment_index_ema, exchange_rate_index, exchange_rate_index_ema, industrial_metals_index, industrial_metals_index_ema, government_spending_index, government_spending_index_ema, commercial_property_index, commercial_property_index_ema, residential_property_index, residential_property_index_ema, retail_default_rate, retail_default_rate_ema, agricultural_commodity_index, agricultural_commodity_index_ema, freight_rate_index, freight_rate_index_ema, capital_stock_overhang, capital_stock_overhang_ema, interbank_liquidity_spread, interbank_liquidity_spread_ema, total_factor_productivity_index, total_factor_productivity_index_ema) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 $now,
                 $macroState->inflation,
@@ -466,6 +505,10 @@ class MacroEngine
                 $macroState->freightRateIndexEma,
                 $macroState->capitalStockOverhang,
                 $macroState->capitalStockOverhangEma,
+                $macroState->interbankLiquiditySpread,
+                $macroState->interbankLiquiditySpreadEma,
+                $macroState->totalFactorProductivityIndex,
+                $macroState->totalFactorProductivityIndexEma,
             ]
         );
     }
@@ -608,7 +651,13 @@ class MacroEngine
         // The 2D Kaldor Force: Overcapacity drags the economy down; Pent-up depreciation forces a recovery.
         $capitalDrag = self::KALDOR_CAPITAL_DRAG * $state->capitalStockOverhang;
 
-        $drift = ($momentum - $cubicConstraint - $monetaryDrag + $fiscalStimulus - $capitalDrag) * $dt;
+        // --- Modigliani Wealth Effect ---
+        // Household consumption scales with perceived housing wealth (Case, Quigley, and Shiller 2005).
+        // A 20% drop in home values destroys aggregate demand proportionally based on the MPC out of wealth (4%).
+        $housingWealthEffect = (($state->residentialPropertyIndexEma / self::RESIDENTIAL_BASELINE) - 1.0) * self::KALDOR_WEALTH_EFFECT_ELASTICITY;
+
+        // Inject the Wealth Effect directly into the macroeconomic drift
+        $drift = ($momentum - $cubicConstraint - $monetaryDrag + $fiscalStimulus - $capitalDrag + $housingWealthEffect) * $dt;
         $volatility = self::OUTPUT_GAP_DIFFUSION_SIGMA * $stressMultiplier * sqrt($dt) * $outZ;
 
         $newGap = $y + $drift + $volatility;
@@ -671,16 +720,55 @@ class MacroEngine
         return max(0.08, min(0.80, sqrt($nextVar)));
     }
 
-    private function calculatePotentialAndNominalGdp(MacroState $state, float $naturalRate, float $dt): void
+    private function calculateTotalFactorProductivity(MacroState $state, float $dt): void
     {
-        $nominalPotentialGrowth = $naturalRate + $state->inflationEma;
-        $state->potentialGdpIndex = max(0.10, $state->potentialGdpIndex * exp($nominalPotentialGrowth * $dt));
+        $currentTfp = $state->totalFactorProductivityIndex ?? self::TFP_BASELINE;
+
+        // 1. Continuous innovation drift (Deterministic Secular Growth)
+        // Brownian diffusion is removed because continuous stochastic processes with non-negative constraints
+        // create explosive artificial growth as dt -> 0 (stochastic calculus artifact).
+        // Technology grows secularly at the exact structural drift rate.
+        $continuousMultiplier = exp(self::TFP_DRIFT * $dt);
+
+        // 2. Paradigm-shifting technology jumps (e.g., Internet, AI)
+        $jumpData = $this->mathUtility->calculateJumpDiffusion(
+            lambda: self::TFP_JUMP_PROBABILITY,
+            jumpMean: self::TFP_JUMP_MEAN,
+            jumpVol: self::TFP_JUMP_VOL,
+            dt: $dt
+        );
+
+        // Technology does not un-invent itself. The jump multiplier must be strictly positive (>= 1.0).
+        $jumpMultiplier = max(1.0, $jumpData['multiplier']);
+
+        // 3. New TFP Level (Monotonically non-decreasing knowledge frontier)
+        $state->totalFactorProductivityIndex = max($currentTfp, $currentTfp * $continuousMultiplier * $jumpMultiplier);
+    }
+
+    private function calculatePotentialAndNominalGdp(MacroState $state, float $dt): void
+    {
+        // 1. Evaluate Total Factor Productivity (TFP)
+        $oldTfp = $state->totalFactorProductivityIndex ?? self::TFP_BASELINE;
+        $this->calculateTotalFactorProductivity($state, $dt);
+        $newTfp = $state->totalFactorProductivityIndex;
+
+        // 2. Solow-Swan Potential Growth
+        // Real Potential Growth = Structural Demographic/Labor Growth + TFP Growth Rate
+        $tfpGrowthRate = log($newTfp / max(0.01, $oldTfp)) / $dt;
+        $realPotentialGrowth = self::STRUCTURAL_LABOR_GROWTH_RATE + $tfpGrowthRate;
+
+        // 3. Nominal Potential GDP Growth (Real + Expected Inflation)
+        $nominalPotentialGrowth = $realPotentialGrowth + $state->inflationEma;
+
+        $currentPotential = $state->potentialGdpIndex > 0.0 ? $state->potentialGdpIndex : 1.0;
+        $state->potentialGdpIndex = max(0.10, $currentPotential * exp($nominalPotentialGrowth * $dt));
         $state->nominalGdpIndex = $state->potentialGdpIndex * (1.0 + $state->outputGap);
     }
 
     private function updateExponentialMovingAverages(MacroState $state, float $dt): void
     {
-        $emaWeight = min(1.0, $dt / 0.25);
+        $emaWeight = 1.0 - exp(-$dt / self::STANDARD_EMA_HORIZON_YEARS);
+        $slowEmaWeight = 1.0 - exp(-$dt / self::REAL_ESTATE_EMA_HORIZON_YEARS);
 
         $state->outputGapEma += $emaWeight * ($state->outputGap - $state->outputGapEma);
         $state->policyRateEma += $emaWeight * ($state->policyRate - $state->policyRateEma);
@@ -700,12 +788,16 @@ class MacroEngine
         $state->exchangeRateIndexEma += $emaWeight * ($state->exchangeRateIndex - $state->exchangeRateIndexEma);
         $state->industrialMetalsIndexEma += $emaWeight * ($state->industrialMetalsIndex - $state->industrialMetalsIndexEma);
         $state->governmentSpendingIndexEma += $emaWeight * ($state->governmentSpendingIndex - $state->governmentSpendingIndexEma);
-        $state->commercialPropertyIndexEma += $emaWeight * ($state->commercialPropertyIndex - $state->commercialPropertyIndexEma);
-        $state->residentialPropertyIndexEma += $emaWeight * ($state->residentialPropertyIndex - $state->residentialPropertyIndexEma);
         $state->retailDefaultRateEma += $emaWeight * ($state->retailDefaultRate - $state->retailDefaultRateEma);
         $state->agriculturalCommodityIndexEma += $emaWeight * ($state->agriculturalCommodityIndex - $state->agriculturalCommodityIndexEma);
         $state->freightRateIndexEma += $emaWeight * ($state->freightRateIndex - $state->freightRateIndexEma);
+        $state->interbankLiquiditySpreadEma += $emaWeight * ($state->interbankLiquiditySpread - $state->interbankLiquiditySpreadEma);
+        $state->totalFactorProductivityIndexEma += $emaWeight * ($state->totalFactorProductivityIndex - $state->totalFactorProductivityIndexEma);
         $state->capitalStockOverhangEma += $emaWeight * ($state->capitalStockOverhang - $state->capitalStockOverhangEma);
+
+        // Long-term EMAs for physical real estate and structural capital stock overhang
+        $state->residentialPropertyIndexEma += $slowEmaWeight * ($state->residentialPropertyIndex - $state->residentialPropertyIndexEma);
+        $state->commercialPropertyIndexEma += $slowEmaWeight * ($state->commercialPropertyIndex - $state->commercialPropertyIndexEma);
     }
 
     private function calculateDynamicFiscalPolicy(MacroState $state, float $dt): void
@@ -741,6 +833,44 @@ class MacroEngine
         $volSpread = self::MERTON_VOL_SENSITIVITY * $excessVol;
 
         $state->macroCreditSpread = max(0.008, min(self::MAX_CREDIT_SPREAD, $cycleSpread + $volSpread));
+    }
+
+    private function calculateInterbankLiquiditySpread(MacroState $state, float $dt): void
+    {
+        $currentSpread = $state->interbankLiquiditySpread ?? self::INTERBANK_BASELINE_SPREAD;
+
+        // 1. Continuous Cox-Ingersoll-Ross (CIR) Process
+        // CIR naturally prevents the credit spread from dropping below zero while mean-reverting.
+        $dW = $this->mathUtility->generateStandardNormal();
+        $baseProcess = $this->mathUtility->calculateCIR(
+            currentValue: $currentSpread,
+            kappa: self::INTERBANK_SPREAD_KAPPA,
+            theta: self::INTERBANK_BASELINE_SPREAD,
+            sigma: self::INTERBANK_SPREAD_SIGMA,
+            dt: $dt,
+            dW: $dW
+        );
+
+        // 2. Systemic Panic Jumps (TED Spread Blowouts)
+        // Financial plumbing freezes are highly correlated with broader market panic (VIX).
+        $volatilityRatio = max(1.0, $state->marketVolatilityEma / self::MACRO_VOL_BASE_ANCHOR);
+        $jumpProbability = min(0.10, self::INTERBANK_JUMP_PROBABILITY * $volatilityRatio);
+
+        $jumpData = $this->mathUtility->calculateJumpDiffusion(
+            lambda: $jumpProbability,
+            jumpMean: self::INTERBANK_JUMP_MEAN,
+            jumpVol: self::INTERBANK_JUMP_VOL,
+            dt: $dt
+        );
+
+        $jumpAmount = 0.0;
+        if ($jumpData['multiplier'] !== 1.0) {
+            // Apply the log-normal multiplier to simulate a catastrophic overnight spread blowout
+            $jumpAmount = $baseProcess * ($jumpData['multiplier'] - 1.0);
+        }
+
+        // Clamp to realistic bounds: Minimum 1 bp, Maximum 1000 bps (10%)
+        $state->interbankLiquiditySpread = max(0.0001, min(0.10, $baseProcess + $jumpAmount));
     }
 
     private function calculateUnemployment(MacroState $state, float $dt): void
@@ -1010,7 +1140,7 @@ class MacroEngine
         $profitabilityRatio = max(0.10, $state->freightRateIndexEma / self::FREIGHT_BASELINE);
         $targetSupply = self::FREIGHT_BASELINE * pow($profitabilityRatio, self::FREIGHT_SUPPLY_ORDER_ELASTICITY);
 
-        $slowEmaWeight = min(1.0, $dt / self::FREIGHT_SUPPLY_LAG_YEARS);
+        $slowEmaWeight = 1.0 - exp(-$dt / self::FREIGHT_SUPPLY_LAG_YEARS);
         $state->freightSupplyEma += $slowEmaWeight * ($targetSupply - $state->freightSupplyEma);
         $supply = max(20.0, $state->freightSupplyEma);
 
