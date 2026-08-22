@@ -169,9 +169,7 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock is whichever stream deviated the most, overridden by tail events
-        $primaryShockZ = abs($commercialZ) > abs($residentialZ) ? $commercialZ : $residentialZ;
-        if (abs($recyclingZ) > abs($primaryShockZ)) $primaryShockZ = $recyclingZ;
-        if (abs($eventZ) > abs($primaryShockZ)) $primaryShockZ = $eventZ;
+        $primaryShockZ = $streams->resolveDominantShockZ([$commercialZ, $residentialZ, $recyclingZ], $eventZ);
 
         // Residential is highly visible, Commercial correlates to GDP, Recycling is visible via commodities
         $observableShockZ = ($residentialZ * $residentialWeight * self::RESIDENTIAL_VARIANCE_SCALAR * 0.90) +

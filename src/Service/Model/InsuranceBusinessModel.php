@@ -384,7 +384,7 @@ class InsuranceBusinessModel implements BusinessModelInterface
 
         // Only trigger a structural volatility shock if the claim variance is an actual catastrophe.
         $structuralClaimShock = abs($claimZ) > abs(self::CATASTROPHE_Z_THRESHOLD) ? $claimZ : 0.0;
-        $primaryShockZ = abs($structuralClaimShock) > abs($revenueZ) ? $structuralClaimShock : $revenueZ;
+        $primaryShockZ = $streams->resolveDominantShockZ([$structuralClaimShock, $revenueZ]);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

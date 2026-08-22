@@ -116,10 +116,7 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         }
 
         $structuralClaimShock = abs($claimZ) > abs($catThreshold) ? $claimZ : 0.0;
-        $primaryShockZ = abs($structuralClaimShock) > abs($pcZ) ? $structuralClaimShock : $pcZ;
-        if (abs($lifeZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $lifeZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([$structuralClaimShock, $pcZ, $lifeZ]);
 
         $pcBase = max(1.0, $expectedRevenue * $pcWeight);
         $pcShock = ($pcRevenue - $pcBase) / $pcBase;

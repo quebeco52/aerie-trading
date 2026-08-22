@@ -219,23 +219,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = $realizedVariableMargin + $restructuringPenalty;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // Determine dominant shock driver
-        $streamAbs = [
-            'industrial_manufacturing' => abs($industrialZ),
-            'defensive_staples'        => abs($defensiveZ),
-            'financial_investments'    => abs($floatZ),
-        ];
-        arsort($streamAbs);
-        $dominantKey = array_key_first($streamAbs);
-        $primaryShockZ = match ($dominantKey) {
-            'industrial_manufacturing' => $industrialZ,
-            'financial_investments'    => $floatZ,
-            default                    => $defensiveZ,
-        };
-
-        if (abs($eventZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $eventZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([$industrialZ, $defensiveZ, $floatZ], $eventZ);
 
         // Blended observable shock
         $observableShockZ = ($industrialShock * $industrialWeight) +

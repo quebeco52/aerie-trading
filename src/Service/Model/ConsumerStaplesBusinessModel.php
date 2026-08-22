@@ -282,7 +282,7 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = $realizedVariableMargin + $recallCostPenalty + $agriculturalCostSqueeze + $logisticsPenalty;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        $primaryShockZ = abs($eventZ) > abs($brandedZ) ? $eventZ : $brandedZ;
+        $primaryShockZ = $streams->resolveDominantShockZ([$brandedZ], $eventZ);
 
         $observableShockZ = ($brandedZ * $brandedWeight * $baselineVol * self::REVENUE_VARIANCE_SCALAR)
             + ($volumeZ * $volumeWeight * $baselineVol * self::REVENUE_VARIANCE_SCALAR)

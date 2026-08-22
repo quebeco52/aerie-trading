@@ -176,7 +176,7 @@ class BrokerageBusinessModel implements BusinessModelInterface
         }
 
         // observableShockZ: the VIX bonus is completely public via daily VIX tracking — analysts can anticipate it fully.
-        $primaryShockZ = abs($tradingZ) > abs($advisoryZ) ? $tradingZ : $advisoryZ;
+        $primaryShockZ = $streams->resolveDominantShockZ([$tradingZ, $advisoryZ]);
         $observableShockZ = $volatilityBonus * $tradingWeight;
 
         return new SectorPhysicsResult(

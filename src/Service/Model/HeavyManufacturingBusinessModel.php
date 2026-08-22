@@ -144,7 +144,7 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
         $clampedMargin = $this->clampMargin($effectiveMargin + $inflationPenalty);
 
-        $primaryShockZ = abs($oemZ) > abs($mroZ) ? $oemZ : $mroZ;
+        $primaryShockZ = $streams->resolveDominantShockZ([$oemZ, $mroZ]);
         $observableShockZ = ($oemZ * $oemWeight * self::OEM_VARIANCE_SCALAR * (1.0 - self::BACKLOG_DAMPING_FACTOR)) +
             ($mroZ * $mroWeight * self::MRO_VARIANCE_SCALAR);
         $observableShockZ *= $baselineVol;

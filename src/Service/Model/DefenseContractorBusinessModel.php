@@ -283,10 +283,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // --- Shock Determination ---
-        $primaryShockZ = $costPlusZ;
-        if (abs($fixedPriceZ) > abs($primaryShockZ)) $primaryShockZ = $fixedPriceZ;
-        if (abs($fmsZ) > abs($primaryShockZ)) $primaryShockZ = $fmsZ;
-        if (abs($eventZ) > abs($primaryShockZ)) $primaryShockZ = $eventZ;
+        $primaryShockZ = $streams->resolveDominantShockZ([$costPlusZ, $fixedPriceZ, $fmsZ], $eventZ);
 
         $costPlusShock   = (($costPlusZ * $baselineVol * self::COST_PLUS_VARIANCE_SCALAR) + $costPlusBonus) * $costPlusMultiplier + ($costPlusMultiplier - 1.0);
         $fixedPriceShock = ($fixedPriceZ * $baselineVol * self::FIXED_PRICE_DEV_VARIANCE_SCALAR) * $fixedPriceMultiplier + ($fixedPriceMultiplier - 1.0);

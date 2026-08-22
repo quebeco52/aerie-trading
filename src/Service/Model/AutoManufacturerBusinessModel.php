@@ -299,23 +299,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $effectiveMargin = $actualRevenue > 0 ? ($totalVariableCosts / $actualRevenue) : $realizedVariableMargin;
         $clampedMargin = $this->clampMargin($effectiveMargin);
 
-        // Determine dominant shock driver
-        $streamAbs = [
-            'mass_market_sales'   => abs($salesZ),
-            'apex_luxury'         => abs($apexZ),
-            'software_telematics' => abs($softwareZ),
-        ];
-        arsort($streamAbs);
-        $dominantKey = array_key_first($streamAbs);
-        $primaryShockZ = match ($dominantKey) {
-            'apex_luxury'         => $apexZ,
-            'software_telematics' => $softwareZ,
-            default               => $salesZ,
-        };
-
-        if (abs($eventZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $eventZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([$salesZ, $apexZ, $softwareZ], $eventZ);
 
         // Observable shock blending
         $strikeShock = ($salesMultiplier - 1.0) * $salesWeight;

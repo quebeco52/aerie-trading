@@ -182,10 +182,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $regulatoryLagPenalty + $sparkSpreadCrush + $disasterPenalty + $refinancingDrag);
 
         // Primary shock is whichever stream deviated the most, overridden by tail events
-        $primaryShockZ = abs($unregulatedZ) > abs($weatherZ) ? $unregulatedZ : $weatherZ;
-        if (abs($eventZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $eventZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([$unregulatedZ, $weatherZ], $eventZ);
 
         // Regulated weather volume is perfectly visible via meter data, wholesale trading is opaque.
         $observableShockZ = ($weatherZ * $regulatedWeight * self::WEATHER_VARIANCE_SCALAR) +

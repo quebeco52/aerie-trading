@@ -150,6 +150,33 @@ class StreamContext
     }
 
     /**
+     * Resolves the dominant shock Z-score by finding the stream or event shock with the highest absolute magnitude.
+     *
+     * @param array<int|string, float> $streamZs Array or dictionary of stream Z-scores
+     * @param float|null $eventZ Optional event shock Z-score
+     * @return float The dominant shock Z-score with the largest absolute value
+     */
+    public function resolveDominantShockZ(array $streamZs, ?float $eventZ = null): float
+    {
+        $primary = 0.0;
+        foreach ($streamZs as $z) {
+            if (abs($z) > abs($primary)) {
+                $primary = (float) $z;
+            }
+        }
+
+        if ($eventZ !== null && abs($eventZ) > abs($primary)) {
+            $primary = (float) $eventZ;
+        }
+
+        if (empty($streamZs) && $eventZ !== null) {
+            return (float) $eventZ;
+        }
+
+        return $primary;
+    }
+
+    /**
      * Retrieves the map of all generated stream Z-scores to pass into SectorPhysicsResult.
      *
      * @return array<string, float>

@@ -227,10 +227,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             $eventType = ShockEvent::RESERVE_RELEASE;
         }
 
-        $primaryShockZ = abs($creditZ) > abs($originationZ) ? $creditZ : $originationZ;
-        if (abs($lendingZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $lendingZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([$creditZ, $originationZ, $lendingZ]);
 
         $mortgageBase = max(1.0, $expectedRevenue * $mortgageWeight);
         $mortgageShock = ($mortgageRevenue - $mortgageBase) / $mortgageBase;

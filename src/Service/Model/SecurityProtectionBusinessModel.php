@@ -208,9 +208,7 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock is whichever stream deviated the most, overridden by tail events
-        $primaryShockZ = abs($expeditionaryZ) > abs($retainerZ) ? $expeditionaryZ : $retainerZ;
-        if (abs($govZ) > abs($primaryShockZ)) $primaryShockZ = $govZ;
-        if (abs($eventZ) > abs($primaryShockZ)) $primaryShockZ = $eventZ;
+        $primaryShockZ = $streams->resolveDominantShockZ([$expeditionaryZ, $retainerZ, $govZ], $eventZ);
 
         // Visibility: Government cost-plus inflation is fully public, Retainers are moderately public, Expeditionary Black Ops are opaque.
         $observableShockZ = ($govZ * $govWeight * self::GOVERNMENT_VARIANCE_SCALAR * 1.0) +

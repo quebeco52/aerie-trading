@@ -445,7 +445,7 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: abs($defaultZ) > abs($revenueZ) ? $defaultZ : $revenueZ,
+            primaryShockZ: $streams->resolveDominantShockZ([$defaultZ, $revenueZ]),
             observableShockZ: $revenueZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR,
             eventType: $eventType,
             streamZ: $streams->getStreamZ(),

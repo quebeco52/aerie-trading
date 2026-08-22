@@ -332,7 +332,7 @@ class AssetManagementBusinessModel implements BusinessModelInterface
         // We encode the relative deviation from the macro-expected revenue as the observable shock.
         $unanticipatedRevenueDelta = $actualRevenue - ($expectedRevenue * (1.0 + $aumMarketBeta));
         $observableShockZ = $expectedRevenue > 0 ? ($unanticipatedRevenueDelta / $expectedRevenue) : 0.0;
-        $primaryShockZ = abs($alphaZ) > abs($baseFeeZ) ? $alphaZ : $baseFeeZ;
+        $primaryShockZ = $streams->resolveDominantShockZ([$alphaZ, $baseFeeZ]);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

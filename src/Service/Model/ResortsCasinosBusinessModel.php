@@ -277,13 +277,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Shock Determination
-        $primaryShockZ = abs($gamingZ) > abs($nonGamingZ) ? $gamingZ : $nonGamingZ;
-        if ($creWeight > 0.0 && abs($creZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $creZ;
-        }
-        if (abs($eventZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $eventZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([$gamingZ, $nonGamingZ, $creWeight > 0.0 ? $creZ : 0.0], $eventZ);
 
         $gamingShock = (($gamingZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR) * $whaleMultiplier * $gamingHaircut) + ($whaleMultiplier * $gamingHaircut - 1.0);
         $nonGamingShock = $nonGamingZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::NON_GAMING_VOLATILITY_SCALAR;

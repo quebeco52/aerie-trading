@@ -188,10 +188,9 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $foodSafetyPenalty + $inflationPenalty + $energyDrag + $foodCommodityDrag + $laborTightnessDrag + $elasticityShift;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        $primaryShockZ = ($corporateZ * $corporateWeight) + ($franchiseZ * $franchiseWeight);
-        if (abs($eventZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $eventZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([
+            ($corporateZ * $corporateWeight) + ($franchiseZ * $franchiseWeight),
+        ], $eventZ);
 
         $observableShockZ = ($corporateZ * $corporateWeight * self::REVENUE_VARIANCE_SCALAR * $baselineVol) + ($rentEscalator * $leaseWeight);
 

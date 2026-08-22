@@ -195,10 +195,7 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock is whichever stream deviated the most, overridden by tail events
-        $primaryShockZ = abs($equipmentZ) > abs($servicesZ) ? $equipmentZ : $servicesZ;
-        if (abs($eventZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $eventZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([$equipmentZ, $servicesZ], $eventZ);
 
         $observableShockZ = $primaryShockZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
 

@@ -185,10 +185,9 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Blended primary shock for standard model integration
-        $primaryShockZ = ($enterpriseZ * $enterpriseWeight) + ($consumerZ * $consumerWeight);
-        if (abs($eventZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $eventZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([
+            ($enterpriseZ * $enterpriseWeight) + ($consumerZ * $consumerWeight),
+        ], $eventZ);
 
         $observableShockZ = $primaryShockZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
 

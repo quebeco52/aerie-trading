@@ -110,10 +110,7 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin);
 
-        $primaryShockZ = abs($enterpriseZ) > abs($tuitionZ) ? $enterpriseZ : $tuitionZ;
-        if (abs($lmsZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $lmsZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([$enterpriseZ, $tuitionZ, $lmsZ]);
 
         $observableShockZ = ($tuitionZ * $tuitionWeight * self::TUITION_VARIANCE_SCALAR * $baselineVol) +
             ($enterpriseZ * $enterpriseWeight * self::ENTERPRISE_VARIANCE_SCALAR * $baselineVol) +

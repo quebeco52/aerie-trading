@@ -231,22 +231,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Determine primary shock driver
-        $streamAbs = [
-            'civil_infrastructure'   => abs($civilZ),
-            'commercial_epc'         => abs($commercialZ),
-            'facilities_maintenance' => abs($maintenanceZ),
-        ];
-        arsort($streamAbs);
-        $dominantKey = array_key_first($streamAbs);
-        $primaryShockZ = match ($dominantKey) {
-            'civil_infrastructure'   => $civilZ,
-            'commercial_epc'         => $commercialZ,
-            default                  => $maintenanceZ,
-        };
-
-        if (abs($eventZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $eventZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([$civilZ, $commercialZ, $maintenanceZ], $eventZ);
 
         // Civil infrastructure wins are public tenders; maintenance is recurring; commercial is moderately visible
         $observableShockZ = ($civilZ * $civilWeight * self::CIVIL_VARIANCE_SCALAR * 0.80) +

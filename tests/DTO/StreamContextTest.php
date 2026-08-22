@@ -232,4 +232,27 @@ class StreamContextTest extends TestCase
         $this->assertEqualsWithDelta(0.90, $active['dominant'], 0.0001, 'A 90% dominant target stream must not be capped at 85%.');
         $this->assertEqualsWithDelta(0.10, $active['secondary'], 0.0001);
     }
+
+    public function testResolveDominantShockZ(): void
+    {
+        $context = new StreamContext([], $this->mathUtility);
+
+        // Stream with highest absolute magnitude dominates
+        $this->assertSame(-2.5, $context->resolveDominantShockZ([1.0, -2.5, 0.5]));
+        $this->assertSame(-3.2, $context->resolveDominantShockZ([1.0, -3.2, 2.5]));
+
+        // Event shock with higher magnitude overrides streams
+        $this->assertSame(4.0, $context->resolveDominantShockZ([1.0, -2.5], 4.0));
+        $this->assertSame(-4.5, $context->resolveDominantShockZ([1.0, 2.5], -4.5));
+
+        // When stream shock is larger than event shock
+        $this->assertSame(-3.0, $context->resolveDominantShockZ([1.0, -3.0], 2.0));
+
+        // Dictionary of named streams
+        $this->assertSame(-2.8, $context->resolveDominantShockZ(['oem' => 1.2, 'mro' => -2.8], 0.5));
+
+        // Empty streams with event shock
+        $this->assertSame(1.5, $context->resolveDominantShockZ([], 1.5));
+        $this->assertSame(0.0, $context->resolveDominantShockZ([]));
+    }
 }

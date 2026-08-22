@@ -278,25 +278,13 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             ($securitizationShock * $securitizationWeight) +
             ($longevityShock * $longevityWeight);
 
-        // Determine primary shock Z across dominant stream or tenant default
-        $primaryShockZ = $revenueZ;
-        $maxAbsZ = abs($revenueZ);
-
-        if (abs($hospitalityZ) > $maxAbsZ) {
-            $maxAbsZ = abs($hospitalityZ);
-            $primaryShockZ = $hospitalityZ;
-        }
-        if ($securitizationWeight > 0.0 && abs($securitizationZ) > $maxAbsZ) {
-            $maxAbsZ = abs($securitizationZ);
-            $primaryShockZ = $securitizationZ;
-        }
-        if ($longevityWeight > 0.0 && abs($longevityZ) > $maxAbsZ) {
-            $maxAbsZ = abs($longevityZ);
-            $primaryShockZ = $longevityZ;
-        }
-        if (abs($tenantDefaultZ) > $maxAbsZ) {
-            $primaryShockZ = $tenantDefaultZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([
+            $revenueZ,
+            $hospitalityZ,
+            $securitizationWeight > 0.0 ? $securitizationZ : 0.0,
+            $longevityWeight > 0.0 ? $longevityZ : 0.0,
+            $tenantDefaultZ,
+        ]);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

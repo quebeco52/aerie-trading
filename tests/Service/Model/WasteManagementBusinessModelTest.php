@@ -93,4 +93,27 @@ class WasteManagementBusinessModelTest extends TestCase
             'Industrial metals and energy price surges must expand scrap and commodity recycling revenue.'
         );
     }
+
+    public function testEnergySpikeCompressesMarginsDueToFuelSurchargeLag(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('CORM');
+        $stock->setBeta('1.0');
+
+        $calmMacro = new MacroStateDTO(energyPriceIndexEma: 100.0);
+        $energyShockMacro = new MacroStateDTO(energyPriceIndexEma: 200.0);
+
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $calmResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $calmMacro, $mathMock);
+        $shockResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $energyShockMacro, $mathMock);
+
+        $this->assertGreaterThan(
+            $calmResult->clampedMargin,
+            $shockResult->clampedMargin,
+            'Energy price spikes cause diesel fuel surcharge lag, expanding variable cost ratio.'
+        );
+        $this->assertLessThan($calmResult->ebit, $shockResult->ebit);
+    }
 }

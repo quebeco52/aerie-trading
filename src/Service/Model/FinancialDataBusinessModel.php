@@ -135,7 +135,7 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $operatingLeverageShift);
 
-        $primaryShockZ = abs($transactionZ) > abs($subscriptionZ) ? $transactionZ : $subscriptionZ;
+        $primaryShockZ = $streams->resolveDominantShockZ([$transactionZ, $subscriptionZ]);
         $observableShockZ = (($subscriptionZ * $subscriptionWeight + $transactionZ * $transactionWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))
             + ($transactionMacroBonus * $transactionWeight);
 

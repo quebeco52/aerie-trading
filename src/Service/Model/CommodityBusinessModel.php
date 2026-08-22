@@ -248,23 +248,7 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = $effectiveMargin + $ricardianFriction + $disasterPenalty;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // Determine dominant primary shock driver
-        $streamAbs = [
-            'extraction_volume' => abs($extractionZ),
-            'spot_price'        => abs($spotZ),
-            'refining_spread'   => abs($refiningZ),
-        ];
-        arsort($streamAbs);
-        $dominantKey = array_key_first($streamAbs);
-        $primaryShockZ = match ($dominantKey) {
-            'extraction_volume' => $extractionZ,
-            'refining_spread'   => $refiningZ,
-            default             => $spotZ,
-        };
-
-        if (abs($eventZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $eventZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([$extractionZ, $spotZ, $refiningZ], $eventZ);
 
         $spotShockTotal = $spotShock + $inflationBonus + $convenienceYieldBonus;
         $observableShockZ = ($extractionShock * $extractionWeight) +

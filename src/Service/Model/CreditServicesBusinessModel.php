@@ -247,7 +247,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             $eventType = ShockEvent::RESERVE_RELEASE;
         }
 
-        $primaryShockZ = abs($defaultZ) > abs($lendingZ) ? $defaultZ : $lendingZ;
+        $primaryShockZ = $streams->resolveDominantShockZ([$defaultZ, $lendingZ]);
         // observableShockZ: inflation bonus and swipe volume are visible, lending is partially visible
         $lendingBase = max(1.0, $expectedRevenue * $lendingWeight);
         $lendingShock = ($lendingRevenue - $lendingBase) / $lendingBase;

@@ -137,10 +137,7 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin);
 
-        $primaryShockZ = abs($recoveryZ) > abs($advisoryZ) ? $recoveryZ : $advisoryZ;
-        if ($loanToOwnWeight > 0.0 && abs($loanToOwnZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $loanToOwnZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([$recoveryZ, $advisoryZ, $loanToOwnWeight > 0.0 ? $loanToOwnZ : 0.0]);
 
         $observableShockZ = ($advisoryZ * $advisoryWeight * self::ADVISORY_VARIANCE_SCALAR * $baselineVol) +
             ($recoveryZ * $recoveryWeight * self::RECOVERY_VARIANCE_SCALAR * $baselineVol) +

@@ -218,23 +218,7 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = $realizedVariableMargin + $effectiveWageDrag + $auditPenalty;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // Determine primary shock driver
-        $streamAbs = [
-            'inpatient_care'      => abs($inpatientZ),
-            'elective_outpatient' => abs($outpatientZ),
-            'insurance_arbitrage' => abs($arbitrageZ),
-        ];
-        arsort($streamAbs);
-        $dominantKey = array_key_first($streamAbs);
-        $primaryShockZ = match ($dominantKey) {
-            'inpatient_care'      => $inpatientZ,
-            'elective_outpatient' => $outpatientZ,
-            default               => $arbitrageZ,
-        };
-
-        if (abs($eventZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $eventZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([$inpatientZ, $outpatientZ, $arbitrageZ], $eventZ);
 
         // Inpatient care and mandatory spending packages are publicly visible; billing arbitrage is opaque
         $observableShockZ = ($inpatientZ * $inpatientWeight * self::INPATIENT_VARIANCE_SCALAR * 0.70) +

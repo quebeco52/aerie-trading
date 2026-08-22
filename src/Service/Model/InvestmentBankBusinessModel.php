@@ -257,9 +257,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             }
         }
 
-        $primaryShockZ = $advisoryWeight > 0.0 ? $advisoryZ : $tradingZ;
-        if (abs($tradingZ) > abs($primaryShockZ)) $primaryShockZ = $tradingZ;
-        if (abs($eventZ)   > abs($primaryShockZ)) $primaryShockZ = $eventZ;
+        $primaryShockZ = $streams->resolveDominantShockZ([$advisoryWeight > 0.0 ? $advisoryZ : 0.0, $tradingZ], $eventZ);
 
         $observableShockZ = ($advisoryZ * $advisoryWeight * self::ADVISORY_ANALYST_VISIBILITY
             + $tradingZ * $tradingWeight * self::TRADING_ANALYST_VISIBILITY)

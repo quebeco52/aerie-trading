@@ -208,13 +208,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock Z-score selects the most extreme driver across streams
-        $primaryShockZ = $subscriptionZ;
-        if (abs($adZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $adZ;
-        }
-        if (abs($eventZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $eventZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([$subscriptionZ, $adZ], $eventZ);
 
         $observableShockZ = (($subscriptionZ * $subWeight) + ($adZ * $adWeight)) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
 

@@ -170,10 +170,7 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock is whichever stream deviated the most, overridden by tail events
-        $primaryShockZ = abs($equipmentZ) > abs($subscriptionZ) ? $equipmentZ : $subscriptionZ;
-        if (abs($eventZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $eventZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([$equipmentZ, $subscriptionZ], $eventZ);
 
         // Subscriber additions/churn are heavily tracked by analysts, equipment sales are standard retail visibility.
         $observableShockZ = ($subscriptionZ * $subscriptionWeight * self::SUBSCRIPTION_VARIANCE_SCALAR * 0.90) +

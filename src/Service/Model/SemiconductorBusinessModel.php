@@ -201,10 +201,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $yieldModifier + $energyDrag);
 
-        $primaryShockZ = abs($cycleZ) > abs($foundryZ) ? $cycleZ : $foundryZ;
-        if (abs($designZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $designZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([$cycleZ, $foundryZ, $designZ]);
         // observableShockZ: foundry and design demand visible via shipment lead times and supply chain checks
         $foundryBase = max(1.0, $expectedRevenue * $foundryWeight);
         $foundryShock = ($foundryRevenue - $foundryBase) / $foundryBase;

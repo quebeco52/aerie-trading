@@ -118,10 +118,7 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $fuelLagDrag);
 
         // Max magnitude shock
-        $primaryShockZ = abs($intermodalZ) > abs($bulkZ) ? $intermodalZ : $bulkZ;
-        if (abs($industrialZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $industrialZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([$intermodalZ, $bulkZ, $industrialZ]);
 
         $observableShockZ = ($intermodalZ * $intermodalWeight * self::INTERMODAL_VARIANCE_SCALAR) +
             ($bulkZ * $bulkWeight * self::BULK_VARIANCE_SCALAR) +

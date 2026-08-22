@@ -181,10 +181,9 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Blended primary shock for standard model integration
-        $primaryShockZ = ($commercialZ * $commercialWeight) + ($consumerZ * $consumerWeight);
-        if (abs($eventZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $eventZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([
+            ($commercialZ * $commercialWeight) + ($consumerZ * $consumerWeight),
+        ], $eventZ);
 
         $observableShockZ = $primaryShockZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
 

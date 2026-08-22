@@ -146,10 +146,7 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $fuelLagDrag);
 
-        $primaryShockZ = abs($spotZ) > abs($fleetZ) ? $spotZ : $fleetZ;
-        if (abs($whZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $whZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([$spotZ, $fleetZ, $whZ]);
 
         $observableShockZ = ($fleetZ * $fleetWeight * self::DEDICATED_VARIANCE_SCALAR * $baselineVol) +
             ($spotZ * $spotWeight * self::SPOT_VARIANCE_SCALAR * $baselineVol) +

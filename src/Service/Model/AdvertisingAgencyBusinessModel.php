@@ -102,10 +102,7 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin);
 
-        $primaryShockZ = abs($mediaZ) > abs($brandZ) ? $mediaZ : $brandZ;
-        if (abs($martechZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $martechZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([$mediaZ, $brandZ, $martechZ]);
 
         $observableShockZ = ($mediaZ * $mediaWeight * self::MEDIA_VARIANCE_SCALAR * $baselineVol) +
             ($brandZ * $brandWeight * self::BRAND_VARIANCE_SCALAR * $baselineVol) +

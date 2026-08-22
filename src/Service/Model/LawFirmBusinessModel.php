@@ -224,23 +224,7 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = $realizedVariableMargin + $wageDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
-        // Determine dominant shock driver
-        $streamAbs = [
-            'corporate_retainers'    => abs($retainerZ),
-            'litigation_settlements' => abs($litigationZ),
-            'restructuring_advisory' => abs($restructuringZ),
-        ];
-        arsort($streamAbs);
-        $dominantKey = array_key_first($streamAbs);
-        $primaryShockZ = match ($dominantKey) {
-            'litigation_settlements' => $litigationZ,
-            'restructuring_advisory' => $restructuringZ,
-            default                  => $retainerZ,
-        };
-
-        if (abs($eventZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $eventZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([$retainerZ, $litigationZ, $restructuringZ], $eventZ);
 
         // Blended observable shock
         $observableShockZ = ($retainerShock * $retainerWeight) +

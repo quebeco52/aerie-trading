@@ -129,10 +129,7 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         }
 
         $structuralClaimShock = abs($claimZ) > abs($catThreshold) ? $claimZ : 0.0;
-        $primaryShockZ = abs($structuralClaimShock) > abs($treatyZ) ? $structuralClaimShock : $treatyZ;
-        if (abs($catBondZ) > abs($primaryShockZ)) {
-            $primaryShockZ = $catBondZ;
-        }
+        $primaryShockZ = $streams->resolveDominantShockZ([$structuralClaimShock, $treatyZ, $catBondZ]);
 
         $treatyBase = max(1.0, $expectedRevenue * $treatyWeight);
         $treatyShock = ($treatyRevenue - $treatyBase) / $treatyBase;

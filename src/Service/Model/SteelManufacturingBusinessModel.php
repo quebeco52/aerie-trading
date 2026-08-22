@@ -105,7 +105,7 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $freightDrag = $freightShift * 0.05;
         $clampedMargin = $this->clampMargin($realizedVariableMargin + ($energyDrag * 0.40) + $freightDrag);
 
-        $primaryShockZ = abs($spotZ) > abs($contractZ) ? $spotZ : $contractZ;
+        $primaryShockZ = $streams->resolveDominantShockZ([$spotZ, $contractZ]);
         $observableShockZ = ($contractZ * $contractWeight * self::CONTRACT_VARIANCE_SCALAR * $baselineVol)
             + ($spotZ * $spotWeight * self::SPOT_VARIANCE_SCALAR * $baselineVol)
             + ($macroBoost * self::SPOT_HRC_WEIGHT);

@@ -256,7 +256,7 @@ class ClearingHouseBusinessModel implements BusinessModelInterface
             $eventType = ShockEvent::VOLATILITY_SURGE;
         }
 
-        $primaryShockZ = abs($defaultZ) > abs($revenueZ) ? $defaultZ : $revenueZ;
+        $primaryShockZ = $streams->resolveDominantShockZ([$defaultZ, $revenueZ]);
         $observableShockZ = 0.0;
 
         $result = new SectorPhysicsResult(
