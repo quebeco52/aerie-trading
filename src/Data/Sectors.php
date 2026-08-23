@@ -25,6 +25,7 @@ class Sectors
         'asset_manager'   => 'Collects management fees based on total Assets Under Management (AUM). Highly scalable and asset-light. Idiosyncratic variance is exceptionally low due to sticky recurring fees, but vulnerable to broader market downturns reducing AUM. Evaluated on ROE.',
         'credit_services' => 'Operates like a bank but with unsecured loans. Revenue benefits directly from inflation as swipe fees scale with prices. Extremely vulnerable to economic downturns when unsecured consumer loan defaults violently spike. Evaluated on ROE.',
         'private_equity'  => 'Alternative asset managers operating with leverage. Base revenue is AUM fees, but massive performance fees (Carried Interest) are earned during economic expansions. Highly dependent on cheap credit and M&A volume. Evaluated on ROE.',
+        'hedge_fund'      => 'Active investment funds deploying leveraged long/short strategies and quantitative models. Revenue blends recurring management fees with volatile performance fees and market-making alpha. Thrives on market volatility (high VIX) to capture arbitrage spreads, but highly vulnerable to prime brokerage margin calls and forced liquidations during credit freezes. Evaluated on ROE.',
         'shadow_bank'     => 'Non-depository financial institutions (Mortgage Finance, Mortgage REITs). They fund massive loan books entirely through short-term wholesale debt. Hyper-vulnerable to yield curve inversions and mortgage default spikes during housing crashes. Evaluated on ROE.',
         'reit'            => 'Real Estate Investment Trusts hold physical property. Evaluated on Funds From Operations (FFO). Pays 0% corporate tax but must issue heavy debt to expand due to high dividend payouts. Features CPI rent escalators (inflation hedge) and tenant vacancy risks.',
         'utility'         => 'Regulated monopolies and essential infrastructure (Power, Water, Telecom, Waste Management) with heavily regulated Return on Invested Capital (ROIC). They grow absolute earnings by deploying massive CapEx. Revenues are hyper-stable, but rate hikes lag behind inflation, causing temporary margin compression during inflationary spikes.',
@@ -116,6 +117,7 @@ class Sectors
         'Gambling' => ['pe' => 18.00, 'depreciation' => 0.08, 'ebitda_limit' => 4.5, 'equity_limit' => 2.0, 'business_model' => 'none'], // Collateralized by real estate
         'Gold' => ['pe' => 15.00, 'depreciation' => 0.10, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'commodity'], // Mines deplete, highly cyclical
         'Grocery Stores' => ['pe' => 15.00, 'depreciation' => 0.06, 'ebitda_limit' => 4.0, 'equity_limit' => 1.5, 'business_model' => 'consumer_staples'], // Very safe debt profile
+        'Hedge Fund' => ['pe' => 14.00, 'depreciation' => 0.02, 'ebitda_limit' => 999.0, 'equity_limit' => 3.0, 'business_model' => 'hedge_fund'], // Quantitative alpha, leveraged directional trading
         'Healthcare Plans' => ['pe' => 16.00, 'depreciation' => 0.04, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'none'], // Managed care
         'Health Information Services' => ['pe' => 24.00, 'depreciation' => 0.08, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'none'],
         'Home Improvement Retail' => ['pe' => 20.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.0, 'equity_limit' => 1.0, 'business_model' => 'none'],
@@ -205,7 +207,7 @@ class Sectors
      */
     public static function isFinancial(string $businessModel): bool
     {
-        return in_array($businessModel, ['commercial_bank', 'insurance', 'retail_insurance', 'reinsurance', 'brokerage', 'asset_manager', 'credit_services', 'shadow_bank', 'private_equity', 'clearing_house', 'investment_bank', 'distressed_debt']);
+        return in_array($businessModel, ['commercial_bank', 'insurance', 'retail_insurance', 'reinsurance', 'brokerage', 'asset_manager', 'credit_services', 'shadow_bank', 'private_equity', 'hedge_fund', 'clearing_house', 'investment_bank', 'distressed_debt']);
     }
 
     private static array $strategyInstances = [];
@@ -240,6 +242,7 @@ class Sectors
             'asset_manager'   => new \App\Service\Model\Sector\AssetManagementBusinessModel(),
             'credit_services' => new \App\Service\Model\Sector\CreditServicesBusinessModel(),
             'private_equity'  => new \App\Service\Model\Sector\PrivateEquityBusinessModel(),
+            'hedge_fund'      => new \App\Service\Model\Sector\HedgeFundBusinessModel(),
             'shadow_bank'     => new \App\Service\Model\Sector\ShadowBankBusinessModel(),
             'reit'            => new \App\Service\Model\Sector\ReitBusinessModel(),
             'clearing_house'  => new \App\Service\Model\Sector\ClearingHouseBusinessModel(),

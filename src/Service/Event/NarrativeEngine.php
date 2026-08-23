@@ -148,6 +148,26 @@ class NarrativeEngine
                 "Lack of debt financing stalled leveraged buyout deployment and exit realizations.",
                 "Extended portfolio holding periods delayed carried interest crystallization."
             ]),
+            ShockEvent::HF_QUANT_ALPHA_SURGE => $this->getRandomPhrase([
+                "Black-box quantitative trading desks exploited massive market volatility, generating historic stat-arb alpha.",
+                "High-frequency algorithmic market-making desks minted record profits amid violent price swings.",
+                "Proprietary volatility arbitrage models captured unprecedented spreads across fragmented markets."
+            ]),
+            ShockEvent::HF_MARGIN_CALL => $this->getRandomPhrase([
+                "Spreading credit contagion and blowing credit spreads triggered severe prime broker margin calls.",
+                "Forced de-grossing and fire-sale liquidations locked in steep mark-to-market trading losses.",
+                "Prime brokers aggressively hiked collateral haircuts, forcing emergency portfolio de-leveraging."
+            ]),
+            ShockEvent::HF_PERFORMANCE_FEE_CRYSTALLIZATION => $this->getRandomPhrase([
+                "Crystallized massive 20% incentive fees as flagship funds set new all-time high-water marks.",
+                "Explosive trading gains cleared high-water marks, unlocking substantial performance fee allocations.",
+                "Exceptional risk-adjusted fund returns triggered historic quarterly incentive fee payouts."
+            ]),
+            ShockEvent::HF_DIRECTIONAL_BLOWUP => $this->getRandomPhrase([
+                "Heavily leveraged directional bets blew up following an unanticipated macroeconomic regime shift.",
+                "Aggressive long/short equity exposure suffered catastrophic drawdown against surging macro headwinds.",
+                "Concentrated directional positions collapsed under violent market rotation, wiping out trading equity."
+            ]),
             ShockEvent::DEFENSE_CONTRACT_LOSS => $this->getRandomPhrase([
                 "Lost a multi-billion dollar next-generation government defense contract to a rival.",
                 "Major aerospace program cancellation reduced forward backlog significantly.",

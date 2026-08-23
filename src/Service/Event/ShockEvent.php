@@ -44,6 +44,10 @@ class ShockEvent
     public const PE_DEAL_DROUGHT = 'pe_deal_drought';
     public const PE_LEVERAGE_RECAPITALIZATION = 'pe_leverage_recapitalization';
     public const PE_PORTFOLIO_MARKDOWN = 'pe_portfolio_markdown';
+    public const HF_QUANT_ALPHA_SURGE = 'hf_quant_alpha_surge';
+    public const HF_MARGIN_CALL = 'hf_margin_call';
+    public const HF_PERFORMANCE_FEE_CRYSTALLIZATION = 'hf_performance_fee_crystallization';
+    public const HF_DIRECTIONAL_BLOWUP = 'hf_directional_blowup';
     public const DEFENSE_CONTRACT_LOSS = 'defense_contract_loss';
     public const DEFENSE_CONTRACT_WIN = 'defense_contract_win';
     public const CREDIT_UNSECURED_PROVISIONS = 'credit_unsecured_provisions';

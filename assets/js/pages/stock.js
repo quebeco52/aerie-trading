@@ -1259,28 +1259,11 @@ function renderRevenueStreamsChart(labels, streamsKeysSet, rawStreamsData, strea
                             if (!details) return [];
 
                             const lines = [];
-                            if (details.qoq_delta !== undefined && details.qoq_delta !== 0) {
-                                const delta = details.qoq_delta;
-                                const deltaSign = delta >= 0 ? '+' : '';
-                                lines.push(`  QoQ Trend: ${deltaSign}${(delta * 100).toFixed(1)}%`);
-                            }
                             if (details.share !== undefined && details.share > 0) {
                                 lines.push(`  Mix: ${(details.share * 100).toFixed(1)}% of total`);
                             }
                             if (details.event) {
                                 lines.push(`  ⚡ Shock: ${details.event}`);
-                            }
-                            if (Array.isArray(details.drivers) && details.drivers.length > 0) {
-                                lines.push('  Key Drivers:');
-                                details.drivers.forEach(d => {
-                                    const isPos = (d.impact || 0) >= 0;
-                                    const sign = isPos ? '+' : '';
-                                    const metric = d.type === 'momentum' 
-                                        ? `(Z=${d.z !== undefined ? d.z : '0'})` 
-                                        : `${sign}${((d.impact || 0) * 100).toFixed(1)}%`;
-                                    const icon = d.type === 'macro' ? '• ' : '• ';
-                                    lines.push(`    ${icon}${d.label}: ${metric}`);
-                                });
                             }
                             return lines;
                         }

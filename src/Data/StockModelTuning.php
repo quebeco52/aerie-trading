@@ -143,16 +143,21 @@ class StockModelTuning
         ],
 
         // =====================================================================
-        // PRIVATE EQUITY & DISTRESSED DEBT ARCHETYPES
+        // HEDGE FUND & QUANTITATIVE ARBITRAGE ARCHETYPES
         // =====================================================================
 
         // --- Black Swan Capital (SWAN) ---
-        // Mega-cap alternative asset manager specializing in leveraged buyouts and carried interest.
+        // Apex predator quantitative hedge fund and tactical alternative asset manager.
+        // Tri-stream engine combining sticky AUM fees, leveraged directional bets, and black-box quant alpha.
         'SWAN' => [
-            ModelParam::ManagementFeeWeight->value        => 0.60,
-            ModelParam::CarriedInterestWeight->value      => 0.20,
-            ModelParam::PrincipalInvestmentsWeight->value => 0.20,
+            ModelParam::HfManagementFeeWeight->value   => 0.50,
+            ModelParam::HfDirectionalBetsWeight->value => 0.30,
+            ModelParam::HfQuantAlphaWeight->value      => 0.20,
         ],
+
+        // =====================================================================
+        // PRIVATE EQUITY & DISTRESSED DEBT ARCHETYPES
+        // =====================================================================
 
         // --- Vulture Capital Recovery (VULT) ---
         // Specialist distressed debt restructuring and turnaround equity sponsor.

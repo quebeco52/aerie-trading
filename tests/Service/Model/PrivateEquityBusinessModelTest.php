@@ -68,15 +68,15 @@ class PrivateEquityBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(1.0, $normalPhysics['pricing_power_multiplier'], 0.001);
 
         // High cost of debt macro (policy rate 5.5% + spread 3.0% = 8.5% CoD > 6.5% baseline)
-        // Delta = 0.02 * 15.0 = 0.30 compression => carried interest multiple = 0.70
-        // Blended (35% mgmt + 65% carry) = 0.35*1.0 + 0.65*0.70 = 0.35 + 0.455 = 0.805
+        // Delta = 0.02 * 7.50 = 0.15 compression => carried interest multiple = 0.85
+        // Blended (35% mgmt + 65% carry) = 0.35*1.0 + 0.65*0.85 = 0.35 + 0.5525 = 0.9025
         $highCoDMacro = MacroStateDTO::fromArray([
             'policy_rate_ema' => 0.055,
             'macro_credit_spread_ema' => 0.030,
         ]);
         $distressedPhysics = $this->model->getMacroPhysics($stock, $highCoDMacro);
         $this->assertLessThan(1.0, $distressedPhysics['pricing_power_multiplier']);
-        $this->assertEqualsWithDelta(0.805, $distressedPhysics['pricing_power_multiplier'], 0.01);
+        $this->assertEqualsWithDelta(0.9025, $distressedPhysics['pricing_power_multiplier'], 0.001);
     }
 
     public function testCalculateSectorPhysicsCarriedInterestHurdleMiss(): void
@@ -157,6 +157,9 @@ class PrivateEquityBusinessModelTest extends TestCase
         $calmYield = $this->model->calculateCashYield($calmMacro);
         $this->assertGreaterThan(0.0, $calmYield);
 
+        // 80% bonds @ 4% + 20% equity @ 7% = 0.032 + 0.014 = 0.046
+        $this->assertEqualsWithDelta(0.046, $calmYield, 0.001);
+
         $stock = new Stock();
         $stock->setTicker('PE_CORP');
         $stock->setTotalRevenue('50000000.0');
@@ -169,6 +172,23 @@ class PrivateEquityBusinessModelTest extends TestCase
 
         $this->assertGreaterThan(0.0, $calmIncome);
         $this->assertLessThan($calmIncome, $panicIncome);
+    }
+
+    public function testDealFlowAsymmetryExpansionVsContraction(): void
+    {
+        $this->assertGreaterThan(
+            PrivateEquityBusinessModel::DEAL_FLOW_BOOM_MULT,
+            PrivateEquityBusinessModel::DEAL_FLOW_BUST_MULT
+        );
+        $this->assertSame(3.0, PrivateEquityBusinessModel::DEAL_FLOW_BOOM_MULT);
+        $this->assertSame(5.0, PrivateEquityBusinessModel::DEAL_FLOW_BUST_MULT);
+    }
+
+    public function testTreasury8020BondEquityAllocation(): void
+    {
+        $this->assertSame(0.80, PrivateEquityBusinessModel::PORTFOLIO_BOND_ALLOCATION);
+        $this->assertSame(0.20, PrivateEquityBusinessModel::PORTFOLIO_EQUITY_ALLOCATION);
+        $this->assertEqualsWithDelta(1.0, PrivateEquityBusinessModel::PORTFOLIO_BOND_ALLOCATION + PrivateEquityBusinessModel::PORTFOLIO_EQUITY_ALLOCATION, 0.0001);
     }
 
     public function testDebtExpansionCapacityGatedDuringCreditFreeze(): void

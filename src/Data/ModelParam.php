@@ -58,6 +58,11 @@ enum ModelParam: string
     case RestructuringAdvisoryWeight = 'restructuring_advisory_weight';
     case TurnaroundGainsWeight = 'turnaround_gains_weight';
 
+    // --- Hedge Fund ---
+    case HfManagementFeeWeight = 'hf_management_fee_weight';
+    case HfDirectionalBetsWeight = 'hf_directional_bets_weight';
+    case HfQuantAlphaWeight = 'hf_quant_alpha_weight';
+
     // --- Banking & Credit Services ---
     case NiiRevenueWeight = 'nii_revenue_weight';
     case FeeRevenueWeight = 'fee_revenue_weight';

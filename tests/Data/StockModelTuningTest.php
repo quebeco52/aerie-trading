@@ -84,6 +84,7 @@ class StockModelTuningTest extends TestCase
             'conglomerate' => [ModelParam::IndustrialConglomerateWeight, ModelParam::DefensiveStaplesWeight, ModelParam::ContrarianFloatWeight],
             'law_firm' => [ModelParam::CorporateRetainerWeight, ModelParam::LitigationContingencyWeight, ModelParam::RestructuringAdvisoryWeight],
             'auto_manufacturer' => [ModelParam::AutoSalesWeight, ModelParam::ApexLuxuryWeight, ModelParam::SoftwareServicesWeight],
+            'hedge_fund' => [ModelParam::HfManagementFeeWeight, ModelParam::HfDirectionalBetsWeight, ModelParam::HfQuantAlphaWeight],
         ];
 
         foreach (StockModelTuning::OVERRIDES as $ticker => $overrides) {
@@ -114,6 +115,11 @@ class StockModelTuningTest extends TestCase
 
     public function testNewlyTunedArchetypesMatchLore(): void
     {
+        // Black Swan Capital (SWAN)
+        $this->assertSame(0.60, StockModelTuning::get('SWAN', ModelParam::HfManagementFeeWeight, 0.0));
+        $this->assertSame(0.20, StockModelTuning::get('SWAN', ModelParam::HfDirectionalBetsWeight, 0.0));
+        $this->assertSame(0.20, StockModelTuning::get('SWAN', ModelParam::HfQuantAlphaWeight, 0.0));
+
         // Three Rivers Manufacturing (TRIV)
         $this->assertSame(0.60, StockModelTuning::get('TRIV', ModelParam::IndustrialConglomerateWeight, 0.0));
         $this->assertSame(0.30, StockModelTuning::get('TRIV', ModelParam::DefensiveStaplesWeight, 0.0));
@@ -246,6 +252,7 @@ class StockModelTuningTest extends TestCase
             new \App\Service\Model\Sector\EducationBusinessModel(),
             new \App\Service\Model\Sector\FinancialDataBusinessModel(),
             new \App\Service\Model\Sector\HeavyManufacturingBusinessModel(),
+            new \App\Service\Model\Sector\HedgeFundBusinessModel(),
             new \App\Service\Model\Sector\InsuranceBusinessModel(),
             new \App\Service\Model\Sector\InternetRetailBusinessModel(),
             new \App\Service\Model\Sector\InvestmentBankBusinessModel(),

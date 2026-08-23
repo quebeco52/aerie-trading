@@ -35,27 +35,27 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     /** Maximum leverage aggression multiplier when the firm hits its equity limit. */
     public const MAX_LEVERAGE_AGGRESSION = 1.00;
     /** Amplifier for carried interest based on the amount of wholesale leverage deployed. */
-    public const CARRY_LEVERAGE_AMPLIFIER_SCALAR = 0.30;
+    public const CARRY_LEVERAGE_AMPLIFIER_SCALAR = 0.80;
 
     // --- Cost of Debt & LBO Elasticity ---
     /** Baseline macro credit spread (~200bps) for normal LBO conditions. */
     public const LBO_CREDIT_SPREAD_BASELINE = 0.020;
     /** Baseline policy rate (~4.5%) threshold above which LBO financing becomes distressed. */
     public const LBO_RATE_FREEZE_THRESHOLD  = 0.045;
-    /** Elasticity scalar: How violently LBO multiples compress and exits freeze as total Cost of Debt rises. */
-    public const LBO_COST_OF_DEBT_ELASTICITY = 15.0;
+    /** Elasticity scalar: How LBO multiples compress and exits freeze as total Cost of Debt rises. */
+    public const LBO_COST_OF_DEBT_ELASTICITY = 7.50;
     /** Z-score cliff where economic conditions trigger a complete miss of the hurdle rate, wiping out carry. */
-    public const HURDLE_RATE_Z_CLIFF = -0.50;
+    public const HURDLE_RATE_Z_CLIFF = -1.00;
     /** Sensitivity of the hurdle rate cliff to widening credit spreads. */
     public const HURDLE_CREDIT_SPREAD_SCALAR = 10.0;
     /** Multiplier for variable costs (rescue capital) when policy rates choke portfolio companies. */
-    public const RESCUE_CAPITAL_COST_SCALAR = 1.50;
+    public const RESCUE_CAPITAL_COST_SCALAR = 1.00;
 
     // --- Macro & Stream Physics ---
     /** Deal flow volume multiplier during macroeconomic output gap expansions. */
     public const DEAL_FLOW_BOOM_MULT       = 3.00;
     /** Deal flow volume multiplier during macroeconomic output gap contractions. */
-    public const DEAL_FLOW_BUST_MULT       = 1.50;
+    public const DEAL_FLOW_BUST_MULT       = 5.00;
     /** Standard deviation multiplier for firm-wide revenue variance. */
     public const REVENUE_VARIANCE_SCALAR   = 0.15;
     /** Minimum structural operating cost-to-revenue ratio reflecting PE overhead. */
@@ -64,14 +64,14 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     // --- Stream Volatility Scalars ---
     /** Reduced volatility scalar for sticky management fees. */
     public const MGMT_BASE_VOLATILITY_SCALAR = 0.50;
-    /** Amplified volatility scalar for carried interest performance fees. */
-    public const CARRY_BASE_VOLATILITY_SCALAR = 1.50;
-    /** Highly amplified volatility scalar for principal balance sheet investments. */
+    /** Volatility scalar for carried interest performance fees. */
+    public const CARRY_BASE_VOLATILITY_SCALAR = 2.20;
+    /** Volatility scalar for principal balance sheet investments. */
     public const PRINCIPAL_BASE_VOLATILITY_SCALAR = 2.00;
 
     // --- Principal MTM Physics ---
     /** Sensitivity of Principal balance sheet investments to macro Output Gap (Multiple Expansion/Contraction). */
-    public const PRINCIPAL_MTM_MACRO_SCALAR = 2.50;
+    public const PRINCIPAL_MTM_MACRO_SCALAR = 2.00;
     /** Credit spread drag scalar applied to Mark-to-Market principal valuations. */
     public const PRINCIPAL_MTM_SPREAD_DRAG = 0.50;
     /** Base variable cost penalty applied when illiquid portfolio companies must be marked down. */
@@ -82,10 +82,10 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     public const SEED_VIX_THRESHOLD = 0.20;
     /** Sensitivity of PE cash yields to severe VIX market panics. */
     public const SEED_VIX_SENSITIVITY = 0.50;
-    /** Allocation percentage of PE excess cash deployed into internal sponsor equity. */
-    public const PORTFOLIO_EQUITY_ALLOCATION = 0.80;
-    /** Allocation percentage of PE excess cash deployed into internal sponsor debt. */
-    public const PORTFOLIO_BOND_ALLOCATION = 0.20;
+    /** Allocation percentage of PE excess cash deployed into internal sponsor equity co-investments. */
+    public const PORTFOLIO_EQUITY_ALLOCATION = 0.20;
+    /** Allocation percentage of PE excess cash deployed into safe debt and fixed income reserves. */
+    public const PORTFOLIO_BOND_ALLOCATION = 0.80;
 
     // --- Debt Gating & Hoarding ---
     /** Multiple compression threshold that triggers a total freeze on new LBO debt issuance. */
@@ -300,7 +300,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
 
         // 4. Credit-Condition Hurdle Cliff
         $spreadFreezeDrag = max(0.0, ($creditSpread - self::LBO_CREDIT_SPREAD_BASELINE) * self::HURDLE_CREDIT_SPREAD_SCALAR);
-        $hurdleRateZCliff = self::HURDLE_RATE_Z_CLIFF - $spreadFreezeDrag;
+        $hurdleRateZCliff = self::HURDLE_RATE_Z_CLIFF + $spreadFreezeDrag;
         $economicCondition = $carryZ + $dealFlowMultiplier;
 
         $blendedMultiplier = ($mgmtWeight * 1.0) + ($carryWeight * $multipleCompression) + ($principalWeight * 1.0);
@@ -482,7 +482,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $bondReturn = $yield10y;
         $equityReturn = self::BASE_EQUITY_RETURN + ($outputGap * self::EQUITY_RETURN_GAP_MULT * 1.5);
 
-        // PE firms deploy excess cash into highly levered sponsor commitments (20% Bonds / 80% Equities)
+        // PE firms deploy excess cash into safe short-term sovereign debt and sponsor commitments (80% Bonds / 20% Equities)
         return max(0.0, (self::PORTFOLIO_BOND_ALLOCATION * $bondReturn) + (self::PORTFOLIO_EQUITY_ALLOCATION * $equityReturn));
     }
 
