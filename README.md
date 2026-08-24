@@ -105,3 +105,6 @@ docker compose --env-file .env.dev -f docker-compose.dev.yml --profile live  up
 - AI may be used to write code snippets and analys code with human oversight.
 - No autonomous AI agents are allowed to write code.
 - The developer who commits the code stands for the code and understands the code.
+
+## License
+This project is licensed under the [GNU Affero General Public License v3.0 (AGPLv3)](LICENSE).
