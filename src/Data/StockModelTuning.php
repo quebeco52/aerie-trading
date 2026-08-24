@@ -150,8 +150,8 @@ class StockModelTuning
         // Apex predator quantitative hedge fund and tactical alternative asset manager.
         // Tri-stream engine combining sticky AUM fees, leveraged directional bets, and black-box quant alpha.
         'SWAN' => [
-            ModelParam::HfManagementFeeWeight->value   => 0.50,
-            ModelParam::HfDirectionalBetsWeight->value => 0.30,
+            ModelParam::HfManagementFeeWeight->value   => 0.60,
+            ModelParam::HfDirectionalBetsWeight->value => 0.20,
             ModelParam::HfQuantAlphaWeight->value      => 0.20,
         ],
 

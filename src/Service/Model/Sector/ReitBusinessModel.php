@@ -57,6 +57,10 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     /** Weight given to historical trailing twelve month ROIC when updating ROIC EMA. */
     public const ROIC_TTM_HIST_WEIGHT       = 0.75;
 
+    // --- Macro Demand Sensitivity ---
+    /** Sensitivity of contractual lease demand and hospitality utilization to real GDP output gap. */
+    public const MACRO_DEMAND_SCALAR            = 0.25;
+
     // --- Revenue & Vacancy Shock Physics ---
     /** Base volatility scalar applied to sticky commercial lease revenues. */
     public const REVENUE_VARIANCE_SCALAR        = 0.05;
@@ -66,6 +70,10 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public const SECURITIZATION_VARIANCE_SCALAR = 2.00;
     /** Volatility multiplier for longevity-linked bond yields and pension assets. */
     public const LONGEVITY_VARIANCE_SCALAR      = 0.25;
+    /** Weight of commercial property price index in market lease reversion. */
+    public const CRE_INDEX_WEIGHT               = 0.70;
+    /** Weight of residential property price index in market lease reversion. */
+    public const RES_INDEX_WEIGHT               = 0.30;
 
     /** Fraction of excess CPI inflation captured via contractual rent escalators. */
     public const RENT_ESCALATOR_CAPTURE         = 0.80;
@@ -110,7 +118,11 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     /** Minimum structural operating margin floor after extended asset degradation. */
     public const MIN_OPERATING_MARGIN_FLOOR   = 0.05;
     /** Maximum structural operating margin ceiling achievable through property modernization. */
-    public const MAX_OPERATING_MARGIN_CEILING = 0.45;
+    public const MAX_OPERATING_MARGIN_CEILING = 0.75;
+
+    // --- Credit Risk & Recovery ---
+    /** Expected loss given default for tangible real estate collateral. */
+    public const REIT_LOSS_GIVEN_DEFAULT = 0.30;
 
     // --- Aggressive Property Acquisition Borrowing ---
     /** Base probability of REIT expanding balance sheet debt to fund property acquisitions. */
@@ -139,7 +151,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
         $yield10y = $macroState->yield10yEma;
         $realEstateRiskPremium = $macroState->equityRiskPremium;
-        $targetCapRate = $yield10y + $realEstateRiskPremium;
+        $creditSpreadDrag = $macroState->macroCreditSpreadEma * self::CAP_RATE_SPREAD_SENSITIVITY;
+        $targetCapRate = $yield10y + $realEstateRiskPremium + $creditSpreadDrag;
 
         $portfolioTurnoverRate = self::PORTFOLIO_TURNOVER_RATE;
         $maxCapRate = max(self::MAX_CAP_RATE_CLAMP, $macroState->yield10yEma + self::CAP_RATE_CEILING_SPREAD);
@@ -167,6 +180,10 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
         $physics['pricing_power_multiplier'] = 1.0;
+        $outputGap = $macroState->outputGapEma;
+        $beta = (float) $stock->getBeta();
+        // REITs hold domestic real estate with sticky contracted leases; scale output gap demand shift appropriately
+        $physics['macro_demand_shift'] = $outputGap * self::MACRO_DEMAND_SCALAR * $beta;
         return $physics;
     }
 
@@ -217,7 +234,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $rentEscalator = $excessInflation * self::RENT_ESCALATOR_CAPTURE;
         $creShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;
         $resShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
-        $blendedPropertyShift = ($creShift * 0.70) + ($resShift * 0.30);
+        $blendedPropertyShift = ($creShift * self::CRE_INDEX_WEIGHT) + ($resShift * self::RES_INDEX_WEIGHT);
         $marketLeaseReversion = $blendedPropertyShift * self::PORTFOLIO_TURNOVER_RATE;
 
         // --- Clamped Revenue Streams ---
@@ -343,8 +360,9 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
     public function getInterestCoverage(float $ebit, float $interestExpense, float $depreciation = 0.0, float $interestIncome = 0.0): float
     {
-        // FIX: Added $interestIncome to prevent distressed ICR flags when holding massive M&A cash hoards.
-        $ffo = $ebit + $depreciation + $interestIncome;
+        // In EarningsEngine, $ebit already represents Net Operating Income (NOI) without depreciation deducted.
+        // Therefore, we do not add depreciation back to prevent double-counting.
+        $ffo = $ebit + $interestIncome;
         return $interestExpense > 0 ? ($ffo / $interestExpense) : ($ffo > 0 ? self::INFINITE_ICR_POS_FALLBACK : self::INFINITE_ICR_NEG_FALLBACK);
     }
 
@@ -364,7 +382,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
         $minimumIcr = ($this->getModelThresholds()['buyback_min_icr'] ?? 3.0) + 0.5;
 
-        $operatingIncome = $ebit + $depreciation;
+        $operatingIncome = $ebit;
 
         $maxTolerableInterest = max(0.0, $operatingIncome / $minimumIcr);
         $currentInterestExpense = $health->rawMetrics->interestExpense ?? 0.0;
@@ -418,5 +436,10 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public function requiresAlternativeZScore(): bool
     {
         return true;
+    }
+
+    public function getLossGivenDefault(): float
+    {
+        return self::REIT_LOSS_GIVEN_DEFAULT;
     }
 }

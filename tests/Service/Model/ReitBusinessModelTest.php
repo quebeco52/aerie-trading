@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model;
 
 use App\Data\ModelParam;
+use App\DTO\DebtHealthDTO;
+use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
@@ -91,10 +93,11 @@ class ReitBusinessModelTest extends TestCase
     {
         $model = new ReitBusinessModel();
 
-        // Standard FFO ICR: (EBIT + Depreciation + Interest Income) / Interest Expense
-        // ebit = 100, dep = 50, interest income = 10, interest expense = 80 => (100 + 50 + 10) / 80 = 2.0
+        // Standard FFO ICR: (EBIT + Interest Income) / Interest Expense
+        // (EBIT already represents NOI without depreciation deducted in this system)
+        // ebit = 100, interest income = 10, interest expense = 80 => (100 + 10) / 80 = 1.375
         $icr = $model->getInterestCoverage(ebit: 100.0, interestExpense: 80.0, depreciation: 50.0, interestIncome: 10.0);
-        $this->assertEqualsWithDelta(2.0, $icr, 0.0001);
+        $this->assertEqualsWithDelta(1.375, $icr, 0.0001);
 
         // Zero interest expense with positive FFO -> Infinite positive fallback
         $posIcr = $model->getInterestCoverage(ebit: 100.0, interestExpense: 0.0, depreciation: 50.0);
@@ -115,7 +118,8 @@ class ReitBusinessModelTest extends TestCase
         $stock->setCorporateTreasury('0');
         $stock->setBaselineRoic('0.07');
 
-        // Macro: 10y yield = 4.5%, ERP = 5.5% => Target Cap Rate = 10.0%
+        // Macro: 10y yield = 4.5%, ERP = 5.5%, Credit spread = 1.5% (sensitivity = 1.20 => 1.8% spread drag)
+        // Target Cap Rate = 4.5% + 5.5% + 1.8% = 11.8%
         $macro = $this->createMacroState(yield10y: 0.045, equityRiskPremium: 0.055);
         $math = new MathUtility();
 
@@ -125,9 +129,9 @@ class ReitBusinessModelTest extends TestCase
         $this->assertArrayHasKey('invested_capital', $metrics);
         $this->assertEquals(1000000000.0, $metrics['invested_capital']);
 
-        // Blended Cap Rate = (0.07 * 0.975) + (0.10 * 0.025) = 0.06825 + 0.0025 = 0.07075
+        // Blended Cap Rate = (0.07 * 0.975) + (0.118 * 0.025) = 0.06825 + 0.00295 = 0.0712
         // Baseline ROIC is updated in stock
-        $this->assertEqualsWithDelta(0.07075, (float) $stock->getBaselineRoic(), 0.0001);
+        $this->assertEqualsWithDelta(0.0712, (float) $stock->getBaselineRoic(), 0.0001);
     }
 
     public function testRevenueAndRentEscalatorPhysics(): void
@@ -345,9 +349,9 @@ class ReitBusinessModelTest extends TestCase
         // Over-reinvestment / modernization (reinvestmentRatio = 2.0, dt = 0.25)
         $stock->setOperatingMargin('0.25');
         // modGain = 0.008 * ln(2.0) * 1.0 = 0.008 * 0.693147 = 0.005545
-        // updatedMargin = 0.25 + ((0.45 - 0.25) * 0.005545) = 0.25 + (0.20 * 0.005545) = 0.251109
+        // updatedMargin = 0.25 + ((0.75 - 0.25) * 0.005545) = 0.25 + (0.50 * 0.005545) = 0.252773
         $model->applyAssetDepreciationDecay($stock, reinvestmentRatio: 2.0, dt: 0.25);
-        $this->assertEqualsWithDelta(0.251109, (float) $stock->getOperatingMargin(), 0.0001);
+        $this->assertEqualsWithDelta(0.252773, (float) $stock->getOperatingMargin(), 0.0001);
     }
 
     public function testSustainableDividendBaseAndFairValue(): void
@@ -488,5 +492,90 @@ class ReitBusinessModelTest extends TestCase
         // Debt should stay within reasonable bounds relative to equity
         $deRatio = $finalDebt / max(1.0, $finalEquity);
         $this->assertLessThan(3.0, $deRatio, 'Debt to equity ratio must remain within healthy industry limits.');
+    }
+
+    public function testLossGivenDefaultIsThirtyPercent(): void
+    {
+        $model = new ReitBusinessModel();
+        $this->assertEquals(0.30, $model->getLossGivenDefault());
+    }
+
+    public function testMacroPhysicsRemovesFxDrag(): void
+    {
+        $model = new ReitBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('REIT_FX');
+        $stock->setBeta('1.2');
+
+        $macro = new MacroStateDTO(
+            outputGapEma: 0.02,
+            exchangeRateIndexEma: 120.0,
+        );
+
+        $physics = $model->getMacroPhysics($stock, $macro);
+
+        // Pricing power multiplier is fixed at 1.0
+        $this->assertEquals(1.0, $physics['pricing_power_multiplier']);
+
+        // Macro demand shift = outputGap * 0.25 * beta = 0.02 * 0.25 * 1.2 = 0.006 (no FX drag)
+        $this->assertEqualsWithDelta(0.006, $physics['macro_demand_shift'], 0.0001);
+    }
+
+    private function createDebtHealth(float $debtTolerance, float $interestExpense = 0.0): DebtHealthDTO
+    {
+        return new DebtHealthDTO(
+            grossCost: 0.05,
+            effectiveCost: 0.05,
+            cashYield: 0.03,
+            isNegativeCarry: false,
+            isSevereNegativeCarry: false,
+            interestCoverage: 5.0,
+            wantsToPaydownDebt: false,
+            canIssueDebt: true,
+            debtTolerance: $debtTolerance,
+            wacc: 0.06,
+            costOfEquity: 0.08,
+            leveredBeta: 1.0,
+            rawMetrics: new DebtMetricsDTO(
+                interestExpense: $interestExpense,
+                blendedRate: 0.05,
+                historicalFixedRate: 0.05,
+                dynamicSpread: 0.02,
+                currentMarketRate: 0.05,
+                wholesaleRate: 0.05,
+                ebit: 30.0,
+                revenue: 100.0,
+                depreciation: 5.0,
+                ebitda: 35.0
+            ),
+            isLiquidityCrisis: false,
+            isLiquidityWarning: false,
+            isUnderLeveraged: false
+        );
+    }
+
+    public function testDebtExpansionCapacityUsesEbitDirectly(): void
+    {
+        $model = new ReitBusinessModel();
+        $health = $this->createDebtHealth(debtTolerance: 1.5, interestExpense: 0.0);
+        
+        $equity = 1000.0;
+        $totalDebt = 500.0;
+        $wholesaleDebt = 500.0;
+        $newBorrowingRate = 0.05;
+        $ebit = 100.0;
+        $depreciation = 50.0;
+
+        // Balance sheet capacity = (1000 * 1.5) - 500 = 1000
+        $capacity = $model->calculateDebtExpansionCapacity($equity, $totalDebt, $wholesaleDebt, $health, $newBorrowingRate, $ebit, $depreciation);
+        $this->assertEqualsWithDelta(1000.0, $capacity, 0.001);
+
+        // When income statement is the binding constraint:
+        $lowEbit = 20.0;
+        // minimumIcr = 1.15 + 0.5 = 1.65
+        // maxTolerableInterest = 20.0 / 1.65 = 12.1212
+        // availableCapacity = 12.1212 / 0.05 = 242.424
+        $incomeBoundCapacity = $model->calculateDebtExpansionCapacity($equity, $totalDebt, $wholesaleDebt, $health, $newBorrowingRate, $lowEbit, $depreciation);
+        $this->assertEqualsWithDelta(242.424, $incomeBoundCapacity, 0.01);
     }
 }

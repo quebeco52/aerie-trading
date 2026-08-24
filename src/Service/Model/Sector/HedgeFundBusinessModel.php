@@ -73,7 +73,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     /** Baseline VIX threshold (~18%) above which market fragmentation expands quantitative alpha spreads. */
     public const VIX_ALPHA_BASELINE = 0.18;
     /** Multiplier scaling quantitative alpha revenue bonuses with elevated market volatility. */
-    public const VIX_ALPHA_SCALAR = 2.00;
+    public const VIX_ALPHA_SCALAR = 1.50;
     /** Drag scalar on quant alpha revenue when market volatility is compressed below baseline. */
     public const VIX_CALM_DRAG_SCALAR = 1.25;
 
@@ -90,6 +90,14 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     public const MACRO_DEMAND_SCALAR = 1.0;
     /** Sensitivity of AUM management fee base to macroeconomic output gap. */
     public const AUM_MARKET_BETA_SCALAR = 1.0;
+
+    // --- Redemption & Capital Flight Physics ---
+    /** Z-score threshold for composite alpha below which institutional investors trigger redemptions. */
+    public const REDEMPTION_SHOCK_Z_FLOOR = -1.00;
+    /** Penalty scalar applied to the AUM base per z-unit below the redemption shock threshold. */
+    public const REDEMPTION_SHOCK_SCALAR = 0.10;
+    /** Maximum fraction of AUM that can be redeemed in a single quarter to prevent mathematical collapse. */
+    public const MAX_REDEMPTION_DRAG = 0.30;
 
     // --- Kyle / Almgren-Chriss Liquidity Friction & Margin Calls ---
     /** Macro credit spread threshold (~400bps) above which prime brokers issue margin calls. */
@@ -309,9 +317,16 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         $wholesaleDebt  = (float) $stock->getWholesaleDebt();
         $actualLeverage = $equity > 0 ? ($wholesaleDebt / $equity) : 0.0;
 
-        // --- 1. Sticky Management Fee Revenue (Cyclical AUM Market Beta) ---
+        // --- 1. Sticky Management Fee Revenue (Cyclical AUM Market Beta & Redemption Drag) ---
+        $compositeAlphaZ = ($dirZ * self::COMPOSITE_ALPHA_DIR_WEIGHT) + ($quantZ * self::COMPOSITE_ALPHA_QUANT_WEIGHT);
+        $redemptionDrag = 0.0;
+        if ($compositeAlphaZ < self::REDEMPTION_SHOCK_Z_FLOOR) {
+            $rawDrag = abs($compositeAlphaZ - self::REDEMPTION_SHOCK_Z_FLOOR) * self::REDEMPTION_SHOCK_SCALAR;
+            $redemptionDrag = min(self::MAX_REDEMPTION_DRAG, $rawDrag);
+        }
+
         $aumMarketBeta = $outputGap * abs($beta) * self::AUM_MARKET_BETA_SCALAR;
-        $mgmtExpectedRevenue = $expectedRevenue * $mgmtWeight;
+        $mgmtExpectedRevenue = $expectedRevenue * $mgmtWeight * (1.0 - $redemptionDrag);
 
         $mgmtRevenue = max(0.0, $mgmtExpectedRevenue
             * (1.0 + ($mgmtZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::MGMT_BASE_VOLATILITY_SCALAR)) + $aumMarketBeta));
@@ -369,7 +384,6 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $marginCallPenalty, $minVariableMargin);
 
         // --- 6. Shock Event Detection ---
-        $compositeAlphaZ = ($dirZ * self::COMPOSITE_ALPHA_DIR_WEIGHT) + ($quantZ * self::COMPOSITE_ALPHA_QUANT_WEIGHT);
         $eventType = null;
 
         if ($creditSpread > self::MARGIN_CALL_SPREAD_THRESHOLD && $actualLeverage > self::LORE_MARGIN_CALL_LEVERAGE_THRESHOLD && $dirZ < -1.0) {

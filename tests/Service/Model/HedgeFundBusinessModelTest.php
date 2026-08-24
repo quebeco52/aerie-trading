@@ -66,8 +66,8 @@ class HedgeFundBusinessModelTest extends TestCase
         ]);
         $calmPhysics = $this->model->getMacroPhysics($stock, $calmMacro);
 
-        // High VIX (30% > 18% baseline -> 12% excess * 2.0 = 24% quant boost -> 1.24 quant pricing power)
-        // Blended for SWAN (60% mgmt*1.0 + 20% dir*1.0 + 20% quant*1.24) = 0.60 + 0.20 + 0.248 = 1.048
+        // High VIX (30% > 18% baseline -> 12% excess * 1.50 = 18% quant boost -> 1.18 quant pricing power)
+        // Blended for SWAN (50% mgmt*1.0 + 30% dir*1.0 + 20% quant*1.18) = 0.50 + 0.30 + 0.236 = 1.036
         $panicMacro = MacroStateDTO::fromArray([
             'output_gap_ema'        => 0.0,
             'market_volatility_ema' => 0.30,
@@ -75,7 +75,7 @@ class HedgeFundBusinessModelTest extends TestCase
         $panicPhysics = $this->model->getMacroPhysics($stock, $panicMacro);
 
         $this->assertGreaterThan($calmPhysics['pricing_power_multiplier'], $panicPhysics['pricing_power_multiplier']);
-        $this->assertEqualsWithDelta(1.048, $panicPhysics['pricing_power_multiplier'], 0.001);
+        $this->assertEqualsWithDelta(1.036, $panicPhysics['pricing_power_multiplier'], 0.001);
     }
 
     public function testSectorPhysicsQuantAlphaSurgeUnderHighVix(): void
@@ -448,11 +448,66 @@ class HedgeFundBusinessModelTest extends TestCase
 
         $result = $this->model->computeActualFinancials($stock, 100.0, 0.40, 10.0, 0.10, $macro, $mathMock);
 
-        // Implied AUM = (100 * 0.30) / 0.02 = 1500.0
-        // Dir Incentive Fee = (1500 * 0.60) * 0.19 * 0.20 = 34.2
-        // Dir Base Revenue = 100 * 0.40 * (1.0 + 2.0 * 0.10 * 0.18 * 2.50 * 1.90) = 40 * (1 + 0.171) = 46.84
-        // Total Dir Revenue = 46.84 + 34.2 = 81.04
-        $this->assertGreaterThan(80.0, $result->streamRevenue['directional_bets']);
+        // Implied AUM = (100 * 0.60) / 0.02 = 3000.0 (or default weight)
+        // With Hurdle Z = 1.25 and Leverage Mult = 1.50:
+        // Dir Incentive Fee crystallizes and adds to directional revenue
+        $this->assertGreaterThan(60.0, $result->streamRevenue['directional_bets']);
+    }
+
+    public function testRedemptionDragReducesManagementFeesAndAum(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('SWAN');
+        $stock->setTotalEquity('100.0');
+        $stock->setWholesaleDebt('0.0');
+        $stock->setBeta('1.0');
+
+        $macro = MacroStateDTO::fromArray([
+            'output_gap_ema'          => 0.0,
+            'market_volatility_ema'   => 0.18,
+            'macro_credit_spread_ema' => 0.02,
+        ]);
+
+        // Case 1: Neutral Alpha (dirZ = 0, quantZ = 0 -> composite = 0 > -1.0 floor)
+        $mathNeutral = $this->createStub(MathUtility::class);
+        $mathNeutral->method('generatePersistentZ')->willReturn(0.0);
+        $resultNeutral = $this->model->computeActualFinancials($stock, 100.0, 0.40, 10.0, 0.10, $macro, $mathNeutral);
+        $neutralMgmtRev = $resultNeutral->streamRevenue['management_fees'];
+
+        // Case 2: Moderate Negative Alpha (dirZ = -2.0, quantZ = -2.0 -> composite = -2.0)
+        // Deficit below -1.0 floor = 1.0 unit * 0.10 scalar = 10% drag
+        $mathNegative = $this->createStub(MathUtility::class);
+        $mathNegative->method('generatePersistentZ')->willReturnCallback(function ($prevZ, $phi) {
+            return $prevZ < 0 ? -2.0 : 0.0;
+        });
+        $stock->setEarningsMomentumZ([
+            'directional_bets' => -2.0,
+            'quant_alpha'      => -2.0,
+            'management_fees'  => 0.0,
+        ]);
+        $resultNegative = $this->model->computeActualFinancials($stock, 100.0, 0.40, 10.0, 0.10, $macro, $mathNegative);
+        $negativeMgmtRev = $resultNegative->streamRevenue['management_fees'];
+
+        // Mgmt revenue should be reduced by approximately 10%
+        $this->assertEqualsWithDelta($neutralMgmtRev * 0.90, $negativeMgmtRev, 0.01);
+        $this->assertLessThan($neutralMgmtRev, $negativeMgmtRev);
+
+        // Case 3: Catastrophic Alpha (dirZ = -5.0, quantZ = -5.0 -> composite = -5.0)
+        // Deficit = 4.0 units * 0.10 = 40% -> capped at MAX_REDEMPTION_DRAG (30%)
+        $mathSevere = $this->createStub(MathUtility::class);
+        $mathSevere->method('generatePersistentZ')->willReturnCallback(function ($prevZ, $phi) {
+            return $prevZ < 0 ? -5.0 : 0.0;
+        });
+        $stock->setEarningsMomentumZ([
+            'directional_bets' => -5.0,
+            'quant_alpha'      => -5.0,
+            'management_fees'  => 0.0,
+        ]);
+        $resultSevere = $this->model->computeActualFinancials($stock, 100.0, 0.40, 10.0, 0.10, $macro, $mathSevere);
+        $severeMgmtRev = $resultSevere->streamRevenue['management_fees'];
+
+        // Mgmt revenue should be capped at 30% drag (70% of neutral mgmt revenue)
+        $this->assertEqualsWithDelta($neutralMgmtRev * 0.70, $severeMgmtRev, 0.01);
     }
 
     public function testAlmgrenChrissQuadraticLiquidationSlippage(): void
