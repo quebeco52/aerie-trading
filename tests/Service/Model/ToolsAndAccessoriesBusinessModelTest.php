@@ -41,7 +41,7 @@ class ToolsAndAccessoriesBusinessModelTest extends TestCase
             consumerSentimentIndexEma: 100.0
         );
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $baseResult = $this->model->computeActualFinancials(

@@ -9,6 +9,13 @@ use App\Entity\Stock;
  */
 class CorporateMetrics
 {
+    private static ?self $instance = null;
+
+    public static function getInstance(): self
+    {
+        return self::$instance ??= new self();
+    }
+
     public function getIndustryDepreciationRate(string $industry): float
     {
         return \App\Data\Sectors::INDUSTRY_METRICS[$industry]['depreciation'] ?? 0.05;
@@ -95,18 +102,34 @@ class CorporateMetrics
         return $ebit / $interestExpense;
     }
 
-    public function calculateAltmanZScore(Stock $stock, float $ebit, float $annualSales): float
+    /**
+     * Calculates the severity of market saturation [0.0 to 1.0] by comparing the saturation penalty
+     * to the theoretical baseline economic return.
+     *
+     * In corporate life-cycle theory (DeAngelo, DeAngelo & Stulz 2006; Jensen 1986), as saturation penalty
+     * approaches or exceeds the baseline economic return, internal growth opportunities vanish,
+     * signaling a structural transition from growth capital retention to mature cash-cow distribution.
+     */
+    public function calculateSaturationSeverity(float $saturationPenalty, float $trueReturn): float
     {
-        $totalAssets = max(1.0, (float) $stock->getTotalEquity() + (float) $stock->getTotalDebt());
-        $totalLiabilities = max(0.01, (float) $stock->getTotalDebt());
+        if ($saturationPenalty <= 0.0) {
+            return 0.0;
+        }
+        $baselineReturn = max(0.01, $trueReturn + $saturationPenalty);
+        return min(1.0, max(0.0, $saturationPenalty / $baselineReturn));
+    }
 
-        $workingCapital = (float) $stock->getCorporateTreasury(); // Proxy for WC
-        $t1 = $workingCapital / $totalAssets;
-        $t2 = (float) $stock->getRetainedEarnings() / $totalAssets;
-        $t3 = $ebit / $totalAssets;
-        $t4 = (float) $stock->getTotalEquity() / $totalLiabilities; // Equity is Book Value, but good enough proxy for Market Value
-        $t5 = $annualSales / $totalAssets;
-
-        return (1.2 * $t1) + (1.4 * $t2) + (3.3 * $t3) + (0.6 * $t4) + (0.999 * $t5);
+    /**
+     * Calculates the effective life-cycle target dividend payout ratio according to the
+     * DeAngelo-DeAngelo (2006) Life-Cycle Theory of Dividends.
+     *
+     * As market saturation severity increases (diminishing marginal returns on reinvestment),
+     * the optimal retention ratio collapses and the target payout ratio dynamically expands
+     * from baseline towards the mature cash-cow ceiling (LIFE_CYCLE_MAX_PAYOUT_RATIO).
+     */
+    public function calculateLifeCyclePayoutRatio(float $baselinePayoutRatio, float $saturationSeverity): float
+    {
+        $maxPayout = FinancialConstants::LIFE_CYCLE_MAX_PAYOUT_RATIO;
+        return min($maxPayout, max($baselinePayoutRatio, $baselinePayoutRatio + (($maxPayout - $baselinePayoutRatio) * $saturationSeverity)));
     }
 }

@@ -62,7 +62,7 @@ class HeavyManufacturingBusinessModelTest extends TestCase
         $baseMacro = new MacroStateDTO(exchangeRateIndexEma: 100.0, freightRateIndexEma: 100.0);
         $shockMacro = new MacroStateDTO(exchangeRateIndexEma: 120.0, freightRateIndexEma: 140.0);
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $baseMacro, $mathMock);
@@ -81,7 +81,7 @@ class HeavyManufacturingBusinessModelTest extends TestCase
         $scarcityMacro = new MacroStateDTO(capitalStockOverhangEma: -0.10);
         $overhangMacro = new MacroStateDTO(capitalStockOverhangEma: 0.10);
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $scarcityResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $scarcityMacro, $mathMock);

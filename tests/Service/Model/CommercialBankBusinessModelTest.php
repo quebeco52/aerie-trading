@@ -331,4 +331,85 @@ class CommercialBankBusinessModelTest extends TestCase
         );
         $this->assertLessThan($calmResult->ebit, $tedResult->ebit);
     }
+
+    public function testBaselThreeRwaAndCet1Calculations(): void
+    {
+        $bank = new Stock();
+        $bank->setTicker('HEALTHY_BANK');
+        $bank->setTotalEquity('10000000000'); // $10B
+        $bank->setCustomerDeposits('80000000000'); // $80B
+        $bank->setWholesaleDebt('10000000000'); // $10B
+        $bank->setCorporateTreasury('5000000000'); // $5B
+
+        // Earning Assets = 10B + 90B - 5B = 95B
+        // RWA = 95B * 1.0 + 5B * 0.0 = 95B
+        $rwa = $this->model->calculateRiskWeightedAssets($bank);
+        $this->assertEqualsWithDelta(95_000_000_000.0, $rwa, 1.0);
+
+        // CET1 = 10B / 95B = ~10.53%
+        $cet1 = $this->model->calculateCet1Ratio($bank);
+        $this->assertEqualsWithDelta(10.0 / 95.0, $cet1, 0.0001);
+        $this->assertGreaterThan(CommercialBankBusinessModel::BASEL_CCB_CET1_RATIO, $cet1);
+
+        // Dividend cap for healthy bank is 1.0
+        $divCap = $this->model->getRegulatoryDividendCap($bank, 5_000_000_000.0);
+        $this->assertSame(1.0, $divCap);
+    }
+
+    public function testCapitalConservationBufferHaltsDividends(): void
+    {
+        $bank = new Stock();
+        $bank->setTicker('BUFFER_BANK');
+        $bank->setTotalEquity('5000000000'); // $5B
+        $bank->setCustomerDeposits('80000000000'); // $80B
+        $bank->setWholesaleDebt('10000000000'); // $10B
+        $bank->setCorporateTreasury('5000000000'); // $5B
+
+        // Earning Assets = 5B + 90B - 5B = 90B
+        // CET1 = 5B / 90B = ~5.56% (Between 4.0% and 6.5%)
+        $cet1 = $this->model->calculateCet1Ratio($bank);
+        $this->assertGreaterThan(CommercialBankBusinessModel::BASEL_MIN_CET1_RATIO, $cet1);
+        $this->assertLessThan(CommercialBankBusinessModel::BASEL_CCB_CET1_RATIO, $cet1);
+
+        // CCB forces dividend cap strictly to 0.0
+        $divCap = $this->model->getRegulatoryDividendCap($bank, 5_000_000_000.0);
+        $this->assertSame(0.0, $divCap);
+    }
+
+    public function testInsolventBankTriggersBankSeizureShockEvent(): void
+    {
+        $bank = new Stock();
+        $bank->setTicker('INSOLVENT_BANK');
+        $bank->setBeta('1.0');
+        $bank->setTotalEquity('3000000000'); // $3B
+        $bank->setCustomerDeposits('80000000000'); // $80B
+        $bank->setWholesaleDebt('10000000000'); // $10B
+        $bank->setCorporateTreasury('5000000000'); // $5B
+
+        // Earning Assets = 3B + 90B - 5B = 88B
+        // CET1 = 3B / 88B = ~3.41% (< 4.0% statutory minimum)
+        $cet1 = $this->model->calculateCet1Ratio($bank);
+        $this->assertLessThan(CommercialBankBusinessModel::BASEL_MIN_CET1_RATIO, $cet1);
+
+        $mathMock = $this->createMathUtilityMock([0.0, 0.0, 0.0]);
+        $macro = new MacroStateDTO(
+            outputGapEma: 0.0,
+            policyRateEma: 0.03,
+            yield2yEma: 0.03,
+            yield10yEma: 0.05,
+            macroCreditSpreadEma: 0.02
+        );
+
+        $result = $this->model->computeActualFinancials(
+            $bank,
+            expectedRevenue: 1_000_000_000.0,
+            realizedVariableMargin: 0.50,
+            fixedCosts: 200_000_000.0,
+            baselineVol: 0.0,
+            macroState: $macro,
+            mathUtility: $mathMock
+        );
+
+        $this->assertSame(ShockEvent::BANK_SEIZURE, $result->eventType);
+    }
 }

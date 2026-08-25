@@ -25,7 +25,7 @@ class ClearingHouseBusinessModelTest extends TestCase
 
     public function testCalculateEarningsValue(): void
     {
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
 
         $val1 = $this->model->calculateEarningsValue(100.0, 150.0, 5.0, 0.08, $mathMock);
         $this->assertSame(150.0, $val1);
@@ -36,11 +36,11 @@ class ClearingHouseBusinessModelTest extends TestCase
 
     public function testCalculateInterestIncomeScalesWithPolicyRateAndZirpTrap(): void
     {
-        $stockMock = $this->createMock(\App\Entity\Stock::class);
+        $stockMock = $this->createStub(\App\Entity\Stock::class);
         $stockMock->method('getCorporateTreasury')->willReturn('100000000000.0');
         $stockMock->method('getCustomerDeposits')->willReturn('100000000000.0'); // 100% margin pool
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
 
         // Low interest rate ZIRP regime (< 1%)
         $lowRateState = new \App\DTO\MacroStateDTO(

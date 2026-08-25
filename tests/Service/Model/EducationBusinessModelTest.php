@@ -66,7 +66,7 @@ class EducationBusinessModelTest extends TestCase
         $baseMacro = new MacroStateDTO(governmentSpendingIndexEma: 100.0);
         $expansionMacro = new MacroStateDTO(governmentSpendingIndexEma: 130.0);
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $baseMacro, $mathMock);
         $expansionResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $expansionMacro, $mathMock);
 
@@ -82,7 +82,7 @@ class EducationBusinessModelTest extends TestCase
         $lowUnemploymentMacro = new MacroStateDTO(unemploymentRateEma: 0.040);
         $highUnemploymentMacro = new MacroStateDTO(unemploymentRateEma: 0.080);
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $lowUnemploymentMacro, $mathMock);

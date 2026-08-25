@@ -136,13 +136,11 @@ trait StandardOperatingPhysicsTrait
 
         $saturationPenalty = 0.0;
         if ($macroState !== null) {
-            $metrics = new \App\Service\Math\CorporateMetrics();
-            $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, abs($investedCapital), $macroState);
+            $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, abs($investedCapital), $macroState);
         }
 
-        $math = new MathUtility();
         $effectiveMoat = max(0.0, $moatSpread - $saturationPenalty);
-        $newTtm += $math->calculateReversionPull($newTtm, $wacc, $scaledKappa, $effectiveMoat);
+        $newTtm += MathUtility::getInstance()->calculateReversionPull($newTtm, $wacc, $scaledKappa, $effectiveMoat);
         $stock->setRoicTtm((string) max(-0.50, min(1.0, $newTtm)));
 
         return $truePostTaxReturn;

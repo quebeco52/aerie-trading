@@ -70,7 +70,7 @@ class CreditServicesBusinessModelTest extends TestCase
             unemploymentRateEma: 0.080
         );
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $baseResult = $this->model->computeActualFinancials(

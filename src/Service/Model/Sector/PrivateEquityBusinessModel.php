@@ -169,8 +169,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
             $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
         }
 
-        $metrics = new \App\Service\Math\CorporateMetrics();
-        $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
+        $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
         $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
         $baselineRoe = max($waccBase, $baselineRoe - $saturationPenalty);
 
@@ -451,19 +450,17 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::ROE_TTM_EMA_WEIGHT) + ($oldTtm * self::ROE_TTM_HIST_WEIGHT);
 
         $scaledKappa = $kappa / self::TTM_ROE_WEIGHT;
-        $math = new MathUtility();
 
         $saturationPenalty = 0.0;
         if ($macroState !== null) {
-            $metrics = new \App\Service\Math\CorporateMetrics();
-            $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
+            $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
         }
 
         $theoreticalTarget = ($costOfEquity + $moatSpread) - $saturationPenalty;
         $flooredTarget = max($costOfEquity, $theoreticalTarget);
         $effectiveMoat = $flooredTarget - $costOfEquity;
 
-        $newTtm += $math->calculateReversionPull($newTtm, $costOfEquity, $scaledKappa, $effectiveMoat);
+        $newTtm += MathUtility::getInstance()->calculateReversionPull($newTtm, $costOfEquity, $scaledKappa, $effectiveMoat);
         $stock->setRoeTtm((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;

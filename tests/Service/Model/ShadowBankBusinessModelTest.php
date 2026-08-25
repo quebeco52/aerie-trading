@@ -83,7 +83,7 @@ class ShadowBankBusinessModelTest extends TestCase
             commercialPropertyIndexEma: 80.0 // CRE valuation collapse
         );
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $baseMacro, $mathMock);
@@ -102,7 +102,7 @@ class ShadowBankBusinessModelTest extends TestCase
         $depressedMacro = new MacroStateDTO(residentialPropertyIndexEma: 75.0);
         $boomMacro = new MacroStateDTO(residentialPropertyIndexEma: 130.0);
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $depressedResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $depressedMacro, $mathMock);
@@ -140,7 +140,7 @@ class ShadowBankBusinessModelTest extends TestCase
             interbankLiquiditySpreadEma: 0.0200
         );
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $calmResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $calmMacro, $mathMock);

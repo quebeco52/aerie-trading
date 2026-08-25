@@ -14,9 +14,11 @@ use App\Service\Event\ShockEvent;
 use App\Service\Model\BusinessModelInterface;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class EarningsReportSubscriberTest extends TestCase
 {
     private EntityManagerInterface&MockObject $entityManager;

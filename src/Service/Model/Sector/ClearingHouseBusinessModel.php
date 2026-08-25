@@ -13,12 +13,6 @@ use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\FinancialConstants;
-use App\Service\Model\Trait\FinancialPhysicsTrait;
-use App\Service\Model\Trait\StandardBaseModelTrait;
-use App\Service\Model\Trait\StandardCapitalAllocationTrait;
-use App\Service\Model\Trait\StandardOperatingPhysicsTrait;
-use App\Service\Model\Trait\StandardTreasuryTrait;
-use App\Service\Model\Trait\StandardValuationTrait;
 
 /**
  * Earnings strategy for Central Counterparty Clearing Houses (CCP).
@@ -30,21 +24,11 @@ use App\Service\Model\Trait\StandardValuationTrait;
  * - Carries extreme tail risk governed by a statutory Default Waterfall: routine member defaults are absorbed
  *   by member collateral/guaranty funds ($0 loss to CCP), while systemic defaults pierce Skin-in-the-Game (SITG) capital.
  */
-class ClearingHouseBusinessModel implements BusinessModelInterface
+class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
 {
     public function getModelThresholds(): array
     {
         return ['min_icr' => 1.05, 'bankrupt_equity' => 0.5,  'distress_equity' => 1.25, 'warning_equity' => 2.5,  'wholesale_leverage_limit' => null, 'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.10, 'moat_spread' => 0.030, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 1.0];
-    }
-    use StandardBaseModelTrait;
-    use StandardTreasuryTrait;
-    use StandardValuationTrait;
-    use StandardOperatingPhysicsTrait, StandardCapitalAllocationTrait, FinancialPhysicsTrait {
-        FinancialPhysicsTrait::getTrueReturn insteadof StandardOperatingPhysicsTrait;
-        FinancialPhysicsTrait::getEvaluationCapital insteadof StandardOperatingPhysicsTrait;
-        FinancialPhysicsTrait::calculateEconomicReturn insteadof StandardOperatingPhysicsTrait;
-        FinancialPhysicsTrait::updateDynamicRoic insteadof StandardOperatingPhysicsTrait;
-        FinancialPhysicsTrait::getMaxOrganicGrowthSpeed insteadof StandardCapitalAllocationTrait;
     }
 
     // --- Fee Revenue Floor ---
@@ -135,8 +119,7 @@ class ClearingHouseBusinessModel implements BusinessModelInterface
             $baselineRoe = ($baselineRoe * 0.70) + ($ttmRoe * 0.30);
         }
 
-        $metrics = new \App\Service\Math\CorporateMetrics();
-        $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, $effectiveEquity, $macroState);
+        $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, $effectiveEquity, $macroState);
         $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
         $baselineRoe = max($waccBase, $baselineRoe - $saturationPenalty);
 

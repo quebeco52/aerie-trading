@@ -8,6 +8,7 @@ use App\Entity\Stock;
 use Doctrine\ORM\EntityManagerInterface;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\CorporateMetrics;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\DTO\CapitalAllocationContext;
 use App\DTO\MacroStateDTO;
@@ -143,22 +144,35 @@ class CapitalAllocationEngine
         $customDepreciation = (float) $stock->getDepreciationRate();
         $depRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($ctx->industry);
 
-        $sustainableBase = $ctx->strategy->getSustainableDividendBase($stock, $ctx->quarterlyEps, $ctx->investedCapital, $depRate);
-        if ($sustainableBase <= 0.0 && $ctx->quarterlyFcfPerShare > 0.0) {
-            $sustainableBase = min($ctx->quarterlyFcfPerShare, $lastDividend / max(0.01, $targetPayout));
-        }
-        $calculatedTarget = $sustainableBase > 0 ? ($sustainableBase * $targetPayout) : 0.0;
-        $targetDividend = $isAristocrat ? max($calculatedTarget, $lastDividend) : $calculatedTarget;
-
-        $isRegulatoryDividendHalt = false;
         $trueReturn = $ctx->isFinancial ? (float) $stock->getRoeTtm() : (float) $stock->getRoicTtm();
         if ($trueReturn === 0.0) {
             $trueReturn = $ctx->strategy->calculateEconomicReturn($stock, $ctx->isFinancial ? $ctx->actualTotalNetIncome : $ctx->quarterlyNopat, $ctx->investedCapital);
         }
-        
-        if ($ctx->isFinancial) {
-            $hurdleRate = $ctx->health->costOfEquity ?? 0.10;
 
+        // Life-Cycle Payout Target Expansion (DeAngelo & DeAngelo 2006 / Jensen 1986)
+        // As a firm approaches market saturation, internal reinvestment slows and target payout scales toward cash cow levels.
+        $evaluationCapital = $ctx->strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $ctx->investedCapital);
+        $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $ctx->macroState);
+        $saturationSeverity = $this->corporateMetrics->calculateSaturationSeverity($saturationPenalty, $trueReturn);
+        $effectiveTargetPayout = $this->corporateMetrics->calculateLifeCyclePayoutRatio($targetPayout, $saturationSeverity);
+
+        $sustainableBase = $ctx->strategy->getSustainableDividendBase($stock, $ctx->quarterlyEps, $ctx->investedCapital, $depRate);
+        if ($sustainableBase <= 0.0 && $ctx->quarterlyFcfPerShare > 0.0) {
+            $sustainableBase = min($ctx->quarterlyFcfPerShare, $lastDividend / max(0.01, $effectiveTargetPayout));
+        }
+        $calculatedTarget = $sustainableBase > 0 ? ($sustainableBase * $effectiveTargetPayout) : 0.0;
+        $targetDividend = $isAristocrat ? max($calculatedTarget, $lastDividend) : $calculatedTarget;
+
+        $isRegulatoryDividendHalt = false;
+        
+        $regulatoryCap = $ctx->strategy->getRegulatoryDividendCap($stock, $ctx->newTreasury);
+        if ($regulatoryCap !== null) {
+            if ($regulatoryCap <= 0.0) {
+                $isRegulatoryDividendHalt = true;
+            } else {
+                $targetDividend = min($targetDividend, $sustainableBase * min($effectiveTargetPayout, $regulatoryCap));
+            }
+        } elseif ($ctx->isFinancial) {
             $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$ctx->industry]['equity_limit'] ?? 10.0;
             $leverageRatio = (float) $stock->getDebtToEquityRatio();
             $leverageOvershoot = $leverageRatio / $equityLimit;
@@ -166,13 +180,13 @@ class CapitalAllocationEngine
             if ($leverageOvershoot >= self::REGULATORY_BUFFER_TIER_3_THRESHOLD) {
                 $isRegulatoryDividendHalt = true;
             } elseif ($leverageOvershoot >= self::REGULATORY_BUFFER_TIER_2_THRESHOLD) {
-                $targetDividend = min($targetDividend, $sustainableBase * min($targetPayout, self::REGULATORY_BUFFER_TIER_2_PAYOUT_CAP));
+                $targetDividend = min($targetDividend, $sustainableBase * min($effectiveTargetPayout, self::REGULATORY_BUFFER_TIER_2_PAYOUT_CAP));
             } elseif ($leverageOvershoot >= self::REGULATORY_BUFFER_TIER_1_THRESHOLD) {
-                $targetDividend = min($targetDividend, $sustainableBase * min($targetPayout, self::REGULATORY_BUFFER_TIER_1_PAYOUT_CAP));
+                $targetDividend = min($targetDividend, $sustainableBase * min($effectiveTargetPayout, self::REGULATORY_BUFFER_TIER_1_PAYOUT_CAP));
             }
-        } else {
-            $hurdleRate = $ctx->health->wacc;
         }
+
+        $hurdleRate = $ctx->isFinancial ? ($ctx->health->costOfEquity ?? 0.10) : $ctx->health->wacc;
 
         $evaSpread = $trueReturn - $hurdleRate;
         $distressMultiplier = $isAristocrat ? self::ARISTOCRAT_DISTRESS_MULTIPLIER : self::STANDARD_DISTRESS_MULTIPLIER;
@@ -204,6 +218,8 @@ class CapitalAllocationEngine
             if ($catchUpRatio > self::ARISTOCRAT_CATCHUP_THRESHOLD) {
                 $speed = min(self::ARISTOCRAT_MAX_CATCHUP_SPEED, $speed + (($catchUpRatio - self::ARISTOCRAT_CATCHUP_THRESHOLD) * 0.10));
             }
+        } elseif (!$isAristocrat && $saturationSeverity > 0.20 && $calculatedTarget > $lastDividend) {
+            $speed = min(1.0, $speed + ($saturationSeverity * 0.10));
         }
 
         $ctx->newDividend = max(0.0, $lastDividend + ($speed * ($targetDividend - $lastDividend)));
@@ -263,6 +279,12 @@ class CapitalAllocationEngine
         $canEasilyCoverDebt = $ctx->excessCash > ((float) $stock->getTotalDebt() * 2.0);
 
         if ($ctx->isFinancial) {
+            $regulatoryCap = $ctx->strategy->getRegulatoryDividendCap($stock, $ctx->newTreasury);
+            if ($regulatoryCap !== null && $regulatoryCap <= 0.0) {
+                $ctx->newShares = $ctx->sharesOutstanding;
+                return;
+            }
+
             $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$ctx->industry]['equity_limit'] ?? 10.0;
             $buybackLockoutThreshold = max(1.0, $equityLimit - 1.0) + 0.5;
 
@@ -297,15 +319,30 @@ class CapitalAllocationEngine
         $hurdleRate = $ctx->isFinancial ? ($ctx->health->costOfEquity ?? 0.10) : $ctx->health->wacc;
         $economicSpread = $trueReturn - $hurdleRate;
 
+        $evaluationCapital = $ctx->strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $ctx->investedCapital);
+        $saturationPenalty = $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $ctx->macroState);
+        $saturationSeverity = $this->corporateMetrics->calculateSaturationSeverity($saturationPenalty, $trueReturn);
+
         $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $trueReturn, 0.02);
 
         $ctx->newShares = $ctx->sharesOutstanding;
 
-        if (($economicSpread > 0.02 && $ctx->currentPE < ($fairValuePE + 3.0)) || $isHoarder || $isUnderLeveraged) {
+        if (($economicSpread > 0.02 && $ctx->currentPE < ($fairValuePE + 3.0)) || $isHoarder || $isUnderLeveraged || $saturationSeverity > 0.20) {
             $maxWillingSpend = $ctx->strategy->calculateMaxBuybackSpend($excessCash, $ctx->retainedEarningsThisQuarter, $isMegaHoarder);
 
+            // Saturation Buyback Unlock: Mature firms distribute non-reinvestable excess cash
+            if ($saturationSeverity > 0.05) {
+                $saturationSpendRatio = $isMegaHoarder
+                    ? FinancialConstants::BUYBACK_SPEND_MEGA_SATURATED_RATIO
+                    : FinancialConstants::BUYBACK_SPEND_SATURATED_RATIO;
+                $saturationWillingSpend = $excessCash * $saturationSpendRatio * $saturationSeverity;
+                $maxWillingSpend = max($maxWillingSpend, $saturationWillingSpend);
+            }
+
             $marketCap = $ctx->sharesOutstanding * max($ctx->currentPrice, 0.01);
-            $maxRegulatorySpend = $marketCap * ($isMegaHoarder ? 0.075 : ($isHoarder ? 0.05 : 0.015));
+            $baseRegulatoryPct = $isMegaHoarder ? 0.075 : ($isHoarder ? 0.05 : 0.015);
+            $effectiveRegulatoryPct = $baseRegulatoryPct + (FinancialConstants::MAX_REGULATORY_SPEND_SATURATED - $baseRegulatoryPct) * $saturationSeverity;
+            $maxRegulatorySpend = $marketCap * $effectiveRegulatoryPct;
 
             if ($isUnderLeveraged) {
                 // Under-leveraged financials must crush equity bloat via buybacks to restore ROE.

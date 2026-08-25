@@ -27,6 +27,11 @@ class NarrativeEngine
                 "Faced a sudden liquidity crisis as depositors withdrew \${$context['amount']}B in a panic.",
                 "Experienced severe capital flight requiring a \${$context['amount']}B emergency liquidity injection."
             ]),
+            ShockEvent::BANK_SEIZURE => $this->getRandomPhrase([
+                "Breached statutory minimum capital requirements. Regulators stepped in with an emergency seizure.",
+                "Seized by banking regulators following severe capital depletion and balance sheet insolvency.",
+                "Fell below statutory Basel capital minimums, triggering an immediate regulatory takeover."
+            ]),
             ShockEvent::MASSIVE_CREDIT_PROVISION => $this->getRandomPhrase([
                 "Took a massive provision for credit losses due to rising loan defaults.",
                 "Forced to drastically increase loan loss reserves amid deteriorating credit quality.",

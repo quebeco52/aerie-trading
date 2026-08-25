@@ -11,21 +11,24 @@ use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\CreditRatingAgency;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Math\MathUtility;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class DebtEngineTest extends TestCase
 {
-    private MathUtility|MockObject $mathUtilityMock;
-    private CorporateMetrics|MockObject $corporateMetricsMock;
+    private MathUtility&Stub $mathUtilityMock;
+    private CorporateMetrics&Stub $corporateMetricsMock;
     private CreditRatingAgency $creditRatingAgency;
-    private MarketEventPublisher|MockObject $marketEventPublisherMock;
+    private MarketEventPublisher&MockObject $marketEventPublisherMock;
     private DebtEngine $engine;
 
     protected function setUp(): void
     {
-        $this->mathUtilityMock = $this->createMock(MathUtility::class);
-        $this->corporateMetricsMock = $this->createMock(CorporateMetrics::class);
+        $this->mathUtilityMock = $this->createStub(MathUtility::class);
+        $this->corporateMetricsMock = $this->createStub(CorporateMetrics::class);
         $this->creditRatingAgency = new CreditRatingAgency();
         $this->marketEventPublisherMock = $this->createMock(MarketEventPublisher::class);
 

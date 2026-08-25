@@ -18,7 +18,7 @@ class TechBusinessModelTest extends TestCase
         $stock->setTicker('TECH');
         $stock->setBeta('1.5');
 
-        $mathUtilityMock = $this->createMock(MathUtility::class);
+        $mathUtilityMock = $this->createStub(MathUtility::class);
         // sequence: subscriptionZ=2.0 (strong cloud ARR expansion), adZ=0, eventZ=0, analystError=0
         $mathUtilityMock->method('generateStandardNormal')
             ->willReturnOnConsecutiveCalls(2.0, 0.0, 0.0, 0.0);

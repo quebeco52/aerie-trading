@@ -71,7 +71,7 @@ class InternetRetailBusinessModelTest extends TestCase
         $stock->setTicker('AMZN_MOCK');
         $stock->setBeta('1.0');
 
-        $mathUtilityMock = $this->createMock(MathUtility::class);
+        $mathUtilityMock = $this->createStub(MathUtility::class);
         // fpZ = 0.0, tpZ = 0.0, adsZ = 0.0, eventZ = -2.30 (< WAREHOUSE_STRIKE_Z_SCORE -2.20)
         $mathUtilityMock->method('generatePersistentZ')
             ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, -2.30);
@@ -98,7 +98,7 @@ class InternetRetailBusinessModelTest extends TestCase
         $stock->setTicker('AMZN_MOCK');
         $stock->setBeta('1.0');
 
-        $mathUtilityMock = $this->createMock(MathUtility::class);
+        $mathUtilityMock = $this->createStub(MathUtility::class);
         // fpZ = 0.0, tpZ = 0.0, adsZ = 0.0, eventZ = -2.70 (< ANTITRUST_FINE_Z_SCORE -2.60)
         $mathUtilityMock->method('generatePersistentZ')
             ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, -2.70);
@@ -126,7 +126,7 @@ class InternetRetailBusinessModelTest extends TestCase
         $stock->setTicker('AMZN_MOCK');
         $stock->setBeta('1.0');
 
-        $mathUtilityMock = $this->createMock(MathUtility::class);
+        $mathUtilityMock = $this->createStub(MathUtility::class);
         // fpZ = 0.0, tpZ = 0.0, adsZ = 0.0, eventZ = 2.50 (> VIRAL_HOLIDAY_SURGE_Z 2.40)
         $mathUtilityMock->method('generatePersistentZ')
             ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, 2.50);

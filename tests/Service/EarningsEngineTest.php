@@ -14,25 +14,27 @@ use App\Service\Event\MarketEventPublisher;
 use App\Service\Market\MarketConsensusEngine;
 use App\Data\EconomicCycle;
 use App\Entity\Stock;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
-use Doctrine\ORM\EntityManagerInterface;
 
+#[AllowMockObjectsWithoutExpectations]
 class EarningsEngineTest extends TestCase
 {
-    private MathUtility|MockObject $mathUtilityMock;
-    private MarketEventPublisher|MockObject $marketEventMock;
-    private CapitalAllocationEngine|MockObject $capitalAllocationEngineMock;
-    private DebtEngine|MockObject $debtEngineMock;
-    private CapExEngine|MockObject $capExEngineMock;
-    private CorporateMetrics|MockObject $corporateMetricsMock;
-    private NarrativeEngine|MockObject $narrativeEngineMock;
-    private \Symfony\Contracts\EventDispatcher\EventDispatcherInterface|MockObject $eventDispatcherMock;
+    private MathUtility&Stub $mathUtilityMock;
+    private MarketEventPublisher&Stub $marketEventMock;
+    private CapitalAllocationEngine&Stub $capitalAllocationEngineMock;
+    private DebtEngine&Stub $debtEngineMock;
+    private CapExEngine&Stub $capExEngineMock;
+    private CorporateMetrics&Stub $corporateMetricsMock;
+    private NarrativeEngine&Stub $narrativeEngineMock;
+    private EventDispatcherInterface&MockObject $eventDispatcherMock;
     private EarningsEngine $engine;
 
     protected function setUp(): void
     {
-        $this->capitalAllocationEngineMock = $this->createMock(CapitalAllocationEngine::class);
+        $this->capitalAllocationEngineMock = $this->createStub(CapitalAllocationEngine::class);
         $this->capitalAllocationEngineMock->method('allocateCapital')->willReturn([
             'new_shares' => 1000000,
             'dividend_paid' => 0.0,
@@ -42,7 +44,7 @@ class EarningsEngineTest extends TestCase
             'events' => []
         ]);
 
-        $this->debtEngineMock = $this->createMock(DebtEngine::class);
+        $this->debtEngineMock = $this->createStub(DebtEngine::class);
         $debtMetrics = new \App\DTO\DebtMetricsDTO(
             interestExpense: 0.0,
             blendedRate: 0.05,
@@ -75,7 +77,7 @@ class EarningsEngineTest extends TestCase
             isUnderLeveraged: false
         ));
 
-        $this->marketEventMock = $this->createMock(MarketEventPublisher::class);
+        $this->marketEventMock = $this->createStub(MarketEventPublisher::class);
         $this->marketEventMock->method('publish')->willReturnCallback(function($stock, $type, $desc, $pct) {
             return [
                 'type' => $type,
@@ -86,7 +88,7 @@ class EarningsEngineTest extends TestCase
         });
 
         // 3. Mock MathUtility to control the stochastic Z-scores
-        $this->mathUtilityMock = $this->createMock(MathUtility::class);
+        $this->mathUtilityMock = $this->createStub(MathUtility::class);
         $this->mathUtilityMock->method('generatePersistentZ')->willReturnCallback(function($prev, $phi) {
             return $this->mathUtilityMock->generateStandardNormal();
         });
@@ -95,12 +97,12 @@ class EarningsEngineTest extends TestCase
         });
         $this->mathUtilityMock->method('calculateJumpDiffusion')->willReturn(['exponent' => 0.0]);
 
-        $this->corporateMetricsMock = $this->createMock(CorporateMetrics::class);
+        $this->corporateMetricsMock = $this->createStub(CorporateMetrics::class);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(10000000.0);
 
-        $this->narrativeEngineMock = $this->createMock(NarrativeEngine::class);
+        $this->narrativeEngineMock = $this->createStub(NarrativeEngine::class);
         $this->eventDispatcherMock = $this->createMock(EventDispatcherInterface::class);
-        $this->capExEngineMock = $this->createMock(CapExEngine::class);
+        $this->capExEngineMock = $this->createStub(CapExEngine::class);
 
         // Instantiate the core engine
         $this->engine = new EarningsEngine(

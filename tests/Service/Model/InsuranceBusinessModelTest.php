@@ -7,8 +7,10 @@ namespace App\Tests\Service\Model;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\InsuranceBusinessModel;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class InsuranceBusinessModelTest extends TestCase
 {
     public function testCalculateMinOperatingCashAndTargetCash(): void

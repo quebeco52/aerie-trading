@@ -430,7 +430,7 @@ class DefenseContractorBusinessModelTest extends TestCase
             exchangeRateIndexEma: 120.0 // Strong dollar creates FMS export headwind
         );
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $baseResult = $model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $baseMacro, $mathMock);

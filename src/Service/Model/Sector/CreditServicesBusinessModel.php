@@ -285,8 +285,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
         }
 
-        $metrics = new \App\Service\Math\CorporateMetrics();
-        $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, $effectiveEquity, $macroState);
+        $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, $effectiveEquity, $macroState);
         $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
         $baselineRoe = max($waccBase, $baselineRoe - $saturationPenalty);
 

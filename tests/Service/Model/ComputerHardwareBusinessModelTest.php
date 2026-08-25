@@ -38,7 +38,7 @@ class ComputerHardwareBusinessModelTest extends TestCase
             industrialMetalsIndexEma: 100.0
         );
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $baseResult = $this->model->computeActualFinancials(
@@ -77,7 +77,7 @@ class ComputerHardwareBusinessModelTest extends TestCase
         $baseMacro = new MacroStateDTO(industrialMetalsIndexEma: 100.0);
         $metalsSpikeMacro = new MacroStateDTO(industrialMetalsIndexEma: 150.0);
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $baseMacro, $mathMock);

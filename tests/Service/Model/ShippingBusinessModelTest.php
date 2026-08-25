@@ -18,7 +18,7 @@ class ShippingBusinessModelTest extends TestCase
         $stock->setTicker('SHIP');
         $stock->setBeta('1.0');
 
-        $mathUtilityMock = $this->createMock(MathUtility::class);
+        $mathUtilityMock = $this->createStub(MathUtility::class);
         $mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         // Positive output gap -> continuous positive spot rate multiplier
@@ -75,7 +75,7 @@ class ShippingBusinessModelTest extends TestCase
         $stock->setTicker('SHIP');
         $stock->setBeta('1.0');
 
-        $mathUtilityMock = $this->createMock(MathUtility::class);
+        $mathUtilityMock = $this->createStub(MathUtility::class);
         $mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $baseMacro = new \App\DTO\MacroStateDTO(freightRateIndexEma: 100.0);

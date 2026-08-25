@@ -97,8 +97,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
             $baselineRoic = ($baselineRoic * self::BASELINE_ROIC_WEIGHT) + ($ttmRoic * self::TTM_ROIC_WEIGHT);
         }
 
-        $metrics = new \App\Service\Math\CorporateMetrics();
-        $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, $stock->getInvestedCapital(), $macroState);
+        $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, $stock->getInvestedCapital(), $macroState);
         $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
         $effectiveRoic = max($waccBase, $baselineRoic - $saturationPenalty);
 
@@ -194,16 +193,14 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * FinancialConstants::TTM_SMOOTHING_NEW_WEIGHT) + ($oldTtm * FinancialConstants::TTM_SMOOTHING_OLD_WEIGHT);
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
         $scaledKappa = $kappa / self::TTM_ROIC_WEIGHT;
-        $math = new MathUtility();
 
         $saturationPenalty = 0.0;
         if ($macroState !== null) {
-            $metrics = new \App\Service\Math\CorporateMetrics();
-            $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, abs($investedCapital), $macroState);
+            $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, abs($investedCapital), $macroState);
         }
 
         $effectiveMoat = max(0.0, $moatSpread - $saturationPenalty);
-        $newTtm += $math->calculateReversionPull($newTtm, $wacc, $scaledKappa, $effectiveMoat);
+        $newTtm += MathUtility::getInstance()->calculateReversionPull($newTtm, $wacc, $scaledKappa, $effectiveMoat);
         $stock->setRoicTtm((string) max(-0.50, min(1.0, $newTtm)));
 
         return $truePostTaxReturn;

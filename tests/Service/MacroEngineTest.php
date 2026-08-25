@@ -13,8 +13,8 @@ use App\Data\EconomicCycle;
 #[AllowMockObjectsWithoutExpectations]
 class MacroEngineTest extends TestCase
 {
-    private MathUtility|MockObject $mathUtilityMock;
-    private \Redis|MockObject $redisMock;
+    private MathUtility&MockObject $mathUtilityMock;
+    private \Redis&MockObject $redisMock;
     private MacroEngine $engine;
 
     protected function setUp(): void
@@ -1050,5 +1050,67 @@ class MacroEngineTest extends TestCase
 
         $this->assertGreaterThanOrEqual(120.0, $state->totalFactorProductivityIndex, 'TFP index must never decline.');
     }
-}
 
+    public function testExchangeRateAppreciationDragsDownOutputGap(): void
+    {
+        $stateStrongFx = new \App\Service\Macro\MacroState();
+        $stateStrongFx->exchangeRateIndexEma = 120.0; // 20% appreciation
+
+        $stateNeutralFx = new \App\Service\Macro\MacroState();
+        $stateNeutralFx->exchangeRateIndexEma = 100.0; // Neutral
+
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateOutputGap');
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $gapStrongFx = $reflectionMethod->invoke($this->engine, $stateStrongFx, 0.05, 0.02, 0.25, 1.0);
+        $gapNeutralFx = $reflectionMethod->invoke($this->engine, $stateNeutralFx, 0.05, 0.02, 0.25, 1.0);
+
+        $this->assertLessThan($gapNeutralFx, $gapStrongFx, 'Marshall-Lerner condition: Strong FX must drag down output gap.');
+    }
+
+    public function testInterbankContagionWidensMacroCreditSpread(): void
+    {
+        $stateStressed = new \App\Service\Macro\MacroState();
+        $stateStressed->outputGapEma = 0.0;
+        $stateStressed->marketVolatilityEma = 0.15;
+        $stateStressed->interbankLiquiditySpreadEma = 0.03; // 300 bps interbank stress
+
+        $stateNeutral = new \App\Service\Macro\MacroState();
+        $stateNeutral->outputGapEma = 0.0;
+        $stateNeutral->marketVolatilityEma = 0.15;
+        $stateNeutral->interbankLiquiditySpreadEma = 0.0025; // Normal
+
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateMacroCreditSpread');
+
+        $reflectionMethod->invoke($this->engine, $stateStressed);
+        $reflectionMethod->invoke($this->engine, $stateNeutral);
+
+        $this->assertGreaterThan($stateNeutral->macroCreditSpread, $stateStressed->macroCreditSpread, 'Interbank stress must contagion into corporate credit spreads.');
+        $this->assertEqualsWithDelta(
+            $stateNeutral->macroCreditSpread + ((0.03 - 0.0025) * MacroEngine::INTERBANK_CREDIT_CONTAGION_SENSITIVITY),
+            $stateStressed->macroCreditSpread,
+            0.0001
+        );
+    }
+
+    public function testSustainedInflationElevatesExpectations(): void
+    {
+        $stateHighEma = new \App\Service\Macro\MacroState();
+        $stateHighEma->inflation = 0.04;
+        $stateHighEma->inflationEma = 0.06; // Persistently high
+        $stateHighEma->outputGap = 0.0;
+
+        $stateAnchored = new \App\Service\Macro\MacroState();
+        $stateAnchored->inflation = 0.04;
+        $stateAnchored->inflationEma = 0.02; // Firmly anchored
+        $stateAnchored->outputGap = 0.0;
+
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateInflation');
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $infHigh = $reflectionMethod->invoke($this->engine, $stateHighEma, 0.02, 1.0, 0.25);
+        $infAnchored = $reflectionMethod->invoke($this->engine, $stateAnchored, 0.02, 1.0, 0.25);
+
+        $this->assertGreaterThan($infAnchored, $infHigh, 'Un-anchored expectations must result in higher inflation drift.');
+    }
+}

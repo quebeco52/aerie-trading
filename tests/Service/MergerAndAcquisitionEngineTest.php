@@ -14,25 +14,28 @@ use App\Service\Event\MarketEventPublisher;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Math\MathUtility;
 use Doctrine\ORM\EntityManagerInterface;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class MergerAndAcquisitionEngineTest extends TestCase
 {
-    private EntityManagerInterface|MockObject $entityManagerMock;
-    private MarketEventPublisher|MockObject $marketEventPublisherMock;
-    private DebtEngine|MockObject $debtEngineMock;
-    private MathUtility|MockObject $mathUtilityMock;
-    private CorporateMetrics|MockObject $corporateMetricsMock;
+    private EntityManagerInterface&Stub $entityManagerMock;
+    private MarketEventPublisher&Stub $marketEventPublisherMock;
+    private DebtEngine&Stub $debtEngineMock;
+    private MathUtility&Stub $mathUtilityMock;
+    private CorporateMetrics&Stub $corporateMetricsMock;
     private MergerAndAcquisitionEngine $engine;
 
     protected function setUp(): void
     {
-        $this->entityManagerMock = $this->createMock(EntityManagerInterface::class);
-        $this->marketEventPublisherMock = $this->createMock(MarketEventPublisher::class);
-        $this->debtEngineMock = $this->createMock(DebtEngine::class);
-        $this->mathUtilityMock = $this->createMock(MathUtility::class);
-        $this->corporateMetricsMock = $this->createMock(CorporateMetrics::class);
+        $this->entityManagerMock = $this->createStub(EntityManagerInterface::class);
+        $this->marketEventPublisherMock = $this->createStub(MarketEventPublisher::class);
+        $this->debtEngineMock = $this->createStub(DebtEngine::class);
+        $this->mathUtilityMock = $this->createStub(MathUtility::class);
+        $this->corporateMetricsMock = $this->createStub(CorporateMetrics::class);
 
         $this->engine = new MergerAndAcquisitionEngine(
             $this->entityManagerMock,

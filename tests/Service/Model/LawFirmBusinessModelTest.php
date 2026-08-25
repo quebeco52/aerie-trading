@@ -103,7 +103,7 @@ class LawFirmBusinessModelTest extends TestCase
 
         $macro = new MacroStateDTO(outputGapEma: 0.0, macroCreditSpread: 0.015);
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
         $mathMock->method('generateStandardNormal')->willReturn(0.0);
 

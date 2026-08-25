@@ -134,7 +134,7 @@ class CommodityBusinessModelTest extends TestCase
 
     public function testTickerParameterResolution(): void
     {
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $sink = new Stock();
@@ -180,7 +180,7 @@ class CommodityBusinessModelTest extends TestCase
         $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 100.0);
 
         // Neutral run: Z = 0 across all streams
-        $mathNeutral = $this->createMock(MathUtility::class);
+        $mathNeutral = $this->createStub(MathUtility::class);
         $mathNeutral->method('generatePersistentZ')->willReturn(0.0);
 
         $resNeutral = $this->model->computeActualFinancials(
@@ -194,7 +194,7 @@ class CommodityBusinessModelTest extends TestCase
         );
 
         // Surge extraction volume: extraction_volume Z = 2.0, other streams = 0.0
-        $mathSurge = $this->createMock(MathUtility::class);
+        $mathSurge = $this->createStub(MathUtility::class);
         $mathSurge->method('generatePersistentZ')->willReturnOnConsecutiveCalls(
             2.0, // extraction_volume
             0.0, // spot_price
@@ -226,7 +226,7 @@ class CommodityBusinessModelTest extends TestCase
         $neutralMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 100.0);
         $spikeMacro   = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 180.0);
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $neutralRes = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $neutralMacro, $mathMock);
@@ -244,7 +244,7 @@ class CommodityBusinessModelTest extends TestCase
 
         $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 100.0);
 
-        $mathDisaster = $this->createMock(MathUtility::class);
+        $mathDisaster = $this->createStub(MathUtility::class);
         $mathDisaster->method('generatePersistentZ')->willReturnOnConsecutiveCalls(
             0.0,   // extraction_volume
             0.0,   // spot_price
@@ -281,7 +281,7 @@ class CommodityBusinessModelTest extends TestCase
 
         $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 100.0);
 
-        $mathSanctions = $this->createMock(MathUtility::class);
+        $mathSanctions = $this->createStub(MathUtility::class);
         $mathSanctions->method('generatePersistentZ')->willReturnOnConsecutiveCalls(
             0.0,   // extraction_volume
             0.0,   // spot_price
@@ -312,7 +312,7 @@ class CommodityBusinessModelTest extends TestCase
 
         $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 100.0);
 
-        $mathExportBan = $this->createMock(MathUtility::class);
+        $mathExportBan = $this->createStub(MathUtility::class);
         $mathExportBan->method('generatePersistentZ')->willReturnOnConsecutiveCalls(
             0.0,  // extraction_volume
             0.0,  // spot_price

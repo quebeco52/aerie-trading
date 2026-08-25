@@ -4,6 +4,7 @@ namespace App\Tests\Service;
 
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use App\Service\Market\StockTracker;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Market\MarketEngine;
@@ -18,30 +19,33 @@ use App\Entity\Stock;
 use App\Entity\StockEvent;
 use App\Entity\StockHistory;
 
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+
+#[AllowMockObjectsWithoutExpectations]
 class StockTrackerTest extends TestCase
 {
-    private EntityManagerInterface|MockObject $entityManagerMock;
-    private MarketEngine|MockObject $marketEngineMock;
-    private EarningsEngine|MockObject $earningsEngineMock;
-    private CorporateActionEngine|MockObject $corporateActionEngineMock;
-    private MergerAndAcquisitionEngine|MockObject $maEngineMock;
-    private MarketEventPublisher|MockObject $marketEventMock;
-    private DebtEngine|MockObject $debtEngineMock;
-    private MathUtility|MockObject $mathUtilityMock;
-    private CorporateMetrics|MockObject $corporateMetricsMock;
+    private EntityManagerInterface&MockObject $entityManagerMock;
+    private MarketEngine&Stub $marketEngineMock;
+    private EarningsEngine&Stub $earningsEngineMock;
+    private CorporateActionEngine&Stub $corporateActionEngineMock;
+    private MergerAndAcquisitionEngine&Stub $maEngineMock;
+    private MarketEventPublisher&Stub $marketEventMock;
+    private DebtEngine&Stub $debtEngineMock;
+    private MathUtility&Stub $mathUtilityMock;
+    private CorporateMetrics&Stub $corporateMetricsMock;
     private StockTracker $tracker;
 
     protected function setUp(): void
     {
         $this->entityManagerMock = $this->createMock(EntityManagerInterface::class);
-        $this->marketEngineMock = $this->createMock(MarketEngine::class);
-        $this->earningsEngineMock = $this->createMock(EarningsEngine::class);
-        $this->corporateActionEngineMock = $this->createMock(CorporateActionEngine::class);
-        $this->maEngineMock = $this->createMock(MergerAndAcquisitionEngine::class);
-        $this->marketEventMock = $this->createMock(MarketEventPublisher::class);
-        $this->debtEngineMock = $this->createMock(DebtEngine::class);
-        $this->mathUtilityMock = $this->createMock(MathUtility::class);
-        $this->corporateMetricsMock = $this->createMock(CorporateMetrics::class);
+        $this->marketEngineMock = $this->createStub(MarketEngine::class);
+        $this->earningsEngineMock = $this->createStub(EarningsEngine::class);
+        $this->corporateActionEngineMock = $this->createStub(CorporateActionEngine::class);
+        $this->maEngineMock = $this->createStub(MergerAndAcquisitionEngine::class);
+        $this->marketEventMock = $this->createStub(MarketEventPublisher::class);
+        $this->debtEngineMock = $this->createStub(DebtEngine::class);
+        $this->mathUtilityMock = $this->createStub(MathUtility::class);
+        $this->corporateMetricsMock = $this->createStub(CorporateMetrics::class);
         
         $this->mathUtilityMock->method('calculateSVJJJumps')->willReturn([
             'price_multiplier' => 1.0,

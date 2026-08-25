@@ -193,8 +193,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
             $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
         }
 
-        $metrics = new CorporateMetrics();
-        $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
+        $saturationPenalty = CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
         $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
         $baselineRoe = max($waccBase, $baselineRoe - $saturationPenalty);
 
@@ -331,29 +330,29 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         $mgmtRevenue = max(0.0, $mgmtExpectedRevenue
             * (1.0 + ($mgmtZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::MGMT_BASE_VOLATILITY_SCALAR)) + $aumMarketBeta));
 
-        // --- 2. "2 and 20" Incentive Fee Physics (Call Option on Alpha) ---
-        $impliedAum = $mgmtExpectedRevenue / self::BASE_MANAGEMENT_FEE_RATE;
+        // --- 2. Leveraged Directional Bets & Performance Fees (Asymmetric Alpha Call Option) ---
         $leverageMultiplier = 1.0 + ($actualLeverage * self::LEVERAGE_AMPLIFIER_SCALAR);
-
-        $dirAlphaReturn   = max(0.0, ($dirZ - self::PERFORMANCE_FEE_HURDLE_Z) * $baselineVol * $leverageMultiplier);
-        $quantAlphaReturn = max(0.0, ($quantZ - self::PERFORMANCE_FEE_HURDLE_Z) * $baselineVol);
-
-        $dirIncentiveFee   = ($impliedAum * self::COMPOSITE_ALPHA_DIR_WEIGHT) * $dirAlphaReturn * self::INCENTIVE_FEE_RATE;
-        $quantIncentiveFee = ($impliedAum * self::COMPOSITE_ALPHA_QUANT_WEIGHT) * $quantAlphaReturn * self::INCENTIVE_FEE_RATE;
-
-        // --- 3. Leveraged Directional Bets Revenue ---
         $macroDirectionalShift = $outputGap * $beta * self::DIRECTIONAL_MACRO_SCALAR;
-        $dirRevenue = max(0.0, ($expectedRevenue * $dirWeight
-            * (1.0 + ($dirZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::DIRECTIONAL_BASE_VOLATILITY_SCALAR * $leverageMultiplier)
-                + $macroDirectionalShift)) + $dirIncentiveFee);
 
-        // --- 4. Quantitative Alpha Engine (Volatility Spread Expansion) ---
+        // In hedge fund physics ("2 and 20"):
+        // Above hurdle (Z > 1.25), performance incentive fees scale dynamically with excess alpha and leverage.
+        // Below hurdle (Z < 1.25), no performance fees are earned; directional trading revenues scale with baseline volatility.
+        $dirBaseDrift = $dirZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::DIRECTIONAL_BASE_VOLATILITY_SCALAR * $leverageMultiplier;
+        $dirIncentiveBonus = max(0.0, ($dirZ - self::PERFORMANCE_FEE_HURDLE_Z) * self::INCENTIVE_FEE_RATE * 3.0 * $leverageMultiplier);
+
+        $dirRevenue = max(0.0, $expectedRevenue * $dirWeight
+            * (1.0 + $dirBaseDrift + $dirIncentiveBonus + $macroDirectionalShift));
+
+        // --- 3. Quantitative Alpha Engine (Volatility Spread Expansion & Market Making) ---
         $vixAlphaMultiplier = 1.0 + max(0.0, ($vixEma - self::VIX_ALPHA_BASELINE) * self::VIX_ALPHA_SCALAR);
         $vixCalmDrag        = min(0.0, ($vixEma - self::VIX_ALPHA_BASELINE) * self::VIX_CALM_DRAG_SCALAR);
 
+        $quantBaseDrift = $quantZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::QUANT_ALPHA_VOLATILITY_SCALAR;
+        $quantIncentiveBonus = max(0.0, ($quantZ - self::PERFORMANCE_FEE_HURDLE_Z) * self::INCENTIVE_FEE_RATE * 2.0);
+
         $quantRevenue = max(0.0, ($expectedRevenue * $quantWeight
-            * (1.0 + ($quantZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::QUANT_ALPHA_VOLATILITY_SCALAR) + $vixCalmDrag)
-            * $vixAlphaMultiplier) + $quantIncentiveFee);
+            * (1.0 + $quantBaseDrift + $quantIncentiveBonus + $vixCalmDrag)
+            * $vixAlphaMultiplier));
 
         $streamRevenues = [
             'management_fees'  => $mgmtRevenue,
@@ -364,20 +363,14 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // --- 5. Quadratic Liquidation Friction (Dimensional Unit Fix) ---
+        // --- 4. Quadratic Liquidation Friction ---
         $marginCallPenalty = 0.0;
         if ($creditSpread > self::MARGIN_CALL_SPREAD_THRESHOLD) {
             $spreadDelta = $creditSpread - self::MARGIN_CALL_SPREAD_THRESHOLD;
             $liquidationFraction = min(1.0, $actualLeverage * $spreadDelta * self::PRIME_BROKER_HAIRCUT_MULT);
 
-            // Almgren-Chriss slippage cost as a percentage of the liquidated capital: 0.5 * lambda * Q^2
-            $slippageCostPercent = 0.5 * self::LIQUIDITY_FRICTION_LAMBDA * ($liquidationFraction ** 2);
-
-            // Calculate strict dollar loss on the balance sheet, then scale to margin
-            $liquidatedAum = $impliedAum * $liquidationFraction;
-            $dollarSlippageLoss = $liquidatedAum * $slippageCostPercent;
-
-            $marginCallPenalty = $dollarSlippageLoss / max(1.0, $actualRevenue);
+            // Almgren-Chriss slippage friction: 0.5 * lambda * Q^2
+            $marginCallPenalty = 0.5 * self::LIQUIDITY_FRICTION_LAMBDA * ($liquidationFraction ** 2);
         }
 
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));

@@ -41,7 +41,7 @@ class SteelManufacturingBusinessModelTest extends TestCase
             freightRateIndexEma: 100.0
         );
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $baseResult = $this->model->computeActualFinancials(
@@ -83,7 +83,7 @@ class SteelManufacturingBusinessModelTest extends TestCase
         $baseMacro = new MacroStateDTO(energyPriceIndexEma: 100.0, freightRateIndexEma: 100.0);
         $costSpikeMacro = new MacroStateDTO(energyPriceIndexEma: 150.0, freightRateIndexEma: 140.0);
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $baseMacro, $mathMock);

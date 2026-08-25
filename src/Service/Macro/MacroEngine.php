@@ -27,6 +27,8 @@ class MacroEngine
     public const CASH_YIELD_SPREAD = 0.0025;
 
     // --- KALDOR-KALECKI 2D LIMIT CYCLE ---
+    /** Elasticity of aggregate demand to exchange rate deviations (Marshall-Lerner Net Export Drag). */
+    public const KALDOR_FX_ELASTICITY = 0.04;
     /** Linear momentum of aggregate demand feedback loop. */
     public const KALDOR_MOMENTUM = 0.15;
     /** Cubic stabilization factor bounding extreme boom/bust expansions. */
@@ -139,12 +141,16 @@ class MacroEngine
     public const NS_GAP_TERM_PREMIUM_SCALE = -0.15;
 
     // --- New Keynesian Phillips Curve Dynamics ---
+    /** Adaptive unanchoring weight of inflation expectations to sustained trend deviations. */
+    public const INFLATION_ADAPTIVE_EXPECTATIONS_WEIGHT = 0.25;
     /** Phillips curve slope: sensitivity of headline inflation to the output gap. */
     public const PHILLIPS_SLOPE = 0.15;
     /** Speed of inflation expectations mean-reverting toward central bank target (anchored expectations). */
     public const INFLATION_MEAN_REVERSION = 0.50;
 
     // --- Merton Structural Corporate Credit Spreads (Merton 1974) ---
+    /** Sensitivity of corporate credit spreads to wholesale interbank funding stress. */
+    public const INTERBANK_CREDIT_CONTAGION_SENSITIVITY = 2.0;
     /** Baseline investment-grade corporate credit spread (200 bps) over risk-free rate. */
     public const BASE_CREDIT_SPREAD = 0.020;
     /** Sensitivity of corporate credit spreads to GDP contraction (leverage & distance-to-default channel). */
@@ -655,8 +661,13 @@ class MacroEngine
         // Household consumption scales with perceived housing wealth (Case, Quigley, and Shiller 2005).
         $housingWealthEffect = (($state->residentialPropertyIndexEma / self::RESIDENTIAL_BASELINE) - 1.0) * self::KALDOR_WEALTH_EFFECT_ELASTICITY;
 
-        // Inject the Wealth Effect directly into the macroeconomic drift
-        $drift = ($momentum - $cubicConstraint - $monetaryDrag + $fiscalStimulus - $capitalDrag + $housingWealthEffect) * $dt;
+        // --- Marshall-Lerner Net Export Drag ---
+        // A strong currency (index > 100) makes exports uncompetitive, dragging down the output gap.
+        $fxShift = ($state->exchangeRateIndexEma / self::EXCHANGE_RATE_BASELINE) - 1.0;
+        $netExportDrag = self::KALDOR_FX_ELASTICITY * $fxShift;
+
+        // Inject the Wealth Effect and FX Drag directly into the macroeconomic drift
+        $drift = ($momentum - $cubicConstraint - $monetaryDrag + $fiscalStimulus - $capitalDrag + $housingWealthEffect - $netExportDrag) * $dt;
         $volatility = self::OUTPUT_GAP_DIFFUSION_SIGMA * $stressMultiplier * sqrt($dt) * $outZ;
 
         $newGap = $y + $drift + $volatility;
@@ -667,8 +678,14 @@ class MacroEngine
     private function calculateInflation(MacroState $state, float $targetInflation, float $stressMultiplier, float $dt): float
     {
         $infZ = $this->mathUtility->generateStandardNormal();
-        // Inflation expectations are fully anchored. Revert structurally toward the target rate.
-        $inflationDrift = self::INFLATION_MEAN_REVERSION * ($targetInflation - $state->inflation) * $dt;
+
+        // --- Adaptive Inflation Expectations (Hybrid NKPC) ---
+        // If the EMA stays severely elevated, the "anchor" slips away from the 2% target.
+        $anchorSlip = ($state->inflationEma - $targetInflation) * self::INFLATION_ADAPTIVE_EXPECTATIONS_WEIGHT;
+        $effectiveTarget = $targetInflation + $anchorSlip;
+
+        // Revert structurally toward the effective expectations target
+        $inflationDrift = self::INFLATION_MEAN_REVERSION * ($effectiveTarget - $state->inflation) * $dt;
 
         $phillipsSlope = $state->outputGap * self::PHILLIPS_SLOPE;
 
@@ -815,7 +832,12 @@ class MacroEngine
         $excessVol = max(0.0, $state->marketVolatilityEma - 0.20);
         $volSpread = self::MERTON_VOL_SENSITIVITY * $excessVol;
 
-        $state->macroCreditSpread = max(0.008, min(self::MAX_CREDIT_SPREAD, $cycleSpread + $volSpread));
+        // --- Interbank Contagion Channel ---
+        // Wholesale liquidity freezes (e.g. TED spread blowout) bleed directly into corporate credit
+        $interbankStress = max(0.0, $state->interbankLiquiditySpreadEma - self::INTERBANK_BASELINE_SPREAD);
+        $contagionSpread = $interbankStress * self::INTERBANK_CREDIT_CONTAGION_SENSITIVITY;
+
+        $state->macroCreditSpread = max(0.008, min(self::MAX_CREDIT_SPREAD, $cycleSpread + $volSpread + $contagionSpread));
     }
 
     private function calculateInterbankLiquiditySpread(MacroState $state, float $dt): void

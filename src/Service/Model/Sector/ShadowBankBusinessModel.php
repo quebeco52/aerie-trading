@@ -103,8 +103,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
         }
 
-        $metrics = new \App\Service\Math\CorporateMetrics();
-        $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, $effectiveEquity, $macroState);
+        $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, $effectiveEquity, $macroState);
         $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
         $baselineRoe = max($waccBase, $baselineRoe - $saturationPenalty);
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());

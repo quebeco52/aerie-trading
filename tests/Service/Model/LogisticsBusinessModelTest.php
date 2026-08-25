@@ -40,7 +40,7 @@ class LogisticsBusinessModelTest extends TestCase
             energyPriceIndexEma: 100.0
         );
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $baseResult = $this->model->computeActualFinancials(
@@ -106,7 +106,7 @@ class LogisticsBusinessModelTest extends TestCase
         $baseMacro = new MacroStateDTO(energyPriceIndexEma: 100.0);
         $spikeMacro = new MacroStateDTO(energyPriceIndexEma: 160.0);
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $baseMacro, $mathMock);

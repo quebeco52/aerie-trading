@@ -57,7 +57,7 @@ class RestaurantBusinessModelTest extends TestCase
         $stock->setTicker('MCD');
         $stock->setBeta('1.0');
 
-        $mathUtilityMock = $this->createMock(MathUtility::class);
+        $mathUtilityMock = $this->createStub(MathUtility::class);
         $mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $macroBaseline = new MacroStateDTO(
@@ -102,7 +102,7 @@ class RestaurantBusinessModelTest extends TestCase
         $stock->setTicker('MCD');
         $stock->setBeta('1.0');
 
-        $mathUtilityMock = $this->createMock(MathUtility::class);
+        $mathUtilityMock = $this->createStub(MathUtility::class);
         $mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $macroNormalLabor = new MacroStateDTO(

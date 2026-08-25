@@ -13,12 +13,6 @@ use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\FinancialConstants;
-use App\Service\Model\Trait\FinancialPhysicsTrait;
-use App\Service\Model\Trait\StandardBaseModelTrait;
-use App\Service\Model\Trait\StandardCapitalAllocationTrait;
-use App\Service\Model\Trait\StandardOperatingPhysicsTrait;
-use App\Service\Model\Trait\StandardTreasuryTrait;
-use App\Service\Model\Trait\StandardValuationTrait;
 
 /**
  * Earnings strategy for Brokerages & Capital Markets.
@@ -28,18 +22,8 @@ use App\Service\Model\Trait\StandardValuationTrait;
  * - Revenue scales off trading volume, investment banking advisory, and margin loans.
  * - Evaluated on Return on Equity (ROE).
  */
-class BrokerageBusinessModel implements BusinessModelInterface
+class BrokerageBusinessModel extends BaseFinancialBusinessModel
 {
-    use StandardBaseModelTrait;
-    use StandardTreasuryTrait;
-    use StandardValuationTrait;
-    use StandardOperatingPhysicsTrait, StandardCapitalAllocationTrait, FinancialPhysicsTrait {
-        FinancialPhysicsTrait::getTrueReturn insteadof StandardOperatingPhysicsTrait;
-        FinancialPhysicsTrait::getEvaluationCapital insteadof StandardOperatingPhysicsTrait;
-        FinancialPhysicsTrait::calculateEconomicReturn insteadof StandardOperatingPhysicsTrait;
-        FinancialPhysicsTrait::updateDynamicRoic insteadof StandardOperatingPhysicsTrait;
-        FinancialPhysicsTrait::getMaxOrganicGrowthSpeed insteadof StandardCapitalAllocationTrait;
-    }
 
     // --- Loss Provisions & Analyst Coverage ---
     /** Loss provision z-factor for margin credit defaults. */
@@ -208,8 +192,7 @@ class BrokerageBusinessModel implements BusinessModelInterface
             $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
         }
 
-        $metrics = new \App\Service\Math\CorporateMetrics();
-        $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
+        $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
         $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
         $baselineRoe = max($waccBase, $baselineRoe - $saturationPenalty);
 

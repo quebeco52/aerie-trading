@@ -4,15 +4,17 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model;
 
-use PHPUnit\Framework\TestCase;
-use App\Service\Model\Sector\InvestmentBankBusinessModel;
-use App\Service\Math\MathUtility;
-use App\Service\Macro\MacroEngine;
-use App\Entity\Stock;
 use App\Data\InitialMarket;
 use App\Data\StockInfo;
 use App\Data\StockModelTuning;
+use App\Entity\Stock;
+use App\Service\Macro\MacroEngine;
+use App\Service\Math\MathUtility;
+use App\Service\Model\Sector\InvestmentBankBusinessModel;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class InvestmentBankBusinessModelTest extends TestCase
 {
     private InvestmentBankBusinessModel $model;
@@ -45,7 +47,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('CORV');
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generateStandardNormal')->willReturn(0.0);
         $mathMock->method('generateUniform')->willReturn(0.50); // No regulatory fine
 
@@ -82,7 +84,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('GS');
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generateStandardNormal')->willReturn(0.0);
         $mathMock->method('generateUniform')->willReturn(0.50);
 
@@ -121,7 +123,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('PERE'); // PERE: advisory = 0.0, trading = 0.40, options_premium_income = 0.60, vix_scalar = 1.80
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generateStandardNormal')->willReturn(0.0);
         $mathMock->method('generateUniform')->willReturn(0.50);
 
@@ -161,7 +163,7 @@ class InvestmentBankBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('KING'); // KING: advisory = 0.75, trading = 0.25
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generateStandardNormal')->willReturn(0.0);
         $mathMock->method('generateUniform')->willReturn(0.50);
 

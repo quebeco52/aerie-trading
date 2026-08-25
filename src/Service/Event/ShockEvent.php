@@ -10,6 +10,7 @@ class ShockEvent
     public const REGULATORY_FINE = 'regulatory_fine';
     public const SEVERE_CHURN = 'severe_churn';
     public const BANK_RUN = 'bank_run';
+    public const BANK_SEIZURE = 'bank_seizure';
     public const MASSIVE_CREDIT_PROVISION = 'massive_credit_provision';
     public const ELEVATED_LOAN_DEFAULTS = 'elevated_loan_defaults';
     public const RESERVE_RELEASE = 'reserve_release';

@@ -10,17 +10,20 @@ use App\DTO\SectorCoverageProfile;
 use App\Entity\Stock;
 use App\Service\Market\MarketConsensusEngine;
 use App\Service\Math\MathUtility;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class MarketConsensusEngineTest extends TestCase
 {
-    private MathUtility|MockObject $mathUtilityMock;
+    private MathUtility&Stub $mathUtilityMock;
     private MarketConsensusEngine $engine;
 
     protected function setUp(): void
     {
-        $this->mathUtilityMock = $this->createMock(MathUtility::class);
+        $this->mathUtilityMock = $this->createStub(MathUtility::class);
         $this->mathUtilityMock->method('calculateBayesianAnalystUpdate')->willReturnCallback(
             fn(float $pEst, float $pVar, float $sEst, float $sVar) => (new MathUtility())->calculateBayesianAnalystUpdate($pEst, $pVar, $sEst, $sVar)
         );

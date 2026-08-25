@@ -65,7 +65,7 @@ class RetailInsuranceBusinessModelTest extends TestCase
         $stock->setBeta('0.8');
         $stock->setTotalEquity('50000000000');
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         // pcZ = 1.0, lifeZ = 0.5, claimZ = 0.0
         $mathMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(1.0, 0.5, 0.0);
         $mathMock->method('generateStandardNormal')->willReturn(0.0);

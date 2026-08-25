@@ -67,7 +67,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
 
         $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, policyRateEma: 0.03, yield10yEma: 0.04, yield2yEma: 0.03);
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $result = $this->model->computeActualFinancials(
@@ -92,7 +92,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $stock->setTicker('FALC');
         $stock->setBeta('1.75');
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $neutralMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, policyRateEma: 0.03, equityRiskPremium: 0.045, qeActive: false);
@@ -116,7 +116,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $stock->setTicker('FALC');
         $stock->setBeta('1.75');
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $baselineMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, policyRateEma: 0.03);
@@ -135,7 +135,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
 
     public function testLaborStrikeObservableShockBounded(): void
     {
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(-3.0);
 
         $stock = new Stock();
@@ -188,7 +188,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $calmFreightMacro = new MacroStateDTO(freightRateIndexEma: 100.0, inflationEma: 0.02, energyPriceIndexEma: 100.0, industrialMetalsIndexEma: 100.0);
         $spikeFreightMacro = new MacroStateDTO(freightRateIndexEma: 160.0, inflationEma: 0.02, energyPriceIndexEma: 100.0, industrialMetalsIndexEma: 100.0);
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $calmResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $calmFreightMacro, $mathMock);

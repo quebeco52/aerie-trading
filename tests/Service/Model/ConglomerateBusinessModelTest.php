@@ -97,7 +97,7 @@ class ConglomerateBusinessModelTest extends TestCase
 
     public function testTrivAndBrkwParameterResolution(): void
     {
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $triv = new Stock();

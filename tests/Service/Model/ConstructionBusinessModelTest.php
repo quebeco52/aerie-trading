@@ -74,7 +74,7 @@ class ConstructionBusinessModelTest extends TestCase
             energyPriceIndexEma: 100.0
         );
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $result = $this->model->computeActualFinancials(
@@ -107,7 +107,7 @@ class ConstructionBusinessModelTest extends TestCase
             energyPriceIndexEma: 140.0 // 40% energy spike
         );
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $resultDefault = $this->model->computeActualFinancials(
@@ -143,7 +143,7 @@ class ConstructionBusinessModelTest extends TestCase
             residentialPropertyIndexEma: 110.0
         );
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 10_000_000.0, 0.0, $baseMacro, $mathMock);

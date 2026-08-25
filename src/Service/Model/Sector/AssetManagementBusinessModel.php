@@ -12,12 +12,7 @@ use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
-use App\Service\Model\Trait\FinancialPhysicsTrait;
-use App\Service\Model\Trait\StandardBaseModelTrait;
-use App\Service\Model\Trait\StandardCapitalAllocationTrait;
-use App\Service\Model\Trait\StandardOperatingPhysicsTrait;
-use App\Service\Model\Trait\StandardTreasuryTrait;
-use App\Service\Model\Trait\StandardValuationTrait;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Asset Managers.
@@ -27,21 +22,11 @@ use App\Service\Model\Trait\StandardValuationTrait;
  * - Revenue scales off highly sticky, recurring Assets Under Management (AUM) fees.
  * - Evaluated on Return on Equity (ROE).
  */
-class AssetManagementBusinessModel implements BusinessModelInterface
+class AssetManagementBusinessModel extends BaseFinancialBusinessModel
 {
     public function getModelThresholds(): array
     {
         return ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => 0.5,  'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.18, 'moat_spread' => 0.010, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 1.0];
-    }
-    use StandardBaseModelTrait;
-    use StandardTreasuryTrait;
-    use StandardValuationTrait;
-    use StandardOperatingPhysicsTrait, StandardCapitalAllocationTrait, FinancialPhysicsTrait {
-        FinancialPhysicsTrait::getTrueReturn insteadof StandardOperatingPhysicsTrait;
-        FinancialPhysicsTrait::getEvaluationCapital insteadof StandardOperatingPhysicsTrait;
-        FinancialPhysicsTrait::calculateEconomicReturn insteadof StandardOperatingPhysicsTrait;
-        FinancialPhysicsTrait::updateDynamicRoic insteadof StandardOperatingPhysicsTrait;
-        FinancialPhysicsTrait::getMaxOrganicGrowthSpeed insteadof StandardCapitalAllocationTrait;
     }
 
     // --- ROE & Target Architecture ---
@@ -173,8 +158,7 @@ class AssetManagementBusinessModel implements BusinessModelInterface
             $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
         }
 
-        $metrics = new \App\Service\Math\CorporateMetrics();
-        $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
+        $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
         $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
         $baselineRoe = max($waccBase, $baselineRoe - $saturationPenalty);
 
@@ -401,16 +385,14 @@ class AssetManagementBusinessModel implements BusinessModelInterface
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::ROE_TTM_EMA_WEIGHT) + ($oldTtm * self::ROE_TTM_HIST_WEIGHT);
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
         $scaledKappa = $kappa / self::TTM_ROE_WEIGHT;
-        $math = new MathUtility();
 
         $saturationPenalty = 0.0;
         if ($macroState !== null) {
-            $metrics = new \App\Service\Math\CorporateMetrics();
-            $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
+            $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
         }
 
         $effectiveMoat = max(0.0, $moatSpread - $saturationPenalty);
-        $newTtm += $math->calculateReversionPull($newTtm, $costOfEquity, $scaledKappa, $effectiveMoat);
+        $newTtm += MathUtility::getInstance()->calculateReversionPull($newTtm, $costOfEquity, $scaledKappa, $effectiveMoat);
         $stock->setRoeTtm((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;

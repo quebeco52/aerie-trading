@@ -67,7 +67,7 @@ class ReinsuranceBusinessModelTest extends TestCase
         // Very low equity relative to expected revenue creates high surplus deficit
         $stock->setTotalEquity('1000000000'); // $1B vs $10B expected revenue (target surplus = $6.67B)
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
         $mathMock->method('generateStandardNormal')->willReturn(0.0);
 
@@ -105,7 +105,7 @@ class ReinsuranceBusinessModelTest extends TestCase
         $stock->setBeta('0.9');
         $stock->setTotalEquity('30000000000');
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         // Return Z-scores: treatyZ = 0.0, catBondZ = 0.0, claimZ = -3.0 (breaches attachment at -2.50)
         $mathMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, 0.0, -3.0);
         $mathMock->method('generateStandardNormal')->willReturn(0.0);
@@ -148,7 +148,7 @@ class ReinsuranceBusinessModelTest extends TestCase
         $stock->setBeta('0.9');
         $stock->setTotalEquity('30000000000');
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         // Extreme black swan catastrophe: claimZ = -8.0
         $mathMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, 0.0, -8.0);
         $mathMock->method('generateStandardNormal')->willReturn(0.0);

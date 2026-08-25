@@ -578,4 +578,54 @@ class ReitBusinessModelTest extends TestCase
         $incomeBoundCapacity = $model->calculateDebtExpansionCapacity($equity, $totalDebt, $wholesaleDebt, $health, $newBorrowingRate, $lowEbit, $depreciation);
         $this->assertEqualsWithDelta(242.424, $incomeBoundCapacity, 0.01);
     }
+
+    public function testCapRateFloorTetheredTo10YearYield(): void
+    {
+        $model = new ReitBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('REIT_FLOOR');
+        $stock->setTotalEquity('100000000');
+        $stock->setWholesaleDebt('100000000');
+        $stock->setCorporateTreasury('0');
+        $stock->setBaselineRoic('0.02'); // Depressed historical baseline
+
+        // Macro: 10y yield = 4.5%, negative/flat risk premiums
+        $macro = $this->createMacroState(yield10y: 0.045, equityRiskPremium: -0.01);
+        $math = new MathUtility();
+
+        $metrics = $model->getTargetMetrics($stock, $macro, $math);
+
+        // Baseline ROIC and target Cap Rate must be floored at least at 10Y yield (0.045)
+        $this->assertGreaterThanOrEqual(0.045, (float) $stock->getBaselineRoic());
+        $this->assertGreaterThanOrEqual(0.045, $metrics['baseline_roic']);
+    }
+
+    public function testDynamicRoicRevertsToMarketCapRateWhenMacroStatePresent(): void
+    {
+        $model = new ReitBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('REIT_REVERT');
+        $stock->setRoicTtm('0.02');
+
+        // High corporate WACC = 15% (e.g. distressed debt cost), but market cap rate = 4% + 5% + 1.8% = 10.8%
+        $macro = $this->createMacroState(yield10y: 0.04, equityRiskPremium: 0.05);
+        $ebit = 20_000_000.0;
+        $investedCapital = 1_000_000_000.0; // 8% current NOI return
+
+        $model->updateDynamicRoic(
+            $stock,
+            actualTotalNetIncome: $ebit,
+            investedCapital: $investedCapital,
+            ebit: $ebit,
+            corporateTaxRate: 0.0,
+            wacc: 0.15,
+            costOfEquity: 0.18,
+            macroState: $macro
+        );
+
+        $newTtm = (float) $stock->getRoicTtm();
+        // The return should have blended with current return and pulled towards market cap rate (10.8%), not WACC (15%)
+        $this->assertGreaterThan(0.02, $newTtm);
+        $this->assertLessThan(0.15, $newTtm);
+    }
 }

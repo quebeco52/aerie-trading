@@ -30,7 +30,7 @@ services:
     depends_on:
       - aerie-database
       - aerie-redis
-    command: php bin/console messenger:consume async -vv --memory-limit=128M --time-limit=3600
+    command: sh -c "php bin/console messenger:setup-transports && exec php bin/console messenger:consume async -vv --memory-limit=128M --time-limit=3600"
     restart: unless-stopped
     env_file:
       - .env.dev

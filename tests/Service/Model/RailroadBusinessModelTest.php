@@ -76,7 +76,7 @@ class RailroadBusinessModelTest extends TestCase
             agriculturalCommodityIndexEma: 130.0
         );
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $baseResult = $this->model->computeActualFinancials($stock, 1_000_000.0, 0.40, 200_000.0, 0.0, $baseMacro, $mathMock);

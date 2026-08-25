@@ -27,7 +27,7 @@ class SecurityProtectionBusinessModelTest extends TestCase
         $stock->setTicker('SEC');
         $stock->setBeta('1.0');
 
-        $mathUtilityMock = $this->createMock(MathUtility::class);
+        $mathUtilityMock = $this->createStub(MathUtility::class);
         // govZ = 0.0, retainerZ = 0.0, expeditionaryZ = 0.0, eventZ = -3.0 (triggers tactical failure < -2.50)
         $mathUtilityMock->method('generatePersistentZ')
             ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, -3.0);
@@ -93,7 +93,7 @@ class SecurityProtectionBusinessModelTest extends TestCase
         $stock->setTicker('SEC');
         $stock->setBeta('1.0');
 
-        $mathUtilityMock = $this->createMock(MathUtility::class);
+        $mathUtilityMock = $this->createStub(MathUtility::class);
         // govZ = 0.0, retainerZ = 0.0, expeditionaryZ = 0.0, eventZ = 3.0 (triggers conflict > 2.40)
         $mathUtilityMock->method('generatePersistentZ')
             ->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, 3.0);

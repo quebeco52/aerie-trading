@@ -9,11 +9,27 @@ use App\Service\Math\FinancialConstants;
 
 trait StandardValuationTrait
 {
-    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float {
-        // Assume FAIR_VALUE_EARNINGS_WEIGHT is 0.90, FAIR_VALUE_BOOK_WEIGHT is 0.10, FAIR_VALUE_DDM_WEIGHT is 0.15
-        $baseConsensus = ($earningsValue * 0.90) + ($pbFairValue * 0.10);
+    public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float
+    {
+        if ($fcfPerShare !== null && $fcfPerShare > 0.0) {
+            $terminalGrowth = defined('static::DCF_TERMINAL_GROWTH_RATE') ? static::DCF_TERMINAL_GROWTH_RATE : FinancialConstants::DEFAULT_PERPETUAL_GROWTH_RATE;
+            $maxDcfCap = defined('static::MAX_DCF_TO_PE_CAP_MULT') ? static::MAX_DCF_TO_PE_CAP_MULT : 1.50;
+            $multiplier = $mathUtility->calculateDcfMultiplier($liveWacc, $terminalGrowth);
+            // The FCF passed from EarningsEngine is Quarterly. We MUST annualize it!
+            $annualFcf = $fcfPerShare * 4.0;
+            // Cap the DCF so a temporary lack of CapEx doesn't cause an infinite perpetual valuation.
+            $dcfFairValue = min(max(0.01, $annualFcf * $multiplier), $peFairValue * $maxDcfCap);
+            return ($peFairValue + $dcfFairValue) / 2.0;
+        }
+        $discount = defined('static::NEGATIVE_FCF_VAL_DISCOUNT') ? static::NEGATIVE_FCF_VAL_DISCOUNT : 0.75;
+        return $fcfPerShare !== null ? max($revenueFloorValue, $peFairValue) * $discount : max($revenueFloorValue, $peFairValue);
+    }
+
+    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
+    {
+        $baseConsensus = ($earningsValue * FinancialConstants::FAIR_VALUE_EARNINGS_WEIGHT) + ($pbFairValue * FinancialConstants::FAIR_VALUE_BOOK_WEIGHT);
         return $dividendSupportValue > 0.0
-            ? ($baseConsensus * (1.0 - 0.15)) + ($dividendSupportValue * 0.15)
+            ? ($baseConsensus * (1.0 - FinancialConstants::FAIR_VALUE_DDM_WEIGHT)) + ($dividendSupportValue * FinancialConstants::FAIR_VALUE_DDM_WEIGHT)
             : $baseConsensus;
     }
 }

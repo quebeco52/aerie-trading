@@ -50,7 +50,7 @@ class BrokerageBusinessModelTest extends TestCase
         $stock->setTicker('ROOK');
         $stock->setOperatingMargin('0.30');
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         // Macro state with elevated VIX (30% vs 20% baseline)

@@ -152,12 +152,12 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $yield10y = $macroState->yield10yEma;
         $realEstateRiskPremium = $macroState->equityRiskPremium;
         $creditSpreadDrag = $macroState->macroCreditSpreadEma * self::CAP_RATE_SPREAD_SENSITIVITY;
-        $targetCapRate = $yield10y + $realEstateRiskPremium + $creditSpreadDrag;
+        $targetCapRate = max($yield10y, $yield10y + $realEstateRiskPremium + $creditSpreadDrag);
 
         $portfolioTurnoverRate = self::PORTFOLIO_TURNOVER_RATE;
         $maxCapRate = max(self::MAX_CAP_RATE_CLAMP, $macroState->yield10yEma + self::CAP_RATE_CEILING_SPREAD);
-        $blendedCapRate = min($maxCapRate, ($baselineRoic * (1.0 - $portfolioTurnoverRate)) + ($targetCapRate * $portfolioTurnoverRate));
-        $stock->setBaselineRoic((string) max(0.01, $blendedCapRate));
+        $blendedCapRate = min($maxCapRate, max($yield10y, ($baselineRoic * (1.0 - $portfolioTurnoverRate)) + ($targetCapRate * $portfolioTurnoverRate)));
+        $stock->setBaselineRoic((string) max($yield10y, $blendedCapRate));
 
         $targetEbitYield = $blendedCapRate;
 
@@ -166,8 +166,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             $targetEbitYield = ($targetEbitYield * self::TARGET_EBIT_WEIGHT) + ($ttmRoic * self::TTM_ROIC_WEIGHT);
         }
 
-        $metrics = new \App\Service\Math\CorporateMetrics();
-        $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, $investedCapital, $macroState);
+        $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, $investedCapital, $macroState);
         $effectiveRoic = max(0.01, $targetEbitYield - $saturationPenalty);
 
         return [
@@ -333,16 +332,19 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $oldTtm = (float) $stock->getRoicTtm();
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::ROIC_TTM_EMA_WEIGHT) + ($oldTtm * self::ROIC_TTM_HIST_WEIGHT);
         $scaledKappa = $kappa / self::TTM_ROIC_WEIGHT;
-        $math = new MathUtility();
 
         $saturationPenalty = 0.0;
+        $targetYield = $wacc;
         if ($macroState !== null) {
-            $metrics = new \App\Service\Math\CorporateMetrics();
-            $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, abs($investedCapital), $macroState);
+            $yield10y = $macroState->yield10yEma;
+            $realEstateRiskPremium = $macroState->equityRiskPremium;
+            $creditSpreadDrag = $macroState->macroCreditSpreadEma * self::CAP_RATE_SPREAD_SENSITIVITY;
+            $targetYield = max($yield10y, $yield10y + $realEstateRiskPremium + $creditSpreadDrag);
+            $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, abs($investedCapital), $macroState);
         }
 
         $effectiveMoat = max(0.0, $moatSpread - $saturationPenalty);
-        $newTtm += $math->calculateReversionPull($newTtm, $wacc, $scaledKappa, $effectiveMoat);
+        $newTtm += MathUtility::getInstance()->calculateReversionPull($newTtm, $targetYield, $scaledKappa, $effectiveMoat);
         $stock->setRoicTtm((string) max(self::MIN_ROIC_CLAMP, min(self::MAX_ROIC_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;

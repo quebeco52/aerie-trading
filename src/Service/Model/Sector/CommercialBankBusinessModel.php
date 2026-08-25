@@ -13,12 +13,7 @@ use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
 use App\Service\Event\ShockEvent;
-use App\Service\Model\Trait\FinancialPhysicsTrait;
-use App\Service\Model\Trait\StandardBaseModelTrait;
-use App\Service\Model\Trait\StandardCapitalAllocationTrait;
-use App\Service\Model\Trait\StandardOperatingPhysicsTrait;
-use App\Service\Model\Trait\StandardTreasuryTrait;
-use App\Service\Model\Trait\StandardValuationTrait;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Commercial Banks.
@@ -28,21 +23,35 @@ use App\Service\Model\Trait\StandardValuationTrait;
  * - Evaluated strictly on Return on Equity (ROE) rather than ROIC.
  * - Customer deposits act as operating leverage (inventory), requiring an APY Beta to prevent capital flight.
  */
-class CommercialBankBusinessModel implements BusinessModelInterface
+class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 {
+    // --- Model Thresholds ---
+    /** Minimum Interest Coverage Ratio (ICR) required before distress. */
+    public const THRESHOLD_MIN_ICR = 1.05;
+    /** Equity multiplier where bankruptcy risk becomes critical. */
+    public const THRESHOLD_BANKRUPT_EQUITY = 2.0;
+    /** Equity multiplier indicating severe financial distress. */
+    public const THRESHOLD_DISTRESS_EQUITY = 4.0;
+    /** Equity multiplier serving as an early warning indicator. */
+    public const THRESHOLD_WARNING_EQUITY = 6.0;
+    /** Maximum allowed wholesale leverage multiplier. */
+    public const THRESHOLD_WHOLESALE_LEVERAGE_LIMIT = 2.0;
+    /** ICR level below which dividends are suspended. */
+    public const THRESHOLD_DIVIDEND_CRISIS_ICR = 1.05;
+    /** Minimum ICR required to execute share buybacks. */
+    public const THRESHOLD_BUYBACK_MIN_ICR = 1.15;
+    /** Speed at which ROE reverts to the mean. */
+    public const THRESHOLD_REVERSION_SPEED = 0.18;
+    /** Spread indicating an economic moat. */
+    public const THRESHOLD_MOAT_SPREAD = 0.010;
+    /** Net Working Capital (NWC) intensity factor. */
+    public const THRESHOLD_NWC_INTENSITY = 0.0;
+    /** Rate at which planned capital expenditure is completed. */
+    public const THRESHOLD_CAPEX_COMPLETION_RATE = 1.0;
+
     public function getModelThresholds(): array
     {
-        return ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => 2.0,  'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.18, 'moat_spread' => 0.010, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 1.0];
-    }
-    use StandardBaseModelTrait;
-    use StandardTreasuryTrait;
-    use StandardValuationTrait;
-    use StandardOperatingPhysicsTrait, StandardCapitalAllocationTrait, FinancialPhysicsTrait {
-        FinancialPhysicsTrait::getTrueReturn insteadof StandardOperatingPhysicsTrait;
-        FinancialPhysicsTrait::getEvaluationCapital insteadof StandardOperatingPhysicsTrait;
-        FinancialPhysicsTrait::calculateEconomicReturn insteadof StandardOperatingPhysicsTrait;
-        FinancialPhysicsTrait::updateDynamicRoic insteadof StandardOperatingPhysicsTrait;
-        FinancialPhysicsTrait::getMaxOrganicGrowthSpeed insteadof StandardCapitalAllocationTrait;
+        return ['min_icr' => self::THRESHOLD_MIN_ICR, 'bankrupt_equity' => self::THRESHOLD_BANKRUPT_EQUITY,  'distress_equity' => self::THRESHOLD_DISTRESS_EQUITY,  'warning_equity' => self::THRESHOLD_WARNING_EQUITY,  'wholesale_leverage_limit' => self::THRESHOLD_WHOLESALE_LEVERAGE_LIMIT,  'dividend_crisis_icr' => self::THRESHOLD_DIVIDEND_CRISIS_ICR, 'buyback_min_icr' => self::THRESHOLD_BUYBACK_MIN_ICR, 'reversion_speed' => self::THRESHOLD_REVERSION_SPEED, 'moat_spread' => self::THRESHOLD_MOAT_SPREAD, 'nwc_intensity' => self::THRESHOLD_NWC_INTENSITY, 'capex_completion_rate' => self::THRESHOLD_CAPEX_COMPLETION_RATE];
     }
 
     // --- ROE & Target Metrics ---
@@ -94,7 +103,9 @@ class CommercialBankBusinessModel implements BusinessModelInterface
     public const MIN_EFFICIENCY_RATIO          = 0.55;
 
     // --- Analyst Visibility & Error ---
+    /** Baseline coverage visibility for analyst estimates. */
     public const BASE_COVERAGE_VISIBILITY = 0.65;
+    /** Baseline error rate for analyst estimates. */
     public const BASE_COVERAGE_ERROR = 0.06;
 
     // --- Model Specific Constants ---
@@ -150,9 +161,13 @@ class CommercialBankBusinessModel implements BusinessModelInterface
     public const INTEREST_INCOME_CASH_BUFFER = 0.05;
 
     // --- Debt Expansion Constants ---
+    /** Base probability for debt expansion in a neutral environment. */
     public const DEBT_EXPANSION_BASE_PROB = 0.40;
+    /** Multiplier applied to spread to adjust debt expansion probability. */
     public const DEBT_EXPANSION_PROB_MULT = 0.40;
+    /** Base aggressiveness for debt expansion in a neutral environment. */
     public const DEBT_EXPANSION_BASE_AGGR = 0.02;
+    /** Multiplier applied to spread to adjust debt expansion aggressiveness. */
     public const DEBT_EXPANSION_AGGR_MULT = 0.20;
     /** Structural baseline of wholesale debt banks target. */
     public const WHOLESALE_TARGET_RATIO = 0.10;
@@ -175,9 +190,54 @@ class CommercialBankBusinessModel implements BusinessModelInterface
     /** Minimum fraction of debt issued allocated to organic capex. */
     public const ORGANIC_CAPEX_DEBT_MULT = 0.95;
     /** Minimum ratio of target leverage before the bank is considered under-leveraged and triggers aggressive buybacks to defend ROE. */
-    public const UNDER_LEVERAGED_TOLERANCE = 0.80;
+    public const UNDER_LEVERAGED_TOLERANCE = 0.35;
 
     // --- Macro & Shock Thresholds ---
+    /** Sensitivity of bank demand to macroeconomic output gap (lower than physical goods). */
+    public const MACRO_DEMAND_BETA_SENSITIVITY = 0.50;
+    /** Pricing power multiplier for banks, passing structural yields to expectations. */
+    public const MACRO_PRICING_POWER_MULT = 1.0;
+    /** Persistence (AR1) parameter for Net Interest Income (NII) Z-score drift. */
+    public const STREAM_Z_PERSISTENCE_NII = 0.35;
+    /** Persistence (AR1) parameter for Fee Income and Default Z-score drift. */
+    public const STREAM_Z_PERSISTENCE_FEE = 0.25;
+    /** Normalization baseline for indices like sentiment and real estate property. */
+    public const INDEX_NORMALIZATION_BASE = 100.0;
+    /** Impact multiplier of commercial property declines on bank default drag. */
+    public const SHOCK_WEIGHT_CRE_DECLINE = 0.05;
+    /** Impact multiplier of residential property declines on bank default drag. */
+    public const SHOCK_WEIGHT_RESIDENTIAL_DECLINE = 0.05;
+    /** Impact multiplier of retail default rate increases on bank default drag. */
+    public const SHOCK_WEIGHT_RETAIL_DEFAULT = 0.05;
+    /** Minimum duration gap multiplier acting as a hedge floor. */
+    public const HEDGE_FLOOR_MULTIPLIER = 0.10;
+    /** Weight for current quarter when calculating TTM ROE. */
+    public const TTM_CURRENT_QUARTER_WEIGHT = 0.25;
+    /** Weight for historical TTM ROE when updating with current quarter. */
+    public const TTM_HISTORICAL_WEIGHT = 0.75;
+    /** Annualization multiplier for quarterly returns. */
+    public const ANNUALIZATION_FACTOR = 4.0;
+    /** Maximum clamped ROE reported to the stock. */
+    public const ROE_CLAMP_MAX = 1.0;
+    /** Minimum clamped ROE reported to the stock. */
+    public const ROE_CLAMP_MIN = -0.50;
+    /** Maximum probability cap when issuing debt to close wholesale gap. */
+    public const WHOLESALE_GAP_PROB_CAP = 0.90;
+    /** Multiplier applied to wholesale gap ratio to boost expansion probability. */
+    public const WHOLESALE_GAP_PROB_BOOST_MULT = 0.30;
+    /** Maximum aggressiveness cap when issuing debt to close wholesale gap. */
+    public const WHOLESALE_GAP_AGGR_CAP = 0.35;
+    /** Multiplier applied to wholesale gap ratio to boost expansion aggressiveness. */
+    public const WHOLESALE_GAP_AGGR_BOOST_MULT = 0.15;
+    /** Minimum base expansion probability floor. */
+    public const DEBT_EXPANSION_PROB_MIN = 0.05;
+    /** Minimum base expansion aggressiveness floor. */
+    public const DEBT_EXPANSION_AGGR_MIN = 0.02;
+    /** Maximum base expansion probability limit. */
+    public const DEBT_EXPANSION_PROB_MAX = 1.0;
+    /** Maximum base expansion aggressiveness limit. */
+    public const DEBT_EXPANSION_AGGR_MAX = 0.50;
+
     /** Output gap multiplier for fee revenue. */
     public const SECTOR_SHOCK_FEE_OUTPUT_GAP_MULT = 0.35;
     /** Z-score threshold for elevated defaults. */
@@ -187,7 +247,30 @@ class CommercialBankBusinessModel implements BusinessModelInterface
     /** Z-score threshold for reserve releases. */
     public const SECTOR_SHOCK_RESERVE_RELEASE_Z = 2.0;
 
+    // --- Basel III Capital Adequacy & CCB ---
+    /** Risk weight for risk-free cash and central bank treasury reserves under Basel III Standardized Approach. */
+    public const BASEL_RISK_WEIGHT_TREASURY = 0.0;
+    /** Risk weight for standard commercial loans and earning assets under Basel III Standardized Approach. */
+    public const BASEL_RISK_WEIGHT_EARNING_ASSETS = 1.0;
+    /** Basel III statutory minimum Common Equity Tier 1 (CET1) ratio before insolvency and regulatory seizure. */
+    public const BASEL_MIN_CET1_RATIO = 0.040;
+    /** Basel III Capital Conservation Buffer (CCB) target CET1 ratio below which dividends and buybacks are prohibited. */
+    public const BASEL_CCB_CET1_RATIO = 0.065;
+
     // --- Passive Liability Growth ---
+    /** Minimum sensitivity bound for liability growth relative to stock beta. */
+    public const LIABILITY_BETA_SENSITIVITY_MIN = 0.8;
+    /** Maximum sensitivity bound for liability growth relative to stock beta. */
+    public const LIABILITY_BETA_SENSITIVITY_MAX = 1.2;
+    /** Standard deviation of idiosyncratic drift applied to passive liability growth. */
+    public const LIABILITY_GROWTH_DRIFT_STD = 0.005;
+    /** Sentiment shock magnitude applied during a severe bank run event. */
+    public const EVENT_SHOCK_BANK_RUN = -5.0;
+    /** Sentiment shock magnitude applied when significant customer deposits flee. */
+    public const EVENT_SHOCK_DEPOSIT_FLIGHT = -2.0;
+    /** Sentiment shock magnitude applied when new deposits are heavily captured. */
+    public const EVENT_SHOCK_DEPOSIT_CAPTURE = 0.5;
+
     /** Base real GDP growth for liability expansion. */
     public const LIABILITY_BASE_GDP_GROWTH = 0.02;
     /** Positive output gap multiplier for liability growth. */
@@ -228,13 +311,12 @@ class CommercialBankBusinessModel implements BusinessModelInterface
             $baselineRoe = ($baselineRoe * self::BASELINE_ROE_WEIGHT) + ($ttmRoe * self::TTM_ROE_WEIGHT);
         }
 
-        $metrics = new \App\Service\Math\CorporateMetrics();
-        $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, $effectiveEquity, $macroState);
+        $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, $effectiveEquity, $macroState);
         $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
         $baselineRoe = max($waccBase, $baselineRoe - $saturationPenalty);
 
         $industry = $stock->getIndustry() ?: 'General';
-        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 10.0;
+        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 15.0;
 
         $policyRate = $macroState->policyRateEma;
         $yield5y = $macroState->yield5yEma;
@@ -314,8 +396,8 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $beta = (float) $stock->getBeta();
 
         return [
-            'macro_demand_shift' => $outputGap * $beta * 0.50, // Less demand destruction than physical goods
-            'pricing_power_multiplier' => 1.0, // Passes structural yield adjustments to the expectation engine
+            'macro_demand_shift' => $outputGap * $beta * self::MACRO_DEMAND_BETA_SENSITIVITY, // Less demand destruction than physical goods
+            'pricing_power_multiplier' => self::MACRO_PRICING_POWER_MULT, // Passes structural yield adjustments to the expectation engine
         ];
     }
 
@@ -354,9 +436,9 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $proprietaryDividendWeight = $activeWeights['proprietary_dividend'] ?? 0.0;
 
         // Independent stream Z-scores with AR(1) persistence
-        $revenueZ = $streams->generateZ('net_interest_income', 0.35); // NII loan origination volume
-        $feeZ     = $streams->generateZ('fee_income', 0.25); // Non-interest custodial / payment fee volume
-        $defaultZ = $streams->generateZ('default', 0.25); // Idiosyncratic credit default
+        $revenueZ = $streams->generateZ('net_interest_income', self::STREAM_Z_PERSISTENCE_NII); // NII loan origination volume
+        $feeZ     = $streams->generateZ('fee_income', self::STREAM_Z_PERSISTENCE_FEE); // Non-interest custodial / payment fee volume
+        $defaultZ = $streams->generateZ('default', self::STREAM_Z_PERSISTENCE_FEE); // Idiosyncratic credit default
 
         $outputGap = $macroState->outputGapEma;
 
@@ -375,7 +457,7 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $proprietaryDividendZ = 0.0;
         if ($proprietaryDividendWeight > 0.0) {
             // Proprietary dividends are highly cyclical and tie to corporate expansion
-            $proprietaryDividendZ = $streams->generateZ('proprietary_dividend', 0.25);
+            $proprietaryDividendZ = $streams->generateZ('proprietary_dividend', self::STREAM_Z_PERSISTENCE_FEE);
             $proprietaryDividendRevenue = max(0.0, $expectedRevenue * $proprietaryDividendWeight * (1.0 + ($proprietaryDividendZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5)) + ($outputGap * self::SECTOR_SHOCK_FEE_OUTPUT_GAP_MULT * 2.0)));
             $streamRevenues['proprietary_dividend'] = $proprietaryDividendRevenue;
         }
@@ -397,17 +479,17 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $annualLossDelta = $conditionalEl - $baselineEl;
 
         // Convert annual loan loss rate delta to quarterly dollar credit provision shock
-        $quarterlyDollarLoss = ($annualLossDelta / 4.0) * $earningAssets;
+        $quarterlyDollarLoss = ($annualLossDelta / self::ANNUALIZATION_FACTOR) * $earningAssets;
         $provisionCostAddon = $quarterlyDollarLoss / max(1.0, $actualRevenue);
 
-        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
+        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / self::INDEX_NORMALIZATION_BASE;
         $retailDefaultShift = max(0.0, ($macroState->retailDefaultRateEma - MacroEngine::RETAIL_DEFAULT_BASELINE) / MacroEngine::RETAIL_DEFAULT_BASELINE);
-        
-        $creShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;
-        $residentialShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
-        $propertyDrag = ($creShift < 0.0 ? abs($creShift) * 0.05 : 0.0) + ($residentialShift < 0.0 ? abs($residentialShift) * 0.05 : 0.0);
 
-        $macroDefaultDrag = ($sentimentShift < 0.0 ? abs($sentimentShift) * self::MACRO_DEFAULT_LGD_DRAG : 0.0) + ($retailDefaultShift * 0.05) + $propertyDrag;
+        $creShift = ($macroState->commercialPropertyIndexEma - self::INDEX_NORMALIZATION_BASE) / self::INDEX_NORMALIZATION_BASE;
+        $residentialShift = ($macroState->residentialPropertyIndexEma - self::INDEX_NORMALIZATION_BASE) / self::INDEX_NORMALIZATION_BASE;
+        $propertyDrag = ($creShift < 0.0 ? abs($creShift) * self::SHOCK_WEIGHT_CRE_DECLINE : 0.0) + ($residentialShift < 0.0 ? abs($residentialShift) * self::SHOCK_WEIGHT_RESIDENTIAL_DECLINE : 0.0);
+
+        $macroDefaultDrag = ($sentimentShift < 0.0 ? abs($sentimentShift) * self::MACRO_DEFAULT_LGD_DRAG : 0.0) + ($retailDefaultShift * self::SHOCK_WEIGHT_RETAIL_DEFAULT) + $propertyDrag;
 
         // Clamp reserve release to MAX_PROVISION_REVERSAL to avoid unbounded write-backs
         $lossProvisionShock = max(-self::MAX_PROVISION_REVERSAL, $provisionCostAddon) + $macroDefaultDrag;
@@ -428,7 +510,7 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $rawDurationGap = max(0.0, self::ASSET_DURATION_YEARS - self::LIABILITY_DURATION_YEARS);
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $hedgeMultiplier = ($inversionSensitivity / self::NIM_INVERSION_SENSITIVITY) * (1.0 - ($floatingRatio * self::FLOATING_HEDGE_EFFICIENCY));
-        $effectiveDurationGap = $rawDurationGap * max(0.10, $hedgeMultiplier);
+        $effectiveDurationGap = $rawDurationGap * max(self::HEDGE_FLOOR_MULTIPLIER, $hedgeMultiplier);
 
         $curveDeviation = $bankSpread - self::NIM_BASE_SPREAD_BUFFER;
         $nimSqueeze = - ($curveDeviation * $effectiveDurationGap);
@@ -441,8 +523,12 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $rawMargin = $realizedVariableMargin + $niiCostAddon;
         $clampedMargin = $this->clampMargin($rawMargin, $minVariableMargin);
 
+        $cet1Ratio = $this->calculateCet1Ratio($stock);
+
         $eventType = null;
-        if ($defaultZ < self::SECTOR_SHOCK_MASSIVE_DEFAULT_Z) {
+        if ($cet1Ratio < self::BASEL_MIN_CET1_RATIO) {
+            $eventType = ShockEvent::BANK_SEIZURE;
+        } elseif ($defaultZ < self::SECTOR_SHOCK_MASSIVE_DEFAULT_Z) {
             $eventType = ShockEvent::MASSIVE_CREDIT_PROVISION;
         } elseif ($defaultZ < self::SECTOR_SHOCK_ELEVATED_DEFAULT_Z) {
             $eventType = ShockEvent::ELEVATED_LOAN_DEFAULTS;
@@ -486,25 +572,23 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $moatSpread = $thresholds['moat_spread'] ?? 0.01;
 
         $equity = (float) $stock->getTotalEquity();
-        $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * 4.0 : 0.0;
+        $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * self::ANNUALIZATION_FACTOR : 0.0;
 
-        $stock->setCurrentRoe((string) max(-0.50, min(1.0, $truePostTaxReturn)));
+        $stock->setCurrentRoe((string) max(self::ROE_CLAMP_MIN, min(self::ROE_CLAMP_MAX, $truePostTaxReturn)));
 
         $oldTtm = (float) $stock->getRoeTtm();
-        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * 0.25) + ($oldTtm * 0.75);
+        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::TTM_CURRENT_QUARTER_WEIGHT) + ($oldTtm * self::TTM_HISTORICAL_WEIGHT);
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
         $scaledKappa = $kappa / self::TTM_ROE_WEIGHT;
-        $math = new MathUtility();
 
         $saturationPenalty = 0.0;
         if ($macroState !== null) {
-            $metrics = new \App\Service\Math\CorporateMetrics();
-            $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
+            $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
         }
 
         $effectiveMoat = max(0.0, $moatSpread - $saturationPenalty);
-        $newTtm += $math->calculateReversionPull($newTtm, $costOfEquity, $scaledKappa, $effectiveMoat);
-        $stock->setRoeTtm((string) max(-0.50, min(1.0, $newTtm)));
+        $newTtm += MathUtility::getInstance()->calculateReversionPull($newTtm, $costOfEquity, $scaledKappa, $effectiveMoat);
+        $stock->setRoeTtm((string) max(self::ROE_CLAMP_MIN, min(self::ROE_CLAMP_MAX, $newTtm)));
 
         return $truePostTaxReturn;
     }
@@ -617,7 +701,7 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $equity = (float) $stock->getTotalEquity();
         $totalDebt = $state['wholesaleDebt'] + $currentLiabilities;
         $industry = $stock->getIndustry() ?: 'General';
-        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 10.0;
+        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 15.0;
 
         $realGdpGrowth = self::LIABILITY_BASE_GDP_GROWTH + ($outputGap > 0.0 ? $outputGap * self::LIABILITY_GDP_POSITIVE_GAP_MULT : $outputGap * self::LIABILITY_GDP_NEGATIVE_GAP_MULT);
         $depositApyBeta = $this->calculateDepositBeta($totalDebt, $equity, $equityLimit, $currentLiabilities);
@@ -625,16 +709,16 @@ class CommercialBankBusinessModel implements BusinessModelInterface
 
         // Yield Flight Penalty: If Money Market funds yield much higher than the bank's APY, depositors flee.
         $yieldFlightPenalty = max(0.0, max(0.0, $policyRate - self::YIELD_FLIGHT_POLICY_RATE_OFFSET) - $state['bank_apy']) * 1.0;
-        $systemicGrowthQuarterly = ($inflation + $realGdpGrowth - $yieldFlightPenalty) / 4.0;
+        $systemicGrowthQuarterly = ($inflation + $realGdpGrowth - $yieldFlightPenalty) / self::ANNUALIZATION_FACTOR;
 
-        $betaSensitivity = max(0.8, min(1.2, abs((float) $stock->getBeta())));
+        $betaSensitivity = max(self::LIABILITY_BETA_SENSITIVITY_MIN, min(self::LIABILITY_BETA_SENSITIVITY_MAX, abs((float) $stock->getBeta())));
 
         // Competitive advantage relative to market-average deposit beta.
         // A bank paying above the normalization baseline retains and attracts more deposits.
         $competitiveAdvantage = $depositApyBeta / self::DEPOSIT_BETA_NORMALIZATION_BASELINE;
 
         $baseGrowth = $systemicGrowthQuarterly > 0 ? $systemicGrowthQuarterly * $betaSensitivity * $competitiveAdvantage : $systemicGrowthQuarterly * $betaSensitivity / max(0.1, $competitiveAdvantage);
-        $liabilityChange = $currentLiabilities * max(-self::LIABILITY_MAX_CHANGE_LIMIT, min(self::LIABILITY_MAX_CHANGE_LIMIT, $baseGrowth + ($mathUtility->generateStandardNormal() * 0.005)));
+        $liabilityChange = $currentLiabilities * max(-self::LIABILITY_MAX_CHANGE_LIMIT, min(self::LIABILITY_MAX_CHANGE_LIMIT, $baseGrowth + ($mathUtility->generateStandardNormal() * self::LIABILITY_GROWTH_DRIFT_STD)));
 
         if (abs($liabilityChange) > 0) {
             $state['treasury'] += $liabilityChange;
@@ -643,11 +727,11 @@ class CommercialBankBusinessModel implements BusinessModelInterface
             if ($state['treasury'] < 0.0) {
                 $liquidityShortfall = abs($state['treasury']);
                 $amtB = number_format($liquidityShortfall / 1_000_000_000, 2);
-                $state['events'][] = ['event_type' => ShockEvent::BANK_RUN, 'context' => ['amount' => $amtB], 'shock' => -5.0];
+                $state['events'][] = ['event_type' => ShockEvent::BANK_RUN, 'context' => ['amount' => $amtB], 'shock' => self::EVENT_SHOCK_BANK_RUN];
             }
             $stock->setCustomerDeposits((string) max(0.0, $state['customerDeposits']));
-            if (($liabilityChange / $currentLiabilities) < self::LIABILITY_FLIGHT_THRESHOLD) $state['events'][] = ['event_type' => ShockEvent::CUSTOMER_DEPOSIT_FLIGHT, 'context' => ['amount' => number_format(abs($liabilityChange) / 1_000_000_000, 2)], 'shock' => -2.0];
-            elseif (($liabilityChange / $currentLiabilities) > self::LIABILITY_CAPTURE_THRESHOLD) $state['events'][] = ['event_type' => ShockEvent::CAPTURED_NEW_DEPOSITS, 'context' => ['amount' => number_format($liabilityChange / 1_000_000_000, 2)], 'shock' => 0.5];
+            if (($liabilityChange / $currentLiabilities) < self::LIABILITY_FLIGHT_THRESHOLD) $state['events'][] = ['event_type' => ShockEvent::CUSTOMER_DEPOSIT_FLIGHT, 'context' => ['amount' => number_format(abs($liabilityChange) / 1_000_000_000, 2)], 'shock' => self::EVENT_SHOCK_DEPOSIT_FLIGHT];
+            elseif (($liabilityChange / $currentLiabilities) > self::LIABILITY_CAPTURE_THRESHOLD) $state['events'][] = ['event_type' => ShockEvent::CAPTURED_NEW_DEPOSITS, 'context' => ['amount' => number_format($liabilityChange / 1_000_000_000, 2)], 'shock' => self::EVENT_SHOCK_DEPOSIT_CAPTURE];
         }
     }
 
@@ -656,25 +740,74 @@ class CommercialBankBusinessModel implements BusinessModelInterface
         $probability = self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT);
         $aggressiveness = self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier);
 
-        $leverage = $totalDebt > 0 ? $customerDeposits / $totalDebt : 0.0;
+        $wholesaleDebt = max(0.0, $totalDebt - $customerDeposits);
+        $wholesaleRatio = $totalDebt > 0 ? ($wholesaleDebt / $totalDebt) : 0.0;
 
         if ($currentTreasury < $targetOperatingCash && $targetOperatingCash > 0) {
+            // Urgent liquidity backstop during deposit runoff
             $shortfallRatio = ($targetOperatingCash - $currentTreasury) / $targetOperatingCash;
             $probability += (self::WHOLESALE_URGENCY_PROB_BOOST * $shortfallRatio);
             $aggressiveness += (self::WHOLESALE_URGENCY_AGGR_BOOST * $shortfallRatio);
-        } elseif ($leverage > self::UNDER_LEVERAGED_TOLERANCE) {
-            $probability = 0.0;
-            $aggressiveness = 0.0;
+        } elseif ($wholesaleRatio < self::WHOLESALE_TARGET_RATIO) {
+            // Under-target in wholesale debt: actively issue bonds to reach the structural 10% target
+            $gapRatio = (self::WHOLESALE_TARGET_RATIO - $wholesaleRatio) / self::WHOLESALE_TARGET_RATIO;
+            $probability = min(self::WHOLESALE_GAP_PROB_CAP, $probability + (self::WHOLESALE_GAP_PROB_BOOST_MULT * $gapRatio));
+            $aggressiveness = min(self::WHOLESALE_GAP_AGGR_CAP, $aggressiveness + (self::WHOLESALE_GAP_AGGR_BOOST_MULT * $gapRatio));
         }
 
         return [
-            'probability' => min(1.0, $probability),
-            'aggressiveness' => $aggressiveness
+            'probability' => min(self::DEBT_EXPANSION_PROB_MAX, max(self::DEBT_EXPANSION_PROB_MIN, $probability)),
+            'aggressiveness' => min(self::DEBT_EXPANSION_AGGR_MAX, max(self::DEBT_EXPANSION_AGGR_MIN, $aggressiveness))
         ];
     }
 
     public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
     {
         return $currentDebtRatio < ($targetDebtTolerance * self::UNDER_LEVERAGED_TOLERANCE);
+    }
+
+    /**
+     * Calculates Risk-Weighted Assets (RWA) under the Basel III Standardized Approach.
+     */
+    public function calculateRiskWeightedAssets(Stock $stock, ?float $currentTreasury = null): float
+    {
+        $treasury = $currentTreasury ?? (float) $stock->getCorporateTreasury();
+        $totalEquity = (float) $stock->getTotalEquity();
+        $totalDebt = (float) $stock->getTotalDebt();
+        $earningAssets = max(0.0, $totalEquity + $totalDebt - $treasury);
+
+        return ($earningAssets * self::BASEL_RISK_WEIGHT_EARNING_ASSETS) + ($treasury * self::BASEL_RISK_WEIGHT_TREASURY);
+    }
+
+    /**
+     * Calculates Common Equity Tier 1 (CET1) capital ratio dynamically from balance sheet equity and RWA.
+     */
+    public function calculateCet1Ratio(Stock $stock, ?float $currentTreasury = null): float
+    {
+        $rwa = $this->calculateRiskWeightedAssets($stock, $currentTreasury);
+        if ($rwa <= 0.0) {
+            return 1.0;
+        }
+
+        $totalEquity = (float) $stock->getTotalEquity();
+        if ($totalEquity <= 0.0) {
+            return 0.0;
+        }
+
+        return $totalEquity / $rwa;
+    }
+
+    /**
+     * Implements Basel III Capital Conservation Buffer (CCB) dividend restrictions.
+     */
+    public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury): ?float
+    {
+        $cet1Ratio = $this->calculateCet1Ratio($stock, $currentTreasury);
+
+        if ($cet1Ratio < self::BASEL_CCB_CET1_RATIO) {
+            return 0.0;
+        }
+
+        return 1.0;
     }
 }

@@ -44,14 +44,22 @@ class BusinessModelRegistryTest extends TestCase
         foreach ($files as $file) {
             $class = 'App\\Service\\Model\\Sector\\' . basename($file, '.php');
             $this->assertTrue(class_exists($class), "Class $class should exist");
+            $ref = new \ReflectionClass($class);
+            if ($ref->isAbstract()) {
+                continue;
+            }
             $instances[] = new $class();
         }
 
         $registry = new BusinessModelRegistry($instances);
 
-        $this->assertGreaterThanOrEqual(44, count($files));
+        $this->assertGreaterThanOrEqual(44, count($instances));
         foreach ($files as $file) {
             $class = 'App\\Service\\Model\\Sector\\' . basename($file, '.php');
+            $ref = new \ReflectionClass($class);
+            if ($ref->isAbstract()) {
+                continue;
+            }
             $shortName = basename($file, '.php');
             $expectedKey = strtolower((string) preg_replace('/(?<!^)[A-Z]/', '_$0', preg_replace('/BusinessModel$/', '', $shortName)));
 

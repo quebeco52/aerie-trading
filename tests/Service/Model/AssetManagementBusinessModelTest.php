@@ -26,7 +26,7 @@ class AssetManagementBusinessModelTest extends TestCase
         $stock->setFloatingDebtRatio('0.5');
         $stock->setIndustry('Asset Management');
 
-        $mathUtilityMock = $this->createMock(MathUtility::class);
+        $mathUtilityMock = $this->createStub(MathUtility::class);
         $macroState = \App\DTO\MacroStateDTO::fromArray([
             'policy_rate_ema' => 0.04,
             'yield_5y_ema' => 0.04,
@@ -63,7 +63,7 @@ class AssetManagementBusinessModelTest extends TestCase
         $stock->setFloatingDebtRatio('0.4');
         $stock->setIndustry('Private Equity');
 
-        $mathUtilityMock = $this->createMock(MathUtility::class);
+        $mathUtilityMock = $this->createStub(MathUtility::class);
         $macroState = \App\DTO\MacroStateDTO::fromArray([
             'policy_rate_ema' => 0.04,
             'yield_5y_ema' => 0.045,

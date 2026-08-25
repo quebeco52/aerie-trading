@@ -7,11 +7,13 @@ use App\Service\Market\MarketEngine;
 use App\Service\Math\MathUtility;
 use App\DTO\MarketPricingContext;
 use App\DTO\MacroStateDTO;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 
+#[AllowMockObjectsWithoutExpectations]
 class MarketEngineTest extends TestCase
 {
-    private MathUtility|MockObject $mathUtilityMock;
+    private MathUtility&MockObject $mathUtilityMock;
     private MarketEngine $engine;
 
     protected function setUp(): void

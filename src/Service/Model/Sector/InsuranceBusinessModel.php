@@ -13,12 +13,7 @@ use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
-use App\Service\Model\Trait\FinancialPhysicsTrait;
-use App\Service\Model\Trait\StandardBaseModelTrait;
-use App\Service\Model\Trait\StandardCapitalAllocationTrait;
-use App\Service\Model\Trait\StandardOperatingPhysicsTrait;
-use App\Service\Model\Trait\StandardTreasuryTrait;
-use App\Service\Model\Trait\StandardValuationTrait;
+use App\Service\Math\FinancialConstants;
 
 /**
  * Earnings strategy for Insurance companies.
@@ -29,21 +24,11 @@ use App\Service\Model\Trait\StandardValuationTrait;
  * - Structural profits come from "The Float" (investing premium cash before it's paid out).
  * - Evaluated on Return on Equity (ROE) rather than ROIC.
  */
-class InsuranceBusinessModel implements BusinessModelInterface
+class InsuranceBusinessModel extends BaseFinancialBusinessModel
 {
     public function getModelThresholds(): array
     {
         return ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.18, 'moat_spread' => 0.010, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 1.0];
-    }
-    use StandardBaseModelTrait;
-    use StandardTreasuryTrait;
-    use StandardValuationTrait;
-    use StandardOperatingPhysicsTrait, StandardCapitalAllocationTrait, FinancialPhysicsTrait {
-        FinancialPhysicsTrait::getTrueReturn insteadof StandardOperatingPhysicsTrait;
-        FinancialPhysicsTrait::getEvaluationCapital insteadof StandardOperatingPhysicsTrait;
-        FinancialPhysicsTrait::calculateEconomicReturn insteadof StandardOperatingPhysicsTrait;
-        FinancialPhysicsTrait::updateDynamicRoic insteadof StandardOperatingPhysicsTrait;
-        FinancialPhysicsTrait::getMaxOrganicGrowthSpeed insteadof StandardCapitalAllocationTrait;
     }
 
     // --- The Kenney Rule & Capacity Limits ---
@@ -130,9 +115,9 @@ class InsuranceBusinessModel implements BusinessModelInterface
     /** Minimum emergency operating cash reserve ratio applied to customer deposit float. */
     public const MIN_FLOAT_BUFFER         = 0.15;
     /** Threshold ratio of excess cash over total debt triggering hoarder status. */
-    public const HOARDER_THRESHOLD        = 0.50;
+    public const HOARDER_THRESHOLD        = 0.20;
     /** Threshold ratio of excess cash over total debt triggering mega-hoarder status. */
-    public const MEGA_HOARDER_THRESHOLD   = 0.75;
+    public const MEGA_HOARDER_THRESHOLD   = 0.50;
 
     // --- Buybacks & Capital Deployment ---
     /** Fraction of excess cash allocated to buybacks for mega-hoarder insurers. */
@@ -275,8 +260,7 @@ class InsuranceBusinessModel implements BusinessModelInterface
             $baselineRoic = ($baselineRoic * self::BASELINE_ROIC_WEIGHT) + ($structuralRoe * self::TTM_ROIC_WEIGHT);
         }
 
-        $metrics = new \App\Service\Math\CorporateMetrics();
-        $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
+        $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
         $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
         $baselineRoic = max($waccBase, $baselineRoic - $saturationPenalty);
 
@@ -507,16 +491,14 @@ class InsuranceBusinessModel implements BusinessModelInterface
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * $emaWeight) + ($oldTtm * (1.0 - $emaWeight));
         // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
         $scaledKappa = $kappa / self::TTM_ROIC_WEIGHT;
-        $math = new MathUtility();
 
         $saturationPenalty = 0.0;
         if ($macroState !== null) {
-            $metrics = new \App\Service\Math\CorporateMetrics();
-            $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
+            $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
         }
 
         $effectiveMoat = max(0.0, $moatSpread - $saturationPenalty);
-        $newTtm += $math->calculateReversionPull($newTtm, $costOfEquity, $scaledKappa, $effectiveMoat);
+        $newTtm += MathUtility::getInstance()->calculateReversionPull($newTtm, $costOfEquity, $scaledKappa, $effectiveMoat);
         $stock->setRoeTtm((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $newTtm)));
 
         return $truePostTaxReturn;

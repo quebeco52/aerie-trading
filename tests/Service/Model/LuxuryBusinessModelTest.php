@@ -8,8 +8,10 @@ use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\LuxuryBusinessModel;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class LuxuryBusinessModelTest extends TestCase
 {
     public function testVeblenBrandCachetElasticityImprovesMargin(): void

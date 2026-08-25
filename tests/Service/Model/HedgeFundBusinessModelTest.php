@@ -448,10 +448,8 @@ class HedgeFundBusinessModelTest extends TestCase
 
         $result = $this->model->computeActualFinancials($stock, 100.0, 0.40, 10.0, 0.10, $macro, $mathMock);
 
-        // Implied AUM = (100 * 0.60) / 0.02 = 3000.0 (or default weight)
-        // With Hurdle Z = 1.25 and Leverage Mult = 1.50:
-        // Dir Incentive Fee crystallizes and adds to directional revenue
-        $this->assertGreaterThan(60.0, $result->streamRevenue['directional_bets']);
+        // Dir Incentive Fee crystallizes and adds to directional revenue above baseline ($30.0)
+        $this->assertGreaterThan(30.0, $result->streamRevenue['directional_bets']);
     }
 
     public function testRedemptionDragReducesManagementFeesAndAum(): void

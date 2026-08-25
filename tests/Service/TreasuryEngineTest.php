@@ -18,8 +18,10 @@ use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\InvestmentBankBusinessModel;
 use App\Service\Model\Sector\ShadowBankBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class TreasuryEngineTest extends TestCase
 {
     private CorporateMetrics $corporateMetrics;
@@ -31,9 +33,9 @@ class TreasuryEngineTest extends TestCase
     protected function setUp(): void
     {
         mt_srand(42);
-        $this->corporateMetrics = $this->createMock(CorporateMetrics::class);
+        $this->corporateMetrics = $this->createStub(CorporateMetrics::class);
         $this->debtEngine = $this->createMock(DebtEngine::class);
-        $this->capExEngine = $this->createMock(CapExEngine::class);
+        $this->capExEngine = $this->createStub(CapExEngine::class);
         $this->mathUtility = new MathUtility();
 
         $this->treasuryEngine = new TreasuryEngine(

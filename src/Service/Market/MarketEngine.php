@@ -211,8 +211,8 @@ class MarketEngine
 
         // Geometrically blend the GBM price with the fundamental Fair Value
         $diffusedPrice = exp(
-            $reversionWeight * log($gbmPrice) +
-                (1.0 - $reversionWeight) * log($perceivedFairValue)
+            $reversionWeight * log(max(0.01, $gbmPrice)) +
+                (1.0 - $reversionWeight) * log(max(0.01, $perceivedFairValue))
         );
 
         // Apply Simultaneous Price Jumps AND M&A Shocks outside the GBM exponent
@@ -390,7 +390,7 @@ class MarketEngine
         // Explains non-linear institutional arbitrage around a fundamental target (Taylor, Peel, & Sarno, 2001).
         // Within narrow valuation bands, transaction costs and noise-trader risk keep institutional arbitrage near zero.
         // As mispricing spreads widen, institutions enter aggressively, scaling reversion speed smoothly toward an upper asymptotic limit.
-        $logValuationGap = abs(log($currentPrice / max(0.01, $perceivedFairValue)));
+        $logValuationGap = abs(log(max(0.01, $currentPrice) / max(0.01, $perceivedFairValue)));
         $arbitrageElasticity = FinancialConstants::ESTAR_ARBITRAGE_ELASTICITY;
         $maxReversionCap = FinancialConstants::MAX_REVERSION_FORCE_CAP;
 

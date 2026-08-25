@@ -20,27 +20,30 @@ use App\Service\User\Portfolio;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
+#[AllowMockObjectsWithoutExpectations]
 class BankruptcyTest extends TestCase
 {
-    private EntityManagerInterface|MockObject $entityManagerMock;
-    private LoggerInterface|MockObject $loggerMock;
-    private MarketEventPublisher|MockObject $marketEventMock;
-    private DebtEngine|MockObject $debtEngineMock;
-    private MathUtility|MockObject $mathUtilityMock;
-    private Connection|MockObject $connectionMock;
-    private EntityRepository|MockObject $tradeOrderRepoMock;
+    private EntityManagerInterface&MockObject $entityManagerMock;
+    private LoggerInterface&Stub $loggerMock;
+    private MarketEventPublisher&MockObject $marketEventMock;
+    private DebtEngine&MockObject $debtEngineMock;
+    private MathUtility&Stub $mathUtilityMock;
+    private Connection&MockObject $connectionMock;
+    private EntityRepository&MockObject $tradeOrderRepoMock;
 
     protected function setUp(): void
     {
         $this->entityManagerMock = $this->createMock(EntityManagerInterface::class);
-        $this->loggerMock = $this->createMock(LoggerInterface::class);
+        $this->loggerMock = $this->createStub(LoggerInterface::class);
         $this->marketEventMock = $this->createMock(MarketEventPublisher::class);
         $this->debtEngineMock = $this->createMock(DebtEngine::class);
-        $this->mathUtilityMock = $this->createMock(MathUtility::class);
+        $this->mathUtilityMock = $this->createStub(MathUtility::class);
         $this->connectionMock = $this->createMock(Connection::class);
         $this->tradeOrderRepoMock = $this->createMock(EntityRepository::class);
 
@@ -88,11 +91,13 @@ class BankruptcyTest extends TestCase
         $sellOrder->setLimitPrice('12.00');
         $sellOrder->setStatus('OPEN');
 
-        $this->entityManagerMock->method('getRepository')
+        $this->entityManagerMock->expects($this->once())
+            ->method('getRepository')
             ->with(TradeOrder::class)
             ->willReturn($this->tradeOrderRepoMock);
 
-        $this->tradeOrderRepoMock->method('findBy')
+        $this->tradeOrderRepoMock->expects($this->once())
+            ->method('findBy')
             ->with(['ticker' => 'DEAD', 'status' => 'OPEN'])
             ->willReturn([$buyOrder, $sellOrder]);
 
@@ -159,15 +164,16 @@ class BankruptcyTest extends TestCase
         $stock->setTicker('DEAD');
         $stock->setIsBankrupt(true);
 
-        $stockRepo = $this->createMock(EntityRepository::class);
-        $stockRepo->method('findOneBy')->with(['ticker' => 'DEAD'])->willReturn($stock);
+        $stockRepo = $this->createStub(EntityRepository::class);
+        $stockRepo->method('findOneBy')->willReturn($stock);
 
-        $this->entityManagerMock->method('getRepository')
+        $this->entityManagerMock->expects($this->once())
+            ->method('getRepository')
             ->with(Stock::class)
             ->willReturn($stockRepo);
 
-        $portfolio = $this->createMock(Portfolio::class);
-        $redis = $this->createMock(\Redis::class);
+        $portfolio = $this->createStub(Portfolio::class);
+        $redis = $this->createStub(\Redis::class);
 
         $tradeService = new TradeExecutionService(
             $this->entityManagerMock,
@@ -193,8 +199,8 @@ class BankruptcyTest extends TestCase
         $marketEngine = $this->createMock(\App\Service\Market\MarketEngine::class);
         $earningsEngine = $this->createMock(EarningsEngine::class);
         $corpActionEngine = $this->createMock(\App\Service\Corporate\CorporateActionEngine::class);
-        $maEngine = $this->createMock(\App\Service\Corporate\MergerAndAcquisitionEngine::class);
-        $corpMetrics = $this->createMock(\App\Service\Math\CorporateMetrics::class);
+        $maEngine = $this->createStub(\App\Service\Corporate\MergerAndAcquisitionEngine::class);
+        $corpMetrics = $this->createStub(\App\Service\Math\CorporateMetrics::class);
 
         $marketEngine->expects($this->never())->method('calculateNextPrice');
         $earningsEngine->expects($this->never())->method('calculate');
@@ -229,8 +235,8 @@ class BankruptcyTest extends TestCase
         $stock->setIsBankrupt(true);
         $stock->setSharesOutstanding('1000000');
 
-        $ledger = $this->createMock(\App\Service\Corporate\CorporateLedgerService::class);
-        $redis = $this->createMock(\Redis::class);
+        $ledger = $this->createStub(\App\Service\Corporate\CorporateLedgerService::class);
+        $redis = $this->createStub(\Redis::class);
 
         $actionEngine = new \App\Service\Corporate\CorporateActionEngine(
             $ledger,

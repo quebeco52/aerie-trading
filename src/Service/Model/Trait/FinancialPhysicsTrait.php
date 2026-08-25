@@ -48,16 +48,14 @@ trait FinancialPhysicsTrait
         $oldTtm = (float) $stock->getRoeTtm();
         $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * \App\Service\Math\FinancialConstants::TTM_SMOOTHING_NEW_WEIGHT) + ($oldTtm * \App\Service\Math\FinancialConstants::TTM_SMOOTHING_OLD_WEIGHT);
         $scaledKappa = $kappa / (defined('static::TTM_ROE_WEIGHT') ? static::TTM_ROE_WEIGHT : 0.50);
-        $math = new \App\Service\Math\MathUtility();
 
         $saturationPenalty = 0.0;
         if ($macroState !== null) {
-            $metrics = new \App\Service\Math\CorporateMetrics();
-            $saturationPenalty = $metrics->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
+            $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
         }
 
         $effectiveMoat = max(0.0, $moatSpread - $saturationPenalty);
-        $newTtm += $math->calculateReversionPull($newTtm, $costOfEquity, $scaledKappa, $effectiveMoat);
+        $newTtm += \App\Service\Math\MathUtility::getInstance()->calculateReversionPull($newTtm, $costOfEquity, $scaledKappa, $effectiveMoat);
         $stock->setRoeTtm((string) max(-0.50, min(1.0, $newTtm)));
 
         return $truePostTaxReturn;
@@ -88,8 +86,8 @@ trait FinancialPhysicsTrait
 
     public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
     {
-        $equityLimit = $this->getModelThresholds()['equity_limit'] ?? 3.0;
-        return $currentDebtRatio < ($equityLimit * 0.50);
+        $limit = $targetDebtTolerance > 0.0 ? $targetDebtTolerance : ($this->getModelThresholds()['equity_limit'] ?? 3.0);
+        return $currentDebtRatio < ($limit * 0.50);
     }
 
     public function supportsUnderleveragedDebtExpansion(): bool
@@ -131,7 +129,7 @@ trait FinancialPhysicsTrait
     {
         $modelThresholds = $this->getModelThresholds();
         $wholesaleTolerance = $modelThresholds['wholesale_leverage_limit'] ?? $health->debtTolerance;
-        $bankEquityLimit = $modelThresholds['equity_limit'] ?? 10.0;
+        $bankEquityLimit = $modelThresholds['equity_limit'] ?? $health->debtTolerance;
 
         $wholesaleCapacity = max(0.0, ($equity * $wholesaleTolerance) - $wholesaleDebt);
         $totalCapacity = max(0.0, ($equity * $bankEquityLimit) - $totalDebt);

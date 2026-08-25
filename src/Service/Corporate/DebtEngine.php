@@ -224,7 +224,7 @@ class DebtEngine
         $interestExpense = $expenseMetrics['interest_expense'];
         $wholesaleRate = $expenseMetrics['wholesale_rate'];
 
-        $trueBlendedRate = $debt > 0 ? ($interestExpense / $debt) : 0.0;
+        $trueBlendedRate = $debt > 1.0 ? ($interestExpense / $debt) : 0.0;
 
         return new \App\DTO\DebtMetricsDTO(
             $interestExpense,

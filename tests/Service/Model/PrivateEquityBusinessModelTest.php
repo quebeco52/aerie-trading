@@ -93,7 +93,7 @@ class PrivateEquityBusinessModelTest extends TestCase
             'macro_credit_spread_ema' => 0.04,
         ]);
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturnCallback(function ($prevZ, $phi) {
             return $prevZ < 0 ? -2.0 : 0.0;
         });

@@ -12,4 +12,5 @@ interface CapitalAllocationStrategyInterface
     public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float;
     public function getSustainableDividendBase(Stock $stock, float $quarterlyEps, float $investedCapital, float $depRate): float;
     public function getMaxOrganicGrowthSpeed(bool $isHoarder, bool $isMegaHoarder): float;
+    public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury): ?float;
 }

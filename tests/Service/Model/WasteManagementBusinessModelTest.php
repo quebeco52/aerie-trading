@@ -103,7 +103,7 @@ class WasteManagementBusinessModelTest extends TestCase
         $calmMacro = new MacroStateDTO(energyPriceIndexEma: 100.0);
         $energyShockMacro = new MacroStateDTO(energyPriceIndexEma: 200.0);
 
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $calmResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $calmMacro, $mathMock);

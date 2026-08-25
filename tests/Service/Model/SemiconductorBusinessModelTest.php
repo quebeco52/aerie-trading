@@ -4,16 +4,18 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model;
 
-use PHPUnit\Framework\TestCase;
 use App\Service\Model\Sector\SemiconductorBusinessModel;
 use App\Service\Math\MathUtility;
 use App\Entity\Stock;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class SemiconductorBusinessModelTest extends TestCase
 {
     private SemiconductorBusinessModel $model;
-    private MathUtility|MockObject $mathUtilityMock;
+    private MathUtility&MockObject $mathUtilityMock;
 
     protected function setUp(): void
     {
