@@ -414,9 +414,9 @@ class ReitBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('PLZA');
         $stock->setBaselineRoic('0.08');
-        // Scaled invested capital: 800 Billion
-        $stock->setTotalEquity('450000000000');
-        $stock->setWholesaleDebt('350000000000');
+        // Scaled invested capital: 600 Billion
+        $stock->setTotalEquity('350000000000');
+        $stock->setWholesaleDebt('250000000000');
         $stock->setCorporateTreasury('0');
 
         $macro = $this->createMacroState(yield10y: 0.04, equityRiskPremium: 0.045);

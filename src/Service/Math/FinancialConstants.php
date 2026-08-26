@@ -157,8 +157,8 @@ class FinancialConstants
     public const CAPITAL_MARGINAL_ELASTICITY = 0.50;
     /** Competitive moat dampeners protecting industry titans from market share erosion. */
     public const SYSTEMIC_MOAT_FACTORS = [
-        'titan'    => 0.30,
-        'systemic' => 0.75,
+        'titan'    => 0.70,
+        'systemic' => 0.80,
         'base'     => 0.90,
         'default'  => 1.00,
     ];

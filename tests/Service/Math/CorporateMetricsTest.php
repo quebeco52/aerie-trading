@@ -56,16 +56,16 @@ class CorporateMetricsTest extends TestCase
 
         $macro = new MacroStateDTO(nominalGdpIndex: 1.0);
 
-        // 1. Below optimal threshold (TAM = 2T, InvestedCapital = 500B -> 25% share <= 50% optimal threshold)
-        $zeroPenalty = $this->metrics->calculateMarketSaturationPenalty($stock, 500_000_000_000.0, $macro);
+        // 1. Below optimal threshold (TAM = 1T, InvestedCapital = 250B -> 25% share <= 50% optimal threshold)
+        $zeroPenalty = $this->metrics->calculateMarketSaturationPenalty($stock, 250_000_000_000.0, $macro);
         $this->assertSame(0.0, $zeroPenalty);
 
-        // 2. Above optimal threshold (InvestedCapital = 1.5T -> 75% share > 50% optimal threshold)
-        $penalty75 = $this->metrics->calculateMarketSaturationPenalty($stock, 1_500_000_000_000.0, $macro);
+        // 2. Above optimal threshold (InvestedCapital = 750B -> 75% share > 50% optimal threshold)
+        $penalty75 = $this->metrics->calculateMarketSaturationPenalty($stock, 750_000_000_000.0, $macro);
         $this->assertGreaterThan(0.0, $penalty75);
 
-        // 3. Monopolistic scale (InvestedCapital = 1.8T -> 90% share) -> penalty grows quadratically
-        $penalty90 = $this->metrics->calculateMarketSaturationPenalty($stock, 1_800_000_000_000.0, $macro);
+        // 3. Monopolistic scale (InvestedCapital = 900B -> 90% share) -> penalty grows quadratically
+        $penalty90 = $this->metrics->calculateMarketSaturationPenalty($stock, 900_000_000_000.0, $macro);
         $this->assertGreaterThan($penalty75 * 2.0, $penalty90);
     }
 
@@ -80,12 +80,12 @@ class CorporateMetricsTest extends TestCase
         $trueReturn = 0.20; // 20% ROIC
         $saturationPenalty = 0.02;
 
-        // 1. Below optimal scale (InvestedCapital = 500B -> 25% share <= 50% optimal threshold)
-        $returnNormal = $this->metrics->calculateMarginalReturn($stock, $trueReturn, $saturationPenalty, 500_000_000_000.0, $macro);
+        // 1. Below optimal scale (InvestedCapital = 250B -> 25% share <= 50% optimal threshold)
+        $returnNormal = $this->metrics->calculateMarginalReturn($stock, $trueReturn, $saturationPenalty, 250_000_000_000.0, $macro);
         $this->assertEqualsWithDelta(0.18, $returnNormal, 0.0001);
 
-        // 2. Above optimal scale (InvestedCapital = 1.6T -> 80% share)
-        $returnSaturated = $this->metrics->calculateMarginalReturn($stock, $trueReturn, $saturationPenalty, 1_600_000_000_000.0, $macro);
+        // 2. Above optimal scale (InvestedCapital = 800B -> 80% share)
+        $returnSaturated = $this->metrics->calculateMarginalReturn($stock, $trueReturn, $saturationPenalty, 800_000_000_000.0, $macro);
         $this->assertLessThan(0.18, $returnSaturated);
         $this->assertGreaterThan(0.0, $returnSaturated);
     }

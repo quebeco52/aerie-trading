@@ -69,6 +69,9 @@ class CommodityBusinessModelTest extends TestCase
         $normalMacro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 100.0);
         $spikeMacro  = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.06, energyPriceIndexEma: 200.0);
 
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
         $normalResult = $this->model->computeActualFinancials(
             $stock,
             expectedRevenue: 100_000_000.0,
@@ -76,7 +79,7 @@ class CommodityBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.0,
             macroState: $normalMacro,
-            mathUtility: $this->mathUtility
+            mathUtility: $mathMock
         );
 
         $spikeResult = $this->model->computeActualFinancials(
@@ -86,7 +89,7 @@ class CommodityBusinessModelTest extends TestCase
             fixedCosts: 20_000_000.0,
             baselineVol: 0.0,
             macroState: $spikeMacro,
-            mathUtility: $this->mathUtility
+            mathUtility: $mathMock
         );
 
         // Spot price revenue surges aggressively under high inflation + energy spike (Schwartz convenience yield)

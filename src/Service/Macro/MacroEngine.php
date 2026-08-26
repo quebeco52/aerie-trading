@@ -142,7 +142,7 @@ class MacroEngine
 
     // --- New Keynesian Phillips Curve Dynamics ---
     /** Adaptive unanchoring weight of inflation expectations to sustained trend deviations. */
-    public const INFLATION_ADAPTIVE_EXPECTATIONS_WEIGHT = 0.25;
+    public const INFLATION_ADAPTIVE_EXPECTATIONS_WEIGHT = 0.15;
     /** Phillips curve slope: sensitivity of headline inflation to the output gap. */
     public const PHILLIPS_SLOPE = 0.15;
     /** Speed of inflation expectations mean-reverting toward central bank target (anchored expectations). */
