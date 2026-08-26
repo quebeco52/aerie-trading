@@ -99,9 +99,21 @@ class InitialMarketTest extends TestCase
         $this->assertGreaterThanOrEqual(0.0, $stock['corporate_treasury'], "Corporate treasury negative for {$ticker}");
         $this->assertGreaterThan(0.0, $stock['total_equity'], "Total equity non-positive for {$ticker}");
         $this->assertGreaterThanOrEqual(0.0, $stock['wholesale_debt'], "Wholesale debt negative for {$ticker}");
+        $this->assertGreaterThanOrEqual(0.0, $stock['retained_earnings'] ?? 0.0, "Retained earnings negative for {$ticker}");
 
         if (isset($stock['customer_deposits'])) {
             $this->assertGreaterThanOrEqual(0.0, $stock['customer_deposits'], "Customer deposits negative for {$ticker}");
         }
+
+        // Debt-to-Equity limit invariant
+        $industry = $stock['industry'];
+        $equityLimit = Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 1.5;
+        $debtToEquity = $stock['wholesale_debt'] / $stock['total_equity'];
+        $this->assertLessThanOrEqual(
+            $equityLimit + 1e-6,
+            $debtToEquity,
+            "Stock {$ticker} in industry {$industry} exceeds equity limit of {$equityLimit} (actual D/E: {$debtToEquity})"
+        );
     }
 }
+

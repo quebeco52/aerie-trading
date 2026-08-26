@@ -558,7 +558,7 @@ class ReitBusinessModelTest extends TestCase
     {
         $model = new ReitBusinessModel();
         $health = $this->createDebtHealth(debtTolerance: 1.5, interestExpense: 0.0);
-        
+
         $equity = 1000.0;
         $totalDebt = 500.0;
         $wholesaleDebt = 500.0;

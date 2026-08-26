@@ -145,8 +145,8 @@ class FinancialConstants
     public const YIELD_CURVE_INVERSION_SENSITIVITY = 15.0;
 
     // --- Market Saturation & Bureaucratic Bloat ---
-    /** Baseline total addressable market size ($2T) for standard corporate sectors. */
-    public const BASELINE_SECTOR_TAM = 2000000000000.0;
+    /** Baseline total addressable market size ($1T) for standard corporate sectors. */
+    public const BASELINE_SECTOR_TAM = 1_000_000_000_000.00;
     /** Price elasticity of demand parameter in Cournot market share competition. */
     public const COURNOT_DEMAND_ELASTICITY = 1.25;
     /** Market share threshold (50%) beyond which Penrose bureaucratic bloat accelerates. */
