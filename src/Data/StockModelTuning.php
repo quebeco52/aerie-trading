@@ -175,10 +175,8 @@ class StockModelTuning
         // --- Aerie Central Clearing (ACC) ---
         // Systemically important central counterparty clearinghouse (CCP). 
         'ACC' => [
-            ModelParam::ClearingFeeWeight->value      => 0.50,
-            ModelParam::CustodyFloatWeight->value     => 0.15,
-            ModelParam::DataSubscriptionWeight->value => 0.20,
-            ModelParam::MarginInterestWeight->value   => 0.15,
+            ModelParam::ClearingFeeWeight->value      => 0.70,
+            ModelParam::DataSubscriptionWeight->value => 0.30,
         ],
 
         // =====================================================================
@@ -532,6 +530,16 @@ class StockModelTuning
             ModelParam::GamingRevenueWeight->value         => 0.20, // Casino floors are just the bait for foot traffic
             ModelParam::NonGamingRevenueWeight->value     => 0.10,
             ModelParam::CommercialRealEstateWeight->value => 0.70, // The real engine: extortionate commercial real estate leases
+        ],
+
+        // --- Shearwater Mills (SHER) ---
+        // Vertically integrated technical textile manufacturer. Premium bamboo/merino at commodity cost.
+        // Strong DTC brand presence, massive wholesale distribution, and contract fiber supply.
+        'SHER' => [
+            ModelParam::DtcRetailWeight->value              => 0.30,
+            ModelParam::WholesaleChannelWeight->value       => 0.40,
+            ModelParam::ContractTextileSupplyWeight->value  => 0.30,
+            ModelParam::PricingPowerIndex->value            => 0.60, // Moderate — cost leader, not luxury
         ],
 
         // =====================================================================

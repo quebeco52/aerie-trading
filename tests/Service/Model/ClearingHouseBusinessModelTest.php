@@ -34,29 +34,87 @@ class ClearingHouseBusinessModelTest extends TestCase
         $this->assertSame(200.0, $val2);
     }
 
-    public function testCalculateInterestIncomeScalesWithPolicyRateAndZirpTrap(): void
+    public function testCalculateInterestIncomeOnlyComputesOnOwnCash(): void
     {
         $stockMock = $this->createStub(\App\Entity\Stock::class);
-        $stockMock->method('getCorporateTreasury')->willReturn('100000000000.0');
-        $stockMock->method('getCustomerDeposits')->willReturn('100000000000.0'); // 100% margin pool
+        $stockMock->method('getCorporateTreasury')->willReturn('110000000000.0'); // 110B ($10B own cash + $100B margin)
+        $stockMock->method('getCustomerDeposits')->willReturn('100000000000.0'); // 100B margin pool
 
         $mathMock = $this->createStub(MathUtility::class);
 
-        // Low interest rate ZIRP regime (< 1%)
-        $lowRateState = new \App\DTO\MacroStateDTO(
-            policyRateEma: 0.005,
-            yield2yEma: 0.005
-        );
-        $incomeLow = $this->model->calculateInterestIncome($stockMock, $lowRateState, $mathMock);
-
-        // High interest rate regime
-        $highRateState = new \App\DTO\MacroStateDTO(
+        // At 5% policy rate:
+        // Own cash yield = $10B * 0.05 = $500M
+        $macroState = new \App\DTO\MacroStateDTO(
             policyRateEma: 0.05,
             yield2yEma: 0.06
         );
-        $incomeHigh = $this->model->calculateInterestIncome($stockMock, $highRateState, $mathMock);
+        $income = $this->model->calculateInterestIncome($stockMock, $macroState, $mathMock);
 
-        $this->assertGreaterThan($incomeLow, $incomeHigh, 'Clearinghouse margin pool yield must scale upward during high-rate regimes.');
+        $this->assertSame(500000000.0, $income);
+    }
+
+    public function testCalculateEffectiveCustodySpreadScalesWithRate(): void
+    {
+        // 5% rate -> 15 bps base + (5% * 15% retention = 75 bps) = 90 bps (0.0090)
+        $macroState = new \App\DTO\MacroStateDTO(
+            policyRateEma: 0.05,
+            yield2yEma: 0.06
+        );
+        $spread = $this->model->calculateEffectiveCustodySpread($macroState);
+        $this->assertEqualsWithDelta(0.0090, $spread, 0.0001);
+    }
+
+    public function testGetTargetMetricsUsesEffectiveEquityAsInvestedCapital(): void
+    {
+        $stockMock = $this->createStub(\App\Entity\Stock::class);
+        $stockMock->method('getTotalEquity')->willReturn('35000000000.0');
+        $stockMock->method('getCustomerDeposits')->willReturn('1300000000000.0');
+
+        $macroState = new \App\DTO\MacroStateDTO(
+            policyRate: 0.02,
+            equityRiskPremium: 0.05,
+            corporateTaxRate: 0.20,
+            policyRateEma: 0.02,
+            yield5yEma: 0.03
+        );
+        $mathMock = $this->createStub(MathUtility::class);
+
+        $metrics = $this->model->getTargetMetrics($stockMock, $macroState, $mathMock);
+
+        // Invested capital must be just $35B, not $1.335T
+        $this->assertSame(35000000000.0, $metrics['invested_capital']);
+    }
+
+    public function testProcessPassiveLiabilityGrowthCapacityClamping(): void
+    {
+        $stockMock = $this->getMockBuilder(\App\Entity\Stock::class)
+            ->onlyMethods(['getTotalEquity', 'setCustomerDeposits'])
+            ->getMock();
+            
+        $stockMock->method('getTotalEquity')->willReturn('35000000000.0'); // 35B
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $macroState = new \App\DTO\MacroStateDTO(
+            inflationEma: 0.02,
+            outputGapEma: 0.0,
+            marketVolatilityEma: 0.20 // Neutral VIX
+        );
+
+        // Exceeding capacity limits (50x equity = 1.75T). Let's say deposits are 2T.
+        $stateOver = ['customerDeposits' => 2000000000000.0, 'treasury' => 2000000000000.0, 'events' => []];
+        $this->model->processPassiveLiabilityGrowth($stockMock, $macroState, $stateOver, $mathMock);
+        
+        // Growth should be negative because of capacity clamping
+        $this->assertLessThan(2000000000000.0, $stateOver['customerDeposits']);
+        
+        // Under capacity limit
+        $stateUnder = ['customerDeposits' => 500000000000.0, 'treasury' => 500000000000.0, 'events' => []];
+        $this->model->processPassiveLiabilityGrowth($stockMock, $macroState, $stateUnder, $mathMock);
+        
+        // Growth should be positive
+        $this->assertGreaterThan(500000000000.0, $stateUnder['customerDeposits']);
     }
 
     public function testCalculateCashYieldUsesPolicyRate(): void

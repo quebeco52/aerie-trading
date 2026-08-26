@@ -89,6 +89,9 @@ class ShockEvent
 
     public const MANDATORY_HEALTHCARE_EXPANSION = 'mandatory_healthcare_expansion';
     public const HEALTHCARE_AUDIT_CLAWBACK = 'healthcare_audit_clawback';
+
+    public const APPAREL_SUPPLY_CHAIN_DISRUPTION = 'apparel_supply_chain_disruption';
+    public const APPAREL_VIRAL_PRODUCT = 'apparel_viral_product';
 }
 
 

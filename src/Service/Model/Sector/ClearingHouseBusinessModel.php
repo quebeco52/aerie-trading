@@ -104,14 +104,29 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     // --- Monopoly Valuation Moat ---
     /** Operating margin mean reversion speed: slower speed reflects toll-booth monopoly pricing power. */
     public const MONOPOLY_REVERSION_SPEED = 2.0;
+    /**
+     * Calculates the effective annual custody spread rate earned on member initial margin deposits.
+     * Includes base custody fee (15 bps) + dynamic retention share of short-term policy yields.
+     */
+    public function calculateEffectiveCustodySpread(\App\DTO\MacroStateDTO $macroState): float
+    {
+        $cashYield = $this->calculateCashYield($macroState);
+        $policyRate = $macroState->policyRateEma;
+        $retentionMultiplier = min(1.0, max(0.0, ($policyRate - 0.01) / 0.03));
+        $dynamicRetentionShare = self::MARGIN_POOL_YIELD_RETENTION_SHARE * $retentionMultiplier;
+
+        return self::MARGIN_POOL_CUSTODY_SPREAD + ($cashYield * $dynamicRetentionShare);
+    }
+
     public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
         $equity = (float) $stock->getTotalEquity();
         $effectiveEquity = max(1.0, $equity);
         $marginPool = (float) $stock->getCustomerDeposits();
 
-        // Earning assets represent physical capital deployed into clearing operations and margin pool custody
-        $earningAssets = max($effectiveEquity, $effectiveEquity + $marginPool);
+        // Earning assets for a clearinghouse is its own corporate equity base (skin-in-the-game capital).
+        // Custody margin pools do NOT count as corporate invested capital, they are pass-through liabilities.
+        $earningAssets = $effectiveEquity;
 
         $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
         $ttmRoe = (float) $stock->getRoeTtm();
@@ -130,7 +145,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         $optimalNetIncome = $effectiveEquity * $baselineRoe;
         $optimalEbt = $optimalNetIncome / (1.0 - $taxRate);
 
-        // 2. Non-operating corporate treasury interest and debt expense
+        // 2. Non-operating corporate treasury interest and corporate debt expense
         $policyRate = $macroState->policyRateEma;
         $ownCashIncome = $this->calculateInterestIncome($stock, $macroState, $mathUtility);
 
@@ -141,18 +156,26 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
         $optimalInterestExpense = $corporateDebt * $blendedWholesaleRate;
 
-        // 3. Operating EBIT required from core clearing and custody operations
-        $optimalEbit = $optimalEbt + $optimalInterestExpense - $ownCashIncome;
+        // 3. Total Operating EBIT required from core clearing, data, and custody operations
+        $optimalTotalEbit = $optimalEbt + $optimalInterestExpense - $ownCashIncome;
         $minEbit = $effectiveEquity * self::MIN_EQUITY_EBIT_YIELD;
-        $targetEbit = max($minEbit, $optimalEbit);
+        $targetTotalEbit = max($minEbit, $optimalTotalEbit);
 
-        // 4. Derive total structural operating revenue (clearing fees + custody spread)
-        $targetRevenue = $targetEbit / $stableMargin;
-        $grossYield = $targetRevenue / max(1.0, abs($earningAssets));
+        // 4. Target Total Operating Revenue (including custody float)
+        $targetTotalRevenue = $targetTotalEbit / $stableMargin;
+
+        // 5. Estimate Custody Float Revenue from member margin pool
+        $effectiveCustodySpread = $this->calculateEffectiveCustodySpread($macroState);
+        $expectedCustodyFloatAnnual = $marginPool * $effectiveCustodySpread;
+
+        // 6. Derive Target Franchise Revenue (Clearing Fees + Data Licensing)
+        // Ensure franchise revenue does not drop below a healthy operating floor (e.g. 25% of total revenue)
+        $targetFranchiseRevenue = max($targetTotalRevenue * 0.25, $targetTotalRevenue - $expectedCustodyFloatAnnual);
+        $grossFranchiseYield = $targetFranchiseRevenue / max(1.0, abs($earningAssets));
 
         return [
             'invested_capital' => $earningAssets,
-            'baseline_roic'    => ($grossYield * $stableMargin) * (1.0 - $taxRate)
+            'baseline_roic'    => ($grossFranchiseYield * $stableMargin) * (1.0 - $taxRate)
         ];
     }
 
@@ -162,29 +185,20 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
 
         $params = $this->resolveModelParameters($stock, [
-            ModelParam::ClearingFeeWeight->value      => 0.55,
-            ModelParam::CustodyFloatWeight->value     => 0.20,
-            ModelParam::DataSubscriptionWeight->value => 0.25,
-            ModelParam::MarginInterestWeight->value   => 0.00,
+            ModelParam::ClearingFeeWeight->value      => 0.70,
+            ModelParam::DataSubscriptionWeight->value => 0.30,
         ]);
-        $rawMarginWeight = $params[ModelParam::MarginInterestWeight];
 
         $targetWeights = [
             'clearing_fees'  => $params[ModelParam::ClearingFeeWeight],
-            'custody_float'  => $params[ModelParam::CustodyFloatWeight],
             'data_licensing' => $params[ModelParam::DataSubscriptionWeight],
         ];
-        if ($rawMarginWeight > 0.0) {
-            $targetWeights['margin_interest'] = $rawMarginWeight;
-        }
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
 
         $clearingWeight = $activeWeights['clearing_fees'];
-        $custodyWeight  = $activeWeights['custody_float'];
         $dataWeight     = $activeWeights['data_licensing'];
-        $marginWeight   = $activeWeights['margin_interest'] ?? 0.0;
 
         $revenueZ = $streams->generateZ('clearing_fees', 0.25);
         $custodyZ = $streams->generateZ('custody_float', 0.20);
@@ -201,29 +215,21 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
 
         $totalMacroBonus = $volatilityBonus + $ratesVolBonus;
 
-        // 1. Clearing Revenue (Highly cyclical, gets the Vol and Rates bonus)
+        // 1. Franchise Revenue (Clearing Fees + Data Licensing from expectedRevenue)
         $clearingRevenue = max(0.0, $expectedRevenue * $clearingWeight * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $totalMacroBonus));
-        // 2. Custody Revenue (Tied somewhat to volume/Z-score but no macro bonus)
-        $custodyRevenue  = max(0.0, $expectedRevenue * $custodyWeight * (1.0 + ($custodyZ * ($baselineVol * 0.3))));
-        // 3. NEW: Data & Analytics Revenue (Highly sticky SaaS revenue, immune to trading panics)
         $dataRevenue     = max(0.0, $expectedRevenue * $dataWeight * (1.0 + ($dataZ * ($baselineVol * 0.05))));
+
+        // 2. Custody Float Revenue (Calculated directly from live member margin pool)
+        $marginPool = (float) $stock->getCustomerDeposits();
+        $effectiveCustodySpread = $this->calculateEffectiveCustodySpread($macroState);
+        $quarterlyCustodySpread = $effectiveCustodySpread / 4.0;
+        $custodyRevenue = max(0.0, ($marginPool * $quarterlyCustodySpread) * (1.0 + ($custodyZ * ($baselineVol * 0.15))));
 
         $streamRevenues = [
             'clearing_fees'  => $clearingRevenue,
-            'custody_float'  => $custodyRevenue,
             'data_licensing' => $dataRevenue,
+            'custody_float'  => $custodyRevenue,
         ];
-
-        $marginRevenue = 0.0;
-        $marginZ = 0.0;
-        if ($marginWeight > 0.0) {
-            $marginZ = $streams->generateZ('margin_interest', 0.30);
-            $policyRateEma = $macroState->policyRateEma;
-            // Margin interest explodes when rates are high
-            $rateBonus = $policyRateEma > 0.03 ? ($policyRateEma - 0.03) * 5.0 : 0.0;
-            $marginRevenue = max(0.0, $expectedRevenue * $marginWeight * (1.0 + ($marginZ * $baselineVol * 0.5) + $rateBonus));
-            $streamRevenues['margin_interest'] = $marginRevenue;
-        }
 
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
@@ -277,26 +283,15 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
 
     public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): float
     {
-        // Non-operating interest income is earned on surplus corporate cash ($ownCash).
-        // Additionally, the clearinghouse earns a 15 bps base custody spread plus a dynamic retention
-        // share of prevailing short-term yields on member initial margin deposits ($marginPool).
+        // Non-operating interest income is earned ONLY on surplus corporate cash ($ownCash).
+        // Margin pool custody spread is an operating revenue stream included in calculateSectorPhysics.
         $cash = (float) $stock->getCorporateTreasury();
         $marginPool = (float) $stock->getCustomerDeposits();
         $ownCash = max(0.0, $cash - $marginPool);
 
         $cashYield = $this->calculateCashYield($macroState);
-        $ownCashYield = $ownCash * $cashYield;
-
-        // NEW: The ZIRP Trap. If policy rates are near zero (< 1%), the CCP waives yield retention
-        // to prevent member cash drag. If rates are high, they capture their full 15% share.
-        $policyRate = $macroState->policyRateEma;
-        $retentionMultiplier = min(1.0, max(0.0, ($policyRate - 0.01) / 0.03));
-        $dynamicRetentionShare = self::MARGIN_POOL_YIELD_RETENTION_SHARE * $retentionMultiplier;
-
-        $effectiveCustodySpread = self::MARGIN_POOL_CUSTODY_SPREAD + ($cashYield * $dynamicRetentionShare);
-        $marginPoolYield = $marginPool * $effectiveCustodySpread;
-
-        return $ownCashYield + $marginPoolYield;
+        
+        return $ownCash * $cashYield;
     }
 
     public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array
@@ -360,22 +355,31 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         $realGdpGrowth = self::BASE_GDP_GROWTH_RATE + ($outputGap > 0.0 ? $outputGap * self::EXPANSION_GDP_MULT : $outputGap * self::RECESSION_GDP_MULT);
         $systemicGrowthQuarterly = ($inflation + $realGdpGrowth) / 4.0;
 
-        // 2. Procyclical Asymmetric Margin Calls
-        // If VIX is high, CCPs issue aggressive, rapid margin calls (causing massive deposit inflows).
-        // If VIX drops, they release margin collateral very slowly to remain cautious.
+        // 2. Cyclical Elasticity (VIX Shifts)
+        // High VIX = aggressive margin calls (expansion). Low VIX = collateral release (contraction).
         $vixEma = $macroState->marketVolatilityEma;
         $vixDelta = $vixEma - self::VIX_BASELINE_THRESHOLD;
-        if ($vixDelta > 0) {
-            $volatilityShiftQuarterly = $vixDelta * self::VIX_POOL_GROWTH_SCALAR;
-        } else {
-            $volatilityShiftQuarterly = ($vixDelta * self::VIX_POOL_GROWTH_SCALAR) / 4.0;
+        $volatilityShiftQuarterly = $vixDelta * self::VIX_POOL_GROWTH_SCALAR;
+
+        // 3. Capacity Constraints (Mean Reversion)
+        // A clearinghouse cannot grow its margin pool infinitely without commensurate equity backing.
+        $equity = max(1.0, (float) $stock->getTotalEquity());
+        $maxCapacity = $equity * 50.0; // statutory capacity limit
+
+        $capacityPressure = 0.0;
+        if ($currentLiabilities > $maxCapacity) {
+            // Strong downward reversion if exceeding capacity
+            $capacityPressure = -0.05 * ($currentLiabilities / $maxCapacity);
+        } elseif ($currentLiabilities < $maxCapacity * 0.5) {
+            // Gentle upward pull if severely under-utilized
+            $capacityPressure = 0.02;
         }
 
-        $baseGrowth = $systemicGrowthQuarterly + $volatilityShiftQuarterly;
+        $baseGrowth = $systemicGrowthQuarterly + $volatilityShiftQuarterly + $capacityPressure;
         $noise = $mathUtility->generateStandardNormal() * self::POOL_GROWTH_NOISE_STD;
 
-        // Allow higher upward clamps for panic margin calls, but restrict downward clamps
-        $growthRate = max(-self::MAX_POOL_CHANGE_CLAMP, min(self::MAX_POOL_CHANGE_CLAMP * 1.5, $baseGrowth + $noise));
+        // Clamp quarterly margin pool volatility within realistic bounds (+/- 5%)
+        $growthRate = max(-0.05, min(0.05, $baseGrowth + $noise));
 
         $liabilityChange = $currentLiabilities * $growthRate;
 

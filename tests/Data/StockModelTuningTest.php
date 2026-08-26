@@ -235,6 +235,7 @@ class StockModelTuningTest extends TestCase
     {
         $registry = new \App\Service\Model\BusinessModelRegistry([
             new \App\Service\Model\Sector\AdvertisingAgencyBusinessModel(),
+            new \App\Service\Model\Sector\ApparelManufacturingBusinessModel(),
             new \App\Service\Model\Sector\AssetManagementBusinessModel(),
             new \App\Service\Model\Sector\AutoManufacturerBusinessModel(),
             new \App\Service\Model\Sector\BiotechBusinessModel(),

@@ -167,6 +167,9 @@ enum ModelParam: string
     case MediaBuyingWeight = 'media_buying_weight';
     case BrandRetainerWeight = 'brand_retainer_weight';
     case MartechConsultingWeight = 'martech_consulting_weight';
+    case DtcRetailWeight = 'dtc_retail_weight';
+    case WholesaleChannelWeight = 'wholesale_channel_weight';
+    case ContractTextileSupplyWeight = 'contract_textile_supply_weight';
 
     // --- Automotive ---
     case AutoSalesWeight = 'auto_sales_weight';
