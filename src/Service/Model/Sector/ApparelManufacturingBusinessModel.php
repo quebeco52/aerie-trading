@@ -21,6 +21,9 @@ use App\Service\Math\MathUtility;
  *      1. DTC Retail: High-margin branded garments sold direct-to-consumer (e-commerce and retail footprint). High consumer sentiment sensitivity, tempered by recessionary trade-down.
  *      2. Wholesale Channel: Branded garments distributed to department stores and multi-brand retailers. Moderate margin and channel inventory sensitivity.
  *      3. Contract Textile Supply: Low-margin B2B processed fiber, fabric, and private-label contract manufacturing. Low variance, counter-cyclical FX export benefits.
+ * - Forrester Bullwhip Effect: Wholesale channel suffers violent, mathematically convex order freezes when retailers panic over inventory bloat during negative output gaps.
+ * - Fast Fashion Markdown Squeeze: Seasonal/perishable inventory forces aggressive promotional markdowns during recessions, destroying DTC and Wholesale gross margins.
+ * - COGS Forward Hedging: Raw material inventory lags (6-9 months) and cotton futures dampen immediate spot commodity and freight inflation passthrough.
  * - Consumer Trade-Down Effect: Recessions prompt consumers to trade down from high-end designer labels into durable value apparel and basics.
  * - Agricultural & Supply Chain Inflation: Variable margins squeezed by price spikes in agricultural commodities (raw cotton, wool, plant cellulose), freight rates, and energy.
  * - Manufacturing Asset & Plant Modernization Physics: High asset sensitivity where equipment maintenance and automated weaving/cutting dictate structural unit cost leadership.
@@ -59,6 +62,18 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     /** Variable cost multiplier for volume-driven contract B2B textile supply (20% higher variable cost ratio / thinner unit spread). */
     public const CONTRACT_VARIABLE_COST_MULTIPLIER = 1.20;
 
+    // --- Forrester Bullwhip Physics ---
+    /** Convexity exponent for non-linear wholesale channel order cancellations during macro contractions. */
+    public const BULLWHIP_CONVEXITY = 2.0;
+    /** Scaling multiplier applied to the convex output gap penalty on the wholesale channel. */
+    public const BULLWHIP_PENALTY_SCALAR = 2.0;
+
+    // --- Fast Fashion Markdown Squeeze Physics ---
+    /** Convexity exponent for perishable seasonal inventory markdown squeezes during recessions. */
+    public const MARKDOWN_CONVEXITY = 1.5;
+    /** Scaling multiplier for gross margin destruction from aggressive promotional markdowns. */
+    public const MARKDOWN_SQUEEZE_SCALAR = 0.40;
+
     // --- Macro & Trade-Down Physics ---
     /** Demand boost scalar capturing consumer trade-down from premium/designer apparel into affordable mass-market basics during recessions. */
     public const TRADE_DOWN_SCALAR = 0.60;
@@ -76,6 +91,8 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const FREIGHT_RATE_SCALAR = 0.06;
     /** Input cost sensitivity to industrial textile processing energy costs (~4% of variable cost). */
     public const ENERGY_INPUT_SCALAR = 0.04;
+    /** Proportion of spot commodity/freight price shocks that immediately pass through to COGS (simulating 6-9 month forward hedging). */
+    public const FORWARD_HEDGE_RATIO = 0.33;
     /** Overall scaling factor for input inflation penalties on variable operating margins. */
     public const INFLATION_PENALTY_SCALAR = 0.50;
 
@@ -234,8 +251,15 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         $contractFxBonus = $fxShift * self::CONTRACT_FX_EXPORT_SCALAR;
 
+        // Output gap drives non-linear supply chain ordering contractions and inventory markdown pressures
+        $outputGap = $macroState->outputGapEma;
+        $outputGapContraction = $outputGap < 0.0 ? abs($outputGap) : 0.0;
+
+        // 1. Forrester Bullwhip Effect: Wholesale retailers panic and freeze orders non-linearly under negative output gaps
+        $bullwhipPenalty = $mathUtility->calculateConvexPenalty($outputGapContraction, self::BULLWHIP_CONVEXITY, self::BULLWHIP_PENALTY_SCALAR);
+
         $dtcShock       = $dtcZ * ($baselineVol * self::DTC_RETAIL_VARIANCE);
-        $wholesaleShock = $wholesaleZ * ($baselineVol * self::WHOLESALE_CHANNEL_VARIANCE);
+        $wholesaleShock = ($wholesaleZ * ($baselineVol * self::WHOLESALE_CHANNEL_VARIANCE)) - $bullwhipPenalty;
         $contractShock  = ($contractZ * ($baselineVol * self::CONTRACT_TEXTILE_VARIANCE)) + $contractFxBonus;
 
         $dtcRevenue       = max(0.0, $expectedRevenue * $dtcWeight * (1.0 + $dtcShock) * $revenueMultiplier * $brandSurgeMultiplier);
@@ -251,24 +275,29 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // --- Structural Margin Blending ---
+        // --- Structural Margin Blending & Fast Fashion Markdown Squeeze ---
         // DTC retail captures premium margins (lower variable costs), wholesale operates at baseline,
         // and contract textile supply operates at volume pricing (higher variable costs).
-        $dtcCostRatio       = $realizedVariableMargin * self::DTC_VARIABLE_COST_MULTIPLIER;
-        $wholesaleCostRatio = $realizedVariableMargin * self::WHOLESALE_VARIABLE_COST_MULTIPLIER;
+        // 2. Fast Fashion Markdown Squeeze: During negative output gaps, unsold perishable inventory forces aggressive markdowns, raising variable cost ratios.
+        $markdownPenalty = $mathUtility->calculateConvexPenalty($outputGapContraction, self::MARKDOWN_CONVEXITY, self::MARKDOWN_SQUEEZE_SCALAR);
+
+        $dtcCostRatio       = ($realizedVariableMargin * self::DTC_VARIABLE_COST_MULTIPLIER) + $markdownPenalty;
+        $wholesaleCostRatio = ($realizedVariableMargin * self::WHOLESALE_VARIABLE_COST_MULTIPLIER) + $markdownPenalty;
         $contractCostRatio  = $realizedVariableMargin * self::CONTRACT_VARIABLE_COST_MULTIPLIER;
 
         $actualVariableCosts = ($dtcRevenue * $dtcCostRatio)
             + ($wholesaleRevenue * $wholesaleCostRatio)
             + ($contractRevenue * $contractCostRatio);
 
-        // --- Commodity & Supply Chain Input Inflation Penalties ---
+        // --- Commodity & Supply Chain Input Inflation Penalties (with Forward Hedging) ---
         $agriShift = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
         $freightShift = max(0.0, ($macroState->freightRateIndexEma - 100.0) / 100.0);
         $energyShift = ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0;
 
-        $combinedInputDrag = max(0.0, ($agriShift * self::AGRI_COMMODITY_SCALAR) + ($freightShift * self::FREIGHT_RATE_SCALAR) + ($energyShift * self::ENERGY_INPUT_SCALAR));
-        $baseInflationPenalty = $combinedInputDrag > 0 ? $combinedInputDrag * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0;
+        // 3. COGS Forward Hedging: 6-9 months raw inventory & futures dampen immediate spot commodity/freight passthrough
+        $spotInputDrag = max(0.0, ($agriShift * self::AGRI_COMMODITY_SCALAR) + ($freightShift * self::FREIGHT_RATE_SCALAR) + ($energyShift * self::ENERGY_INPUT_SCALAR));
+        $hedgedInputDrag = $spotInputDrag * self::FORWARD_HEDGE_RATIO;
+        $baseInflationPenalty = $hedgedInputDrag > 0 ? $hedgedInputDrag * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0;
         $totalInflationPenalty = $baseInflationPenalty * $inflationMultiplier;
 
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;

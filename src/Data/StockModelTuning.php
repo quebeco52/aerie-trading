@@ -175,8 +175,9 @@ class StockModelTuning
         // --- Aerie Central Clearing (ACC) ---
         // Systemically important central counterparty clearinghouse (CCP). 
         'ACC' => [
-            ModelParam::ClearingFeeWeight->value      => 0.70,
-            ModelParam::DataSubscriptionWeight->value => 0.30,
+            ModelParam::ClearingFeeWeight->value      => 0.50,
+            ModelParam::CustodyFloatWeight->value     => 0.30,
+            ModelParam::DataSubscriptionWeight->value => 0.20,
         ],
 
         // =====================================================================

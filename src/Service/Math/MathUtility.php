@@ -1018,4 +1018,24 @@ class MathUtility
 
         return $normalized;
     }
+
+    /**
+     * Calculates a convex penalty using power-law scaling to model non-linear demand destruction,
+     * bullwhip supply chain freezes, or aggressive promotional inventory markdowns.
+     *
+     * Formula: Penalty = (max(0, Shock))^Convexity * Scalar
+     *
+     * @param float $shock     The magnitude of the shock/contraction (e.g. abs(outputGap)).
+     * @param float $convexity The degree of convexity (e.g. 1.5 or 2.0).
+     * @param float $scalar    The scaling factor.
+     * @return float The non-linear convex penalty.
+     */
+    public function calculateConvexPenalty(float $shock, float $convexity = 1.5, float $scalar = 1.0): float
+    {
+        if ($shock <= 0.0) {
+            return 0.0;
+        }
+
+        return pow($shock, $convexity) * $scalar;
+    }
 }

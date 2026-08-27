@@ -178,8 +178,8 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const BASE_ECONOMIC_GROWTH_ADD = 0.02;
     /** Output gap multiplier scaling systemic float growth during economic expansions. */
     public const EXPANSION_GAP_MULT       = 0.50;
-    /** Output gap multiplier scaling systemic float contraction during economic recessions. */
-    public const RECESSION_GAP_MULT       = 2.00;
+    /** Output gap multiplier scaling systemic float contraction during economic recessions. Insurance float is sticky. */
+    public const RECESSION_GAP_MULT       = 0.50;
     /** Quarterly conversion divisor for annual systemic float growth rates. */
     public const QUARTERLY_GROWTH_DIVISOR = 4.00;
     /** Minimum stock beta clamp applied to liability float growth sensitivity. */
@@ -194,12 +194,12 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const FLOAT_GROWTH_NOISE_STD   = 0.005;
     /** Event shock penalty applied when catastrophe claim payouts cause cash insolvency. */
     public const EVENT_SHOCK_INSOLVENCY   = -5.00;
-    /** Threshold fraction of policy roll-offs triggering negative underwriting lore. */
-    public const LORE_ROLLOFF_THRESHOLD   = -0.005;
-    /** Threshold fraction of new premium capture triggering positive underwriting lore. */
-    public const LORE_CAPTURE_THRESHOLD   = 0.005;
+    /** Threshold fraction of policy roll-offs triggering negative underwriting lore (2.5% quarterly drop). */
+    public const LORE_ROLLOFF_THRESHOLD   = -0.025;
+    /** Threshold fraction of new premium capture triggering positive underwriting lore (2.5% quarterly gain). */
+    public const LORE_CAPTURE_THRESHOLD   = 0.025;
     /** Event shock penalty applied during significant quarterly policy roll-offs. */
-    public const EVENT_SHOCK_ROLLOFF      = -2.00;
+    public const EVENT_SHOCK_ROLLOFF      = -1.00;
     /** Event shock bonus applied during significant quarterly new premium capture. */
     public const EVENT_SHOCK_CAPTURE      = 0.50;
 
@@ -677,7 +677,11 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         // Premium-to-Surplus Capacity constraint (Kenney Rule) throttles growth if they don't have enough equity to back the policies.
         $capacityMultiplier = $this->calculateFloatCapacityMultiplier($totalDebt, $equity, $equityLimit, $currentLiabilities);
-        $baseGrowth = $systemicGrowthQuarterly * max(self::MIN_BETA_GROWTH_CLAMP, min(self::MAX_BETA_GROWTH_CLAMP, abs((float) $stock->getBeta()))) * $capacityMultiplier;
+        
+        // Capacity should only boost positive market capture. It should not accelerate shrinkage during recessions.
+        $effectiveSystemicGrowth = $systemicGrowthQuarterly > 0.0 ? $systemicGrowthQuarterly * $capacityMultiplier : $systemicGrowthQuarterly;
+        $baseGrowth = $effectiveSystemicGrowth * max(self::MIN_BETA_GROWTH_CLAMP, min(self::MAX_BETA_GROWTH_CLAMP, abs((float) $stock->getBeta())));
+        
         $effectiveNoise = ($mathUtility->generateStandardNormal() * self::FLOAT_GROWTH_NOISE_STD) * min(1.0, $capacityMultiplier);
         $liabilityChange = $currentLiabilities * max(self::MIN_FLOAT_CHANGE_CLAMP, min(self::MAX_FLOAT_CHANGE_CLAMP, $baseGrowth + $effectiveNoise));
 

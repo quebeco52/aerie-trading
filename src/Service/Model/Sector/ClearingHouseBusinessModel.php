@@ -163,19 +163,11 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
 
         // 4. Target Total Operating Revenue (including custody float)
         $targetTotalRevenue = $targetTotalEbit / $stableMargin;
-
-        // 5. Estimate Custody Float Revenue from member margin pool
-        $effectiveCustodySpread = $this->calculateEffectiveCustodySpread($macroState);
-        $expectedCustodyFloatAnnual = $marginPool * $effectiveCustodySpread;
-
-        // 6. Derive Target Franchise Revenue (Clearing Fees + Data Licensing)
-        // Ensure franchise revenue does not drop below a healthy operating floor (e.g. 25% of total revenue)
-        $targetFranchiseRevenue = max($targetTotalRevenue * 0.25, $targetTotalRevenue - $expectedCustodyFloatAnnual);
-        $grossFranchiseYield = $targetFranchiseRevenue / max(1.0, abs($earningAssets));
+        $grossYield = $targetTotalRevenue / max(1.0, abs($earningAssets));
 
         return [
             'invested_capital' => $earningAssets,
-            'baseline_roic'    => ($grossFranchiseYield * $stableMargin) * (1.0 - $taxRate)
+            'baseline_roic'    => ($grossYield * $stableMargin) * (1.0 - $taxRate)
         ];
     }
 
@@ -185,12 +177,14 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
 
         $params = $this->resolveModelParameters($stock, [
-            ModelParam::ClearingFeeWeight->value      => 0.70,
-            ModelParam::DataSubscriptionWeight->value => 0.30,
+            ModelParam::ClearingFeeWeight->value      => 0.50,
+            ModelParam::CustodyFloatWeight->value     => 0.30,
+            ModelParam::DataSubscriptionWeight->value => 0.20,
         ]);
 
         $targetWeights = [
             'clearing_fees'  => $params[ModelParam::ClearingFeeWeight],
+            'custody_float'  => $params[ModelParam::CustodyFloatWeight],
             'data_licensing' => $params[ModelParam::DataSubscriptionWeight],
         ];
 
@@ -198,6 +192,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
 
         $clearingWeight = $activeWeights['clearing_fees'];
+        $custodyWeight  = $activeWeights['custody_float'];
         $dataWeight     = $activeWeights['data_licensing'];
 
         $revenueZ = $streams->generateZ('clearing_fees', 0.25);
@@ -209,26 +204,27 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         $vixEma = $macroState->marketVolatilityEma;
         $volatilityBonus = max(0.0, ($vixEma - self::VIX_BASELINE_THRESHOLD) * self::VIX_REVENUE_SCALAR);
 
-        // NEW: Interest Rate Volatility Bonus. If the yield curve is violently steepening or inverting, IRS clearing volumes spike.
+        // Interest Rate Volatility Bonus. If the yield curve is violently steepening or inverting, IRS clearing volumes spike.
         $yieldCurveSlope = abs($macroState->yield10yEma - $macroState->yield2yEma);
         $ratesVolBonus = $yieldCurveSlope > 0.005 ? ($yieldCurveSlope - 0.005) * 2.0 : 0.0;
 
         $totalMacroBonus = $volatilityBonus + $ratesVolBonus;
 
-        // 1. Franchise Revenue (Clearing Fees + Data Licensing from expectedRevenue)
-        $clearingRevenue = max(0.0, $expectedRevenue * $clearingWeight * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $totalMacroBonus));
-        $dataRevenue     = max(0.0, $expectedRevenue * $dataWeight * (1.0 + ($dataZ * ($baselineVol * 0.05))));
+        // Interest Rate Shift on Custody Float:
+        $policyRateEma = $macroState->policyRateEma;
+        $rateShift = ($policyRateEma - 0.02) * 2.0;
 
-        // 2. Custody Float Revenue (Calculated directly from live member margin pool)
-        $marginPool = (float) $stock->getCustomerDeposits();
-        $effectiveCustodySpread = $this->calculateEffectiveCustodySpread($macroState);
-        $quarterlyCustodySpread = $effectiveCustodySpread / 4.0;
-        $custodyRevenue = max(0.0, ($marginPool * $quarterlyCustodySpread) * (1.0 + ($custodyZ * ($baselineVol * 0.15))));
+        // 1. Clearing Revenue (Highly cyclical, gets the Vol and Rates bonus)
+        $clearingRevenue = max(0.0, $expectedRevenue * $clearingWeight * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $totalMacroBonus));
+        // 2. Custody Revenue (Tied to policy rates and float)
+        $custodyRevenue  = max(0.0, $expectedRevenue * $custodyWeight * (1.0 + ($custodyZ * ($baselineVol * 0.20)) + $rateShift));
+        // 3. Data & Analytics Revenue (Highly sticky SaaS revenue, immune to trading panics)
+        $dataRevenue     = max(0.0, $expectedRevenue * $dataWeight * (1.0 + ($dataZ * ($baselineVol * 0.05))));
 
         $streamRevenues = [
             'clearing_fees'  => $clearingRevenue,
-            'data_licensing' => $dataRevenue,
             'custody_float'  => $custodyRevenue,
+            'data_licensing' => $dataRevenue,
         ];
 
         $actualRevenue = max(0.0, array_sum($streamRevenues));

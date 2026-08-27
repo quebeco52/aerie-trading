@@ -290,4 +290,150 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $this->model->applyAssetDepreciationDecay($stock, reinvestmentRatio: 2.0, dt: 0.25);
         $this->assertEqualsWithDelta(0.220832, (float) $stock->getOperatingMargin(), 0.0001);
     }
+
+    public function testForresterBullwhipEffectNonLinearWholesaleContraction(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('SHER');
+        $stock->setBeta('1.0');
+
+        $neutralMacro = new MacroStateDTO(outputGapEma: 0.0);
+        $mildRecessionMacro = new MacroStateDTO(outputGapEma: -0.05);
+        $deepRecessionMacro = new MacroStateDTO(outputGapEma: -0.10);
+
+        $mathUtility = new MathUtility();
+
+        $neutralResult = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.22,
+            fixedCosts: 20_000_000.0,
+            baselineVol: 0.0, // Zero baseline vol to isolate deterministic macro/bullwhip physics
+            macroState: $neutralMacro,
+            mathUtility: $mathUtility
+        );
+
+        $mildResult = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.22,
+            fixedCosts: 20_000_000.0,
+            baselineVol: 0.0,
+            macroState: $mildRecessionMacro,
+            mathUtility: $mathUtility
+        );
+
+        $deepResult = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.22,
+            fixedCosts: 20_000_000.0,
+            baselineVol: 0.0,
+            macroState: $deepRecessionMacro,
+            mathUtility: $mathUtility
+        );
+
+        // Neutral wholesale revenue = $40,000,000
+        $this->assertEqualsWithDelta(40_000_000.0, $neutralResult->streamRevenue['wholesale_channel'], 1.0);
+
+        // Mild gap contraction (5%): penalty = (0.05)^2 * 2.0 = 0.005 -> shock = -0.005
+        // Wholesale revenue = 40M * (1 - 0.005) = 39,800,000
+        $mildWholesaleDrop = $neutralResult->streamRevenue['wholesale_channel'] - $mildResult->streamRevenue['wholesale_channel'];
+        $this->assertEqualsWithDelta(200_000.0, $mildWholesaleDrop, 1.0);
+
+        // Deep gap contraction (10%): penalty = (0.10)^2 * 2.0 = 0.020 -> shock = -0.020
+        // Wholesale revenue = 40M * (1 - 0.020) = 39,200,000
+        $deepWholesaleDrop = $neutralResult->streamRevenue['wholesale_channel'] - $deepResult->streamRevenue['wholesale_channel'];
+        $this->assertEqualsWithDelta(800_000.0, $deepWholesaleDrop, 1.0);
+
+        // Convexity check: Doubling contraction from 5% to 10% quadruples the revenue destruction
+        $this->assertEqualsWithDelta(4.0, $deepWholesaleDrop / $mildWholesaleDrop, 0.001, 'Bullwhip effect must scale convexly (quadratically).');
+    }
+
+    public function testFastFashionMarkdownSqueezeDestroysGrossMargin(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('SHER');
+        $stock->setBeta('1.0');
+
+        $neutralMacro = new MacroStateDTO(outputGapEma: 0.0);
+        $recessionMacro = new MacroStateDTO(outputGapEma: -0.06);
+
+        $mathUtility = new MathUtility();
+
+        $neutralResult = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.22,
+            fixedCosts: 20_000_000.0,
+            baselineVol: 0.0,
+            macroState: $neutralMacro,
+            mathUtility: $mathUtility
+        );
+
+        $recessionResult = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.22,
+            fixedCosts: 20_000_000.0,
+            baselineVol: 0.0,
+            macroState: $recessionMacro,
+            mathUtility: $mathUtility
+        );
+
+        // Markdown penalty increases variable cost ratio (clampedMargin = raw variable cost margin)
+        $this->assertGreaterThan(
+            $neutralResult->clampedMargin,
+            $recessionResult->clampedMargin,
+            'Recessionary inventory markdown squeeze must raise variable cost margin / destroy gross margins.'
+        );
+    }
+
+    public function testCogsForwardHedgingDampensSpotCommodityShocks(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('SHER');
+        $stock->setBeta('1.0');
+
+        $neutralMacro = new MacroStateDTO(
+            agriculturalCommodityIndexEma: 100.0,
+            freightRateIndexEma: 100.0,
+            energyPriceIndexEma: 100.0
+        );
+
+        $spotShockMacro = new MacroStateDTO(
+            agriculturalCommodityIndexEma: 150.0, // +50% raw cotton
+            freightRateIndexEma: 150.0,            // +50% shipping
+            energyPriceIndexEma: 150.0             // +50% energy
+        );
+
+        $mathUtility = new MathUtility();
+
+        $neutralResult = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.20,
+            fixedCosts: 20_000_000.0,
+            baselineVol: 0.0,
+            macroState: $neutralMacro,
+            mathUtility: $mathUtility
+        );
+
+        $shockResult = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.20,
+            fixedCosts: 20_000_000.0,
+            baselineVol: 0.0,
+            macroState: $spotShockMacro,
+            mathUtility: $mathUtility
+        );
+
+        // Spot input drag = (0.50 * 0.15) + (0.50 * 0.06) + (0.50 * 0.04) = 0.075 + 0.030 + 0.020 = 0.125
+        // Hedged input drag = 0.125 * 0.33 = 0.04125
+        // Beta = 1.0, Inflation penalty scalar = 0.50, Inflation multiplier (SHER pricing power 0.60) = 2.0 - (0.60 * 2.0) = 0.80
+        // Total inflation penalty = 0.04125 * 1.0 * 0.50 * 0.80 = 0.0165
+        $marginIncrease = $shockResult->clampedMargin - $neutralResult->clampedMargin;
+        $this->assertEqualsWithDelta(0.0165, $marginIncrease, 0.0001, 'Forward hedging must dampen spot input inflation passthrough by forward hedge ratio.');
+    }
 }

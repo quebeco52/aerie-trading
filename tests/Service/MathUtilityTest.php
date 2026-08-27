@@ -418,5 +418,20 @@ class MathUtilityTest extends TestCase
         $this->assertEqualsWithDelta($expectedPull, $pullQuarter, 0.00001);
         $this->assertLessThan(0.0, $pullQuarter, 'Excess return above equilibrium should pull return downwards.');
     }
+
+    public function testCalculateConvexPenalty(): void
+    {
+        // Zero or negative shock yields 0 penalty
+        $this->assertEquals(0.0, $this->mathUtility->calculateConvexPenalty(0.0, 2.0, 1.5));
+        $this->assertEquals(0.0, $this->mathUtility->calculateConvexPenalty(-0.05, 2.0, 1.5));
+
+        // 5% shock (0.05) with quadratic convexity (2.0) and scalar 2.0
+        // (0.05)^2 * 2.0 = 0.0025 * 2.0 = 0.005
+        $this->assertEqualsWithDelta(0.005, $this->mathUtility->calculateConvexPenalty(0.05, 2.0, 2.0), 0.00001);
+
+        // 10% shock (0.10) with convexity 2.0 and scalar 2.0 -> (0.10)^2 * 2.0 = 0.02
+        // Quadruples penalty for doubling shock (convex property)
+        $this->assertEqualsWithDelta(0.02, $this->mathUtility->calculateConvexPenalty(0.10, 2.0, 2.0), 0.00001);
+    }
 }
 
