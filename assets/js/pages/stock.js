@@ -23,6 +23,15 @@ function updateAerieData() {
         EPS = window.AERIE_DATA.eps;
         TICKS_PER_YEAR = window.AERIE_DATA.ticksPerYear || 54000;
         SECONDS_PER_TICK = Math.round(31536000 / TICKS_PER_YEAR);
+    } else {
+        CURRENT_TICKER = null;
+        IS_ETF = false;
+        BUSINESS_MODEL = 'none';
+        IS_FINANCIAL = false;
+        SHARES_OUTSTANDING = null;
+        CURRENT_PRICE = 0;
+        USER_QUANTITY = 0;
+        EPS = null;
     }
 }
 
@@ -99,8 +108,9 @@ function formatLarge(num) {
 }
 
 function initStockPage() {
+    updateAerieData();
     const container = document.getElementById('mainChartContainer');
-    if (!container) return;
+    if (!container || !window.AERIE_DATA || !CURRENT_TICKER) return;
     if (container.dataset.initialized) return;
     container.dataset.initialized = 'true';
 
@@ -158,6 +168,75 @@ function initStockPage() {
     if (IS_ETF) initEtfChart();
     loadHistory('1y');
     setupEventListeners();
+    setupStockTabs();
+
+    function setupStockTabs() {
+        const tabButtons = document.querySelectorAll('.stock-tab-btn');
+        const tabPanels = document.querySelectorAll('.stock-tab-panel');
+
+        function activateTab(tabId) {
+            tabButtons.forEach(btn => {
+                const isActive = btn.dataset.tab === tabId;
+                if (isActive) {
+                    btn.classList.remove('text-on-surface-variant', 'border-transparent');
+                    btn.classList.add('text-primary', 'border-primary');
+                } else {
+                    btn.classList.remove('text-primary', 'border-primary');
+                    btn.classList.add('text-on-surface-variant', 'border-transparent');
+                }
+            });
+
+            tabPanels.forEach(panel => {
+                if (panel.id === `stock-tab-content-${tabId}`) {
+                    panel.classList.remove('hidden');
+                } else {
+                    panel.classList.add('hidden');
+                }
+            });
+
+            // Trigger chart resize when switching tabs so hidden canvases paint properly
+            setTimeout(() => {
+                window.dispatchEvent(new Event('resize'));
+                const chartInstances = [
+                    profitEngineChartInstance, debtEquityChartInstance, creditHealthChartInstance,
+                    capitalEfficiencyChartInstance, payoutRatioChartInstance, valuationMultiplesChartInstance,
+                    shareholderValueChartInstance, cashFlowSummaryChartInstance, netInterestEngineChartInstance,
+                    insuranceDualEngineChartInstance, reitCoverageChartInstance, reinvestmentIntensityChartInstance,
+                    cyclicalDynamicsChartInstance, etfPieChart,
+                    macroEconomyChartInstance, macroRatesChartInstance, macroMortgageChartInstance,
+                    macroRiskChartInstance, macroLaborCreditChartInstance, macroCommoditiesChartInstance,
+                    macroPropertyChartInstance, macroTradeLogisticsChartInstance, macroSentimentChartInstance,
+                    macroGovtSpendingChartInstance, macroInterbankLiquidityChartInstance
+                ];
+                chartInstances.forEach(c => {
+                    if (c) {
+                        try { c.resize(); } catch(e) {}
+                    }
+                });
+                if (lwChart) {
+                    const cEl = document.getElementById('mainChartContainer');
+                    if (cEl && cEl.clientWidth > 0) {
+                        lwChart.applyOptions({ width: cEl.clientWidth });
+                    }
+                }
+            }, 50);
+        }
+
+        tabButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tabId = btn.dataset.tab;
+                activateTab(tabId);
+                if (history.replaceState) {
+                    history.replaceState(null, null, `#${tabId}`);
+                }
+            });
+        });
+
+        const hash = window.location.hash.replace('#', '');
+        if (hash && document.getElementById(`stock-tab-content-${hash}`)) {
+            activateTab(hash);
+        }
+    }
 
     if (!IS_ETF) {
         // Fetch Stock Fundamental Data
@@ -189,11 +268,19 @@ function initStockPage() {
             updateEtfPie(payload);
         }
 
-        const stockUpdate = payload.stocks.find(s => s.ticker === CURRENT_TICKER);
+        const stockUpdate = payload.stocks ? payload.stocks.find(s => s.ticker === CURRENT_TICKER) : null;
         if (stockUpdate) {
             const newPrice = parseFloat(stockUpdate.price);
-            updatePriceUI(newPrice, stockUpdate);
-            updateLiveChart(newPrice);
+            try {
+                updatePriceUI(newPrice, stockUpdate);
+            } catch (err) {
+                console.error("Error updating price UI:", err);
+            }
+            try {
+                updateLiveChart(newPrice);
+            } catch (err) {
+                console.error("Error updating live chart:", err);
+            }
         }
 
         if (payload.events && payload.events.length > 0) {
@@ -310,7 +397,13 @@ function initStockPage() {
     }
 
     function initEtfChart() {
-        const ctx = document.getElementById('etfPieChart').getContext('2d');
+        const canvas = document.getElementById('etfPieChart');
+        if (!canvas) return;
+        if (etfPieChart) {
+            try { etfPieChart.destroy(); } catch (e) { }
+            etfPieChart = null;
+        }
+        const ctx = canvas.getContext('2d');
         etfPieChart = new Chart(ctx, {
             type: 'doughnut',
             data: {
@@ -418,23 +511,29 @@ function initStockPage() {
             const currentEps = stockUpdate.eps !== undefined ? stockUpdate.eps : EPS;
 
             // Format the large numbers dynamically!
-            if (document.getElementById('stat-mkt-cap') && stockUpdate.market_cap !== undefined) {
-                document.getElementById('stat-mkt-cap').innerText = '$' + formatLarge(stockUpdate.market_cap);
+            const mktCapEl = document.getElementById('stat-mkt-cap');
+            if (mktCapEl && stockUpdate.market_cap !== undefined) {
+                mktCapEl.innerText = '$' + formatLarge(stockUpdate.market_cap);
             }
-            if (document.getElementById('stat-treasury') && stockUpdate.treasury !== undefined) {
-                document.getElementById('stat-treasury').innerText = '$' + formatLarge(stockUpdate.treasury);
+            const treasuryEl = document.getElementById('stat-treasury');
+            if (treasuryEl && stockUpdate.treasury !== undefined) {
+                treasuryEl.innerText = '$' + formatLarge(stockUpdate.treasury);
             }
-            if (document.getElementById('stat-equity') && stockUpdate.equity !== undefined) {
-                document.getElementById('stat-equity').innerText = '$' + formatLarge(stockUpdate.equity);
+            const equityEl = document.getElementById('stat-equity');
+            if (equityEl && stockUpdate.equity !== undefined) {
+                equityEl.innerText = '$' + formatLarge(stockUpdate.equity);
             }
-            if (document.getElementById('stat-pe')) {
-                document.getElementById('stat-pe').innerText = currentEps > 0 ? (newPrice / currentEps).toFixed(2) : '0.00';
+            const peEl = document.getElementById('stat-pe');
+            if (peEl) {
+                peEl.innerText = currentEps > 0 ? (newPrice / currentEps).toFixed(2) + 'x' : '-';
             }
-            if (document.getElementById('stat-debt-ratio')) {
-                document.getElementById('stat-debt-ratio').innerText = stockUpdate.debt_ratio.toFixed(2) + 'x';
+            const debtRatioEl = document.getElementById('stat-debt-ratio');
+            if (debtRatioEl && stockUpdate.debt_ratio !== undefined) {
+                debtRatioEl.innerText = stockUpdate.debt_ratio.toFixed(2) + 'x';
             }
-            if (stockUpdate.market_share !== undefined && document.getElementById('stat-market-share')) {
-                document.getElementById('stat-market-share').innerText = stockUpdate.market_share.toFixed(2) + '%';
+            const mktShareEl = document.getElementById('stat-market-share');
+            if (mktShareEl && stockUpdate.market_share !== undefined) {
+                mktShareEl.innerText = stockUpdate.market_share.toFixed(2) + '%';
             }
 
             if (IS_FINANCIAL && stockUpdate.invested_capital !== undefined && stockUpdate.treasury !== undefined) {
@@ -444,13 +543,20 @@ function initStockPage() {
                 const loanPct = totalAssets > 0 ? (invCap / totalAssets) * 100 : 0;
                 const cashPct = totalAssets > 0 ? (treasury / totalAssets) * 100 : 0;
 
-                if (document.getElementById('stat-total-assets')) document.getElementById('stat-total-assets').innerText = formatLarge(totalAssets);
-                if (document.getElementById('stat-loan-book')) document.getElementById('stat-loan-book').innerText = formatLarge(invCap);
-                if (document.getElementById('stat-vault-cash')) document.getElementById('stat-vault-cash').innerText = formatLarge(treasury);
-                if (document.getElementById('stat-leverage-mult')) {
+                const totAssetsEl = document.getElementById('stat-total-assets');
+                if (totAssetsEl) totAssetsEl.innerText = formatLarge(totalAssets);
+
+                const loanBookEl = document.getElementById('stat-loan-book');
+                if (loanBookEl) loanBookEl.innerText = formatLarge(invCap);
+
+                const vaultCashEl = document.getElementById('stat-vault-cash');
+                if (vaultCashEl) vaultCashEl.innerText = formatLarge(treasury);
+
+                const levMultEl = document.getElementById('stat-leverage-mult');
+                if (levMultEl) {
                     const eqVal = parseFloat(stockUpdate.equity) || 1.0;
                     const lev = eqVal > 0 ? (totalAssets / eqVal) : 1.0;
-                    document.getElementById('stat-leverage-mult').innerText = lev.toFixed(1) + 'x';
+                    levMultEl.innerText = lev.toFixed(1) + 'x';
                 }
 
                 let assetTypeLabel = 'Invested Capital';
@@ -494,14 +600,17 @@ function initStockPage() {
             }
 
             // Other live stats
-            if (stockUpdate.current_volatility !== undefined) {
-                document.getElementById('stat-volatility').innerText = stockUpdate.current_volatility.toFixed(2) + '%';
+            const volEl = document.getElementById('stat-volatility');
+            if (volEl && stockUpdate.current_volatility !== undefined) {
+                volEl.innerText = stockUpdate.current_volatility.toFixed(2) + '%';
             }
-            if (stockUpdate.shares !== undefined) {
-                document.getElementById('stat-shares').innerText = stockUpdate.shares.toLocaleString('en-US');
+            const sharesEl = document.getElementById('stat-shares');
+            if (sharesEl && stockUpdate.shares !== undefined) {
+                sharesEl.innerText = stockUpdate.shares.toLocaleString('en-US');
             }
-            if (stockUpdate.current_roic !== undefined && document.getElementById('stat-roic')) {
-                document.getElementById('stat-roic').innerText = (stockUpdate.current_roic * 100).toFixed(2) + '%';
+            const roicEl = document.getElementById('stat-roic');
+            if (roicEl && stockUpdate.current_roic !== undefined) {
+                roicEl.innerText = (stockUpdate.current_roic * 100).toFixed(2) + '%';
             }
 
 
@@ -589,13 +698,14 @@ function initStockPage() {
     }
 
     function updateEtfPie(payload) {
-        if (!etfPieChart) return;
+        if (!etfPieChart || !Array.isArray(payload?.stocks)) return;
         let updated = false;
 
         payload.stocks.forEach(stock => {
             let comp = etfComponents.find(c => c.ticker === stock.ticker);
-            if (comp) {
-                comp.value = parseFloat(stock.price) * window.AERIE_DATA.sharesMap[stock.ticker];
+            if (comp && window.AERIE_DATA?.sharesMap) {
+                const shares = window.AERIE_DATA.sharesMap[stock.ticker] || 0;
+                comp.value = parseFloat(stock.price) * shares;
                 updated = true;
             }
         });
@@ -653,15 +763,14 @@ function initStockPage() {
         });
     }
 
-
-
     function prepareEtfData() {
-        if (!IS_ETF) return [];
+        if (!IS_ETF || !window.AERIE_DATA || !Array.isArray(window.AERIE_DATA.pieLabels)) return [];
         let components = [];
         let fIndex = 0;
         window.AERIE_DATA.pieLabels.forEach((ticker, i) => {
             let color = BRAND_COLORS[ticker] || FALLBACK_PALETTE[fIndex++ % FALLBACK_PALETTE.length];
-            components.push({ ticker, value: window.AERIE_DATA.pieData[i], color });
+            let val = (window.AERIE_DATA.pieData && window.AERIE_DATA.pieData[i]) || 0;
+            components.push({ ticker, value: val, color });
         });
         return components.sort((a, b) => b.value - a.value);
     }
@@ -1382,8 +1491,10 @@ function updateMacroCharts() {
 }
 
 function renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOverhangData) {
+    const canvas = document.getElementById('macroEconomyChart');
+    if (!canvas) return;
     if (macroEconomyChartInstance) macroEconomyChartInstance.destroy();
-    const ctx = document.getElementById('macroEconomyChart').getContext('2d');
+    const ctx = canvas.getContext('2d');
     macroEconomyChartInstance = new Chart(ctx, {
         type: 'bar',
         data: {
@@ -1431,8 +1542,10 @@ function renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOv
 }
 
 function renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData, yield10yData, spread2s10sData) {
+    const canvas = document.getElementById('macroRatesChart');
+    if (!canvas) return;
     if (macroRatesChartInstance) macroRatesChartInstance.destroy();
-    const ctx = document.getElementById('macroRatesChart').getContext('2d');
+    const ctx = canvas.getContext('2d');
     macroRatesChartInstance = new Chart(ctx, {
         type: 'bar', // Set base type to bar so we can render the background slope
         data: {
@@ -1547,8 +1660,10 @@ function renderMacroMortgageChart(labels, policyRateData, yield30yData, spread30
 }
 
 function renderMacroRiskChart(labels, erpData, volData, taxData, corpBorrowingData) {
+    const canvas = document.getElementById('macroRiskChart');
+    if (!canvas) return;
     if (macroRiskChartInstance) macroRiskChartInstance.destroy();
-    const ctx = document.getElementById('macroRiskChart').getContext('2d');
+    const ctx = canvas.getContext('2d');
     macroRiskChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
@@ -1605,8 +1720,10 @@ function renderMacroRiskChart(labels, erpData, volData, taxData, corpBorrowingDa
 }
 
 function renderMacroLaborChart(labels, unemploymentData) {
+    const canvas = document.getElementById('macroLaborChart');
+    if (!canvas) return;
     if (macroLaborChartInstance) macroLaborChartInstance.destroy();
-    const ctx = document.getElementById('macroLaborChart').getContext('2d');
+    const ctx = canvas.getContext('2d');
     macroLaborChartInstance = new Chart(ctx, {
         type: 'line',
         data: {

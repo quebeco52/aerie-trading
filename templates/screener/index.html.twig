@@ -1,125 +1,191 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Stock Screener - Aerie Trading{% endblock %}
+{% block title %}Stock Screener | Aerie Exchange{% endblock %}
 
 {% block body %}
-<div class="container mx-auto px-4 py-8">
-    <h1 class="text-3xl font-bold mb-6 text-gray-800 dark:text-gray-100">Stock Screener</h1>
+<div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full space-y-6">
 
-    <div class="overflow-x-auto bg-white dark:bg-gray-800 shadow-md rounded-lg border border-gray-200 dark:border-gray-700">
-        <table class="min-w-full text-sm text-left text-gray-500 dark:text-gray-400">
-            <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-900 dark:text-gray-300">
-                <tr>
-                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider">Ticker</th>
-                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider">Company Name</th>
-                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider">Sector</th>
-                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider text-right">Price</th>
-                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider text-right">Market Cap</th>
-                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider text-right">P/E Ratio</th>
-                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider text-right">EPS</th>
-                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider text-right">Div Yield</th>
-                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider text-right">ROIC</th>
-                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider text-right">Equity</th>
-                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider text-right">Debt</th>
-                    <th scope="col" class="px-4 py-3 font-semibold tracking-wider text-right">D/E Ratio</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-                {% for stock in stocks %}
-                    <tr class="{{ stock.isBankrupt ? 'bg-red-50/50 dark:bg-red-950/20 opacity-60' : 'bg-white dark:bg-gray-800' }} hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
-                        <td class="px-4 py-4 font-bold text-gray-900 whitespace-nowrap dark:text-white" data-value="{{ stock.ticker }}">
-                            <div class="flex items-center gap-1.5">
-                                <a href="{{ path('app_stock_view', {ticker: stock.ticker}) }}" class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline">
-                                    {{ stock.ticker }}
-                                </a>
-                                {% if stock.isBankrupt %}
-                                    <span class="px-1.5 py-0.5 bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 rounded text-[9px] font-bold tracking-wider">BANKRUPT</span>
-                                {% endif %}
-                            </div>
-                        </td>
-                        <td class="px-4 py-4 max-w-[200px] truncate font-medium text-gray-800 dark:text-gray-200" data-value="{{ stock.name }}" title="{{ stock.name }}">{{ stock.name }}</td>
-                        <td class="px-4 py-4 whitespace-nowrap" data-value="{{ stock.sector }}"><span class="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs">{{ stock.sector }}</span></td>
-                        <td class="px-4 py-4 whitespace-nowrap text-right font-medium {{ stock.isBankrupt ? 'text-red-500 line-through' : 'text-gray-900 dark:text-gray-100' }}" data-value="{{ stock.isBankrupt ? 0 : stock.price }}">${{ (stock.isBankrupt ? 0.00 : stock.price)|number_format(2) }}</td>
-                        <td class="px-4 py-4 whitespace-nowrap text-right" data-value="{{ stock.isBankrupt ? 0 : stock.marketCap }}">
-                            {% if stock.isBankrupt %}
-                                $0.00
-                            {% elseif stock.marketCap >= 1000000000000 %}
-                                ${{ (stock.marketCap / 1000000000000)|number_format(2) }}T
-                            {% elseif stock.marketCap >= 1000000000 %}
-                                ${{ (stock.marketCap / 1000000000)|number_format(2) }}B
-                            {% else %}
-                                ${{ (stock.marketCap / 1000000)|number_format(2) }}M
-                            {% endif %}
-                        </td>
-                        <td class="px-4 py-4 whitespace-nowrap text-right" data-value="{{ stock.isBankrupt ? 0 : stock.peRatio|default(0) }}">
-                            {{ not stock.isBankrupt and stock.peRatio is not null ? stock.peRatio|number_format(2) ~ 'x' : '<span class="text-gray-400">-</span>'|raw }}
-                        </td>
-                        <td class="px-4 py-4 whitespace-nowrap text-right" data-value="{{ stock.eps }}">${{ stock.eps|number_format(2) }}</td>
-                        <td class="px-4 py-4 whitespace-nowrap text-right" data-value="{{ stock.isBankrupt ? 0 : stock.dividendYield }}">{{ (stock.isBankrupt ? 0 : stock.dividendYield)|number_format(2) }}%</td>
-                        <td class="px-4 py-4 whitespace-nowrap text-right {{ stock.currentRoic > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400' }}" data-value="{{ stock.currentRoic }}">
-                            {{ (stock.currentRoic * 100)|number_format(2) }}%
-                        </td>
-                        <td class="px-4 py-4 whitespace-nowrap text-right" data-value="{{ stock.equity }}">
-                            {% if stock.equity >= 1000000000000 %}
-                                ${{ (stock.equity / 1000000000000)|number_format(2) }}T
-                            {% elseif stock.equity >= 1000000000 %}
-                                ${{ (stock.equity / 1000000000)|number_format(2) }}B
-                            {% else %}
-                                ${{ (stock.equity / 1000000)|number_format(2) }}M
-                            {% endif %}
-                        </td>
-                        <td class="px-4 py-4 whitespace-nowrap text-right" data-value="{{ stock.debt }}">
-                            {% if stock.debt >= 1000000000000 %}
-                                ${{ (stock.debt / 1000000000000)|number_format(2) }}T
-                            {% elseif stock.debt >= 1000000000 %}
-                                ${{ (stock.debt / 1000000000)|number_format(2) }}B
-                            {% else %}
-                                ${{ (stock.debt / 1000000)|number_format(2) }}M
-                            {% endif %}
-                        </td>
-                        <td class="px-4 py-4 whitespace-nowrap text-right" data-value="{{ stock.debtToEquity|default(0) }}">
-                            {{ stock.debtToEquity is not null ? stock.debtToEquity|number_format(2) ~ 'x' : '<span class="text-gray-400">-</span>'|raw }}
-                        </td>
-                    </tr>
+    {# Hero Section #}
+    <div class="bg-surface-container-low shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-6 md:p-8 border border-outline-variant/15 relative overflow-hidden">
+        <div class="absolute -right-20 -top-20 w-64 h-64 bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
 
-                {% else %}
-                    <tr>
-                        <td colspan="12" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">No stocks available in the market.</td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative z-10">
+            <div>
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="material-symbols-outlined text-primary text-base">filter_alt</span>
+                    <span class="text-[10px] font-bold tracking-widest text-primary uppercase">Market Intelligence</span>
+                </div>
+                <h1 class="text-3xl md:text-4xl font-bold text-on-surface tracking-tight">Stock Screener</h1>
+                <p class="text-xs text-on-surface-variant mt-1">Filter, sort, and analyze corporate fundamentals across the entire exchange.</p>
+            </div>
+
+            <div class="w-full md:w-72">
+                <div class="relative">
+                    <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-base">search</span>
+                    <input type="text" id="screener-search" placeholder="Filter by ticker or name..." class="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-xl pl-9 pr-4 py-2 text-xs font-mono text-on-surface focus:ring-1 focus:ring-primary outline-none placeholder:text-on-surface-variant/50">
+                </div>
+            </div>
+        </div>
     </div>
+
+    {# Sector Filter Pills #}
+    <div class="flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar" id="sector-filters">
+        <button class="sector-filter-btn px-4 py-1.5 rounded-xl text-xs font-bold transition-all bg-primary text-[#001a42] shadow-md shadow-primary/20 whitespace-nowrap" data-sector="ALL">
+            All Sectors
+        </button>
+        {% set sectors = [] %}
+        {% for stock in stocks %}
+            {% if stock.sector and stock.sector not in sectors %}
+                {% set sectors = sectors|merge([stock.sector]) %}
+            {% endif %}
+        {% endfor %}
+        {% for sec in sectors|sort %}
+            <button class="sector-filter-btn px-4 py-1.5 rounded-xl text-xs font-bold transition-all bg-surface-container text-on-surface-variant hover:bg-surface-container-high whitespace-nowrap" data-sector="{{ sec }}">
+                {{ sec }}
+            </button>
+        {% endfor %}
+    </div>
+
+    {# Screener Table #}
+    <div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl overflow-hidden shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)]">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse min-w-[900px]" id="screener-table">
+                <thead>
+                    <tr class="bg-surface-container-highest/30 text-on-surface-variant text-[10px] uppercase tracking-widest border-b border-outline-variant/10">
+                        <th class="px-6 py-4 font-bold cursor-pointer select-none hover:text-primary transition-colors" data-col="ticker">Ticker</th>
+                        <th class="px-4 py-4 font-bold cursor-pointer select-none hover:text-primary transition-colors" data-col="name">Company</th>
+                        <th class="px-4 py-4 font-bold cursor-pointer select-none hover:text-primary transition-colors" data-col="sector">Sector</th>
+                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="price">Price</th>
+                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="mcap">Market Cap</th>
+                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="pe">P/E Ratio</th>
+                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="eps">EPS (TTM)</th>
+                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="roic">ROIC / ROE</th>
+                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="equity">Total Equity</th>
+                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="de">D/E Ratio</th>
+                        <th class="px-6 py-4 font-bold text-right">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-outline-variant/5 text-sm" id="screener-tbody">
+                    {% for stock in stocks %}
+                        <tr class="hover:bg-surface-container-high/40 transition-colors group cursor-pointer screener-row {{ stock.isBankrupt ? 'opacity-50 bg-red-950/10' : '' }}" onclick="window.location.href='/stock/{{ stock.ticker }}'" data-ticker="{{ stock.ticker }}" data-name="{{ stock.name|lower }}" data-sector="{{ stock.sector }}">
+                            <td class="px-6 py-4" data-value="{{ stock.ticker }}">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold text-primary font-mono group-hover:underline">{{ stock.ticker }}</span>
+                                    {% if stock.isBankrupt %}
+                                        <span class="px-1.5 py-0.2 rounded bg-red-500/10 text-red-400 text-[9px] font-bold border border-red-500/20">BANKRUPT</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td class="px-4 py-4 font-bold text-on-surface max-w-[220px] truncate" data-value="{{ stock.name }}">{{ stock.name }}</td>
+                            <td class="px-4 py-4 text-on-surface-variant text-xs" data-value="{{ stock.sector }}">
+                                <span class="px-2.5 py-1 rounded-md bg-surface-container text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">{{ stock.sector }}</span>
+                            </td>
+                            <td class="px-4 py-4 font-mono text-right font-bold {{ stock.isBankrupt ? 'text-tertiary line-through' : 'text-on-surface' }}" data-value="{{ stock.isBankrupt ? 0 : stock.price }}">${{ (stock.isBankrupt ? 0.00 : stock.price)|number_format(2) }}</td>
+                            <td class="px-4 py-4 font-mono text-right text-on-surface" data-value="{{ stock.isBankrupt ? 0 : stock.marketCap }}">${{ stock.isBankrupt ? '0.00' : stock.marketCap|format_large }}</td>
+                            <td class="px-4 py-4 font-mono text-right text-on-surface" data-value="{{ stock.isBankrupt ? 0 : (stock.peRatio ?? 0) }}">
+                                {{ not stock.isBankrupt and stock.peRatio is not null ? stock.peRatio|number_format(2) ~ 'x' : '-' }}
+                            </td>
+                            <td class="px-4 py-4 font-mono text-right text-on-surface" data-value="{{ stock.eps }}">${{ stock.eps|number_format(2) }}</td>
+                            <td class="px-4 py-4 font-mono text-right font-bold {{ stock.currentRoic >= 0 ? 'text-secondary' : 'text-tertiary' }}" data-value="{{ stock.currentRoic }}">
+                                {{ (stock.currentRoic * 100)|number_format(2) }}%
+                            </td>
+                            <td class="px-4 py-4 font-mono text-right text-on-surface" data-value="{{ stock.equity }}">${{ stock.equity|format_large }}</td>
+                            <td class="px-4 py-4 font-mono text-right text-on-surface" data-value="{{ stock.debtToEquity ?? 0 }}">
+                                {{ stock.debtToEquity is not null ? stock.debtToEquity|number_format(2) ~ 'x' : '-' }}
+                            </td>
+                            <td class="px-6 py-4 text-right">
+                                <a href="/stock/{{ stock.ticker }}" onclick="event.stopPropagation();" class="inline-flex items-center px-3 py-1 rounded-lg bg-surface-container hover:bg-primary/20 text-primary border border-primary/20 text-xs font-bold transition-colors">
+                                    View
+                                </a>
+                            </td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="11" class="px-6 py-12 text-center text-on-surface-variant text-sm font-serif">No stocks available in the market.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
 </div>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const table = document.querySelector('table');
-    const headers = table.querySelectorAll('th');
-    const tbody = table.querySelector('tbody');
-    let currentSort = { column: null, direction: 'asc' };
+    const table = document.getElementById('screener-table');
+    if (!table) return;
+    const headers = table.querySelectorAll('th[data-col]');
+    const tbody = document.getElementById('screener-tbody');
+    const searchInput = document.getElementById('screener-search');
+    const filterButtons = document.querySelectorAll('.sector-filter-btn');
 
+    let currentSort = { colIndex: null, direction: 'asc' };
+    let selectedSector = 'ALL';
+    let searchQuery = '';
+
+    // Sector Filter Buttons
+    filterButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            filterButtons.forEach(b => {
+                b.classList.remove('bg-primary', 'text-[#001a42]', 'shadow-md', 'shadow-primary/20');
+                b.classList.add('bg-surface-container', 'text-on-surface-variant');
+            });
+            btn.classList.remove('bg-surface-container', 'text-on-surface-variant');
+            btn.classList.add('bg-primary', 'text-[#001a42]', 'shadow-md', 'shadow-primary/20');
+
+            selectedSector = btn.dataset.sector;
+            applyFilters();
+        });
+    });
+
+    // Search Input
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            searchQuery = searchInput.value.trim().toLowerCase();
+            applyFilters();
+        });
+    }
+
+    function applyFilters() {
+        const rows = document.querySelectorAll('.screener-row');
+        rows.forEach(row => {
+            const sec = row.dataset.sector || '';
+            const ticker = (row.dataset.ticker || '').toLowerCase();
+            const name = (row.dataset.name || '').toLowerCase();
+
+            const matchesSector = (selectedSector === 'ALL' || sec === selectedSector);
+            const matchesSearch = (searchQuery === '' || ticker.includes(searchQuery) || name.includes(searchQuery));
+
+            if (matchesSector && matchesSearch) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    // Column Sorting
     headers.forEach((header, index) => {
-        header.classList.add('cursor-pointer', 'select-none', 'hover:bg-gray-200', 'dark:hover:bg-gray-700', 'relative', 'whitespace-nowrap');
         header.addEventListener('click', () => {
-            const rows = Array.from(tbody.querySelectorAll('tr'));
-            if (rows.length === 0 || rows[0].children.length === 1) return;
-            
-            const direction = currentSort.column === index && currentSort.direction === 'asc' ? 'desc' : 'asc';
-            
+            const rows = Array.from(tbody.querySelectorAll('.screener-row'));
+            if (rows.length === 0) return;
+
+            const direction = currentSort.colIndex === index && currentSort.direction === 'desc' ? 'asc' : 'desc';
+
             headers.forEach(h => {
-                const icon = h.querySelector('.sort-icon');
+                const icon = h.querySelector('.sort-arrow');
                 if (icon) icon.remove();
             });
-            
-            const icon = document.createElement('span');
-            icon.className = 'sort-icon absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-600 dark:text-gray-300';
-            icon.innerText = direction === 'asc' ? '↑' : '↓';
-            header.appendChild(icon);
-            
+
+            const arrow = document.createElement('span');
+            arrow.className = 'sort-arrow ml-1 text-primary text-xs';
+            arrow.innerText = direction === 'asc' ? '↑' : '↓';
+            header.appendChild(arrow);
+
             rows.sort((a, b) => {
-                const aVal = a.children[index].getAttribute('data-value');
-                const bVal = b.children[index].getAttribute('data-value');
+                const aVal = a.children[index].getAttribute('data-value') || '';
+                const bVal = b.children[index].getAttribute('data-value') || '';
                 const aNum = parseFloat(aVal);
                 const bNum = parseFloat(bVal);
 
@@ -130,7 +196,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             tbody.append(...rows);
-            currentSort = { column: index, direction };
+            currentSort = { colIndex: index, direction };
         });
     });
 });

@@ -73,7 +73,8 @@ function initHome() {
                 priceEl.innerText = '$' + newPrice.toFixed(2);
 
                 // Calculate & Update Market Cap (Using the new WebSocket payload if available, else fallback)
-                const newMcap = stock.market_cap !== undefined ? stock.market_cap : (newPrice * (window.MARKET_SHARES[stock.ticker] || 0));
+                const sharesCount = (window.MARKET_SHARES && window.MARKET_SHARES[stock.ticker]) ? window.MARKET_SHARES[stock.ticker] : 0;
+                const newMcap = stock.market_cap !== undefined ? stock.market_cap : (newPrice * sharesCount);
                 
                 // USE THE FORMATTER HERE
                 mcapEl.innerText = '$' + formatLarge(newMcap);

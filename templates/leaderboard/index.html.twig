@@ -1,32 +1,110 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Leaderboard{% endblock %}
+{% block title %}Leaderboard | Aerie Exchange{% endblock %}
 
 {% block body %}
-<div class="container mx-auto p-4">
-    <h1 class="text-3xl font-bold mb-6">Aerie Exchange Leaderboard</h1>
-    
-    <table class="min-w-full bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
-        <thead class="bg-gray-100 dark:bg-gray-700">
-            <tr>
-                <th class="py-3 px-4 text-left">Rank</th>
-                <th class="py-3 px-4 text-left">Trader</th>
-                <th class="py-3 px-4 text-right">Cash</th>
-                <th class="py-3 px-4 text-right">Assets Value</th>
-                <th class="py-3 px-4 text-right">Total Net Worth</th>
-            </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-            {% for leader in leaders %}
-                <tr>
-                    <td class="py-3 px-4">{{ loop.index }}</td>
-                    <td class="py-3 px-4 font-semibold">{{ leader.username }}</td>
-                    <td class="py-3 px-4 text-right">${{ leader.cash_balance|number_format(2) }}</td>
-                    <td class="py-3 px-4 text-right">${{ (leader.stock_value + leader.etf_value)|number_format(2) }}</td>
-                    <td class="py-3 px-4 text-right font-bold text-green-600">${{ leader.total_value|number_format(2) }}</td>
-                </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+<div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full space-y-6">
+
+    {# Hero Section #}
+    <div class="bg-surface-container-low shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-6 md:p-8 border border-outline-variant/15 relative overflow-hidden">
+        <div class="absolute -right-20 -top-20 w-64 h-64 bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div class="flex items-center gap-2 mb-2 relative z-10">
+            <span class="material-symbols-outlined text-primary text-base">emoji_events</span>
+            <span class="text-[10px] font-bold tracking-widest text-primary uppercase">Trader Rankings</span>
+        </div>
+        <h1 class="text-3xl md:text-4xl font-bold text-on-surface tracking-tight relative z-10">Exchange Leaderboard</h1>
+        <p class="text-xs text-on-surface-variant mt-1 relative z-10">Top performing traders ranked by total portfolio net worth across the exchange.</p>
+    </div>
+
+    {# Top 3 Podium Cards (if at least 3 leaders exist) #}
+    {% if leaders|length >= 3 %}
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {# 2nd Place (Silver) #}
+            <div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg flex flex-col justify-between order-2 md:order-1 relative overflow-hidden">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="w-8 h-8 rounded-full bg-slate-400/10 border border-slate-400/30 text-slate-300 flex items-center justify-center font-bold text-sm">#2</span>
+                    <span class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Silver</span>
+                </div>
+                <div>
+                    <h3 class="text-lg font-bold text-on-surface">{{ leaders[1].username }}</h3>
+                    <p class="text-2xl font-bold font-mono text-secondary mt-1">${{ leaders[1].total_value|number_format(2) }}</p>
+                </div>
+                <div class="flex justify-between text-xs text-on-surface-variant mt-4 pt-3 border-t border-outline-variant/10 font-mono">
+                    <span>Cash: ${{ leaders[1].cash_balance|number_format(0) }}</span>
+                    <span>Assets: ${{ (leaders[1].stock_value + leaders[1].etf_value)|number_format(0) }}</span>
+                </div>
+            </div>
+
+            {# 1st Place (Gold) #}
+            <div class="bg-surface-container-low border border-primary/30 rounded-2xl p-6 shadow-2xl flex flex-col justify-between order-1 md:order-2 relative overflow-hidden bg-gradient-to-b from-primary/5 to-transparent">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="w-10 h-10 rounded-full bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 flex items-center justify-center font-bold text-base shadow-[0_0_15px_rgba(234,179,8,0.2)]">#1</span>
+                    <span class="text-[10px] font-bold uppercase tracking-widest text-yellow-400">Gold Champion</span>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-on-surface">{{ leaders[0].username }}</h3>
+                    <p class="text-3xl font-bold font-mono text-secondary mt-1">${{ leaders[0].total_value|number_format(2) }}</p>
+                </div>
+                <div class="flex justify-between text-xs text-on-surface-variant mt-4 pt-3 border-t border-outline-variant/10 font-mono">
+                    <span>Cash: ${{ leaders[0].cash_balance|number_format(0) }}</span>
+                    <span>Assets: ${{ (leaders[0].stock_value + leaders[0].etf_value)|number_format(0) }}</span>
+                </div>
+            </div>
+
+            {# 3rd Place (Bronze) #}
+            <div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg flex flex-col justify-between order-3 md:order-3 relative overflow-hidden">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="w-8 h-8 rounded-full bg-amber-700/10 border border-amber-700/30 text-amber-500 flex items-center justify-center font-bold text-sm">#3</span>
+                    <span class="text-[10px] font-bold uppercase tracking-widest text-amber-600">Bronze</span>
+                </div>
+                <div>
+                    <h3 class="text-lg font-bold text-on-surface">{{ leaders[2].username }}</h3>
+                    <p class="text-2xl font-bold font-mono text-secondary mt-1">${{ leaders[2].total_value|number_format(2) }}</p>
+                </div>
+                <div class="flex justify-between text-xs text-on-surface-variant mt-4 pt-3 border-t border-outline-variant/10 font-mono">
+                    <span>Cash: ${{ leaders[2].cash_balance|number_format(0) }}</span>
+                    <span>Assets: ${{ (leaders[2].stock_value + leaders[2].etf_value)|number_format(0) }}</span>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+
+    {# Rankings Table #}
+    <div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl overflow-hidden shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)]">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse min-w-[600px]">
+                <thead>
+                    <tr class="bg-surface-container-highest/30 text-on-surface-variant text-[10px] uppercase tracking-widest border-b border-outline-variant/10">
+                        <th class="px-6 py-4 font-bold">Rank</th>
+                        <th class="px-6 py-4 font-bold">Trader</th>
+                        <th class="px-4 py-4 font-bold text-right">Cash Balance</th>
+                        <th class="px-4 py-4 font-bold text-right">Assets Value</th>
+                        <th class="px-6 py-4 font-bold text-right">Total Net Worth</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-outline-variant/5 text-sm">
+                    {% for leader in leaders %}
+                        <tr class="hover:bg-surface-container-high/40 transition-colors">
+                            <td class="px-6 py-4">
+                                <span class="w-7 h-7 rounded-lg flex items-center justify-center font-bold font-mono text-xs {{ loop.index == 1 ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' : (loop.index == 2 ? 'bg-slate-400/10 text-slate-300 border border-slate-400/20' : (loop.index == 3 ? 'bg-amber-700/10 text-amber-500 border border-amber-700/20' : 'bg-surface-container text-on-surface-variant')) }}">
+                                    {{ loop.index }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 font-bold text-on-surface">{{ leader.username }}</td>
+                            <td class="px-4 py-4 font-mono text-right text-on-surface-variant">${{ leader.cash_balance|number_format(2) }}</td>
+                            <td class="px-4 py-4 font-mono text-right text-on-surface">${{ (leader.stock_value + leader.etf_value)|number_format(2) }}</td>
+                            <td class="px-6 py-4 font-mono text-right font-bold text-secondary text-base">${{ leader.total_value|number_format(2) }}</td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="5" class="px-6 py-12 text-center text-on-surface-variant text-sm font-serif">No traders registered on the exchange yet.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
 </div>
 {% endblock %}

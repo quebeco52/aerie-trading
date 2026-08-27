@@ -99,8 +99,44 @@ class StockController extends AbstractController
         $quote = \App\Data\StockInfo::getQuote($ticker);
 
         $allAssets = [];
+        $pieLabels = [];
+        $pieData = [];
+        $sharesMap = [];
+        $components = [];
+
         if ($isEtf) {
             $allAssets = $entityManager->getRepository(Stock::class)->findAll();
+            $totalMcap = 0.0;
+            foreach ($allAssets as $stock) {
+                if ($stock->isBankrupt()) continue;
+                $sPrice = (float) $stock->getPrice();
+                $sShares = (float) $stock->getSharesOutstanding();
+                $sMcap = $sPrice * $sShares;
+                $totalMcap += $sMcap;
+            }
+
+            foreach ($allAssets as $stock) {
+                if ($stock->isBankrupt()) continue;
+                $sPrice = (float) $stock->getPrice();
+                $sShares = (float) $stock->getSharesOutstanding();
+                $sMcap = $sPrice * $sShares;
+                $weight = $totalMcap > 0 ? ($sMcap / $totalMcap) * 100 : 0;
+
+                $pieLabels[] = $stock->getTicker();
+                $pieData[] = $sMcap;
+                $sharesMap[$stock->getTicker()] = $sShares;
+
+                $components[] = [
+                    'ticker' => $stock->getTicker(),
+                    'name' => $stock->getName(),
+                    'sector' => $stock->getSector(),
+                    'price' => $sPrice,
+                    'marketCap' => $sMcap,
+                    'weight' => $weight,
+                ];
+            }
+
+            usort($components, fn($a, $b) => $b['weight'] <=> $a['weight']);
         }
 
         $events = [];
@@ -122,12 +158,75 @@ class StockController extends AbstractController
         $economicCycle = $redis->get('economy_state') ?: 'Expansion';
 
         $openOrders = [];
+        $userTrades = [];
+        $userAvgCost = (float) $asset->getPrice();
+        $userUnrealizedPnL = 0.0;
+        $userUnrealizedPnLPercent = 0.0;
+
         if ($currentUser) {
             $openOrders = $entityManager->getRepository(\App\Entity\TradeOrder::class)->findBy([
                 'user' => $currentUser,
                 'ticker' => $ticker,
                 'status' => 'OPEN'
             ], ['createdAt' => 'DESC']);
+
+            $userTrades = $entityManager->getRepository(\App\Entity\TradeOrder::class)->findBy([
+                'user' => $currentUser,
+                'ticker' => $ticker,
+                'status' => ['FILLED', 'CANCELLED']
+            ], ['createdAt' => 'DESC'], 20);
+
+            if ($userQuantity > 0) {
+                $filledBuys = $entityManager->createQuery(
+                    'SELECT o FROM App\Entity\TradeOrder o WHERE o.user = :user AND o.ticker = :ticker AND o.action = :action AND o.status = :status ORDER BY o.createdAt ASC'
+                )->setParameter('user', $currentUser)->setParameter('ticker', $ticker)->setParameter('action', 'BUY')->setParameter('status', 'FILLED')->getResult();
+
+                $totalCost = 0.0;
+                $totalQty = 0;
+                foreach ($filledBuys as $fOrder) {
+                    $qty = $fOrder->getFilledQuantity() > 0 ? $fOrder->getFilledQuantity() : $fOrder->getQuantity();
+                    $execPrice = (float) ($fOrder->getExecutionPrice() ?? $fOrder->getLimitPrice() ?? $asset->getPrice());
+                    $totalCost += ($qty * $execPrice);
+                    $totalQty += $qty;
+                }
+                if ($totalQty > 0) {
+                    $userAvgCost = $totalCost / $totalQty;
+                }
+                $userPositionCost = $userAvgCost * $userQuantity;
+                $currentVal = (float)$asset->getPrice() * $userQuantity;
+                $userUnrealizedPnL = $currentVal - $userPositionCost;
+                $userUnrealizedPnLPercent = $userPositionCost > 0 ? ($userUnrealizedPnL / $userPositionCost) * 100 : 0.0;
+            }
+        }
+
+        // Fetch Sector Peers for comparative analysis
+        $peers = [];
+        if (!$isEtf && $asset->getSector()) {
+            $peerEntities = $entityManager->getRepository(Stock::class)->findBy(['sector' => $asset->getSector()]);
+            foreach ($peerEntities as $p) {
+                if ($p->getId() === $asset->getId()) continue;
+                $pPrice = (float) $p->getPrice();
+                $pShares = (float) $p->getSharesOutstanding();
+                $pEps = (float) $p->getEarningsPerShare();
+                $pMcap = $p->isBankrupt() ? 0.0 : ($pPrice * $pShares);
+                $pPe = (!$p->isBankrupt() && $pEps > 0) ? ($pPrice / $pEps) : null;
+                $pModel = \App\Data\Sectors::INDUSTRY_METRICS[$p->getIndustry() ?? 'General']['business_model'] ?? 'none';
+                $pIsFin = \App\Data\Sectors::isFinancial($pModel);
+                $pRoic = $pIsFin ? ((float)$p->getCurrentRoe() ?: (float)$p->getBaselineRoe()) : ((float)$p->getCurrentRoic() ?: (float)$p->getBaselineRoic());
+
+                $peers[] = [
+                    'ticker' => $p->getTicker(),
+                    'name' => $p->getName(),
+                    'industry' => $p->getIndustry(),
+                    'price' => $pPrice,
+                    'marketCap' => $pMcap,
+                    'peRatio' => $pPe,
+                    'roic' => $pRoic,
+                    'totalEquity' => (float)$p->getTotalEquity(),
+                    'isBankrupt' => $p->isBankrupt(),
+                ];
+            }
+            usort($peers, fn($a, $b) => $b['marketCap'] <=> $a['marketCap']);
         }
 
         return $this->render('stock/index.html.twig', [
@@ -137,6 +236,9 @@ class StockController extends AbstractController
             'businessModel' => $businessModel,
             'investedCapital' => $investedCapital,
             'userQuantity' => $userQuantity,
+            'userAvgCost' => $userAvgCost,
+            'userUnrealizedPnL' => $userUnrealizedPnL,
+            'userUnrealizedPnLPercent' => $userUnrealizedPnLPercent,
             'marketCap' => $marketCap,
             'peRatio' => $peRatio,
             'targetPE' => $targetPE,
@@ -148,7 +250,13 @@ class StockController extends AbstractController
             'macro' => $macroState,
             'marketShare' => $marketShare,
             'quote' => $quote,
-            'openOrders' => $openOrders
+            'openOrders' => $openOrders,
+            'userTrades' => $userTrades,
+            'peers' => $peers,
+            'pieLabels' => $pieLabels,
+            'pieData' => $pieData,
+            'sharesMap' => $sharesMap,
+            'components' => $components,
         ]);
     }
 

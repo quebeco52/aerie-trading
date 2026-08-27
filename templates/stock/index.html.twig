@@ -13,42 +13,15 @@
 	</span>
 {% endmacro %}
 
-
 {% block title %}
-	{{ asset.ticker }}
-	Stock Price & Analysis |
-	{{ asset.name }}
-	- Aerie Exchange
+	{{ asset.ticker }} Stock Price & Analysis | {{ asset.name }} - Aerie Exchange
 {% endblock %}
 
 {% block meta %}
-	<meta name="description" content="View live stock prices, market cap, and fundamental Clean Surplus accounting data for {{ asset.name }} ({{ asset.ticker }}). See the latest quarterly earnings reports and historical charts.">
+	<meta name="description" content="View live stock prices, market cap, and fundamental Clean Surplus accounting data for {{ asset.name }} ({{ asset.ticker }}).">
 	<meta property="og:title" content="{{ asset.ticker }} Stock Price | Aerie Exchange">
 	<meta property="og:description" content="Live financial data and economic simulation for {{ asset.name }} ({{ isEtf ? 'Market Index' : asset.industry|default('General') }}).">
 	<meta property="og:type" content="website">
-
-	<script type="application/ld+json">
-		{
-												            "@context": "https://schema.org",
-												            "@type": "{{ isEtf ? 'InvestmentFund' : 'Corporation' }}",
-												            "name": "{{ asset.name }}",
-												            "tickerSymbol": "{{ asset.ticker }}",
-												            "description": "Live financial data and economic simulation for
-		{{ asset.name }}.",
-												            "url": "{{ app.request.uri }}"
-		{% if isEtf and allAssets is defined %},
-																		                "hasPart": [
-			{% for a in allAssets %}
-				{
-																								                            "@type": "Corporation",
-																								                            "name": "{{ a.name }}",
-																								                            "tickerSymbol": "{{ a.ticker }}"
-																								                        }{{ not loop.last ? ',' : '' }}
-			{% endfor %}
-			]
-		{% endif %}
-		}
-	</script>
 {% endblock %}
 
 {% block favicon %}
@@ -57,1099 +30,769 @@
 
 {% block body %}
 
-	<div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 lg:py-8 w-full">
-		<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+	<div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 lg:py-6 w-full space-y-6">
 
-			<div class="lg:col-span-8 space-y-6 lg:space-y-8">
+		{# --- TOP ASSET HERO BANNER --- #}
+		<div class="bg-surface-container-low shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-6 lg:p-8 border border-outline-variant/15 relative overflow-hidden">
+			<div class="absolute -right-20 -top-20 w-64 h-64 bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
 
-				<div class="bg-surface-container-low shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-6 lg:p-8 border border-outline-variant/15">
-					<div
-						class="flex flex-col md:flex-row md:justify-between md:items-start gap-6 mb-8 w-full">
-						{# Left Side - Identity #}
-						<div class="flex items-center gap-4 min-w-0">
-							<img class="w-14 h-14 md:w-16 md:h-16 rounded-full shadow-md shrink-0" src="{{ asset('icons/' ~ asset.ticker ~ '.svg') }}" onerror="this.onerror=null; this.src='{{ asset('icons/default.svg') }}';" alt="{{ asset.ticker }} icon">
+			<div class="flex flex-col md:flex-row md:justify-between md:items-start gap-6 relative z-10">
+				{# Left: Identity & Sector #}
+				<div class="flex items-center gap-4 min-w-0">
+					<img class="w-14 h-14 md:w-16 md:h-16 rounded-full shadow-md shrink-0" src="{{ asset('icons/' ~ asset.ticker ~ '.svg') }}" onerror="this.onerror=null; this.src='{{ asset('icons/default.svg') }}';" alt="{{ asset.ticker }} icon">
 
-							<div class="flex flex-col gap-1.5 min-w-0">
-								<h1 class="text-3xl md:text-4xl font-bold text-on-surface tracking-tight break-words leading-tight">{{ asset.name }}</h1>
+					<div class="flex flex-col gap-1.5 min-w-0">
+						<h1 class="text-2xl sm:text-3xl md:text-4xl font-bold text-on-surface tracking-tight break-words leading-tight">{{ asset.name }}</h1>
 
-								<div class="flex flex-wrap items-center gap-2 md:gap-3">
-									<p class="text-base font-bold text-on-surface-variant tracking-wide mr-1">{{ asset.ticker }}</p>
+						<div class="flex flex-wrap items-center gap-2 md:gap-3">
+							<span class="text-base font-bold text-primary font-mono tracking-wider">{{ asset.ticker }}</span>
 
-									<span class="group relative cursor-help inline-flex items-center rounded-md bg-surface-container-highest px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant focus-visible:outline-none" tabindex="0">
-										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">{{ isEtf ? 'Market Index' : asset.industry|default('General') }}</span>
-										{% set bmMap = constant('App\\Data\\Sectors::BUSINESS_MODEL_DESCRIPTIONS') %}
-										{% set bmDesc = isEtf ? 'An Exchange Traded Fund tracking a basket of underlying stocks, providing broad market exposure.' : (bmMap[businessModel|default('none')] ?? bmMap['none']) %}
-										{{ _self.tooltip(bmDesc, 'left', 'w-72 z-50', 'bottom') }}
-									</span>
-
-									{% if not isEtf and asset.isBankrupt %}
-										<span class="inline-flex items-center rounded-md bg-red-500/10 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-red-400 border border-red-500/20">
-											BANKRUPT / DELISTED
-										</span>
-									{% endif %}
-								</div>
-							</div>
-						</div>
-
-						{# Right Side - Price #}
-						<div class="md:text-right shrink-0 flex flex-col md:items-end">
-							<div class="flex items-center md:justify-end gap-2 mb-1">
-								{% if not isEtf and asset.isBankrupt %}
-									<span class="w-2 h-2 rounded-full bg-tertiary"></span>
-									<span class="text-[10px] font-bold tracking-widest text-tertiary uppercase" id="live-indicator">BANKRUPT / DELISTED</span>
-								{% else %}
-									<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
-									<span class="text-[10px] font-bold tracking-widest text-secondary uppercase" id="live-indicator">Live Market</span>
-								{% endif %}
-							</div>
-							<span class="block text-4xl md:text-5xl font-bold {{ not isEtf and asset.isBankrupt ? 'text-tertiary line-through' : 'text-on-surface' }} tracking-tighter transition-colors duration-300" id="big-price">
-								${{ (not isEtf and asset.isBankrupt ? 0.00 : asset.price)|number_format(2) }}
+							<span class="group relative cursor-help inline-flex items-center rounded-md bg-surface-container-highest px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant focus-visible:outline-none" tabindex="0">
+								<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">{{ isEtf ? 'Market Index' : asset.industry|default('General') }}</span>
+								{% set bmMap = constant('App\\Data\\Sectors::BUSINESS_MODEL_DESCRIPTIONS') %}
+								{% set bmDesc = isEtf ? 'An Exchange Traded Fund tracking a basket of underlying stocks, providing broad market exposure.' : (bmMap[businessModel|default('none')] ?? bmMap['none']) %}
+								{{ _self.tooltip(bmDesc, 'left', 'w-72 z-50', 'bottom') }}
 							</span>
+
+							{% if not isEtf and asset.isBankrupt %}
+								<span class="inline-flex items-center rounded-md bg-red-500/10 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-red-400 border border-red-500/20">
+									BANKRUPT / DELISTED
+								</span>
+							{% endif %}
 						</div>
-					</div>
-
-					<div class="flex overflow-x-auto gap-1 sm:gap-2 mb-4 bg-surface-container-lowest p-1 rounded-lg w-full md:w-max [&::-webkit-scrollbar]:hidden" style="scrollbar-width: none; -ms-overflow-style: none;">
-						<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center" data-range="1w">1W</button>
-						<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center" data-range="1m">1M</button>
-						<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center" data-range="6m">6M</button>
-						<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-primary text-[#001a42] shadow-md shadow-primary/20 transition-colors text-center" data-range="1y">1Y</button>
-						<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center" data-range="3y">3Y</button>
-						<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center" data-range="5y">5Y</button>
-						<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center" data-range="10y">10Y</button>
-						<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center" data-range="max">MAX</button>
-					</div>
-
-					<div
-						class="w-full h-[300px] md:h-[450px] relative rounded-xl overflow-hidden">
-
-						{#SPINNER#}
-						<div id="chart-spinner" class="hidden absolute inset-0 z-50 flex items-center justify-center bg-surface-container-low/60 backdrop-blur-sm transition-opacity duration-300">
-							<svg class="animate-spin h-12 w-12 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewbox="0 0 24 24">
-								<circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-								<path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-							</svg>
-						</div>
-
-						<div id="mainChartContainer" class="w-full h-full"></div>
 					</div>
 				</div>
 
-				<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 lg:p-8 border border-outline-variant/15">
-					<h3 class="text-sm font-bold uppercase tracking-widest text-primary mb-4">About
-						{{ asset.name }}</h3>
-					<div class="text-base font-serif text-on-surface-variant leading-relaxed tracking-wide">
-						<p>{{ generalInfo|nl2br }}</p>
+				{# Right: Large Price & Status #}
+				<div class="md:text-right shrink-0 flex flex-col md:items-end">
+					<div class="flex items-center md:justify-end gap-2 mb-1">
+						{% if not isEtf and asset.isBankrupt %}
+							<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+							<span class="text-[10px] font-bold tracking-widest text-tertiary uppercase" id="live-indicator">BANKRUPT / DELISTED</span>
+						{% else %}
+							<span class="w-2 h-2 rounded-full bg-secondary animate-pulse shadow-[0_0_8px_rgba(78,222,163,0.6)]"></span>
+							<span class="text-[10px] font-bold tracking-widest text-secondary uppercase" id="live-indicator">Live Market</span>
+						{% endif %}
 					</div>
+					<span class="block text-4xl md:text-5xl font-bold font-mono {{ not isEtf and asset.isBankrupt ? 'text-tertiary line-through' : 'text-on-surface' }} tracking-tighter transition-colors duration-300" id="big-price">
+						${{ (not isEtf and asset.isBankrupt ? 0.00 : asset.price)|number_format(2) }}
+					</span>
 				</div>
-
-				{# --- FUNDAMENTALS DASHBOARD --- #}
-				{% if not isEtf %}
-					<div id="fundamentaldashboard" class="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-surface-container-low/60 border border-outline-variant/20 rounded-2xl p-4 mb-4 gap-4">
-						<div>
-							<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
-								<span class="material-symbols-outlined text-primary text-base">analytics</span>
-								Fundamental Financial Analytics
-							</h3>
-							<p class="text-[11px] text-on-surface-variant mt-0.5">Timeframe selection applies to all historical financial statement charts below.</p>
-						</div>
-						<div class="flex items-center gap-3 self-end sm:self-auto">
-							<div class="flex space-x-2 bg-surface-container-lowest p-1.5 rounded-xl border border-outline-variant/15 shadow-inner">
-								<button onclick="document.dispatchEvent(new CustomEvent('sankey:open'))" class="px-4 py-1.5 text-xs font-bold rounded-lg bg-surface-container text-primary border border-primary/20 hover:bg-primary/10 transition-all uppercase tracking-widest flex items-center gap-1">
-									<span class="material-symbols-outlined text-[14px]">account_tree</span>
-									Earnings Flow
-								</button>
-								<button onclick="updateCharts('12Q')" id="btn-global-12Q" class="px-4 py-1.5 text-xs font-bold rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-all uppercase tracking-widest">12Q</button>
-								<button onclick="updateCharts('12Y')" id="btn-global-12Y" class="px-4 py-1.5 text-xs font-bold rounded-lg bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-all uppercase tracking-widest">12Y</button>
-							</div>
-						</div>
-					</div>
-
-					<div class="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 mt-2">
-
-						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Net Income Trend</span>
-									{{ _self.tooltip('Tracks the total Revenue and Net Income generated each quarter.', 'left', 'w-64') }}
-								</h3>
-								<div class="flex items-center gap-3">
-									<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-										<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-									</button>
-								</div>
-							</div>
-							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="netIncomeChart"></canvas>
-							</div>
-						</div>
-
-						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Debt vs Equity</span>
-									{{ _self.tooltip("Visualizes the company's capital structure. Total Equity (Book Value) compared against Total Debt.", 'right', 'w-64') }}
-								</h3>
-								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-								</button>
-							</div>
-							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="debtEquityChart"></canvas>
-							</div>
-						</div>
-
-						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Credit Health & Maturity Wall</span>
-									{{ _self.tooltip('Displays the Interest Coverage Ratio (ability to pay interest from operating profit) and the Blended Interest Rate on existing debt.', 'left', 'w-64') }}
-								</h3>
-								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-								</button>
-							</div>
-							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="creditHealthChart"></canvas>
-							</div>
-						</div>
-
-						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Capital Efficiency</span>
-									{% if isFinancial|default(false) %}
-										{{ _self.tooltip('Shows Economic Value Added (EVA) and Return on Equity (ROE). Positive EVA means the company is creating true wealth above its capital costs.', 'right', 'w-64') }}
-									{% else %}
-										{{ _self.tooltip('Shows Economic Value Added (EVA) and Return on Invested Capital (ROIC). Positive EVA means the company is creating true wealth above its capital costs.', 'right', 'w-64') }}
-									{% endif %}
-								</h3>
-								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-								</button>
-							</div>
-							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="capitalEfficiencyChart"></canvas>
-							</div>
-						</div>
-
-						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Payout Allocation (LTM)</span>
-									{{ _self.tooltip('Proportion of Trailing 12-Month net income distributed to shareholders as cash dividends vs retained earnings for business growth.', 'right', 'w-64') }}
-								</h3>
-								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-								</button>
-							</div>
-							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="payoutRatioChart"></canvas>
-							</div>
-						</div>
-
-						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Revenue Streams</span>
-									{{ _self.tooltip('Tracks the individual revenue sources making up the total revenue over time.', 'right', 'w-64') }}
-								</h3>
-								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-								</button>
-							</div>
-							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="revenueStreamsChart"></canvas>
-							</div>
-						</div>
-
-						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Capital Return & Yield</span>
-									{{ _self.tooltip('Tracks total dividends paid and stock buybacks over time (bars), overlaid with the trailing Dividend Yield percentage (orange line).', 'left', 'w-64') }}
-								</h3>
-								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-								</button>
-							</div>
-							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="capitalReturnChart"></canvas>
-							</div>
-						</div>
-						{% if isFinancial|default(false) %}
-							<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-								<div class="flex justify-between items-center mb-6">
-									<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Regulatory Ratios</span>
-										{{ _self.tooltip('Displays the Capital Ratio (Equity vs Total Assets) and Customer Deposit Ratio. Critical balance sheet health indicators for banks and financial institutions.', 'right', 'w-64') }}
-									</h3>
-									<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-										<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-									</button>
-								</div>
-								<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-									<canvas id="regulatoryRatiosChart"></canvas>
-								</div>
-							</div>
-						{% endif %}
-
-						{# --- NEW UNIVERSAL CHARTS --- #}
-						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Valuation Multiples</span>
-									{{ _self.tooltip('Displays historical Price-to-Earnings (P/E), Price-to-Book (P/B), and Price-to-Sales (P/S) multiples over time.', 'left', 'w-64') }}
-								</h3>
-								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-								</button>
-							</div>
-							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="valuationMultiplesChart"></canvas>
-							</div>
-						</div>
-
-						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Per-Share Value & Dilution</span>
-									{{ _self.tooltip('Tracks Earnings Per Share (EPS), Book Value Per Share (BVPS), and total Shares Outstanding (monitoring buyback retirement vs dilution).', 'right', 'w-64') }}
-								</h3>
-								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-								</button>
-							</div>
-							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="shareholderValueChart"></canvas>
-							</div>
-						</div>
-
-						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Free Cash Flow & Reinvestment</span>
-									{{ _self.tooltip('Compares Free Cash Flow (FCF = Net Income - CapEx) against FCF Conversion Rate (%) and Net Retained Cash after shareholder distributions.', 'left', 'w-64') }}
-								</h3>
-								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-								</button>
-							</div>
-							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="cashFlowSummaryChart"></canvas>
-							</div>
-						</div>
-
-						{# --- SECTOR & BUSINESS MODEL TAILORED CHARTS --- #}
-						{% if businessModel|default('none') in ['commercial_bank', 'credit_services', 'shadow_bank'] %}
-							<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-								<div class="flex justify-between items-center mb-6">
-									<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Net Interest Income & Spread</span>
-										{{ _self.tooltip('Plots Interest Income vs Interest Expense (bars) overlaid with the Net Interest Margin spread between Blended Rate and Deposit APY.', 'right', 'w-64') }}
-									</h3>
-									<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-										<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-									</button>
-								</div>
-								<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-									<canvas id="netInterestEngineChart"></canvas>
-								</div>
-							</div>
-						{% endif %}
-
-						{% if businessModel|default('none') == 'insurance' %}
-							<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-								<div class="flex justify-between items-center mb-6">
-									<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Underwriting vs Float Income</span>
-										{{ _self.tooltip('Illustrates the dual-engine insurance model: Underwriting Profit vs Investment Float Income, overlaid with the Combined Ratio.', 'right', 'w-64') }}
-									</h3>
-									<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-										<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-									</button>
-								</div>
-								<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-									<canvas id="insuranceDualEngineChart"></canvas>
-								</div>
-							</div>
-						{% endif %}
-
-						{% if businessModel|default('none') == 'reit' %}
-							<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-								<div class="flex justify-between items-center mb-6">
-									<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">REIT Coverage & LTV</span>
-										{{ _self.tooltip('Monitors Dividend Coverage/Payout Ratio (%) and Loan-to-Value (LTV) leverage ratio alongside the Cap Rate vs WACC spread.', 'right', 'w-64') }}
-									</h3>
-									<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-										<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-									</button>
-								</div>
-								<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-									<canvas id="reitCoverageChart"></canvas>
-								</div>
-							</div>
-						{% endif %}
-
-						{% if businessModel|default('none') in ['tech', 'semiconductor', 'biotech', 'defense_contractor'] %}
-							<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-								<div class="flex justify-between items-center mb-6">
-									<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">R&D & Reinvestment Intensity</span>
-										{{ _self.tooltip('Tracks CapEx to Revenue ratio (%) and Operating Margin (%) to highlight capital reinvestment intensity and future compounding power.', 'right', 'w-64') }}
-									</h3>
-									<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-										<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-									</button>
-								</div>
-								<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-									<canvas id="reinvestmentIntensityChart"></canvas>
-								</div>
-							</div>
-						{% endif %}
-
-						{% if businessModel|default('none') in ['commodity', 'shipping'] %}
-							<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-								<div class="flex justify-between items-center mb-6">
-									<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Cyclical Dynamics & Deleveraging</span>
-										{{ _self.tooltip('Visualizes commodity/shipping cycle peaks and troughs: Operating Margin (%) compared against Total Debt paydown and Treasury accumulation.', 'right', 'w-64') }}
-									</h3>
-									<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-										<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-									</button>
-								</div>
-								<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-									<canvas id="cyclicalDynamicsChart"></canvas>
-								</div>
-							</div>
-						{% endif %}
-
-					</div>
-				{% else %}
-					{# MACRO CHARTS #}
-					<div class="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 mt-2">
-						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Economic Engine</span>
-									{{ _self.tooltip('Headline inflation, output gap (cyclical economic deviation from potential capacity), and structural physical capital stock overhang.', 'left', 'w-64') }}
-								</h3>
-								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-								</button>
-							</div>
-							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="macroEconomyChart"></canvas>
-							</div>
-						</div>
-						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Interest Rates</span>
-									{{ _self.tooltip('Sovereign yield curve across key benchmark tenors (Policy Rate, 2Y, 5Y, 10Y, 30Y) alongside the benchmark 2s10s yield curve slope.', 'right', 'w-64') }}
-								</h3>
-								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-								</button>
-							</div>
-							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="macroRatesChart"></canvas>
-							</div>
-						</div>
-						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Mortgage Market</span>
-									{{ _self.tooltip('Long-term 30-year fixed residential mortgage yields compared against the central policy benchmark and origination spreads.', 'left', 'w-64') }}
-								</h3>
-								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-								</button>
-							</div>
-							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="macroMortgageChart"></canvas>
-							</div>
-						</div>
-						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Systemic Risk</span>
-									{{ _self.tooltip('Composite market risk metrics: equity volatility index, equity risk premium (ERP), corporate borrowing benchmarks, and statutory corporate tax rates.', 'right', 'w-64') }}
-								</h3>
-								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-								</button>
-							</div>
-							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="macroRiskChart"></canvas>
-							</div>
-						</div>
-						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Labor & Consumer Credit Health</span>
-									{{ _self.tooltip('Macroeconomic labor market unemployment rate alongside consumer and retail credit default rates.', 'left', 'w-64') }}
-								</h3>
-								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-								</button>
-							</div>
-							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="macroLaborCreditChart"></canvas>
-							</div>
-						</div>
-						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Commodities & Raw Materials</span>
-									{{ _self.tooltip('Commodity price indices tracking energy, industrial metals, and agricultural raw materials.', 'right', 'w-64') }}
-								</h3>
-								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-								</button>
-							</div>
-							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="macroCommoditiesChart"></canvas>
-							</div>
-						</div>
-						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Real Estate & Property Valuation</span>
-									{{ _self.tooltip('Commercial real estate (CRE) and residential property price indices evaluating asset valuation and housing market trends.', 'left', 'w-64') }}
-								</h3>
-								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-								</button>
-							</div>
-							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="macroPropertyChart"></canvas>
-							</div>
-						</div>
-						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Global Trade & Freight Logistics</span>
-									{{ _self.tooltip('Foreign exchange currency valuation index and global ocean freight spot charter rate indices.', 'right', 'w-64') }}
-								</h3>
-								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-								</button>
-							</div>
-							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="macroTradeLogisticsChart"></canvas>
-							</div>
-						</div>
-						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Consumer Sentiment Index</span>
-									{{ _self.tooltip('Consumer sentiment index measuring household financial confidence, economic outlook, and consumer demand conditions.', 'left', 'w-64') }}
-								</h3>
-								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-								</button>
-							</div>
-							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="macroSentimentChart"></canvas>
-							</div>
-						</div>
-						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Fiscal & Defense Appropriations</span>
-									{{ _self.tooltip('Government fiscal appropriations index tracking public sector expenditure and budget outlays.', 'right', 'w-64') }}
-								</h3>
-								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-								</button>
-							</div>
-							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="macroGovtSpendingChart"></canvas>
-							</div>
-						</div>
-						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 transition-all duration-300">
-							<div class="flex justify-between items-center mb-6">
-								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Interbank Liquidity & Credit Plumbing</span>
-									{{ _self.tooltip('Interbank liquidity spread (FRA-OIS / TED spread proxy) and benchmark corporate investment-grade credit spreads.', 'left', 'w-64') }}
-								</h3>
-								<button type="button" class="expand-chart-btn text-on-surface-variant hover:text-primary transition-colors focus:outline-none" title="Toggle Expand">
-									<span class="material-symbols-outlined text-[18px] expand-icon">open_in_full</span>
-								</button>
-							</div>
-							<div class="chart-canvas-container relative h-48 w-full transition-all duration-300">
-								<canvas id="macroInterbankLiquidityChart"></canvas>
-							</div>
-						</div>
-					</div>
-				{% endif %}
-
-
 			</div>
+		</div>
 
-			<div class="lg:col-span-4 space-y-6 lg:space-y-8">
-
-				<div class="glass-panel rounded-2xl p-6 lg:p-8 border border-primary/20 shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] relative overflow-hidden">
-					<div class="absolute -right-10 -top-10 w-40 h-40 bg-primary/10 rounded-full blur-3xl pointer-events-none"></div>
-
-					<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface mb-6 flex items-center gap-2">
-						<span class="material-symbols-outlined text-primary text-sm">swap_horiz</span>
-						Execute Trade
-					</h3>
-
-					{% if not isEtf and asset.isBankrupt %}
-						<div class="p-5 bg-red-950/20 border border-red-500/20 rounded-xl space-y-3 relative z-10">
-							<div class="flex items-center gap-2 text-red-400 font-bold text-xs uppercase tracking-wider">
-								<span class="material-symbols-outlined text-base">block</span>
-								Trading Halted
-							</div>
-							<p class="text-xs text-on-surface-variant leading-relaxed">
-								This corporation has collapsed into insolvency and entered Chapter 7 bankruptcy liquidation. All shareholder equity has been cancelled and trading is permanently halted.
-							</p>
-							<div class="pt-2 border-t border-red-500/10 flex justify-between items-center text-[10px] font-mono text-red-400/80 uppercase tracking-widest">
-								<span>Status: Insolvent</span>
-								<span>Price: $0.00</span>
-							</div>
-						</div>
-					{% else %}
-						{% if userQuantity > 0 %}
-							<div class="mb-6 p-4 bg-surface-container-lowest/50 rounded-xl border border-outline-variant/10">
-								<div class="flex justify-between items-center">
-									<span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Your Position</span>
-									<span class="text-sm font-bold text-on-surface">{{ userQuantity|number_format }}
-										Shares</span>
-								</div>
-								<div class="flex justify-between items-center mt-2">
-									<span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Market Value</span>
-									<span class="text-sm font-bold text-secondary" id="user-holding-value">${{ (userQuantity * asset.price)|number_format(2) }}</span>
-								</div>
-							</div>
-						{% endif %}
-
-						<form action="/trade/execute" method="POST" class="space-y-5 relative z-10">
-							<input type="hidden" name="ticker" value="{{ asset.ticker }}">
-							<input type="hidden" name="_token" value="{{ csrf_token('execute_trade') }}">
-
-							<div class="flex gap-2">
-								<label class="flex-1 cursor-pointer">
-									<input type="radio" name="orderType" value="MARKET" class="peer sr-only" checked onchange="document.getElementById('limitPriceContainer').style.display='none'">
-									<div class="rounded-xl px-3 py-2 text-center text-[10px] font-bold uppercase tracking-widest text-on-surface-variant border border-outline-variant/30 peer-checked:bg-primary/10 peer-checked:text-primary peer-checked:border-primary/30 transition-all">Market</div>
-								</label>
-								<label class="flex-1 cursor-pointer">
-									<input type="radio" name="orderType" value="LIMIT" class="peer sr-only" onchange="document.getElementById('limitPriceContainer').style.display='block'">
-									<div class="rounded-xl px-3 py-2 text-center text-[10px] font-bold uppercase tracking-widest text-on-surface-variant border border-outline-variant/30 peer-checked:bg-primary/10 peer-checked:text-primary peer-checked:border-primary/30 transition-all">Limit</div>
-								</label>
-							</div>
-
-							<div>
-								<label class="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">Quantity ({{ asset.ticker }})</label>
-								<div class="relative">
-									<input type="number" name="quantity" min="1" value="10" class="w-full bg-surface-container-highest border-none rounded-xl text-lg font-bold text-on-surface focus:ring-1 focus:ring-primary py-4 px-4 transition-all">
-								</div>
-							</div>
-
-							<div id="limitPriceContainer" style="display:none">
-								<label class="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">Limit Price ($)</label>
-								<div class="relative">
-									<input type="number" name="limitPrice" min="0.01" step="0.01" placeholder="{{ asset.price|number_format(2) }}" class="w-full bg-surface-container-highest border-none rounded-xl text-lg font-bold text-on-surface focus:ring-1 focus:ring-primary py-4 px-4 transition-all">
-								</div>
-							</div>
-
-							<div class="grid grid-cols-2 gap-3 pt-2">
-								<button type="submit" name="action" value="BUY" class="flex w-full justify-center rounded-xl bg-secondary px-3 py-3.5 text-sm font-bold text-[#002113] shadow-lg shadow-secondary/20 hover:brightness-110 active:scale-95 transition-all">
-									BUY
-								</button>
-								<button type="submit" name="action" value="SELL" class="flex w-full justify-center rounded-xl bg-surface-container-high px-3 py-3.5 text-sm font-bold text-on-surface hover:bg-surface-bright active:scale-95 transition-all">
-									SELL
-								</button>
-							</div>
-						</form>
-					{% endif %}
-				</div>
-
-
+		{# --- TAB NAVIGATION BAR (ALL ENGLISH) --- #}
+		<div class="flex border-b border-outline-variant/15 overflow-x-auto gap-2 sm:gap-6 pb-px custom-scrollbar">
+			<button class="stock-tab-btn pb-3 px-1 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-primary border-primary" data-tab="overview">
+				<span class="material-symbols-outlined text-base">monitoring</span>
+				Overview
+			</button>
+			{% if isEtf %}
+				<button class="stock-tab-btn pb-3 px-1 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent" data-tab="macro">
+					<span class="material-symbols-outlined text-base">public</span>
+					Macro Trends & Indicators
+				</button>
+			{% else %}
+				<button class="stock-tab-btn pb-3 px-1 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent" data-tab="financials">
+					<span class="material-symbols-outlined text-base">analytics</span>
+					Financials & Fundamentals
+				</button>
+				<button class="stock-tab-btn pb-3 px-1 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent" data-tab="sector">
+					<span class="material-symbols-outlined text-base">corporate_fare</span>
+					Company & Sector
+				</button>
+			{% endif %}
+			<button class="stock-tab-btn pb-3 px-1 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent" data-tab="orders">
+				<span class="material-symbols-outlined text-base">swap_vert</span>
+				Order Depth & Trades
 				{% if openOrders|length > 0 %}
-					<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15">
-						<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface mb-6 flex items-center gap-2">
-							<span class="material-symbols-outlined text-sm">schedule</span>
-							Open Orders
+					<span class="px-2 py-0.5 rounded-full text-[10px] bg-primary/20 text-primary font-mono font-bold">{{ openOrders|length }}</span>
+				{% endif %}
+			</button>
+		</div>
+
+		{# ========================================================================= #}
+		{# TAB 1: OVERVIEW #}
+		{# ========================================================================= #}
+		<div id="stock-tab-content-overview" class="stock-tab-panel">
+			<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+				
+				{# Left Column: Chart & About #}
+				<div class="lg:col-span-8 space-y-6">
+					{# Main Price Chart Card #}
+					<div class="bg-surface-container-low shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-6 lg:p-8 border border-outline-variant/15">
+						<div class="flex overflow-x-auto gap-1 sm:gap-2 mb-4 bg-surface-container-lowest p-1 rounded-lg w-full md:w-max [&::-webkit-scrollbar]:hidden" style="scrollbar-width: none; -ms-overflow-style: none;">
+							<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center" data-range="1w">1W</button>
+							<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center" data-range="1m">1M</button>
+							<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center" data-range="6m">6M</button>
+							<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-primary text-[#001a42] shadow-md shadow-primary/20 transition-colors text-center" data-range="1y">1Y</button>
+							<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center" data-range="3y">3Y</button>
+							<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center" data-range="5y">5Y</button>
+							<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center" data-range="10y">10Y</button>
+							<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center" data-range="max">MAX</button>
+						</div>
+
+						<div class="w-full h-[300px] md:h-[450px] relative rounded-xl overflow-hidden">
+							<div id="chart-spinner" class="hidden absolute inset-0 z-50 flex items-center justify-center bg-surface-container-low/60 backdrop-blur-sm transition-opacity duration-300">
+								<svg class="animate-spin h-12 w-12 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewbox="0 0 24 24">
+									<circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+									<path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+								</svg>
+							</div>
+							<div id="mainChartContainer" class="w-full h-full"></div>
+						</div>
+					</div>
+
+					{# About Card #}
+					<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 lg:p-8 border border-outline-variant/15">
+						<h3 class="text-xs font-bold uppercase tracking-widest text-primary mb-4 flex items-center gap-2">
+							<span class="material-symbols-outlined text-base">info</span>
+							About {{ asset.name }}
 						</h3>
-						<div class="space-y-3">
-							{% for order in openOrders %}
-								<div class="flex items-center justify-between p-3 rounded-lg bg-surface-container-lowest border border-outline-variant/10">
-									<div>
-										<div class="flex items-center gap-2">
-											<span class="text-xs font-bold {{ order.action == 'BUY' ? 'text-secondary' : 'text-primary' }}">{{ order.action }}</span>
-											<span class="text-xs font-bold text-on-surface">{{ order.quantity|number_format }}
-												shares</span>
+						<div class="text-sm font-serif text-on-surface-variant leading-relaxed tracking-wide">
+							<p>{{ generalInfo|nl2br }}</p>
+						</div>
+					</div>
+
+					{# Corporate News / Events Feed #}
+					<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 lg:p-8 border border-outline-variant/15">
+						<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface mb-4 flex items-center gap-2">
+							<span class="material-symbols-outlined text-primary text-base">newspaper</span>
+							Recent Company Events & News
+						</h3>
+						<div class="space-y-3" id="events-feed">
+							{% for event in events %}
+								<div class="p-3.5 rounded-xl bg-surface-container-lowest/60 border border-outline-variant/10 flex items-start gap-3">
+									<span class="material-symbols-outlined text-base text-primary mt-0.5">campaign</span>
+									<div class="flex-1 min-w-0">
+										<div class="flex items-center justify-between gap-2">
+											<span class="text-xs font-bold text-on-surface">{{ event.headline|default(event.description) }}</span>
+											<span class="text-[10px] text-on-surface-variant font-mono whitespace-nowrap">{{ event.recordedAt|date('Y-m-d H:i') }}</span>
 										</div>
-										<div class="text-[10px] text-on-surface-variant mt-1">@ ${{ order.limitPrice|number_format(2) }}</div>
+										{% if event.description and event.headline is defined and event.headline != event.description %}
+											<p class="text-xs text-on-surface-variant mt-1 leading-relaxed">{{ event.description }}</p>
+										{% endif %}
 									</div>
-									<form action="/trade/cancel/{{ order.id }}" method="POST">
-										<input type="hidden" name="_token" value="{{ csrf_token('cancel_trade_' ~ order.id) }}">
-										<button type="submit" class="p-1.5 rounded-md text-on-surface-variant hover:text-error hover:bg-error/10 transition-colors" title="Cancel Order">
-											<span class="material-symbols-outlined text-sm">close</span>
-										</button>
-									</form>
 								</div>
+							{% else %}
+								<p class="text-xs text-on-surface-variant font-serif py-4 text-center">No recent corporate events logged.</p>
 							{% endfor %}
 						</div>
 					</div>
-				{% endif %}
+				</div>
 
-				{% if not isEtf %}
-					<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15">
-						<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface mb-6">Market Fundamentals</h3>
+				{# Right Column: Trading Box, Position & Fundamentals #}
+				<div class="lg:col-span-4 space-y-6">
 
+					{# Trading Widget #}
+					<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)]">
+						<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface mb-4 flex items-center gap-2">
+							<span class="material-symbols-outlined text-primary text-base">currency_exchange</span>
+							Trade {{ asset.ticker }}
+						</h3>
 
-						<dl class="divide-y divide-outline-variant/5">
-							<div class="py-3 flex justify-between items-center">
-								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Market Cap</span>
-									{{ _self.tooltip("The total valuation of the company's outstanding equity. (Price × Shares)") }}
-								</dt>
-								<dd class="text-sm font-semibold text-on-surface" id="stat-mkt-cap">${{ marketCap|format_large }}</dd>
+						{% if not isEtf and asset.isBankrupt %}
+							<div class="p-4 bg-red-950/20 border border-red-500/20 rounded-xl space-y-2">
+								<div class="flex items-center gap-2 text-red-400 font-bold text-xs uppercase tracking-wider">
+									<span class="material-symbols-outlined text-base">block</span>
+									Trading Halted
+								</div>
+								<p class="text-xs text-on-surface-variant leading-relaxed">
+									This corporation is in bankruptcy liquidation. Trading is permanently halted.
+								</p>
 							</div>
-							<div class="py-3 flex justify-between items-center">
-								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Shares Out</span>
-									{{ _self.tooltip('The total number of shares currently issued and held by the market.') }}
-								</dt>
-								<dd class="text-sm font-semibold text-on-surface" id="stat-shares">{{ asset.sharesOutstanding|number_format }}</dd>
-							</div>
-							<div class="py-3 flex justify-between items-center">
-								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">P/E Ratio</span>
-									{{ _self.tooltip('Price-to-Earnings. Measures the share price relative to the per-share profits.') }}
-								</dt>
-								<dd class="text-sm font-semibold text-on-surface" id="stat-pe">{{ peRatio|number_format(2) }}</dd>
-							</div>
-							<div class="py-3 flex justify-between items-center">
-								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">EPS (TTM)</span>
-									{{ _self.tooltip("Earnings Per Share (Trailing 12 Months). The company's total net income divided by its shares.") }}
-								</dt>
-								<dd class="text-sm font-semibold text-on-surface" id="stat-eps">${{ asset.earningsPerShare|number_format(2) }}</dd>
-							</div>
-							<div class="py-3 flex justify-between items-center">
-								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Volatility</span>
-									{{ _self.tooltip('A statistical measure of the dispersion of returns. Higher values indicate a riskier stock.') }}
-								</dt>
-								<dd class="text-sm font-semibold text-on-surface" id="stat-volatility">{{ ((asset.currentVolatility ?? asset.volatility) * 100)|number_format(2) }}%</dd>
-							</div>
-							<div class="py-3 flex justify-between items-center">
-								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Beta</span>
-									{{ _self.tooltip('Measures volatility relative to the market (LBI). > 1.0 is more volatile, < 1.0 is defensive.') }}
-								</dt>
-								<dd class="text-sm font-semibold text-on-surface">{{ asset.beta|number_format(2) }}</dd>
-							</div>
-							<div class="py-3 flex justify-between items-center">
-								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
-									{% if isFinancial|default(false) %}
-										<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">ROE</span>
-										{{ _self.tooltip('Return on Equity. Measures how effectively the company utilizes shareholders\' equity to generate profit.') }}
-								{% elseif businessModel|default('none') == 'reit' %}
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Cap Rate</span>
-									{{ _self.tooltip('Capitalization Rate (NOI / Property Value). Evaluates true real estate yield before debt service.') }}
-								{% else %}
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">ROIC</span>
-									{{ _self.tooltip('Return on Invested Capital. How efficiently the company utilizes capital to generate profit.') }}
-								{% endif %}
-							</dt>
-							<dd class="text-sm font-semibold text-on-surface" id="stat-roic">
-								{% if isFinancial|default(false) %}
-									{{ ((asset.currentRoe != 0 ? asset.currentRoe : asset.baselineRoe) * 100)|number_format(2) }}%
-								{% else %}
-									{{ ((asset.currentRoic != 0 ? asset.currentRoic : asset.baselineRoic) * 100)|number_format(2) }}%
-								{% endif %}
-							</dd>
-						</div>
-						<div class="py-3 flex justify-between items-center">
-							<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
-								<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Total Cash</span>
-								{{ _self.tooltip('Corporate Treasury. The total cash and liquid reserves sitting on the balance sheet.') }}
-							</dt>
-							<dd class="text-sm font-semibold text-on-surface" id="stat-treasury">${{ asset.corporateTreasury|format_large }}</dd>
-						</div>
-						<div class="py-3 flex justify-between items-center">
-							<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
-								<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Book Value</span>
-								{{ _self.tooltip('Total Equity. The absolute net value of the company if all debts were paid and assets liquidated.') }}
-							</dt>
-							<dd class="text-sm font-semibold text-on-surface" id="stat-equity">${{ asset.totalEquity|format_large }}</dd>
-						</div>
-						<div class="py-3 flex justify-between items-center">
-							<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
-								<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">D/E</span>
-								{{ _self.tooltip('Debt-to-Equity Ratio. Measures financial leverage. A higher ratio indicates dangerous debt levels.') }}
-							</dt>
-							<dd class="text-sm font-semibold text-on-surface" id="stat-debt-ratio">{{ asset.debtToEquityRatio|number_format(2) }}x</dd>
-						</div>
-						{% if not isEtf and asset.creditRating is defined %}
-							<div class="py-3 flex justify-between items-center">
-								<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
-									<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Credit Rating</span>
-									{{ _self.tooltip('Discrete credit rating bracket (AAA through D) evaluated from Merton structural distance-to-default.') }}
-								</dt>
-								<dd class="text-sm font-semibold text-on-surface" id="stat-credit-rating">{{ asset.creditRating }}</dd>
-							</div>
-						{% endif %}
-						<div class="py-3 flex justify-between items-center">
-							<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
-								<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Market Share</span>
-								{{ _self.tooltip("The company's dominance of its sector, measured against the broader District GDP (Evaluates Equity for Banks).") }}
-							</dt>
-							<dd class="text-sm font-semibold text-on-surface" id="stat-market-share">{{ (marketShare * 100)|number_format(2) }}%</dd>
-						</div>
-						<div class="py-3 flex justify-between items-center">
-							<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help focus-visible:outline-none" tabindex="0">
-								<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Jump Intensity</span>
-								{{ _self.tooltip('The frequency of sudden, massive price shocks caused by corporate events or systemic panics.') }}
-							</dt>
-							<dd class="text-sm font-semibold text-on-surface">{{ asset.jumpIntensity }}</dd>
-						</div>
-					</dl>
-
-					{% if isFinancial|default(false) %}
-						{# DEDICATED ASSET BREAKDOWN VISUALIZATION FOR FINANCIAL INSTITUTIONS #}
-						<div class="mt-6 p-4 bg-surface-container-highest rounded-xl border border-outline-variant/20 shadow-inner">
-							<div class="flex flex-wrap justify-between items-center gap-2 mb-3">
-								<div class="flex items-center gap-3">
-									<h4 class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant flex items-center gap-1.5">
-										<span class="material-symbols-outlined text-[14px]">account_balance</span>
-										Asset & Balance Sheet Structure
-									</h4>
-									{% if businessModel|default('none') in ['commercial_bank', 'credit_services', 'shadow_bank'] %}
-										<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container text-[10px] font-bold border border-outline-variant/10" title="Net Interest Spread between Blended Rate and Deposit APY/Cash Yield">
-											<span class="text-on-surface-variant">Spread:</span>
-											<span id="stat-bank-spread" class="font-mono text-primary">--%</span>
+						{% else %}
+							{% if userQuantity > 0 %}
+								<div class="mb-4 p-4 bg-surface-container-lowest/60 rounded-xl border border-outline-variant/10 space-y-2">
+									<div class="flex justify-between items-center text-xs">
+										<span class="text-on-surface-variant uppercase tracking-wider text-[10px] font-bold">Your Position</span>
+										<span class="font-bold text-on-surface font-mono">{{ userQuantity|number_format }} Shares</span>
+									</div>
+									<div class="flex justify-between items-center text-xs">
+										<span class="text-on-surface-variant uppercase tracking-wider text-[10px] font-bold">Avg Cost Basis</span>
+										<span class="font-mono text-on-surface-variant">${{ userAvgCost|number_format(2) }}</span>
+									</div>
+									<div class="flex justify-between items-center text-xs">
+										<span class="text-on-surface-variant uppercase tracking-wider text-[10px] font-bold">Market Value</span>
+										<span class="font-bold text-on-surface font-mono" id="user-holding-value">${{ (userQuantity * asset.price)|number_format(2) }}</span>
+									</div>
+									<div class="flex justify-between items-center text-xs pt-1 border-t border-outline-variant/10">
+										<span class="text-on-surface-variant uppercase tracking-wider text-[10px] font-bold">Unrealized Return</span>
+										<span class="font-mono font-bold {{ userUnrealizedPnL >= 0 ? 'text-secondary' : 'text-tertiary' }}">
+											{{ userUnrealizedPnL >= 0 ? '+' : '' }}${{ userUnrealizedPnL|number_format(2) }} ({{ userUnrealizedPnL >= 0 ? '+' : '' }}{{ userUnrealizedPnLPercent|number_format(2) }}%)
 										</span>
-									{% endif %}
+									</div>
 								</div>
-								<div class="flex items-center gap-3 text-[10px] font-bold text-on-surface-variant">
-									<span>Total Assets: $<span id="stat-total-assets">{{ (asset.corporateTreasury + investedCapital)|format_large }}</span>
-									</span>
-									{% set totalEquityVal = asset.totalEquity|default(1) %}
-									{% set leverageMult = totalEquityVal > 0 ? ((asset.corporateTreasury + investedCapital) / totalEquityVal) : 1.0 %}
-									<span class="pl-2 border-l border-outline-variant/30">Leverage:
-										<span id="stat-leverage-mult" class="text-primary font-mono">{{ leverageMult|number_format(1) }}x</span>
-									</span>
-								</div>
-							</div>
-
-							{% set totalAssets = asset.corporateTreasury + investedCapital %}
-							{% set loanPct = totalAssets > 0 ? (investedCapital / totalAssets) * 100 : 0 %}
-							{% set cashPct = totalAssets > 0 ? (asset.corporateTreasury / totalAssets) * 100 : 0 %}
-
-							{% set assetTypeLabel = 'Invested Capital' %}
-							{% set assetTypeTooltip = 'Capital deployed into earning operations and portfolio assets.' %}
-							{% set cashLabel = 'Treasury Reserves' %}
-							{% set cashTooltip = 'Liquid cash and reserve assets held on balance sheet.' %}
-
-							{% if businessModel|default('none') == 'commercial_bank' %}
-								{% set assetTypeLabel = 'Loan Book' %}
-								{% set assetTypeTooltip = 'The total value of active loans generating interest income.' %}
-								{% set cashLabel = 'Vault Cash' %}
-								{% set cashTooltip = 'Fractional reserve cash held at the Central Bank to safely cover customer deposit withdrawals.' %}
-							{% elseif businessModel|default('none') == 'insurance' %}
-								{% set assetTypeLabel = 'Investment Portfolio' %}
-								{% set assetTypeTooltip = 'The total value of premium float invested across markets to generate yield.' %}
-								{% set cashLabel = 'Claims Reserves' %}
-								{% set cashTooltip = 'Liquid cash reserves held to safely pay out policyholder claims.' %}
-							{% elseif businessModel|default('none') == 'credit_services' %}
-								{% set assetTypeLabel = 'Credit Receivables' %}
-								{% set assetTypeTooltip = 'The total value of revolving credit card balances generating interest income.' %}
-							{% elseif businessModel|default('none') == 'shadow_bank' %}
-								{% set assetTypeLabel = 'Wholesale & Mortgage Loans' %}
-								{% set assetTypeTooltip = 'High-yield non-bank lending and structured credit assets.' %}
-							{% elseif businessModel|default('none') == 'clearing_house' %}
-								{% set assetTypeLabel = 'Margin & Custody Assets' %}
-								{% set assetTypeTooltip = 'Initial margin deposits and collateral assets held from clearing members.' %}
-								{% set cashLabel = 'Guaranty Fund Cash' %}
-								{% set cashTooltip = 'Liquid reserves held to absorb counterparty default shocks.' %}
-							{% elseif businessModel|default('none') in ['brokerage', 'investment_bank'] %}
-								{% set assetTypeLabel = 'Trading & Capital Markets Assets' %}
-								{% set assetTypeTooltip = 'Capital deployed in securities, underwriting, and market making inventory.' %}
-							{% elseif businessModel|default('none') in ['asset_manager', 'private_equity', 'distressed_debt'] %}
-								{% set assetTypeLabel = 'Deployed Capital' %}
-								{% set assetTypeTooltip = 'Capital deployed into portfolio investments and fund operations.' %}
 							{% endif %}
 
-							<div class="w-full h-2.5 flex rounded-full overflow-hidden mb-3 bg-surface-container-low border border-outline-variant/10">
-								<div id="bar-loan-book" class="bg-primary transition-all duration-500" style="width: {{ loanPct }}%;" title="{{ assetTypeLabel }}: {{ loanPct|number_format(1) }}%"></div>
-								<div id="bar-cash" class="bg-secondary transition-all duration-500" style="width: {{ cashPct }}%;" title="{{ cashLabel }}: {{ cashPct|number_format(1) }}%"></div>
-							</dt>
-						</div>
+							<form action="/trade/execute" method="POST" class="space-y-4">
+								<input type="hidden" name="ticker" value="{{ asset.ticker }}">
+								<input type="hidden" name="_token" value="{{ csrf_token('execute_trade') }}">
 
-						<div class="flex justify-between items-start text-[10px] font-bold uppercase tracking-widest mt-2">
-							<div class="text-primary group relative cursor-help">
-								<span class="border-b border-dotted border-primary/50" id="label-loan-book">{{ assetTypeLabel }}
-									({{ loanPct|number_format(1) }}%)</span>
-								<div class="text-sm font-bold text-on-surface mt-1">$<span id="stat-loan-book">{{ investedCapital|format_large }}</span>
+								<div class="flex gap-2 bg-surface-container-lowest p-1 rounded-xl border border-outline-variant/15">
+									<label class="flex-1 cursor-pointer">
+										<input type="radio" name="orderType" value="MARKET" class="peer sr-only" checked onchange="document.getElementById('limitPriceContainer').style.display='none'">
+										<div class="rounded-lg py-2 text-center text-xs font-bold uppercase tracking-widest text-on-surface-variant peer-checked:bg-primary peer-checked:text-[#001a42] transition-all">Market</div>
+									</label>
+									<label class="flex-1 cursor-pointer">
+										<input type="radio" name="orderType" value="LIMIT" class="peer sr-only" onchange="document.getElementById('limitPriceContainer').style.display='block'">
+										<div class="rounded-lg py-2 text-center text-xs font-bold uppercase tracking-widest text-on-surface-variant peer-checked:bg-primary peer-checked:text-[#001a42] transition-all">Limit</div>
+									</label>
 								</div>
-								{{ _self.tooltip(assetTypeTooltip, 'left', 'w-56') }}
-							</div>
-							<div class="text-secondary group relative cursor-help text-right">
-								<span class="border-b border-dotted border-secondary/50" id="label-vault-cash">{{ cashLabel }}
-									({{ cashPct|number_format(1) }}%)</span>
-								<div class="text-sm font-bold text-on-surface mt-1">$<span id="stat-vault-cash">{{ asset.corporateTreasury|format_large }}</span>
+
+								<div>
+									<label class="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Quantity (Shares)</label>
+									<input type="number" name="quantity" min="1" value="10" class="w-full bg-surface-container-highest border-none rounded-xl text-base font-bold text-on-surface font-mono focus:ring-1 focus:ring-primary py-3 px-4 transition-all">
 								</div>
-								{{ _self.tooltip(cashTooltip, 'right', 'w-56') }}
-							</div>
-						</div>
+
+								<div id="limitPriceContainer" style="display:none">
+									<label class="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">Limit Price ($)</label>
+									<input type="number" name="limitPrice" min="0.01" step="0.01" placeholder="{{ asset.price|number_format(2) }}" class="w-full bg-surface-container-highest border-none rounded-xl text-base font-bold text-on-surface font-mono focus:ring-1 focus:ring-primary py-3 px-4 transition-all">
+								</div>
+
+								<div class="grid grid-cols-2 gap-3 pt-1">
+									<button type="submit" name="action" value="BUY" class="flex w-full justify-center rounded-xl bg-secondary px-3 py-3 text-sm font-bold text-[#002113] shadow-lg shadow-secondary/20 hover:brightness-110 active:scale-95 transition-all">
+										BUY
+									</button>
+									<button type="submit" name="action" value="SELL" class="flex w-full justify-center rounded-xl bg-surface-container-high px-3 py-3 text-sm font-bold text-on-surface hover:bg-surface-bright active:scale-95 transition-all">
+										SELL
+									</button>
+								</div>
+							</form>
+						{% endif %}
 					</div>
-				{% endif %}
-			</div>
 
-			<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15">
-				<div class="flex justify-between items-center mb-6">
-					<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
-						<span class="material-symbols-outlined text-sm">query_stats</span>
-						Analyst Consensus
-					</h3>
-					<span id="analyst-consensus-badge" class="hidden px-2 py-1 text-[10px] font-bold rounded-md uppercase tracking-widest"></span>
+					{# Key Fundamentals Grid Card #}
+					{% if not isEtf %}
+						<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)]">
+							<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface mb-4 flex items-center gap-2">
+								<span class="material-symbols-outlined text-primary text-base">query_stats</span>
+								Key Statistics
+							</h3>
+
+							<dl class="divide-y divide-outline-variant/5 text-xs">
+								<div class="py-2.5 flex justify-between items-center">
+									<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Market Cap</dt>
+									<dd class="font-bold text-on-surface font-mono" id="stat-mkt-cap">${{ marketCap|format_large }}</dd>
+								</div>
+								<div class="py-2.5 flex justify-between items-center">
+									<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Shares Out</dt>
+									<dd class="font-bold text-on-surface font-mono" id="stat-shares">{{ asset.sharesOutstanding|number_format }}</dd>
+								</div>
+								<div class="py-2.5 flex justify-between items-center">
+									<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">P/E Ratio</dt>
+									<dd class="font-bold text-on-surface font-mono" id="stat-pe">{{ peRatio ? peRatio|number_format(2) ~ 'x' : '-' }}</dd>
+								</div>
+								<div class="py-2.5 flex justify-between items-center">
+									<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">EPS (TTM)</dt>
+									<dd class="font-bold text-on-surface font-mono" id="stat-eps">${{ asset.earningsPerShare|number_format(2) }}</dd>
+								</div>
+								<div class="py-2.5 flex justify-between items-center">
+									<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Beta</dt>
+									<dd class="font-bold text-on-surface font-mono">{{ asset.beta|number_format(2) }}</dd>
+								</div>
+								<div class="py-2.5 flex justify-between items-center">
+									<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{{ isFinancial ? 'ROE' : 'ROIC' }}</dt>
+									<dd class="font-bold text-on-surface font-mono" id="stat-roic">
+										{% if isFinancial %}
+											{{ ((asset.currentRoe != 0 ? asset.currentRoe : asset.baselineRoe) * 100)|number_format(2) }}%
+										{% else %}
+											{{ ((asset.currentRoic != 0 ? asset.currentRoic : asset.baselineRoic) * 100)|number_format(2) }}%
+										{% endif %}
+									</dd>
+								</div>
+								<div class="py-2.5 flex justify-between items-center">
+									<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Book Value (Equity)</dt>
+									<dd class="font-bold text-on-surface font-mono" id="stat-equity">${{ asset.totalEquity|format_large }}</dd>
+								</div>
+								<div class="py-2.5 flex justify-between items-center">
+									<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Debt-to-Equity</dt>
+									<dd class="font-bold text-on-surface font-mono" id="stat-debt-ratio">{{ asset.debtToEquityRatio|number_format(2) }}x</dd>
+								</div>
+								{% if asset.creditRating is defined %}
+									<div class="py-2.5 flex justify-between items-center">
+										<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Credit Rating</dt>
+										<dd class="font-bold text-primary font-mono" id="stat-credit-rating">{{ asset.creditRating }}</dd>
+									</div>
+								{% endif %}
+							</dl>
+						</div>
+					{% endif %}
+
+					{% if isEtf %}
+						{# ETF Portfolio Allocation Card #}
+						<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)]">
+							<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface mb-4 flex items-center gap-2">
+								<span class="material-symbols-outlined text-primary text-base">pie_chart</span>
+								ETF Component Weightings
+							</h3>
+
+							<div class="h-64 relative w-full mb-4">
+								<canvas id="etfPieChart"></canvas>
+							</div>
+
+							{% if components is defined and components|length > 0 %}
+								<div class="space-y-2 mt-4 max-h-56 overflow-y-auto custom-scrollbar">
+									{% for comp in components %}
+										<div class="flex justify-between items-center text-xs p-2 rounded-lg bg-surface-container-lowest/60 border border-outline-variant/5">
+											<div class="flex items-center gap-2">
+												<a href="/stock/{{ comp.ticker }}" class="font-bold text-primary hover:underline font-mono">{{ comp.ticker }}</a>
+												<span class="text-on-surface-variant truncate max-w-[120px]">{{ comp.name|default('') }}</span>
+											</div>
+											<span class="font-bold text-on-surface font-mono">{{ comp.weight|default(0)|number_format(1) }}%</span>
+										</div>
+									{% endfor %}
+								</div>
+							{% endif %}
+						</div>
+
+						{# Macro Economic Vitals Card #}
+						<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)]">
+							<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface mb-4 flex items-center gap-2">
+								<span class="material-symbols-outlined text-primary text-base">speed</span>
+								Economic Vitals
+							</h3>
+							<dl class="divide-y divide-outline-variant/5 text-xs">
+								<div class="py-2.5 flex justify-between items-center">
+									<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Inflation (CPI)</dt>
+									<dd class="font-bold text-on-surface font-mono" id="macro-inflation">-</dd>
+								</div>
+								<div class="py-2.5 flex justify-between items-center">
+									<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Output Gap</dt>
+									<dd class="font-bold text-on-surface font-mono" id="macro-output-gap">-</dd>
+								</div>
+								<div class="py-2.5 flex justify-between items-center">
+									<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Central Bank Rate</dt>
+									<dd class="font-bold text-on-surface font-mono" id="macro-policy-rate">-</dd>
+								</div>
+								<div class="py-2.5 flex justify-between items-center">
+									<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">10Y Benchmark Yield</dt>
+									<dd class="font-bold text-on-surface font-mono" id="macro-yield">-</dd>
+								</div>
+								<div class="py-2.5 flex justify-between items-center">
+									<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Market Heat</dt>
+									<dd class="font-bold text-on-surface font-mono" id="market-heat-value">-</dd>
+								</div>
+							</dl>
+						</div>
+					{% endif %}
+
 				</div>
+			</div>
+		</div>
 
-				{# Add this new Blended Fair Value Box #}
-				<div class="flex justify-between items-center pb-4 mb-4 border-b border-outline-variant/20 bg-surface-container-highest p-4 rounded-xl">
+		{# ========================================================================= #}
+		{# TAB 2 (ETF): MACROECONOMIC TRENDS & INDICATORS #}
+		{# ========================================================================= #}
+		{% if isEtf %}
+			<div id="stock-tab-content-macro" class="stock-tab-panel hidden space-y-6">
+				<div class="flex justify-between items-center bg-surface-container-low p-6 rounded-2xl border border-outline-variant/15 shadow-lg">
 					<div>
-						<p class="text-xs font-bold uppercase tracking-widest text-primary">Consensus Fair Value</p>
-						<p class="text-[10px] text-on-surface-variant mt-1">Blended Target</p>
-					</div>
-					<div class="text-right">
-						<p class="text-xl font-bold text-on-surface" id="target-consensus">--</p>
+						<h2 class="text-xl font-bold text-on-surface">Macroeconomic Trends & Cycle Indicators</h2>
+						<p class="text-xs text-on-surface-variant mt-1">25-Year historical econometric cycle series across inflation, yield curves, credit spreads, and labor dynamics.</p>
 					</div>
 				</div>
 
-				<div class="space-y-4">
-
-					<div class="space-y-4">
-						<div class="flex justify-between items-center pb-4 border-b border-outline-variant/10">
-							<div>
-								<p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Growth Analyst</p>
-								<p class="text-xs text-on-surface-variant mt-0.5">DCF & Earnings</p>
-							</div>
-							<div class="text-right">
-								<p class="text-sm font-bold text-on-surface" id="target-growth">--</p>
-							</div>
-						</div>
-						<div class="flex justify-between items-center pb-4 border-b border-outline-variant/10">
-							<div>
-								<p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Income Analyst</p>
-								<p class="text-xs text-on-surface-variant mt-0.5">Dividend Yield</p>
-							</div>
-							<div class="text-right">
-								<p class="text-sm font-bold text-on-surface" id="target-income">--</p>
-							</div>
-						</div>
-						<div class="flex justify-between items-center">
-							<div>
-								<p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Value Analyst</p>
-								<p class="text-xs text-on-surface-variant mt-0.5">Liquidation Floor</p>
-							</div>
-							<div class="text-right">
-								<p class="text-sm font-bold text-on-surface" id="target-value">--</p>
-							</div>
-						</div>
-					</div>
-				</div>
-			</div>
-
-		{% else %}
-			<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15">
-
-				<div class="flex justify-between items-center mb-6 pb-4 border-b border-outline-variant/10">
-					<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface group relative cursor-help focus-visible:outline-none" tabindex="0">
-						<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Index Composition</span>
-						{{ _self.tooltip('The percentage weight of each company in the index, based on their live Market Capitalization.', 'left', 'w-64') }}
-					</h3>
-
-					<div class="flex items-center gap-2">
-						<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">District Volatility (VIX):</span>
-						<span id="district-vix" class="text-sm font-bold text-on-surface transition-colors">15.00%</span>
-					</div>
-				</div>
-
-				{# DISTRICT MACROECONOMICS DASHBOARD #}
-				<div class="bg-surface-container-lowest rounded-xl p-4 border border-outline-variant/10 mb-6">
-					<h4 class="text-[10px] font-bold uppercase tracking-widest text-primary mb-4 flex items-center gap-2">
-						<span class="material-symbols-outlined text-sm">monitoring</span>
-						Real-Time Macroeconomics
-					</h4>
-
-					<div
-						class="grid grid-cols-2 gap-4">
-						{# INFLATION #}
-						<div>
-							<div class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help inline-block focus-visible:outline-none" tabindex="0">
-								<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Inflation</span>
-								{{ _self.tooltip('The rate at which the general level of prices for goods and services is rising in the District.') }}
-							</div>
-							<p class="text-lg font-bold text-on-surface" id="macro-inflation">
-								{{ (macro.inflation|default(0) * 100)|number_format(2) }}%
-							</p>
-						</div>
-
-						{# OUTPUT GAP #}
-						<div>
-							<div class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help inline-block focus-visible:outline-none" tabindex="0">
-								<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Output Gap</span>
-								{{ _self.tooltip('The difference between actual economic output and potential. Positive indicates an overheated boom.', 'right') }}
-							</div>
-							<p class="text-lg font-bold text-on-surface" id="macro-output-gap">
-								{{ (macro.output_gap|default(0) * 100)|number_format(2) }}%
-							</p>
-						</div>
-
-						{# POLICY RATE #}
-						<div>
-							<div class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help inline-block focus-visible:outline-none" tabindex="0">
-								<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Policy Rate</span>
-								{{ _self.tooltip('The baseline interest rate set by central authorities, dictating borrowing costs for the entire District.') }}
-							</div>
-							<p class="text-lg font-bold text-on-surface" id="macro-policy-rate">
-								{{ (macro.policy_rate|default(0) * 100)|number_format(2) }}%
-							</p>
-						</div>
-
-						{# YIELD CURVE #}
-						<div>
-							<div class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant group relative cursor-help inline-flex items-center gap-1 focus-visible:outline-none" tabindex="0">
-								<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">10-Yr Yield</span>
-								{{ _self.tooltip("The interest rate on the District's 10-year bond. It serves as the benchmark for long-term corporate borrowing costs and heavily influences the broader business cycle.", 'right', 'w-64') }}
-							</div>
-							<p class="text-lg font-bold {% if macro.qe_active|default(false) %}text-secondary{% else %}text-on-surface{% endif %}" id="macro-yield">
-								{{ (macro.yield_10y|default(0) * 100)|number_format(2) }}%
-							</p>
-						</div>
+				<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+					{# Chart 1: Inflation & Output Gap #}
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg chart-card">
+						<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-4">Inflation & Economic Output Gap</h4>
+						<div class="h-72 relative"><canvas id="macroEconomyChart"></canvas></div>
 					</div>
 
-					{# QUANTITATIVE EASING STATUS #}
-					<div id="qe-status-container" class="mt-4 pt-3 border-t border-outline-variant/10 flex justify-between items-center transition-all duration-500 {% if not macro.qe_active|default(false) %}hidden{% endif %}">
-						<span class="text-[10px] font-bold text-secondary uppercase tracking-widest group relative cursor-help inline-flex items-center gap-2 focus-visible:outline-none" tabindex="0">
-							<span class="inline-flex w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
-							<span class="border-b border-dotted border-secondary/70 pb-0.5">Quantitative Easing:</span>
-							{{ _self.tooltip('The Central Bank is actively expanding its balance sheet to artificially suppress long-term yields and stimulate the economy.') }}
-						</span>
-						<span id="macro-qe-intensity" class="text-xs font-bold text-secondary">
-							-{{ (macro.qe_intensity|default(0) * 100)|number_format(2) }}% Yield Suppression
-						</span>
+					{# Chart 2: Yield Curve & Policy Rates #}
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg chart-card">
+						<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-4">Yield Curve & Term Structure (2Y/5Y/10Y)</h4>
+						<div class="h-72 relative"><canvas id="macroRatesChart"></canvas></div>
 					</div>
 
-					{# THE ECONOMIC STATUS BADGE #}
-					<div class="mt-2 pt-2 border-t border-outline-variant/10 flex justify-between items-center">
-						<span class="text-[10px] text-on-surface-variant group relative cursor-help inline-block focus-visible:outline-none" tabindex="0">
-							<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">District GDP:</span>
-							{{ _self.tooltip('Gross Domestic Product. The total nominal value of all goods and services produced in the Aerie.') }}
-						</span>
-						<span id="macro-gdp" class="text-xs font-bold text-on-surface">
-							${{ (50.00 * macro.nominal_gdp_index|default(1.0))|number_format(2) }}T
-						</span>
+					{# Chart 3: 30Y Mortgage Spread #}
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg chart-card">
+						<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-4">Mortgage Rates & Spread Dynamics (30Y)</h4>
+						<div class="h-72 relative"><canvas id="macroMortgageChart"></canvas></div>
 					</div>
 
-					<div class="mt-2 pt-2 flex justify-between items-center">
-						<span class="text-[10px] text-on-surface-variant group relative cursor-help inline-block focus-visible:outline-none" tabindex="0">
-							<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Current Cycle:</span>
-							{{ _self.tooltip('The prevailing macroeconomic state of the District. Determines systemic trends and baseline inflation.') }}
-						</span>
-						<span id="market-economic-cycle" class="text-xs font-bold uppercase tracking-widest text-primary">
-							{{ economic_cycle }}
-						</span>
+					{# Chart 4: Market Risk & ERP #}
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg chart-card">
+						<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-4">Risk Premia, Volatility & Corporate Rates</h4>
+						<div class="h-72 relative"><canvas id="macroRiskChart"></canvas></div>
 					</div>
-				</div>
 
-				<div class="relative h-72 w-full flex justify-center">
-					<canvas id="etfPieChart"></canvas>
+					{# Chart 5: Labor & Credit Defaults #}
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg chart-card">
+						<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-4">Labor Market & Consumer Credit Quality</h4>
+						<div class="h-72 relative"><canvas id="macroLaborCreditChart"></canvas></div>
+					</div>
+
+					{# Chart 6: Commodities Index #}
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg chart-card">
+						<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-4">Global Commodities & Energy Pricing</h4>
+						<div class="h-72 relative"><canvas id="macroCommoditiesChart"></canvas></div>
+					</div>
+
+					{# Chart 7: Property Markets #}
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg chart-card">
+						<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-4">Commercial & Residential Real Estate</h4>
+						<div class="h-72 relative"><canvas id="macroPropertyChart"></canvas></div>
+					</div>
+
+					{# Chart 8: Trade & FX #}
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg chart-card">
+						<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-4">Foreign Exchange & Shipping Freight Rates</h4>
+						<div class="h-72 relative"><canvas id="macroTradeLogisticsChart"></canvas></div>
+					</div>
+
+					{# Chart 9: Consumer Sentiment #}
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg chart-card">
+						<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-4">Consumer Sentiment & Confidence</h4>
+						<div class="h-72 relative"><canvas id="macroSentimentChart"></canvas></div>
+					</div>
+
+					{# Chart 10: Fiscal Spending #}
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg chart-card">
+						<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-4">Government Fiscal & Infrastructure Stimulus</h4>
+						<div class="h-72 relative"><canvas id="macroGovtSpendingChart"></canvas></div>
+					</div>
+
+					{# Chart 11: Interbank Liquidity #}
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg chart-card lg:col-span-2">
+						<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-4">TED Interbank Spread & Systemic Liquidity</h4>
+						<div class="h-72 relative"><canvas id="macroInterbankLiquidityChart"></canvas></div>
+					</div>
 				</div>
 			</div>
 		{% endif %}
 
-		<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15">
-			<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface mb-6 flex items-center gap-2">
-				<span class="material-symbols-outlined text-sm">feed</span>
-				Live Events
-			</h3>
-
-			<p id="no-events-msg" class="text-xs text-on-surface-variant {{ events is not empty ? 'hidden' : '' }}">No recent news reported.</p>
-			<ul id="events-list" role="list" class="divide-y divide-outline-variant/10">
-				{% for event in events %}
-					{% set isPositive = event.changePercent >= 0 %}
-					<li class="py-3">
-						<div class="flex items-start justify-between">
-							<div class="flex items-start gap-3 flex-1 min-w-0">
-								<div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 {{ isPositive ? 'bg-secondary/10 text-secondary' : 'bg-tertiary/10 text-tertiary' }}">
-									<span class="material-symbols-outlined text-sm">{{ event.eventType == 'SHOCK' ? 'bolt' : 'campaign' }}</span>
-								</div>
-								<div class="flex-1 min-w-0">
-									<p class="text-xs font-bold text-on-surface">{{ event.eventType }}</p>
-									<p class="text-[11px] text-on-surface-variant mt-1 leading-relaxed whitespace-pre-line">
-										{{ event.description }}
-									</p>
-								</div>
-							</div>
-
-							<div class="text-right flex-shrink-0 ml-2">
-								<span class="inline-flex items-center rounded bg-transparent px-1 py-0.5 text-xs font-bold {{ isPositive ? 'text-secondary' : 'text-tertiary' }}">
-									{{ isPositive ? '+' : '' }}{{ event.changePercent|number_format(2) }}%
-								</span>
-								<p class="text-[10px] text-on-surface-variant mt-1">
-									{{ event.recordedAt|date('H:i') }}
-								</p>
-							</div>
+		{# ========================================================================= #}
+		{# TAB 2: FINANCIALS & FUNDAMENTALS #}
+		{# ========================================================================= #}
+		{% if not isEtf %}
+			<div id="stock-tab-content-financials" class="stock-tab-panel hidden space-y-6">
+				
+				{# Financials Header & Timeframe Switcher #}
+				<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-surface-container-low border border-outline-variant/15 rounded-2xl p-4 gap-4 shadow-lg">
+					<div>
+						<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+							<span class="material-symbols-outlined text-primary text-base">analytics</span>
+							Fundamental Financial Statements & Analytics
+						</h3>
+						<p class="text-[11px] text-on-surface-variant mt-0.5">Quarterly and annual historical financial data</p>
+					</div>
+					<div class="flex items-center gap-3">
+						<button onclick="document.dispatchEvent(new CustomEvent('sankey:open'))" class="px-4 py-1.5 text-xs font-bold rounded-lg bg-surface-container text-primary border border-primary/20 hover:bg-primary/10 transition-all uppercase tracking-widest flex items-center gap-1.5">
+							<span class="material-symbols-outlined text-[16px]">account_tree</span>
+							Earnings Flow (Sankey)
+						</button>
+						<div class="flex space-x-1 bg-surface-container-lowest p-1 rounded-xl border border-outline-variant/15">
+							<button onclick="updateCharts('12Q')" id="btn-global-12Q" class="px-3 py-1 text-xs font-bold rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-all">12Q</button>
+							<button onclick="updateCharts('12Y')" id="btn-global-12Y" class="px-3 py-1 text-xs font-bold rounded-lg bg-primary text-[#001a42] shadow-md shadow-primary/20 transition-all">12Y</button>
 						</div>
-					</li>
-				{% endfor %}
-			</ul>
+					</div>
+				</div>
+
+				{# 6 Fundamental Statement Charts Grid #}
+				<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+					<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+						<div class="flex justify-between items-center mb-4">
+							<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface">Net Income Trend</h4>
+						</div>
+						<div class="relative h-56 w-full">
+							<canvas id="netIncomeChart"></canvas>
+						</div>
+					</div>
+
+					<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+						<div class="flex justify-between items-center mb-4">
+							<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface">Debt vs Equity</h4>
+						</div>
+						<div class="relative h-56 w-full">
+							<canvas id="debtEquityChart"></canvas>
+						</div>
+					</div>
+
+					<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+						<div class="flex justify-between items-center mb-4">
+							<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface">Credit Health & Maturity Wall</h4>
+						</div>
+						<div class="relative h-56 w-full">
+							<canvas id="creditHealthChart"></canvas>
+						</div>
+					</div>
+
+					<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+						<div class="flex justify-between items-center mb-4">
+							<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface">Capital Efficiency (EVA & Return)</h4>
+						</div>
+						<div class="relative h-56 w-full">
+							<canvas id="capitalEfficiencyChart"></canvas>
+						</div>
+					</div>
+
+					<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+						<div class="flex justify-between items-center mb-4">
+							<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface">Payout Allocation</h4>
+						</div>
+						<div class="relative h-56 w-full">
+							<canvas id="payoutRatioChart"></canvas>
+						</div>
+					</div>
+
+					<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+						<div class="flex justify-between items-center mb-4">
+							<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface">Valuation Multiples</h4>
+						</div>
+						<div class="relative h-56 w-full">
+							<canvas id="valuationMultiplesChart"></canvas>
+						</div>
+					</div>
+
+				</div>
+			</div>
+		{% endif %}
+
+		{# ========================================================================= #}
+		{# TAB 3: COMPANY & SECTOR #}
+		{# ========================================================================= #}
+		{% if not isEtf %}
+			<div id="stock-tab-content-sector" class="stock-tab-panel hidden space-y-6">
+				
+				{# Sector Profile & Business Model Details #}
+				<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)]">
+					<h3 class="text-xs font-bold uppercase tracking-widest text-primary mb-3 flex items-center gap-2">
+						<span class="material-symbols-outlined text-base">domain</span>
+						Sector Mechanics & Industry Profile
+					</h3>
+					<div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs mt-4">
+						<div class="p-4 rounded-xl bg-surface-container-lowest/60 border border-outline-variant/10">
+							<span class="text-on-surface-variant uppercase text-[10px] font-bold">Sector</span>
+							<p class="text-base font-bold text-on-surface mt-1">{{ asset.sector }}</p>
+						</div>
+						<div class="p-4 rounded-xl bg-surface-container-lowest/60 border border-outline-variant/10">
+							<span class="text-on-surface-variant uppercase text-[10px] font-bold">Industry</span>
+							<p class="text-base font-bold text-on-surface mt-1">{{ asset.industry|default('General') }}</p>
+						</div>
+						<div class="p-4 rounded-xl bg-surface-container-lowest/60 border border-outline-variant/10">
+							<span class="text-on-surface-variant uppercase text-[10px] font-bold">Market Share</span>
+							<p class="text-base font-bold text-primary font-mono mt-1">{{ (marketShare * 100)|number_format(2) }}%</p>
+						</div>
+					</div>
+				</div>
+
+				{# Sector Peer Comparison Table #}
+				<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)]">
+					<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface mb-4 flex items-center gap-2">
+						<span class="material-symbols-outlined text-primary text-base">compare_arrows</span>
+						Sector Peer Comparison ({{ asset.sector }})
+					</h3>
+
+					<div class="overflow-x-auto">
+						<table class="w-full text-left border-collapse min-w-[650px]">
+							<thead>
+								<tr class="text-[10px] text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/10">
+									<th class="py-3 font-bold">Company</th>
+									<th class="py-3 font-bold text-right">Price</th>
+									<th class="py-3 font-bold text-right">Market Cap</th>
+									<th class="py-3 font-bold text-right">P/E Ratio</th>
+									<th class="py-3 font-bold text-right">ROIC / ROE</th>
+									<th class="py-3 font-bold text-right">Total Equity</th>
+									<th class="py-3 font-bold text-right">Action</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-outline-variant/5 text-sm">
+								{# Current Stock Highlighted #}
+								<tr class="bg-primary/5 font-bold">
+									<td class="py-3 flex items-center gap-2">
+										<span class="text-primary font-mono">{{ asset.ticker }}</span>
+										<span class="text-on-surface text-xs">{{ asset.name }}</span>
+										<span class="px-1.5 py-0.2 rounded text-[9px] bg-primary/20 text-primary uppercase">Current</span>
+									</td>
+									<td class="py-3 text-right font-mono text-on-surface">${{ asset.price|number_format(2) }}</td>
+									<td class="py-3 text-right font-mono text-on-surface">${{ marketCap|format_large }}</td>
+									<td class="py-3 text-right font-mono text-on-surface">{{ peRatio ? peRatio|number_format(2) ~ 'x' : '-' }}</td>
+									<td class="py-3 text-right font-mono text-on-surface">{{ ((isFinancial ? (asset.currentRoe ?: asset.baselineRoe) : (asset.currentRoic ?: asset.baselineRoic)) * 100)|number_format(2) }}%</td>
+									<td class="py-3 text-right font-mono text-on-surface">${{ asset.totalEquity|format_large }}</td>
+									<td class="py-3 text-right text-xs text-on-surface-variant">-</td>
+								</tr>
+
+								{# Peer Companies #}
+								{% for peer in peers %}
+									<tr class="hover:bg-surface-container-high/40 transition-colors cursor-pointer group" onclick="window.location.href='/stock/{{ peer.ticker }}'">
+										<td class="py-3 flex items-center gap-2">
+											<span class="font-mono text-primary font-bold group-hover:underline">{{ peer.ticker }}</span>
+											<span class="text-on-surface-variant text-xs">{{ peer.name }}</span>
+										</td>
+										<td class="py-3 text-right font-mono text-on-surface">${{ peer.price|number_format(2) }}</td>
+										<td class="py-3 text-right font-mono text-on-surface">${{ peer.marketCap|format_large }}</td>
+										<td class="py-3 text-right font-mono text-on-surface">{{ peer.peRatio ? peer.peRatio|number_format(2) ~ 'x' : '-' }}</td>
+										<td class="py-3 text-right font-mono text-on-surface">{{ (peer.roic * 100)|number_format(2) }}%</td>
+										<td class="py-3 text-right font-mono text-on-surface">${{ peer.totalEquity|format_large }}</td>
+										<td class="py-3 text-right">
+											<a href="/stock/{{ peer.ticker }}" class="px-2.5 py-1 text-xs font-bold text-primary bg-primary/10 rounded-lg hover:bg-primary/20 transition-colors">
+												View
+											</a>
+										</td>
+									</tr>
+								{% else %}
+									<tr>
+										<td colspan="7" class="py-4 text-center text-xs text-on-surface-variant font-serif">No peer companies found in this sector.</td>
+									</tr>
+								{% endfor %}
+							</tbody>
+						</table>
+					</div>
+				</div>
+
+			</div>
+		{% endif %}
+
+		{# ========================================================================= #}
+		{# TAB 4: ORDER DEPTH & TRADES #}
+		{# ========================================================================= #}
+		<div id="stock-tab-content-orders" class="stock-tab-panel hidden space-y-6">
+			
+			{# Open Limit Orders for this Ticker #}
+			<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)]">
+				<div class="flex items-center justify-between mb-4">
+					<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+						<span class="material-symbols-outlined text-primary text-base">schedule</span>
+						Your Active Orders for {{ asset.ticker }}
+					</h3>
+					<span class="text-xs font-mono text-on-surface-variant">{{ openOrders|length }} active</span>
+				</div>
+
+				{% if openOrders|length > 0 %}
+					<div class="overflow-x-auto">
+						<table class="w-full text-left border-collapse min-w-[500px]">
+							<thead>
+								<tr class="text-[10px] text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/10">
+									<th class="py-3 font-bold">Placed Date</th>
+									<th class="py-3 font-bold">Action</th>
+									<th class="py-3 font-bold text-right">Shares</th>
+									<th class="py-3 font-bold text-right">Limit Price</th>
+									<th class="py-3 font-bold text-right">Total Est.</th>
+									<th class="py-3 font-bold text-right">Cancel</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-outline-variant/5 text-sm">
+								{% for order in openOrders %}
+									<tr>
+										<td class="py-3 text-xs text-on-surface-variant">{{ order.createdAt|date('Y-m-d H:i') }}</td>
+										<td class="py-3 font-bold {{ order.action == 'BUY' ? 'text-secondary' : 'text-primary' }}">{{ order.action }}</td>
+										<td class="py-3 text-right font-mono text-on-surface">{{ order.quantity|number_format }}</td>
+										<td class="py-3 text-right font-mono font-bold text-on-surface">${{ order.limitPrice|number_format(2) }}</td>
+										<td class="py-3 text-right font-mono text-on-surface-variant">${{ (order.limitPrice * order.quantity)|number_format(2) }}</td>
+										<td class="py-3 text-right">
+											<form action="/trade/cancel/{{ order.id }}" method="POST" class="inline">
+												<input type="hidden" name="_token" value="{{ csrf_token('cancel_trade_' ~ order.id) }}">
+												<button type="submit" class="px-2.5 py-1 text-xs font-bold text-tertiary bg-tertiary/10 hover:bg-tertiary/20 rounded-lg border border-tertiary/20 transition-colors">
+													Cancel
+												</button>
+											</form>
+										</td>
+									</tr>
+								{% endfor %}
+							</tbody>
+						</table>
+					</div>
+				{% else %}
+					<p class="py-6 text-center text-xs text-on-surface-variant font-serif">No open limit orders for {{ asset.ticker }}.</p>
+				{% endif %}
+			</div>
+
+			{# Your Past Trades on this Ticker #}
+			<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)]">
+				<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface mb-4 flex items-center gap-2">
+					<span class="material-symbols-outlined text-primary text-base">receipt_long</span>
+					Your Execution History for {{ asset.ticker }}
+				</h3>
+
+				{% if userTrades|length > 0 %}
+					<div class="overflow-x-auto">
+						<table class="w-full text-left border-collapse min-w-[500px]">
+							<thead>
+								<tr class="text-[10px] text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/10">
+									<th class="py-3 font-bold">Execution Date</th>
+									<th class="py-3 font-bold">Action</th>
+									<th class="py-3 font-bold text-right">Shares</th>
+									<th class="py-3 font-bold text-right">Executed Price</th>
+									<th class="py-3 font-bold text-right">Total</th>
+									<th class="py-3 font-bold text-right">Status</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-outline-variant/5 text-sm">
+								{% for trade in userTrades %}
+									<tr>
+										<td class="py-3 text-xs text-on-surface-variant">{{ (trade.filledAt ?? trade.createdAt)|date('Y-m-d H:i') }}</td>
+										<td class="py-3 font-bold {{ trade.action == 'BUY' ? 'text-secondary' : 'text-primary' }}">{{ trade.action }}</td>
+										<td class="py-3 text-right font-mono text-on-surface">{{ (trade.filledQuantity > 0 ? trade.filledQuantity : trade.quantity)|number_format }}</td>
+										<td class="py-3 text-right font-mono text-on-surface">${{ (trade.executionPrice ?? trade.limitPrice ?? 0.00)|number_format(2) }}</td>
+										<td class="py-3 text-right font-mono font-bold text-on-surface">
+											${{ ((trade.executionPrice ?? trade.limitPrice ?? 0.00) * (trade.filledQuantity > 0 ? trade.filledQuantity : trade.quantity))|number_format(2) }}
+										</td>
+										<td class="py-3 text-right">
+											<span class="px-2 py-0.5 text-[10px] font-bold rounded {{ trade.status == 'FILLED' ? 'bg-secondary/10 text-secondary border border-secondary/20' : 'bg-surface-container text-on-surface-variant' }}">
+												{{ trade.status }}
+											</span>
+										</td>
+									</tr>
+								{% endfor %}
+							</tbody>
+						</table>
+					</div>
+				{% else %}
+					<p class="py-6 text-center text-xs text-on-surface-variant font-serif">You have not executed any trades for {{ asset.ticker }} yet.</p>
+				{% endif %}
+			</div>
+
+		</div>
+
+	</div>
+
+	{# --- SANKEY MODAL (INCOME STATEMENT FLOW) --- #}
+	<div id="sankey-modal" data-controller="sankey" data-sankey-ticker-value="{{ asset.ticker }}" class="fixed inset-0 z-[100] hidden flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+		<div class="bg-surface-container-low border border-outline-variant/20 rounded-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+			<div class="flex justify-between items-center p-6 border-b border-outline-variant/10">
+				<div>
+					<h3 class="text-lg font-bold text-on-surface flex items-center gap-2">
+						<span class="material-symbols-outlined text-primary">account_tree</span>
+						Earnings Flow (Sankey Diagram) - {{ asset.ticker }}
+					</h3>
+					<p class="text-xs text-on-surface-variant mt-0.5">Visualizing revenue streams through operational costs to net profit and capital allocation.</p>
+				</div>
+				<button onclick="document.dispatchEvent(new CustomEvent('sankey:close'))" class="text-on-surface-variant hover:text-on-surface transition-colors">
+					<span class="material-symbols-outlined text-2xl">close</span>
+				</button>
+			</div>
+			<div class="flex-1 p-6 relative">
+				<div data-sankey-target="container" class="w-full h-full"></div>
+			</div>
 		</div>
 	</div>
 
-</div></div>{% endblock %}{% block javascripts %}<script>
-window.AERIE_DATA = {
-ticker: "{{ asset.ticker }}",
-isEtf: {{ isEtf ? 'true' : 'false' }},
-isFinancial: {{ isFinancial|default(false) ? 'true' : 'false' }},
-businessModel: "{{ businessModel|default('none') }}",
-sharesOutstanding: {{ isEtf ? 0 : asset.sharesOutstanding }},
-userQuantity: {{ userQuantity|default(0) }},
-eps: {{ isEtf ? 0 : asset.earningsPerShare|default(0) }},
-baselineVol: {{ isEtf ? 0.15 : asset.volatility }},
-pieLabels: [{% if isEtf and allAssets is defined %}{% for a in allAssets %}"{{ a.ticker }}"{{ not loop.last ? ',' : '' }}{% endfor %}{% endif %}],
-pieData: [{% if isEtf and allAssets is defined %}{% for a in allAssets %}{{ a.price * a.sharesOutstanding }}{{ not loop.last ? ',' : '' }}{% endfor %}{% endif %}],
-sharesMap: {
-{% if isEtf and allAssets is defined %}
-{% for a in allAssets %}
-"{{ a.ticker }}" : {{ a.sharesOutstanding }}
-{{ not loop.last ? ',' : '' }}
-{% endfor %}
-{% endif %}
-},
-ticksPerYear: {{ ticksPerYear }}
-};</script><script type="module">
-import 'pages/stock';</script>{% if not isEtf %}
-<dialog id="sankeyModal" class="backdrop:bg-surface-container-lowest/80 backdrop:backdrop-blur-sm bg-surface-container shadow-2xl rounded-2xl border border-outline-variant/20 p-6 w-[90vw] max-w-5xl open:animate-in open:fade-in open:zoom-in-95">
-	<div class="flex justify-between items-center mb-6">
-		<h3 class="text-lg font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
-			<span class="material-symbols-outlined text-primary text-xl">account_tree</span>
-			{{ asset.name }}
-			- Latest Earnings Flow
-		</h3>
-		<button onclick="document.getElementById('sankeyModal').close()" class="p-2 rounded-xl text-on-surface-variant hover:text-error hover:bg-error/10 transition-colors">
-			<span class="material-symbols-outlined">close</span>
-		</button>
-	</div>
-	<div id="sankeyContainer" data-controller="sankey" data-action="sankey:open@document->sankey#open" data-sankey-ticker-value="{{ asset.ticker }}" data-sankey-url-value="{{ path('api_earnings_flow') }}" class="w-full" style="height: 600px;"></div>
+{% endblock %}
+
+{% block javascripts %}
+	{{ parent() }}
+
 	<script>
-		const modal = document.getElementById('sankeyModal');
-modal.addEventListener('click', (e) => {
-if (e.target === modal) 
-modal.close();
-
-
-
-});
+		window.AERIE_DATA = {
+			ticker: "{{ asset.ticker }}",
+			isEtf: {{ isEtf ? 'true' : 'false' }},
+			businessModel: "{{ businessModel|default('none') }}",
+			isFinancial: {{ isFinancial ? 'true' : 'false' }},
+			sharesOutstanding: {{ asset.sharesOutstanding|default(1) }},
+			currentPrice: {{ asset.price|default(0) }},
+			userQuantity: {{ userQuantity|default(0) }},
+			eps: {{ not isEtf and asset.earningsPerShare is defined ? asset.earningsPerShare|default(0) : 0 }},
+			ticksPerYear: {{ ticksPerYear|default(14400) }},
+			pieLabels: {{ pieLabels is defined and pieLabels ? pieLabels|json_encode|raw : '[]' }},
+			pieData: {{ pieData is defined and pieData ? pieData|json_encode|raw : '[]' }},
+			sharesMap: {{ sharesMap is defined and sharesMap ? sharesMap|json_encode|raw : '{}' }}
+		};
 	</script>
-</dialog>{% endif %}{% endblock %}
+
+	<script type="module">
+		import 'pages/stock';
+	</script>
+{% endblock %}
