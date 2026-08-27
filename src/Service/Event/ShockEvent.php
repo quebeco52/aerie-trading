@@ -92,6 +92,11 @@ class ShockEvent
 
     public const APPAREL_SUPPLY_CHAIN_DISRUPTION = 'apparel_supply_chain_disruption';
     public const APPAREL_VIRAL_PRODUCT = 'apparel_viral_product';
+
+    public const CHEMICAL_CRACK_SPREAD_SQUEEZE = 'chemical_crack_spread_squeeze';
+    public const CHEMICAL_PLANT_TURNAROUND = 'chemical_plant_turnaround';
+    public const CHEMICAL_AGRI_BOOM = 'chemical_agri_boom';
 }
+
 
 

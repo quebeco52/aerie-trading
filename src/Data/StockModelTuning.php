@@ -626,6 +626,20 @@ class StockModelTuning
             ModelParam::CommercialWeight->value  => 0.30,
             ModelParam::RecyclingWeight->value   => 0.10,
         ],
+
+        // =====================================================================
+        // CHEMICAL & MATERIALS ARCHETYPES
+        // =====================================================================
+
+        // --- Fulmar Chemical Group (FULM) ---
+        // Integrated chemical conglomerate spanning bulk base olefins/aromatics,
+        // high-margin specialty electronic materials/catalysts, and fertilizer agrochemicals.
+        'FULM' => [
+            ModelParam::BasePetrochemicalsWeight->value => 0.50,
+            ModelParam::SpecialtyChemicalsWeight->value => 0.30,
+            ModelParam::AgrochemicalsWeight->value      => 0.20,
+            ModelParam::PricingPowerIndex->value        => 0.55,
+        ],
     ];
 
     /**

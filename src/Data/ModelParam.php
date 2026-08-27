@@ -192,4 +192,10 @@ enum ModelParam: string
     case ResidentialWeight = 'residential_weight';
     case RecyclingWeight = 'recycling_weight';
     case ServicesWeight = 'services_weight';
+
+    // --- Chemicals ---
+    case BasePetrochemicalsWeight = 'base_petrochemicals_weight';
+    case SpecialtyChemicalsWeight = 'specialty_chemicals_weight';
+    case AgrochemicalsWeight = 'agrochemicals_weight';
 }
+

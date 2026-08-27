@@ -85,6 +85,7 @@ class StockModelTuningTest extends TestCase
             'law_firm' => [ModelParam::CorporateRetainerWeight, ModelParam::LitigationContingencyWeight, ModelParam::RestructuringAdvisoryWeight],
             'auto_manufacturer' => [ModelParam::AutoSalesWeight, ModelParam::ApexLuxuryWeight, ModelParam::SoftwareServicesWeight],
             'hedge_fund' => [ModelParam::HfManagementFeeWeight, ModelParam::HfDirectionalBetsWeight, ModelParam::HfQuantAlphaWeight],
+            'chemical' => [ModelParam::BasePetrochemicalsWeight, ModelParam::SpecialtyChemicalsWeight, ModelParam::AgrochemicalsWeight],
         ];
 
         foreach (StockModelTuning::OVERRIDES as $ticker => $overrides) {
@@ -229,6 +230,12 @@ class StockModelTuningTest extends TestCase
         // Brine Pool Capital (POOL)
         $this->assertSame(0.60, StockModelTuning::get('POOL', ModelParam::MortgageOriginationWeight, 0.0));
         $this->assertSame(0.40, StockModelTuning::get('POOL', ModelParam::DirectLendingWeight, 0.0));
+
+        // Fulmar Chemical Group (FULM)
+        $this->assertSame(0.50, StockModelTuning::get('FULM', ModelParam::BasePetrochemicalsWeight, 0.0));
+        $this->assertSame(0.30, StockModelTuning::get('FULM', ModelParam::SpecialtyChemicalsWeight, 0.0));
+        $this->assertSame(0.20, StockModelTuning::get('FULM', ModelParam::AgrochemicalsWeight, 0.0));
+        $this->assertSame(0.55, StockModelTuning::get('FULM', ModelParam::PricingPowerIndex, 0.0));
     }
 
     public function testAllInitialStocksMapToValidSectorsAndBusinessModels(): void
@@ -280,6 +287,7 @@ class StockModelTuningTest extends TestCase
             new \App\Service\Model\Sector\ToolsAndAccessoriesBusinessModel(),
             new \App\Service\Model\Sector\UtilityBusinessModel(),
             new \App\Service\Model\Sector\WasteManagementBusinessModel(),
+            new \App\Service\Model\Sector\ChemicalBusinessModel(),
         ]);
 
         foreach (\App\Data\InitialMarket::STOCKS as $stockData) {
