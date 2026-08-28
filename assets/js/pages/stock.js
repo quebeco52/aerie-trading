@@ -62,6 +62,11 @@ let chartResizeObserver = null;
 Chart.defaults.color = '#c2c6d6';
 Chart.defaults.scale.grid.color = 'rgba(45, 52, 73, 0.4)';
 Chart.defaults.font.family = '"Courier Prime", monospace';
+Chart.defaults.animation = false;
+Chart.defaults.animations = false;
+if (Chart.defaults.transitions && Chart.defaults.transitions.active) {
+    Chart.defaults.transitions.active.animation.duration = 0;
+}
 
 const centerTextPlugin = {
     id: 'centerText',
@@ -138,6 +143,7 @@ function initStockPage() {
     macroGovtSpendingChartInstance = destroyChart(macroGovtSpendingChartInstance);
     macroInterbankLiquidityChartInstance = destroyChart(macroInterbankLiquidityChartInstance);
     profitEngineChartInstance = destroyChart(profitEngineChartInstance);
+    revenueStreamsChartInstance = destroyChart(revenueStreamsChartInstance);
     debtEquityChartInstance = destroyChart(debtEquityChartInstance);
     creditHealthChartInstance = destroyChart(creditHealthChartInstance);
     capitalEfficiencyChartInstance = destroyChart(capitalEfficiencyChartInstance);
@@ -444,7 +450,10 @@ function initStockPage() {
     function loadHistory(range) {
         currentRange = range;
         const spinner = document.getElementById('chart-spinner');
-        if (spinner) spinner.classList.remove('hidden');
+        if (spinner) {
+            spinner.classList.remove('hidden');
+            spinner.classList.add('flex');
+        }
 
         document.querySelectorAll('.range-btn').forEach(btn => {
             btn.className = btn.dataset.range === range
@@ -474,7 +483,12 @@ function initStockPage() {
                 lastChartPointTime = currentSimTime;
             })
             .catch(console.error)
-            .finally(() => { if (spinner) spinner.classList.add('hidden'); });
+            .finally(() => {
+                if (spinner) {
+                    spinner.classList.add('hidden');
+                    spinner.classList.remove('flex');
+                }
+            });
     }
 
     function updateLiveChart(newPrice) {
@@ -740,7 +754,7 @@ function initStockPage() {
             li.innerHTML = `
                 <div class="flex items-start justify-between">
                     <div class="flex items-start gap-3 flex-1 min-w-0">
-                        <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${isPos ? 'bg-secondary/10 text-secondary' : 'bg-tertiary/10 text-tertiary'}">
+                        <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isPos ? 'bg-secondary/10 text-secondary' : 'bg-tertiary/10 text-tertiary'}">
                             <span class="material-symbols-outlined text-sm">${icon}</span>
                         </div>
                         <div class="flex-1 min-w-0">
@@ -748,7 +762,7 @@ function initStockPage() {
                             <p class="text-[11px] text-on-surface-variant mt-1 leading-relaxed whitespace-pre-line">${desc}</p>
                         </div>
                     </div>
-                    <div class="text-right flex-shrink-0 ml-2"> 
+                    <div class="text-right shrink-0 ml-2"> 
                         <span class="inline-flex items-center rounded bg-transparent px-1 py-0.5 text-xs font-bold ${isPos ? 'text-secondary' : 'text-tertiary'}">
                             ${isPos ? '+' : ''}${parseFloat(evt.change_percent).toFixed(2)}%
                         </span>

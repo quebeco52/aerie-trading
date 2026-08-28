@@ -93,17 +93,31 @@ function initDashboard() {
             handleScale: true,
         });
 
-        areaSeries = portfolioChart.addAreaSeries({
-            topColor: 'rgba(173, 198, 255, 0.4)',
-            bottomColor: 'rgba(173, 198, 255, 0.01)',
-            lineColor: '#adc6ff',
-            lineWidth: 2,
-            priceFormat: {
-                type: 'price',
-                precision: 2,
-                minMove: 0.01,
-            },
-        });
+        if (typeof portfolioChart.addSeries === 'function' && LightweightCharts.AreaSeries) {
+            areaSeries = portfolioChart.addSeries(LightweightCharts.AreaSeries, {
+                topColor: 'rgba(173, 198, 255, 0.4)',
+                bottomColor: 'rgba(173, 198, 255, 0.01)',
+                lineColor: '#adc6ff',
+                lineWidth: 2,
+                priceFormat: {
+                    type: 'price',
+                    precision: 2,
+                    minMove: 0.01,
+                },
+            });
+        } else if (typeof portfolioChart.addAreaSeries === 'function') {
+            areaSeries = portfolioChart.addAreaSeries({
+                topColor: 'rgba(173, 198, 255, 0.4)',
+                bottomColor: 'rgba(173, 198, 255, 0.01)',
+                lineColor: '#adc6ff',
+                lineWidth: 2,
+                priceFormat: {
+                    type: 'price',
+                    precision: 2,
+                    minMove: 0.01,
+                },
+            });
+        }
 
         // Resize chart observer
         const resizeObserver = new ResizeObserver(entries => {
@@ -136,7 +150,10 @@ function initDashboard() {
 
     async function loadPortfolioData(range) {
         const spinner = document.getElementById('portfolio-chart-spinner');
-        if (spinner) spinner.classList.remove('hidden');
+        if (spinner) {
+            spinner.classList.remove('hidden');
+            spinner.classList.add('flex');
+        }
 
         try {
             const res = await fetch(`/api/portfolio/history?range=${encodeURIComponent(range)}`);
@@ -168,7 +185,10 @@ function initDashboard() {
         } catch (e) {
             console.error('Error loading portfolio chart data:', e);
         } finally {
-            if (spinner) spinner.classList.add('hidden');
+            if (spinner) {
+                spinner.classList.add('hidden');
+                spinner.classList.remove('flex');
+            }
         }
     }
 

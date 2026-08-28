@@ -17,7 +17,13 @@
         <ini name="error_reporting" value="-1" />
         <server name="APP_ENV" value="test" force="true" />
         <env name="APP_ENV" value="test" force="true" />
+        <server name="APP_SECRET" value="6c5e75877fba1c8d50e8a719d2b8b93b" force="true" />
+        <env name="APP_SECRET" value="6c5e75877fba1c8d50e8a719d2b8b93b" force="true" />
         <server name="SHELL_VERBOSITY" value="-1" />
+        <server name="PANTHER_APP_ENV" value="test" />
+        <server name="PANTHER_DEFAULT_BROWSER" value="selenium" force="true" />
+        <server name="PANTHER_WEBDRIVER_URL" value="http://aerie-selenium:4444/wd/hub" force="true" />
+        <server name="PANTHER_EXTERNAL_BASE_URI" value="http://aerie-app" force="true" />
     </php>
 
     <testsuites>
@@ -35,6 +41,9 @@
         </testsuite>
         <testsuite name="Functional">
             <directory>tests/Controller</directory>
+        </testsuite>
+        <testsuite name="E2E">
+            <directory>tests/Panther</directory>
         </testsuite>
     </testsuites>
 
@@ -55,5 +64,6 @@
     </source>
 
     <extensions>
+        <bootstrap class="Symfony\Component\Panther\ServerExtension" />
     </extensions>
 </phpunit>

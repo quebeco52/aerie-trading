@@ -14,19 +14,35 @@ function formatSankeyValue(num) {
 }
 
 export default class extends Controller {
+    static targets = ['container'];
     static values = {
         ticker: String,
-        url: String
-    }
+        url: { type: String, default: '/api/earnings-flow' }
+    };
 
     connect() {
         this.chart = null;
         this.resizeHandler = () => this.chart?.resize();
         window.addEventListener('resize', this.resizeHandler);
+
+        this.openHandler = () => this.open();
+        this.closeHandler = () => this.close();
+        this.keydownHandler = (e) => {
+            if (e.key === 'Escape' && !this.element.classList.contains('hidden')) {
+                this.close();
+            }
+        };
+
+        document.addEventListener('sankey:open', this.openHandler);
+        document.addEventListener('sankey:close', this.closeHandler);
+        document.addEventListener('keydown', this.keydownHandler);
     }
 
     disconnect() {
         window.removeEventListener('resize', this.resizeHandler);
+        document.removeEventListener('sankey:open', this.openHandler);
+        document.removeEventListener('sankey:close', this.closeHandler);
+        document.removeEventListener('keydown', this.keydownHandler);
         if (this.chart) {
             this.chart.dispose();
             this.chart = null;
@@ -34,26 +50,46 @@ export default class extends Controller {
     }
 
     open() {
-        const modal = this.element.closest('dialog') || document.getElementById('sankeyModal');
-        if (modal && !modal.hasAttribute('open')) {
-            modal.showModal();
-        }
+        this.element.classList.remove('hidden');
+        this.element.classList.add('flex');
         this.loadChart();
     }
 
+    close() {
+        this.element.classList.add('hidden');
+        this.element.classList.remove('flex');
+    }
+
+    backdropClick(event) {
+        if (event.target === this.element) {
+            this.close();
+        }
+    }
+
     async loadChart() {
+        const container = this.hasContainerTarget ? this.containerTarget : this.element;
+        if (!container) return;
+
         if (!this.chart) {
-            // Need to specify a height for the container if it's empty
-            if (this.element.clientHeight === 0) {
-                this.element.style.height = '500px';
+            if (typeof window.echarts === 'undefined') {
+                console.error("ECharts library is not loaded.");
+                container.innerHTML = '<div class="flex items-center justify-center h-full text-center p-4 text-on-surface-variant text-sm font-serif">Chart library loading...</div>';
+                return;
             }
-            this.chart = window.echarts.init(this.element);
-            
-            // Show loading
-            this.chart.showLoading();
+
+            this.chart = window.echarts.init(container);
+            this.chart.showLoading({
+                text: 'Loading Earnings Flow...',
+                color: '#adc6ff',
+                textColor: '#dae2fd',
+                maskColor: 'rgba(11, 19, 38, 0.8)'
+            });
             
             try {
-                const response = await fetch(`${this.urlValue}?ticker=${this.tickerValue}`);
+                const url = this.urlValue || '/api/earnings-flow';
+                const ticker = this.tickerValue || window.AERIE_DATA?.ticker || '';
+                const response = await fetch(`${url}?ticker=${encodeURIComponent(ticker)}`);
+                if (!response.ok) throw new Error(`HTTP error ${response.status}`);
                 const data = await response.json();
                 
                 this.chart.hideLoading();
@@ -61,7 +97,7 @@ export default class extends Controller {
                 if (!data.nodes || data.nodes.length === 0) {
                     this.chart.dispose();
                     this.chart = null;
-                    this.element.innerHTML = '<div class="flex items-center justify-center h-full text-center p-4 text-on-surface-variant font-bold tracking-widest uppercase text-sm">No earnings data available for this asset yet.</div>';
+                    container.innerHTML = '<div class="flex items-center justify-center h-full text-center p-4 text-on-surface-variant font-bold tracking-widest uppercase text-sm font-mono">No earnings flow data available for this asset yet.</div>';
                     return;
                 }
 
@@ -69,13 +105,13 @@ export default class extends Controller {
                     tooltip: {
                         trigger: 'item',
                         triggerOn: 'mousemove',
-                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        backgroundColor: 'rgba(15, 23, 42, 0.95)',
                         borderColor: 'rgba(51, 65, 85, 0.5)',
                         borderWidth: 1,
                         padding: [12, 16],
                         textStyle: {
                             color: '#f8fafc',
-                            fontFamily: 'Inter, sans-serif',
+                            fontFamily: 'Courier Prime, monospace, sans-serif',
                             fontSize: 13
                         },
                         formatter: function (params) {
@@ -141,7 +177,7 @@ export default class extends Controller {
                             },
                             label: {
                                 color: '#e2e8f0',
-                                fontFamily: 'Inter, sans-serif',
+                                fontFamily: 'Courier Prime, monospace, sans-serif',
                                 fontSize: 12,
                                 fontWeight: 'bold',
                                 padding: [0, 8]
@@ -151,15 +187,17 @@ export default class extends Controller {
                 };
 
                 this.chart.setOption(option);
+                setTimeout(() => {
+                    this.chart?.resize();
+                }, 50);
             } catch (error) {
                 console.error("Failed to load Sankey chart data", error);
                 this.chart.hideLoading();
-                this.element.innerHTML = '<div class="text-center p-4 text-red-500">Error loading chart data.</div>';
+                container.innerHTML = '<div class="flex items-center justify-center h-full text-center p-4 text-tertiary font-bold text-sm">Error loading earnings flow data.</div>';
             }
         } else {
-            // Resize if it was hidden when initially created (e.g., in a modal)
             setTimeout(() => {
-                this.chart.resize();
+                this.chart?.resize();
             }, 50);
         }
     }

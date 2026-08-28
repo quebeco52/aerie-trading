@@ -7,7 +7,7 @@
 	{% set verticalClass = vpos == 'bottom' ? 'top-full mt-2.5' : 'bottom-full mb-2.5' %}
 	{% set arrowVerticalClass = vpos == 'bottom' ? '-top-[5px] border-t border-l' : '-bottom-[5px] border-b border-r' %}
 
-	<span role="tooltip" class="block pointer-events-none absolute {{ alignClass }} {{ verticalClass }} {{ width }} p-2.5 bg-[#0f172a] text-white text-[11px] leading-relaxed rounded-lg shadow-2xl opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 group-focus:opacity-100 group-focus:translate-y-0 transition-all duration-200 z-[100] normal-case tracking-normal font-normal border border-slate-700">
+	<span role="tooltip" class="block pointer-events-none absolute {{ alignClass }} {{ verticalClass }} {{ width }} p-2.5 bg-[#0f172a] text-white text-[11px] leading-relaxed rounded-lg shadow-2xl opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 group-focus:opacity-100 group-focus:translate-y-0 transition-all duration-200 z-50 normal-case tracking-normal font-normal border border-slate-700">
 		{{ text }}
 		<span class="block absolute {{ arrowVerticalClass }} {{ arrowPosition }} w-2.5 h-2.5 bg-[#0f172a] border-slate-700 transform rotate-45"></span>
 	</span>
@@ -18,9 +18,9 @@
 {% endblock %}
 
 {% block meta %}
-	<meta name="description" content="View live stock prices, market cap, and fundamental Clean Surplus accounting data for {{ asset.name }} ({{ asset.ticker }}).">
-	<meta property="og:title" content="{{ asset.ticker }} Stock Price | Aerie Exchange">
-	<meta property="og:description" content="Live financial data and economic simulation for {{ asset.name }} ({{ isEtf ? 'Market Index' : asset.industry|default('General') }}).">
+	<meta name="description" content="View live stock prices, market cap, financial statements, and fundamental valuation metrics for {{ asset.name }} ({{ asset.ticker }}).">
+	<meta property="og:title" content="{{ asset.ticker }} Stock Price & Financials | Aerie Exchange">
+	<meta property="og:description" content="Live financial data and analytics for {{ asset.name }} ({{ isEtf ? 'Market Index' : asset.industry|default('General') }}).">
 	<meta property="og:type" content="website">
 {% endblock %}
 
@@ -30,19 +30,21 @@
 
 {% block body %}
 
-	<div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 lg:py-6 w-full space-y-6">
+	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-4 lg:py-6 w-full space-y-6">
 
 		{# --- TOP ASSET HERO BANNER --- #}
-		<div class="bg-surface-container-low shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-6 lg:p-8 border border-outline-variant/15 relative overflow-hidden">
-			<div class="absolute -right-20 -top-20 w-64 h-64 bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
+		<div class="bg-surface-container-low shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-6 lg:p-8 border border-outline-variant/15 relative z-20">
+			<div class="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none">
+				<div class="absolute -right-20 -top-20 w-64 h-64 bg-primary/5 rounded-full blur-3xl"></div>
+			</div>
 
-			<div class="flex flex-col md:flex-row md:justify-between md:items-start gap-6 relative z-10">
+			<div class="flex flex-col md:flex-row md:justify-between md:items-center gap-6 relative z-10">
 				{# Left: Identity & Sector #}
-				<div class="flex items-center gap-4 min-w-0">
-					<img class="w-14 h-14 md:w-16 md:h-16 rounded-full shadow-md shrink-0" src="{{ asset('icons/' ~ asset.ticker ~ '.svg') }}" onerror="this.onerror=null; this.src='{{ asset('icons/default.svg') }}';" alt="{{ asset.ticker }} icon">
+				<div class="flex items-center gap-5 sm:gap-6 min-w-0">
+					<img class="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl shadow-xl shadow-black/40 border border-outline-variant/15 bg-surface-container-lowest/50 p-1.5 shrink-0 object-contain" src="{{ asset('icons/' ~ asset.ticker ~ '.svg') }}" onerror="this.onerror=null; this.src='{{ asset('icons/default.svg') }}';" alt="{{ asset.ticker }} icon">
 
 					<div class="flex flex-col gap-1.5 min-w-0">
-						<h1 class="text-2xl sm:text-3xl md:text-4xl font-bold text-on-surface tracking-tight break-words leading-tight">{{ asset.name }}</h1>
+						<h1 class="text-2xl sm:text-3xl md:text-4xl font-bold text-on-surface tracking-tight wrap-break-word leading-tight">{{ asset.name }}</h1>
 
 						<div class="flex flex-wrap items-center gap-2 md:gap-3">
 							<span class="text-base font-bold text-primary font-mono tracking-wider">{{ asset.ticker }}</span>
@@ -51,7 +53,7 @@
 								<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">{{ isEtf ? 'Market Index' : asset.industry|default('General') }}</span>
 								{% set bmMap = constant('App\\Data\\Sectors::BUSINESS_MODEL_DESCRIPTIONS') %}
 								{% set bmDesc = isEtf ? 'An Exchange Traded Fund tracking a basket of underlying stocks, providing broad market exposure.' : (bmMap[businessModel|default('none')] ?? bmMap['none']) %}
-								{{ _self.tooltip(bmDesc, 'left', 'w-72 z-50', 'bottom') }}
+								{{ _self.tooltip(bmDesc, 'left', 'w-72', 'bottom') }}
 							</span>
 
 							{% if not isEtf and asset.isBankrupt %}
@@ -132,8 +134,8 @@
 							<button class="range-btn flex-1 sm:flex-none shrink-0 px-1 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center" data-range="max">MAX</button>
 						</div>
 
-						<div class="w-full h-[300px] md:h-[450px] relative rounded-xl overflow-hidden">
-							<div id="chart-spinner" class="hidden absolute inset-0 z-50 flex items-center justify-center bg-surface-container-low/60 backdrop-blur-sm transition-opacity duration-300">
+						<div class="w-full h-75 md:h-112.5 relative rounded-xl overflow-hidden">
+							<div id="chart-spinner" class="hidden absolute inset-0 z-50 items-center justify-center bg-surface-container-low/60 backdrop-blur-sm transition-opacity duration-300">
 								<svg class="animate-spin h-12 w-12 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewbox="0 0 24 24">
 									<circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
 									<path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -337,7 +339,7 @@
 										<div class="flex justify-between items-center text-xs p-2 rounded-lg bg-surface-container-lowest/60 border border-outline-variant/5">
 											<div class="flex items-center gap-2">
 												<a href="/stock/{{ comp.ticker }}" class="font-bold text-primary hover:underline font-mono">{{ comp.ticker }}</a>
-												<span class="text-on-surface-variant truncate max-w-[120px]">{{ comp.name|default('') }}</span>
+												<span class="text-on-surface-variant truncate max-w-30">{{ comp.name|default('') }}</span>
 											</div>
 											<span class="font-bold text-on-surface font-mono">{{ comp.weight|default(0)|number_format(1) }}%</span>
 										</div>
@@ -386,78 +388,209 @@
 		{# ========================================================================= #}
 		{% if isEtf %}
 			<div id="stock-tab-content-macro" class="stock-tab-panel hidden space-y-6">
-				<div class="flex justify-between items-center bg-surface-container-low p-6 rounded-2xl border border-outline-variant/15 shadow-lg">
+				{# Header #}
+				<div class="flex flex-col md:flex-row justify-between items-start md:items-center bg-surface-container-low p-6 rounded-2xl border border-outline-variant/15 shadow-lg gap-4">
 					<div>
-						<h2 class="text-xl font-bold text-on-surface">Macroeconomic Trends & Cycle Indicators</h2>
-						<p class="text-xs text-on-surface-variant mt-1">25-Year historical econometric cycle series across inflation, yield curves, credit spreads, and labor dynamics.</p>
+						<div class="flex items-center gap-2 mb-1">
+							<span class="material-symbols-outlined text-primary text-base">analytics</span>
+							<span class="text-[10px] font-bold tracking-widest text-primary uppercase">Macroeconomic Intelligence</span>
+						</div>
+						<h2 class="text-xl md:text-2xl font-bold text-on-surface">Macroeconomic Trends & Cycle Indicators</h2>
+						<p class="text-xs text-on-surface-variant mt-1">25-Year historical econometric cycle series across inflation, yield curves, risk premia, labor dynamics, and commodities.</p>
+					</div>
+					<div class="flex items-center gap-2 bg-surface-container-highest px-3 py-1.5 rounded-xl border border-outline-variant/20">
+						<span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+						<span class="text-xs font-semibold text-on-surface">25Y Quarterly Time Series</span>
 					</div>
 				</div>
 
+				{# Side-by-Side 2-Column Responsive Grid #}
 				<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 					{# Chart 1: Inflation & Output Gap #}
-					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg chart-card">
-						<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-4">Inflation & Economic Output Gap</h4>
-						<div class="h-72 relative"><canvas id="macroEconomyChart"></canvas></div>
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between">
+						<div class="flex items-center justify-between mb-4">
+							<div class="flex items-center gap-2.5">
+								<div class="p-2 rounded-xl bg-amber-500/10 text-amber-400">
+									<span class="material-symbols-outlined text-lg leading-none">price_change</span>
+								</div>
+								<div>
+									<h4 class="text-sm font-bold text-on-surface">Inflation & Economic Output Gap</h4>
+									<p class="text-[11px] text-on-surface-variant">Consumer price inflation (EMA) vs economic capacity output gap</p>
+								</div>
+							</div>
+							<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Prices</span>
+						</div>
+						<div class="h-80 md:h-85 w-full relative"><canvas id="macroEconomyChart"></canvas></div>
 					</div>
 
 					{# Chart 2: Yield Curve & Policy Rates #}
-					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg chart-card">
-						<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-4">Yield Curve & Term Structure (2Y/5Y/10Y)</h4>
-						<div class="h-72 relative"><canvas id="macroRatesChart"></canvas></div>
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between">
+						<div class="flex items-center justify-between mb-4">
+							<div class="flex items-center gap-2.5">
+								<div class="p-2 rounded-xl bg-sky-500/10 text-sky-400">
+									<span class="material-symbols-outlined text-lg leading-none">stacked_line_chart</span>
+								</div>
+								<div>
+									<h4 class="text-sm font-bold text-on-surface">Yield Curve & Term Structure (2Y / 5Y / 10Y)</h4>
+									<p class="text-[11px] text-on-surface-variant">Central bank policy rates, treasury yields & 2s10s curve spread</p>
+								</div>
+							</div>
+							<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Rates</span>
+						</div>
+						<div class="h-80 md:h-85 w-full relative"><canvas id="macroRatesChart"></canvas></div>
 					</div>
 
 					{# Chart 3: 30Y Mortgage Spread #}
-					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg chart-card">
-						<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-4">Mortgage Rates & Spread Dynamics (30Y)</h4>
-						<div class="h-72 relative"><canvas id="macroMortgageChart"></canvas></div>
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between">
+						<div class="flex items-center justify-between mb-4">
+							<div class="flex items-center gap-2.5">
+								<div class="p-2 rounded-xl bg-rose-500/10 text-rose-400">
+									<span class="material-symbols-outlined text-lg leading-none">home</span>
+								</div>
+								<div>
+									<h4 class="text-sm font-bold text-on-surface">Mortgage Rates & Spread Dynamics (30Y)</h4>
+									<p class="text-[11px] text-on-surface-variant">30-Year fixed mortgage rates vs policy rate lending spreads</p>
+								</div>
+							</div>
+							<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Mortgages</span>
+						</div>
+						<div class="h-80 md:h-85 w-full relative"><canvas id="macroMortgageChart"></canvas></div>
 					</div>
 
 					{# Chart 4: Market Risk & ERP #}
-					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg chart-card">
-						<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-4">Risk Premia, Volatility & Corporate Rates</h4>
-						<div class="h-72 relative"><canvas id="macroRiskChart"></canvas></div>
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between">
+						<div class="flex items-center justify-between mb-4">
+							<div class="flex items-center gap-2.5">
+								<div class="p-2 rounded-xl bg-purple-500/10 text-purple-400">
+									<span class="material-symbols-outlined text-lg leading-none">speed</span>
+								</div>
+								<div>
+									<h4 class="text-sm font-bold text-on-surface">Risk Premia, Volatility & Corporate Rates</h4>
+									<p class="text-[11px] text-on-surface-variant">Equity risk premium (ERP), implied market volatility & borrowing yields</p>
+								</div>
+							</div>
+							<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Volatility</span>
+						</div>
+						<div class="h-80 md:h-85 w-full relative"><canvas id="macroRiskChart"></canvas></div>
 					</div>
 
 					{# Chart 5: Labor & Credit Defaults #}
-					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg chart-card">
-						<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-4">Labor Market & Consumer Credit Quality</h4>
-						<div class="h-72 relative"><canvas id="macroLaborCreditChart"></canvas></div>
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between">
+						<div class="flex items-center justify-between mb-4">
+							<div class="flex items-center gap-2.5">
+								<div class="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
+									<span class="material-symbols-outlined text-lg leading-none">group</span>
+								</div>
+								<div>
+									<h4 class="text-sm font-bold text-on-surface">Labor Market & Consumer Credit Quality</h4>
+									<p class="text-[11px] text-on-surface-variant">Unemployment rate vs retail household default rates</p>
+								</div>
+							</div>
+							<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Credit</span>
+						</div>
+						<div class="h-80 md:h-85 w-full relative"><canvas id="macroLaborCreditChart"></canvas></div>
 					</div>
 
-					{# Chart 6: Commodities Index #}
-					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg chart-card">
-						<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-4">Global Commodities & Energy Pricing</h4>
-						<div class="h-72 relative"><canvas id="macroCommoditiesChart"></canvas></div>
+					{# Chart 6: TED Interbank Liquidity #}
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between">
+						<div class="flex items-center justify-between mb-4">
+							<div class="flex items-center gap-2.5">
+								<div class="p-2 rounded-xl bg-cyan-500/10 text-cyan-400">
+									<span class="material-symbols-outlined text-lg leading-none">account_balance</span>
+								</div>
+								<div>
+									<h4 class="text-sm font-bold text-on-surface">TED Interbank Spread & Credit Liquidity</h4>
+									<p class="text-[11px] text-on-surface-variant">Interbank liquidity stress (bps) vs corporate credit risk premium</p>
+								</div>
+							</div>
+							<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Liquidity</span>
+						</div>
+						<div class="h-80 md:h-85 w-full relative"><canvas id="macroInterbankLiquidityChart"></canvas></div>
 					</div>
 
 					{# Chart 7: Property Markets #}
-					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg chart-card">
-						<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-4">Commercial & Residential Real Estate</h4>
-						<div class="h-72 relative"><canvas id="macroPropertyChart"></canvas></div>
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between">
+						<div class="flex items-center justify-between mb-4">
+							<div class="flex items-center gap-2.5">
+								<div class="p-2 rounded-xl bg-orange-500/10 text-orange-400">
+									<span class="material-symbols-outlined text-lg leading-none">domain</span>
+								</div>
+								<div>
+									<h4 class="text-sm font-bold text-on-surface">Commercial & Residential Real Estate</h4>
+									<p class="text-[11px] text-on-surface-variant">CRE price valuation index vs residential housing indices</p>
+								</div>
+							</div>
+							<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Property</span>
+						</div>
+						<div class="h-80 md:h-85 w-full relative"><canvas id="macroPropertyChart"></canvas></div>
 					</div>
 
-					{# Chart 8: Trade & FX #}
-					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg chart-card">
-						<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-4">Foreign Exchange & Shipping Freight Rates</h4>
-						<div class="h-72 relative"><canvas id="macroTradeLogisticsChart"></canvas></div>
+					{# Chart 8: Consumer Sentiment #}
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between">
+						<div class="flex items-center justify-between mb-4">
+							<div class="flex items-center gap-2.5">
+								<div class="p-2 rounded-xl bg-indigo-500/10 text-indigo-400">
+									<span class="material-symbols-outlined text-lg leading-none">sentiment_satisfied</span>
+								</div>
+								<div>
+									<h4 class="text-sm font-bold text-on-surface">Consumer Sentiment & Confidence</h4>
+									<p class="text-[11px] text-on-surface-variant">Macro consumer confidence survey index (Baseline: 100)</p>
+								</div>
+							</div>
+							<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Sentiment</span>
+						</div>
+						<div class="h-80 md:h-85 w-full relative"><canvas id="macroSentimentChart"></canvas></div>
 					</div>
 
-					{# Chart 9: Consumer Sentiment #}
-					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg chart-card">
-						<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-4">Consumer Sentiment & Confidence</h4>
-						<div class="h-72 relative"><canvas id="macroSentimentChart"></canvas></div>
+					{# Chart 9: Commodities Index #}
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between">
+						<div class="flex items-center justify-between mb-4">
+							<div class="flex items-center gap-2.5">
+								<div class="p-2 rounded-xl bg-yellow-500/10 text-yellow-400">
+									<span class="material-symbols-outlined text-lg leading-none">oil_barrel</span>
+								</div>
+								<div>
+									<h4 class="text-sm font-bold text-on-surface">Global Commodities & Energy Pricing</h4>
+									<p class="text-[11px] text-on-surface-variant">Energy, industrial metals & agricultural spot indexes (Baseline: 100)</p>
+								</div>
+							</div>
+							<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Commodities</span>
+						</div>
+						<div class="h-80 md:h-85 w-full relative"><canvas id="macroCommoditiesChart"></canvas></div>
 					</div>
 
-					{# Chart 10: Fiscal Spending #}
-					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg chart-card">
-						<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-4">Government Fiscal & Infrastructure Stimulus</h4>
-						<div class="h-72 relative"><canvas id="macroGovtSpendingChart"></canvas></div>
+					{# Chart 10: Trade & FX #}
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between">
+						<div class="flex items-center justify-between mb-4">
+							<div class="flex items-center gap-2.5">
+								<div class="p-2 rounded-xl bg-blue-500/10 text-blue-400">
+									<span class="material-symbols-outlined text-lg leading-none">directions_boat</span>
+								</div>
+								<div>
+									<h4 class="text-sm font-bold text-on-surface">Foreign Exchange & Shipping Freight Rates</h4>
+									<p class="text-[11px] text-on-surface-variant">Exchange rate currency index vs maritime container freight rates</p>
+								</div>
+							</div>
+							<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Logistics</span>
+						</div>
+						<div class="h-80 md:h-85 w-full relative"><canvas id="macroTradeLogisticsChart"></canvas></div>
 					</div>
 
-					{# Chart 11: Interbank Liquidity #}
-					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg chart-card lg:col-span-2">
-						<h4 class="text-xs font-bold text-on-surface uppercase tracking-widest mb-4">TED Interbank Spread & Systemic Liquidity</h4>
-						<div class="h-72 relative"><canvas id="macroInterbankLiquidityChart"></canvas></div>
+					{# Chart 11: Fiscal Spending #}
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between lg:col-span-2">
+						<div class="flex items-center justify-between mb-4">
+							<div class="flex items-center gap-2.5">
+								<div class="p-2 rounded-xl bg-teal-500/10 text-teal-400">
+									<span class="material-symbols-outlined text-lg leading-none">account_balance_wallet</span>
+								</div>
+								<div>
+									<h4 class="text-sm font-bold text-on-surface">Government Fiscal & Infrastructure Stimulus</h4>
+									<p class="text-[11px] text-on-surface-variant">Public sector expenditure and infrastructure investment index (Baseline: 100)</p>
+								</div>
+							</div>
+							<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Fiscal Policy</span>
+						</div>
+						<div class="h-80 md:h-85 w-full relative"><canvas id="macroGovtSpendingChart"></canvas></div>
 					</div>
 				</div>
 			</div>
@@ -479,7 +612,7 @@
 						<p class="text-[11px] text-on-surface-variant mt-0.5">Quarterly and annual historical financial data</p>
 					</div>
 					<div class="flex items-center gap-3">
-						<button onclick="document.dispatchEvent(new CustomEvent('sankey:open'))" class="px-4 py-1.5 text-xs font-bold rounded-lg bg-surface-container text-primary border border-primary/20 hover:bg-primary/10 transition-all uppercase tracking-widest flex items-center gap-1.5">
+						<button type="button" onclick="document.dispatchEvent(new CustomEvent('sankey:open'))" class="px-4 py-1.5 text-xs font-bold rounded-lg bg-surface-container text-primary border border-primary/20 hover:bg-primary/10 transition-all uppercase tracking-widest flex items-center gap-1.5 cursor-pointer">
 							<span class="material-symbols-outlined text-[16px]">account_tree</span>
 							Earnings Flow (Sankey)
 						</button>
@@ -490,62 +623,230 @@
 					</div>
 				</div>
 
-				{# 6 Fundamental Statement Charts Grid #}
+				{# Fundamental Statement Charts Grid #}
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-					<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+					{# 1. Net Income & Profit Engine #}
+					<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
 						<div class="flex justify-between items-center mb-4">
-							<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface">Net Income Trend</h4>
+							<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+								<span class="material-symbols-outlined text-primary text-base">payments</span>
+								Net Income Trend
+							</h4>
 						</div>
-						<div class="relative h-56 w-full">
+						<div class="relative h-64 w-full">
 							<canvas id="netIncomeChart"></canvas>
 						</div>
 					</div>
 
-					<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+					{# 2. Revenue Breakdown by Segment / Stream #}
+					<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
 						<div class="flex justify-between items-center mb-4">
-							<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface">Debt vs Equity</h4>
+							<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+								<span class="material-symbols-outlined text-primary text-base">pie_chart</span>
+								Revenue Streams Breakdown
+							</h4>
 						</div>
-						<div class="relative h-56 w-full">
+						<div class="relative h-64 w-full">
+							<canvas id="revenueStreamsChart"></canvas>
+						</div>
+					</div>
+
+					{# 3. Debt vs Equity #}
+					<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
+						<div class="flex justify-between items-center mb-4">
+							<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+								<span class="material-symbols-outlined text-primary text-base">balance</span>
+								Debt vs Equity
+							</h4>
+						</div>
+						<div class="relative h-64 w-full">
 							<canvas id="debtEquityChart"></canvas>
 						</div>
 					</div>
 
-					<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+					{# 4. Credit Health & Maturity Wall #}
+					<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
 						<div class="flex justify-between items-center mb-4">
-							<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface">Credit Health & Maturity Wall</h4>
+							<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+								<span class="material-symbols-outlined text-primary text-base">health_and_safety</span>
+								Credit Health & Maturity Wall
+							</h4>
 						</div>
-						<div class="relative h-56 w-full">
+						<div class="relative h-64 w-full">
 							<canvas id="creditHealthChart"></canvas>
 						</div>
 					</div>
 
-					<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+					{# 5. Capital Efficiency (EVA & Return) #}
+					<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
 						<div class="flex justify-between items-center mb-4">
-							<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface">Capital Efficiency (EVA & Return)</h4>
+							<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+								<span class="material-symbols-outlined text-primary text-base">trending_up</span>
+								Capital Efficiency (EVA & Spread)
+							</h4>
 						</div>
-						<div class="relative h-56 w-full">
+						<div class="relative h-64 w-full">
 							<canvas id="capitalEfficiencyChart"></canvas>
 						</div>
 					</div>
 
-					<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+					{# 6. Return on Capital (ROIC vs WACC) #}
+					<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
 						<div class="flex justify-between items-center mb-4">
-							<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface">Payout Allocation</h4>
+							<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+								<span class="material-symbols-outlined text-primary text-base">percent</span>
+								Return on Capital ({{ isFinancial ? 'ROE' : 'ROIC' }} vs Hurdle)
+							</h4>
 						</div>
-						<div class="relative h-56 w-full">
+						<div class="relative h-64 w-full">
+							<canvas id="capitalReturnChart"></canvas>
+						</div>
+					</div>
+
+					{# 7. Payout Allocation & Dividends #}
+					<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
+						<div class="flex justify-between items-center mb-4">
+							<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+								<span class="material-symbols-outlined text-primary text-base">savings</span>
+								Payout Allocation & Dividends
+							</h4>
+						</div>
+						<div class="relative h-64 w-full">
 							<canvas id="payoutRatioChart"></canvas>
 						</div>
 					</div>
 
-					<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15">
+					{# 8. Valuation Multiples #}
+					<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
 						<div class="flex justify-between items-center mb-4">
-							<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface">Valuation Multiples</h4>
+							<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+								<span class="material-symbols-outlined text-primary text-base">query_stats</span>
+								Valuation Multiples (P/E & P/B)
+							</h4>
 						</div>
-						<div class="relative h-56 w-full">
+						<div class="relative h-64 w-full">
 							<canvas id="valuationMultiplesChart"></canvas>
 						</div>
 					</div>
+
+					{# 9. Shareholder Yield & Cumulative Value Creation #}
+					<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
+						<div class="flex justify-between items-center mb-4">
+							<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+								<span class="material-symbols-outlined text-primary text-base">diamond</span>
+								Shareholder Value Creation
+							</h4>
+						</div>
+						<div class="relative h-64 w-full">
+							<canvas id="shareholderValueChart"></canvas>
+						</div>
+					</div>
+
+					{# 10. Free Cash Flow & Reinvestment #}
+					<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
+						<div class="flex justify-between items-center mb-4">
+							<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+								<span class="material-symbols-outlined text-primary text-base">account_balance_wallet</span>
+								Free Cash Flow & Reinvestment
+							</h4>
+						</div>
+						<div class="relative h-64 w-full">
+							<canvas id="cashFlowSummaryChart"></canvas>
+						</div>
+					</div>
+
+					{# --- SECTOR & BUSINESS MODEL TAILORED CHARTS --- #}
+
+					{# Banking / Credit Services: Net Interest Margin #}
+					{% if businessModel|default('none') in ['commercial_bank', 'credit_services', 'shadow_bank'] %}
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
+							<div class="flex justify-between items-center mb-4">
+								<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+									<span class="material-symbols-outlined text-primary text-base">account_balance</span>
+									Net Interest Income & Spread (NIM)
+								</h4>
+							</div>
+							<div class="relative h-64 w-full">
+								<canvas id="netInterestEngineChart"></canvas>
+							</div>
+						</div>
+					{% endif %}
+
+					{# Financials: Regulatory Capital Ratios #}
+					{% if isFinancial|default(false) %}
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
+							<div class="flex justify-between items-center mb-4">
+								<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+									<span class="material-symbols-outlined text-primary text-base">verified_user</span>
+									Regulatory Capital & Solvency
+								</h4>
+							</div>
+							<div class="relative h-64 w-full">
+								<canvas id="regulatoryRatiosChart"></canvas>
+							</div>
+						</div>
+					{% endif %}
+
+					{# Insurance: Dual Engine Underwriting vs Float #}
+					{% if businessModel|default('none') == 'insurance' %}
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
+							<div class="flex justify-between items-center mb-4">
+								<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+									<span class="material-symbols-outlined text-primary text-base">security</span>
+									Underwriting vs Investment Float Income
+								</h4>
+							</div>
+							<div class="relative h-64 w-full">
+								<canvas id="insuranceDualEngineChart"></canvas>
+							</div>
+						</div>
+					{% endif %}
+
+					{# REITs: AFFO Coverage & LTV #}
+					{% if businessModel|default('none') == 'reit' %}
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
+							<div class="flex justify-between items-center mb-4">
+								<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+									<span class="material-symbols-outlined text-primary text-base">apartment</span>
+									REIT Dividend Coverage & LTV
+								</h4>
+							</div>
+							<div class="relative h-64 w-full">
+								<canvas id="reitCoverageChart"></canvas>
+							</div>
+						</div>
+					{% endif %}
+
+					{# Tech / Semi / Biotech / Defense: R&D & Reinvestment Intensity #}
+					{% if businessModel|default('none') in ['tech', 'semiconductor', 'biotech', 'defense_contractor'] %}
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
+							<div class="flex justify-between items-center mb-4">
+								<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+									<span class="material-symbols-outlined text-primary text-base">science</span>
+									R&D & Reinvestment Intensity
+								</h4>
+							</div>
+							<div class="relative h-64 w-full">
+								<canvas id="reinvestmentIntensityChart"></canvas>
+							</div>
+						</div>
+					{% endif %}
+
+					{# Commodities / Shipping: Cyclical Dynamics & Deleveraging #}
+					{% if businessModel|default('none') in ['commodity', 'shipping'] %}
+						<div class="chart-card bg-surface-container-low shadow-lg rounded-2xl p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
+							<div class="flex justify-between items-center mb-4">
+								<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+									<span class="material-symbols-outlined text-primary text-base">cyclone</span>
+									Cyclical Dynamics & Deleveraging
+								</h4>
+							</div>
+							<div class="relative h-64 w-full">
+								<canvas id="cyclicalDynamicsChart"></canvas>
+							</div>
+						</div>
+					{% endif %}
 
 				</div>
 			</div>
@@ -587,7 +888,7 @@
 					</h3>
 
 					<div class="overflow-x-auto">
-						<table class="w-full text-left border-collapse min-w-[650px]">
+						<table class="w-full text-left border-collapse min-w-162.5">
 							<thead>
 								<tr class="text-[10px] text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/10">
 									<th class="py-3 font-bold">Company</th>
@@ -663,7 +964,7 @@
 
 				{% if openOrders|length > 0 %}
 					<div class="overflow-x-auto">
-						<table class="w-full text-left border-collapse min-w-[500px]">
+						<table class="w-full text-left border-collapse min-w-125">
 							<thead>
 								<tr class="text-[10px] text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/10">
 									<th class="py-3 font-bold">Placed Date</th>
@@ -709,7 +1010,7 @@
 
 				{% if userTrades|length > 0 %}
 					<div class="overflow-x-auto">
-						<table class="w-full text-left border-collapse min-w-[500px]">
+						<table class="w-full text-left border-collapse min-w-125">
 							<thead>
 								<tr class="text-[10px] text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/10">
 									<th class="py-3 font-bold">Execution Date</th>
@@ -750,7 +1051,7 @@
 	</div>
 
 	{# --- SANKEY MODAL (INCOME STATEMENT FLOW) --- #}
-	<div id="sankey-modal" data-controller="sankey" data-sankey-ticker-value="{{ asset.ticker }}" class="fixed inset-0 z-[100] hidden flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+	<div id="sankey-modal" data-controller="sankey" data-sankey-ticker-value="{{ asset.ticker }}" data-sankey-url-value="/api/earnings-flow" data-action="click->sankey#backdropClick" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-md p-4">
 		<div class="bg-surface-container-low border border-outline-variant/20 rounded-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden shadow-2xl">
 			<div class="flex justify-between items-center p-6 border-b border-outline-variant/10">
 				<div>
@@ -760,7 +1061,7 @@
 					</h3>
 					<p class="text-xs text-on-surface-variant mt-0.5">Visualizing revenue streams through operational costs to net profit and capital allocation.</p>
 				</div>
-				<button onclick="document.dispatchEvent(new CustomEvent('sankey:close'))" class="text-on-surface-variant hover:text-on-surface transition-colors">
+				<button type="button" data-action="click->sankey#close" onclick="document.dispatchEvent(new CustomEvent('sankey:close'))" class="text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer">
 					<span class="material-symbols-outlined text-2xl">close</span>
 				</button>
 			</div>

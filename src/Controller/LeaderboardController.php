@@ -14,9 +14,9 @@ class LeaderboardController extends AbstractController
     #[Route('/leaderboard', name: 'app_leaderboard')]
     public function index(EntityManagerInterface $entityManager, CacheInterface $cache): Response
     {
-        // Cache the heavy aggregation query for 60 seconds to prevent database throttling
+        // Cache the aggregation query for 5 seconds for fast reloads without DB throttling
         $leaders = $cache->get('leaderboard_top_100', function (ItemInterface $item) use ($entityManager) {
-            $item->expiresAfter(60);
+            $item->expiresAfter(5);
             
             $conn = $entityManager->getConnection();
             

@@ -125,6 +125,7 @@ class AppFixtures extends Fixture
         // Hash the password
         $hashedPassword = $this->passwordHasher->hashPassword($user, 'test');
         $user->setPassword($hashedPassword);
+        $user->setIsVerified(true);
 
         $manager->persist($user);
 

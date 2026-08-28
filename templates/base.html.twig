@@ -15,9 +15,9 @@
 
 
 		{% block meta %}
-			<meta name="description" content="Aerie Exchange is a live, procedurally generated stock market simulation featuring real-time trading, clean surplus accounting, and dynamic macroeconomic cycles.">
-			<meta property="og:title" content="Aerie Exchange - Live Market Simulator">
-			<meta property="og:description" content="Trade live stocks and ETFs in a realistic, procedurally generated economic simulation.">
+			<meta name="description" content="Aerie Exchange is a live financial market and trading platform featuring real-time prices, deep order books, and macroeconomic analytics.">
+			<meta property="og:title" content="Aerie Exchange - Live Trading & Market Analytics">
+			<meta property="og:description" content="Trade live stocks and market indices with real-time financial data and deep market analytics.">
 			<meta property="og:type" content="website">
 			<meta name="twitter:card" content="summary_large_image">
 			<meta name="google-site-verification" content="zp-MWJxjqDD3nMcN7eRoM30TwI2oAY1I_IxP6EUYjSg"/>
@@ -28,7 +28,7 @@
 								            "@type": "WebSite",
 								            "name": "Aerie Exchange",
 								            "url": "{{ app.request.getSchemeAndHttpHost() }}/",
-								            "description": "Live, procedurally generated stock market simulation featuring clean surplus accounting."
+								            "description": "Live financial market and trading platform featuring real-time prices and market analytics."
 								        }
 			</script>
 
@@ -69,7 +69,7 @@
 		</div>
 
 		{# The Page Content #}
-		<main class="flex-grow"> {% block body %}{% endblock %}
+		<main class="grow"> {% block body %}{% endblock %}
 			</main>
 
 			{% include 'partials/_footer.html.twig' %}

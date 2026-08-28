@@ -1,5 +1,5 @@
 <nav class="sticky top-0 z-50 bg-surface/80 backdrop-blur-xl border-b border-outline-variant/10 w-full">
-    <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between items-center h-16">
             <div class="flex items-center gap-8">
                 <a href="/" class="text-xl font-bold tracking-tighter text-primary flex items-center gap-2">
@@ -38,35 +38,6 @@
                 {% endif %}
             </div>
         </div>
-    </div>
-
-    {# --- MINI TICKER TAPE / MARKET STATUS STRIP --- #}
-    <div class="bg-surface-container-lowest/90 border-t border-outline-variant/10 px-4 sm:px-6 lg:px-8 py-1.5 overflow-x-auto text-[11px] font-mono flex items-center justify-between gap-6 custom-scrollbar whitespace-nowrap">
-        <div class="flex items-center gap-6">
-            <div class="flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full bg-secondary animate-pulse shadow-[0_0_6px_rgba(78,222,163,0.8)]"></span>
-                <span class="text-secondary font-bold uppercase tracking-wider text-[10px]">Markets Live</span>
-            </div>
-
-            <a href="/stock/LBI" class="flex items-center gap-1.5 text-on-surface hover:text-primary transition-colors group">
-                <span class="font-bold text-primary">LBI Index:</span>
-                <span id="nav-lbi-price" class="font-bold">$100.00</span>
-            </a>
-
-            <span class="text-outline-variant/40">|</span>
-
-            <div class="flex items-center gap-4 text-on-surface-variant text-[10px]" id="nav-ticker-items">
-                <span>Trading Hours: 24/7 Live Sim</span>
-                <span>Accounting: Clean Surplus Model</span>
-            </div>
-        </div>
-
-        {% if app.user %}
-            <a href="/dashboard" class="text-primary hover:underline text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-                <span>My Portfolio</span>
-                <span class="material-symbols-outlined text-[12px]">chevron_right</span>
-            </a>
-        {% endif %}
     </div>
 
     <script>
@@ -142,18 +113,6 @@
                 }
             });
         }
-
-        // Live LBI price update in ticker tape
-        document.addEventListener('market:update', function(e) {
-            const payload = e.detail;
-            if (payload && payload.stocks) {
-                const lbi = payload.stocks.find(s => s.ticker === 'LBI');
-                const lbiEl = document.getElementById('nav-lbi-price');
-                if (lbi && lbiEl) {
-                    lbiEl.innerText = '$' + parseFloat(lbi.price).toFixed(2);
-                }
-            }
-        });
     });
     </script>
 </nav>

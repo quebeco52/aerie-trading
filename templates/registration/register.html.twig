@@ -14,7 +14,7 @@
 				class="space-y-6" action="{{ path('app_register') }}" method="POST">
 
 				{# CSRF token#}
-				<input type="hidden" name="_csrf_token" value="{{ csrf_token('register_form') }}">
+				<input type="hidden" name="_csrf_token" data-controller="csrf-protection" value="{{ csrf_token('register_form') }}">
 
 				<div>
 					<label for="email" class="block text-sm font-medium leading-6 text-white">Email address</label>

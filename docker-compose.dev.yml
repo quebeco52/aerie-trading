@@ -115,6 +115,16 @@ services:
     ports:
       - "1025:1025"
       - "8025:8025"
+
+  aerie-selenium:
+    image: selenium/standalone-chromium:latest
+    shm_size: 2gb
+    restart: unless-stopped
+    ports:
+      - "4444:4444"
+      - "7900:7900"
+    depends_on:
+      - aerie-app
   
 volumes:
   caddy_data:

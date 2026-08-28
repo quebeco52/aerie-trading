@@ -4,12 +4,10 @@
     order php_server before file_server
 }
 
-localhost {
-    # Route requests to your Symfony public directory
+(app_routes) {
     root * /app/public
-    
     encode zstd gzip
-    
+
     # 1. FORCE WebSocket traffic to Workerman, bypassing Symfony entirely
     route /ws* {
         uri strip_prefix /ws
@@ -20,4 +18,12 @@ localhost {
     route {
         php_server
     }
+}
+
+localhost {
+    import app_routes
+}
+
+http://aerie-app, http://:80 {
+    import app_routes
 }

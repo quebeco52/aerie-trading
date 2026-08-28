@@ -296,6 +296,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('SHER');
         $stock->setBeta('1.0');
+        $stock->setEarningsMomentumZ(['event' => 0.0, 'wholesale_channel' => 0.0, 'dtc_retail' => 0.0, 'contract_textile_supply' => 0.0]);
 
         $neutralMacro = new MacroStateDTO(outputGapEma: 0.0);
         $mildRecessionMacro = new MacroStateDTO(outputGapEma: -0.05);

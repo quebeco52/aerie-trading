@@ -3,7 +3,7 @@
 {% block title %}My Portfolio | Aerie Exchange{% endblock %}
 
 {% block body %}
-    <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full space-y-6">
+    <div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full space-y-6">
 
         {# --- HERO PORTFOLIO VALUE & METRICS BANNER --- #}
         <div class="bg-surface-container-low shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-6 sm:p-8 border border-outline-variant/15 relative overflow-hidden">
@@ -68,8 +68,8 @@
                 </div>
             </div>
 
-            <div class="w-full h-[260px] sm:h-[320px] relative rounded-xl overflow-hidden">
-                <div id="portfolio-chart-spinner" class="hidden absolute inset-0 z-20 flex items-center justify-center bg-surface-container-low/60 backdrop-blur-sm">
+            <div class="w-full h-65 sm:h-80 relative rounded-xl overflow-hidden">
+                <div id="portfolio-chart-spinner" class="hidden absolute inset-0 z-20 items-center justify-center bg-surface-container-low/60 backdrop-blur-sm">
                     <svg class="animate-spin h-8 w-8 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -143,7 +143,7 @@
             {# Holdings Table #}
             <div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl overflow-hidden shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)]">
                 <div class="overflow-x-auto">
-                    <table class="w-full text-left border-collapse min-w-[700px]">
+                    <table class="w-full text-left border-collapse min-w-175">
                         <thead>
                             <tr class="bg-surface-container-highest/30 text-on-surface-variant text-[10px] uppercase tracking-widest border-b border-outline-variant/10">
                                 <th class="px-6 py-4 font-bold">Asset</th>
@@ -220,7 +220,7 @@
 
                 {% if openOrders|length > 0 %}
                     <div class="overflow-x-auto">
-                        <table class="w-full text-left border-collapse min-w-[600px]">
+                        <table class="w-full text-left border-collapse min-w-150">
                             <thead>
                                 <tr class="text-[10px] text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/10">
                                     <th class="py-3 font-bold">Placed Date</th>
@@ -275,7 +275,7 @@
 
                 {% if tradeHistory|length > 0 %}
                     <div class="overflow-x-auto">
-                        <table class="w-full text-left border-collapse min-w-[600px]">
+                        <table class="w-full text-left border-collapse min-w-150">
                             <thead>
                                 <tr class="text-[10px] text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/10">
                                     <th class="py-3 font-bold">Execution Date</th>

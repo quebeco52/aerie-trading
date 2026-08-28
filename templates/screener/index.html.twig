@@ -3,7 +3,7 @@
 {% block title %}Stock Screener | Aerie Exchange{% endblock %}
 
 {% block body %}
-<div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full space-y-6">
+<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full space-y-6">
 
     {# Hero Section #}
     <div class="bg-surface-container-low shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-6 md:p-8 border border-outline-variant/15 relative overflow-hidden">
@@ -49,7 +49,7 @@
     {# Screener Table #}
     <div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl overflow-hidden shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)]">
         <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse min-w-[900px]" id="screener-table">
+            <table class="w-full text-left border-collapse min-w-225" id="screener-table">
                 <thead>
                     <tr class="bg-surface-container-highest/30 text-on-surface-variant text-[10px] uppercase tracking-widest border-b border-outline-variant/10">
                         <th class="px-6 py-4 font-bold cursor-pointer select-none hover:text-primary transition-colors" data-col="ticker">Ticker</th>
@@ -76,7 +76,7 @@
                                     {% endif %}
                                 </div>
                             </td>
-                            <td class="px-4 py-4 font-bold text-on-surface max-w-[220px] truncate" data-value="{{ stock.name }}">{{ stock.name }}</td>
+                            <td class="px-4 py-4 font-bold text-on-surface max-w-55 truncate" data-value="{{ stock.name }}">{{ stock.name }}</td>
                             <td class="px-4 py-4 text-on-surface-variant text-xs" data-value="{{ stock.sector }}">
                                 <span class="px-2.5 py-1 rounded-md bg-surface-container text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">{{ stock.sector }}</span>
                             </td>
