@@ -25,10 +25,9 @@ use App\Service\Macro\MacroEngine;
  */
 class SemiconductorBusinessModel extends StandardCorporateBusinessModel
 {
-    public function getModelThresholds(): array
-    {
-        return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.15, 'moat_spread' => 0.020, 'nwc_intensity' => 0.18, 'capex_completion_rate' => 0.125];
-    }
+        public function getReversionSpeed(): float { return 0.15; }
+    public function getMoatSpread(): float { return 0.02; }
+    public function getCapExCompletionRate(Stock $stock): float { return 0.125; }
     public function getSecularGrowthRate(Stock $stock): float
     {
         return 0.05;

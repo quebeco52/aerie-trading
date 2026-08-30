@@ -122,6 +122,21 @@ class DebtEngine
         $ebitda = $ebit + $depreciation;
 
         if ($debt <= 0.0) {
+            if ($this->creditRatingAgency !== null && $advanceMaturity) {
+                $oldRating = $stock->getCreditRating();
+                $zScoreData = $this->calculateAltmanZScore($stock, $ebit, $revenue, (float) $stock->getPrice());
+                $newRating = $this->creditRatingAgency->evaluateRating($stock, 10.0, $zScoreData['z_score']);
+                if ($newRating !== null && $this->marketEventPublisher !== null) {
+                    $isDowngrade = $this->creditRatingAgency->isDowngrade($oldRating, $newRating);
+                    $eventType = $isDowngrade ? 'CREDIT_DOWNGRADE' : 'CREDIT_UPGRADE';
+                    $desc = $isDowngrade
+                        ? sprintf('[CREDIT DOWNGRADE] %s: Credit rating downgraded from %s to %s due to deteriorating fundamental solvency.', $stock->getTicker(), $oldRating, $newRating)
+                        : sprintf('[CREDIT UPGRADE] %s: Credit rating upgraded from %s to %s following balance sheet strengthening.', $stock->getTicker(), $oldRating, $newRating);
+                    $changePct = $isDowngrade ? -3.0 : 2.0;
+                    $this->marketEventPublisher->publish($stock, $eventType, $desc, $changePct);
+                }
+            }
+
             return new \App\DTO\DebtMetricsDTO(
                 0.0,
                 0.0,
@@ -137,6 +152,7 @@ class DebtEngine
         }
 
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
+        $totalDebtObligations = max(0.01, $debt + $wholesaleDebt);
         $netDebt = max(0.0, $strategy->getNetDebtCapital($debt, $wholesaleDebt, $treasury));
         $totalEquity = (float) $stock->getTotalEquity();
 
@@ -152,8 +168,8 @@ class DebtEngine
         $equityVolatility = max(0.05, $equityVolatility); // Minimum vol failsafe
 
         $marketCap = max(1.0, (float) $stock->getPrice() * max(1.0, (float) $stock->getSharesOutstanding()));
-        // For default modeling, we evaluate Net Debt against Market Equity to approximate Firm Value
-        $assetValue = $marketCap + $netDebt;
+        // For default modeling, Firm Value V = Market Equity + Total Debt Obligations
+        $assetValue = $marketCap + $totalDebtObligations;
 
         // Asset Volatility approximation: sigma_V = sigma_E * (E / V)
         // A dying company with massive debt has E approaching 0, which would shrink Asset Volatility to 0 and falsely grant a AAA rating.
@@ -173,7 +189,7 @@ class DebtEngine
 
         $distanceToDefault = $this->mathUtility->calculateDistanceToDefault(
             $assetValue,
-            max(0.01, $netDebt),
+            $totalDebtObligations,
             $assetVolatility,
             $policyRate,
             $timeToMaturity
@@ -181,12 +197,13 @@ class DebtEngine
 
         if ($this->creditRatingAgency !== null && $advanceMaturity) {
             $oldRating = $stock->getCreditRating();
-            $newRating = $this->creditRatingAgency->evaluateRating($stock, $distanceToDefault);
+            $zScoreData = $this->calculateAltmanZScore($stock, $ebit, $revenue, (float) $stock->getPrice());
+            $newRating = $this->creditRatingAgency->evaluateRating($stock, $distanceToDefault, $zScoreData['z_score']);
             if ($newRating !== null && $this->marketEventPublisher !== null) {
                 $isDowngrade = $this->creditRatingAgency->isDowngrade($oldRating, $newRating);
                 $eventType = $isDowngrade ? 'CREDIT_DOWNGRADE' : 'CREDIT_UPGRADE';
                 $desc = $isDowngrade
-                    ? sprintf('[CREDIT DOWNGRADE] %s: Credit rating downgraded from %s to %s due to deteriorating distance to default.', $stock->getTicker(), $oldRating, $newRating)
+                    ? sprintf('[CREDIT DOWNGRADE] %s: Credit rating downgraded from %s to %s due to deteriorating credit profile.', $stock->getTicker(), $oldRating, $newRating)
                     : sprintf('[CREDIT UPGRADE] %s: Credit rating upgraded from %s to %s following balance sheet strengthening.', $stock->getTicker(), $oldRating, $newRating);
                 $changePct = $isDowngrade ? -3.0 : 2.0;
                 $this->marketEventPublisher->publish($stock, $eventType, $desc, $changePct);
@@ -266,7 +283,6 @@ class DebtEngine
         $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industry] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
         $businessModel = $metrics['business_model'] ?? 'none';
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
-        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
 
         $debtMetrics = $this->calculateInterestExpense($stock, $macroState, false, $overrideRevenue, $overrideMargin);
 
@@ -324,8 +340,7 @@ class DebtEngine
         // DISTRESS PENALTY
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
         
-        $modelThresholds = $strategy->getModelThresholds();
-        $minIcr = $modelThresholds['min_icr'];
+        $minIcr = $strategy->getMinIcr();
 
         // Interest income generated by a company's cash treasury is a core component of Cash Flow Available for Debt Service (CFADS).
         // By adding it to EBIT before calculating the ICR, we prevent massive cash fortresses from suffering false liquidity crises.
@@ -352,7 +367,7 @@ class DebtEngine
 
         $wacc = $baseWacc + $distressPremium;
 
-        if ($isFinancial) {
+        if ($strategy->appliesDistressPremiumToCostOfEquity()) {
             // Financial institutions use Cost of Equity as their hurdle rate, so it must also suffer the distress penalty!
             $costOfEquity += $distressPremium;
         }
@@ -452,10 +467,9 @@ class DebtEngine
             $capitalRatio = $equity / $totalAssets;
             $zScore = max(-100.0, min(100.0, $capitalRatio * 100.0)); // Convert to percentage points (e.g., 8% capital = 8.0 score)
 
-            $modelThresholds = $strategy->getModelThresholds();
-            $distressThreshold = $modelThresholds['distress_equity'];
-            $warningThreshold = $modelThresholds['warning_equity'];
-            $bankruptThreshold = $modelThresholds['bankrupt_equity'];
+            $distressThreshold = $strategy->getDistressEquityThreshold();
+            $warningThreshold = $strategy->getWarningEquityThreshold();
+            $bankruptThreshold = $strategy->getBankruptEquityThreshold();
 
             $zone = 'Safe';
             if ($zScore < $distressThreshold) {

@@ -24,10 +24,8 @@ use App\Service\Math\FinancialConstants;
  */
 class AssetManagementBusinessModel extends BaseFinancialBusinessModel
 {
-    public function getModelThresholds(): array
-    {
-        return ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => 0.5,  'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.18, 'moat_spread' => 0.010, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 1.0];
-    }
+        public function getWholesaleLeverageLimit(): float { return 0.5; }
+    public function getMoatSpread(): float { return 0.01; }
 
     // --- ROE & Target Architecture ---
     /** Weight given to historical baseline ROE when blending with TTM ROE. */
@@ -370,11 +368,8 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
      */
     public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float
     {
-        $industry = $stock->getIndustry() ?: 'General';
-        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $thresholds = $this->getModelThresholds();
-        $kappa = $thresholds['reversion_speed'] ?? 0.18;
-        $moatSpread = $thresholds['moat_spread'] ?? 0.01;
+        $kappa = $this->getReversionSpeed();
+        $moatSpread = $this->getMoatSpread();
 
         $equity = (float) $stock->getTotalEquity();
         $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * self::ROE_ANNUALIZATION_MULT : 0.0;

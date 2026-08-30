@@ -39,8 +39,8 @@ class ConsumerStaplesBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($expectedCropNwc, $model->getWorkingCapitalIntensity($crop), 0.0001);
 
         // 4. Threshold invariant
-        $thresholds = $model->getModelThresholds();
-        $this->assertEquals(ConsumerStaplesBusinessModel::BRANDED_NWC_INTENSITY, $thresholds['nwc_intensity']);
+        $this->assertEquals(0.15, $model->getReversionSpeed());
+        $this->assertEquals(0.015, $model->getMoatSpread());
     }
 
     public function testPricingPowerAndElasticityModulation(): void

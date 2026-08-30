@@ -122,22 +122,9 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     /** Operating margin mean reversion speed for apparel manufacturing economics. */
     public const APPAREL_REVERSION_SPEED = 0.15;
 
-    public function getModelThresholds(): array
-    {
-        return [
-            'min_icr' => 2.00,
-            'bankrupt_equity' => 0.0,
-            'distress_equity' => 0.0,
-            'warning_equity' => 0.0,
-            'wholesale_leverage_limit' => 1.0,
-            'dividend_crisis_icr' => 1.50,
-            'buyback_min_icr' => 2.00,
-            'reversion_speed' => self::APPAREL_REVERSION_SPEED,
-            'moat_spread' => 0.008,
-            'nwc_intensity' => 0.22,
-            'capex_completion_rate' => 0.25,
-        ];
-    }
+        public function getReversionSpeed(): float { return 0.15; }
+    public function getMoatSpread(): float { return 0.008; }
+    public function getCapExCompletionRate(Stock $stock): float { return 0.25; }
 
     public function getSecularGrowthRate(Stock $stock): float
     {

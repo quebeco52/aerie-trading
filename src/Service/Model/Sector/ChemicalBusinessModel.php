@@ -141,22 +141,10 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     /** Seasonal fertilizer inventory stockpiling working capital intensity for agrochemicals. */
     public const AGROCHEM_NWC_INTENSITY = 0.28;
 
-    public function getModelThresholds(): array
-    {
-        return [
-            'min_icr' => 2.00,
-            'bankrupt_equity' => 0.0,
-            'distress_equity' => 0.0,
-            'warning_equity' => 0.0,
-            'wholesale_leverage_limit' => 1.5,
-            'dividend_crisis_icr' => 1.50,
-            'buyback_min_icr' => 2.00,
-            'reversion_speed' => self::CHEMICAL_REVERSION_SPEED,
-            'moat_spread' => 0.010,
-            'nwc_intensity' => 0.23,
-            'capex_completion_rate' => 0.30,
-        ];
-    }
+        public function getWholesaleLeverageLimit(): float { return 1.5; }
+    public function getReversionSpeed(): float { return 0.12; }
+    public function getMoatSpread(): float { return 0.01; }
+    public function getCapExCompletionRate(Stock $stock): float { return 0.3; }
 
     public function getSecularGrowthRate(Stock $stock): float
     {

@@ -120,22 +120,8 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Revenue throughput multiplier applied during factory assembly shutdowns from labor strikes. */
     public const UAW_STRIKE_MULT = 0.80;
 
-    public function getModelThresholds(): array
-    {
-        return [
-            'min_icr'                  => 2.00,
-            'bankrupt_equity'          => 0.0,
-            'distress_equity'          => 0.0,
-            'warning_equity'           => 0.0,
-            'wholesale_leverage_limit' => 1.0,
-            'dividend_crisis_icr'      => 1.50,
-            'buyback_min_icr'          => 2.00,
-            'reversion_speed'          => 0.08,
-            'moat_spread'              => 0.015,
-            'nwc_intensity'            => 0.15,
-            'capex_completion_rate'    => 0.125,
-        ];
-    }
+        public function getReversionSpeed(): float { return 0.08; }
+    public function getMoatSpread(): float { return 0.015; }
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {

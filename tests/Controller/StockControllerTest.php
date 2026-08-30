@@ -40,6 +40,11 @@ class StockControllerTest extends WebTestCase
         $this->assertSelectorExists('.stock-tab-btn[data-tab="financials"]');
         $this->assertSelectorExists('.stock-tab-btn[data-tab="sector"]');
         $this->assertSelectorExists('.stock-tab-btn[data-tab="orders"]');
+        $this->assertSelectorExists('#target-consensus');
+        $this->assertSelectorExists('#target-growth');
+        $this->assertSelectorExists('#target-value');
+        $this->assertSelectorExists('#target-income');
+        $this->assertSelectorExists('#analyst-consensus-badge');
     }
 
     public function testStockViewLoadsForValidEtf(): void

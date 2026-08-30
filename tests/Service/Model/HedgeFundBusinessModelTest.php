@@ -565,11 +565,10 @@ class HedgeFundBusinessModelTest extends TestCase
 
     public function testModelThresholds(): void
     {
-        $thresholds = $this->model->getModelThresholds();
-        $this->assertSame(3.0, $thresholds['wholesale_leverage_limit']);
-        $this->assertSame(1.05, $thresholds['min_icr']);
-        $this->assertSame(0.20, $thresholds['reversion_speed']);
-        $this->assertSame(0.008, $thresholds['moat_spread']);
+        $this->assertSame(3.0, $this->model->getWholesaleLeverageLimit());
+        $this->assertSame(1.05, $this->model->getMinIcr());
+        $this->assertSame(0.20, $this->model->getReversionSpeed());
+        $this->assertSame(0.008, $this->model->getMoatSpread());
     }
 }
 

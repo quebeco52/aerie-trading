@@ -22,10 +22,16 @@ interface OperatingStrategyInterface
     public function getSecularGrowthRate(Stock $stock): float;
     public function getCapexCyclicality(): float;
     public function getSurpriseBlendWeights(): array;
+    public function getEffectiveReturn(Stock $stock): float;
     public function getTrueReturn(Stock $stock): float;
     public function getEvaluationCapital(float $equity, float $investedCapital): float;
     public function getWorkingCapitalIntensity(Stock $stock): float;
     public function getCapExCompletionRate(Stock $stock): float;
     public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void;
     public function getMarginReversionSpeed(): float;
+    public function getReversionSpeed(): float;
+    public function getMoatSpread(): float;
+    public function getPhysicalCapital(Stock $stock): float;
+    public function allowsPhysicalOrganicCapex(): bool;
+    public function getReturnBasisIncome(Stock $stock, float $quarterlyNopat, float $actualTotalNetIncome): float;
 }

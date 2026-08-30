@@ -29,10 +29,8 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.50;
     public const BASE_COVERAGE_ERROR = 0.10;
-    public function getModelThresholds(): array
-    {
-        return ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => 8.0,  'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.18, 'moat_spread' => 0.005, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 1.0];
-    }
+        public function getWholesaleLeverageLimit(): float { return 8.0; }
+    public function getMoatSpread(): float { return 0.005; }
     // --- ROE & Target Architecture ---
     /** Weight given to historical baseline ROE when blending with TTM ROE. */
     public const BASELINE_ROE_WEIGHT = 0.50;

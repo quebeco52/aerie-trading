@@ -25,10 +25,7 @@ use App\Service\Math\FinancialConstants;
  */
 class CreditServicesBusinessModel extends CommercialBankBusinessModel
 {
-    public function getModelThresholds(): array
-    {
-        return ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => 2.0,  'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.18, 'moat_spread' => 0.005, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 1.0];
-    }
+        public function getMoatSpread(): float { return 0.005; }
     // --- Dual-Stream Credit Services Architecture ---
     /** Baseline fraction of revenue derived from revolving consumer lending interest. */
     public const LENDING_REVENUE_WEIGHT  = 0.65;
@@ -409,7 +406,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
 
     public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
     {
-        $bankEquityLimit = $this->getModelThresholds()['equity_limit'] ?? 10.0;
+        $bankEquityLimit = $targetDebtTolerance > 0.0 ? $targetDebtTolerance : $this->getWholesaleLeverageLimit();
         return $currentDebtRatio < ($bankEquityLimit * 0.90);
     }
 }

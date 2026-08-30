@@ -20,14 +20,24 @@ use App\Service\Model\Trait\StandardValuationTrait;
  */
 abstract class BaseFinancialBusinessModel implements BusinessModelInterface
 {
-    use StandardBaseModelTrait;
     use StandardTreasuryTrait;
-    use StandardValuationTrait;
-    use StandardOperatingPhysicsTrait, StandardCapitalAllocationTrait, FinancialPhysicsTrait {
+    use StandardBaseModelTrait, StandardValuationTrait, StandardOperatingPhysicsTrait, StandardCapitalAllocationTrait, FinancialPhysicsTrait {
+        FinancialPhysicsTrait::isFinancial insteadof StandardBaseModelTrait;
         FinancialPhysicsTrait::getTrueReturn insteadof StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::getEvaluationCapital insteadof StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::calculateEconomicReturn insteadof StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::updateDynamicRoic insteadof StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::getReversionSpeed insteadof StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::getMoatSpread insteadof StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::getWorkingCapitalIntensity insteadof StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::getCapExCompletionRate insteadof StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::getPhysicalCapital insteadof StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::allowsPhysicalOrganicCapex insteadof StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::getReturnBasisIncome insteadof StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::getEffectiveReturn insteadof StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::getMaxOrganicGrowthSpeed insteadof StandardCapitalAllocationTrait;
+        FinancialPhysicsTrait::getRegulatoryDividendCap insteadof StandardCapitalAllocationTrait;
+        FinancialPhysicsTrait::checkBuybackRegulatoryLockout insteadof StandardCapitalAllocationTrait;
+        FinancialPhysicsTrait::calculateStructuralEps insteadof StandardValuationTrait;
     }
 }

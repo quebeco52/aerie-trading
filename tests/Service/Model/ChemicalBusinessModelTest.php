@@ -37,11 +37,9 @@ class ChemicalBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('CHEM');
 
-        $thresholds = $this->model->getModelThresholds();
-        $this->assertEquals(0.23, $thresholds['nwc_intensity']);
-        $this->assertEquals(0.010, $thresholds['moat_spread']);
-        $this->assertEquals(0.12, $thresholds['reversion_speed']);
-        $this->assertEquals(0.30, $thresholds['capex_completion_rate']);
+        $this->assertEquals(0.010, $this->model->getMoatSpread());
+        $this->assertEquals(0.12, $this->model->getReversionSpeed());
+        $this->assertEquals(0.30, $this->model->getCapExCompletionRate($stock));
 
         // Default weights: Base Petro 50% (0.24), Specialty 30% (0.18), Agri 20% (0.28)
         // (0.50*0.24) + (0.30*0.18) + (0.20*0.28) = 0.120 + 0.054 + 0.056 = 0.230

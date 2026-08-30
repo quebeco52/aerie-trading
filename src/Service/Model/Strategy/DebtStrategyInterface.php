@@ -26,10 +26,19 @@ interface DebtStrategyInterface
     public function getRequiredIcrBuffer(): float;
     public function getMaxFloatingDebtRatio(): float;
     public function getDeleveragingEvaluationDebt(float $totalDebt, float $wholesaleDebt): float;
-    public function getDeleveragingEvaluationLimit(array $modelThresholds, float $macroDebtTolerance): float;
+    public function getDeleveragingEvaluationLimit(float $macroDebtTolerance): float;
     public function getDebtCostMetrics(DebtMetricsDTO $debtMetrics, float $currentDebt, float $wholesaleDebt, float $interestExpense): array;
     public function getNetDebtCapital(float $currentDebt, float $wholesaleDebt, float $treasury): float;
     public function calculateLeveredBeta(float $baseBeta, float $impliedTaxShieldRate, float $effectiveDebtToEquity, MathUtility $mathUtility): float;
     public function requiresAlternativeZScore(): bool;
     public function processPassiveLiabilityGrowth(Stock $stock, MacroStateDTO $macroState, array &$state, MathUtility $mathUtility): void;
+    public function getMinIcr(): float;
+    public function getBankruptEquityThreshold(): float;
+    public function getDistressEquityThreshold(): float;
+    public function getWarningEquityThreshold(): float;
+    public function getWholesaleLeverageLimit(): float;
+    public function getDividendCrisisIcr(): float;
+    public function getBuybackMinIcr(): float;
+    public function appliesDistressPremiumToCostOfEquity(): bool;
+    public function shouldForceDeleveragingOnJunkOrHoarding(): bool;
 }

@@ -32,6 +32,14 @@ class CreditRatingAgency
     /** Hysteresis buffer requiring d2 to exceed threshold +/- buffer to prevent border oscillation. */
     public const HYSTERESIS_BUFFER = 0.15;
 
+    // --- Altman Z''-Score Distress Bounds ---
+    /** Altman Z''-Score threshold below which a firm is in deep financial distress (speculative ceiling CCC). */
+    public const ALTMAN_DISTRESS_THRESHOLD = 1.10;
+    /** Altman Z''-Score threshold below which a firm is in the grey zone (speculative ceiling BB). */
+    public const ALTMAN_GREY_THRESHOLD = 2.60;
+    /** Altman Z''-Score threshold below which a firm is insolvent/defaulting (rating D). */
+    public const ALTMAN_INSOLVENT_THRESHOLD = 0.00;
+
     // --- Rating Hierarchy ---
     /** Discrete numerical ranks for credit rating brackets from highest (AAA=7) to default (D=0). */
     public const RATING_RANKS = [
@@ -46,26 +54,69 @@ class CreditRatingAgency
     ];
 
     /**
-     * Evaluates the company's Distance to Default and updates its assigned credit rating.
+     * Evaluates the company's Distance to Default, Altman Z''-score, and balance sheet solvency
+     * to assign an updated credit rating.
      *
-     * @param Stock $stock             The stock entity being evaluated.
-     * @param float $distanceToDefault The continuous Distance to Default score (d2) from Merton's model.
+     * @param Stock       $stock             The stock entity being evaluated.
+     * @param float       $distanceToDefault The continuous Distance to Default score (d2) from Merton's model.
+     * @param float|null  $altmanZScore      The company's Altman Z''-score for accounting solvency.
      * @return string|null The new credit rating bracket if a transition occurred, or null if the rating stayed the same.
      */
-    public function evaluateRating(Stock $stock, float $distanceToDefault): ?string
+    public function evaluateRating(Stock $stock, float $distanceToDefault, ?float $altmanZScore = null): ?string
     {
         $oldRating = $stock->getCreditRating();
 
-        // 1. Calculate the pure mathematical rating based on the current d2 score
+        if ($stock->isBankrupt()) {
+            if ($oldRating !== 'D') {
+                $stock->setCreditRating('D');
+                return 'D';
+            }
+            return null;
+        }
+
+        // 1. Calculate the pure structural rating based on current d2 score
         $targetRating = $this->convertDistanceToRating($distanceToDefault, $oldRating);
+        $targetRank = self::RATING_RANKS[$targetRating] ?? 4;
 
-        if ($targetRating !== $oldRating) {
-            // 2. Clamp the transition to prevent multi-notch whiplash
-            $clampedRating = $this->clampRatingTransition($oldRating, $targetRating);
+        // 2. Fundamental & Balance Sheet Solvency Caps
+        $capRank = 7; // AAA default ceiling
 
-            // 3. Update the stock entity
-            $stock->setCreditRating($clampedRating);
-            return $clampedRating;
+        // A company with negative book equity is balance sheet insolvent
+        if ((float) $stock->getTotalEquity() <= 0.0) {
+            $capRank = min($capRank, self::RATING_RANKS['CCC']);
+        }
+
+        if ($altmanZScore !== null) {
+            if ($altmanZScore < self::ALTMAN_INSOLVENT_THRESHOLD) {
+                $capRank = min($capRank, self::RATING_RANKS['D']);
+            } elseif ($altmanZScore < self::ALTMAN_DISTRESS_THRESHOLD) {
+                $capRank = min($capRank, self::RATING_RANKS['CCC']);
+            } elseif ($altmanZScore < self::ALTMAN_GREY_THRESHOLD) {
+                $capRank = min($capRank, self::RATING_RANKS['BB']);
+            }
+        }
+
+        $effectiveTargetRank = min($targetRank, $capRank);
+        $flippedRanks = array_flip(self::RATING_RANKS);
+        $effectiveTargetRating = $flippedRanks[$effectiveTargetRank];
+
+        if ($effectiveTargetRating !== $oldRating) {
+            $isSevereDistress = ($altmanZScore !== null && $altmanZScore < self::ALTMAN_DISTRESS_THRESHOLD)
+                || ((float) $stock->getTotalEquity() <= 0.0)
+                || $effectiveTargetRank <= self::RATING_RANKS['CCC'];
+
+            // During fatal distress or insolvency, execute an immediate emergency downgrade
+            // rather than artificially maintaining investment-grade ratings via notch damping.
+            if ($isSevereDistress && $effectiveTargetRank < (self::RATING_RANKS[$oldRating] ?? 4)) {
+                $clampedRating = $effectiveTargetRating;
+            } else {
+                $clampedRating = $this->clampRatingTransition($oldRating, $effectiveTargetRating);
+            }
+
+            if ($clampedRating !== $oldRating) {
+                $stock->setCreditRating($clampedRating);
+                return $clampedRating;
+            }
         }
 
         return null;

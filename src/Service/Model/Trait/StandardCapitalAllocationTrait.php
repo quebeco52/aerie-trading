@@ -35,4 +35,9 @@ trait StandardCapitalAllocationTrait
     {
         return null;
     }
+
+    public function checkBuybackRegulatoryLockout(Stock $stock, float $currentTreasury): ?bool
+    {
+        return null;
+    }
 }

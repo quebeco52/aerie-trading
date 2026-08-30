@@ -59,6 +59,7 @@ class BankruptcyTest extends TestCase
         $stock->setSharesOutstanding('1000000');
         $stock->setOperatingMargin('0.10');
         $stock->setTotalRevenue('1000000');
+        $stock->setCreditRating('BBB');
 
         $this->assertFalse($stock->isBankrupt());
 
@@ -126,6 +127,7 @@ class BankruptcyTest extends TestCase
 
         $this->assertCount(1, $events);
         $this->assertTrue($stock->isBankrupt());
+        $this->assertSame('D', $stock->getCreditRating());
         $this->assertEquals('0.00000000', $stock->getPrice());
         $this->assertEquals('0.0000', $stock->getCurrentVolatility());
         $this->assertEquals('CANCELLED', $buyOrder->getStatus());

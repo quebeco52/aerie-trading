@@ -31,7 +31,14 @@ class StockController extends AbstractController
      * @return Response Returns the rendered view with asset details.
      */
     #[Route('/stock/{ticker}', name: 'app_stock_view')]
-    public function view(string $ticker, EntityManagerInterface $entityManager, \Redis $redis, \App\Service\Math\CorporateMetrics $corporateMetrics): Response
+    public function view(
+        string $ticker,
+        EntityManagerInterface $entityManager,
+        \Redis $redis,
+        \App\Service\Math\CorporateMetrics $corporateMetrics,
+        \App\Service\Market\MarketEngine $marketEngine,
+        \App\Service\Corporate\DebtEngine $debtEngine
+    ): Response
     {
         $isEtf = false;
         $asset = $entityManager->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);
@@ -75,8 +82,7 @@ class StockController extends AbstractController
         $isFinancial = false;
         $businessModel = 'none';
         $investedCapital = 0.0;
-
-
+        $analystTargets = null;
 
         if (!$isEtf) {
             $isBankrupt = $asset->isBankrupt();
@@ -93,6 +99,52 @@ class StockController extends AbstractController
             $investedCapital = $isBankrupt ? 0.0 : (float) $asset->getInvestedCapital();
 
             $marketShare = $isBankrupt ? 0.0 : min(0.9999, $corporateMetrics->calculateMarketShare($evaluationCapital, $nominalGdpIndex, $samRatio));
+
+            if (!$isBankrupt) {
+                $currentPrice = (float) $asset->getPrice();
+                $health = $debtEngine->analyzeDebtHealth($asset, $macroState);
+                $industry = $asset->getIndustry() ?: 'General';
+                $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+                $shares = max(1.0, (float) $asset->getSharesOutstanding());
+                $revenue = (float) $asset->getTotalRevenue();
+                $debt = (float) $asset->getTotalDebt();
+                $treasury = (float) $asset->getCorporateTreasury();
+                $netDebt = max(0.0, $strategy->getNetDebtCapital($debt, (float) $asset->getWholesaleDebt(), $treasury));
+                $baselinePE = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['pe_ratio'] ?? 20.0;
+                $secularGrowth = $strategy->getSecularGrowthRate($asset);
+
+                $pricingCtx = new \App\DTO\MarketPricingContext(
+                    currentPrice: $currentPrice,
+                    currentVolatility: (float) ($asset->getCurrentVolatility() ?? $asset->getVolatility()),
+                    longTermVolatility: (float) $asset->getVolatility(),
+                    earningsPerShare: (float) $asset->getEarningsPerShare(),
+                    dt: 0.0,
+                    beta: (float) $asset->getBeta(),
+                    macroState: $macroState,
+                    fcfPerShare: $asset->getFreeCashFlowPerShare() !== null ? (float) $asset->getFreeCashFlowPerShare() : null,
+                    bookValuePerShare: (float) $asset->getBookValuePerShare(),
+                    currentRoic: (float) ($asset->getCurrentRoic() ?: $asset->getBaselineRoic()),
+                    roicTtm: (float) $asset->getRoicTtm(),
+                    dividendPerShare: (float) $asset->getLastDividend(),
+                    liveWacc: $health->wacc ?? 0.08,
+                    baselineIndustryPE: $baselinePE,
+                    revenuePerShare: $revenue / $shares,
+                    businessModel: $businessModel,
+                    liveCostOfEquity: $health->costOfEquity ?? 0.10,
+                    netDebtPerShare: $netDebt / $shares,
+                    secularGrowth: $secularGrowth
+                );
+
+                $pricingResult = $marketEngine->calculateNextPrice($pricingCtx);
+                $analystTargets = $pricingResult['analyst_targets'];
+                $fairValue = (float) ($pricingResult['perceived_fair_value'] ?? 0.0);
+                $analystTargets['consensus'] = $fairValue > 0 ? $fairValue : max($analystTargets['growth_analyst'], $analystTargets['income_analyst'], $analystTargets['value_analyst']);
+
+                $isOutperform = $analystTargets['consensus'] > ($currentPrice * 1.05);
+                $isUnderperform = $analystTargets['consensus'] < ($currentPrice * 0.95);
+                $analystTargets['rating'] = $isOutperform ? 'Outperform' : ($isUnderperform ? 'Underperform' : 'Neutral');
+                $analystTargets['upside_pct'] = $currentPrice > 0 ? (($analystTargets['consensus'] - $currentPrice) / $currentPrice) * 100 : 0.0;
+            }
         }
 
         $generalInfo = $asset->getDescription();
@@ -257,6 +309,7 @@ class StockController extends AbstractController
             'pieData' => $pieData,
             'sharesMap' => $sharesMap,
             'components' => $components,
+            'analystTargets' => $analystTargets,
         ]);
     }
 

@@ -24,10 +24,16 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     /** Standard deviation of Wall Street analyst error when estimating REIT revenues. */
     public const BASE_COVERAGE_ERROR = 0.10;
 
-    public function getModelThresholds(): array
-    {
-        return ['min_icr' => 1.05, 'bankrupt_equity' => 10.0, 'distress_equity' => 20.0, 'warning_equity' => 30.0, 'wholesale_leverage_limit' => 2.0,  'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.20, 'moat_spread' => 0.005, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 0.125];
-    }
+        public function getMinIcr(): float { return 1.05; }
+    public function getBankruptEquityThreshold(): float { return 10.0; }
+    public function getDistressEquityThreshold(): float { return 20.0; }
+    public function getWarningEquityThreshold(): float { return 30.0; }
+    public function getWholesaleLeverageLimit(): float { return 2.0; }
+    public function getDividendCrisisIcr(): float { return 1.05; }
+    public function getBuybackMinIcr(): float { return 1.15; }
+    public function getMoatSpread(): float { return 0.005; }
+    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.0; }
+    public function getCapExCompletionRate(Stock $stock): float { return 0.125; }
 
     // --- Cap Rate & Portfolio Turnover Rails ---
     /** Fraction of property portfolio acquired/divested per quarter adjusting baseline cap rate. */
@@ -318,9 +324,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
     public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float
     {
-        $thresholds = $this->getModelThresholds();
-        $kappa = $thresholds['reversion_speed'] ?? 0.20;
-        $moatSpread = $thresholds['moat_spread'] ?? 0.005;
+        $kappa = $this->getReversionSpeed();
+        $moatSpread = $this->getMoatSpread();
 
         // In EarningsEngine, $ebit is calculated as actualRevenue - (variableCosts + fixedCosts) without deducting depreciation.
         // Therefore, $ebit already represents Net Operating Income (NOI).
@@ -382,7 +387,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $evalTolerance = $health->debtTolerance;
         $balanceSheetCapacity = max(0.0, ($equity * $evalTolerance) - $evalDebt);
 
-        $minimumIcr = ($this->getModelThresholds()['buyback_min_icr'] ?? 3.0) + 0.5;
+        $minimumIcr = $this->getBuybackMinIcr() + 0.5;
 
         $operatingIncome = $ebit;
 

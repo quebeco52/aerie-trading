@@ -90,7 +90,7 @@ class AssetManagementBusinessModelTest extends TestCase
     {
         $peModel = new PrivateEquityBusinessModel();
 
-        // PE default equity limit is 2.5 (from getModelThresholds wholesale_leverage_limit) or 1.0 default
+        // PE default equity limit is 2.5 (from getWholesaleLeverageLimit) or 1.0 default
         // 85% of 1.0 (default) is 0.85
         $this->assertTrue($peModel->isUnderLeveraged(0.80, 1.0, 5.0, 1.05, 0.12, 0.05));
         $this->assertFalse($peModel->isUnderLeveraged(0.90, 1.0, 5.0, 1.05, 0.12, 0.05));

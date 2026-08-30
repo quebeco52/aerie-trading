@@ -144,9 +144,9 @@ class CapitalAllocationEngine
         $customDepreciation = (float) $stock->getDepreciationRate();
         $depRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($ctx->industry);
 
-        $trueReturn = $ctx->isFinancial ? (float) $stock->getRoeTtm() : (float) $stock->getRoicTtm();
+        $trueReturn = (float) $ctx->strategy->getTrueReturn($stock);
         if ($trueReturn === 0.0) {
-            $trueReturn = $ctx->strategy->calculateEconomicReturn($stock, $ctx->isFinancial ? $ctx->actualTotalNetIncome : $ctx->quarterlyNopat, $ctx->investedCapital);
+            $trueReturn = $ctx->strategy->calculateEconomicReturn($stock, $ctx->strategy->getReturnBasisIncome($stock, $ctx->quarterlyNopat, $ctx->actualTotalNetIncome), $ctx->investedCapital);
         }
 
         // Life-Cycle Payout Target Expansion (DeAngelo & DeAngelo 2006 / Jensen 1986)
@@ -172,21 +172,9 @@ class CapitalAllocationEngine
             } else {
                 $targetDividend = min($targetDividend, $sustainableBase * min($effectiveTargetPayout, $regulatoryCap));
             }
-        } elseif ($ctx->isFinancial) {
-            $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$ctx->industry]['equity_limit'] ?? 10.0;
-            $leverageRatio = (float) $stock->getDebtToEquityRatio();
-            $leverageOvershoot = $leverageRatio / $equityLimit;
-
-            if ($leverageOvershoot >= self::REGULATORY_BUFFER_TIER_3_THRESHOLD) {
-                $isRegulatoryDividendHalt = true;
-            } elseif ($leverageOvershoot >= self::REGULATORY_BUFFER_TIER_2_THRESHOLD) {
-                $targetDividend = min($targetDividend, $sustainableBase * min($effectiveTargetPayout, self::REGULATORY_BUFFER_TIER_2_PAYOUT_CAP));
-            } elseif ($leverageOvershoot >= self::REGULATORY_BUFFER_TIER_1_THRESHOLD) {
-                $targetDividend = min($targetDividend, $sustainableBase * min($effectiveTargetPayout, self::REGULATORY_BUFFER_TIER_1_PAYOUT_CAP));
-            }
         }
 
-        $hurdleRate = $ctx->isFinancial ? ($ctx->health->costOfEquity ?? 0.10) : $ctx->health->wacc;
+        $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
 
         $evaSpread = $trueReturn - $hurdleRate;
         $distressMultiplier = $isAristocrat ? self::ARISTOCRAT_DISTRESS_MULTIPLIER : self::STANDARD_DISTRESS_MULTIPLIER;
@@ -198,8 +186,7 @@ class CapitalAllocationEngine
         $isDeepDistress = $evaSpread < (self::DEEP_DISTRESS_EVA_SPREAD * $distressMultiplier);
         $isModerateDistressNoCash = ($evaSpread < (self::MODERATE_DISTRESS_EVA_SPREAD * $distressMultiplier)) && !$hasCashBuffer;
 
-        $modelThresholds = $ctx->strategy->getModelThresholds();
-        $crisisThreshold = $modelThresholds['dividend_crisis_icr'];
+        $crisisThreshold = $ctx->strategy->getDividendCrisisIcr();
         $isLiquidityCrisis = $ctx->health->interestCoverage < 1.0 || ($ctx->health->interestCoverage < $crisisThreshold && !$hasCashBuffer);
 
         if ($isLiquidityCrisis || $isRegulatoryDividendHalt) {
@@ -278,20 +265,9 @@ class CapitalAllocationEngine
         $stock = $ctx->stock;
         $canEasilyCoverDebt = $ctx->excessCash > ((float) $stock->getTotalDebt() * 2.0);
 
-        if ($ctx->isFinancial) {
-            $regulatoryCap = $ctx->strategy->getRegulatoryDividendCap($stock, $ctx->newTreasury);
-            if ($regulatoryCap !== null && $regulatoryCap <= 0.0) {
-                $ctx->newShares = $ctx->sharesOutstanding;
-                return;
-            }
-
-            $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$ctx->industry]['equity_limit'] ?? 10.0;
-            $buybackLockoutThreshold = max(1.0, $equityLimit - 1.0) + 0.5;
-
-            if ((float)$stock->getDebtToEquityRatio() > $buybackLockoutThreshold) {
-                $ctx->newShares = $ctx->sharesOutstanding;
-                return;
-            }
+        if ($ctx->strategy->checkBuybackRegulatoryLockout($stock, $ctx->newTreasury)) {
+            $ctx->newShares = $ctx->sharesOutstanding;
+            return;
         }
 
         $hoardStatus = $ctx->strategy->evaluateHoardingStatus($ctx->newTreasury, $ctx->targetOperatingCash, $ctx->operatingBase, (float) $stock->getTotalDebt());
@@ -302,21 +278,20 @@ class CapitalAllocationEngine
         $isUnderLeveraged = $ctx->health->isUnderLeveraged ?? false;
 
         $isLiquidityCrisis = $ctx->health->interestCoverage < 1.0;
-        $modelThresholds = $ctx->strategy->getModelThresholds();
-        $minBuybackIcr = $modelThresholds['buyback_min_icr'];
+        $minBuybackIcr = $ctx->strategy->getBuybackMinIcr();
 
         if ($isLiquidityCrisis || (!$isHoarder && (($ctx->health->wantsToPaydownDebt && !$canEasilyCoverDebt) || $ctx->health->interestCoverage < $minBuybackIcr))) {
-            if (!($ctx->isFinancial && $isUnderLeveraged)) {
+            if (!($ctx->strategy->isFinancial() && $isUnderLeveraged)) {
                 $ctx->newShares = $ctx->sharesOutstanding;
                 return;
             }
         }
 
-        $trueReturn = $ctx->isFinancial ? (float) $stock->getRoeTtm() : (float) $stock->getRoicTtm();
+        $trueReturn = (float) $ctx->strategy->getTrueReturn($stock);
         if ($trueReturn === 0.0) {
-            $trueReturn = $ctx->strategy->calculateEconomicReturn($stock, $ctx->isFinancial ? $ctx->actualTotalNetIncome : $ctx->quarterlyNopat, $ctx->investedCapital);
+            $trueReturn = $ctx->strategy->calculateEconomicReturn($stock, $ctx->strategy->getReturnBasisIncome($stock, $ctx->quarterlyNopat, $ctx->actualTotalNetIncome), $ctx->investedCapital);
         }
-        $hurdleRate = $ctx->isFinancial ? ($ctx->health->costOfEquity ?? 0.10) : $ctx->health->wacc;
+        $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
         $economicSpread = $trueReturn - $hurdleRate;
 
         $evaluationCapital = $ctx->strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $ctx->investedCapital);

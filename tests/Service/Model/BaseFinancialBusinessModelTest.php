@@ -15,23 +15,6 @@ class BaseFinancialBusinessModelTest extends TestCase
     protected function setUp(): void
     {
         $this->model = new class extends BaseFinancialBusinessModel {
-            public function getModelThresholds(): array
-            {
-                return [
-                    'min_icr' => 1.05,
-                    'bankrupt_equity' => 2.0,
-                    'distress_equity' => 4.0,
-                    'warning_equity' => 6.0,
-                    'wholesale_leverage_limit' => 2.0,
-                    'dividend_crisis_icr' => 1.05,
-                    'buyback_min_icr' => 1.15,
-                    'reversion_speed' => 0.18,
-                    'moat_spread' => 0.010,
-                    'nwc_intensity' => 0.0,
-                    'capex_completion_rate' => 1.0,
-                ];
-            }
-
             public function getCoverageProfile(Stock $stock): \App\DTO\SectorCoverageProfile
             {
                 return new \App\DTO\SectorCoverageProfile(0.65, 0.06);

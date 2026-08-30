@@ -84,22 +84,13 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
     /** Variable cost penalty from regulatory coding audits, clawbacks, and arbitration settlements. */
     public const BILLING_AUDIT_PENALTY = 0.05;
 
-    public function getModelThresholds(): array
-    {
-        return [
-            'min_icr'                  => 1.80,
-            'bankrupt_equity'          => 0.0,
-            'distress_equity'          => 0.0,
-            'warning_equity'           => 0.0,
-            'wholesale_leverage_limit' => 2.0,
-            'dividend_crisis_icr'      => 1.50,
-            'buyback_min_icr'          => 1.80,
-            'reversion_speed'          => 0.12,
-            'moat_spread'              => 0.015,
-            'nwc_intensity'            => 0.08,
-            'capex_completion_rate'    => 0.35,
-        ];
-    }
+        public function getMinIcr(): float { return 1.8; }
+    public function getWholesaleLeverageLimit(): float { return 2.0; }
+    public function getBuybackMinIcr(): float { return 1.8; }
+    public function getReversionSpeed(): float { return 0.12; }
+    public function getMoatSpread(): float { return 0.015; }
+    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.08; }
+    public function getCapExCompletionRate(Stock $stock): float { return 0.35; }
 
     public function getSecularGrowthRate(Stock $stock): float
     {

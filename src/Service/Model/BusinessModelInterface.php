@@ -28,5 +28,5 @@ interface BusinessModelInterface extends
     ValuationStrategyInterface
 {
     public function setModelIdentifier(string $identifier): void;
-    public function getModelThresholds(): array;
+    public function isFinancial(): bool;
 }

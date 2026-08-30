@@ -32,10 +32,11 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.60;
     public const BASE_COVERAGE_ERROR = 0.08;
 
-    public function getModelThresholds(): array
-    {
-        return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 2.5,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.15, 'moat_spread' => 0.020, 'nwc_intensity' => 0.15, 'capex_completion_rate' => 0.30];
-    }
+        public function getWholesaleLeverageLimit(): float { return 2.5; }
+    public function getReversionSpeed(): float { return 0.15; }
+    public function getMoatSpread(): float { return 0.02; }
+    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.15; }
+    public function getCapExCompletionRate(Stock $stock): float { return 0.3; }
 
     public function getSecularGrowthRate(Stock $stock): float { return 0.015; }
     

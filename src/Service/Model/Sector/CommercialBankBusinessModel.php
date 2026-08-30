@@ -49,10 +49,17 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /** Rate at which planned capital expenditure is completed. */
     public const THRESHOLD_CAPEX_COMPLETION_RATE = 1.0;
 
-    public function getModelThresholds(): array
-    {
-        return ['min_icr' => self::THRESHOLD_MIN_ICR, 'bankrupt_equity' => self::THRESHOLD_BANKRUPT_EQUITY,  'distress_equity' => self::THRESHOLD_DISTRESS_EQUITY,  'warning_equity' => self::THRESHOLD_WARNING_EQUITY,  'wholesale_leverage_limit' => self::THRESHOLD_WHOLESALE_LEVERAGE_LIMIT,  'dividend_crisis_icr' => self::THRESHOLD_DIVIDEND_CRISIS_ICR, 'buyback_min_icr' => self::THRESHOLD_BUYBACK_MIN_ICR, 'reversion_speed' => self::THRESHOLD_REVERSION_SPEED, 'moat_spread' => self::THRESHOLD_MOAT_SPREAD, 'nwc_intensity' => self::THRESHOLD_NWC_INTENSITY, 'capex_completion_rate' => self::THRESHOLD_CAPEX_COMPLETION_RATE];
-    }
+        public function getMinIcr(): float { return self::THRESHOLD_MIN_ICR; }
+    public function getBankruptEquityThreshold(): float { return self::THRESHOLD_BANKRUPT_EQUITY; }
+    public function getDistressEquityThreshold(): float { return self::THRESHOLD_DISTRESS_EQUITY; }
+    public function getWarningEquityThreshold(): float { return self::THRESHOLD_WARNING_EQUITY; }
+    public function getWholesaleLeverageLimit(): float { return self::THRESHOLD_WHOLESALE_LEVERAGE_LIMIT; }
+    public function getDividendCrisisIcr(): float { return self::THRESHOLD_DIVIDEND_CRISIS_ICR; }
+    public function getBuybackMinIcr(): float { return self::THRESHOLD_BUYBACK_MIN_ICR; }
+    public function getReversionSpeed(): float { return self::THRESHOLD_REVERSION_SPEED; }
+    public function getMoatSpread(): float { return self::THRESHOLD_MOAT_SPREAD; }
+    public function getWorkingCapitalIntensity(Stock $stock): float { return self::THRESHOLD_NWC_INTENSITY; }
+    public function getCapExCompletionRate(Stock $stock): float { return self::THRESHOLD_CAPEX_COMPLETION_RATE; }
 
     // --- ROE & Target Metrics ---
     /** Weight given to historical baseline ROE when blending with TTM ROE. */
@@ -342,8 +349,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         // Crucially, this cap ONLY applies to wholesale debt. Customer deposits are market-driven and unconstrained.
 
         $actualWholesaleLeverage = $effectiveEquity > 0 ? ($wholesaleDebt / $effectiveEquity) : 0.0;
-        $thresholds = $this->getModelThresholds();
-        $wholesaleLeverageLimit = $thresholds['wholesale_leverage_limit'] ?? 2.0;
+        $wholesaleLeverageLimit = $this->getWholesaleLeverageLimit();
 
         $allowedWholesaleLeverage = min($actualWholesaleLeverage, max(0.0, $wholesaleLeverageLimit));
         $optimalWholesaleDebt = $effectiveEquity * $allowedWholesaleLeverage;
@@ -567,9 +573,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
      */
     public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float
     {
-        $thresholds = $this->getModelThresholds();
-        $kappa = $thresholds['reversion_speed'] ?? 0.18;
-        $moatSpread = $thresholds['moat_spread'] ?? 0.01;
+        $kappa = $this->getReversionSpeed();
+        $moatSpread = $this->getMoatSpread();
 
         $equity = (float) $stock->getTotalEquity();
         $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * self::ANNUALIZATION_FACTOR : 0.0;

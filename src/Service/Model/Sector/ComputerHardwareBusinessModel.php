@@ -64,13 +64,8 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     /** Structural maximum operating margin ceiling for advanced silicon monopolies. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.30;
 
-    public function getModelThresholds(): array
-    {
-        $thresholds = parent::getModelThresholds();
-        $thresholds['moat_spread'] = 0.020; // Enterprise tech has high switching costs
-        $thresholds['reversion_speed'] = 0.25; // Hardware cycles are vicious, margins revert fast
-        return $thresholds;
-    }
+        public function getReversionSpeed(): float { return 0.25; }
+    public function getMoatSpread(): float { return 0.02; }
 
     public function getSecularGrowthRate(Stock $stock): float
     {

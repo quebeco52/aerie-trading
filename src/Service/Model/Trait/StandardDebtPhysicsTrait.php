@@ -58,8 +58,7 @@ trait StandardDebtPhysicsTrait
         $evalTolerance = $health->debtTolerance;
         $balanceSheetCapacity = max(0.0, ($equity * $evalTolerance) - $evalDebt);
 
-        $thresholds = $this->getModelThresholds();
-        $minimumIcr = ($thresholds['buyback_min_icr'] ?? 3.0) + 0.5;
+        $minimumIcr = $this->getBuybackMinIcr() + 0.5;
 
         $maxTolerableInterest = max(0.0, $ebit / $minimumIcr);
         $currentInterestExpense = $health->rawMetrics->interestExpense ?? 0.0;
@@ -85,7 +84,7 @@ trait StandardDebtPhysicsTrait
         return $totalDebt;
     }
     
-    public function getDeleveragingEvaluationLimit(array $modelThresholds, float $macroDebtTolerance): float {
+    public function getDeleveragingEvaluationLimit(float $macroDebtTolerance): float {
         return $macroDebtTolerance;
     }
     
@@ -110,4 +109,14 @@ trait StandardDebtPhysicsTrait
     }
     
     public function processPassiveLiabilityGrowth(Stock $stock, MacroStateDTO $macroState, array &$state, MathUtility $mathUtility): void {}
+
+    public function getMinIcr(): float { return 2.00; }
+    public function getBankruptEquityThreshold(): float { return 0.0; }
+    public function getDistressEquityThreshold(): float { return 0.0; }
+    public function getWarningEquityThreshold(): float { return 0.0; }
+    public function getWholesaleLeverageLimit(): float { return 1.0; }
+    public function getDividendCrisisIcr(): float { return 1.50; }
+    public function getBuybackMinIcr(): float { return 2.00; }
+    public function appliesDistressPremiumToCostOfEquity(): bool { return false; }
+    public function shouldForceDeleveragingOnJunkOrHoarding(): bool { return true; }
 }

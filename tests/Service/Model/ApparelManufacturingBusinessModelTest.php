@@ -37,11 +37,9 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('SHER');
 
-        $thresholds = $this->model->getModelThresholds();
-        $this->assertEquals(0.22, $thresholds['nwc_intensity']);
-        $this->assertEquals(0.008, $thresholds['moat_spread']);
-        $this->assertEquals(0.15, $thresholds['reversion_speed']);
-        $this->assertEquals(0.25, $thresholds['capex_completion_rate']);
+        $this->assertEquals(0.008, $this->model->getMoatSpread());
+        $this->assertEquals(0.15, $this->model->getReversionSpeed());
+        $this->assertEquals(0.25, $this->model->getCapExCompletionRate($stock));
 
         $this->assertEqualsWithDelta(0.229, $this->model->getWorkingCapitalIntensity($stock), 0.01);
         $this->assertEquals(0.025, $this->model->getSecularGrowthRate($stock));
@@ -293,6 +291,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
 
     public function testForresterBullwhipEffectNonLinearWholesaleContraction(): void
     {
+        mt_srand(12345);
         $stock = new Stock();
         $stock->setTicker('SHER');
         $stock->setBeta('1.0');

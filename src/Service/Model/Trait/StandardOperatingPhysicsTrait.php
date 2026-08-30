@@ -66,14 +66,12 @@ trait StandardOperatingPhysicsTrait
 
     public function getWorkingCapitalIntensity(Stock $stock): float
     {
-        $thresholds = $this->getModelThresholds();
-        return $thresholds['nwc_intensity'] ?? 0.05;
+        return 0.10;
     }
 
     public function getCapExCompletionRate(Stock $stock): float
     {
-        $thresholds = $this->getModelThresholds();
-        return $thresholds['capex_completion_rate'] ?? 0.33;
+        return 0.33;
     }
 
     public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void {}
@@ -120,9 +118,8 @@ trait StandardOperatingPhysicsTrait
 
     public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float
     {
-        $thresholds = $this->getModelThresholds();
-        $kappa = $thresholds['reversion_speed'] ?? 0.20;
-        $moatSpread = $thresholds['moat_spread'] ?? 0.00;
+        $kappa = $this->getReversionSpeed();
+        $moatSpread = $this->getMoatSpread();
 
         $nopatProxy = $ebit > 0 ? $ebit * (1.0 - $corporateTaxRate) : $ebit;
         $effectiveCapital = max(1.0, abs($investedCapital));
@@ -146,6 +143,11 @@ trait StandardOperatingPhysicsTrait
         return $truePostTaxReturn;
     }
 
+    public function getEffectiveReturn(Stock $stock): float
+    {
+        return (float) ($stock->getCurrentRoic() ?: $stock->getBaselineRoic());
+    }
+
     public function getTrueReturn(Stock $stock): float
     {
         return (float) $stock->getRoicTtm();
@@ -154,5 +156,30 @@ trait StandardOperatingPhysicsTrait
     public function getEvaluationCapital(float $equity, float $investedCapital): float
     {
         return $investedCapital;
+    }
+
+    public function getReversionSpeed(): float
+    {
+        return 0.20;
+    }
+
+    public function getMoatSpread(): float
+    {
+        return 0.000;
+    }
+
+    public function getPhysicalCapital(Stock $stock): float
+    {
+        return $stock->getInvestedCapital();
+    }
+
+    public function allowsPhysicalOrganicCapex(): bool
+    {
+        return true;
+    }
+
+    public function getReturnBasisIncome(Stock $stock, float $quarterlyNopat, float $actualTotalNetIncome): float
+    {
+        return $quarterlyNopat;
     }
 }

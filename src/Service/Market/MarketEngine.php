@@ -288,8 +288,7 @@ class MarketEngine
     ): array {
 
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
-        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
-        $hurdleRate = $isFinancial ? $liveCostOfEquity : $liveWacc;
+        $hurdleRate = $strategy->isFinancial() ? $liveCostOfEquity : $liveWacc;
 
         // Structural ROIC is simply the TTM ROIC.
         $structuralRoic = $roicTtm;
@@ -310,21 +309,12 @@ class MarketEngine
 
         $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $structuralRoic, $expectedGrowth);
 
-        if ($isFinancial) { // Use isFinancial
-            // For Financials, Cash IS their operating inventory. Do not penalize them.
-            $trueStructuralEps = $bookValuePerShare * $structuralRoic;
-        } else {
-            // Standard corporates & special models: Operating Base per share is max(Revenue, Book Value)
-            $operatingBasePerShare = max($revenuePerShare, $bookValuePerShare);
-
-            // Delegate operating cash determination directly to the domain business model!
-            $cashPerShare = $strategy->calculateTargetOperatingCash($operatingBasePerShare, 0.0, 0.0);
-            $operatingBookValue = max(0.01, $bookValuePerShare - $cashPerShare);
-
-            $structuralOperatingEps = $operatingBookValue * $structuralRoic;
-            $structuralCashYieldEps = $cashPerShare * $riskFreeRate;
-            $trueStructuralEps = $structuralOperatingEps + $structuralCashYieldEps;
-        }
+        $trueStructuralEps = $strategy->calculateStructuralEps(
+            $bookValuePerShare,
+            $structuralRoic,
+            $revenuePerShare,
+            $riskFreeRate
+        );
 
         // 2. STRUCTURAL EPS SMOOTHING (Past Performance via Kalman Filter)
         // Real analysts value a company based on its established structural run-rate.

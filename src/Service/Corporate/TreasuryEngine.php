@@ -220,7 +220,7 @@ class TreasuryEngine
         // CapitalAllocationEngine::executeBuybacks() can deploy it for recapitalization.
         // Expanding the loan book when D/E is far below the regulatory target only worsens
         // equity bloat and suppresses ROE further.
-        if (!$forcedExpansion && $ctx->isFinancial && ($ctx->health->isUnderLeveraged ?? false)) {
+        if (!$forcedExpansion && $ctx->strategy->isFinancial() && ($ctx->health->isUnderLeveraged ?? false)) {
             return;
         }
 
@@ -429,8 +429,7 @@ class TreasuryEngine
             $macroDebtTolerance = $ctx->health->debtTolerance;
 
             $evalDebt = $ctx->strategy->getDeleveragingEvaluationDebt($totalDebt, $ctx->wholesaleDebt);
-            $modelThresholds = $ctx->strategy->getModelThresholds();
-            $evalLimit = $ctx->strategy->getDeleveragingEvaluationLimit($modelThresholds, $macroDebtTolerance);
+            $evalLimit = $ctx->strategy->getDeleveragingEvaluationLimit($macroDebtTolerance);
 
             $currentDebtRatio = $evalDebt / max(1.0, $newEquity);
 
@@ -445,7 +444,7 @@ class TreasuryEngine
             // Financial institutions (Banks, Brokerages, Insurers) have structural, regulatory-driven balance sheets 
             // where "cash hoarding" is just normal float/deposits/trading buffers, and junk status on marginal debt 
             // shouldn't force them to liquidate their structural core funding.
-            if (!$ctx->isFinancial) {
+            if ($ctx->strategy->shouldForceDeleveragingOnJunkOrHoarding()) {
                 if ($isJunkBondStatus || $hoardStatus['is_hoarder']) {
                     $shouldSweep = true;
                 }

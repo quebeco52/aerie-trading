@@ -72,14 +72,9 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     /** Structural maximum operating margin ceiling for automated precision monopolies. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.28;
 
-    public function getModelThresholds(): array
-    {
-        $thresholds = parent::getModelThresholds();
-        $thresholds['moat_spread'] = 0.025;
-        $thresholds['reversion_speed'] = 0.10;
-        $thresholds['nwc_intensity'] = 0.18;
-        return $thresholds;
-    }
+        public function getReversionSpeed(): float { return 0.1; }
+    public function getMoatSpread(): float { return 0.025; }
+    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.18; }
 
     public function getSurpriseBlendWeights(): array
     {

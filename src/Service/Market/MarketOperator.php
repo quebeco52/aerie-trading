@@ -109,6 +109,7 @@ class MarketOperator
         $stock->setIsBankrupt(true);
         $stock->setPrice('0.00000000');
         $stock->setCurrentVolatility('0.0000');
+        $stock->setCreditRating('D');
 
         // Cancel all OPEN trade orders for this ticker and refund BUY escrow
         $openOrders = $this->entityManager->getRepository(\App\Entity\TradeOrder::class)->findBy([

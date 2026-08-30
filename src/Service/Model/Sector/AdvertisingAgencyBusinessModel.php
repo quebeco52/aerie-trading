@@ -30,10 +30,14 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.25;
     public const BASE_COVERAGE_ERROR = 0.06;
 
-    public function getModelThresholds(): array
-    {
-        return ['min_icr' => 3.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.5,  'dividend_crisis_icr' => 2.00, 'buyback_min_icr' => 3.00, 'reversion_speed' => 0.15, 'moat_spread' => 0.015, 'nwc_intensity' => 0.05, 'capex_completion_rate' => 0.20];
-    }
+        public function getMinIcr(): float { return 3.0; }
+    public function getWholesaleLeverageLimit(): float { return 1.5; }
+    public function getDividendCrisisIcr(): float { return 2.0; }
+    public function getBuybackMinIcr(): float { return 3.0; }
+    public function getReversionSpeed(): float { return 0.15; }
+    public function getMoatSpread(): float { return 0.015; }
+    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.05; }
+    public function getCapExCompletionRate(Stock $stock): float { return 0.2; }
 
     public function getSecularGrowthRate(Stock $stock): float { return 0.015; }
     

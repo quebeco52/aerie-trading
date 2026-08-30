@@ -13,4 +13,5 @@ interface CapitalAllocationStrategyInterface
     public function getSustainableDividendBase(Stock $stock, float $quarterlyEps, float $investedCapital, float $depRate): float;
     public function getMaxOrganicGrowthSpeed(bool $isHoarder, bool $isMegaHoarder): float;
     public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury): ?float;
+    public function checkBuybackRegulatoryLockout(Stock $stock, float $currentTreasury): ?bool;
 }

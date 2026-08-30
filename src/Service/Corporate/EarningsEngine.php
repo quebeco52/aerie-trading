@@ -81,7 +81,6 @@ class EarningsEngine
 
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
 
         $ctx = new EarningsSimulationContext(
@@ -89,7 +88,6 @@ class EarningsEngine
             $macroState,
             $strategy,
             $businessModel,
-            $isFinancial,
             self::QUARTERLY_TIME_STEP
         );
 
@@ -231,7 +229,7 @@ class EarningsEngine
         $ctx->expectedEbit = max(-$ctx->structuralRevenue * self::MAX_EBIT_LOSS_RATIO, $expectedEbit);
 
         $ctx->operatingCosts = $ctx->actualVariableCosts + $ctx->fixedCosts;
-        $ctx->ebit = $ctx->actualRevenue - $ctx->operatingCosts;
+        $ctx->ebitda = $ctx->actualRevenue - $ctx->operatingCosts;
 
         $ctx->primaryShockZ = $actuals->primaryShockZ;
         $ctx->eventType = $actuals->eventType;
@@ -244,12 +242,28 @@ class EarningsEngine
     {
         $stock = $ctx->stock;
 
+        $ctx->previousQuarterlyRevenue = (float) $stock->getPreviousRevenue();
+        $stock->setTotalRevenue((string) ($ctx->actualRevenue * 4.0));
+
+        $industry = $stock->getIndustry() ?: 'General';
+        $customDepreciation = (float) $stock->getDepreciationRate();
+        $baseDepreciationRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($industry);
+
+        // Units of Production Depreciation Method
+        // Depreciation scales directly with actual asset utilization. Extreme utilization naturally accelerates depreciation.
+        $productionDepreciationRate = $baseDepreciationRate * $ctx->capacityUtilization;
+
+        $depreciableBase = max(0.0, $ctx->strategy->getPhysicalCapital($stock) - $stock->getTotalCipAmount());
+        $annualDepreciation = $depreciableBase * $productionDepreciationRate;
+        $ctx->quarterlyDepreciation = $annualDepreciation / 4.0;
+
+        // Finalize true EBIT by subtracting depreciation from EBITDA
+        $ctx->ebit = $ctx->ebitda - $ctx->quarterlyDepreciation;
+        $ctx->expectedEbit = max(-$ctx->structuralRevenue * self::MAX_EBIT_LOSS_RATIO, $ctx->expectedEbit - $ctx->quarterlyDepreciation);
+
         $expectedOperatingMargin = $ctx->expectedEbit / max(1.0, $ctx->expectedRevenue);
         $expectedDebtMetrics = $this->debtEngine->calculateInterestExpense($stock, $ctx->macroState, false, $ctx->expectedRevenue * 4.0, $expectedOperatingMargin);
         $ctx->expectedInterestExpense = $expectedDebtMetrics->interestExpense / 4.0;
-
-        $ctx->previousQuarterlyRevenue = (float) $stock->getPreviousRevenue();
-        $stock->setTotalRevenue((string) ($ctx->actualRevenue * 4.0));
 
         $ctx->trueOperatingMargin = $ctx->ebit / max(1.0, $ctx->actualRevenue);
         $ctx->debtMetrics = $this->debtEngine->calculateInterestExpense($stock, $ctx->macroState, true, $ctx->actualRevenue * 4.0, $ctx->trueOperatingMargin);
@@ -262,17 +276,6 @@ class EarningsEngine
 
         $annualInterestIncome = $ctx->strategy->calculateInterestIncome($stock, $ctx->macroState, $this->mathUtility);
         $ctx->quarterlyInterestIncome = $annualInterestIncome / 4.0;
-
-        $industry = $stock->getIndustry() ?: 'General';
-        $customDepreciation = (float) $stock->getDepreciationRate();
-        $baseDepreciationRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($industry);
-
-        // Units of Production Depreciation Method
-        // Depreciation scales directly with actual asset utilization. Extreme utilization naturally accelerates depreciation.
-        $productionDepreciationRate = $baseDepreciationRate * $ctx->capacityUtilization;
-
-        $annualDepreciation = $ctx->investedCapital * $productionDepreciationRate;
-        $ctx->quarterlyDepreciation = $annualDepreciation / 4.0;
     }
 
     private function reconcileTaxesAndNetIncome(EarningsSimulationContext $ctx): void
@@ -383,7 +386,7 @@ class EarningsEngine
             $capexCyclicality = $ctx->strategy->getCapexCyclicality();
             $cycleCapExModifier = max(0.50, min(1.50, 1.00 + ($outputGap * $capexCyclicality)));
 
-            $physicalCapital = $ctx->isFinancial ? (float) $stock->getTotalEquity() : $stock->getInvestedCapital();
+            $physicalCapital = $ctx->strategy->getPhysicalCapital($stock);
             $baselineIncomeForCapEx = max($physicalCapital * 0.02, max(0.0, $ctx->actualQuarterlyNetIncome));
             $actualCapEx = $baselineIncomeForCapEx * ($capExRatio * $cycleCapExModifier);
 
@@ -418,7 +421,7 @@ class EarningsEngine
         $stock->setSharesOutstanding((string) $ctx->allocation['new_shares']);
 
         $organicCapex = $ctx->allocation['organic_capex'] ?? 0.0;
-        $reportedOrganicCapex = $ctx->isFinancial ? 0.0 : $organicCapex;
+        $reportedOrganicCapex = $ctx->strategy->allowsPhysicalOrganicCapex() ? $organicCapex : 0.0;
         $annualizedOrganicCapex = $reportedOrganicCapex * 4.0;
         $organicCapexPerShare = $ctx->sharesOutstanding > 0 ? ($annualizedOrganicCapex / $ctx->sharesOutstanding) : 0.0;
 
@@ -432,7 +435,13 @@ class EarningsEngine
     private function executePriceAndVolatilityShocks(EarningsSimulationContext $ctx): void
     {
         $stock = $ctx->stock;
-        $this->applyVolatilityShock($stock, $ctx->primaryShockZ, $ctx->baselineVol);
+
+        // Derive a composite earnings Z-score from the blended surprise percentage.
+        // Scale by baseline volatility to normalize: a 10% surprise on a 20% vol stock ≈ 0.5σ event.
+        $earningsSurpriseZ = $ctx->baselineVol > 0.01
+            ? $ctx->surprisePct / $ctx->baselineVol
+            : $ctx->primaryShockZ;
+        $this->applyVolatilityShock($stock, $earningsSurpriseZ, $ctx->baselineVol);
 
         $currentPrice = (float) $stock->getPrice();
 
@@ -490,16 +499,10 @@ class EarningsEngine
     private function publishEventAndReport(EarningsSimulationContext $ctx): array
     {
         $stock = $ctx->stock;
-        $equity = (float) $stock->getTotalEquity();
 
-        if ($ctx->isFinancial) {
-            $costOfEquity = $ctx->health->costOfEquity ?? 0.10;
-            $ctx->quarterlyEconomicProfit = ($equity * ($ctx->truePostTaxReturn - $costOfEquity)) / 4.0;
-            $ctx->wacc = $costOfEquity;
-        } else {
-            $ctx->wacc = $ctx->health->wacc ?? 0.08;
-            $ctx->quarterlyEconomicProfit = ($ctx->investedCapital * ($ctx->truePostTaxReturn - $ctx->wacc)) / 4.0;
-        }
+        $ctx->wacc = $ctx->strategy->getHurdleRate($ctx->health);
+        $capital = $ctx->strategy->getPhysicalCapital($stock);
+        $ctx->quarterlyEconomicProfit = ($capital * ($ctx->truePostTaxReturn - $ctx->wacc)) / 4.0;
 
         $evaAbs = abs($ctx->quarterlyEconomicProfit);
         $formattedEva = $evaAbs >= 1_000_000_000
@@ -509,11 +512,12 @@ class EarningsEngine
         $evaString = $ctx->quarterlyEconomicProfit >= 0 ? "+{$formattedEva} EVA" : "-{$formattedEva} EVA";
 
         $formattedEps = $ctx->actualQuarterlyEps < 0 ? '-$' . number_format(abs($ctx->actualQuarterlyEps), 2) : '$' . number_format($ctx->actualQuarterlyEps, 2);
-        $formattedSurprise = '$' . number_format(abs($ctx->surpriseAmountQuarterly), 2);
+        $roundedSurprise = round(abs($ctx->surpriseAmountQuarterly), 2);
+        $formattedSurprise = '$' . number_format($roundedSurprise, 2);
 
-        if ($ctx->surpriseAmountQuarterly > 0.0) {
+        if ($roundedSurprise >= 0.01 && $ctx->surpriseAmountQuarterly > 0.0) {
             $description = "Q-Earnings: {$formattedEps} (Beat expectations by {$formattedSurprise} | {$evaString}).";
-        } elseif ($ctx->surpriseAmountQuarterly < 0.0) {
+        } elseif ($roundedSurprise >= 0.01 && $ctx->surpriseAmountQuarterly < 0.0) {
             $description = "Q-Earnings: {$formattedEps} (Missed expectations by {$formattedSurprise} | {$evaString}).";
         } else {
             $description = "Q-Earnings: {$formattedEps} (Met expectations exactly | {$evaString}).";
@@ -531,13 +535,13 @@ class EarningsEngine
         return [$earningsEvent];
     }
 
-    private function applyVolatilityShock(Stock $stock, float $revenueZ, float $baselineVol): void
+    private function applyVolatilityShock(Stock $stock, float $earningsZ, float $baselineVol): void
     {
         $currentVol = (float) $stock->getCurrentVolatility();
-        $zScore = abs($revenueZ);
+        $zScore = abs($earningsZ);
 
         if ($zScore > FinancialConstants::SURPRISE_Z_SCORE_THRESHOLD) {
-            $shockFactor = $revenueZ < 0
+            $shockFactor = $earningsZ < 0
                 ? FinancialConstants::VOLATILITY_SHOCK_FACTOR * FinancialConstants::NEGATIVE_SURPRISE_VOL_MULTIPLIER
                 : FinancialConstants::VOLATILITY_SHOCK_FACTOR;
 

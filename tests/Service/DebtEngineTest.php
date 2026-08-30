@@ -109,4 +109,74 @@ class DebtEngineTest extends TestCase
 
         $this->assertSame('A', $stock->getCreditRating());
     }
+
+    public function testZeroDebtHealthyCompanyUpgradesOnAdvanceMaturity(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('ZERODEBT');
+        $stock->setCreditRating('BBB');
+        $stock->setTotalEquity('200000000');
+        $stock->setWholesaleDebt('0');
+        $stock->setCustomerDeposits('0');
+        $stock->setCorporateTreasury('50000000');
+        $stock->setRetainedEarnings('50000000');
+        $stock->setOperatingMargin('0.25');
+        $stock->setTotalRevenue('100000000');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setPrice('200.00');
+
+        $macroState = new MacroStateDTO(
+            policyRateEma: 0.04,
+            corporateTaxRate: 0.21,
+            yield5yEma: 0.04
+        );
+
+        $this->marketEventPublisherMock->expects($this->once())
+            ->method('publish')
+            ->with(
+                $this->equalTo($stock),
+                $this->equalTo('CREDIT_UPGRADE'),
+                $this->stringContains('upgraded from BBB to A'),
+                $this->equalTo(2.0)
+            );
+
+        $this->engine->calculateInterestExpense($stock, $macroState, true);
+
+        $this->assertSame('A', $stock->getCreditRating());
+    }
+
+    public function testZeroDebtDistressedCompanyDowngradesOnAdvanceMaturity(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('BURNING');
+        $stock->setCreditRating('AAA');
+        $stock->setTotalEquity('-10000000');
+        $stock->setWholesaleDebt('0');
+        $stock->setCustomerDeposits('0');
+        $stock->setCorporateTreasury('1000000');
+        $stock->setRetainedEarnings('-50000000');
+        $stock->setOperatingMargin('-0.50');
+        $stock->setTotalRevenue('5000000');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setPrice('0.10');
+
+        $macroState = new MacroStateDTO(
+            policyRateEma: 0.04,
+            corporateTaxRate: 0.21,
+            yield5yEma: 0.04
+        );
+
+        $this->marketEventPublisherMock->expects($this->once())
+            ->method('publish')
+            ->with(
+                $this->equalTo($stock),
+                $this->equalTo('CREDIT_DOWNGRADE'),
+                $this->stringContains('downgraded from AAA to D'),
+                $this->equalTo(-3.0)
+            );
+
+        $this->engine->calculateInterestExpense($stock, $macroState, true);
+
+        $this->assertSame('D', $stock->getCreditRating());
+    }
 }

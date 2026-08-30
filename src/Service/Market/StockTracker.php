@@ -93,6 +93,7 @@ class StockTracker
                     'equity' => (float) $stock->getTotalEquity(),
                     'invested_capital' => (float) $stock->getInvestedCapital(),
                     'debt_ratio' => (float) $stock->getDebtToEquityRatio(),
+                    'credit_rating' => $stock->getCreditRating(),
                     'analyst_targets' => [],
                     'perceived_fair_value' => 0.0,
                     'is_bankrupt' => true,
@@ -132,25 +133,19 @@ class StockTracker
             $industryKey = $stock->getIndustry() ?: 'General';
             $metrics = \App\Data\Sectors::INDUSTRY_METRICS[$industryKey] ?? \App\Data\Sectors::INDUSTRY_METRICS['General'];
             $businessModel = $metrics['business_model'] ?? 'none';
-            $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
+            $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
             $baselineIndustryPE = $metrics['pe'] ?? 20.0;
 
             // Use the annualized total_revenue from the stock entity directly
             $revenuePerShare = (float) $stock->getTotalRevenue() / $shares;
 
-            $effectiveRoic = $isFinancial
-                ? (float) ($stock->getCurrentRoe() ?: $stock->getBaselineRoe())
-                : (float) ($stock->getCurrentRoic() ?: $stock->getBaselineRoic());
-
-            $roicTtm = $isFinancial
-                ? (float) $stock->getRoeTtm()
-                : (float) $stock->getRoicTtm();
+            $effectiveRoic = $strategy->getEffectiveReturn($stock);
+            $roicTtm = $strategy->getTrueReturn($stock);
 
             $totalDebt = (float) $stock->getTotalDebt();
             $corporateTreasury = (float) $stock->getCorporateTreasury();
             $netDebtPerShare = max(0.0, ($totalDebt - $corporateTreasury) / $shares);
 
-            $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
             $secularGrowth = $strategy->getSecularGrowthRate($stock);
 
             $pricingCtx = new \App\DTO\MarketPricingContext(
@@ -249,6 +244,7 @@ class StockTracker
                 'equity' => (float) $stock->getTotalEquity(),
                 'invested_capital' => $stock->getInvestedCapital(),
                 'debt_ratio' => (float) $stock->getDebtToEquityRatio(),
+                'credit_rating' => $stock->getCreditRating(),
                 'analyst_targets' => $calculation['analyst_targets'],
                 'perceived_fair_value' => $calculation['perceived_fair_value'],
                 'is_bankrupt' => false,
@@ -263,7 +259,7 @@ class StockTracker
                 $nominalGdpIndex = $macroDTO->nominalGdpIndex;
                 $samRatio = (float) $stock->getSamRatio();
 
-                $evaluationCapital = $isFinancial ? $equity : $investedCapital;
+                $evaluationCapital = $strategy->getEvaluationCapital($equity, $investedCapital);
                 $marketShare = min(0.9999, $this->corporateMetrics->calculateMarketShare($evaluationCapital, $nominalGdpIndex, $samRatio));
 
                 $stockUpdate['market_share'] = round($marketShare * 100, 2);

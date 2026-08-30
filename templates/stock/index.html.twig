@@ -158,26 +158,88 @@
 
 					{# Corporate News / Events Feed #}
 					<div class="bg-surface-container-low shadow-lg rounded-2xl p-6 lg:p-8 border border-outline-variant/15">
-						<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface mb-4 flex items-center gap-2">
-							<span class="material-symbols-outlined text-primary text-base">newspaper</span>
-							Recent Company Events & News
-						</h3>
-						<div class="space-y-3" id="events-feed">
-							{% for event in events %}
-								<div class="p-3.5 rounded-xl bg-surface-container-lowest/60 border border-outline-variant/10 flex items-start gap-3">
-									<span class="material-symbols-outlined text-base text-primary mt-0.5">campaign</span>
-									<div class="flex-1 min-w-0">
-										<div class="flex items-center justify-between gap-2">
-											<span class="text-xs font-bold text-on-surface">{{ event.headline|default(event.description) }}</span>
-											<span class="text-[10px] text-on-surface-variant font-mono whitespace-nowrap">{{ event.recordedAt|date('Y-m-d H:i') }}</span>
+						<div class="flex items-center justify-between mb-5">
+							<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+								<span class="material-symbols-outlined text-primary text-base">newspaper</span>
+								Recent Corporate Events & News
+							</h3>
+							{% if events|length > 0 %}
+								<span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant border border-outline-variant/20">
+									{{ events|length }} {{ events|length == 1 ? 'Event' : 'Events' }}
+								</span>
+							{% endif %}
+						</div>
+						<div class="space-y-3.5" id="events-feed">
+							{% for rawEvent in events %}
+								{% set event = present_event(rawEvent) %}
+								<div class="p-4 rounded-xl bg-surface-container-lowest/80 border border-outline-variant/15 border-l-4 {{ event.borderClass }} hover:border-outline-variant/40 transition-all duration-200 space-y-2.5">
+									
+									{# Top Header Row: Icon + Badge + Headline / EPS + Surprise + EVA + Timestamp #}
+									<div class="flex items-start justify-between gap-3">
+										<div class="flex items-center flex-wrap gap-2 min-w-0">
+											<div class="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 {{ event.iconClass }}">
+												<span class="material-symbols-outlined text-sm">{{ event.icon }}</span>
+											</div>
+											<span class="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold font-mono uppercase tracking-wider border {{ event.badgeClass }}">
+												{{ event.badge }}
+											</span>
+											{% if event.isEarnings and event.eps %}
+												<span class="text-xs font-bold font-mono text-on-surface tracking-tight">
+													EPS {{ event.eps }}
+												</span>
+											{% endif %}
+											{% if event.isEarnings and event.surpriseType != 'met' and event.surpriseAmount %}
+												<span class="text-[11px] font-bold font-mono {{ event.surpriseType == 'beat' ? 'text-secondary' : 'text-tertiary' }}">
+													({{ event.surpriseText }})
+												</span>
+											{% elseif event.isEarnings and event.surpriseType == 'met' %}
+												<span class="text-[11px] font-bold font-mono text-on-surface-variant/80">
+													(In-Line)
+												</span>
+											{% endif %}
+											{% if event.isEarnings and event.eva %}
+												<span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold font-mono {{ event.evaPositive ? 'bg-secondary/10 text-secondary' : 'bg-tertiary/10 text-tertiary' }}">
+													{{ event.eva }}
+												</span>
+											{% endif %}
 										</div>
-										{% if event.description and event.headline is defined and event.headline != event.description %}
-											<p class="text-xs text-on-surface-variant mt-1 leading-relaxed">{{ event.description }}</p>
-										{% endif %}
+
+										<div class="text-right shrink-0 flex items-center gap-2">
+											{% if event.changePercent is not null and event.changePercent != 0 %}
+												<span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-mono font-bold {{ event.changePercent > 0 ? 'bg-secondary/10 text-secondary' : 'bg-tertiary/10 text-tertiary' }}">
+													{{ event.changePercent > 0 ? '+' : '' }}{{ event.changePercent|number_format(2) }}%
+												</span>
+											{% endif %}
+											<span class="text-[10px] text-on-surface-variant font-mono whitespace-nowrap">
+												{{ event.recordedAt|date('Y-m-d H:i') }}
+											</span>
+										</div>
 									</div>
+
+									{# Body Description (For non-earnings or additional narrative) #}
+									{% if not event.isEarnings and event.headline %}
+										<p class="text-xs text-on-surface font-medium leading-relaxed pl-8">
+											{{ event.headline }}
+										</p>
+									{% endif %}
+
+									{# Corporate Action Sub-Pills (Dividends, Buybacks, Debt, Lore) #}
+									{% if event.pills is defined and event.pills|length > 0 %}
+										<div class="flex flex-wrap gap-2 pt-1 pl-8">
+											{% for pill in event.pills %}
+												<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono {{ pill.pillClass }}">
+													<span class="material-symbols-outlined text-sm shrink-0">{{ pill.icon }}</span>
+													<span class="leading-none">{{ pill.text }}</span>
+												</div>
+											{% endfor %}
+										</div>
+									{% endif %}
 								</div>
 							{% else %}
-								<p class="text-xs text-on-surface-variant font-serif py-4 text-center">No recent corporate events logged.</p>
+								<div id="no-events-msg" class="p-8 rounded-xl bg-surface-container-lowest/40 border border-outline-variant/10 text-center space-y-2">
+									<span class="material-symbols-outlined text-3xl text-on-surface-variant/40">event_busy</span>
+									<p class="text-xs text-on-surface-variant font-serif">No recent corporate events logged for this asset.</p>
+								</div>
 							{% endfor %}
 						</div>
 					</div>
@@ -318,6 +380,103 @@
 									</div>
 								{% endif %}
 							</dl>
+						</div>
+					{% endif %}
+
+					{# Wall Street Analyst Consensus & Price Targets Card #}
+					{% if not isEtf and not asset.isBankrupt %}
+						<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] relative overflow-hidden">
+							{# Ambient accent glow #}
+							<div class="absolute -right-12 -top-12 w-32 h-32 bg-primary/5 rounded-full blur-2xl pointer-events-none"></div>
+
+							{# Card Header: Title + Recommendation Badge #}
+							<div class="flex items-center justify-between gap-3 mb-5 relative z-10">
+								<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface flex items-center gap-2">
+									<span class="material-symbols-outlined text-primary text-base">psychology</span>
+									Analyst Consensus & Targets
+								</h3>
+								
+								{% set rating = analystTargets.rating|default('Neutral') %}
+								{% set ratingBg = rating == 'Outperform' ? 'bg-secondary/10 border-secondary/20 text-secondary' : (rating == 'Underperform' ? 'bg-tertiary/10 border-tertiary/20 text-tertiary' : 'bg-surface-container-highest border-outline-variant/20 text-on-surface-variant') %}
+								
+								<span id="analyst-consensus-badge" class="inline-flex items-center rounded-md px-2.5 py-0.5 text-[10px] font-bold font-mono uppercase tracking-wider border {{ ratingBg }}">
+									{{ rating }}
+								</span>
+							</div>
+
+							{# Main Consensus Target Display #}
+							<div class="p-4 rounded-xl bg-surface-container-lowest/80 border border-outline-variant/10 mb-4 relative z-10">
+								<div class="flex justify-between items-baseline mb-1">
+									<span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Consensus 12M Target</span>
+									{% set upside = analystTargets.upside_pct|default(0) %}
+									<span id="target-upside" class="text-[11px] font-mono font-bold {{ upside > 5 ? 'text-secondary' : (upside < -5 ? 'text-tertiary' : 'text-on-surface-variant') }}">
+										{{ upside >= 0 ? '+' : '' }}{{ upside|number_format(1) }}% Implied
+									</span>
+								</div>
+								
+								<div class="flex items-baseline gap-3">
+									<span class="text-3xl font-bold font-mono tracking-tight text-on-surface" id="target-consensus">
+										${{ analystTargets.consensus|default(asset.price)|number_format(2) }}
+									</span>
+								</div>
+							</div>
+
+							{# 3 Distinct Analyst Desk Price Targets #}
+							<div class="space-y-2.5 relative z-10">
+								{# 1. Growth & DCF Desk #}
+								<div class="p-3 rounded-xl bg-surface-container-lowest/50 border border-outline-variant/10 flex items-center justify-between hover:border-outline-variant/25 transition-all">
+									<div class="flex items-center gap-2.5 min-w-0">
+										<div class="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0">
+											<span class="material-symbols-outlined text-sm">trending_up</span>
+										</div>
+										<div>
+											<div class="text-xs font-bold text-on-surface tracking-tight">Growth & DCF Model</div>
+											<div class="text-[10px] text-on-surface-variant">Forward Earnings & Free Cash Flow DCF</div>
+										</div>
+									</div>
+									<div class="text-right shrink-0">
+										<span class="text-sm font-bold font-mono text-on-surface" id="target-growth">
+											${{ analystTargets.growth_analyst|default(0)|number_format(2) }}
+										</span>
+									</div>
+								</div>
+
+								{# 2. Value & Book Asset Desk #}
+								<div class="p-3 rounded-xl bg-surface-container-lowest/50 border border-outline-variant/10 flex items-center justify-between hover:border-outline-variant/25 transition-all">
+									<div class="flex items-center gap-2.5 min-w-0">
+										<div class="w-7 h-7 rounded-lg bg-sky-500/10 text-sky-400 flex items-center justify-center shrink-0">
+											<span class="material-symbols-outlined text-sm">account_balance</span>
+										</div>
+										<div>
+											<div class="text-xs font-bold text-on-surface tracking-tight">Value & Book Multiple</div>
+											<div class="text-[10px] text-on-surface-variant">Tangible Equity & Replacement Value</div>
+										</div>
+									</div>
+									<div class="text-right shrink-0">
+										<span class="text-sm font-bold font-mono text-on-surface" id="target-value">
+											${{ analystTargets.value_analyst|default(0)|number_format(2) }}
+										</span>
+									</div>
+								</div>
+
+								{# 3. Income & DDM Desk #}
+								<div class="p-3 rounded-xl bg-surface-container-lowest/50 border border-outline-variant/10 flex items-center justify-between hover:border-outline-variant/25 transition-all">
+									<div class="flex items-center gap-2.5 min-w-0">
+										<div class="w-7 h-7 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0">
+											<span class="material-symbols-outlined text-sm">savings</span>
+										</div>
+										<div>
+											<div class="text-xs font-bold text-on-surface tracking-tight">Income & Yield (DDM)</div>
+											<div class="text-[10px] text-on-surface-variant">Dividend Discount & Cash Yield Floor</div>
+										</div>
+									</div>
+									<div class="text-right shrink-0">
+										<span class="text-sm font-bold font-mono text-on-surface" id="target-income">
+											${{ analystTargets.income_analyst|default(0)|number_format(2) }}
+										</span>
+									</div>
+								</div>
+							</div>
 						</div>
 					{% endif %}
 

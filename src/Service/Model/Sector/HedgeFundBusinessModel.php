@@ -155,22 +155,9 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     /** Leverage ratio threshold triggering Margin Call event lore under wide credit spreads. */
     public const LORE_MARGIN_CALL_LEVERAGE_THRESHOLD = 1.80;
 
-    public function getModelThresholds(): array
-    {
-        return [
-            'min_icr'                  => 1.05,
-            'bankrupt_equity'          => 2.0,
-            'distress_equity'          => 4.0,
-            'warning_equity'           => 6.0,
-            'wholesale_leverage_limit' => 3.0,
-            'dividend_crisis_icr'      => 1.05,
-            'buyback_min_icr'          => 1.15,
-            'reversion_speed'          => 0.20,
-            'moat_spread'              => 0.008,
-            'nwc_intensity'            => 0.0,
-            'capex_completion_rate'    => 1.0,
-        ];
-    }
+        public function getWholesaleLeverageLimit(): float { return 3.0; }
+    public function getReversionSpeed(): float { return 0.2; }
+    public function getMoatSpread(): float { return 0.008; }
 
     public function getCoverageProfile(Stock $stock): SectorCoverageProfile
     {
@@ -478,7 +465,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         float $costOfEquity,
         float $effectiveCostOfDebt
     ): bool {
-        $limit = $this->getModelThresholds()['wholesale_leverage_limit'] ?? 3.0;
+        $limit = $this->getWholesaleLeverageLimit();
         return $currentDebtRatio < ($limit * 0.85);
     }
 

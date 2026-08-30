@@ -196,8 +196,7 @@ class InvestmentBankBusinessModelTest extends TestCase
 
     public function testWholesaleLeverageLimitMatchesOperatingCapacity(): void
     {
-        $thresholds = $this->model->getModelThresholds();
-        $this->assertSame(8.0, $thresholds['wholesale_leverage_limit']);
+        $this->assertSame(8.0, $this->model->getWholesaleLeverageLimit());
     }
 
     public function testPereOptionWritingPurePlayWithZeroAdvisoryMaintainsZeroAdvisoryAcrossQuarters(): void

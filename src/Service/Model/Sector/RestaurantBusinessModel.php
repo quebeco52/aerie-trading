@@ -66,13 +66,8 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     public const MIN_OPERATING_MARGIN_FLOOR  = 0.08;
     public const MAX_OPERATING_MARGIN_CEILING = 0.32;
 
-    public function getModelThresholds(): array
-    {
-        $thresholds = parent::getModelThresholds();
-        $thresholds['moat_spread'] = 0.015; // Brand equity provides some moat
-        $thresholds['nwc_intensity'] = -0.05; // Customers pay instantly, suppliers paid on terms
-        return $thresholds;
-    }
+        public function getMoatSpread(): float { return 0.015; }
+    public function getWorkingCapitalIntensity(Stock $stock): float { return -0.05; }
 
     public function getSecularGrowthRate(Stock $stock): float
     {

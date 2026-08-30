@@ -63,13 +63,8 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
     /** Structural maximum operating margin ceiling for automated precision monopolies. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.34;
 
-    public function getModelThresholds(): array
-    {
-        $thresholds = parent::getModelThresholds();
-        $thresholds['moat_spread'] = 0.030; // Unbreakable industrial fortress
-        $thresholds['reversion_speed'] = 0.08; // Extremely sticky margins
-        return $thresholds;
-    }
+        public function getReversionSpeed(): float { return 0.08; }
+    public function getMoatSpread(): float { return 0.03; }
 
     public function getSurpriseBlendWeights(): array
     {

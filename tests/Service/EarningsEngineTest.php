@@ -230,4 +230,73 @@ class EarningsEngineTest extends TestCase
 
         $this->assertNotEquals(-10.00, (float) $stock->getEarningsPerShare(), 'A company with negative EPS should still see EPS changes.');
     }
+
+    public function testDepreciationSubtractedFromEbit()
+    {
+        $stock = new Stock();
+        $stock->setTicker('DEPR');
+        $stock->setEarningsPerShare('5.00');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setVolatility('0.20');
+        $stock->setCurrentVolatility('0.20');
+        $stock->setBeta('1.0');
+        $stock->setTotalEquity('100000000');
+        $stock->setWholesaleDebt('0');
+        $stock->setCorporateTreasury('10000000');
+        $stock->setBaselineRoic('0.12');
+        $stock->setOperatingMargin('0.20');
+        $stock->setInvestedCapital('100000000');
+        $stock->setDepreciationRate('0.08');
+
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $capturedContext = null;
+        $this->eventDispatcherMock->expects($this->once())
+            ->method('dispatch')
+            ->willReturnCallback(function($event) use (&$capturedContext) {
+                if ($event instanceof \App\Service\Event\EarningsReportedEvent) {
+                    $capturedContext = $event->getContext();
+                }
+                return $event;
+            });
+
+        $reportingTick = $this->getReportingTick('DEPR');
+        $macroState = new \App\DTO\MacroStateDTO();
+        $this->engine->calculate($stock, $macroState, $reportingTick, 252);
+
+        $this->assertNotNull($capturedContext);
+        $this->assertGreaterThan(0.0, $capturedContext->quarterlyDepreciation, 'Quarterly depreciation must be positive.');
+        $this->assertEqualsWithDelta(
+            $capturedContext->ebitda - $capturedContext->quarterlyDepreciation,
+            $capturedContext->ebit,
+            0.0001,
+            'EBIT must equal EBITDA minus quarterly depreciation.'
+        );
+    }
+
+    public function testVolatilityShockTriggersOnCompositeEarningsMiss()
+    {
+        $stock = new Stock();
+        $stock->setTicker('MISS');
+        $stock->setEarningsPerShare('10.00');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setVolatility('0.20');
+        $stock->setCurrentVolatility('0.20');
+        $stock->setBeta('1.0');
+        $stock->setTotalEquity('150000000');
+        $stock->setWholesaleDebt('0');
+        $stock->setCorporateTreasury('10000000');
+        $stock->setBaselineRoic('0.10');
+        $stock->setOperatingMargin('0.20');
+        $stock->setInvestedCapital('140000000');
+
+        // Negative surprise shock (Z = -2.0) creates a massive miss
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(-2.0);
+
+        $reportingTick = $this->getReportingTick('MISS');
+        $macroState = new \App\DTO\MacroStateDTO();
+        $this->engine->calculate($stock, $macroState, $reportingTick, 252);
+
+        $this->assertGreaterThan(0.20, (float) $stock->getCurrentVolatility(), 'Volatility should have spiked due to the composite earnings miss.');
+    }
 }

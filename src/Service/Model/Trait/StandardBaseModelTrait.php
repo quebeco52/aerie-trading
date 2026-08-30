@@ -19,9 +19,9 @@ trait StandardBaseModelTrait
         $this->modelIdentifier = $identifier;
     }
 
-    public function getModelThresholds(): array
+    public function isFinancial(): bool
     {
-        return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.20, 'moat_spread' => 0.000, 'nwc_intensity' => 0.10, 'capex_completion_rate' => 0.33];
+        return false;
     }
 
     protected function getOperatingBase(Stock $stock): float

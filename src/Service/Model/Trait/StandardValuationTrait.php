@@ -32,4 +32,15 @@ trait StandardValuationTrait
             ? ($baseConsensus * (1.0 - FinancialConstants::FAIR_VALUE_DDM_WEIGHT)) + ($dividendSupportValue * FinancialConstants::FAIR_VALUE_DDM_WEIGHT)
             : $baseConsensus;
     }
+
+    public function calculateStructuralEps(float $bookValuePerShare, float $structuralRoic, float $revenuePerShare, float $riskFreeRate): float
+    {
+        $operatingBasePerShare = max($revenuePerShare, $bookValuePerShare);
+        $cashPerShare = $this->calculateTargetOperatingCash($operatingBasePerShare, 0.0, 0.0);
+        $operatingBookValue = max(0.01, $bookValuePerShare - $cashPerShare);
+
+        $structuralOperatingEps = $operatingBookValue * $structuralRoic;
+        $structuralCashYieldEps = $cashPerShare * $riskFreeRate;
+        return $structuralOperatingEps + $structuralCashYieldEps;
+    }
 }

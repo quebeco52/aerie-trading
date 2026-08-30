@@ -26,10 +26,17 @@ use App\Service\Math\FinancialConstants;
  */
 class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
 {
-    public function getModelThresholds(): array
-    {
-        return ['min_icr' => 1.05, 'bankrupt_equity' => 0.5,  'distress_equity' => 1.25, 'warning_equity' => 2.5,  'wholesale_leverage_limit' => null, 'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.10, 'moat_spread' => 0.030, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 1.0];
-    }
+        public function getMinIcr(): float { return 1.05; }
+    public function getBankruptEquityThreshold(): float { return 0.5; }
+    public function getDistressEquityThreshold(): float { return 1.25; }
+    public function getWarningEquityThreshold(): float { return 2.5; }
+    public function getWholesaleLeverageLimit(): float { return 0.0; }
+    public function getDividendCrisisIcr(): float { return 1.05; }
+    public function getBuybackMinIcr(): float { return 1.15; }
+    public function getReversionSpeed(): float { return 0.1; }
+    public function getMoatSpread(): float { return 0.03; }
+    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.0; }
+    public function getCapExCompletionRate(Stock $stock): float { return 1.0; }
 
     // --- Fee Revenue Floor ---
     /** Minimum structural EBIT floor as a fraction of equity. Prevents degenerate zero-revenue states. */

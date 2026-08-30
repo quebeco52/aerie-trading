@@ -15,6 +15,11 @@ use App\Entity\Stock;
  */
 trait FinancialPhysicsTrait
 {
+    public function getEffectiveReturn(Stock $stock): float
+    {
+        return (float) ($stock->getCurrentRoe() ?: $stock->getBaselineRoe());
+    }
+
     public function getTrueReturn(Stock $stock): float
     {
         return (float) $stock->getRoeTtm();
@@ -36,9 +41,8 @@ trait FinancialPhysicsTrait
         float $costOfEquity = 0.10,
         ?\App\DTO\MacroStateDTO $macroState = null
     ): float {
-        $thresholds = $this->getModelThresholds();
-        $kappa = $thresholds['reversion_speed'] ?? 0.18;
-        $moatSpread = $thresholds['moat_spread'] ?? 0.00;
+        $kappa = $this->getReversionSpeed();
+        $moatSpread = $this->getMoatSpread();
 
         $equity = (float) $stock->getTotalEquity();
         $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * 4.0 : 0.0;
@@ -86,7 +90,7 @@ trait FinancialPhysicsTrait
 
     public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
     {
-        $limit = $targetDebtTolerance > 0.0 ? $targetDebtTolerance : ($this->getModelThresholds()['equity_limit'] ?? 3.0);
+        $limit = $targetDebtTolerance > 0.0 ? $targetDebtTolerance : $this->getWholesaleLeverageLimit();
         return $currentDebtRatio < ($limit * 0.50);
     }
 
@@ -127,9 +131,8 @@ trait FinancialPhysicsTrait
 
     public function calculateDebtExpansionCapacity(float $equity, float $totalDebt, float $wholesaleDebt, \App\DTO\DebtHealthDTO $health, float $newBorrowingRate, float $ebit, float $depreciation): float
     {
-        $modelThresholds = $this->getModelThresholds();
-        $wholesaleTolerance = $modelThresholds['wholesale_leverage_limit'] ?? $health->debtTolerance;
-        $bankEquityLimit = $modelThresholds['equity_limit'] ?? $health->debtTolerance;
+        $wholesaleTolerance = $this->getWholesaleLeverageLimit() > 0 ? $this->getWholesaleLeverageLimit() : $health->debtTolerance;
+        $bankEquityLimit = $health->debtTolerance;
 
         $wholesaleCapacity = max(0.0, ($equity * $wholesaleTolerance) - $wholesaleDebt);
         $totalCapacity = max(0.0, ($equity * $bankEquityLimit) - $totalDebt);
@@ -157,9 +160,67 @@ trait FinancialPhysicsTrait
         return $wholesaleDebt;
     }
 
-    public function getDeleveragingEvaluationLimit(array $modelThresholds, float $macroDebtTolerance): float
+    public function getDeleveragingEvaluationLimit(float $macroDebtTolerance): float
     {
-        return $modelThresholds['wholesale_leverage_limit'] ?? $macroDebtTolerance;
+        return $this->getWholesaleLeverageLimit() > 0 ? $this->getWholesaleLeverageLimit() : $macroDebtTolerance;
+    }
+
+    public function isFinancial(): bool { return true; }
+    public function getMinIcr(): float { return 1.05; }
+    public function getBankruptEquityThreshold(): float { return 2.0; }
+    public function getDistressEquityThreshold(): float { return 4.0; }
+    public function getWarningEquityThreshold(): float { return 6.0; }
+    public function getWholesaleLeverageLimit(): float { return 1.0; }
+    public function getDividendCrisisIcr(): float { return 1.05; }
+    public function getBuybackMinIcr(): float { return 1.15; }
+    public function getReversionSpeed(): float { return 0.18; }
+    public function getMoatSpread(): float { return 0.00; }
+    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.0; }
+    public function getCapExCompletionRate(Stock $stock): float { return 1.0; }
+    public function getPhysicalCapital(Stock $stock): float { return (float) $stock->getTotalEquity(); }
+    public function allowsPhysicalOrganicCapex(): bool { return false; }
+    public function getReturnBasisIncome(Stock $stock, float $quarterlyNopat, float $actualTotalNetIncome): float { return $actualTotalNetIncome; }
+    public function appliesDistressPremiumToCostOfEquity(): bool { return true; }
+    public function shouldForceDeleveragingOnJunkOrHoarding(): bool { return false; }
+    public function calculateStructuralEps(float $bookValuePerShare, float $structuralRoic, float $revenuePerShare, float $riskFreeRate): float
+    {
+        return $bookValuePerShare * $structuralRoic;
+    }
+
+    public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury): ?float
+    {
+        $industry = $stock->getIndustry() ?: 'General';
+        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 10.0;
+        $leverageRatio = (float) $stock->getDebtToEquityRatio();
+        $leverageOvershoot = $leverageRatio / $equityLimit;
+
+        if ($leverageOvershoot >= 1.25) {
+            return 0.0;
+        } elseif ($leverageOvershoot >= 1.15) {
+            return 0.30;
+        } elseif ($leverageOvershoot >= 1.05) {
+            return 0.60;
+        }
+
+        return null;
+    }
+
+    public function checkBuybackRegulatoryLockout(Stock $stock, float $currentTreasury): ?bool
+    {
+        $regulatoryCap = $this->getRegulatoryDividendCap($stock, $currentTreasury);
+        if ($regulatoryCap !== null && $regulatoryCap <= 0.0) {
+            return true;
+        }
+
+        $industry = $stock->getIndustry() ?: 'General';
+        $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? 10.0;
+        $buybackLockoutThreshold = max(1.0, $equityLimit - 1.0) + 0.5;
+
+        if ((float) $stock->getDebtToEquityRatio() > $buybackLockoutThreshold) {
+            return true;
+        }
+
+        return false;
     }
 
     public function getDebtCostMetrics(\App\DTO\DebtMetricsDTO $debtMetrics, float $currentDebt, float $wholesaleDebt, float $interestExpense): array

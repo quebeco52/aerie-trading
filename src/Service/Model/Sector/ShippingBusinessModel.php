@@ -28,10 +28,8 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_VISIBILITY = 0.75;
     public const BASE_COVERAGE_ERROR = 0.10;
     public const BASE_COVERAGE_MIN_VISIBILITY = 0.50;
-    public function getModelThresholds(): array
-    {
-        return ['min_icr' => 2.00, 'bankrupt_equity' => 0.0,  'distress_equity' => 0.0,  'warning_equity' => 0.0,  'wholesale_leverage_limit' => 1.0,  'dividend_crisis_icr' => 1.50, 'buyback_min_icr' => 2.00, 'reversion_speed' => 0.30, 'moat_spread' => 0.000, 'nwc_intensity' => 0.10, 'capex_completion_rate' => 0.125];
-    }
+        public function getReversionSpeed(): float { return 0.3; }
+    public function getCapExCompletionRate(Stock $stock): float { return 0.125; }
     public function getCapexCyclicality(): float
     {
         return 3.0;

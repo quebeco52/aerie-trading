@@ -88,22 +88,13 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     /** Variable cost penalty applied during multi-subsidiary restructuring or supply chain write-offs. */
     public const RESTRUCTURING_DRAG_PENALTY = 0.04;
 
-    public function getModelThresholds(): array
-    {
-        return [
-            'min_icr'                  => 2.50,
-            'bankrupt_equity'          => 0.0,
-            'distress_equity'          => 0.0,
-            'warning_equity'           => 0.0,
-            'wholesale_leverage_limit' => 2.0,
-            'dividend_crisis_icr'      => 1.75,
-            'buyback_min_icr'          => 2.50,
-            'reversion_speed'          => 0.10,
-            'moat_spread'              => 0.015,
-            'nwc_intensity'            => 0.10,
-            'capex_completion_rate'    => 0.15,
-        ];
-    }
+        public function getMinIcr(): float { return 2.5; }
+    public function getWholesaleLeverageLimit(): float { return 2.0; }
+    public function getDividendCrisisIcr(): float { return 1.75; }
+    public function getBuybackMinIcr(): float { return 2.5; }
+    public function getReversionSpeed(): float { return 0.1; }
+    public function getMoatSpread(): float { return 0.015; }
+    public function getCapExCompletionRate(Stock $stock): float { return 0.15; }
 
     public function getSecularGrowthRate(Stock $stock): float
     {

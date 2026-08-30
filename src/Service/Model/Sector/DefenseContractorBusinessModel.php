@@ -111,22 +111,10 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     /** Elevated net working capital intensity during FAR 32.503-6 progress payment withholding. */
     public const WITHHOLDING_NWC_INTENSITY = 0.18;
 
-    public function getModelThresholds(): array
-    {
-        return [
-            'min_icr'                  => 2.00,
-            'bankrupt_equity'          => 0.0,
-            'distress_equity'          => 0.0,
-            'warning_equity'           => 0.0,
-            'wholesale_leverage_limit' => 2.0,
-            'dividend_crisis_icr'      => 1.50,
-            'buyback_min_icr'          => 2.00,
-            'reversion_speed'          => 0.12,
-            'moat_spread'              => 0.020,
-            'nwc_intensity'            => self::BASE_NWC_INTENSITY,
-            'capex_completion_rate'    => 0.20,
-        ];
-    }
+        public function getWholesaleLeverageLimit(): float { return 2.0; }
+    public function getReversionSpeed(): float { return 0.12; }
+    public function getMoatSpread(): float { return 0.02; }
+    public function getCapExCompletionRate(Stock $stock): float { return 0.2; }
 
     public function getCapexCyclicality(): float
     {

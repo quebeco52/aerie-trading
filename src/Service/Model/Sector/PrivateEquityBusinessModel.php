@@ -24,10 +24,7 @@ use App\Service\Event\ShockEvent;
  */
 class PrivateEquityBusinessModel extends AssetManagementBusinessModel
 {
-    public function getModelThresholds(): array
-    {
-        return ['min_icr' => 1.05, 'bankrupt_equity' => 2.0,  'distress_equity' => 4.0,  'warning_equity' => 6.0,  'wholesale_leverage_limit' => 2.5, 'dividend_crisis_icr' => 1.05, 'buyback_min_icr' => 1.15, 'reversion_speed' => 0.18, 'moat_spread' => 0.010, 'nwc_intensity' => 0.0, 'capex_completion_rate' => 1.0];
-    }
+        public function getWholesaleLeverageLimit(): float { return 2.5; }
 
     // --- Leverage & Aggression Physics ---
     /** Minimum leverage aggression multiplier when the firm is unlevered. */
@@ -437,9 +434,8 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
 
     public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float
     {
-        $thresholds = $this->getModelThresholds();
-        $kappa = $thresholds['reversion_speed'] ?? 0.18;
-        $moatSpread = $thresholds['moat_spread'] ?? 0.01;
+        $kappa = $this->getReversionSpeed();
+        $moatSpread = $this->getMoatSpread();
 
         $equity = (float) $stock->getTotalEquity();
         $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * self::ROE_ANNUALIZATION_MULT : 0.0;
@@ -518,7 +514,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
 
     public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
     {
-        $limit = $this->getModelThresholds()['equity_limit'] ?? ($targetDebtTolerance > 0.0 ? $targetDebtTolerance : self::DEFAULT_EQUITY_LIMIT);
+        $limit = $targetDebtTolerance > 0.0 ? $targetDebtTolerance : $this->getWholesaleLeverageLimit();
         return $currentDebtRatio < ($limit * 0.85);
     }
 

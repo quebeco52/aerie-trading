@@ -17,7 +17,6 @@ class EarningsSimulationContext
         public readonly MacroStateDTO $macroState,
         public readonly BusinessModelInterface $strategy,
         public readonly string $businessModel,
-        public readonly bool $isFinancial,
         public readonly float $dt = 0.25
     ) {}
 
@@ -27,6 +26,7 @@ class EarningsSimulationContext
     public float $baselineVol = 0.0;
     public float $sharesOutstanding = 0.0;
     public float $stableMargin = 0.0;
+    public bool $isFinancial = false;
     
     // Capacity & Revenue
     public float $capacityUtilization = 0.0;
@@ -47,6 +47,7 @@ class EarningsSimulationContext
     public float $actualRevenue = 0.0;
     public float $previousQuarterlyRevenue = 0.0;
     public float $actualVariableCosts = 0.0;
+    public float $ebitda = 0.0;
     public float $ebit = 0.0;
     public float $primaryShockZ = 0.0;
     public ?string $eventType = null;

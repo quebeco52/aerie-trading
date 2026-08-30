@@ -57,9 +57,10 @@ class SectorsTest extends TestCase
         $modelKey = $metrics['business_model'];
         $strategy = Sectors::getBusinessModelStrategy($modelKey);
         $this->assertInstanceOf(BusinessModelInterface::class, $strategy, "Strategy for {$modelKey} must implement BusinessModelInterface");
-        $thresholds = $strategy->getModelThresholds();
-        $this->assertIsArray($thresholds, "Model {$modelKey} must return array of thresholds");
-        $this->assertArrayHasKey('min_icr', $thresholds, "Model {$modelKey} thresholds must define min_icr");
+        $this->assertGreaterThan(0.0, $strategy->getMinIcr(), "Model {$modelKey} min ICR must be positive");
+        $this->assertGreaterThan(0.0, $strategy->getBuybackMinIcr(), "Model {$modelKey} buyback min ICR must be positive");
+        $this->assertGreaterThan(0.0, $strategy->getDividendCrisisIcr(), "Model {$modelKey} dividend crisis ICR must be positive");
+        $this->assertGreaterThan(0.0, $strategy->getReversionSpeed(), "Model {$modelKey} reversion speed must be positive");
     }
 
     public function testAllBusinessModelDescriptionsAreNonEmpty(): void
