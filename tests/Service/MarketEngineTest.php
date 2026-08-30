@@ -22,7 +22,7 @@ class MarketEngineTest extends TestCase
         $this->mathUtilityMock = $this->getMockBuilder(MathUtility::class)
             ->onlyMethods(['generateStandardNormal', 'checkProbability'])
             ->getMock();
-            
+
         $this->engine = new MarketEngine($this->mathUtilityMock);
     }
 
@@ -45,9 +45,9 @@ class MarketEngineTest extends TestCase
 
         $this->assertIsArray($result);
         $this->assertNull($result['shock'], 'Shock should be null when no jump occurs.');
-        
+
         $this->assertEqualsWithDelta(0.1951, $result['next_volatility'], 0.001);
-        
+
         $this->assertIsFloat($result['price']);
         $this->assertGreaterThan(0, $result['price']);
     }
@@ -71,13 +71,13 @@ class MarketEngineTest extends TestCase
         $result = $this->engine->calculateNextPrice($ctx);
 
         $this->assertNotNull($result['shock'], 'Shock should occur due to high lambda.');
-        
+
         $this->assertIsFloat($result['price']);
         $this->assertGreaterThan(0, $result['price']);
         $this->assertIsFloat($result['next_volatility']);
         $this->assertGreaterThan(0, $result['next_volatility']);
     }
-    
+
     public function testReversionToFairValue()
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
@@ -163,8 +163,8 @@ class MarketEngineTest extends TestCase
         $stressedResult = $this->engine->calculateNextPrice($stressedCtx);
 
         $this->assertLessThan(
-            $normalResult['dynamic_reversion'], 
-            $stressedResult['dynamic_reversion'], 
+            $normalResult['dynamic_reversion'],
+            $stressedResult['dynamic_reversion'],
             'Brunnermeier-Pedersen funding liquidity dampener must reduce reversion speed during high systemic stress.'
         );
     }
@@ -234,7 +234,7 @@ class MarketEngineTest extends TestCase
         $this->assertGreaterThan(75.0, $techResult['perceived_fair_value'], 'Tech fair value should reflect high earnings power rather than book value.');
     }
 
-    public function testMarketShocksAreStrictlyBoundedToThirtyPercent(): void
+    public function testMarketShocksAreStrictlyBoundedToNoiseTwentyPercent(): void
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(true);
@@ -247,7 +247,7 @@ class MarketEngineTest extends TestCase
                 earningsPerShare: 5.0,
                 dt: 1.0 / 252.0,
                 lambda: 2.0,
-                jumpVol: 0.10,
+                jumpVol: 0.08,
                 drift: 0.08
             );
 
@@ -255,12 +255,13 @@ class MarketEngineTest extends TestCase
             $shock = $result['shock'];
 
             $this->assertNotNull($shock);
-            $this->assertLessThanOrEqual(30.01, $shock, 'Positive market shock must be bounded to <= 30% ceiling.');
-            $this->assertGreaterThanOrEqual(-30.01, $shock, 'Negative market shock must be bounded to >= -30% floor.');
+            $this->assertLessThanOrEqual(20.01, $shock, 'Positive market shock must be bounded to <= 20% ceiling.');
+            $this->assertGreaterThanOrEqual(-20.01, $shock, 'Negative market shock must be bounded to >= -20% floor.');
+            $this->assertGreaterThanOrEqual(9.0, abs($shock), 'Market shocks should be noticeable discontinuities >= 9-10%.');
         }
     }
 
-    public function testSafeReinsuranceMarketJumpStaysWithinBoundedLimits(): void
+    public function testSafeReinsuranceMarketJumpStaysWithinBoundedNoise(): void
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(true);
@@ -272,7 +273,7 @@ class MarketEngineTest extends TestCase
             earningsPerShare: 200.0,
             dt: 1.0 / 252.0,
             lambda: 0.15,
-            jumpVol: 0.06,
+            jumpVol: 0.04,
             beta: 0.20
         );
 
@@ -281,8 +282,9 @@ class MarketEngineTest extends TestCase
             $shock = $result['shock'];
 
             $this->assertNotNull($shock);
-            $this->assertLessThanOrEqual(30.01, $shock, 'SAFE market shock must never exceed 30%.');
-            $this->assertGreaterThanOrEqual(-30.01, $shock, 'SAFE market shock must never breach -30%.');
+            $this->assertLessThanOrEqual(20.01, $shock, 'SAFE market shock must never exceed 20%.');
+            $this->assertGreaterThanOrEqual(-20.01, $shock, 'SAFE market shock must never breach -20%.');
+            $this->assertGreaterThanOrEqual(9.0, abs($shock), 'SAFE market shock should be around 10% - 20%.');
         }
     }
 }
