@@ -406,10 +406,11 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
     {
+        // Commercial Real Estate REITs trade primarily on Distributable Cash Flow / Dividend Yields and Net Asset Value (NAV / Book).
         if ($dividendSupportValue > 0.0) {
-            return ($pbFairValue * self::FAIR_VALUE_BOOK_WEIGHT) + ($earningsValue * self::FAIR_VALUE_EARNINGS_WEIGHT) + ($dividendSupportValue * self::FAIR_VALUE_DDM_WEIGHT);
+            return ($dividendSupportValue * 0.50) + ($pbFairValue * 0.35) + ($earningsValue * 0.15);
         }
-        return ($pbFairValue * 0.40) + ($earningsValue * 0.60);
+        return ($pbFairValue * 0.60) + ($earningsValue * 0.40);
     }
 
     public function getSustainableDividendBase(Stock $stock, float $quarterlyEps, float $investedCapital, float $depRate): float

@@ -168,4 +168,121 @@ class MarketEngineTest extends TestCase
             'Brunnermeier-Pedersen funding liquidity dampener must reduce reversion speed during high systemic stress.'
         );
     }
+
+    public function testDynamicDdmHaircutOnUnsustainableDividend()
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
+
+        // Sustainable dividend ($1.00 quarterly = $4.00 annual on $8.00 EPS => 50% payout)
+        $sustainableCtx = new MarketPricingContext(
+            currentPrice: 100.0,
+            currentVolatility: 0.2,
+            longTermVolatility: 0.2,
+            earningsPerShare: 8.0,
+            dt: 1.0,
+            lambda: 0.0,
+            dividendPerShare: 1.0,
+            currentRoic: 0.12,
+            roicTtm: 0.12,
+            liveCostOfEquity: 0.08
+        );
+        $sustainableResult = $this->engine->calculateNextPrice($sustainableCtx);
+
+        // Unsustainable debt-funded dividend ($3.00 quarterly = $12.00 annual on $4.00 EPS => 300% payout)
+        $unsustainableCtx = new MarketPricingContext(
+            currentPrice: 100.0,
+            currentVolatility: 0.2,
+            longTermVolatility: 0.2,
+            earningsPerShare: 4.0,
+            dt: 1.0,
+            lambda: 0.0,
+            dividendPerShare: 3.0,
+            currentRoic: 0.12,
+            roicTtm: 0.12,
+            liveCostOfEquity: 0.08
+        );
+        $unsustainableResult = $this->engine->calculateNextPrice($unsustainableCtx);
+
+        $this->assertArrayHasKey('income_analyst', $unsustainableResult['analyst_targets']);
+        // Income analyst target should be heavily discounted due to unsustainable payout
+        $this->assertGreaterThan(0.0, $unsustainableResult['analyst_targets']['income_analyst']);
+    }
+
+    public function testTechSectorIgnoresBookValueInValuation()
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
+
+        $techCtx = new MarketPricingContext(
+            currentPrice: 150.0,
+            currentVolatility: 0.2,
+            longTermVolatility: 0.2,
+            earningsPerShare: 10.0,
+            dt: 1.0,
+            lambda: 0.0,
+            bookValuePerShare: 2.0, // Negligible book value
+            currentRoic: 0.25,
+            roicTtm: 0.25,
+            liveWacc: 0.09,
+            revenuePerShare: 50.0,
+            businessModel: 'tech'
+        );
+        $techResult = $this->engine->calculateNextPrice($techCtx);
+
+        // Tech fair value should not be dragged down by the tiny $2.00 book value
+        $this->assertGreaterThan(75.0, $techResult['perceived_fair_value'], 'Tech fair value should reflect high earnings power rather than book value.');
+    }
+
+    public function testMarketShocksAreStrictlyBoundedToThirtyPercent(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(true);
+
+        for ($i = 0; $i < 500; $i++) {
+            $ctx = new MarketPricingContext(
+                currentPrice: 100.0,
+                currentVolatility: 0.15,
+                longTermVolatility: 0.15,
+                earningsPerShare: 5.0,
+                dt: 1.0 / 252.0,
+                lambda: 2.0,
+                jumpVol: 0.10,
+                drift: 0.08
+            );
+
+            $result = $this->engine->calculateNextPrice($ctx);
+            $shock = $result['shock'];
+
+            $this->assertNotNull($shock);
+            $this->assertLessThanOrEqual(30.01, $shock, 'Positive market shock must be bounded to <= 30% ceiling.');
+            $this->assertGreaterThanOrEqual(-30.01, $shock, 'Negative market shock must be bounded to >= -30% floor.');
+        }
+    }
+
+    public function testSafeReinsuranceMarketJumpStaysWithinBoundedLimits(): void
+    {
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(true);
+
+        $ctx = new MarketPricingContext(
+            currentPrice: 1500.0,
+            currentVolatility: 0.10,
+            longTermVolatility: 0.10,
+            earningsPerShare: 200.0,
+            dt: 1.0 / 252.0,
+            lambda: 0.15,
+            jumpVol: 0.06,
+            beta: 0.20
+        );
+
+        for ($i = 0; $i < 200; $i++) {
+            $result = $this->engine->calculateNextPrice($ctx);
+            $shock = $result['shock'];
+
+            $this->assertNotNull($shock);
+            $this->assertLessThanOrEqual(30.01, $shock, 'SAFE market shock must never exceed 30%.');
+            $this->assertGreaterThanOrEqual(-30.01, $shock, 'SAFE market shock must never breach -30%.');
+        }
+    }
 }

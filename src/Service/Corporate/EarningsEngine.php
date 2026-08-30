@@ -151,14 +151,12 @@ class EarningsEngine
         $z1 = $this->mathUtility->generateStandardNormal();
 
         $priceJumpIntensity = (float) ($stock->getJumpIntensity() ?? 2.00);
-        $priceJumpMean = (float) ($stock->getJumpMean() ?? -0.05);
         $priceJumpVol = (float) ($stock->getJumpVol() ?? 0.10);
 
         $jumpIntensity = $priceJumpIntensity * FinancialConstants::FUNDAMENTAL_JUMP_INTENSITY_SCALE;
-        $jumpMean = $priceJumpMean * FinancialConstants::FUNDAMENTAL_JUMP_MEAN_SCALE;
         $jumpVol = $priceJumpVol * FinancialConstants::FUNDAMENTAL_JUMP_VOL_SCALE;
 
-        $jumpData = $this->mathUtility->calculateJumpDiffusion($jumpIntensity, $jumpMean, $jumpVol, $ctx->dt);
+        $jumpData = $this->mathUtility->calculateJumpDiffusion($jumpIntensity, 0.0, $jumpVol, $ctx->dt);
         $jumpMagnitude = $jumpData['exponent'] ?? 0.0;
 
         $idiosyncraticDemandShock = $revenueVol * sqrt($ctx->dt) * $z1;
@@ -229,7 +227,7 @@ class EarningsEngine
         $ctx->expectedEbit = max(-$ctx->structuralRevenue * self::MAX_EBIT_LOSS_RATIO, $expectedEbit);
 
         $ctx->operatingCosts = $ctx->actualVariableCosts + $ctx->fixedCosts;
-        $ctx->ebitda = $ctx->actualRevenue - $ctx->operatingCosts;
+        $ctx->ebit = $ctx->actualRevenue - $ctx->operatingCosts;
 
         $ctx->primaryShockZ = $actuals->primaryShockZ;
         $ctx->eventType = $actuals->eventType;
@@ -257,9 +255,8 @@ class EarningsEngine
         $annualDepreciation = $depreciableBase * $productionDepreciationRate;
         $ctx->quarterlyDepreciation = $annualDepreciation / 4.0;
 
-        // Finalize true EBIT by subtracting depreciation from EBITDA
-        $ctx->ebit = $ctx->ebitda - $ctx->quarterlyDepreciation;
-        $ctx->expectedEbit = max(-$ctx->structuralRevenue * self::MAX_EBIT_LOSS_RATIO, $ctx->expectedEbit - $ctx->quarterlyDepreciation);
+        // Reconstruct EBITDA (EBITDA = GAAP EBIT + Depreciation) for FCF, FFO, and reporting
+        $ctx->ebitda = $ctx->ebit + $ctx->quarterlyDepreciation;
 
         $expectedOperatingMargin = $ctx->expectedEbit / max(1.0, $ctx->expectedRevenue);
         $expectedDebtMetrics = $this->debtEngine->calculateInterestExpense($stock, $ctx->macroState, false, $ctx->expectedRevenue * 4.0, $expectedOperatingMargin);

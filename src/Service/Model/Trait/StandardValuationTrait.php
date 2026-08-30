@@ -35,12 +35,22 @@ trait StandardValuationTrait
 
     public function calculateStructuralEps(float $bookValuePerShare, float $structuralRoic, float $revenuePerShare, float $riskFreeRate): float
     {
-        $operatingBasePerShare = max($revenuePerShare, $bookValuePerShare);
-        $cashPerShare = $this->calculateTargetOperatingCash($operatingBasePerShare, 0.0, 0.0);
-        $operatingBookValue = max(0.01, $bookValuePerShare - $cashPerShare);
+        // For non-financials, Structural ROIC applies to Invested Capital, not Equity (Book Value).
+        $investedCapitalPerShare = max($revenuePerShare * 0.5, $bookValuePerShare * 1.5);
 
-        $structuralOperatingEps = $operatingBookValue * $structuralRoic;
+        // NOPAT = Invested Capital * ROIC
+        $structuralNopat = $investedCapitalPerShare * $structuralRoic;
+
+        // Structural after-tax interest expense drag for levered capital structure
+        $impliedDebt = max(0.0, $investedCapitalPerShare - $bookValuePerShare);
+        $costOfDebt = $riskFreeRate + 0.02;
+        $structuralInterestExpense = $impliedDebt * $costOfDebt * (1.0 - 0.21);
+
+        $structuralOperatingEps = max(0.0, $structuralNopat - $structuralInterestExpense);
+
+        $cashPerShare = $this->calculateTargetOperatingCash($investedCapitalPerShare, 0.0, 0.0);
         $structuralCashYieldEps = $cashPerShare * $riskFreeRate;
-        return $structuralOperatingEps + $structuralCashYieldEps;
+
+        return max(0.01, $structuralOperatingEps + $structuralCashYieldEps);
     }
 }

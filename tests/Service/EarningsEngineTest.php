@@ -231,7 +231,7 @@ class EarningsEngineTest extends TestCase
         $this->assertNotEquals(-10.00, (float) $stock->getEarningsPerShare(), 'A company with negative EPS should still see EPS changes.');
     }
 
-    public function testDepreciationSubtractedFromEbit()
+    public function testEbitAndEbitdaAccountingBridge()
     {
         $stock = new Stock();
         $stock->setTicker('DEPR');
@@ -245,7 +245,6 @@ class EarningsEngineTest extends TestCase
         $stock->setCorporateTreasury('10000000');
         $stock->setBaselineRoic('0.12');
         $stock->setOperatingMargin('0.20');
-        $stock->setInvestedCapital('100000000');
         $stock->setDepreciationRate('0.08');
 
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
@@ -267,10 +266,16 @@ class EarningsEngineTest extends TestCase
         $this->assertNotNull($capturedContext);
         $this->assertGreaterThan(0.0, $capturedContext->quarterlyDepreciation, 'Quarterly depreciation must be positive.');
         $this->assertEqualsWithDelta(
-            $capturedContext->ebitda - $capturedContext->quarterlyDepreciation,
+            $capturedContext->actualRevenue - $capturedContext->operatingCosts,
             $capturedContext->ebit,
             0.0001,
-            'EBIT must equal EBITDA minus quarterly depreciation.'
+            'EBIT must equal revenue minus operating costs (no double-deduction).'
+        );
+        $this->assertEqualsWithDelta(
+            $capturedContext->ebit + $capturedContext->quarterlyDepreciation,
+            $capturedContext->ebitda,
+            0.0001,
+            'EBITDA must equal EBIT plus quarterly depreciation.'
         );
     }
 
@@ -288,7 +293,6 @@ class EarningsEngineTest extends TestCase
         $stock->setCorporateTreasury('10000000');
         $stock->setBaselineRoic('0.10');
         $stock->setOperatingMargin('0.20');
-        $stock->setInvestedCapital('140000000');
 
         // Negative surprise shock (Z = -2.0) creates a massive miss
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(-2.0);

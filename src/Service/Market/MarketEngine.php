@@ -52,7 +52,6 @@ class MarketEngine
      * @param float $dt                 The time step for the simulation (in years).
      * @param float $drift              The expected return (drift) of the stock.
      * @param float $lambda             The jump intensity (average number of jumps per year).
-     * @param float $jumpMean           The mean size of a jump (log-return).
      * @param float $jumpVol            The volatility of the jump size.
      * @param float $beta               The stock's beta (sensitivity to market movements).
      * @param float $marketZ            The systemic market shock Z-score (standard normal).
@@ -114,8 +113,8 @@ class MarketEngine
         $longTermVar = $longTermVolatility * $longTermVolatility;
 
 
-        $dynamicEtaUp = 1.0 / $jump_vol;
-        $dynamicEtaDown = 1.0 / ($jump_vol * 1.25);
+        $dynamicEtaUp = 1.0 / max(0.01, $jump_vol);
+        $dynamicEtaDown = 1.0 / (max(0.01, $jump_vol) * 1.25);
 
         $dynamicMuV = ($currentVolatility * $currentVolatility) * 0.50;
 
@@ -299,13 +298,15 @@ class MarketEngine
         $systemicStressIndex = $recessionStress + $inflationStress;
 
         // 1. MACRO FORWARD GUIDANCE & FUNDAMENTAL P/E
-        // Cyclical macro adjustment: scales with inflation and the output gap (respecting negative beta)
-        $cyclicalAdjustment = $inflation + ($outputGap * 0.5 * $beta);
-        
-        // Combine secular and cyclical forces. 
-        // We cap the terminal growth rate at 5% (0.05) to prevent Gordon Growth Model divergence 
-        // where Growth >= WACC, which would cause an infinite valuation.
-        $expectedGrowth = max(0.0, min(0.05, $secularGrowth + $cyclicalAdjustment));
+        // Real growth is driven by secular trends and the output gap (cyclicality).
+        $realGrowth = $secularGrowth + ($outputGap * 0.5 * $beta);
+
+        // Stagflation drag: High inflation compresses real growth if pricing power/moat is weak
+        $inflationDrag = max(0.0, ($inflation - 0.02) * (1.0 - $strategy->getMoatSpread()));
+        $realGrowth = $realGrowth - $inflationDrag;
+
+        // Nominal expected growth used for valuation (capped at 5% to prevent Gordon Growth divergence)
+        $expectedGrowth = max(0.0, min(0.05, $realGrowth + ($inflation * 0.5)));
 
         $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $structuralRoic, $expectedGrowth);
 
@@ -351,19 +352,30 @@ class MarketEngine
         // Dividend Yield Support (The Dividend Discount Model)
         $dividendSupportValue = 0.0;
         if ($dividendPerShare > 0.0) {
-            // Forward annualized dividend run-rate discounted by Cost of Equity minus expected perpetual growth.
-            // If normalized EPS or FCF is temporarily negative, statutory distributable surplus and cash buffers 
-            // sustain the dividend unless structural solvency breaks.
             $sustainableDividend = $dividendPerShare * 4.0;
-
-            $assumedGrowth = FinancialConstants::DEFAULT_DDM_GROWTH_RATE;
             $requiredYield = max(0.02, $liveCostOfEquity);
 
-            $dividendSupportValue = $this->mathUtility->calculateDividendDiscountModel(
+            // Calculate Payout Ratio to derive sustainable fundamental growth
+            $annualizedEps = max(0.0, $earningsPerShare * 4.0);
+            $payoutRatio = $annualizedEps > 0.0 ? ($sustainableDividend / $annualizedEps) : 1.5;
+
+            // Fundamental Growth = ROIC * Reinvestment Rate (1 - Payout Ratio)
+            $reinvestmentRate = max(0.0, 1.0 - $payoutRatio);
+            $assumedGrowth = max(0.0, min(0.04, $structuralRoic * $reinvestmentRate));
+
+            $rawDdmValue = $this->mathUtility->calculateDividendDiscountModel(
                 $sustainableDividend,
                 $requiredYield,
                 $assumedGrowth
             );
+
+            // Dividend Sustainability Haircut: Heavily discount debt-funded dividends (payout > 100%)
+            $sustainabilityHaircut = 1.0;
+            if ($payoutRatio > 1.0) {
+                $sustainabilityHaircut = max(0.20, 1.0 - (($payoutRatio - 1.0) * 0.5));
+            }
+
+            $dividendSupportValue = $rawDdmValue * $sustainabilityHaircut;
         }
 
         // Intrinsic Price-to-Book (P/B) Valuation

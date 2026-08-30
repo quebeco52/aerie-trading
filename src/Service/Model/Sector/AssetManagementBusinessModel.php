@@ -456,4 +456,12 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     {
         return max($revenueFloorValue, $peFairValue);
     }
+
+    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
+    {
+        // Asset managers, hedge funds, and private equity trade on Fee-Related Earnings (FRE) and carry multiples, not physical Book Value.
+        return $dividendSupportValue > 0.0
+            ? ($earningsValue * 0.80) + ($dividendSupportValue * 0.20)
+            : $earningsValue;
+    }
 }

@@ -176,11 +176,6 @@ class Stock
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 2, nullable: true, options: ['default' => '2.00'])]
     private ?string $jumpIntensity = '2.00';
 
-    /**
-     * @var string The mean size of a market shock/jump.
-     */
-    #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, nullable: true, options: ['default' => '-0.01'])]
-    private string $jumpMean = '-0.01';
 
     /**
      * @var string|null The standard deviation (volatility) of the jump size.
@@ -499,15 +494,6 @@ class Stock
         return $this;
     }
 
-    public function getJumpMean(): ?string
-    {
-        return $this->jumpMean;
-    }
-    public function setJumpMean(?string $jumpMean): static
-    {
-        $this->jumpMean = $jumpMean !== null ? self::cleanBcStr($jumpMean, 4) : null;
-        return $this;
-    }
 
     public function getJumpVol(): ?string
     {

@@ -371,17 +371,17 @@ class ReitBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(1.50, $sustainableBase, 0.0001);
 
         // Fair value with DDM support:
-        // P/B fair value = 50.0 (40% weight) -> 20.0
-        // Earnings value = 60.0 (30% weight) -> 18.0
-        // Dividend support = 70.0 (30% weight) -> 21.0
-        // Total fair value = 20.0 + 18.0 + 21.0 = 59.0
+        // Dividend support = 70.0 (50% weight) -> 35.0
+        // P/B fair value = 50.0 (35% weight) -> 17.5
+        // Earnings value = 60.0 (15% weight) -> 9.0
+        // Total fair value = 35.0 + 17.5 + 9.0 = 61.5
         $fairValue = $model->calculateFairValue(
             earningsValue: 60.0,
             pbFairValue: 50.0,
             normalizedEps: 2.0,
             dividendSupportValue: 70.0
         );
-        $this->assertEqualsWithDelta(59.0, $fairValue, 0.0001);
+        $this->assertEqualsWithDelta(61.5, $fairValue, 0.0001);
     }
 
     public function testDynamicRoicDoesNotDoubleCountDepreciation(): void

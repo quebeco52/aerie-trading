@@ -206,7 +206,6 @@ class MarketResetCommand extends Command
                     current_volatility = :current_vol,
                     beta = :beta,
                     jump_intensity = :jump_int,
-                    jump_mean = :jump_mean, 
                     systemic_importance = :importance,
                     jump_vol = :jump_vol,
                     baseline_roic = :roic,
@@ -253,7 +252,6 @@ class MarketResetCommand extends Command
                     'current_vol' => $stockData['volatility'],
                     'beta' => $stockData['beta'],
                     'jump_int' => $stockData['jump_intensity'],
-                    'jump_mean' => $stockData['jump_mean'],
                     'jump_vol' => $stockData['jump_vol'],
                     'importance' => $stockData['systemic_importance'] ?? 'none',
                     'roic' => $isFinancial ? 0.10 : ($stockData['baseline_roic'] ?? 0.10),
@@ -352,7 +350,6 @@ class MarketResetCommand extends Command
             $stock->setCurrentVolatility('0.20');
             $stock->setBeta('1.00');
             $stock->setJumpIntensity('0.50');
-            $stock->setJumpMean('0.00');
             $stock->setJumpVol('0.05');
             $stock->setSystemicImportance('none');
             $stock->setBaselineRoic('0.12');

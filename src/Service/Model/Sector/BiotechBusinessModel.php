@@ -258,4 +258,10 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         // During clinical R&D cash burn cycles, value biotech firms on their clinical revenue pipeline
         return $fcfPerShare !== null ? max($revenueFloorValue, $peFairValue * self::BIOTECH_RESEARCH_BURN_DISCOUNT) : max($revenueFloorValue, $peFairValue);
     }
+
+    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
+    {
+        // Clinical-stage biotechnology firms trade entirely on clinical pipeline rNPV and cash runway, not Book Value.
+        return $earningsValue;
+    }
 }

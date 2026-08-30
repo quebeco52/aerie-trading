@@ -10,6 +10,7 @@ use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Math\FinancialConstants;
 use App\Service\Macro\MacroEngine;
 
 /**
@@ -160,5 +161,17 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
         );
+    }
+
+    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
+    {
+        // Cyclical heavy manufacturing anchors to Book Value (replacement cost) during trough earnings and mid-cycle earnings during expansions
+        $bookWeight = $normalizedEps < 0 ? 0.70 : 0.40;
+        $earningsWeight = 1.0 - $bookWeight;
+
+        $baseConsensus = ($earningsValue * $earningsWeight) + ($pbFairValue * $bookWeight);
+        return $dividendSupportValue > 0.0
+            ? ($baseConsensus * (1.0 - FinancialConstants::FAIR_VALUE_DDM_WEIGHT)) + ($dividendSupportValue * FinancialConstants::FAIR_VALUE_DDM_WEIGHT)
+            : $baseConsensus;
     }
 }

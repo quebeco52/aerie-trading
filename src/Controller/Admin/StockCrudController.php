@@ -109,7 +109,6 @@ class StockCrudController extends AbstractCrudController
                 ->setHelp('Controls the frequency and severity of sudden market events.'),
             
             NumberField::new('jumpIntensity', 'Intensity')->hideOnIndex(),
-            NumberField::new('jumpMean', 'Mean')->hideOnIndex(),
             NumberField::new('jumpVol', 'Volatility')->hideOnIndex(),
 
             // --- SECTION 5: LORE (EDITABLE) ---

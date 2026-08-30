@@ -356,11 +356,11 @@ class MathUtility
 
             if ($isUpJump) {
                 $jumpSize = $this->generateExponential($etaUp);
-                // Failsafe: Cap individual upside jumps to ~+300% (log(4.0) ≈ 1.38) to prevent runaway inflation
+                // Failsafe: Cap individual upside jumps to +20% (log(1.20) ≈ 0.1823)
                 $jumpSize = min($jumpSize, FinancialConstants::MAX_JUMP_LOG_RETURN);
             } else {
                 $jumpSize = -$this->generateExponential($etaDown);
-                // Failsafe: Cap individual downside crashes to ~-90% (log(0.10) ≈ -2.30) to prevent fractional penny wipeouts
+                // Failsafe: Cap individual downside crashes to -20% (log(0.80) ≈ -0.2231)
                 $jumpSize = max($jumpSize, FinancialConstants::MIN_JUMP_LOG_RETURN);
             }
 

@@ -49,10 +49,10 @@ class FinancialConstants
     public const FUNDAMENTAL_JUMP_VOL_SCALE = 0.50;
 
     // --- SVJJ & Jump Diffusion Limits ---
-    /** Maximum individual upside jump cap (~+300% or log(4.0)) to prevent runaway price spikes. */
-    public const MAX_JUMP_LOG_RETURN = 1.38;
-    /** Minimum individual downside jump floor (~-90% or log(0.10)) to prevent fractional penny wipeouts. */
-    public const MIN_JUMP_LOG_RETURN = -2.30;
+    /** Maximum individual upside jump cap (+30% or log(1.30)) keeping market shocks bounded. */
+    public const MAX_JUMP_LOG_RETURN = 0.2624;
+    /** Minimum individual downside jump floor (-30% or log(0.70)) keeping market shocks bounded. */
+    public const MIN_JUMP_LOG_RETURN = -0.3567;
 
     // --- EPS Smoothing ---
     /** Weight applied to historical smoothed EPS when updating trailing twelve month earnings. */

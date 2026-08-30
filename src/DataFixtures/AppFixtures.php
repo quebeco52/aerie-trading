@@ -79,7 +79,6 @@ class AppFixtures extends Fixture
             $stock->setCurrentVolatility((string) $stockData['volatility']);
             $stock->setBeta((string) $stockData['beta']);
             $stock->setJumpIntensity((string) $stockData['jump_intensity']);
-            $stock->setJumpMean((string) $stockData['jump_mean']);
             $stock->setJumpVol((string) $stockData['jump_vol']);
             $stock->setSystemicImportance($stockData['systemic_importance'] ?? 'none');
 

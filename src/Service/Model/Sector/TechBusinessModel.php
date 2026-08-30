@@ -10,6 +10,7 @@ use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Math\FinancialConstants;
 use App\Service\Macro\MacroEngine;
 use App\Service\Event\ShockEvent;
 
@@ -264,5 +265,13 @@ class TechBusinessModel extends StandardCorporateBusinessModel
             );
             $stock->setOperatingMargin((string) $updatedMargin);
         }
+    }
+
+    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
+    {
+        // Asset-light software & tech equities trade on cash earnings, DCF, and recurring revenue power, not Book Value.
+        return $dividendSupportValue > 0.0
+            ? ($earningsValue * (1.0 - FinancialConstants::FAIR_VALUE_DDM_WEIGHT)) + ($dividendSupportValue * FinancialConstants::FAIR_VALUE_DDM_WEIGHT)
+            : $earningsValue;
     }
 }

@@ -13,6 +13,7 @@ use App\DTO\StreamContext;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
 /**
@@ -277,5 +278,17 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
             );
             $stock->setOperatingMargin((string) $updatedMargin);
         }
+    }
+
+    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
+    {
+        // Cyclical commodity extractors anchor to Book Value (replacement cost) during trough earnings and mid-cycle earnings during expansions
+        $bookWeight = $normalizedEps < 0 ? 0.70 : 0.40;
+        $earningsWeight = 1.0 - $bookWeight;
+
+        $baseConsensus = ($earningsValue * $earningsWeight) + ($pbFairValue * $bookWeight);
+        return $dividendSupportValue > 0.0
+            ? ($baseConsensus * (1.0 - FinancialConstants::FAIR_VALUE_DDM_WEIGHT)) + ($dividendSupportValue * FinancialConstants::FAIR_VALUE_DDM_WEIGHT)
+            : $baseConsensus;
     }
 }

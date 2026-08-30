@@ -248,4 +248,13 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         }
         return $currentDebtRatio < ($targetDebtTolerance * self::UNDERLEVERAGED_DEBT_RATIO);
     }
+
+    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
+    {
+        // Regulated utilities trade primarily on Dividend Discount Model yields and Rate Base (Book Value).
+        if ($dividendSupportValue > 0.0) {
+            return ($dividendSupportValue * 0.50) + ($pbFairValue * 0.35) + ($earningsValue * 0.15);
+        }
+        return ($pbFairValue * 0.70) + ($earningsValue * 0.30);
+    }
 }

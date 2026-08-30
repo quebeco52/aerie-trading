@@ -79,7 +79,6 @@ class MarketSeedCommand extends Command
                 $stock->setCurrentVolatility((string) $stockData['volatility']);
                 $stock->setBeta((string) $stockData['beta']);
                 $stock->setJumpIntensity((string) $stockData['jump_intensity']);
-                $stock->setJumpMean((string) $stockData['jump_mean']);
                 $stock->setJumpVol((string) $stockData['jump_vol']);
                 $stock->setSystemicImportance($stockData['systemic_importance'] ?? 'none');
 
@@ -257,7 +256,6 @@ class MarketSeedCommand extends Command
                 $stock->setCurrentVolatility('0.20');
                 $stock->setBeta('1.00');
                 $stock->setJumpIntensity('0.50');
-                $stock->setJumpMean('0.00');
                 $stock->setJumpVol('0.05');
                 $stock->setSystemicImportance('none');
                 $stock->setBaselineRoic('0.12');
