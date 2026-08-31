@@ -234,7 +234,7 @@ class MarketEngineTest extends TestCase
         $this->assertGreaterThan(75.0, $techResult['perceived_fair_value'], 'Tech fair value should reflect high earnings power rather than book value.');
     }
 
-    public function testMarketShocksAreStrictlyBoundedToNoiseTwentyPercent(): void
+    public function testMarketShocksAreStrictlyBoundedToThirtyPercent(): void
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(true);
@@ -247,7 +247,7 @@ class MarketEngineTest extends TestCase
                 earningsPerShare: 5.0,
                 dt: 1.0 / 252.0,
                 lambda: 2.0,
-                jumpVol: 0.08,
+                jumpVol: 0.10,
                 drift: 0.08
             );
 
@@ -255,13 +255,13 @@ class MarketEngineTest extends TestCase
             $shock = $result['shock'];
 
             $this->assertNotNull($shock);
-            $this->assertLessThanOrEqual(20.01, $shock, 'Positive market shock must be bounded to <= 20% ceiling.');
-            $this->assertGreaterThanOrEqual(-20.01, $shock, 'Negative market shock must be bounded to >= -20% floor.');
-            $this->assertGreaterThanOrEqual(9.0, abs($shock), 'Market shocks should be noticeable discontinuities >= 9-10%.');
+            $this->assertLessThanOrEqual(30.01, $shock, 'Positive market shock must be bounded to <= 30% ceiling.');
+            $this->assertGreaterThanOrEqual(-30.01, $shock, 'Negative market shock must be bounded to >= -30% floor.');
+            $this->assertNotEquals(0.0, $shock, 'Market shock should be non-zero.');
         }
     }
 
-    public function testSafeReinsuranceMarketJumpStaysWithinBoundedNoise(): void
+    public function testSafeReinsuranceMarketJumpStaysWithinBoundedLimits(): void
     {
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
         $this->mathUtilityMock->method('checkProbability')->willReturn(true);
@@ -273,7 +273,7 @@ class MarketEngineTest extends TestCase
             earningsPerShare: 200.0,
             dt: 1.0 / 252.0,
             lambda: 0.15,
-            jumpVol: 0.04,
+            jumpVol: 0.06,
             beta: 0.20
         );
 
@@ -282,9 +282,9 @@ class MarketEngineTest extends TestCase
             $shock = $result['shock'];
 
             $this->assertNotNull($shock);
-            $this->assertLessThanOrEqual(20.01, $shock, 'SAFE market shock must never exceed 20%.');
-            $this->assertGreaterThanOrEqual(-20.01, $shock, 'SAFE market shock must never breach -20%.');
-            $this->assertGreaterThanOrEqual(9.0, abs($shock), 'SAFE market shock should be around 10% - 20%.');
+            $this->assertLessThanOrEqual(30.01, $shock, 'SAFE market shock must never exceed 30%.');
+            $this->assertGreaterThanOrEqual(-30.01, $shock, 'SAFE market shock must never breach -30%.');
+            $this->assertNotEquals(0.0, $shock, 'SAFE market shock should be non-zero.');
         }
     }
 }

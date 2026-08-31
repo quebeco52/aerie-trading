@@ -98,7 +98,10 @@
         ],
         "post-update-cmd": [
             "@auto-scripts"
-        ]
+        ],
+        "phpstan": "phpstan analyse --no-progress",
+        "phpstan:json": "phpstan analyse --no-progress --error-format=json",
+        "phpstan:ci": "phpstan analyse --no-progress --error-format=github"
     },
     "conflict": {
         "symfony/symfony": "*"
@@ -115,6 +118,7 @@
         "phpstan/extension-installer": ">=1.4.3",
         "phpstan/phpstan": ">=2.2.1",
         "phpstan/phpstan-doctrine": ">=2.0.25",
+        "phpstan/phpstan-phpunit": ">=2.0.12",
         "phpstan/phpstan-symfony": ">=2.0.19",
         "phpunit/phpunit": "^13.1.13",
         "symfony/browser-kit": "8.1.*",

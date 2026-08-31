@@ -40,4 +40,4 @@ test: up
 	$(EXEC_PHP) vendor/bin/phpunit
 
 phpstan: up
-	$(EXEC_PHP) vendor/bin/phpstan analyse --memory-limit=1G
+	$(EXEC_PHP) vendor/bin/phpstan analyse --memory-limit=1G --no-progress $(FILE)

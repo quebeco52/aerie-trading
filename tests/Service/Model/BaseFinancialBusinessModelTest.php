@@ -47,7 +47,7 @@ class BaseFinancialBusinessModelTest extends TestCase
 
             public function computeActualFinancials(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, \App\Service\Math\MathUtility $mathUtility): \App\DTO\ActualFinancialsDTO
             {
-                return new \App\DTO\ActualFinancialsDTO(100.0, 50.0, 20.0, 30.0, 30.0, 30.0, 0.0, 0.0);
+                return new \App\DTO\ActualFinancialsDTO(100.0, 50.0, 20.0, 30.0, 30.0, 30.0);
             }
 
             public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, \App\Service\Math\MathUtility $mathUtility): array

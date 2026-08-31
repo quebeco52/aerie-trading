@@ -76,7 +76,7 @@ class ReitBusinessModelTest extends TestCase
 
         if (!empty($persistentZCalls)) {
             $mock->method('generatePersistentZ')
-                ->willReturnOnConsecutiveCalls(...$persistentZCalls);
+                ->willReturnOnConsecutiveCalls(...array_values($persistentZCalls));
         }
 
         return $mock;

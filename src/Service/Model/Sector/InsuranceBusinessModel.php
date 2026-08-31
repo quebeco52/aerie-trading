@@ -31,8 +31,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     // --- The Kenney Rule & Capacity Limits ---
     /** Standard Premium-to-Surplus capacity ratio required to maintain strong credit ratings. */
     public const KENNEY_CAPACITY_RATIO    = 1.50;
-    /** Target surplus ratio relative to customer deposit float (25% regulatory/statutory baseline). */
-    public const TARGET_FLOAT_SURPLUS_RATIO = 0.25;
     /** Implied runoff equity fraction of customer deposit float allowed for insolvent insurers. */
     public const IMPLIED_RUNOFF_EQUITY    = 0.10;
     /** Default maximum financial leverage (Debt/Equity) limit if sector configuration is absent. */
@@ -51,18 +49,8 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const BASELINE_ROIC_WEIGHT     = 0.50;
     /** Weight given to TTM ROE when blending with historical baseline ROIC. */
     public const TTM_ROIC_WEIGHT          = 0.50;
-    /** Annualization multiplier applied to quarterly net income to derive annualized ROE. */
-    public const ROE_ANNUALIZATION_MULT   = 4.00;
-    /** Minimum allowable ROE floor to prevent catastrophic negative overflow. */
-    public const MIN_ROE_CLAMP            = -0.50;
-    /** Maximum allowable ROE ceiling to prevent unrealistic hyperinflation. */
-    public const MAX_ROE_CLAMP            = 1.00;
-    /** Weight given to current quarter ROE when updating trailing twelve-month ROE EMA. */
-    public const ROE_TTM_EMA_WEIGHT       = 0.10;
-    /** Weight given to historical trailing twelve-month ROE when updating ROE EMA. */
-    public const ROE_TTM_HIST_WEIGHT      = 0.90;
-    /** Weight given to current quarter ROE when recovering from below-equilibrium catastrophe drawdowns. */
-    public const ROE_TTM_RECOVERY_WEIGHT  = 0.20;
+    /** Weight given to TTM ROE when scaling reversion speed kappa in financial models. */
+    public const TTM_ROE_WEIGHT           = 0.50;
     /** Minimum structural through-the-cycle ROE floor for TTM valuation to prevent catastrophe whipsaw. */
     public const MIN_STRUCTURAL_ROE_FLOOR = 0.03;
 
@@ -73,6 +61,8 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const INSURANCE_REVERSION_SPEED = 8.0;
     /** Volatility multiplier for top-line premium revenue shocks in sticky insurance markets. */
     public const REVENUE_VARIANCE_SCALAR  = 0.05;
+    /** Baseline fraction of variable underwriting expenses attributed to operating and policy acquisition expenses (Expense Ratio share). */
+    public const BASE_EXPENSE_RATIO_SHARE = 0.35;
     /** Catastrophe claim z-score threshold triggering severe underwriting combined ratio penalties. */
     public const CATASTROPHE_Z_THRESHOLD  = -1.50;
     /** Underwriting loss multiplier applied to catastrophe claim severity. */
@@ -322,7 +312,18 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
 
-        // 2. The Combined Ratio Shock (Catastrophes/Underwriting Cycle)
+        // 2. Separation of Loss Ratio vs. Expense Ratio (The Combined Ratio)
+        // Baseline decomposition: Total variable cost margin is composed of Loss Ratio (claims) + Expense Ratio (acquisition/admin).
+        $baselineExpenseRatio = $realizedVariableMargin * self::BASE_EXPENSE_RATIO_SHARE;
+        $baselineLossRatio    = $realizedVariableMargin * (1.0 - self::BASE_EXPENSE_RATIO_SHARE);
+
+        // A. Expense Ratio Dynamics:
+        // Policy acquisition and administrative overhead costs are sticky relative to expected baseline revenue.
+        // If top-line revenue fluctuates, the realized expense ratio scales inversely with written premiums.
+        $expenseScale = $expectedRevenue > 0.0 ? ($expectedRevenue / max(1.0, $actualRevenue)) : 1.0;
+        $realizedExpenseRatio = $baselineExpenseRatio * $expenseScale;
+
+        // B. Loss Ratio Dynamics (Catastrophes/Underwriting Cycle):
         // Catastrophe Risk Beta: high-catastrophe insurers earn higher premium margins in benign years.
         // Combines both Frequency ($catThreshold) and Severity ($catScalar) to price expected tail risk.
         $frequencyBeta = self::CATASTROPHE_Z_THRESHOLD / min(-0.1, $catThreshold);
@@ -334,7 +335,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $resShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
         $propertyClaimInflation = max(0.0, ($creShift * 0.50) + ($resShift * 0.50)) * 0.05; // Modest drag on variable margin when property replacement values surge
 
-        $underwritingShock = ($claimZ < $catThreshold
+        $lossRatioShock = ($claimZ < $catThreshold
             ? abs($claimZ) * $catScalar
             : ($claimZ > self::BENIGN_CLAIM_Z_FLOOR ? $benignBonus : 0.0)) + $propertyClaimInflation;
 
@@ -356,11 +357,14 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         $reinsuranceSurcharge = 0.0;
         if ($claimZ < self::REINSURANCE_ATTACHMENT_Z) {
-            $underwritingShock = min($underwritingShock, self::MAX_REINSURED_LOSS_SHOCK);
+            $lossRatioShock = min($lossRatioShock, self::MAX_REINSURED_LOSS_SHOCK);
             $reinsuranceSurcharge = self::REINSURANCE_HARD_MARKET_RATE;
         }
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $underwritingShock + $reinsuranceSurcharge - $hardMarketRecoveryDiscount);
+        $realizedLossRatio = max(0.0, $baselineLossRatio + $lossRatioShock);
+        $combinedRatio = $realizedLossRatio + $realizedExpenseRatio + $reinsuranceSurcharge - $hardMarketRecoveryDiscount;
+
+        $clampedMargin = $this->clampMargin($combinedRatio);
 
         $eventType = null;
         if ($claimZ < self::REINSURANCE_ATTACHMENT_Z) {
@@ -450,52 +454,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $moneyMarketYield = max(0.0, $policyRate - MacroEngine::CASH_YIELD_SPREAD);
 
         return ($investableFloat * $floatYield) + ($excessCash * $moneyMarketYield);
-    }
-
-    /**
-     * Financial companies are evaluated strictly on Return on Equity (ROE), not ROIC.
-     *
-     * @param Stock $stock                The insurance stock entity.
-     * @param float $actualTotalNetIncome The total physical net income generated this quarter.
-     * @param float $investedCapital      The invested capital (Total Equity for financials).
-     * @param float $ebit                 Earnings before interest and taxes.
-     * @param float $corporateTaxRate     The effective corporate tax rate.
-     * @return float The true post-tax return on equity.
-     */
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float
-    {
-        $kappa = $this->getReversionSpeed();
-        $moatSpread = $this->getMoatSpread();
-
-        $equity = (float) $stock->getTotalEquity();
-        // Statutory Surplus Floor: Anchor ROE denominator to at least implied regulatory minimum capital (25% of policy float/liabilities)
-        // so temporary catastrophe equity drawdowns never create artificial small-denominator ROE whip-saws (-450% or +200%).
-        $statutorySurplusFloor = (float) $stock->getCustomerDeposits() * self::TARGET_FLOAT_SURPLUS_RATIO;
-        $evaluationEquity = max(max(1.0, $statutorySurplusFloor), $equity);
-        $truePostTaxReturn = ($actualTotalNetIncome / $evaluationEquity) * self::ROE_ANNUALIZATION_MULT;
-
-        $stock->setCurrentRoe((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $truePostTaxReturn)));
-
-        // Insurance earnings are extremely lumpy due to catastrophes. Use a 0.05 smoothing factor (95% historical weight)
-        // when absorbing catastrophe drawdowns to smooth volatility, but use faster recovery smoothing (25% weight)
-        // when recovering so the company heals quickly and does not stay locked in a negative-TTM death trap.
-        $oldTtm = (float) $stock->getRoeTtm();
-        $isRecovering = $truePostTaxReturn > $oldTtm && $oldTtm < ($wacc * 0.5);
-        $emaWeight = $isRecovering ? self::ROE_TTM_RECOVERY_WEIGHT : self::ROE_TTM_EMA_WEIGHT;
-        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * $emaWeight) + ($oldTtm * (1.0 - $emaWeight));
-        // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
-        $scaledKappa = $kappa / self::TTM_ROIC_WEIGHT;
-
-        $saturationPenalty = 0.0;
-        if ($macroState !== null) {
-            $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
-        }
-
-        $effectiveMoat = max(0.0, $moatSpread - $saturationPenalty);
-        $newTtm += MathUtility::getInstance()->calculateReversionPull($newTtm, $costOfEquity, $scaledKappa, $effectiveMoat);
-        $stock->setRoeTtm((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $newTtm)));
-
-        return $truePostTaxReturn;
     }
 
     public function getSustainableDividendBase(Stock $stock, float $quarterlyEps, float $investedCapital, float $depRate): float

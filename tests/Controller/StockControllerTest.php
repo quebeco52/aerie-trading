@@ -45,6 +45,9 @@ class StockControllerTest extends WebTestCase
         $this->assertSelectorExists('#target-value');
         $this->assertSelectorExists('#target-income');
         $this->assertSelectorExists('#analyst-consensus-badge');
+        $this->assertSelectorExists('#stat-volatility');
+        $this->assertSelectorExists('#stat-mkt-cap');
+        $this->assertSelectorExists('#stat-pe');
     }
 
     public function testStockViewLoadsForValidEtf(): void

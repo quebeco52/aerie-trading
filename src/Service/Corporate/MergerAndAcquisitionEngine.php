@@ -246,9 +246,6 @@ class MergerAndAcquisitionEngine
             $ctx->isOvervalued => [
                 'prob' => self::MA_OVERVALUED_PROB, 'spend' => 0.50, 'type' => 'STOCK-FOR-STOCK MERGER', 'use_leverage' => false, 'use_stock' => true
             ],
-            $ctx->isEmpireBuilder && $ctx->health->canIssueDebt && $ctx->totalBuyingPower > self::MA_EMPIRE_BUILDER_MIN_POWER => [
-                'prob' => self::MA_EMPIRE_BUILDER_PROB, 'spend' => 0.80, 'type' => $ctx->strategy->getAcquisitionType('LEVERAGED BUYOUT'), 'use_leverage' => true, 'use_stock' => false
-            ],
             $ctx->isMegaHoarder => [
                 'prob' => self::MA_MEGA_HOARDER_PROB, 'spend' => 0.60, 'type' => $ctx->strategy->getAcquisitionType('CONGLOMERATE EXPANSION'), 'use_leverage' => false, 'use_stock' => false
             ],

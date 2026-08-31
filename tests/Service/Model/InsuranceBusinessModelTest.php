@@ -112,4 +112,129 @@ class InsuranceBusinessModelTest extends TestCase
         $fairValLoss = $model->calculateFairValue(0.0, 100.0, -2.0, 80.0);
         $this->assertEquals(97.0, $fairValLoss);
     }
+
+    public function testUpdateDynamicRoicStandardCalculation(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $stock = new Stock();
+        $stock->setTotalEquity('1000000000.0'); // $1B Equity
+        $stock->setRoeTtm('0.10');
+
+        // $25M quarterly net income -> Annualized ROE = ($25M / $1000M) * 4.0 = 0.10 (10%)
+        $return = $model->updateDynamicRoic($stock, 25_000_000.0, 1_000_000_000.0, 30_000_000.0, 0.21, 0.08, 0.10);
+        
+        $this->assertEquals(0.10, $return);
+        $this->assertEquals('0.1', $stock->getCurrentRoe());
+        $this->assertNotNull($stock->getRoeTtm());
+    }
+
+    public function testBenignClaimEnvironmentReducesLossRatioWhilePreservingExpenseRatio(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('TEST_BENIGN');
+        $stock->setBeta('1.0');
+        $stock->setTotalEquity('10000000000.0');
+
+        $mathUtilityMock = $this->getMockBuilder(MathUtility::class)
+            ->onlyMethods(['generateStandardNormal'])
+            ->getMock();
+        // Revenue Z = 0.0 (no revenue shock), Claim Z = 2.0 (benign environment)
+        $mathUtilityMock->method('generateStandardNormal')
+            ->willReturnOnConsecutiveCalls(0.0, 2.0);
+
+        $macroState = \App\DTO\MacroStateDTO::fromArray([
+            'inflation_ema' => 0.02,
+            'policy_rate' => 0.05,
+            'gdp_growth' => 0.02,
+            'credit_spread' => 0.015,
+            'commercial_property_index_ema' => 100.0,
+            'residential_property_index_ema' => 100.0,
+        ]);
+
+        $baseVariableMargin = 0.60;
+        $expectedRevenue = 10_000_000_000.0;
+
+        $result = $model->computeActualFinancials(
+            $stock,
+            $expectedRevenue,
+            $baseVariableMargin,
+            1_000_000_000.0,
+            0.10,
+            $macroState,
+            $mathUtilityMock
+        );
+
+        // Baseline Loss Ratio = 0.60 * 0.65 = 0.39
+        // Baseline Expense Ratio = 0.60 * 0.35 = 0.21
+        // Benign claim bonus = -0.08 * (1.0) = -0.08 applied only to loss ratio -> realized loss ratio = 0.31
+        // Realized expense ratio remains 0.21
+        // Realized combined ratio = 0.31 + 0.21 = 0.52
+        $this->assertEqualsWithDelta(0.52, $result->clampedMargin, 0.001);
+        $this->assertEqualsWithDelta(5_200_000_000.0, $result->actualVariableCosts, 1_000.0);
+    }
+
+    public function testExpenseRatioScalesWithRevenueFluctuations(): void
+    {
+        $model = new InsuranceBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('SCALE');
+        $stock->setBeta('1.0');
+        $stock->setTotalEquity('10000000000.0');
+
+        $macroState = \App\DTO\MacroStateDTO::fromArray([
+            'inflation_ema' => 0.02,
+            'policy_rate' => 0.05,
+            'gdp_growth' => 0.02,
+            'credit_spread' => 0.015,
+            'commercial_property_index_ema' => 100.0,
+            'residential_property_index_ema' => 100.0,
+        ]);
+
+        $baseVariableMargin = 0.60;
+        $expectedRevenue = 10_000_000_000.0;
+        $baselineVol = 0.20; // with REVENUE_VARIANCE_SCALAR = 0.05, shock magnitude is vol * 0.05
+
+        // 1. Negative Revenue Shock (Revenue drops, expense ratio as % of revenue rises due to operating overhead)
+        $mockNegRevenue = $this->getMockBuilder(MathUtility::class)
+            ->onlyMethods(['generateStandardNormal'])
+            ->getMock();
+        $mockNegRevenue->method('generateStandardNormal')
+            ->willReturnOnConsecutiveCalls(-2.0, 0.0); // Revenue Z = -2.0, Claim Z = 0.0 (neutral claims)
+
+        $resultNeg = $model->computeActualFinancials(
+            $stock,
+            $expectedRevenue,
+            $baseVariableMargin,
+            1_000_000_000.0,
+            $baselineVol,
+            $macroState,
+            $mockNegRevenue
+        );
+
+        // 2. Positive Revenue Shock (Revenue expands, expense ratio as % of revenue declines)
+        $mockPosRevenue = $this->getMockBuilder(MathUtility::class)
+            ->onlyMethods(['generateStandardNormal'])
+            ->getMock();
+        $mockPosRevenue->method('generateStandardNormal')
+            ->willReturnOnConsecutiveCalls(2.0, 0.0); // Revenue Z = 2.0, Claim Z = 0.0 (neutral claims)
+
+        $resultPos = $model->computeActualFinancials(
+            $stock,
+            $expectedRevenue,
+            $baseVariableMargin,
+            1_000_000_000.0,
+            $baselineVol,
+            $macroState,
+            $mockPosRevenue
+        );
+
+        $this->assertGreaterThan($expectedRevenue, $resultPos->actualRevenue);
+        $this->assertLessThan($expectedRevenue, $resultNeg->actualRevenue);
+
+        // Combined ratio with depressed revenue should exceed combined ratio with expanded revenue due to expense ratio dynamics
+        $this->assertGreaterThan($resultPos->clampedMargin, $resultNeg->clampedMargin);
+    }
 }
+
+

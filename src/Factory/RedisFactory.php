@@ -8,35 +8,41 @@ if (!class_exists('Redis')) {
         public const PIPELINE = 2;
         private array $storage = [];
 
-        public function connect($host, $port = 6379, $timeout = 0.0, $reserved = null, $retry_interval = 0, $read_timeout = 0.0): bool
+        public function connect(string $host, int $port = 6379, float $timeout = 0.0, mixed $reserved = null, int $retry_interval = 0, float $read_timeout = 0.0): bool
         {
             return true;
         }
 
-        public function get($key): mixed
+        public function get(string $key): mixed
         {
             return $this->storage[$key] ?? null;
         }
 
-        public function set($key, $val): bool
+        public function set(string $key, mixed $val): bool
         {
             $this->storage[$key] = $val;
             return true;
         }
 
-        public function setex($key, $ttl, $val): bool
+        public function setex(string $key, int $ttl, mixed $val): bool
         {
             $this->storage[$key] = $val;
             return true;
         }
 
-        public function del($key): int
+        public function del(string|array $key): int
         {
-            unset($this->storage[$key]);
+            if (is_array($key)) {
+                foreach ($key as $k) {
+                    unset($this->storage[$k]);
+                }
+            } else {
+                unset($this->storage[$key]);
+            }
             return 1;
         }
 
-        public function lPush($key, $value): int
+        public function lPush(string $key, mixed $value): int
         {
             if (!isset($this->storage[$key])) {
                 $this->storage[$key] = [];
@@ -45,7 +51,7 @@ if (!class_exists('Redis')) {
             return count($this->storage[$key]);
         }
 
-        public function lTrim($key, $start, $stop): bool
+        public function lTrim(string $key, int $start, int $stop): bool
         {
             if (isset($this->storage[$key])) {
                 $this->storage[$key] = array_slice($this->storage[$key], $start, $stop === -1 ? null : $stop - $start + 1);
@@ -53,7 +59,7 @@ if (!class_exists('Redis')) {
             return true;
         }
 
-        public function lRange($key, $start, $end): array
+        public function lRange(string $key, int $start, int $end): array
         {
             if (!isset($this->storage[$key])) {
                 return [];
@@ -61,7 +67,7 @@ if (!class_exists('Redis')) {
             return array_slice($this->storage[$key], $start, $end === -1 ? null : $end - $start + 1);
         }
 
-        public function multi($mode = self::PIPELINE): static
+        public function multi(int $mode = self::PIPELINE): static
         {
             return $this;
         }
@@ -71,7 +77,7 @@ if (!class_exists('Redis')) {
             return [];
         }
 
-        public function publish($channel, $message): int
+        public function publish(string $channel, string $message): int
         {
             return 1;
         }

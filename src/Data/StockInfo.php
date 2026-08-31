@@ -208,7 +208,7 @@ class StockInfo
         'MARS' => "When banks demand collateral, we provide liquidity at a price.",
         'SKYL' => "We syndicate the debt that builds empires.",
         'COOT' => "Local roots, institutional capital.",
-        'FULM' => "Equities are noise. Fixed income governs the world.",
+        'POOL' => "Equities are noise. Fixed income governs the world.",
         'PETR' => "In the wreckage of insolvency, we find generational value.",
         'BOBY' => "Without our transformers, the district goes dark in seconds.",
         'CURW' => "Under ten thousand PSI of pressure, there is only Curlew.",

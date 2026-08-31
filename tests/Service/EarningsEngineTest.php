@@ -3,6 +3,7 @@
 namespace App\Tests\Service;
 
 use PHPUnit\Framework\TestCase;
+use App\DTO\EarningsSimulationContext;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\CapExEngine;
 use App\Service\Corporate\CapitalAllocationEngine;
@@ -249,6 +250,7 @@ class EarningsEngineTest extends TestCase
 
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
+        /** @var EarningsSimulationContext|null $capturedContext */
         $capturedContext = null;
         $this->eventDispatcherMock->expects($this->once())
             ->method('dispatch')
@@ -263,7 +265,7 @@ class EarningsEngineTest extends TestCase
         $macroState = new \App\DTO\MacroStateDTO();
         $this->engine->calculate($stock, $macroState, $reportingTick, 252);
 
-        $this->assertNotNull($capturedContext);
+        $this->assertInstanceOf(EarningsSimulationContext::class, $capturedContext);
         $this->assertGreaterThan(0.0, $capturedContext->quarterlyDepreciation, 'Quarterly depreciation must be positive.');
         $this->assertEqualsWithDelta(
             $capturedContext->actualRevenue - $capturedContext->operatingCosts,
