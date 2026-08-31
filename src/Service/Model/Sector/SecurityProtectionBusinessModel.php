@@ -107,7 +107,7 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         $physics['macro_demand_shift'] = 0.0;
 
         // PMCs have immense pricing power to pass wage and gear inflation through to corporate and government clients.
-        $physics['pricing_power_multiplier'] = 1.0 + ($macroState->inflationEma * 0.80);
+        $physics['pricing_power_multiplier'] = 1.0 + ($macroState->tipsBreakevenEma * 0.80);
 
         return $physics;
     }

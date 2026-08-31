@@ -193,7 +193,7 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
         $outputGap = $macroState->outputGapEma;
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
         $agriShift = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
-        $inflation = $macroState->inflationEma;
+        $inflation = $macroState->tipsBreakevenEma;
         $beta = (float) $stock->getBeta();
 
         // Macro demand shift: Driven by industrial demand (output gap + metals) for base chemicals,
@@ -267,7 +267,7 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
         // When energyPriceIndexEma spikes, variable costs explode.
         $outputGap = $macroState->outputGapEma;
         $agriShift = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
-        $energyInflation = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
+        $energyInflation = max(0.0, $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
 
         // Asymmetric Pass-Through:
         // Specialty chemicals pass through ~95% (scaled by pricing power)

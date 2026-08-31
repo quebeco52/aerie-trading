@@ -54,11 +54,16 @@ class MacroState
     public float $policyRate = 0.0250;
     public float $policyRateEma = 0.0250;
 
+    public float $tipsBreakeven = MacroEngine::TARGET_INFLATION;
+    public float $tipsBreakevenEma = MacroEngine::TARGET_INFLATION;
+    public float $energyCostPushLag = 0.0;
+
     public float $nsLevel = 0.0425;
     public float $nsSlope = -0.0150;
     public float $nsSlopeEma = -0.0150;
     public float $structuralSlope = -0.0150;
     public float $nsCurvature = 0.0;
+    public float $nsCurvature2 = 0.0;
 
     public float $yield2y = 0.0275;
     public float $yield2yEma = 0.0275;
@@ -113,6 +118,7 @@ class MacroState
         $state->energyPriceIndex = $data['energy_price_index'] ?? 90.0;
         $state->energyPriceIndexEma = $data['energy_price_index_ema'] ?? $state->energyPriceIndex;
         $state->energyPriceShock = $data['energy_price_shock'] ?? 0.0;
+        $state->energyCostPushLag = (float) ($data['energy_cost_push_lag'] ?? 0.0);
         $state->consumerSentimentIndex = $data['consumer_sentiment_index'] ?? 108.0;
         $state->consumerSentimentIndexEma = $data['consumer_sentiment_index_ema'] ?? $state->consumerSentimentIndex;
 
@@ -149,11 +155,15 @@ class MacroState
         $state->policyRate = $data['policy_rate'] ?? 0.0250;
         $state->policyRateEma = $data['policy_rate_ema'] ?? $state->policyRate;
 
+        $state->tipsBreakeven = (float) ($data['tips_breakeven'] ?? MacroEngine::TARGET_INFLATION);
+        $state->tipsBreakevenEma = (float) ($data['tips_breakeven_ema'] ?? $state->tipsBreakeven);
+
         $state->nsLevel = $data['ns_level'] ?? 0.0425;
         $state->nsSlope = $data['ns_slope'] ?? -0.0150;
         $state->nsSlopeEma = $data['ns_slope_ema'] ?? $state->nsSlope;
         $state->structuralSlope = $data['structural_slope'] ?? -0.0150;
         $state->nsCurvature = $data['ns_curvature'] ?? 0.0;
+        $state->nsCurvature2 = (float) ($data['ns_curvature2'] ?? 0.0);
 
         $state->yield2y = $data['yield_2y'] ?? 0.0275;
         $state->yield2yEma = $data['yield_2y_ema'] ?? $state->yield2y;
@@ -199,8 +209,12 @@ class MacroState
             'total_time' => $this->totalTime,
             'inflation' => $this->inflation,
             'inflation_ema' => $this->inflationEma,
+            'tips_breakeven' => $this->tipsBreakeven,
+            'tips_breakeven_ema' => $this->tipsBreakevenEma,
+            'energy_cost_push_lag' => $this->energyCostPushLag,
             'output_gap' => $this->outputGap,
             'output_gap_ema' => $this->outputGapEma,
+            'capitalStockOverhang' => $this->capitalStockOverhang,
             'capital_stock_overhang' => $this->capitalStockOverhang,
             'capital_stock_overhang_ema' => $this->capitalStockOverhangEma,
             'unemployment_rate' => $this->unemploymentRate,
@@ -239,6 +253,7 @@ class MacroState
             'ns_slope_ema' => $this->nsSlopeEma,
             'structural_slope' => $this->structuralSlope,
             'ns_curvature' => $this->nsCurvature,
+            'ns_curvature2' => $this->nsCurvature2,
             'yield_2y' => $this->yield2y,
             'yield_2y_ema' => $this->yield2yEma,
             'yield_5y' => $this->yield5y,

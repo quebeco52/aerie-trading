@@ -1113,4 +1113,77 @@ class MacroEngineTest extends TestCase
 
         $this->assertGreaterThan($infAnchored, $infHigh, 'Un-anchored expectations must result in higher inflation drift.');
     }
+
+    public function testTipsBreakevenInflationExpectationsResponseToOutputGapAndVolatility(): void
+    {
+        $stateOverheated = new \App\Service\Macro\MacroState();
+        $stateOverheated->outputGapEma = 0.04;
+        $stateOverheated->inflationEma = 0.04;
+        $stateOverheated->marketVolatilityEma = 0.25;
+
+        $stateNeutral = new \App\Service\Macro\MacroState();
+        $stateNeutral->outputGapEma = 0.00;
+        $stateNeutral->inflationEma = 0.02;
+        $stateNeutral->marketVolatilityEma = 0.15;
+
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateTipsBreakeven');
+
+        $breakevenOverheated = $reflectionMethod->invoke($this->engine, $stateOverheated, MacroEngine::TARGET_INFLATION, 0.25);
+        $breakevenNeutral = $reflectionMethod->invoke($this->engine, $stateNeutral, MacroEngine::TARGET_INFLATION, 0.25);
+
+        $this->assertEqualsWithDelta(MacroEngine::TARGET_INFLATION, $breakevenNeutral, 0.0001, 'Neutral state must produce 2.0% TIPS breakeven expectation.');
+        $this->assertGreaterThan($breakevenNeutral, $breakevenOverheated, 'Overheated economy and elevated volatility must drive forward TIPS breakeven inflation above neutral.');
+    }
+
+    public function testSvenssonYieldCurveSecondaryCurvatureFiscalSupply(): void
+    {
+        $stateHighDeficit = new \App\Service\Macro\MacroState();
+        $stateHighDeficit->policyRate = 0.03;
+        $stateHighDeficit->tipsBreakeven = 0.02;
+        $stateHighDeficit->governmentSpendingIndexEma = 150.0; // 50% spending surge (deficit)
+        $stateHighDeficit->outputGap = 0.0;
+
+        $stateNeutralFiscal = new \App\Service\Macro\MacroState();
+        $stateNeutralFiscal->policyRate = 0.03;
+        $stateNeutralFiscal->tipsBreakeven = 0.02;
+        $stateNeutralFiscal->governmentSpendingIndexEma = 100.0; // Neutral baseline
+        $stateNeutralFiscal->outputGap = 0.0;
+
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateYieldCurveAndQE');
+
+        $yieldDataHighDeficit = $reflectionMethod->invoke($this->engine, $stateHighDeficit, MacroEngine::TARGET_INFLATION, MacroEngine::NATURAL_RATE, 0.25);
+        $yieldDataNeutral = $reflectionMethod->invoke($this->engine, $stateNeutralFiscal, MacroEngine::TARGET_INFLATION, MacroEngine::NATURAL_RATE, 0.25);
+
+        $this->assertGreaterThan($yieldDataNeutral['curvature2'], $yieldDataHighDeficit['curvature2'], 'Secondary Svensson curvature beta3 must increase with fiscal debt issuance.');
+        $this->assertGreaterThan($yieldDataNeutral['yield_30y'], $yieldDataHighDeficit['yield_30y'], 'Long-end 30Y Treasury yield should steepen under fiscal supply expansion.');
+    }
+
+    public function testEnergyCostPushDistributedLagStickiness(): void
+    {
+        $state = new \App\Service\Macro\MacroState();
+        $state->inflation = 0.02;
+        $state->inflationEma = 0.02;
+        $state->outputGap = 0.0;
+        $state->energyPriceShock = 50.0; // +50% energy price spike
+        $state->energyCostPushLag = 0.0;
+
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateInflation');
+
+        // Quarter 1 step
+        $infQ1 = $reflectionMethod->invoke($this->engine, $state, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+        $lagQ1 = $state->energyCostPushLag;
+
+        // The energy lag should have partially transmitted, but not fully reached raw transmission
+        $rawTransmission = (50.0 / 100.0) * MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
+        $this->assertGreaterThan(0.0, $lagQ1, 'Energy shock should immediately start transmitting through lag filter.');
+        $this->assertLessThan($rawTransmission, $lagQ1, 'Energy shock should be sticky and not instantly transmit at 100% in first quarter.');
+
+        // Advance to Quarter 2 with persistent shock
+        $infQ2 = $reflectionMethod->invoke($this->engine, $state, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+        $lagQ2 = $state->energyCostPushLag;
+
+        $this->assertGreaterThan($lagQ1, $lagQ2, 'Sticky cost lag should accumulate and rise across successive quarters of elevated energy.');
+    }
 }

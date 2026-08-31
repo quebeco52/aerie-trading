@@ -171,8 +171,8 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
 
         $outputGap = $macroState->outputGapEma;
-        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
-        $inflation = $macroState->inflationEma;
+        $sentimentShift = ($macroState->consumerSentimentIndexEma - 100.0) / 100.0;
+        $inflation = $macroState->tipsBreakevenEma;
         $beta = (float) $stock->getBeta();
 
         // Hybrid demand physics: Pro-cyclical consumer sentiment + output gap,
@@ -279,7 +279,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         // --- Commodity & Supply Chain Input Inflation Penalties (with Forward Hedging) ---
         $agriShift = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
         $freightShift = max(0.0, ($macroState->freightRateIndexEma - 100.0) / 100.0);
-        $energyShift = ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0;
+        $energyShift = $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
 
         // 3. COGS Forward Hedging: 6-9 months raw inventory & futures dampen immediate spot commodity/freight passthrough
         $spotInputDrag = max(0.0, ($agriShift * self::AGRI_COMMODITY_SCALAR) + ($freightShift * self::FREIGHT_RATE_SCALAR) + ($energyShift * self::ENERGY_INPUT_SCALAR));

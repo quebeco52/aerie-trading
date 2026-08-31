@@ -178,7 +178,7 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         $actualVariableCosts = ($servicesRevenue * self::SERVICES_VARIABLE_COST_RATIO) + ($equipmentRevenue * $equipmentVariableMargin);
 
         // --- Energy & Metals Price Inflation Penalty ---
-        $energyShift = ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0;
+        $energyShift = $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
         $metalsCostDrag = max(0.0, $metalsShift) * 0.05;
 

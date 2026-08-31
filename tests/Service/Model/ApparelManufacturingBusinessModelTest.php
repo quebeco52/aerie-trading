@@ -404,7 +404,8 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $spotShockMacro = new MacroStateDTO(
             agriculturalCommodityIndexEma: 150.0, // +50% raw cotton
             freightRateIndexEma: 150.0,            // +50% shipping
-            energyPriceIndexEma: 150.0             // +50% energy
+            energyPriceIndexEma: 150.0,            // +50% energy
+            energyCostPushLag: 0.0050              // +50% energy shock lagged transmission
         );
 
         $mathUtility = new MathUtility();

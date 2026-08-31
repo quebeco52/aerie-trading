@@ -21,7 +21,8 @@ class ResortsCasinosBusinessModelTest extends TestCase
         float $consumerSentimentIndexEma = 100.0,
         float $energyPriceIndexEma = 100.0,
         float $macroCreditSpread = 0.015,
-        float $yield10y = 0.04
+        float $yield10y = 0.04,
+        float $energyCostPushLag = 0.0
     ): MacroStateDTO {
         return new MacroStateDTO(
             outputGap: $outputGap,
@@ -31,6 +32,7 @@ class ResortsCasinosBusinessModelTest extends TestCase
             energyPriceIndex: $energyPriceIndexEma,
             energyPriceIndexEma: $energyPriceIndexEma,
             energyPriceShock: 0.0,
+            energyCostPushLag: $energyCostPushLag,
             consumerSentimentIndex: $consumerSentimentIndexEma,
             consumerSentimentIndexEma: $consumerSentimentIndexEma,
             inflation: $inflation,
@@ -185,7 +187,7 @@ class ResortsCasinosBusinessModelTest extends TestCase
 
         // Energy index spikes by 20 points (120 vs 100 baseline -> 0.20 shift)
         // energyDrag = 0.20 * 0.20 = 0.04
-        $macroEnergy = $this->createMacroState(energyPriceIndexEma: 120.0);
+        $macroEnergy = $this->createMacroState(energyPriceIndexEma: 120.0, energyCostPushLag: 0.0020);
 
         $resPure = $model->computeActualFinancials($stockPure, 10_000.0, 0.58, 2000.0, 0.15, $macroEnergy, $mathMock1);
         // Absorbs full 0.04 energy drag: 0.58 + 0.04 = 0.62

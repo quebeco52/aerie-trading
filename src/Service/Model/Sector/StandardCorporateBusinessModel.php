@@ -112,7 +112,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
         $macroSensitivityMultiplier = 0.5 + $pricingPower;
 
         $outputGap = $macroState->outputGapEma;
-        $inflation = $macroState->inflationEma;
+        $inflation = $macroState->tipsBreakevenEma;
         $beta = (float) $stock->getBeta();
         $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
 

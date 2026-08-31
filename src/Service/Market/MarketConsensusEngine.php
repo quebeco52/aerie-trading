@@ -63,7 +63,11 @@ class MarketConsensusEngine
 
         $dynamicVisibility = min(1.0, max($minVisibility, $baseVisibility + $analystError));
 
-        $freshEstimate = $expectedRevenue * (1.0 + $actuals->observableShockZ * $dynamicVisibility);
+        // Sloan (1996) Accruals Quality Anomaly: High non-cash accruals decay future growth expectations
+        $accrualsDiscount = max(0.0, (float) ($stock->getAccrualsRatio() ?? 0.0) * \App\Service\Math\FinancialConstants::ACCRUALS_DECAY_EPS_GROWTH_SENSITIVITY);
+        $discountedExpectedRevenue = max(1.0, $expectedRevenue * (1.0 - min(0.25, $accrualsDiscount)));
+
+        $freshEstimate = $discountedExpectedRevenue * (1.0 + $actuals->observableShockZ * $dynamicVisibility);
 
         // Bayesian Updating: Analysts blend structural baseline capacity (prior) with noisy channel signals (fresh estimate)
         $priorVariance = \App\Service\Math\FinancialConstants::BAYESIAN_BASE_PRIOR_VARIANCE 
@@ -72,7 +76,7 @@ class MarketConsensusEngine
         $signalVariance = max(0.0001, pow($coverage->errorStdDev, 2));
         
         $analystExpectedRevenue = $mathUtility->calculateBayesianAnalystUpdate(
-            $expectedRevenue,
+            $discountedExpectedRevenue,
             $priorVariance,
             $freshEstimate,
             $signalVariance

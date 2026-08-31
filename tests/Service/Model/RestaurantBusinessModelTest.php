@@ -79,6 +79,7 @@ class RestaurantBusinessModelTest extends TestCase
         $macroSpike = new MacroStateDTO(
             consumerSentimentIndexEma: 100.0,
             energyPriceIndexEma: 125.0,
+            energyCostPushLag: 0.0025,
             inflationEma: 0.02
         );
 

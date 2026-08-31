@@ -64,6 +64,7 @@ class WasteManagementBusinessModelTest extends TestCase
 
         $spikeMacro = new MacroStateDTO(
             energyPriceIndexEma: 150.0,
+            energyCostPushLag: 0.0050,
             industrialMetalsIndexEma: 180.0
         );
 
@@ -101,7 +102,7 @@ class WasteManagementBusinessModelTest extends TestCase
         $stock->setBeta('1.0');
 
         $calmMacro = new MacroStateDTO(energyPriceIndexEma: 100.0);
-        $energyShockMacro = new MacroStateDTO(energyPriceIndexEma: 200.0);
+        $energyShockMacro = new MacroStateDTO(energyPriceIndexEma: 200.0, energyCostPushLag: 0.0100);
 
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);

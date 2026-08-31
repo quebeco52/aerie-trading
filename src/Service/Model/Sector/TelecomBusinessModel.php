@@ -92,7 +92,7 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
 
         // Telecoms generally pass inflation through via annual bill hikes, 
         // but face mild regulatory/consumer pushback.
-        $inflation = $macroState->inflationEma;
+        $inflation = $macroState->tipsBreakevenEma;
         $physics['pricing_power_multiplier'] = 1.0 + ($inflation * 0.50);
 
         return $physics;

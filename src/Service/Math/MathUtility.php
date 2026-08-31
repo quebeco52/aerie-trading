@@ -528,10 +528,73 @@ class MathUtility
      */
     public function calculateNelsonSiegelYield(float $level, float $slope, float $curvature, float $tau, float $lambda = 0.5): float
     {
+        if ($tau <= 0.0) {
+            return $level + $slope;
+        }
+
         $term1 = (1 - exp(-$lambda * $tau)) / ($lambda * $tau);
         $term2 = $term1 - exp(-$lambda * $tau);
 
         return $level + ($slope * $term1) + ($curvature * $term2);
+    }
+
+    /**
+     * Calculates the yield for a given maturity using the Nelson-Siegel-Svensson (1994) curve model.
+     * Extends Nelson-Siegel with a second curvature (hump) parameter to model more complex term structures.
+     *
+     * @param float $level      The long-term asymptotic yield level (beta0).
+     * @param float $slope      The short-term yield component (beta1).
+     * @param float $curvature1 The primary medium-term hump component (beta2).
+     * @param float $curvature2 The secondary long-term hump component (beta3).
+     * @param float $tau        The maturity in years (e.g., 10.0 for the 10-year yield).
+     * @param float $lambda1    The first decay parameter governing the location of the primary hump.
+     * @param float $lambda2    The second decay parameter governing the location of the secondary hump.
+     * @return float The calculated yield for the specified maturity.
+     */
+    public function calculateSvenssonYield(
+        float $level,
+        float $slope,
+        float $curvature1,
+        float $curvature2,
+        float $tau,
+        float $lambda1 = 0.5,
+        float $lambda2 = 0.15
+    ): float {
+        if ($tau <= 0.0) {
+            return $level + $slope;
+        }
+
+        $term1 = (1.0 - exp(-$lambda1 * $tau)) / ($lambda1 * $tau);
+        $term2 = $term1 - exp(-$lambda1 * $tau);
+
+        $term3 = (1.0 - exp(-$lambda2 * $tau)) / ($lambda2 * $tau);
+        $term4 = $term3 - exp(-$lambda2 * $tau);
+
+        return $level + ($slope * $term1) + ($curvature1 * $term2) + ($curvature2 * $term4);
+    }
+
+    /**
+     * Calculates an exponential distributed lag step (discrete recursive lag filter).
+     * Models delayed transmission and economic stickiness (e.g., cost-push pass-through).
+     *
+     * @param float $currentLaggedValue The current lagged state variable.
+     * @param float $targetValue        The new driving target value.
+     * @param float $dt                 The time step in years.
+     * @param float $lagTimeConstant    The characteristic adjustment time constant in years.
+     * @return float The updated lagged value.
+     */
+    public function calculateDistributedLag(
+        float $currentLaggedValue,
+        float $targetValue,
+        float $dt,
+        float $lagTimeConstant
+    ): float {
+        if ($lagTimeConstant <= 0.0 || $dt <= 0.0) {
+            return $targetValue;
+        }
+
+        $weight = 1.0 - exp(-$dt / $lagTimeConstant);
+        return $currentLaggedValue + $weight * ($targetValue - $currentLaggedValue);
     }
 
     /**
@@ -1041,4 +1104,65 @@ class MathUtility
 
         return pow($shock, $convexity) * $scalar;
     }
+
+    /**
+     * Models Asymmetric Cost Stickiness (Anderson, Banker, & Janakiraman 2003).
+     *
+     * Operating costs drop sluggishly when revenue contracts due to fixed commitments,
+     * employee retention frictions, and severance liabilities, causing operating margins
+     * to compress sharply during revenue declines.
+     *
+     * @param float $currentVariableMargin The baseline variable cost ratio (Costs / Revenue).
+     * @param float $revenueLogChange       Quarter-over-quarter log change in revenue: ln(Rev_t / Rev_{t-1}).
+     * @param float $betaExpansion          Cost elasticity on revenue growth (beta 1).
+     * @param float $betaContractionPenalty Downward stickiness penalty parameter (beta 2 < 0).
+     * @return float The adjusted realized variable cost ratio (Costs / Revenue).
+     */
+    public function calculateAsymmetricCostStickiness(
+        float $currentVariableMargin,
+        float $revenueLogChange,
+        float $betaExpansion = FinancialConstants::STICKY_COST_BETA_EXPANSION,
+        float $betaContractionPenalty = FinancialConstants::STICKY_COST_BETA_CONTRACTION_PENALTY
+    ): float {
+        // Delta ln(Cost) = beta1 * Delta ln(Rev) + beta2 * I(Delta ln(Rev) < 0) * Delta ln(Rev)
+        $isContraction = $revenueLogChange < 0.0 ? 1.0 : 0.0;
+        $costElasticity = $betaExpansion + ($betaContractionPenalty * $isContraction);
+        
+        // Margin shift: ln(Cost_t / Rev_t) - ln(Cost_{t-1} / Rev_{t-1}) = (costElasticity - 1.0) * Delta ln(Rev)
+        $logMarginMultiplier = ($costElasticity - 1.0) * $revenueLogChange;
+        $adjustedMargin = $currentVariableMargin * exp($logMarginMultiplier);
+
+        return max(FinancialConstants::MIN_VARIABLE_MARGIN_CLAMP, min(FinancialConstants::MAX_VARIABLE_MARGIN_CLAMP, $adjustedMargin));
+    }
+
+    /**
+     * Computes the dynamic Cash Conversion Cycle (CCC) strain on working capital intensity.
+     *
+     * During downturns:
+     * - DSO expands as customers delay payments (credit spread stress).
+     * - DIO expands as unsold inventories accumulate (low capacity utilization).
+     * - DPO contracts as vendors demand accelerated payment (interbank funding liquidity stress).
+     *
+     * @param float $baselineIntensity         The baseline working capital intensity (NWC / Revenue).
+     * @param float $creditSpread              Prevailing corporate credit spread (DSO driver).
+     * @param float $capacityUtilization       Current operating capacity utilization ratio (DIO driver).
+     * @param float $interbankLiquiditySpread  Prevailing interbank liquidity funding spread (DPO driver).
+     * @return float The dynamic working capital intensity for the quarter.
+     */
+    public function calculateDynamicWorkingCapitalIntensity(
+        float $baselineIntensity,
+        float $creditSpread,
+        float $capacityUtilization,
+        float $interbankLiquiditySpread
+    ): float {
+        $dsoShiftDays = max(0.0, $creditSpread - MacroEngine::BASE_CREDIT_SPREAD) * FinancialConstants::CCC_DSO_CREDIT_SPREAD_SENSITIVITY;
+        $dioShiftDays = max(0.0, 1.0 - $capacityUtilization) * FinancialConstants::CCC_DIO_CAPACITY_SENSITIVITY;
+        $dpoShiftDays = max(0.0, $interbankLiquiditySpread - MacroEngine::INTERBANK_BASELINE_SPREAD) * FinancialConstants::CCC_DPO_LIQUIDITY_SENSITIVITY;
+
+        $totalCccExpansionDays = $dsoShiftDays + $dioShiftDays + $dpoShiftDays;
+        $workingCapitalStrainMultiplier = 1.0 + ($totalCccExpansionDays / 365.0);
+
+        return max(0.01, min(1.0, $baselineIntensity * $workingCapitalStrainMultiplier));
+    }
 }
+

@@ -87,7 +87,7 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
 
         // Strongly tied to macro output gap and energy prices
         $macroBoost = $macroState->outputGapEma * 1.5 * $beta;
-        $energyDrag = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0) * self::ENERGY_INPUT_DRAG_SCALAR;
+        $energyDrag = max(0.0, $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION) * self::ENERGY_INPUT_DRAG_SCALAR;
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
 
         $contractZ = $streams->generateZ('contracted_oem_steel', 0.35);

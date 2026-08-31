@@ -24,6 +24,7 @@ readonly class MacroStateDTO
         public float $energyPriceIndex = 100.0,
         public float $energyPriceIndexEma = 100.0,
         public float $energyPriceShock = 0.0,
+        public float $energyCostPushLag = 0.0,
         public float $consumerSentimentIndex = 100.0,
         public float $consumerSentimentIndexEma = 100.0,
         public float $exchangeRateIndex = 100.0,
@@ -49,6 +50,8 @@ readonly class MacroStateDTO
         public float $freightSupplyEma = 100.0,
         public float $inflation = 0.02,
         public float $inflationEma = 0.02,
+        public float $tipsBreakeven = 0.02,
+        public float $tipsBreakevenEma = 0.02,
         public float $policyRate = 0.02,
         public float $policyRateEma = 0.02,
         public float $targetRate = 0.02,
@@ -78,6 +81,7 @@ readonly class MacroStateDTO
         public float $nsSlope = 0.0,
         public float $nsSlopeEma = 0.0,
         public float $nsCurvature = 0.0,
+        public float $nsCurvature2 = 0.0,
         public float $potentialGdpIndex = 1.0,
         public float $nominalGdpIndex = 1.0,
         public ?string $eventType = null,
@@ -91,6 +95,8 @@ readonly class MacroStateDTO
         $totalTime = (float) ($data['total_time'] ?? 0.0);
         $inflation = (float) ($data['inflation'] ?? MacroEngine::TARGET_INFLATION);
         $inflationEma = (float) ($data['inflation_ema'] ?? $inflation);
+        $tipsBreakeven = (float) ($data['tips_breakeven'] ?? $inflation);
+        $tipsBreakevenEma = (float) ($data['tips_breakeven_ema'] ?? $tipsBreakeven);
         $outputGap = (float) ($data['output_gap'] ?? 0.02);
         $outputGapEma = (float) ($data['output_gap_ema'] ?? $outputGap);
         $capitalStockOverhang = (float) ($data['capital_stock_overhang'] ?? 0.0);
@@ -102,6 +108,7 @@ readonly class MacroStateDTO
         $energyPriceIndex = (float) ($data['energy_price_index'] ?? 100.0);
         $energyPriceIndexEma = (float) ($data['energy_price_index_ema'] ?? $energyPriceIndex);
         $energyPriceShock = (float) ($data['energy_price_shock'] ?? 0.0);
+        $energyCostPushLag = (float) ($data['energy_cost_push_lag'] ?? 0.0);
         $consumerSentimentIndex = (float) ($data['consumer_sentiment_index'] ?? 100.0);
         $consumerSentimentIndexEma = (float) ($data['consumer_sentiment_index_ema'] ?? $consumerSentimentIndex);
 
@@ -160,6 +167,7 @@ readonly class MacroStateDTO
         $nsSlope = (float) ($data['ns_slope'] ?? 0.0);
         $nsSlopeEma = (float) ($data['ns_slope_ema'] ?? $nsSlope);
         $nsCurvature = (float) ($data['ns_curvature'] ?? 0.0);
+        $nsCurvature2 = (float) ($data['ns_curvature2'] ?? 0.0);
 
         $nominalGdpIndex = (float) ($data['nominal_gdp_index'] ?? 1.0);
         $potentialGdpIndex = (float) ($data['potential_gdp_index'] ?? ($nominalGdpIndex / (1.0 + $outputGap)));
@@ -176,6 +184,7 @@ readonly class MacroStateDTO
             energyPriceIndex: $energyPriceIndex,
             energyPriceIndexEma: $energyPriceIndexEma,
             energyPriceShock: $energyPriceShock,
+            energyCostPushLag: $energyCostPushLag,
             consumerSentimentIndex: $consumerSentimentIndex,
             consumerSentimentIndexEma: $consumerSentimentIndexEma,
             exchangeRateIndex: $exchangeRateIndex,
@@ -201,6 +210,8 @@ readonly class MacroStateDTO
             freightSupplyEma: $freightSupplyEma,
             inflation: $inflation,
             inflationEma: $inflationEma,
+            tipsBreakeven: $tipsBreakeven,
+            tipsBreakevenEma: $tipsBreakevenEma,
             policyRate: $policyRate,
             policyRateEma: $policyRateEma,
             targetRate: $targetRate,
@@ -230,6 +241,7 @@ readonly class MacroStateDTO
             nsSlope: $nsSlope,
             nsSlopeEma: $nsSlopeEma,
             nsCurvature: $nsCurvature,
+            nsCurvature2: $nsCurvature2,
             potentialGdpIndex: $potentialGdpIndex,
             nominalGdpIndex: $nominalGdpIndex,
             eventType: $eventType,
@@ -252,6 +264,7 @@ readonly class MacroStateDTO
             energyPriceIndex: $state->energyPriceIndex,
             energyPriceIndexEma: $state->energyPriceIndexEma,
             energyPriceShock: $state->energyPriceShock,
+            energyCostPushLag: $state->energyCostPushLag,
             consumerSentimentIndex: $state->consumerSentimentIndex,
             consumerSentimentIndexEma: $state->consumerSentimentIndexEma,
             exchangeRateIndex: $state->exchangeRateIndex,
@@ -277,6 +290,8 @@ readonly class MacroStateDTO
             freightSupplyEma: $state->freightSupplyEma,
             inflation: $state->inflation,
             inflationEma: $state->inflationEma,
+            tipsBreakeven: $state->tipsBreakeven,
+            tipsBreakevenEma: $state->tipsBreakevenEma,
             policyRate: $state->policyRate,
             policyRateEma: $state->policyRateEma,
             targetRate: $state->targetRate,
@@ -306,6 +321,7 @@ readonly class MacroStateDTO
             nsSlope: $state->nsSlope,
             nsSlopeEma: $state->nsSlopeEma,
             nsCurvature: $state->nsCurvature,
+            nsCurvature2: $state->nsCurvature2,
             potentialGdpIndex: $state->potentialGdpIndex,
             nominalGdpIndex: $state->nominalGdpIndex,
             eventType: $state->eventType,
@@ -328,6 +344,7 @@ readonly class MacroStateDTO
             'energy_price_index' => $this->energyPriceIndex,
             'energy_price_index_ema' => $this->energyPriceIndexEma,
             'energy_price_shock' => $this->energyPriceShock,
+            'energy_cost_push_lag' => $this->energyCostPushLag,
             'consumer_sentiment_index' => $this->consumerSentimentIndex,
             'consumer_sentiment_index_ema' => $this->consumerSentimentIndexEma,
             'exchange_rate_index' => $this->exchangeRateIndex,
@@ -353,6 +370,8 @@ readonly class MacroStateDTO
             'freight_supply_ema' => $this->freightSupplyEma,
             'inflation' => $this->inflation,
             'inflation_ema' => $this->inflationEma,
+            'tips_breakeven' => $this->tipsBreakeven,
+            'tips_breakeven_ema' => $this->tipsBreakevenEma,
             'policy_rate' => $this->policyRate,
             'policy_rate_ema' => $this->policyRateEma,
             'target_rate' => $this->targetRate,
@@ -382,6 +401,7 @@ readonly class MacroStateDTO
             'ns_slope' => $this->nsSlope,
             'ns_slope_ema' => $this->nsSlopeEma,
             'ns_curvature' => $this->nsCurvature,
+            'ns_curvature2' => $this->nsCurvature2,
             'potential_gdp_index' => $this->potentialGdpIndex,
             'nominal_gdp_index' => $this->nominalGdpIndex,
             'event_type' => $this->eventType,

@@ -83,7 +83,8 @@ class LogisticsBusinessModelTest extends TestCase
 
         $macro = new MacroStateDTO(
             outputGapEma: 0.02,
-            inflationEma: 0.03
+            inflationEma: 0.03,
+            tipsBreakevenEma: 0.03
         );
 
         $physics = $this->model->getMacroPhysics($stock, $macro);
@@ -104,7 +105,7 @@ class LogisticsBusinessModelTest extends TestCase
         $stock->setBeta('1.0');
 
         $baseMacro = new MacroStateDTO(energyPriceIndexEma: 100.0);
-        $spikeMacro = new MacroStateDTO(energyPriceIndexEma: 160.0);
+        $spikeMacro = new MacroStateDTO(energyPriceIndexEma: 160.0, energyCostPushLag: 0.0060);
 
         $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturn(0.0);

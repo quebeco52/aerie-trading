@@ -228,4 +228,25 @@ class FinancialConstants
     // --- Corporate Taxation ---
     /** Max % of taxable income that can be shielded by NOLs (e.g. 80% post-TCJA). */
     public const NOL_MAX_SHIELD_RATIO = 0.80;
+
+    // --- Asymmetric Cost Stickiness (Anderson, Banker, & Janakiraman 2003) ---
+    /** Elasticity of operational variable expenses to revenue growth (beta 1). */
+    public const STICKY_COST_BETA_EXPANSION = 0.85;
+    /** Downward stickiness penalty reducing expense contraction during revenue declines (beta 2 < 0). */
+    public const STICKY_COST_BETA_CONTRACTION_PENALTY = -0.40;
+
+    // --- Dynamic Cash Conversion Cycle & Working Capital (CCC) ---
+    /** Sensitivity of Days Sales Outstanding (DSO) to corporate credit spread widening. */
+    public const CCC_DSO_CREDIT_SPREAD_SENSITIVITY = 250.0;
+    /** Sensitivity of Days Inventory Outstanding (DIO) to stranded capacity / inventory overhang. */
+    public const CCC_DIO_CAPACITY_SENSITIVITY = 20.0;
+    /** Sensitivity of Days Payable Outstanding (DPO) contraction to interbank funding liquidity stress. */
+    public const CCC_DPO_LIQUIDITY_SENSITIVITY = 500.0;
+
+    // --- Accruals Quality & Sloan Anomaly (Sloan 1996) ---
+    /** Valuation multiple discount scalar penalizing stocks with high non-cash accounting accruals. */
+    public const ACCRUALS_ANOMALY_PE_PENALTY_SCALE = 8.0;
+    /** Analyst EPS growth forecast mean-reversion discount for low-quality non-cash earnings. */
+    public const ACCRUALS_DECAY_EPS_GROWTH_SENSITIVITY = 0.50;
 }
+

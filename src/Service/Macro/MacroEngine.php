@@ -134,11 +134,31 @@ class MacroEngine
     /** Policy rate threshold determining proximity to the Zero Lower Bound. */
     public const ZLB_PROXIMITY_THRESHOLD = 0.015;
 
-    // --- Nelson-Siegel Term Premium Dynamics ---
+    // --- Nelson-Siegel-Svensson Term Structure Dynamics (Svensson 1994) ---
     /** Baseline structural term premium for long-term Treasury yields (125 bps). */
     public const NS_BASE_TERM_PREMIUM = 0.0125;
     /** Countercyclical sensitivity of term premium to output gap (recessions compress term premium). */
     public const NS_GAP_TERM_PREMIUM_SCALE = -0.15;
+    /** Primary Nelson-Siegel decay parameter (lambda1 = 0.50, hump at ~3.6 years). */
+    public const SVENSSON_LAMBDA_1 = 0.50;
+    /** Secondary Svensson decay parameter (lambda2 = 0.15, hump at ~12 years). */
+    public const SVENSSON_LAMBDA_2 = 0.15;
+    /** Sensitivity of secondary curvature (beta3) to quantitative tightening and long-term fiscal deficits. */
+    public const SVENSSON_CURVATURE2_FISCAL_SCALE = 0.02;
+
+    // --- Forward-Looking TIPS Breakeven & Phillips Expectations ---
+    /** Weight on anchored central bank target in TIPS breakeven inflation expectation. */
+    public const TIPS_TARGET_WEIGHT = 0.40;
+    /** Weight on adaptive trend inflation in TIPS breakeven inflation expectation. */
+    public const TIPS_TREND_WEIGHT = 0.40;
+    /** Weight on forward-looking output gap pressure in TIPS breakeven inflation expectation. */
+    public const TIPS_CYCLICAL_WEIGHT = 0.20;
+    /** Inflation risk premium sensitivity scaling with macroeconomic volatility. */
+    public const TIPS_INFLATION_RISK_PREMIUM_SCALE = 0.05;
+
+    // --- Distributed Lag Transmission Constants ---
+    /** Characteristic half-life time constant in years for energy cost-push pass-through into core inflation (~6 months). */
+    public const ENERGY_COST_PUSH_LAG_YEARS = 0.50;
 
     // --- New Keynesian Phillips Curve Dynamics ---
     /** Adaptive unanchoring weight of inflation expectations to sustained trend deviations. */
@@ -396,6 +416,8 @@ class MacroEngine
         // Advance physical simulation time in years
         $state->totalTime += $dt;
 
+        $state->tipsBreakeven = $this->calculateTipsBreakeven($state, self::TARGET_INFLATION, $dt);
+
         $state->targetRate = $this->calculateTargetRate($state, self::TARGET_INFLATION, self::NATURAL_RATE);
         $state->policyRate = $this->updatePolicyRate($state, $state->targetRate, $dt);
 
@@ -410,6 +432,7 @@ class MacroEngine
         $state->yield30y = $yieldData['yield_30y'];
         $state->nsLevel = $yieldData['level'];
         $state->nsCurvature = $yieldData['curvature'];
+        $state->nsCurvature2 = $yieldData['curvature2'];
 
         $state->nsSlope = $state->yield10y - $state->policyRate;
         $state->structuralSlope = $yieldData['structural_10y'] - $state->policyRate;
@@ -586,20 +609,27 @@ class MacroEngine
         // We calculate the new value but DO NOT mutate $state->qeIntensity here to preserve CQS.
         $newQeIntensity = $qeYieldSuppressionTarget + ($state->qeIntensity - $qeYieldSuppressionTarget) * exp(-self::QE_RAMP_SPEED * $dt);
 
-        $expectedInflation = $state->inflationEma;
+        // TIPS-Style Forward-Looking Inflation Expectations anchor the level factor
+        $expectedInflation = $state->tipsBreakeven;
 
         $level = $naturalRate + (self::INFLATION_LEVEL_WEIGHT * $targetInflation) + (self::INFLATION_LEVEL_WEIGHT * $expectedInflation);
         $nsBeta1 = $state->policyRate - $level;
         $nsBeta2 = max(-0.01, 0.015 + ($state->outputGap * 0.25));
 
-        $yield2y  = $this->calculateNelsonSiegelTenor(2.0, $level, $nsBeta1, $nsBeta2, $state, $newQeIntensity);
-        $yield5y  = $this->calculateNelsonSiegelTenor(5.0, $level, $nsBeta1, $nsBeta2, $state, $newQeIntensity);
-        $yield10y = $this->calculateNelsonSiegelTenor(10.0, $level, $nsBeta1, $nsBeta2, $state, $newQeIntensity);
-        $yield30y = $this->calculateNelsonSiegelTenor(30.0, $level, $nsBeta1, $nsBeta2, $state, $newQeIntensity);
+        // Svensson Beta 3 (Secondary Curvature / Long-End Hump):
+        // Captures long-term sovereign bond supply pressure and fiscal deficit drag (QT / supply indigestion)
+        $fiscalShift = ($state->governmentSpendingIndexEma / self::GOVT_SPENDING_BASELINE) - 1.0;
+        $nsBeta3 = self::SVENSSON_CURVATURE2_FISCAL_SCALE * $fiscalShift;
+
+        $yield2y  = $this->calculateSvenssonTenor(2.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $newQeIntensity);
+        $yield5y  = $this->calculateSvenssonTenor(5.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $newQeIntensity);
+        $yield10y = $this->calculateSvenssonTenor(10.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $newQeIntensity);
+        $yield30y = $this->calculateSvenssonTenor(30.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $newQeIntensity);
 
         return [
             'level' => $level,
             'curvature' => $nsBeta2,
+            'curvature2' => $nsBeta3,
             'new_qe_intensity' => $newQeIntensity, // Passed back to the caller to mutate state
             'structural_10y' => $yield10y + $newQeIntensity, // Unclamped
             'yield_2y'  => $yield2y,  // Unclamped, allowing negative yields
@@ -609,7 +639,7 @@ class MacroEngine
         ];
     }
 
-    private function calculateNelsonSiegelTenor(float $t, float $level, float $nsBeta1, float $nsBeta2, MacroState $state, float $qeYieldSuppression): float
+    private function calculateSvenssonTenor(float $t, float $level, float $nsBeta1, float $nsBeta2, float $nsBeta3, MacroState $state, float $qeYieldSuppression): float
     {
         // Concave duration scaling: anchors 10-year at ~1.0, and 30-year asymptotically flattens out around ~1.58
         // This mirrors real-world term premium flattening at the long end and prevents linear explosion.
@@ -621,7 +651,15 @@ class MacroEngine
         // Apply the same concave scaling to QE to suppress the entire long end properly
         $qeTargetedSuppression = $qeYieldSuppression * $durationScale;
 
-        $pureYield = $this->mathUtility->calculateNelsonSiegelYield($level, $nsBeta1, $nsBeta2, $t);
+        $pureYield = $this->mathUtility->calculateSvenssonYield(
+            level: $level,
+            slope: $nsBeta1,
+            curvature1: $nsBeta2,
+            curvature2: $nsBeta3,
+            tau: $t,
+            lambda1: self::SVENSSON_LAMBDA_1,
+            lambda2: self::SVENSSON_LAMBDA_2
+        );
 
         return $pureYield + $termPremium - $qeTargetedSuppression;
     }
@@ -689,10 +727,16 @@ class MacroEngine
 
         $phillipsSlope = $state->outputGap * self::PHILLIPS_SLOPE;
 
-        // Add energy cost-push inflation
-        $energyCostPush = ($state->energyPriceShock / 100.0) * self::ENERGY_COST_PUSH_TRANSMISSION; // Moderated transmission of energy shock
+        // Add energy cost-push inflation with distributed lag transmission (economic stickiness)
+        $rawEnergyCostPush = ($state->energyPriceShock / 100.0) * self::ENERGY_COST_PUSH_TRANSMISSION;
+        $state->energyCostPushLag = $this->mathUtility->calculateDistributedLag(
+            currentLaggedValue: $state->energyCostPushLag,
+            targetValue: $rawEnergyCostPush,
+            dt: $dt,
+            lagTimeConstant: self::ENERGY_COST_PUSH_LAG_YEARS
+        );
 
-        $phillipsEffect = ($phillipsSlope + $energyCostPush) * $dt;
+        $phillipsEffect = ($phillipsSlope + $state->energyCostPushLag) * $dt;
 
         $newInflation = $state->inflation + $inflationDrift + $phillipsEffect + (0.005 * $stressMultiplier * sqrt($dt) * $infZ);
         return max(-0.02, min(0.25, $newInflation));
@@ -768,6 +812,23 @@ class MacroEngine
         $state->nominalGdpIndex = $state->potentialGdpIndex * (1.0 + $state->outputGap);
     }
 
+    private function calculateTipsBreakeven(MacroState $state, float $targetInflation, float $dt): float
+    {
+        // TIPS Breakeven Inflation Rate (Real-world forward expectation model):
+        // Blends anchored central bank target (40%), current inflation trend (40%),
+        // and forward-looking cyclical capacity pressure (output gap * 20%), plus inflation volatility risk premium.
+        $cyclicalForecast = $state->outputGapEma * self::PHILLIPS_SLOPE;
+        $excessVol = max(0.0, $state->marketVolatilityEma - self::MACRO_VOL_BASE_ANCHOR);
+        $inflationRiskPremium = $excessVol * self::TIPS_INFLATION_RISK_PREMIUM_SCALE;
+
+        $fundamentalBreakeven = (self::TIPS_TARGET_WEIGHT * $targetInflation)
+            + (self::TIPS_TREND_WEIGHT * $state->inflationEma)
+            + (self::TIPS_CYCLICAL_WEIGHT * ($targetInflation + $cyclicalForecast))
+            + $inflationRiskPremium;
+
+        return max(-0.01, min(0.15, $fundamentalBreakeven));
+    }
+
     private function updateExponentialMovingAverages(MacroState $state, float $dt): void
     {
         $emaWeight = 1.0 - exp(-$dt / self::STANDARD_EMA_HORIZON_YEARS);
@@ -775,6 +836,7 @@ class MacroEngine
         $state->outputGapEma += $emaWeight * ($state->outputGap - $state->outputGapEma);
         $state->policyRateEma += $emaWeight * ($state->policyRate - $state->policyRateEma);
         $state->inflationEma += $emaWeight * ($state->inflation - $state->inflationEma);
+        $state->tipsBreakevenEma += $emaWeight * ($state->tipsBreakeven - $state->tipsBreakevenEma);
         $state->nsSlopeEma += $emaWeight * ($state->nsSlope - $state->nsSlopeEma);
 
         $state->yield2yEma += $emaWeight * ($state->yield2y - $state->yield2yEma);

@@ -114,8 +114,8 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // Diesel fuel surcharge lag: Railroads consume massive quantities of diesel.
-        // Spikes in energy price index create temporary margin compression before 60-day fuel surcharges adjust.
-        $energyShift = ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0;
+        // Spikes in energy price index create temporary margin compression before fuel surcharges adjust.
+        $energyShift = $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
         $fuelLagDrag = $energyShift > 0 ? $energyShift * self::FUEL_SURCHARGE_LAG_PENALTY : 0.0;
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $fuelLagDrag);

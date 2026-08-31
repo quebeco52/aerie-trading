@@ -82,7 +82,7 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $outputGap = $macroState->outputGapEma;
-        $inflation = $macroState->inflationEma;
+        $inflation = $macroState->tipsBreakevenEma;
         $beta = (float) $stock->getBeta();
 
         return [
@@ -147,7 +147,7 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
 
         // Fuel Surcharge Lag Penalty: Fleet transport operations consume substantial diesel.
         // When energy prices spike (> 0), margins compress temporarily before customer surcharges adjust.
-        $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
+        $energyShift = max(0.0, $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
         $fuelLagDrag = $energyShift * self::FUEL_SURCHARGE_LAG_PENALTY * ($fleetWeight + $spotWeight);
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $fuelLagDrag);

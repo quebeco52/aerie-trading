@@ -242,7 +242,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
             ? abs($sentimentShift) * abs((float) $stock->getBeta()) * self::PROMOTIONAL_COMP_DRAG_SCALAR
             : 0.0;
 
-        $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
+        $energyShift = max(0.0, $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
         $energyDrag = $energyShift * self::ENERGY_UTILITY_DRAG_SCALAR;
 
         // Structural Margin Blending

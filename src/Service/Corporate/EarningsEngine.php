@@ -199,7 +199,14 @@ class EarningsEngine
         }
 
         $realizedVariableMargin = $this->mathUtility->calculateCIR($currentVariableMargin, $kappa, $dynamicVariableTheta, $marginVol, $ctx->dt, $z2);
-        $ctx->realizedVariableMargin = min(0.99, max(0.01, $realizedVariableMargin));
+
+        // Asymmetric Cost Stickiness (Anderson, Banker, & Janakiraman 2003):
+        // Operating costs contract sluggishly when revenue drops, squeezing variable margins during contractions.
+        $revRatio = max(0.01, $ctx->expectedRevenue / max(1.0, $ctx->structuralRevenue));
+        $revenueLogChange = log($revRatio);
+        $stickyVariableMargin = $this->mathUtility->calculateAsymmetricCostStickiness($realizedVariableMargin, $revenueLogChange);
+
+        $ctx->realizedVariableMargin = min(0.99, max(0.01, $stickyVariableMargin));
 
         $stock->setStructuralVariableMargin($ctx->realizedVariableMargin);
     }
@@ -387,8 +394,14 @@ class EarningsEngine
             $baselineIncomeForCapEx = max($physicalCapital * 0.02, max(0.0, $ctx->actualQuarterlyNetIncome));
             $actualCapEx = $baselineIncomeForCapEx * ($capExRatio * $cycleCapExModifier);
 
-            $workingCapitalIntensity = $ctx->strategy->getWorkingCapitalIntensity($stock);
-            $deltaNwc = $workingCapitalIntensity * ($ctx->actualRevenue - $ctx->previousQuarterlyRevenue);
+            $baseWorkingCapitalIntensity = $ctx->strategy->getWorkingCapitalIntensity($stock);
+            $dynamicWorkingCapitalIntensity = $this->mathUtility->calculateDynamicWorkingCapitalIntensity(
+                baselineIntensity: $baseWorkingCapitalIntensity,
+                creditSpread: $ctx->macroState->macroCreditSpreadEma,
+                capacityUtilization: $ctx->capacityUtilization,
+                interbankLiquiditySpread: $ctx->macroState->interbankLiquiditySpreadEma
+            );
+            $deltaNwc = $dynamicWorkingCapitalIntensity * ($ctx->actualRevenue - $ctx->previousQuarterlyRevenue);
 
             $fcff = $ctx->actualQuarterlyNetIncome + $ctx->quarterlyDepreciation - $deltaNwc - $actualCapEx;
 
@@ -427,6 +440,12 @@ class EarningsEngine
 
         $ctx->totalReportedCapex = ($actualAnnualCapEx / 4.0) + $reportedOrganicCapex;
         $ctx->trueQuarterlyFcf = ($trueAnnualFcfPerShare * $ctx->sharesOutstanding) / 4.0;
+
+        // Sloan (1996) Accruals Anomaly: Accruals = (Net Income - FCF) / Total Assets
+        $totalAssets = max(FinancialConstants::MIN_OPERATING_BASE_CASH, (float) $stock->getTotalEquity() + (float) $stock->getTotalDebt());
+        $quarterlyAccruals = $ctx->actualQuarterlyNetIncome - $ctx->trueQuarterlyFcf;
+        $accrualsRatio = ($quarterlyAccruals * 4.0) / $totalAssets;
+        $stock->setAccrualsRatio($accrualsRatio);
     }
 
     private function executePriceAndVolatilityShocks(EarningsSimulationContext $ctx): void

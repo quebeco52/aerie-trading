@@ -162,6 +162,15 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $totalFactorProductivityIndexEma = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $tipsBreakeven = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $tipsBreakevenEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $nsCurvature2 = null;
+
     // --- Standard Getters & Setters ---
 
     public function getId(): ?int { return $this->id; }
@@ -314,4 +323,13 @@ class MacroReport
 
     public function getTotalFactorProductivityIndexEma(): ?string { return $this->totalFactorProductivityIndexEma; }
     public function setTotalFactorProductivityIndexEma(string $totalFactorProductivityIndexEma): self { $this->totalFactorProductivityIndexEma = $totalFactorProductivityIndexEma; return $this; }
+
+    public function getTipsBreakeven(): ?string { return $this->tipsBreakeven; }
+    public function setTipsBreakeven(?string $tipsBreakeven): self { $this->tipsBreakeven = $tipsBreakeven; return $this; }
+
+    public function getTipsBreakevenEma(): ?string { return $this->tipsBreakevenEma; }
+    public function setTipsBreakevenEma(?string $tipsBreakevenEma): self { $this->tipsBreakevenEma = $tipsBreakevenEma; return $this; }
+
+    public function getNsCurvature2(): ?string { return $this->nsCurvature2; }
+    public function setNsCurvature2(?string $nsCurvature2): self { $this->nsCurvature2 = $nsCurvature2; return $this; }
 }

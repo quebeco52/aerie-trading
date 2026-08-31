@@ -100,6 +100,7 @@ class MarketEngine
         $secularGrowth = $ctx->secularGrowth;
         $baselineRoic = $ctx->baselineRoic;
         $baselineMargin = $ctx->baselineMargin;
+        $accrualsRatio = $ctx->accrualsRatio;
 
         // CAPM & MACRO TRANSMISSION MECHANISM
 
@@ -181,7 +182,8 @@ class MarketEngine
             $netDebtPerShare,
             $secularGrowth,
             $baselineRoic,
-            $baselineMargin
+            $baselineMargin,
+            $accrualsRatio
         );
 
         $perceivedFairValue = $fundamentalState['perceived_fair_value'];
@@ -218,35 +220,36 @@ class MarketEngine
                 (1.0 - $reversionWeight) * log(max(0.01, $perceivedFairValue))
         );
 
+        // Calculate Analyst Targets for UI and Sentiment Display
+        $analystTargets = $fundamentalState['analyst_targets'];
+
+        // Circuit Breaker: Absolute Maximum Movement per Simulation Step
+        // Standard equities are constrained to max +/- 40% moves per quarter (or equivalent dt scaled)
+        // to prevent mathematical infinities and unrealistic single-tick flash crashes.
+        $maxMovePct = FinancialConstants::MAX_QUARTERLY_PRICE_CIRCUIT_BREAKER;
+        $minPriceFloor = max(0.01, $currentPrice * (1.0 - $maxMovePct));
+        $maxPriceCeiling = $currentPrice * (1.0 + $maxMovePct);
+        $boundedPrice = max($minPriceFloor, min($maxPriceCeiling, $diffusedPrice));
+
         // Apply Simultaneous Price Jumps AND M&A Shocks outside the GBM exponent
         $totalShockMultiplier = $jumpData['price_multiplier'] * (1.0 + $maShock);
-        $finalPrice = $diffusedPrice * $totalShockMultiplier;
+        $finalPrice = $boundedPrice * $totalShockMultiplier;
 
 
         return [
             'price'             => max(0.01, $finalPrice),
             'shock'             => $jumpData['shock_pct'],
             'next_volatility'   => $nextVolatility,
-            'analyst_targets'   => $fundamentalState['analyst_targets'],
+            'analyst_targets'   => $analystTargets,
             'perceived_fair_value' => $perceivedFairValue,
-            'dynamic_reversion' => $fundamentalState['dynamic_reversion'],
+            'dynamic_reversion' => $dynamicReversion,
         ];
     }
 
     /**
-     * Calculates the macro-adjusted drift utilizing CAPM and transmission mechanisms.
-     *
-     * Adjusts the baseline drift by factoring in asymmetric sentiment (fear vs greed),
-     * the stagflation tax (inflation penalty), and liquidity drains (yield curve inversion).
-     *
-     * @param float $outputGap    The current macroeconomic output gap.
-     * @param float $inflation    The current inflation rate.
-     * @param float $nsSlope      The slope of the yield curve (Nelson-Siegel).
-     * @param float $drift        The expected baseline return.
-
-     * Evaluates the fundamental state of the stock under macroeconomic stress.
-     * Calculates the systemic stress index, dynamic WACC, flight-to-quality reversion speed,
-     * and the intrinsic fair value of the asset.
+     * Evaluates the fundamental fair value and dynamic reversion speed of a company
+     * by combining structural ROIC, cost of capital, Kalman-smoothed EPS run-rates,
+     * and ESTAR non-linear arbitrage dynamics.
      * 
      * @param float $currentPrice        The current market price of the stock.
      * @param float $outputGap           The macroeconomic output gap (boom vs bust).
@@ -263,8 +266,14 @@ class MarketEngine
      * @param float $dividendPerShare    The absolute quarterly dividend per share.
      * @param float $baselineIndustryPE  The standard P/E multiple for this industry.
      * @param float $revenuePerShare     The total revenue per share.
-     * @param bool  $isLeveragedIndustry True if the company is a bank or financial institution.
+     * @param string $businessModel      The type of business (e.g., 'tech', 'bank', 'retail').
      * @param float $liveCostOfEquity    The Cost of Equity (CAPM) for financial institutions.
+     * @param float $currentVolatility   The current asset volatility.
+     * @param float $netDebtPerShare     The net debt per share.
+     * @param float $secularGrowth       The long-term growth rate of the sector/economy.
+     * @param float $baselineRoic        The historical average ROIC.
+     * @param float $baselineMargin      The historical average net margin.
+     * @param float $accrualsRatio       The accruals-to-assets ratio.
      * @return array{perceived_fair_value: float, dynamic_reversion: float, analyst_targets: array}
      */
     private function evaluateFundamentalState(
@@ -289,7 +298,8 @@ class MarketEngine
         float $netDebtPerShare = 0.0,
         float $secularGrowth = 0.02,
         float $baselineRoic = 0.10,
-        float $baselineMargin = 0.20
+        float $baselineMargin = 0.20,
+        float $accrualsRatio = 0.0
     ): array {
 
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
@@ -322,6 +332,10 @@ class MarketEngine
         $expectedGrowth = max(0.0, min(0.05, $realGrowth + ($inflation * 0.5)));
 
         $fairValuePE = $this->mathUtility->calculateIntrinsicFairValuePE($hurdleRate, $structuralRoic, $expectedGrowth);
+
+        // Sloan (1996) Accruals Anomaly: Discount P/E multiple for firms with bloated non-cash accounting accruals
+        $accrualsPenalty = max(0.0, $accrualsRatio * FinancialConstants::ACCRUALS_ANOMALY_PE_PENALTY_SCALE);
+        $fairValuePE = max(FinancialConstants::MIN_INTRINSIC_PE, $fairValuePE - $accrualsPenalty);
 
         $trueStructuralEps = $strategy->calculateStructuralEps(
             $bookValuePerShare,

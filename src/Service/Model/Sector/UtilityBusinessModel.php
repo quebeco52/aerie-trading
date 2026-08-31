@@ -104,7 +104,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $physics['macro_demand_shift'] = $outputGap * $beta * self::MACRO_DEMAND_SCALAR;
 
         // Regulatory Lag: Utilities do get rate hikes to cover inflation, but they lag by 12-24 months.
-        $inflation = $macroState->inflationEma;
+        $inflation = $macroState->tipsBreakevenEma;
         $physics['pricing_power_multiplier'] = 1.0 + ($inflation * self::PRICING_POWER_LAG_SCALAR);
 
         return $physics;
@@ -171,7 +171,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         // --- Merchant Spark Spread Crush ---
         // Unregulated merchant power relies on the "spark spread" (wholesale electricity price minus fuel input cost).
         // If the energy index spikes violently, the spark spread collapses.
-        $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
+        $energyShift = max(0.0, $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
         $sparkSpreadCrush = $energyShift * 0.20 * $unregulatedWeight;
 
         // --- Refinancing Wall Drag (Bond Proxies) ---

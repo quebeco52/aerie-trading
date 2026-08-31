@@ -94,7 +94,7 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         $physics['macro_demand_shift'] = 0.0;
 
         // Massive pricing power: Waste management companies dictate prices to municipalities.
-        $physics['pricing_power_multiplier'] = 1.0 + ($macroState->inflationEma * 0.85);
+        $physics['pricing_power_multiplier'] = 1.0 + ($macroState->tipsBreakevenEma * 0.85);
 
         return $physics;
     }
@@ -138,7 +138,7 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         $cpiEscalatorBoost = $excessInflation * self::CPI_ESCALATOR_CAPTURE; // Passive revenue boost
 
         // Recycling is driven entirely by global commodity, energy, and scrap metal prices
-        $energyShift = ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0;
+        $energyShift = $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
         $recyclingCommodityBoost = ($energyShift * 0.30) + ($metalsShift * 0.30);
 

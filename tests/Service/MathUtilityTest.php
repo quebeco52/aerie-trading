@@ -433,5 +433,122 @@ class MathUtilityTest extends TestCase
         // Quadruples penalty for doubling shock (convex property)
         $this->assertEqualsWithDelta(0.02, $this->mathUtility->calculateConvexPenalty(0.10, 2.0, 2.0), 0.00001);
     }
+
+    public function testCalculateNelsonSiegelAndSvenssonYieldZeroTau(): void
+    {
+        $level = 0.04;
+        $slope = -0.01;
+        $curv1 = 0.02;
+        $curv2 = 0.01;
+
+        $ns = $this->mathUtility->calculateNelsonSiegelYield($level, $slope, $curv1, 0.0);
+        $this->assertEquals($level + $slope, $ns, 'Zero maturity should return level + slope (short rate).');
+
+        $sv = $this->mathUtility->calculateSvenssonYield($level, $slope, $curv1, $curv2, 0.0);
+        $this->assertEquals($level + $slope, $sv, 'Svensson zero maturity should return level + slope.');
+    }
+
+    public function testCalculateSvenssonYieldMatchesNelsonSiegelWhenCurvature2IsZero(): void
+    {
+        $level = 0.045;
+        $slope = -0.015;
+        $curvature1 = 0.02;
+        $lambda1 = 0.50;
+
+        foreach ([1.0, 2.0, 5.0, 10.0, 30.0] as $tau) {
+            $nsYield = $this->mathUtility->calculateNelsonSiegelYield($level, $slope, $curvature1, $tau, $lambda1);
+            $svenssonYield = $this->mathUtility->calculateSvenssonYield(
+                level: $level,
+                slope: $slope,
+                curvature1: $curvature1,
+                curvature2: 0.0,
+                tau: $tau,
+                lambda1: $lambda1,
+                lambda2: 0.15
+            );
+
+            $this->assertEqualsWithDelta($nsYield, $svenssonYield, 0.00001, "Svensson must equal Nelson-Siegel when beta3=0 for tau=$tau");
+        }
+    }
+
+    public function testCalculateSvenssonYieldSecondaryCurvatureHump(): void
+    {
+        $level = 0.04;
+        $slope = 0.0;
+        $curvature1 = 0.0;
+        $curvature2 = 0.03; // Long-end hump
+        $lambda2 = 0.15; // Peak around 1 / 0.15 ≈ 6.67 to 10 years
+
+        $yieldShort = $this->mathUtility->calculateSvenssonYield($level, $slope, $curvature1, $curvature2, 0.1, 0.5, $lambda2);
+        $yield10y = $this->mathUtility->calculateSvenssonYield($level, $slope, $curvature1, $curvature2, 10.0, 0.5, $lambda2);
+        $yield100y = $this->mathUtility->calculateSvenssonYield($level, $slope, $curvature1, $curvature2, 100.0, 0.5, $lambda2);
+
+        // Curvature 2 should be small near 0, reach hump in intermediate tenors, and decay asymptotically to level at infinite maturity
+        $this->assertGreaterThan($yieldShort, $yield10y, 'Secondary curvature should create a hump in the yield curve.');
+        $this->assertEqualsWithDelta($level, $yield100y, 0.005, 'Very long maturities should decay back toward long-term level.');
+    }
+
+    public function testCalculateDistributedLagSmoothsTransitions(): void
+    {
+        $current = 0.0;
+        $target = 10.0;
+        $timeConstant = 1.0; // 1 year lag
+
+        // Step of dt = 0.25 (1 quarter)
+        $nextQuarter = $this->mathUtility->calculateDistributedLag($current, $target, 0.25, $timeConstant);
+        $expected = 0.0 + (1.0 - exp(-0.25 / 1.0)) * 10.0; // ≈ 2.21199
+        $this->assertEqualsWithDelta($expected, $nextQuarter, 0.0001);
+
+        // Immediate transition when time constant is 0
+        $immediate = $this->mathUtility->calculateDistributedLag($current, $target, 0.25, 0.0);
+        $this->assertEquals($target, $immediate);
+    }
+
+    public function testCalculateAsymmetricCostStickinessCompressesMarginsOnRevenueDecline(): void
+    {
+        $baselineVariableCostRatio = 0.70; // 70% variable cost ratio (30% gross margin)
+
+        // Case 1: Revenue grows by 20% (log change = ln(1.20) ≈ +0.1823)
+        $growthLogChange = log(1.20);
+        $marginOnGrowth = $this->mathUtility->calculateAsymmetricCostStickiness($baselineVariableCostRatio, $growthLogChange);
+        // On growth, variable costs expand with beta = 0.85, so cost ratio drops (margin expands)
+        $this->assertLessThan($baselineVariableCostRatio, $marginOnGrowth, 'Variable cost ratio should drop slightly on revenue growth.');
+
+        // Case 2: Revenue contracts by 20% (log change = ln(0.80) ≈ -0.2231)
+        $contractionLogChange = log(0.80);
+        $marginOnContraction = $this->mathUtility->calculateAsymmetricCostStickiness($baselineVariableCostRatio, $contractionLogChange);
+        // On contraction, costs drop sluggishly due to stickiness penalty (beta1 + beta2 = 0.85 - 0.40 = 0.45 < 1.0),
+        // causing cost ratio to increase (margin compresses sharply).
+        $this->assertGreaterThan($baselineVariableCostRatio, $marginOnContraction, 'Variable cost ratio should increase sharply on revenue contraction.');
+        
+        // Contraction margin shift magnitude should be significantly larger than growth shift due to asymmetry
+        $growthDelta = abs($baselineVariableCostRatio - $marginOnGrowth);
+        $contractionDelta = abs($marginOnContraction - $baselineVariableCostRatio);
+        $this->assertGreaterThan($growthDelta, $contractionDelta, 'Downward cost stickiness should create larger margin squeeze than upward expansion.');
+    }
+
+    public function testCalculateDynamicWorkingCapitalIntensityExpandsUnderStress(): void
+    {
+        $baseIntensity = 0.15; // 15% NWC / Revenue
+
+        // Normal neutral baseline conditions
+        $neutralIntensity = $this->mathUtility->calculateDynamicWorkingCapitalIntensity(
+            baselineIntensity: $baseIntensity,
+            creditSpread: 0.02,
+            capacityUtilization: 1.0,
+            interbankLiquiditySpread: 0.0015
+        );
+        $this->assertEqualsWithDelta($baseIntensity, $neutralIntensity, 0.0001, 'Under neutral conditions, intensity should equal baseline.');
+
+        // Distressed recession conditions: Credit spread +300bps, Capacity utilization 70%, Interbank spread 100bps
+        $stressedIntensity = $this->mathUtility->calculateDynamicWorkingCapitalIntensity(
+            baselineIntensity: $baseIntensity,
+            creditSpread: 0.05, // +300bps DSO stretch
+            capacityUtilization: 0.70, // 30% idle capacity DIO stretch
+            interbankLiquiditySpread: 0.0100 // +85bps liquidity crunch DPO drain
+        );
+        $this->assertGreaterThan($baseIntensity, $stressedIntensity, 'Stressed conditions must expand working capital intensity.');
+    }
 }
+
 

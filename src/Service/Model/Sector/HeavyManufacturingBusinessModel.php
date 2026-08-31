@@ -137,7 +137,7 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         $actualVariableCosts = ($mroRevenue * self::MRO_VARIABLE_COST_RATIO) + ($oemRevenue * $oemVariableMargin);
 
         // Supply Chain Energy & Freight Penalty: Heavy industry relies heavily on energy, metals, and transit logistics.
-        $energyShift = ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0;
+        $energyShift = $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
         $freightShift = max(0.0, ($macroState->freightRateIndexEma - 100.0) / 100.0);
         $combinedCommodityDrag = max(0.0, $energyShift + $metalsShift + ($freightShift * 0.30));

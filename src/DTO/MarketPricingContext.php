@@ -40,6 +40,7 @@ class MarketPricingContext
         public float $recentPriceTrend = 0.0,
         public float $secularGrowth = 0.02,
         public float $baselineRoic = 0.10,
-        public float $baselineMargin = 0.20
+        public float $baselineMargin = 0.20,
+        public float $accrualsRatio = 0.0
     ) {}
 }

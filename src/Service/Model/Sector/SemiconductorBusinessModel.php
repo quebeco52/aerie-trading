@@ -116,7 +116,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $outputGap = $macroState->outputGapEma;
-        $inflation = $macroState->inflationEma;
+        $inflation = $macroState->tipsBreakevenEma;
         $beta = (float) $stock->getBeta();
 
         // Semiconductors are highly cyclical and levered to global tech capital expenditure cycles
@@ -196,7 +196,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         }
 
         // Cleanroom Energy & Metals Drag: Fabs consume massive electricity and raw materials
-        $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
+        $energyShift = max(0.0, $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
         $metalsShift = max(0.0, ($macroState->industrialMetalsIndexEma - 100.0) / 100.0);
         $energyDrag = (($energyShift * self::CLEANROOM_ENERGY_DRAG_SCALAR) + ($metalsShift * 0.10)) * $foundryWeight;
 

@@ -97,7 +97,7 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $outputGap = $macroState->outputGapEma;
-        $inflation = $macroState->inflationEma;
+        $inflation = $macroState->tipsBreakevenEma;
         $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         $beta = (float) $stock->getBeta();
 
@@ -163,7 +163,7 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         // Fuel and Bunker Cost Inflation / Deflation:
         // Shipping is directly exposed to crude oil and commodity inflation, capturing savings during deflationary/falling fuel regimes.
         $inflation = $macroState->inflationEma;
-        $energyShift = ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0;
+        $energyShift = $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
 
         $bunkerInflationAdjustment = max(
             -0.05,

@@ -206,7 +206,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
 
         // --- Fixed-Price Contract Margin Squeeze with Cost-Plus Pass-Through ---
         $inflation = $macroState->inflationEma;
-        $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
+        $energyShift = max(0.0, $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
 
         $baseInflationPenalty = $inflation > MacroEngine::TARGET_INFLATION
             ? ($inflation - MacroEngine::TARGET_INFLATION) * $beta * self::INFLATION_PENALTY_SCALAR

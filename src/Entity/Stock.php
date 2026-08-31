@@ -273,6 +273,12 @@ class Stock
     #[ORM\Column(type: 'float', nullable: true)]
     private ?float $structuralVariableMargin = null;
 
+    /**
+     * @var float|null Accruals anomaly ratio (Net Income - FCF) / Total Assets (Sloan 1996).
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $accrualsRatio = 0.0;
+
     #[ORM\Column(type: Types::JSON, nullable: true)]
     private ?array $earningsMomentumZ = [];
 
@@ -731,6 +737,17 @@ class Stock
     public function getStructuralVariableMargin(): ?float
     {
         return $this->structuralVariableMargin;
+    }
+
+    public function setAccrualsRatio(?float $accrualsRatio): static
+    {
+        $this->accrualsRatio = $accrualsRatio;
+        return $this;
+    }
+
+    public function getAccrualsRatio(): ?float
+    {
+        return $this->accrualsRatio;
     }
 
     public function setEarningsMomentumZ(?array $earningsMomentumZ): static

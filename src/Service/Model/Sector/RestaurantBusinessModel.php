@@ -168,7 +168,7 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         $inflationPenalty = $baseInflationPenalty * $inflationMultiplier;
 
         // Energy & Utility Drag: Company-operated stores pay kitchen gas, power, and refrigeration utilities
-        $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
+        $energyShift = max(0.0, $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
         $energyDrag = $energyShift * self::UTILITY_ENERGY_DRAG_SCALAR * $corporateWeight;
 
         // Food Commodity Drag (Agri Index): Company-operated stores pay direct food ingredient costs

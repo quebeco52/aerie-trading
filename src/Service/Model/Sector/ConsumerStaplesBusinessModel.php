@@ -158,7 +158,7 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
 
         return [
             'macro_demand_shift'       => ($macroState->outputGapEma * $beta * $effectivePed) - ($fxShift * 0.05),
-            'pricing_power_multiplier' => 1.0 + ($macroState->inflationEma * (1.0 - $effectivePed)),
+            'pricing_power_multiplier' => 1.0 + ($macroState->tipsBreakevenEma * (1.0 - $effectivePed)),
         ];
     }
 
@@ -233,7 +233,7 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
             $commodityZ = $streams->generateZ('commodity_trading', 0.20);
 
             $inflationExcess = max(0.0, $macroState->inflationEma - MacroEngine::TARGET_INFLATION);
-            $energyExcess = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
+            $energyExcess = max(0.0, $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
             $agriExcess = max(0.0, ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0);
             $commoditySqueezeBonus = ($inflationExcess * self::COMMODITY_INFLATION_ALPHA_SCALAR) + ($energyExcess * self::COMMODITY_ENERGY_ALPHA_SCALAR) + ($agriExcess * 0.30);
 
@@ -259,7 +259,7 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
             - ($volumeZ * self::AGRI_HARVEST_SHOCK_SCALAR * $volumeWeight);
 
         // Supply Chain, Freight & Packaging Penalty (Energy & Freight Price Indices)
-        $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
+        $energyShift = max(0.0, $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
         $freightShift = max(0.0, ($macroState->freightRateIndexEma - 100.0) / 100.0);
         $beta = abs((float) $stock->getBeta());
         $rawLogisticsPenalty = ($energyShift * $beta * self::PACKAGING_ENERGY_COST_SCALAR) + ($freightShift * $beta * 0.05);

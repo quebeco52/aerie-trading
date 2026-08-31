@@ -327,7 +327,7 @@ class StockModelTuning
         'WING' => [
             ModelParam::ContractOemWeight->value  => 0.70,
             ModelParam::SpotHrcWeight->value      => 0.30,
-            ModelParam::PricingPowerIndex->value  => 0.40,
+            ModelParam::PricingPowerIndex->value  => 0.65,
         ],
 
         // --- Iron Beak Heavy Industries (IBHI) ---

@@ -178,6 +178,7 @@ class ChemicalBusinessModelTest extends TestCase
         // Scenario 1: High energy price (140.0, +40% energy inflation) in Economic Expansion (outputGap = +0.04)
         $expansionMacro = new MacroStateDTO(
             energyPriceIndexEma: 140.0,
+            energyCostPushLag: 0.0040,
             outputGapEma: 0.04
         );
 
@@ -194,6 +195,7 @@ class ChemicalBusinessModelTest extends TestCase
         // Scenario 2: High energy price (140.0, +40% energy inflation) in Economic Recession (outputGap = -0.04)
         $recessionMacro = new MacroStateDTO(
             energyPriceIndexEma: 140.0,
+            energyCostPushLag: 0.0040,
             outputGapEma: -0.04
         );
 

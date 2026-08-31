@@ -223,7 +223,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
 
         // Supply chain inflation & energy cost penalty on physical manufacturing
         $inflation = $macroState->inflationEma;
-        $energyShift = max(0.0, ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0);
+        $energyShift = max(0.0, $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
         $freightShift = max(0.0, ($macroState->freightRateIndexEma - 100.0) / 100.0);
         $baseInflationPenalty = max(0.0, $inflation - MacroEngine::TARGET_INFLATION) * $beta * self::INFLATION_PENALTY_SCALAR;
