@@ -98,6 +98,8 @@ class MarketEngine
         $netDebtPerShare = $ctx->netDebtPerShare;
         $recentPriceTrend = $ctx->recentPriceTrend;
         $secularGrowth = $ctx->secularGrowth;
+        $baselineRoic = $ctx->baselineRoic;
+        $baselineMargin = $ctx->baselineMargin;
 
         // CAPM & MACRO TRANSMISSION MECHANISM
 
@@ -177,7 +179,9 @@ class MarketEngine
             $liveCostOfEquity,
             $currentVolatility,
             $netDebtPerShare,
-            $secularGrowth
+            $secularGrowth,
+            $baselineRoic,
+            $baselineMargin
         );
 
         $perceivedFairValue = $fundamentalState['perceived_fair_value'];
@@ -283,14 +287,23 @@ class MarketEngine
         float $liveCostOfEquity = 0.10,
         float $currentVolatility = 0.20,
         float $netDebtPerShare = 0.0,
-        float $secularGrowth = 0.02
+        float $secularGrowth = 0.02,
+        float $baselineRoic = 0.10,
+        float $baselineMargin = 0.20
     ): array {
 
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
         $hurdleRate = $strategy->isFinancial() ? $liveCostOfEquity : $liveWacc;
 
-        // Structural ROIC is simply the TTM ROIC.
-        $structuralRoic = $roicTtm;
+        // Structural ROIC is determined by the business model strategy, allowing sectors like Insurance
+        // to smooth out extreme catastrophic volatility and price based on through-the-cycle baseline capacity.
+        $structuralRoic = $strategy->calculateStructuralRoic(
+            $roicTtm,
+            $baselineRoic,
+            $revenuePerShare,
+            $bookValuePerShare,
+            $baselineMargin
+        );
 
         // MACROECONOMIC STRESS INDEX (MSI)
         $recessionStress = max(0.0, -$outputGap);

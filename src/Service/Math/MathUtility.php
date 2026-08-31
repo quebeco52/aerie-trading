@@ -509,8 +509,11 @@ class MathUtility
 
         // Prevent Division by Zero. The denominator must be at least 50 bps (0.005)
         $denominator = max(0.005, $effectiveDiscountRate - $effectiveGrowthRate);
+        $multiplier = 1.0 / $denominator;
+        
+        $clampedMultiplier = min(FinancialConstants::MAX_DCF_MULTIPLIER, $multiplier);
 
-        return $annualDividend / $denominator;
+        return $annualDividend * $clampedMultiplier;
     }
 
     /**

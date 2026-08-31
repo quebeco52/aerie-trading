@@ -615,6 +615,19 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
             : $baseConsensus;
     }
 
+    public function calculateStructuralRoic(float $roicTtm, float $baselineRoic, float $revenuePerShare, float $bookValuePerShare, float $baselineMargin): float
+    {
+        // DuPont Decomposition anchored by Kenney Rule capacity (Premium-to-Surplus ratio = 1.50)
+        $actualTurnover = $bookValuePerShare > 0.0 ? ($revenuePerShare / $bookValuePerShare) : self::KENNEY_CAPACITY_RATIO;
+        $effectiveTurnover = min(self::KENNEY_CAPACITY_RATIO, max(0.5, $actualTurnover));
+
+        $structuralRoe = $effectiveTurnover * $baselineMargin;
+
+        // Blend through-the-cycle structural capacity with actual TTM ROE
+        $blendedRoe = ($structuralRoe * 0.70) + ($roicTtm * 0.30);
+        return max(self::MIN_STRUCTURAL_ROE_FLOOR, $blendedRoe);
+    }
+
     public function processPassiveLiabilityGrowth(Stock $stock, MacroStateDTO $macroState, array &$state, MathUtility $mathUtility): void
     {
         $currentLiabilities = $state['customerDeposits'];

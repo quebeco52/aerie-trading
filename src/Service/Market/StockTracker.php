@@ -173,7 +173,9 @@ class StockTracker
                 liveCostOfEquity: $health->costOfEquity ?? 0.10,
                 netDebtPerShare: $netDebtPerShare,
                 recentPriceTrend: 0.0,
-                secularGrowth: $secularGrowth
+                secularGrowth: $secularGrowth,
+                baselineRoic: (float) ($stock->getBaselineRoic() ?? 0.10),
+                baselineMargin: (float) ($stock->getOperatingMargin() ?? 0.20)
             );
 
             // Calculate new price (GBM + SVJJ)

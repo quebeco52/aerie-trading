@@ -235,6 +235,34 @@ class InsuranceBusinessModelTest extends TestCase
         // Combined ratio with depressed revenue should exceed combined ratio with expanded revenue due to expense ratio dynamics
         $this->assertGreaterThan($resultPos->clampedMargin, $resultNeg->clampedMargin);
     }
+
+    public function testCalculateStructuralRoicWithCatastropheCollapse(): void
+    {
+        $model = new InsuranceBusinessModel();
+
+        $revenuePerShare = 150.0;
+        $bookValuePerShare = 100.0; // Actual turnover = 1.50 (Kenney capacity)
+        $baselineMargin = 0.12; // 12% sustainable operating margin (float yield + benign underwriting)
+        $baselineRoic = 0.10;
+
+        // 1. Normal profitable regime (TTM ROE = 15%)
+        // Structural ROE = 1.50 * 0.12 = 0.18
+        // Blended ROE = (0.18 * 0.70) + (0.15 * 0.30) = 0.126 + 0.045 = 0.171
+        $normalStructuralRoic = $model->calculateStructuralRoic(0.15, $baselineRoic, $revenuePerShare, $bookValuePerShare, $baselineMargin);
+        $this->assertEqualsWithDelta(0.171, $normalStructuralRoic, 0.001);
+
+        // 2. Severe catastrophe collapse (TTM ROE = -50% due to major disaster)
+        // Structural capacity ROE = 1.50 * 0.12 = 0.18
+        // Blended ROE = (0.18 * 0.70) + (-0.50 * 0.30) = 0.126 - 0.150 = -0.024 -> clamped to MIN_STRUCTURAL_ROE_FLOOR (0.03)
+        $catastropheStructuralRoic = $model->calculateStructuralRoic(-0.50, $baselineRoic, $revenuePerShare, $bookValuePerShare, $baselineMargin);
+        $this->assertEqualsWithDelta(InsuranceBusinessModel::MIN_STRUCTURAL_ROE_FLOOR, $catastropheStructuralRoic, 0.001);
+        $this->assertGreaterThan(0.0, $catastropheStructuralRoic);
+
+        // 3. Moderate catastrophe shock (TTM ROE = -10%)
+        // Blended ROE = (0.18 * 0.70) + (-0.10 * 0.30) = 0.126 - 0.030 = 0.096
+        $moderateCatastropheRoic = $model->calculateStructuralRoic(-0.10, $baselineRoic, $revenuePerShare, $bookValuePerShare, $baselineMargin);
+        $this->assertEqualsWithDelta(0.096, $moderateCatastropheRoic, 0.001);
+    }
 }
 
 

@@ -132,7 +132,9 @@ class StockController extends AbstractController
                     businessModel: $businessModel,
                     liveCostOfEquity: $health->costOfEquity ?? 0.10,
                     netDebtPerShare: $netDebt / $shares,
-                    secularGrowth: $secularGrowth
+                    secularGrowth: $secularGrowth,
+                    baselineRoic: (float) ($asset->getBaselineRoic() ?? 0.10),
+                    baselineMargin: (float) ($asset->getOperatingMargin() ?? 0.20)
                 );
 
                 $pricingResult = $marketEngine->calculateNextPrice($pricingCtx);

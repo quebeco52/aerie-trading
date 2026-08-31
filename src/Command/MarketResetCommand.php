@@ -188,7 +188,9 @@ class MarketResetCommand extends Command
                 baselineIndustryPE: \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['pe'] ?? 20.0,
                 revenuePerShare: $shares > 0 ? $revenue / $shares : 0.0,
                 businessModel: $businessModel,
-                liveCostOfEquity: $debtHealth->costOfEquity ?? 0.10
+                liveCostOfEquity: $debtHealth->costOfEquity ?? 0.10,
+                baselineRoic: $impliedPricingRoic,
+                baselineMargin: (float) ($stockData['operating_margin'] ?? 0.20)
             );
 
             $marketCalc = $this->marketEngine->calculateNextPrice($pricingCtx);
