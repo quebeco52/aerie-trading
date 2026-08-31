@@ -81,6 +81,10 @@ class TradeControllerTest extends WebTestCase
             $this->markTestSkipped('Test user not found in database.');
         }
 
+        $em = static::getContainer()->get(\Doctrine\ORM\EntityManagerInterface::class);
+        $testUser->setCashBalance('1000000.00');
+        $em->flush();
+
         $client->loginUser($testUser);
         $crawler = $client->request('GET', '/stock/WING');
         $csrfToken = $crawler->filter('form[action="/trade/execute"] input[name="_token"]')->attr('value');

@@ -549,6 +549,47 @@ class MathUtilityTest extends TestCase
         );
         $this->assertGreaterThan($baseIntensity, $stressedIntensity, 'Stressed conditions must expand working capital intensity.');
     }
+
+    public function testCalculateDynamicWorkingCapitalIntensityCompressesNegativeFloatUnderStress(): void
+    {
+        $negativeFloat = -0.05; // -5% NWC / Revenue float (e.g. Consumer Staples / Fast Food)
+
+        // Normal neutral baseline conditions
+        $neutralIntensity = $this->mathUtility->calculateDynamicWorkingCapitalIntensity(
+            baselineIntensity: $negativeFloat,
+            creditSpread: 0.02,
+            capacityUtilization: 1.0,
+            interbankLiquiditySpread: 0.0015
+        );
+        $this->assertEqualsWithDelta($negativeFloat, $neutralIntensity, 0.0001, 'Under neutral conditions, negative float should be preserved.');
+
+        // Distressed recession conditions: Credit spread +300bps, Capacity utilization 70%, Interbank spread 100bps
+        $stressedIntensity = $this->mathUtility->calculateDynamicWorkingCapitalIntensity(
+            baselineIntensity: $negativeFloat,
+            creditSpread: 0.05,
+            capacityUtilization: 0.70,
+            interbankLiquiditySpread: 0.0100
+        );
+        // Under stress, negative float shrinks toward zero (becomes less negative, i.e., -0.05 -> -0.045)
+        $this->assertGreaterThan($negativeFloat, $stressedIntensity, 'Stressed conditions must compress negative float toward zero.');
+        $this->assertLessThan(0.0, $stressedIntensity, 'Float remains negative during stress.');
+    }
+
+    public function testCalculateDynamicWorkingCapitalIntensityTightensDuringBoom(): void
+    {
+        $baseIntensity = 0.15;
+
+        // Roaring boom: tight credit spreads (-50bps), high interbank liquidity (-50bps), 100% capacity utilization
+        $boomIntensity = $this->mathUtility->calculateDynamicWorkingCapitalIntensity(
+            baselineIntensity: $baseIntensity,
+            creditSpread: 0.015,
+            capacityUtilization: 1.0,
+            interbankLiquiditySpread: 0.0010
+        );
+
+        $this->assertLessThan($baseIntensity, $boomIntensity, 'Boom conditions should tighten working capital intensity below baseline.');
+    }
 }
+
 
 

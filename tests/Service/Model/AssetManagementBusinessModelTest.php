@@ -77,6 +77,104 @@ class AssetManagementBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(290.0, $metrics['invested_capital'], 0.01);
     }
 
+    public function testModelTraitsAndCoverageProfile(): void
+    {
+        $model = new AssetManagementBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('SHRK');
+
+        $this->assertEquals(0.12, $model->getReversionSpeed());
+        $this->assertEquals(0.012, $model->getMoatSpread());
+        $this->assertEquals(0.035, $model->getSecularGrowthRate($stock));
+
+        $surpriseWeights = $model->getSurpriseBlendWeights();
+        $this->assertEquals(0.75, $surpriseWeights['eps_weight']);
+        $this->assertEquals(0.25, $surpriseWeights['revenue_weight']);
+
+        $coverage = $model->getCoverageProfile($stock);
+        $this->assertEquals(AssetManagementBusinessModel::BASE_COVERAGE_VISIBILITY, $coverage->baseVisibility);
+        $this->assertEquals(AssetManagementBusinessModel::BASE_COVERAGE_ERROR, $coverage->errorStdDev);
+        $this->assertEquals(AssetManagementBusinessModel::BASE_COVERAGE_MIN_VISIBILITY, $coverage->minVisibility);
+    }
+
+    public function testMacroPhysicsNullifiesGenericDemandShift(): void
+    {
+        $model = new AssetManagementBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('SHRK');
+        $stock->setBeta('1.2');
+
+        $macro = new \App\DTO\MacroStateDTO(outputGapEma: 0.05);
+        $physics = $model->getMacroPhysics($stock, $macro);
+
+        $this->assertEquals(0.0, $physics['macro_demand_shift'], 'Asset management must nullify generic demand shift to avoid double-counting AUM beta.');
+    }
+
+    public function testPerformanceFeeSurgeAndCompensationPoolFlex(): void
+    {
+        $model = new AssetManagementBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('SHRK');
+        $stock->setBeta('1.0');
+
+        $macro = new \App\DTO\MacroStateDTO(outputGapEma: 0.0);
+
+        // Alpha Z = 2.50 (above 1.50 threshold), BaseFee Z = 0.0
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, 2.50);
+
+        $result = $model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 20_000_000.0,
+            baselineVol: 0.10,
+            macroState: $macro,
+            mathUtility: $mathMock
+        );
+
+        // Alpha fee bonus = (2.50 - 1.50) * 0.08 = +0.08
+        // Perf revenue = 20M * (1 + 0.08) = 21.6M
+        // Base revenue = 80M
+        // Total revenue = 101.6M
+        $this->assertGreaterThan(100_000_000.0, $result->actualRevenue);
+        $this->assertGreaterThan(20_000_000.0, $result->streamRevenue['alpha']);
+
+        // Compensation pool flex: $1.6M excess * 0.40 = $640k bonus pool expense
+        // Raw variable margin increases from baseline to fund bonus pool
+        $this->assertGreaterThan(0.30, $result->clampedMargin, 'Incentive fee crystallization must expand variable compensation bonus pools.');
+    }
+
+    public function testInstitutionalRedemptionOutflowAttrition(): void
+    {
+        $model = new AssetManagementBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('SHRK');
+        $stock->setBeta('1.0');
+
+        $macro = new \App\DTO\MacroStateDTO(outputGapEma: 0.0);
+
+        // Alpha Z = -2.50 (severe redemptions below -1.50), BaseFee Z = 0.0
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, -2.50);
+
+        $result = $model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 20_000_000.0,
+            baselineVol: 0.0, // Zero baseline vol to isolate deterministic attrition
+            macroState: $macro,
+            mathUtility: $mathMock
+        );
+
+        // Redemption excess = |-2.50 - (-1.50)| = 1.0
+        // Base attrition = 1.0 * 0.04 = 0.04
+        // Base revenue = 80M * (1 - 0.04) = 76.8M
+        $this->assertEqualsWithDelta(76_800_000.0, $result->streamRevenue['base_fee'], 1.0);
+        $this->assertLessThan(80_000_000.0, $result->streamRevenue['base_fee'], 'Institutional redemptions must erode base AUM management fee revenue.');
+    }
+
     public function testSupportsUnderleveragedDebtExpansion(): void
     {
         $assetManagerModel = new AssetManagementBusinessModel();

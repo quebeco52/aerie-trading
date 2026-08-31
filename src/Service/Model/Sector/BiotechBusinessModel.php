@@ -7,6 +7,7 @@ namespace App\Service\Model\Sector;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
+use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -25,13 +26,38 @@ use App\Service\Macro\MacroEngine;
  */
 class BiotechBusinessModel extends StandardCorporateBusinessModel
 {
-        public function getReversionSpeed(): float { return 0.15; }
-    public function getMoatSpread(): float { return 0.015; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.125; }
+    // --- Analyst Visibility & Error ---
+    /** Base coverage visibility for routine biotech pipeline drug progress. */
+    public const BASE_COVERAGE_VISIBILITY = 0.20;
+    /** Standard forecasting error on pipeline trial progress and royalty milestones. */
+    public const BASE_COVERAGE_ERROR = 0.05;
+    /** Minimum visibility floor for analyst consensus models. */
+    public const BASE_COVERAGE_MIN_VISIBILITY = 0.10;
+    /** Public consensus visibility during binary FDA regulatory announcements and Phase III readouts. */
+    public const EVENT_BASE_VISIBILITY = 0.85;
+    /** Minimum visibility floor during major clinical trial announcements. */
+    public const EVENT_MIN_VISIBILITY = 0.70;
+
+    public function getReversionSpeed(): float
+    {
+        return 0.15;
+    }
+
+    public function getMoatSpread(): float
+    {
+        return 0.015;
+    }
+
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.125;
+    }
+
     public function getSecularGrowthRate(Stock $stock): float
     {
         return 0.04;
     }
+
     public function getSurpriseBlendWeights(): array
     {
         return ['eps_weight' => 0.20, 'revenue_weight' => 0.80];
@@ -42,18 +68,14 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public const ESTABLISHED_DRUG_WEIGHT = 0.70;
     /** Baseline fraction of revenue derived from high-risk clinical trial pipeline and new indications. */
     public const PIPELINE_DRUG_WEIGHT    = 0.30;
-
-    // --- Inelastic Healthcare Demand & Macro Physics ---
-    /** Macroeconomic demand shift sensitivity to output gap for essential medical treatments. */
-    public const MACRO_DEMAND_SCALAR       = 0.25;
-    /** Minimum beta floor applied when calculating inflation pricing power. */
-    public const MIN_PRICING_BETA_FLOOR    = 0.20;
-    /** Multiplier scaling stock beta to determine pricing power responsiveness to inflation. */
-    public const PRICING_BETA_SCALAR       = 0.50;
+    /** Volatility multiplier for recurring commercial prescription therapeutic volumes. */
+    public const COMMERCIAL_VARIANCE_SCALAR = 0.15;
+    /** Volatility multiplier for lumpy pre-commercial clinical milestone and licensing revenue. */
+    public const PIPELINE_VARIANCE_SCALAR = 0.45;
+    /** Backward compatibility alias for general revenue variance. */
+    public const REVENUE_VARIANCE_SCALAR = 0.25;
 
     // --- Clinical Trial & Patent Cliff Physics ---
-    /** Volatility multiplier for top-line revenue shocks reflecting ongoing clinical trial readouts. */
-    public const REVENUE_VARIANCE_SCALAR   = 0.25;
     /** Positive z-score threshold required to trigger landmark FDA approval blockbuster lore. */
     public const TRIAL_APPROVAL_Z_SCORE    = 2.20;
     /** Top-line revenue multiplier applied when a blockbuster specialty drug pipeline is approved. */
@@ -140,8 +162,8 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $pipelineZ    = $streams->generateZ('pipeline_licensing_milestones', 0.10); // Clinical trial milestone readouts
         $trialZ       = $streams->generateZ('trial', 0.05);
 
-        $establishedRevenue = max(0.0, $expectedRevenue * $establishedWeight * (1.0 + ($establishedZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
-        $pipelineRevenue    = max(0.0, $expectedRevenue * $pipelineWeight    * (1.0 + ($pipelineZ    * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
+        $establishedRevenue = max(0.0, $expectedRevenue * $establishedWeight * (1.0 + ($establishedZ * ($baselineVol * self::COMMERCIAL_VARIANCE_SCALAR))));
+        $pipelineRevenue    = max(0.0, $expectedRevenue * $pipelineWeight    * (1.0 + ($pipelineZ    * ($baselineVol * self::PIPELINE_VARIANCE_SCALAR))));
 
         // Patent Cliff vs. Blockbuster R&D Super-Cycle
         // Applies directly to the high-risk pipeline drug stream ($pipelineWeight).
@@ -171,7 +193,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $patentModifier);
 
         $primaryShockZ = $streams->resolveDominantShockZ([$trialZ, $establishedZ]);
-        $establishedShock = $establishedZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
+        $establishedShock = $establishedZ * ($baselineVol * self::COMMERCIAL_VARIANCE_SCALAR);
         $pipelineBase = max(1.0, $expectedRevenue * $pipelineWeight);
         $pipelineShock = ($pipelineRevenue - $pipelineBase) / $pipelineBase;
         $observableShockZ = ($establishedShock * $establishedWeight) + ($pipelineShock * $pipelineWeight);
@@ -188,16 +210,16 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function getCoverageProfile(\App\Entity\Stock $stock): \App\DTO\SectorCoverageProfile
+    public function getCoverageProfile(Stock $stock): SectorCoverageProfile
     {
         // Dual-mode: FDA/trial announcements are binary public events (85% visible, 70% floor).
         // Routine operational variance is low-visibility (~20%, 10% floor).
-        return new \App\DTO\SectorCoverageProfile(
-            baseVisibility: 0.20,
-            errorStdDev: 0.05,
-            minVisibility: 0.10,
-            eventBaseVisibility: 0.85,
-            eventMinVisibility: 0.70,
+        return new SectorCoverageProfile(
+            baseVisibility: self::BASE_COVERAGE_VISIBILITY,
+            errorStdDev: self::BASE_COVERAGE_ERROR,
+            minVisibility: self::BASE_COVERAGE_MIN_VISIBILITY,
+            eventBaseVisibility: self::EVENT_BASE_VISIBILITY,
+            eventMinVisibility: self::EVENT_MIN_VISIBILITY,
         );
     }
 
@@ -251,7 +273,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     {
         if ($fcfPerShare !== null && $fcfPerShare > 0.0) {
             $multiplier = $mathUtility->calculateDcfMultiplier($liveWacc, self::DCF_TERMINAL_GROWTH_RATE);
-            $annualFcf = $fcfPerShare * 4.0;
+            $annualFcf = $fcfPerShare;
             $dcfFairValue = min(max(0.01, $annualFcf * $multiplier), $peFairValue * self::MAX_DCF_TO_PE_CAP_MULT);
             return ($peFairValue + $dcfFairValue) / 2.0;
         }

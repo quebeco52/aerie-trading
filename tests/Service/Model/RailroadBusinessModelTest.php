@@ -85,4 +85,22 @@ class RailroadBusinessModelTest extends TestCase
         $this->assertGreaterThan($baseResult->streamRevenue['intermodal_freight'], $surgeResult->streamRevenue['intermodal_freight']);
         $this->assertGreaterThan($baseResult->streamRevenue['bulk_commodities'], $surgeResult->streamRevenue['bulk_commodities']);
     }
+
+    public function testTrackAgingAndPsrModernization(): void
+    {
+        // Underinvestment (R = 0.5) -> Track slow orders & rail line decay
+        $stock = new Stock();
+        $stock->setOperatingMargin('0.35');
+        $this->model->applyAssetDepreciationDecay($stock, 0.5, 0.25);
+        $decayed = (float) $stock->getOperatingMargin();
+        $this->assertLessThan(0.35, $decayed);
+        $this->assertGreaterThanOrEqual(RailroadBusinessModel::MIN_OPERATING_MARGIN_FLOOR, $decayed);
+
+        // Modernization (R = 1.5) -> Precision Scheduled Railroading efficiency
+        $stock->setOperatingMargin('0.35');
+        $this->model->applyAssetDepreciationDecay($stock, 1.5, 0.25);
+        $expanded = (float) $stock->getOperatingMargin();
+        $this->assertGreaterThan(0.35, $expanded);
+        $this->assertLessThanOrEqual(RailroadBusinessModel::MAX_OPERATING_MARGIN_CEILING, $expanded);
+    }
 }

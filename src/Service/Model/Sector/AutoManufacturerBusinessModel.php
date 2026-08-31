@@ -8,6 +8,7 @@ use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
 use App\DTO\MacroStateDTO;
+use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\DTO\StreamContext;
 use App\Entity\Stock;
@@ -38,6 +39,20 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
 
     /** Base coverage forecasting error given consumer financing and luxury shipment lumpiness. */
     public const BASE_COVERAGE_ERROR = 0.07;
+
+    /** Minimum visibility floor for analyst consensus models. */
+    public const BASE_COVERAGE_MIN_VISIBILITY = 0.20;
+
+    public function getCoverageProfile(Stock $stock): SectorCoverageProfile
+    {
+        return new SectorCoverageProfile(
+            baseVisibility: self::BASE_COVERAGE_VISIBILITY,
+            errorStdDev: self::BASE_COVERAGE_ERROR,
+            minVisibility: self::BASE_COVERAGE_MIN_VISIBILITY,
+            eventBaseVisibility: 0.80,
+            eventMinVisibility: 0.40
+        );
+    }
 
     // --- Tri-Stream Automotive Architecture ---
     /** Baseline fraction of revenue derived from mass-market consumer vehicle manufacturing. */
@@ -149,8 +164,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         // FIX: Tamed the sentiment multiplier from 1.50 to 0.40.
         // A -40 point drop in sentiment for a 1.75 beta stock now results in a realistic -28% demand drop.
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
-        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
-        $physics['macro_demand_shift'] += ($sentimentShift * $beta * 0.40) - ($fxShift * 0.15);
+        $physics['macro_demand_shift'] += ($sentimentShift * $beta * 0.40);
 
         return $physics;
     }
@@ -291,11 +305,13 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
 
         // Observable shock blending
         $strikeShock = ($salesMultiplier - 1.0) * $salesWeight;
+        $recallShock = -$recallPenalty * $salesWeight;
 
         $observableShockZ = ($salesShock * $salesWeight * 0.60) +
             ($apexShock * $apexWeight * 0.40) +
             ($softwareShock * $softwareWeight * 0.20) +
-            ($strikeShock * 0.80);
+            ($strikeShock * 0.80) +
+            ($recallShock * 0.70);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

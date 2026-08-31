@@ -1155,14 +1155,27 @@ class MathUtility
         float $capacityUtilization,
         float $interbankLiquiditySpread
     ): float {
-        $dsoShiftDays = max(0.0, $creditSpread - MacroEngine::BASE_CREDIT_SPREAD) * FinancialConstants::CCC_DSO_CREDIT_SPREAD_SENSITIVITY;
-        $dioShiftDays = max(0.0, 1.0 - $capacityUtilization) * FinancialConstants::CCC_DIO_CAPACITY_SENSITIVITY;
-        $dpoShiftDays = max(0.0, $interbankLiquiditySpread - MacroEngine::INTERBANK_BASELINE_SPREAD) * FinancialConstants::CCC_DPO_LIQUIDITY_SENSITIVITY;
+        // Dynamic shifts in Days Sales Outstanding (DSO), Days Inventory Outstanding (DIO), and Days Payable Outstanding (DPO)
+        $dsoShiftDays = ($creditSpread - MacroEngine::BASE_CREDIT_SPREAD) * FinancialConstants::CCC_DSO_CREDIT_SPREAD_SENSITIVITY;
+        $dioShiftDays = (1.0 - $capacityUtilization) * FinancialConstants::CCC_DIO_CAPACITY_SENSITIVITY;
+        // Under interbank liquidity stress, vendors demand faster payment (DPO contracts)
+        $dpoShiftDays = -($interbankLiquiditySpread - MacroEngine::INTERBANK_BASELINE_SPREAD) * FinancialConstants::CCC_DPO_LIQUIDITY_SENSITIVITY;
 
-        $totalCccExpansionDays = $dsoShiftDays + $dioShiftDays + $dpoShiftDays;
-        $workingCapitalStrainMultiplier = 1.0 + ($totalCccExpansionDays / 365.0);
+        // Total CCC expansion / contraction days translated to annual intensity units (Days / 365)
+        // Standard formula: CCC = DSO + DIO - DPO
+        // Therefore: Delta CCC = Delta DSO + Delta DIO - Delta DPO
+        $totalCccShiftDays = $dsoShiftDays + $dioShiftDays - $dpoShiftDays;
+        $intensityShift = $totalCccShiftDays / 365.0;
 
-        return max(0.01, min(1.0, $baselineIntensity * $workingCapitalStrainMultiplier));
+        $dynamicIntensity = $baselineIntensity + $intensityShift;
+
+        if ($baselineIntensity < 0.0) {
+            // Negative working capital (float): Under CCC expansion / liquidity stress, vendors tighten terms,
+            // compressing the negative float toward zero (clamped between MIN_NEGATIVE_NWC_INTENSITY and MAX_NEGATIVE_NWC_INTENSITY).
+            return min(FinancialConstants::MAX_NEGATIVE_NWC_INTENSITY, max(FinancialConstants::MIN_NEGATIVE_NWC_INTENSITY, $dynamicIntensity));
+        }
+
+        return max(FinancialConstants::MIN_POSITIVE_NWC_INTENSITY, min(FinancialConstants::MAX_POSITIVE_NWC_INTENSITY, $dynamicIntensity));
     }
 }
 

@@ -93,4 +93,38 @@ class SteelManufacturingBusinessModelTest extends TestCase
         $this->assertGreaterThan($baseResult->clampedMargin, $costSpikeResult->clampedMargin);
         $this->assertLessThan($baseResult->ebit, $costSpikeResult->ebit);
     }
+
+    public function testBlastFurnaceAgingAndEafModernization(): void
+    {
+        // Underinvestment (R = 0.5) -> Blast furnace thermal wear
+        $stock = new Stock();
+        $stock->setOperatingMargin('0.20');
+        $this->model->applyAssetDepreciationDecay($stock, 0.5, 0.25);
+        $decayed = (float) $stock->getOperatingMargin();
+        $this->assertLessThan(0.20, $decayed);
+        $this->assertGreaterThanOrEqual(SteelManufacturingBusinessModel::MIN_OPERATING_MARGIN_FLOOR, $decayed);
+
+        // Modernization (R = 1.5) -> Electric arc furnace efficiency
+        $stock->setOperatingMargin('0.20');
+        $this->model->applyAssetDepreciationDecay($stock, 1.5, 0.25);
+        $expanded = (float) $stock->getOperatingMargin();
+        $this->assertGreaterThan(0.20, $expanded);
+        $this->assertLessThanOrEqual(SteelManufacturingBusinessModel::MAX_OPERATING_MARGIN_CEILING, $expanded);
+    }
+
+    public function testCyclicalSteelBookValueAnchoring(): void
+    {
+        $earningsValue = 10.0;
+        $pbFairValue = 40.0; // Blast furnace physical replacement value
+
+        // 1. Trough regime (negative normalized EPS) -> 70% book value weight
+        $troughValue = $this->model->calculateFairValue($earningsValue, $pbFairValue, -0.50);
+        // (10 * 0.30) + (40 * 0.70) = 3 + 28 = 31.0
+        $this->assertEqualsWithDelta(31.0, $troughValue, 0.01);
+
+        // 2. Expansion regime (positive normalized EPS) -> 40% book value weight
+        $boomValue = $this->model->calculateFairValue($earningsValue, $pbFairValue, 1.50);
+        // (10 * 0.60) + (40 * 0.40) = 6 + 16 = 22.0
+        $this->assertEqualsWithDelta(22.0, $boomValue, 0.01);
+    }
 }

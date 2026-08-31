@@ -164,7 +164,9 @@ class EarningsEngine
         $secularDrift = $secularGrowthRate * $ctx->dt;
 
         $ctx->capacityUtilization = max(self::MIN_CAPACITY_UTILIZATION, 1.0 + $secularDrift + $macroDemandShift + $idiosyncraticDemandShock + $jumpMagnitude);
-        $revenueGeneratingCapital = max(0.0, abs($ctx->investedCapital) - $stock->getTotalCipAmount());
+        $maxCipDeduction = abs($ctx->investedCapital) * FinancialConstants::MAX_CIP_CAPITAL_DEDUCTION_RATIO;
+        $effectiveCip = min($maxCipDeduction, $stock->getTotalCipAmount());
+        $revenueGeneratingCapital = max(abs($ctx->investedCapital) * (1.0 - FinancialConstants::MAX_CIP_CAPITAL_DEDUCTION_RATIO), abs($ctx->investedCapital) - $effectiveCip);
         $ctx->structuralRevenue = max(1.0, $revenueGeneratingCapital * $assetTurnover * $pricingPowerMultiplier);
         $ctx->expectedRevenue = $ctx->structuralRevenue * $ctx->capacityUtilization;
 
@@ -247,7 +249,7 @@ class EarningsEngine
     {
         $stock = $ctx->stock;
 
-        $ctx->previousQuarterlyRevenue = (float) $stock->getPreviousRevenue();
+        $ctx->previousQuarterlyRevenue = (float) $stock->getPreviousRevenue() / 4.0;
         $stock->setTotalRevenue((string) ($ctx->actualRevenue * 4.0));
 
         $industry = $stock->getIndustry() ?: 'General';
@@ -258,7 +260,10 @@ class EarningsEngine
         // Depreciation scales directly with actual asset utilization. Extreme utilization naturally accelerates depreciation.
         $productionDepreciationRate = $baseDepreciationRate * $ctx->capacityUtilization;
 
-        $depreciableBase = max(0.0, $ctx->strategy->getPhysicalCapital($stock) - $stock->getTotalCipAmount());
+        $physicalCapital = $ctx->strategy->getPhysicalCapital($stock);
+        $maxPhysicalCipDeduction = max(0.0, $physicalCapital) * FinancialConstants::MAX_CIP_CAPITAL_DEDUCTION_RATIO;
+        $effectivePhysicalCip = min($maxPhysicalCipDeduction, $stock->getTotalCipAmount());
+        $depreciableBase = max(max(0.0, $physicalCapital) * (1.0 - FinancialConstants::MAX_CIP_CAPITAL_DEDUCTION_RATIO), $physicalCapital - $effectivePhysicalCip);
         $annualDepreciation = $depreciableBase * $productionDepreciationRate;
         $ctx->quarterlyDepreciation = $annualDepreciation / 4.0;
 
@@ -401,7 +406,13 @@ class EarningsEngine
                 capacityUtilization: $ctx->capacityUtilization,
                 interbankLiquiditySpread: $ctx->macroState->interbankLiquiditySpreadEma
             );
-            $deltaNwc = $dynamicWorkingCapitalIntensity * ($ctx->actualRevenue - $ctx->previousQuarterlyRevenue);
+            $prevRevenue = $ctx->previousQuarterlyRevenue > 0.0 ? $ctx->previousQuarterlyRevenue : $ctx->actualRevenue;
+            $previousAnnualizedRevenue = $prevRevenue / max(0.001, $ctx->dt);
+            $currentAnnualizedRevenue = $ctx->actualRevenue / max(0.001, $ctx->dt);
+
+            $previousNwc = $dynamicWorkingCapitalIntensity * $previousAnnualizedRevenue;
+            $currentNwc = $dynamicWorkingCapitalIntensity * $currentAnnualizedRevenue;
+            $deltaNwc = $currentNwc - $previousNwc;
 
             $fcff = $ctx->actualQuarterlyNetIncome + $ctx->quarterlyDepreciation - $deltaNwc - $actualCapEx;
 
@@ -411,11 +422,11 @@ class EarningsEngine
             ];
         }
 
-        $annualFcfPerShare = $fcfData['fcf_per_share'] * 4.0;
-        $actualAnnualCapEx = $fcfData['capex'] * 4.0;
+        $annualFcfPerShare = $fcfData['fcf_per_share'] / max(0.001, $ctx->dt);
+        $actualAnnualCapEx = $fcfData['capex'] / max(0.001, $ctx->dt);
 
         $reinvestmentRatio = $ctx->quarterlyDepreciation > 0 ? ($fcfData['capex'] / $ctx->quarterlyDepreciation) : 1.0;
-        $ctx->strategy->applyAssetDepreciationDecay($stock, $reinvestmentRatio, 0.25);
+        $ctx->strategy->applyAssetDepreciationDecay($stock, $reinvestmentRatio, $ctx->dt);
 
         $currentPrice = (float) $stock->getPrice();
         $ctx->allocation = $this->capitalAllocationEngine->allocateCapital(

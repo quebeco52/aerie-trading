@@ -242,11 +242,25 @@ class FinancialConstants
     public const CCC_DIO_CAPACITY_SENSITIVITY = 20.0;
     /** Sensitivity of Days Payable Outstanding (DPO) contraction to interbank funding liquidity stress. */
     public const CCC_DPO_LIQUIDITY_SENSITIVITY = 500.0;
+    /** Minimum working capital intensity floor for positive working capital models. */
+    public const MIN_POSITIVE_NWC_INTENSITY = 0.01;
+    /** Maximum working capital intensity ceiling for positive working capital models. */
+    public const MAX_POSITIVE_NWC_INTENSITY = 1.00;
+    /** Minimum working capital intensity floor for negative working capital float models. */
+    public const MIN_NEGATIVE_NWC_INTENSITY = -0.50;
+    /** Maximum working capital intensity ceiling for negative working capital float models. */
+    public const MAX_NEGATIVE_NWC_INTENSITY = -0.001;
 
     // --- Accruals Quality & Sloan Anomaly (Sloan 1996) ---
     /** Valuation multiple discount scalar penalizing stocks with high non-cash accounting accruals. */
     public const ACCRUALS_ANOMALY_PE_PENALTY_SCALE = 8.0;
     /** Analyst EPS growth forecast mean-reversion discount for low-quality non-cash earnings. */
     public const ACCRUALS_DECAY_EPS_GROWTH_SENSITIVITY = 0.50;
+
+    // --- CapEx & Construction in Progress (CIP) ---
+    /** Maximum fraction of physical/invested capital that can be deferred as unplaced Construction in Progress (25%). */
+    public const MAX_CIP_CAPITAL_DEDUCTION_RATIO = 0.25;
+    /** Maximum CIP balance relative to invested capital allowed before new growth CapEx deployment is paused (25%). */
+    public const MAX_CIP_EXPANSION_THRESHOLD_RATIO = 0.25;
 }
 

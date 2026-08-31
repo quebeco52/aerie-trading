@@ -15,8 +15,7 @@ trait StandardValuationTrait
             $terminalGrowth = defined('static::DCF_TERMINAL_GROWTH_RATE') ? static::DCF_TERMINAL_GROWTH_RATE : FinancialConstants::DEFAULT_PERPETUAL_GROWTH_RATE;
             $maxDcfCap = defined('static::MAX_DCF_TO_PE_CAP_MULT') ? static::MAX_DCF_TO_PE_CAP_MULT : 1.50;
             $multiplier = $mathUtility->calculateDcfMultiplier($liveWacc, $terminalGrowth);
-            // The FCF passed from EarningsEngine is Quarterly. We MUST annualize it!
-            $annualFcf = $fcfPerShare * 4.0;
+            $annualFcf = $fcfPerShare;
             // Cap the DCF so a temporary lack of CapEx doesn't cause an infinite perpetual valuation.
             $dcfFairValue = min(max(0.01, $annualFcf * $multiplier), $peFairValue * $maxDcfCap);
             return ($peFairValue + $dcfFairValue) / 2.0;

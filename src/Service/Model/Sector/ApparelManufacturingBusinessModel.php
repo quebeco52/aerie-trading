@@ -6,6 +6,7 @@ namespace App\Service\Model\Sector;
 
 use App\Data\ModelParam;
 use App\DTO\MacroStateDTO;
+use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\DTO\StreamContext;
 use App\Entity\Stock;
@@ -75,6 +76,8 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const MARKDOWN_SQUEEZE_SCALAR = 0.40;
 
     // --- Macro & Trade-Down Physics ---
+    /** Baseline pricing power across apparel manufacturer brand portfolio. */
+    public const PRICING_POWER_INDEX = 0.50;
     /** Demand boost scalar capturing consumer trade-down from premium/designer apparel into affordable mass-market basics during recessions. */
     public const TRADE_DOWN_SCALAR = 0.60;
     /** Sensitivity of branded apparel demand to macroeconomic consumer sentiment swings. */
@@ -122,13 +125,40 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     /** Operating margin mean reversion speed for apparel manufacturing economics. */
     public const APPAREL_REVERSION_SPEED = 0.15;
 
-        public function getReversionSpeed(): float { return 0.15; }
-    public function getMoatSpread(): float { return 0.008; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.25; }
+    public function getReversionSpeed(): float
+    {
+        return 0.15;
+    }
+
+    public function getMoatSpread(): float
+    {
+        return 0.008;
+    }
+
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.25;
+    }
+
+    public function getCapexCyclicality(): float
+    {
+        return 1.0;
+    }
 
     public function getSecularGrowthRate(Stock $stock): float
     {
         return 0.025;
+    }
+
+    public function getCoverageProfile(Stock $stock): SectorCoverageProfile
+    {
+        return new SectorCoverageProfile(
+            baseVisibility: self::BASE_COVERAGE_VISIBILITY,
+            errorStdDev: self::BASE_COVERAGE_ERROR,
+            minVisibility: self::BASE_COVERAGE_MIN_VISIBILITY,
+            eventBaseVisibility: 0.70,
+            eventMinVisibility: 0.40
+        );
     }
 
     // --- Working Capital Intensities ---
@@ -166,12 +196,12 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         $params = $this->resolveModelParameters($stock, [
-            ModelParam::PricingPowerIndex->value => 0.50,
+            ModelParam::PricingPowerIndex->value => self::PRICING_POWER_INDEX,
         ]);
         $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
 
         $outputGap = $macroState->outputGapEma;
-        $sentimentShift = ($macroState->consumerSentimentIndexEma - 100.0) / 100.0;
+        $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
         $inflation = $macroState->tipsBreakevenEma;
         $beta = (float) $stock->getBeta();
 
@@ -195,7 +225,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
             ModelParam::DtcRetailWeight->value              => self::DTC_RETAIL_WEIGHT,
             ModelParam::WholesaleChannelWeight->value       => self::WHOLESALE_CHANNEL_WEIGHT,
             ModelParam::ContractTextileSupplyWeight->value  => self::CONTRACT_TEXTILE_SUPPLY_WEIGHT,
-            ModelParam::PricingPowerIndex->value            => 0.50,
+            ModelParam::PricingPowerIndex->value            => self::PRICING_POWER_INDEX,
         ]);
 
         $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
@@ -282,9 +312,10 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $energyShift = $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
 
         // 3. COGS Forward Hedging: 6-9 months raw inventory & futures dampen immediate spot commodity/freight passthrough
-        $spotInputDrag = max(0.0, ($agriShift * self::AGRI_COMMODITY_SCALAR) + ($freightShift * self::FREIGHT_RATE_SCALAR) + ($energyShift * self::ENERGY_INPUT_SCALAR));
+        // Input cost relief on agricultural commodity deflation expands gross margins.
+        $spotInputDrag = ($agriShift * self::AGRI_COMMODITY_SCALAR) + ($freightShift * self::FREIGHT_RATE_SCALAR) + ($energyShift * self::ENERGY_INPUT_SCALAR);
         $hedgedInputDrag = $spotInputDrag * self::FORWARD_HEDGE_RATIO;
-        $baseInflationPenalty = $hedgedInputDrag > 0 ? $hedgedInputDrag * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0;
+        $baseInflationPenalty = $hedgedInputDrag * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR;
         $totalInflationPenalty = $baseInflationPenalty * $inflationMultiplier;
 
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
@@ -292,10 +323,10 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
 
         // Primary and observable shocks
         $primaryShockZ = $streams->resolveDominantShockZ([$dtcZ, $wholesaleZ, $contractZ], $eventZ);
-        $observableShockZ = ($dtcZ * $dtcWeight * self::DTC_RETAIL_VARIANCE) +
+        $observableShockZ = (($dtcZ * $dtcWeight * self::DTC_RETAIL_VARIANCE) +
             ($wholesaleZ * $wholesaleWeight * self::WHOLESALE_CHANNEL_VARIANCE) +
-            ($contractZ * $contractWeight * self::CONTRACT_TEXTILE_VARIANCE);
-        $observableShockZ *= $baselineVol;
+            ($contractZ * $contractWeight * self::CONTRACT_TEXTILE_VARIANCE)) * $baselineVol;
+        $observableShockZ -= ($bullwhipPenalty * $wholesaleWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

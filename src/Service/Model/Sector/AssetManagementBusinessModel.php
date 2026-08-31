@@ -7,6 +7,7 @@ namespace App\Service\Model\Sector;
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
+use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -24,8 +25,49 @@ use App\Service\Math\FinancialConstants;
  */
 class AssetManagementBusinessModel extends BaseFinancialBusinessModel
 {
-        public function getWholesaleLeverageLimit(): float { return 0.5; }
-    public function getMoatSpread(): float { return 0.01; }
+    // --- Analyst Visibility & Error ---
+    /** Base coverage visibility for asset managers with quarterly public AUM disclosures. */
+    public const BASE_COVERAGE_VISIBILITY = 0.45;
+    /** Standard forecasting error on asset management performance fees and net inflows. */
+    public const BASE_COVERAGE_ERROR = 0.08;
+    /** Minimum visibility floor for analyst consensus models. */
+    public const BASE_COVERAGE_MIN_VISIBILITY = 0.20;
+
+    public function getWholesaleLeverageLimit(): float
+    {
+        return 0.5;
+    }
+
+    public function getReversionSpeed(): float
+    {
+        return 0.12;
+    }
+
+    public function getMoatSpread(): float
+    {
+        return 0.012;
+    }
+
+    public function getSecularGrowthRate(Stock $stock): float
+    {
+        return 0.035;
+    }
+
+    public function getSurpriseBlendWeights(): array
+    {
+        return ['eps_weight' => 0.75, 'revenue_weight' => 0.25];
+    }
+
+    public function getCoverageProfile(Stock $stock): SectorCoverageProfile
+    {
+        return new SectorCoverageProfile(
+            baseVisibility: self::BASE_COVERAGE_VISIBILITY,
+            errorStdDev: self::BASE_COVERAGE_ERROR,
+            minVisibility: self::BASE_COVERAGE_MIN_VISIBILITY,
+            eventBaseVisibility: 0.80,
+            eventMinVisibility: 0.40
+        );
+    }
 
     // --- ROE & Target Architecture ---
     /** Weight given to historical baseline ROE when blending with TTM ROE. */
@@ -68,8 +110,12 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     public const PERFORMANCE_FEE_SCALAR    = 0.08;
     /** Severe negative z-score threshold indicating net institutional redemptions and fee compression. */
     public const REDEMPTION_SHOCK_Z_FLOOR  = -1.50;
-    /** Revenue penalty scalar applied per z-unit below the redemption shock threshold. */
+    /** Revenue penalty scalar applied per z-unit below the redemption shock threshold on performance carry. */
     public const REDEMPTION_SHOCK_SCALAR   = 0.06;
+    /** Fraction of institutional redemptions that erodes baseline AUM management fee revenue. */
+    public const BASE_REDEMPTION_ATTRITION_SCALAR = 0.04;
+    /** Fraction of excess performance fee / carry revenue paid out into portfolio manager incentive bonus pools. */
+    public const PERF_BONUS_POOL_PAYOUT    = 0.40;
 
     // --- Structural Efficiency Floor ---
     /** Minimum cost-to-revenue ratio: high operating leverage ensures variable margin does not collapse below structural platform overhead. */
@@ -88,9 +134,6 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     public const LORE_PERFORMANCE_SURGE_Z  = 1.80;
     /** Z-score threshold triggering institutional fund outflows event lore. */
     public const LORE_FUND_OUTFLOWS_Z      = -1.80;
-
-    // --- Analyst Visibility & Error ---
-    // Moved to getCoverageProfile() — see MarketConsensusEngine.
 
     // --- AUM Market Beta & Performance Fee Physics ---
     /** Annualization multiplier applied to quarterly net income to derive annualized ROE. */
@@ -230,11 +273,9 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        $outputGap = $macroState->outputGapEma;
-        $beta = (float) $stock->getBeta();
-
+        // Nullify generic demand shift to handle AUM market beta discretely per stream in calculateSectorPhysics.
         return [
-            'macro_demand_shift' => $outputGap * $beta * self::MACRO_DEMAND_SCALAR,
+            'macro_demand_shift' => 0.0,
             'pricing_power_multiplier' => 1.0,
         ];
     }
@@ -282,19 +323,22 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         $outputGap = $macroState->outputGapEma;
         $aumMarketBeta = $outputGap * abs((float) $stock->getBeta()) * $aumBetaScalar;
 
-        // 2. Asymmetric Performance Fees & Activist Execution (Incentive Fee Stream):
+        // 2. Asymmetric Performance Fees & Institutional Redemptions (Incentive Fee Stream):
         // Strong alpha quarters crystallize outsized performance fees / carried interest.
+        // Severe negative alpha triggers institutional client redemptions eroding baseline AUM.
+        $alphaFeeBonus = 0.0;
+        $baseRedemptionAttrition = 0.0;
         if ($alphaZ > $perfZFloor) {
             $alphaFeeBonus = ($alphaZ - $perfZFloor) * $perfScalar;
         } elseif ($alphaZ < self::REDEMPTION_SHOCK_Z_FLOOR) {
-            $alphaFeeBonus = -abs($alphaZ - self::REDEMPTION_SHOCK_Z_FLOOR) * self::REDEMPTION_SHOCK_SCALAR;
-        } else {
-            $alphaFeeBonus = 0.0;
+            $redemptionExcess = abs($alphaZ - self::REDEMPTION_SHOCK_Z_FLOOR);
+            $alphaFeeBonus = -$redemptionExcess * self::REDEMPTION_SHOCK_SCALAR;
+            $baseRedemptionAttrition = $redemptionExcess * self::BASE_REDEMPTION_ATTRITION_SCALAR;
         }
 
         // Blended dual-stream revenue
         $baseRevenue = max(0.0, $expectedRevenue * $baseWeight
-            * (1.0 + ($baseFeeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $aumMarketBeta));
+            * (1.0 + ($baseFeeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $aumMarketBeta - $baseRedemptionAttrition));
         $perfRevenue = max(0.0, $expectedRevenue * $perfWeight
             * (1.0 + ($alphaZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $alphaFeeBonus));
         
@@ -306,9 +350,15 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // 3. Structural Efficiency Floor: Total Operating Costs (Fixed + Variable) / Revenue >= MIN_EFFICIENCY_RATIO.
+        // 3. Compensation Pool Flex & Structural Efficiency Floor:
+        // Performance fee crystallization expands incentive bonus pool expenses.
+        $perfRevenueExcess = max(0.0, $perfRevenue - ($expectedRevenue * $perfWeight));
+        $bonusPoolExpense = $perfRevenueExcess * self::PERF_BONUS_POOL_PAYOUT;
+        $effectiveVariableCosts = ($actualRevenue * $realizedVariableMargin) + $bonusPoolExpense;
+        $effectiveVariableMargin = $actualRevenue > 0 ? ($effectiveVariableCosts / $actualRevenue) : $realizedVariableMargin;
+
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
-        $clampedMargin = $this->clampMargin($realizedVariableMargin, $minVariableMargin);
+        $clampedMargin = $this->clampMargin($effectiveVariableMargin, $minVariableMargin);
 
         // 4. Dynamic Event Type:
         $eventType = null;
@@ -363,36 +413,6 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         return $excessCash * $effectiveYield;
     }
 
-    /**
-     * Financial companies are evaluated strictly on Return on Equity (ROE), not ROIC.
-     */
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float
-    {
-        $kappa = $this->getReversionSpeed();
-        $moatSpread = $this->getMoatSpread();
-
-        $equity = (float) $stock->getTotalEquity();
-        $truePostTaxReturn = $equity > 0 ? ($actualTotalNetIncome / $equity) * self::ROE_ANNUALIZATION_MULT : 0.0;
-
-        $stock->setCurrentRoe((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $truePostTaxReturn)));
-
-        $oldTtm = (float) $stock->getRoeTtm();
-        $newTtm = $oldTtm === 0.0 ? $truePostTaxReturn : ($truePostTaxReturn * self::ROE_TTM_EMA_WEIGHT) + ($oldTtm * self::ROE_TTM_HIST_WEIGHT);
-        // Scale kappa so the blended target in getTargetMetrics moves at exactly $kappa
-        $scaledKappa = $kappa / self::TTM_ROE_WEIGHT;
-
-        $saturationPenalty = 0.0;
-        if ($macroState !== null) {
-            $saturationPenalty = \App\Service\Math\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, $equity), $macroState);
-        }
-
-        $effectiveMoat = max(0.0, $moatSpread - $saturationPenalty);
-        $newTtm += MathUtility::getInstance()->calculateReversionPull($newTtm, $costOfEquity, $scaledKappa, $effectiveMoat);
-        $stock->setRoeTtm((string) max(self::MIN_ROE_CLAMP, min(self::MAX_ROE_CLAMP, $newTtm)));
-
-        return $truePostTaxReturn;
-    }
-
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
     {
         return max($operatingBase * self::TARGET_OPERATING_BUFFER, $wholesaleDebt * self::TARGET_DEBT_BUFFER);
@@ -411,14 +431,6 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
             'is_hoarder'      => $excessCash > ($operatingBase * self::HOARDER_THRESHOLD),
             'is_mega_hoarder' => $excessCash > ($operatingBase * self::MEGA_HOARDER_THRESHOLD),
         ];
-    }
-
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array
-    {
-        $floatingRatio = (float) $stock->getFloatingDebtRatio();
-        $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingInterestRate);
-        $wholesaleRate = $debt > 0 ? ($interestExpense / $debt) : $currentMarketFixedRate;
-        return ['interest_expense' => $interestExpense, 'wholesale_rate' => $wholesaleRate];
     }
 
     public function calculateCashYield(\App\DTO\MacroStateDTO $macroState): float

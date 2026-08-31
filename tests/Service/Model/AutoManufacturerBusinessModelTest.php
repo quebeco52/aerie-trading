@@ -164,19 +164,66 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $this->assertLessThan(0.0, $result->observableShockZ);
     }
 
-    public function testExchangeRateExportDragOnMacroPhysics(): void
+    public function testCoverageProfile(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('GEN_AUTO');
+
+        $coverage = $this->model->getCoverageProfile($stock);
+        $this->assertEquals(AutoManufacturerBusinessModel::BASE_COVERAGE_VISIBILITY, $coverage->baseVisibility);
+        $this->assertEquals(AutoManufacturerBusinessModel::BASE_COVERAGE_ERROR, $coverage->errorStdDev);
+        $this->assertEquals(AutoManufacturerBusinessModel::BASE_COVERAGE_MIN_VISIBILITY, $coverage->minVisibility);
+    }
+
+    public function testProductRecallEventAndObservableShock(): void
+    {
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(-2.30); // Triggers recall event between -2.20 and -2.50
+
+        $stock = new Stock();
+        $stock->setTicker('GEN_AUTO');
+        $stock->setBeta('1.0');
+        $stock->setEarningsMomentumZ([
+            'event' => -2.30,
+        ]);
+
+        $macro = new MacroStateDTO();
+
+        $result = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.20,
+            fixedCosts: 25_000_000.0,
+            baselineVol: 0.0,
+            macroState: $macro,
+            mathUtility: $mathMock
+        );
+
+        $this->assertSame(\App\Service\Event\ShockEvent::PRODUCT_RECALL, $result->eventType);
+        // Recall penalty = 0.05 on 60% sales stream -> observable shock = -(0.05 * 0.60) * 0.70 = -0.021
+        $this->assertEqualsWithDelta(-0.021, $result->observableShockZ, 0.001);
+    }
+
+    public function testExchangeRateExportDragOnSalesRevenue(): void
     {
         $stock = new Stock();
         $stock->setTicker('GEN_AUTO');
         $stock->setBeta('1.2');
 
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
         $baseMacro = new MacroStateDTO(exchangeRateIndexEma: 100.0);
         $strongDollarMacro = new MacroStateDTO(exchangeRateIndexEma: 120.0);
 
-        $basePhysics = $this->model->getMacroPhysics($stock, $baseMacro);
-        $strongDollarPhysics = $this->model->getMacroPhysics($stock, $strongDollarMacro);
+        $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 20_000_000.0, 0.0, $baseMacro, $mathMock);
+        $strongDollarResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 20_000_000.0, 0.0, $strongDollarMacro, $mathMock);
 
-        $this->assertLessThan($basePhysics['macro_demand_shift'], $strongDollarPhysics['macro_demand_shift']);
+        $this->assertLessThan(
+            $baseResult->streamRevenue['mass_market_sales'],
+            $strongDollarResult->streamRevenue['mass_market_sales'],
+            'Strong domestic currency must reduce mass-market auto export competitiveness.'
+        );
     }
 
     public function testFreightRateSpikeIncreasesAutomotiveLogisticsCost(): void

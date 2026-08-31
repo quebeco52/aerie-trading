@@ -97,6 +97,10 @@ class EarningsEngineTest extends TestCase
             return $actualRaw;
         });
         $this->mathUtilityMock->method('calculateJumpDiffusion')->willReturn(['exponent' => 0.0]);
+        $realMath = new MathUtility();
+        $this->mathUtilityMock->method('calculateDynamicWorkingCapitalIntensity')->willReturnCallback(
+            fn($base, $cs, $cu, $ib) => $realMath->calculateDynamicWorkingCapitalIntensity($base, $cs, $cu, $ib)
+        );
 
         $this->corporateMetricsMock = $this->createStub(CorporateMetrics::class);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(10000000.0);
@@ -126,7 +130,7 @@ class EarningsEngineTest extends TestCase
         return abs(crc32($ticker)) % max(1, $ticksPerSeason);
     }
 
-    public function testCalculateReturnsNullWhenNoEventOccurs()
+    public function testCalculateReturnsNullWhenNoEventOccurs(): void
     {
         $stock = new Stock();
         $stock->setTicker('TEST');
@@ -139,7 +143,7 @@ class EarningsEngineTest extends TestCase
         $this->assertNull($result, 'Engine should return null when the earnings probability check fails.');
     }
 
-    public function testStandardPositiveEarningsReport()
+    public function testStandardPositiveEarningsReport(): void
     {
         $stock = new Stock();
         $stock->setTicker('TEST');
@@ -150,13 +154,10 @@ class EarningsEngineTest extends TestCase
         $stock->setBeta('1.0');
         $stock->setTotalEquity('150000000');
         $stock->setWholesaleDebt('0');
-        if (method_exists($stock, 'setCustomerDeposits')) $stock->setCustomerDeposits('0');
+        $stock->setCustomerDeposits('0');
         $stock->setCorporateTreasury('10000000');
         $stock->setBaselineRoic('0.10');
         $stock->setOperatingMargin('0.20');
-        if (method_exists($stock, 'setInvestedCapital')) {
-            $stock->setInvestedCapital('140000000');
-        }
 
         // Force a mildly positive business quarter
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.5);
@@ -174,7 +175,7 @@ class EarningsEngineTest extends TestCase
         $this->assertGreaterThan(10.00, (float) $stock->getEarningsPerShare());
     }
 
-    public function testExtremeEarningsTriggersVolatilityShock()
+    public function testExtremeEarningsTriggersVolatilityShock(): void
     {
         $stock = new Stock();
         $stock->setTicker('SHOCK');
@@ -185,13 +186,10 @@ class EarningsEngineTest extends TestCase
         $stock->setBeta('1.0');
         $stock->setTotalEquity('150000000');
         $stock->setWholesaleDebt('0');
-        if (method_exists($stock, 'setCustomerDeposits')) $stock->setCustomerDeposits('0');
+        $stock->setCustomerDeposits('0');
         $stock->setCorporateTreasury('10000000');
         $stock->setBaselineRoic('0.10');
         $stock->setOperatingMargin('0.20');
-        if (method_exists($stock, 'setInvestedCapital')) {
-            $stock->setInvestedCapital('140000000');
-        }
 
         // Force an extreme blowout quarter (Z > 1.5 triggers the shock)
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(2.0);
@@ -203,7 +201,7 @@ class EarningsEngineTest extends TestCase
         $this->assertGreaterThan(0.20, (float) $stock->getCurrentVolatility(), 'Volatility should have spiked due to the extreme surprise.');
     }
 
-    public function testNegativeEpsBenefitsFromRecoveryBoost()
+    public function testNegativeEpsBenefitsFromRecoveryBoost(): void
     {
         $stock = new Stock();
         $stock->setTicker('RECOV');
@@ -214,13 +212,10 @@ class EarningsEngineTest extends TestCase
         $stock->setBeta('1.0');
         $stock->setTotalEquity('150000000');
         $stock->setWholesaleDebt('0');
-        if (method_exists($stock, 'setCustomerDeposits')) $stock->setCustomerDeposits('0');
+        $stock->setCustomerDeposits('0');
         $stock->setCorporateTreasury('10000000');
         $stock->setBaselineRoic('0.10');
         $stock->setOperatingMargin('0.20');
-        if (method_exists($stock, 'setInvestedCapital')) {
-            $stock->setInvestedCapital('140000000');
-        }
 
         // Neutral quarter (0.0) isolates the recovery boost math
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
@@ -232,7 +227,7 @@ class EarningsEngineTest extends TestCase
         $this->assertNotEquals(-10.00, (float) $stock->getEarningsPerShare(), 'A company with negative EPS should still see EPS changes.');
     }
 
-    public function testEbitAndEbitdaAccountingBridge()
+    public function testEbitAndEbitdaAccountingBridge(): void
     {
         $stock = new Stock();
         $stock->setTicker('DEPR');
@@ -281,7 +276,7 @@ class EarningsEngineTest extends TestCase
         );
     }
 
-    public function testVolatilityShockTriggersOnCompositeEarningsMiss()
+    public function testVolatilityShockTriggersOnCompositeEarningsMiss(): void
     {
         $stock = new Stock();
         $stock->setTicker('MISS');
@@ -304,5 +299,124 @@ class EarningsEngineTest extends TestCase
         $this->engine->calculate($stock, $macroState, $reportingTick, 252);
 
         $this->assertGreaterThan(0.20, (float) $stock->getCurrentVolatility(), 'Volatility should have spiked due to the composite earnings miss.');
+    }
+
+    public function testWorkingCapitalStrainDrainsFreeCashFlowEvenOnFlatRevenue(): void
+    {
+        $stockCalm = new Stock();
+        $stockCalm->setTicker('NWCF');
+        $stockCalm->setEarningsPerShare('2.00');
+        $stockCalm->setSharesOutstanding('1000000');
+        $stockCalm->setVolatility('0.10');
+        $stockCalm->setCurrentVolatility('0.10');
+        $stockCalm->setBeta('1.0');
+        $stockCalm->setTotalEquity('100000000');
+        $stockCalm->setWholesaleDebt('0');
+        $stockCalm->setCorporateTreasury('10000000');
+        $stockCalm->setBaselineRoic('0.10');
+        $stockCalm->setOperatingMargin('0.20');
+
+        $stockStressed = clone $stockCalm;
+
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $calmMacro = new \App\DTO\MacroStateDTO(
+            macroCreditSpreadEma: 0.02,
+            interbankLiquiditySpreadEma: 0.0015
+        );
+        $stressedMacro = new \App\DTO\MacroStateDTO(
+            macroCreditSpreadEma: 0.06, // +400bps credit spread strain (DSO expansion)
+            interbankLiquiditySpreadEma: 0.0100 // +85bps interbank liquidity strain (DPO contraction)
+        );
+
+        $reportingTick = $this->getReportingTick('NWCF');
+
+        // Run Calm
+        $stockCalm->setPreviousRevenue('25000000');
+        $this->engine->calculate($stockCalm, $calmMacro, $reportingTick, 252);
+        $calmFcfPerShare = (float) $stockCalm->getFreeCashFlowPerShare();
+
+        // Run Stressed on identical initial state
+        $stockStressed->setPreviousRevenue('25000000');
+        $this->engine->calculate($stockStressed, $stressedMacro, $reportingTick, 252);
+        $stressedFcfPerShare = (float) $stockStressed->getFreeCashFlowPerShare();
+
+        // Under macro stress with identical revenue, dynamic intensity rises and drains FCF (stressed FCF < calm FCF)
+        $this->assertLessThan(
+            $calmFcfPerShare,
+            $stressedFcfPerShare,
+            'Credit spread stress expanding CCC days must drain Free Cash Flow even with flat revenue.'
+        );
+    }
+
+    public function testCipQueueDoesNotWipeoutRevenueGeneratingCapital(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('RIVE_TEST');
+        $stock->setIndustry('Specialty Industrial Machinery');
+        $stock->setEarningsPerShare('2.00');
+        $stock->setSharesOutstanding('1000000000');
+        $stock->setVolatility('0.26');
+        $stock->setCurrentVolatility('0.26');
+        $stock->setBeta('1.3');
+        $stock->setTotalEquity('48000000000');
+        $stock->setWholesaleDebt('28000000000');
+        $stock->setCorporateTreasury('5000000000');
+        $stock->setBaselineRoic('0.22');
+        $stock->setOperatingMargin('0.18');
+
+        // Simulate accumulated CIP balance that exceeds invested capital
+        $stock->setCipBalance('100000000000'); // $100B in CIP queue
+
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $macroState = new \App\DTO\MacroStateDTO();
+        $reportingTick = $this->getReportingTick('RIVE_TEST');
+
+        $this->engine->calculate($stock, $macroState, $reportingTick, 252);
+
+        $revenue = (float) $stock->getTotalRevenue();
+        // Annual revenue must remain substantial (at least 75% of baseline capacity) despite huge CIP queue
+        $this->assertGreaterThan(10_000_000_000.0, $revenue, 'Revenue-generating capital must not be wiped out by elevated CIP queue.');
+    }
+
+    public function testAnnualizedPreviousRevenueDoesNotCauseNwcImplosion(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('NWC_BUG');
+        $stock->setIndustry('Heavy Manufacturing');
+        $stock->setEarningsPerShare('2.00');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setVolatility('0.10');
+        $stock->setCurrentVolatility('0.10');
+        $stock->setBeta('1.0');
+        $stock->setTotalEquity('100000000');
+        $stock->setWholesaleDebt('0');
+        $stock->setCorporateTreasury('10000000');
+        $stock->setBaselineRoic('0.10');
+        $stock->setOperatingMargin('0.20');
+
+        // Simulate that the DB contains a previously *annualized* revenue of $100M
+        $stock->setPreviousRevenue('100000000');
+
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $macroState = new \App\DTO\MacroStateDTO();
+        $reportingTick = $this->getReportingTick('NWC_BUG');
+
+        $this->engine->calculate($stock, $macroState, $reportingTick, 252);
+
+        // Before the bug fix, $100M was treated as quarterly, generating an implied annualized previous revenue of $400M.
+        // If current revenue was flat at $100M annualized, this caused a $300M negative delta, massively inflating FCF.
+        // With the fix, the delta should be minimal, and FCF should be a reasonable portion of net income.
+        $fcfPerShare = (float) $stock->getFreeCashFlowPerShare();
+        $totalFcf = $fcfPerShare * (float) $stock->getSharesOutstanding();
+
+        // Under the bug, previous revenue was quadrupled to $400M, triggering an artificial $300M revenue drop
+        // that generated over $250M+ in annualized false NWC release.
+        // With the fix, annualized FCF remains within reasonable bounds (< $75M).
+        $this->assertLessThan(
+            75_000_000.0,
+            $totalFcf,
+            'Free Cash Flow should not be massively inflated by a false negative NWC delta caused by annualized previous revenue mismatch.'
+        );
     }
 }

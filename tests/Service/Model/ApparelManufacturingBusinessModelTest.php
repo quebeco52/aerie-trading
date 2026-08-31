@@ -40,6 +40,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $this->assertEquals(0.008, $this->model->getMoatSpread());
         $this->assertEquals(0.15, $this->model->getReversionSpeed());
         $this->assertEquals(0.25, $this->model->getCapExCompletionRate($stock));
+        $this->assertEquals(1.0, $this->model->getCapexCyclicality());
 
         $this->assertEqualsWithDelta(0.229, $this->model->getWorkingCapitalIntensity($stock), 0.01);
         $this->assertEquals(0.025, $this->model->getSecularGrowthRate($stock));
@@ -47,6 +48,11 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $surpriseWeights = $this->model->getSurpriseBlendWeights();
         $this->assertEquals(0.50, $surpriseWeights['eps_weight']);
         $this->assertEquals(0.50, $surpriseWeights['revenue_weight']);
+
+        $coverage = $this->model->getCoverageProfile($stock);
+        $this->assertEquals(ApparelManufacturingBusinessModel::BASE_COVERAGE_VISIBILITY, $coverage->baseVisibility);
+        $this->assertEquals(ApparelManufacturingBusinessModel::BASE_COVERAGE_ERROR, $coverage->errorStdDev);
+        $this->assertEquals(ApparelManufacturingBusinessModel::BASE_COVERAGE_MIN_VISIBILITY, $coverage->minVisibility);
     }
 
     public function testTriStreamRevenueBlendingWithNeutralShocks(): void
@@ -436,5 +442,79 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         // Total inflation penalty = 0.04125 * 1.0 * 0.50 * 0.80 = 0.0165
         $marginIncrease = $shockResult->clampedMargin - $neutralResult->clampedMargin;
         $this->assertEqualsWithDelta(0.0165, $marginIncrease, 0.0001, 'Forward hedging must dampen spot input inflation passthrough by forward hedge ratio.');
+    }
+
+    public function testAgriculturalCommodityDeflationMarginRelief(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('SHER');
+        $stock->setBeta('1.0');
+
+        $neutralMacro = new MacroStateDTO(
+            agriculturalCommodityIndexEma: 100.0,
+            freightRateIndexEma: 100.0,
+            energyPriceIndexEma: 100.0
+        );
+
+        $deflationMacro = new MacroStateDTO(
+            agriculturalCommodityIndexEma: 80.0, // -20% raw cotton bumper harvest
+            freightRateIndexEma: 100.0,
+            energyPriceIndexEma: 100.0
+        );
+
+        $mathUtility = new MathUtility();
+
+        $neutralResult = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.20,
+            fixedCosts: 20_000_000.0,
+            baselineVol: 0.0,
+            macroState: $neutralMacro,
+            mathUtility: $mathUtility
+        );
+
+        $deflationResult = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.20,
+            fixedCosts: 20_000_000.0,
+            baselineVol: 0.0,
+            macroState: $deflationMacro,
+            mathUtility: $mathUtility
+        );
+
+        // Falling cotton prices provide hedged gross margin relief
+        $this->assertLessThan(
+            $neutralResult->clampedMargin,
+            $deflationResult->clampedMargin,
+            'Deflation in raw agricultural commodities must provide variable margin relief.'
+        );
+    }
+
+    public function testObservableShockIncludesBullwhipDrag(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('SHER');
+        $stock->setBeta('1.0');
+        $stock->setEarningsMomentumZ(['wholesale_channel' => 0.0, 'dtc_retail' => 0.0, 'contract_textile_supply' => 0.0, 'event' => 0.0]);
+
+        $recessionMacro = new MacroStateDTO(outputGapEma: -0.10); // 10% contraction
+        $mathUtility = new MathUtility();
+
+        $result = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.20,
+            fixedCosts: 20_000_000.0,
+            baselineVol: 0.0,
+            macroState: $recessionMacro,
+            mathUtility: $mathUtility
+        );
+
+        // Bullwhip penalty for 10% contraction = (0.10)^2 * 2.0 = 0.02
+        // Wholesale weight = 0.40
+        // Observable shock must reflect -$0.02 * 0.40 = -0.008
+        $this->assertEqualsWithDelta(-0.008, $result->observableShockZ, 0.0001);
     }
 }

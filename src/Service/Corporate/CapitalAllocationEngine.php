@@ -355,7 +355,7 @@ class CapitalAllocationEngine
                 $stock->setSharesOutstanding($sharesStr);
                 $ctx->newShares = $newSharesVal;
 
-                $pctRetired = ($sharesRepurchased / ($ctx->sharesOutstanding + $sharesRepurchased)) * 100;
+                $pctRetired = ($sharesRepurchased / $ctx->sharesOutstanding) * 100;
                 $ctx->events[] = [
                     'description' => "Bought back " . number_format($sharesRepurchased) . " shares.",
                     'shock' => $pctRetired * 0.5

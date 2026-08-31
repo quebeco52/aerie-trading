@@ -10,6 +10,7 @@ use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
+use App\Service\Math\FinancialConstants;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 
@@ -217,5 +218,18 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
             );
             $stock->setOperatingMargin((string) $updatedMargin);
         }
+    }
+
+    public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
+    {
+        // Maritime shipping is deeply asset-heavy. During cyclical freight troughs (negative normalized EPS),
+        // valuation shifts heavily toward Tangible Net Asset Value (P/B book replacement value) rather than discounted trough earnings.
+        $bookWeight = $normalizedEps <= 0.0 ? 0.65 : 0.30;
+        $earningsWeight = 1.0 - $bookWeight;
+
+        $baseConsensus = ($earningsValue * $earningsWeight) + ($pbFairValue * $bookWeight);
+        return $dividendSupportValue > 0.0
+            ? ($baseConsensus * (1.0 - FinancialConstants::FAIR_VALUE_DDM_WEIGHT)) + ($dividendSupportValue * FinancialConstants::FAIR_VALUE_DDM_WEIGHT)
+            : $baseConsensus;
     }
 }

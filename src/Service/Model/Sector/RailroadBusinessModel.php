@@ -29,20 +29,10 @@ use App\Service\Event\ShockEvent;
 class RailroadBusinessModel extends StandardCorporateBusinessModel
 {
     // --- Analyst Visibility & Error ---
+    /** Base coverage visibility for Class 1 railroad analysts. */
     public const BASE_COVERAGE_VISIBILITY = 0.60;
+    /** Base coverage forecasting error given weather and harvest seasonality. */
     public const BASE_COVERAGE_ERROR = 0.08;
-
-        public function getWholesaleLeverageLimit(): float { return 2.5; }
-    public function getReversionSpeed(): float { return 0.15; }
-    public function getMoatSpread(): float { return 0.02; }
-    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.15; }
-    public function getCapExCompletionRate(Stock $stock): float { return 0.3; }
-
-    public function getSecularGrowthRate(Stock $stock): float { return 0.015; }
-    
-    public function getCapexCyclicality(): float { return 0.70; } // Heavy rail maintenance CapEx
-    
-    public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.60, 'revenue_weight' => 0.40]; }
 
     // --- Stream Weights ---
     /** Baseline fraction of revenue derived from cyclical intermodal container shipping. */
@@ -53,12 +43,38 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     public const INDUSTRIAL_CARLOAD_WEIGHT = 0.20;
 
     // --- Physics & Variances ---
+    /** Idiosyncratic revenue variance scalar for cyclical intermodal container shipping. */
     public const INTERMODAL_VARIANCE_SCALAR = 0.30;
+    /** Idiosyncratic revenue variance scalar for bulk agricultural and energy carloads. */
     public const BULK_VARIANCE_SCALAR       = 0.15;
+    /** Idiosyncratic revenue variance scalar for industrial and automotive carloads. */
     public const INDUSTRIAL_VARIANCE_SCALAR = 0.25;
 
     // --- Fuel Surcharge & Operating Ratio ---
+    /** Variable margin cost drag scalar from diesel fuel price spikes before fuel surcharges take effect. */
     public const FUEL_SURCHARGE_LAG_PENALTY = 0.06;
+
+    // --- Rolling Stock & Track Infrastructure Reinvestment Physics ---
+    /** Quarterly margin decay rate per unit of underinvestment below track and locomotive replacement CapEx. */
+    public const TRACK_AGING_DECAY_RATE = 0.015;
+    /** Quarterly margin gain scalar per unit of precision scheduled railroading (PSR) and automated yard overinvestment. */
+    public const PSR_EFFICIENCY_GAIN_RATE = 0.008;
+    /** Structural minimum operating margin floor under severe track slow orders and derailment risk. */
+    public const MIN_OPERATING_MARGIN_FLOOR = 0.15;
+    /** Structural maximum operating margin ceiling for optimized precision freight rail duopolies. */
+    public const MAX_OPERATING_MARGIN_CEILING = 0.45;
+
+    public function getWholesaleLeverageLimit(): float { return 2.5; }
+    public function getReversionSpeed(): float { return 0.15; }
+    public function getMoatSpread(): float { return 0.02; }
+    public function getWorkingCapitalIntensity(Stock $stock): float { return 0.15; }
+    public function getCapExCompletionRate(Stock $stock): float { return 0.3; }
+
+    public function getSecularGrowthRate(Stock $stock): float { return 0.015; }
+    
+    public function getCapexCyclicality(): float { return 0.70; } // Heavy rail maintenance CapEx
+    
+    public function getSurpriseBlendWeights(): array { return ['eps_weight' => 0.60, 'revenue_weight' => 0.40]; }
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
@@ -138,5 +154,26 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
         );
+    }
+
+    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    {
+        $timeScale = $dt / 0.25;
+        $currentMargin = (float) $stock->getOperatingMargin();
+
+        if ($reinvestmentRatio < 1.0) {
+            // Track slow orders & locomotive breakdown drag toward floor
+            $decayRate = self::TRACK_AGING_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
+            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
+            $stock->setOperatingMargin((string) $updatedMargin);
+        } elseif ($reinvestmentRatio > 1.0) {
+            // Precision Scheduled Railroading (PSR) efficiency expands margin ceiling
+            $modGain = self::PSR_EFFICIENCY_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
+            $updatedMargin = min(
+                self::MAX_OPERATING_MARGIN_CEILING,
+                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
+            );
+            $stock->setOperatingMargin((string) $updatedMargin);
+        }
     }
 }

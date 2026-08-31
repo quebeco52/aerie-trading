@@ -231,7 +231,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     {
         if ($fcfPerShare !== null && $fcfPerShare > 0.0) {
             $multiplier = $mathUtility->calculateDcfMultiplier($liveWacc, self::DCF_TERMINAL_GROWTH_RATE);
-            $annualFcf = $fcfPerShare * 4.0;
+            $annualFcf = $fcfPerShare;
             $dcfFairValue = min(max(0.01, $annualFcf * $multiplier), $peFairValue * self::MAX_DCF_TO_PE_CAP_MULT);
             return ($peFairValue + $dcfFairValue) / 2.0;
         }

@@ -67,7 +67,8 @@ class BiotechBusinessModelTest extends TestCase
 
         // Continuous pipeline shift = -0.015 * 1.5 * 0.30 = -0.00675
         // Realized variable margin = 0.30 - 0.00675 = 0.29325
-        $this->assertLessThan(1000.0 * 0.30, $result->actualVariableCosts);
+        $this->assertLessThan(0.30, $result->clampedMargin);
+        $this->assertEqualsWithDelta(0.29325, $result->clampedMargin, 0.0001);
         $this->assertNull($result->eventType);
     }
 
@@ -91,5 +92,57 @@ class BiotechBusinessModelTest extends TestCase
 
         $expected = max(50.0, 100.0 * BiotechBusinessModel::BIOTECH_RESEARCH_BURN_DISCOUNT);
         $this->assertEquals($expected, $fairValue);
+    }
+
+    public function testCoverageProfileAndModelTraits(): void
+    {
+        $model = new BiotechBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('BIO');
+
+        $this->assertEquals(0.15, $model->getReversionSpeed());
+        $this->assertEquals(0.015, $model->getMoatSpread());
+        $this->assertEquals(0.125, $model->getCapExCompletionRate($stock));
+        $this->assertEquals(0.04, $model->getSecularGrowthRate($stock));
+
+        $weights = $model->getSurpriseBlendWeights();
+        $this->assertEquals(0.20, $weights['eps_weight']);
+        $this->assertEquals(0.80, $weights['revenue_weight']);
+
+        $coverage = $model->getCoverageProfile($stock);
+        $this->assertEquals(BiotechBusinessModel::BASE_COVERAGE_VISIBILITY, $coverage->baseVisibility);
+        $this->assertEquals(BiotechBusinessModel::BASE_COVERAGE_ERROR, $coverage->errorStdDev);
+        $this->assertEquals(BiotechBusinessModel::BASE_COVERAGE_MIN_VISIBILITY, $coverage->minVisibility);
+        $this->assertEquals(BiotechBusinessModel::EVENT_BASE_VISIBILITY, $coverage->eventBaseVisibility);
+        $this->assertEquals(BiotechBusinessModel::EVENT_MIN_VISIBILITY, $coverage->eventMinVisibility);
+    }
+
+    public function testPartitionedStreamVariance(): void
+    {
+        $model = new BiotechBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('BIO');
+        $stock->setBeta('1.0');
+
+        $mathUtilityMock = $this->createMock(MathUtility::class);
+        $mathUtilityMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(1.0, 1.0, 0.0);
+
+        $macro = new \App\DTO\MacroStateDTO();
+        $result = $model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.20,
+            fixedCosts: 20_000_000.0,
+            baselineVol: 0.10,
+            macroState: $macro,
+            mathUtility: $mathUtilityMock
+        );
+
+        // Commercial shock = 1.0 * (0.10 * 0.15) = +0.015 (+1.5%)
+        // Pipeline shock = 1.0 * (0.10 * 0.45) = +0.045 (+4.5%)
+        // Established revenue = 70M * 1.015 = 71.05M
+        // Pipeline revenue = 30M * 1.045 = 31.35M
+        $this->assertEqualsWithDelta(71_050_000.0, $result->streamRevenue['commercial_therapeutics'], 1.0);
+        $this->assertEqualsWithDelta(31_350_000.0, $result->streamRevenue['pipeline_licensing_milestones'], 1.0);
     }
 }

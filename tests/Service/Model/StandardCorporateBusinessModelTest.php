@@ -89,4 +89,26 @@ class StandardCorporateBusinessModelTest extends TestCase
         $this->assertGreaterThan(0.0, $result->actualRevenue);
         $this->assertGreaterThanOrEqual(0.01, $result->clampedMargin);
     }
+
+    public function testCalculateEarningsValueWithPositiveFcfDoesNotDoubleAnnualize(): void
+    {
+        $revenueFloorValue = 50.0;
+        $peFairValue = 100.0;
+        $annualFcfPerShare = 4.0; // Already annualized $4.00/share FCF
+        $liveWacc = 0.08; // 8% WACC
+
+        $earningsValue = $this->model->calculateEarningsValue(
+            $revenueFloorValue,
+            $peFairValue,
+            $annualFcfPerShare,
+            $liveWacc,
+            $this->mathUtility
+        );
+
+        $multiplier = $this->mathUtility->calculateDcfMultiplier($liveWacc, StandardCorporateBusinessModel::DCF_TERMINAL_GROWTH_RATE);
+        $expectedDcf = min(max(0.01, $annualFcfPerShare * $multiplier), $peFairValue * StandardCorporateBusinessModel::MAX_DCF_TO_PE_CAP_MULT);
+        $expectedEarningsValue = ($peFairValue + $expectedDcf) / 2.0;
+
+        $this->assertEqualsWithDelta($expectedEarningsValue, $earningsValue, 0.0001);
+    }
 }

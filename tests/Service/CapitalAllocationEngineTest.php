@@ -325,4 +325,53 @@ class CapitalAllocationEngineTest extends TestCase
 
         $this->assertEquals(0.0, $result['dividend_paid'], 'Bank in CCB buffer zone (CET1 < 6.5%) must have its dividend halted to $0.00');
     }
+
+    public function testBuybackPercentageCalculatesFromOriginalSharesOutstanding(): void
+    {
+        $engine = new CapitalAllocationEngine(
+            $this->corporateLedgerServiceMock,
+            $this->corporateMetricsMock,
+            $this->debtEngineMock,
+            $this->mathUtilityMock,
+            $this->treasuryEngineMock
+        );
+
+        $stock = new Stock();
+        $stock->setTicker('BUYBACK_CORP');
+        $stock->setIndustry('Software - Infrastructure');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setPrice('10.00');
+        $stock->setTotalEquity('100000000');
+        $stock->setCorporateTreasury('50000000');
+        $stock->setTargetPayoutRatio('0.00');
+        $stock->setDividendSpeed('0.00');
+        $stock->setLastDividend('0.00');
+        $stock->setTotalRevenue('50000000.00');
+        $stock->setOperatingMargin('0.30');
+        $stock->setRoicTtm('0.15');
+        $stock->setWholesaleDebt('0.00');
+        $stock->setCustomerDeposits('0.00');
+
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21);
+
+        $result = $engine->allocateCapital($stock, 4.00, 2.00, 10.00, 1000000.0, $macroState);
+
+        $this->assertLessThan(1000000.0, $result['new_shares'], 'Shares should be repurchased');
+        $this->assertNotEmpty($result['events']);
+        // Check that shock matches (sharesRepurchased / originalShares) * 100 * 0.5
+        $sharesRepurchased = 1000000.0 - $result['new_shares'];
+        $expectedPctRetired = ($sharesRepurchased / 1000000.0) * 100.0;
+        $expectedShock = $expectedPctRetired * 0.5;
+
+        $buybackEvent = null;
+        foreach ($result['events'] as $event) {
+            if (str_contains($event['description'], 'Bought back')) {
+                $buybackEvent = $event;
+                break;
+            }
+        }
+
+        $this->assertNotNull($buybackEvent);
+        $this->assertEqualsWithDelta($expectedShock, $buybackEvent['shock'], 0.0001);
+    }
 }

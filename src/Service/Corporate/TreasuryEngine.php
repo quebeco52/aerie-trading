@@ -250,6 +250,12 @@ class TreasuryEngine
 
             $expansionSpend = min($expansionSpend, max($maxOrganicCapacity, $ctx->debtIssued));
 
+            $currentCip = $stock->getTotalCipAmount();
+            $maxCipAllowed = abs($liveInvestedCapital) * FinancialConstants::MAX_CIP_EXPANSION_THRESHOLD_RATIO;
+            if ($currentCip >= $maxCipAllowed && !$forcedExpansion) {
+                $expansionSpend = 0.0;
+            }
+
             if ($marginalReturn <= 0.0 && !$forcedExpansion) {
                 $expansionSpend = 0.0;
             }

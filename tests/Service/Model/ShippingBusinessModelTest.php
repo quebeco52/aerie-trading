@@ -102,4 +102,22 @@ class ShippingBusinessModelTest extends TestCase
 
         $this->assertLessThan($basePhysics['macro_demand_shift'], $strongDollarPhysics['macro_demand_shift']);
     }
+
+    public function testCyclicalTroughTangibleBookValueAnchoring(): void
+    {
+        $model = new ShippingBusinessModel();
+
+        $earningsValue = 10.0;
+        $pbFairValue = 50.0; // High tangible book value of owned vessel fleet
+
+        // 1. Cyclical trough (negative normalized EPS) -> heavy book weight (65%)
+        $troughFairValue = $model->calculateFairValue($earningsValue, $pbFairValue, -0.50);
+        // (10 * 0.35) + (50 * 0.65) = 3.5 + 32.5 = 36.0
+        $this->assertEqualsWithDelta(36.0, $troughFairValue, 0.01);
+
+        // 2. Expansion boom (positive normalized EPS) -> standard earnings weight (70%)
+        $boomFairValue = $model->calculateFairValue($earningsValue, $pbFairValue, 2.00);
+        // (10 * 0.70) + (50 * 0.30) = 7.0 + 15.0 = 22.0
+        $this->assertEqualsWithDelta(22.0, $boomFairValue, 0.01);
+    }
 }
