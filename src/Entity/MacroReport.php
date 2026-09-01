@@ -171,6 +171,45 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $nsCurvature2 = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $jobVacanciesRate = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $jobVacanciesRateEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $laborTightness = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $laborTightnessEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $wageGrowth = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $wageGrowthEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $naturalRate = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $naturalRateEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $termPremium10y = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $termPremium10yEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $riskNeutral10y = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $riskNeutral10yEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $balanceSheetIntensity = null;
+
     // --- Standard Getters & Setters ---
 
     public function getId(): ?int { return $this->id; }
@@ -332,4 +371,43 @@ class MacroReport
 
     public function getNsCurvature2(): ?string { return $this->nsCurvature2; }
     public function setNsCurvature2(?string $nsCurvature2): self { $this->nsCurvature2 = $nsCurvature2; return $this; }
+
+    public function getJobVacanciesRate(): ?string { return $this->jobVacanciesRate; }
+    public function setJobVacanciesRate(?string $jobVacanciesRate): self { $this->jobVacanciesRate = $jobVacanciesRate; return $this; }
+
+    public function getJobVacanciesRateEma(): ?string { return $this->jobVacanciesRateEma; }
+    public function setJobVacanciesRateEma(?string $jobVacanciesRateEma): self { $this->jobVacanciesRateEma = $jobVacanciesRateEma; return $this; }
+
+    public function getLaborTightness(): ?string { return $this->laborTightness; }
+    public function setLaborTightness(?string $laborTightness): self { $this->laborTightness = $laborTightness; return $this; }
+
+    public function getLaborTightnessEma(): ?string { return $this->laborTightnessEma; }
+    public function setLaborTightnessEma(?string $laborTightnessEma): self { $this->laborTightnessEma = $laborTightnessEma; return $this; }
+
+    public function getWageGrowth(): ?string { return $this->wageGrowth; }
+    public function setWageGrowth(?string $wageGrowth): self { $this->wageGrowth = $wageGrowth; return $this; }
+
+    public function getWageGrowthEma(): ?string { return $this->wageGrowthEma; }
+    public function setWageGrowthEma(?string $wageGrowthEma): self { $this->wageGrowthEma = $wageGrowthEma; return $this; }
+
+    public function getNaturalRate(): ?string { return $this->naturalRate; }
+    public function setNaturalRate(?string $naturalRate): self { $this->naturalRate = $naturalRate; return $this; }
+
+    public function getNaturalRateEma(): ?string { return $this->naturalRateEma; }
+    public function setNaturalRateEma(?string $naturalRateEma): self { $this->naturalRateEma = $naturalRateEma; return $this; }
+
+    public function getTermPremium10y(): ?string { return $this->termPremium10y; }
+    public function setTermPremium10y(?string $termPremium10y): self { $this->termPremium10y = $termPremium10y; return $this; }
+
+    public function getTermPremium10yEma(): ?string { return $this->termPremium10yEma; }
+    public function setTermPremium10yEma(?string $termPremium10yEma): self { $this->termPremium10yEma = $termPremium10yEma; return $this; }
+
+    public function getRiskNeutral10y(): ?string { return $this->riskNeutral10y; }
+    public function setRiskNeutral10y(?string $riskNeutral10y): self { $this->riskNeutral10y = $riskNeutral10y; return $this; }
+
+    public function getRiskNeutral10yEma(): ?string { return $this->riskNeutral10yEma; }
+    public function setRiskNeutral10yEma(?string $riskNeutral10yEma): self { $this->riskNeutral10yEma = $riskNeutral10yEma; return $this; }
+
+    public function getBalanceSheetIntensity(): ?string { return $this->balanceSheetIntensity; }
+    public function setBalanceSheetIntensity(?string $balanceSheetIntensity): self { $this->balanceSheetIntensity = $balanceSheetIntensity; return $this; }
 }

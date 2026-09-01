@@ -428,4 +428,46 @@ class DebtEngineTest extends TestCase
         $expectedBlended = (0.08 * 0.85) + ($marketRate * 0.15);
         $this->assertEqualsWithDelta($expectedBlended, $metrics->historicalFixedRate, 0.001);
     }
+
+    public function testBernankeGertlerGilchristFinancialAccelerator(): void
+    {
+        $realMath = new MathUtility();
+        $realMetrics = new CorporateMetrics();
+        $engine = new DebtEngine($realMath, $realMetrics, null, null);
+
+        $stock = new Stock();
+        $stock->setTicker('LEVER');
+        $stock->setIndustry('Industrials');
+        $stock->setPrice('50.00');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setTotalEquity('50000000');
+        $stock->setWholesaleDebt('100000000'); // 2.0x Debt/Equity (leveraged)
+        $stock->setCreditSpread('0.02');
+        $stock->setTotalRevenue('100000000');
+        $stock->setOperatingMargin('0.15');
+        $stock->setVolatility('0.20');
+
+        // 1. Normal economy (output gap = 0)
+        $neutralMacro = new MacroStateDTO(
+            outputGapEma: 0.0,
+            yield5yEma: 0.03,
+            macroCreditSpreadEma: 0.015
+        );
+        $neutralResult = $engine->calculateInterestExpense($stock, $neutralMacro, false);
+
+        // 2. Severe Recession (output gap = -4%)
+        $recessionMacro = new MacroStateDTO(
+            outputGapEma: -0.04,
+            yield5yEma: 0.03,
+            macroCreditSpreadEma: 0.015
+        );
+        $recessionResult = $engine->calculateInterestExpense($stock, $recessionMacro, false);
+
+        // BGG External Finance Premium expands during recession for leveraged balance sheets
+        $this->assertGreaterThan(
+            $neutralResult->dynamicSpread,
+            $recessionResult->dynamicSpread,
+            'Credit spreads on leveraged corporate debt must widen non-linearly during economic contractions via the BGG Financial Accelerator.'
+        );
+    }
 }

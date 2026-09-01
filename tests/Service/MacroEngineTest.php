@@ -1257,4 +1257,91 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(MacroEngine::CB_MAX_NORMAL_HIKE_VELOCITY, $annualPanicHike, 'Severe runaway inflation must trigger emergency panic rate hiking acceleration.');
         $this->assertLessThanOrEqual(MacroEngine::CB_MAX_PANIC_HIKE_VELOCITY + 0.0001, $annualPanicHike, 'Panic rate hiking must remain bounded by CB_MAX_PANIC_HIKE_VELOCITY.');
     }
+
+    public function testDynamicNaturalRateDriftsWithTfpGrowth(): void
+    {
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateNaturalRate');
+
+        $state = new \App\Service\Macro\MacroState();
+        $state->naturalRate = MacroEngine::BASE_NATURAL_RATE; // 1.5%
+
+        // 1. Accelerating TFP growth (3.5% vs baseline 1.5%) -> r* should drift upward
+        $acceleratingTfp = 0.035;
+        $dt = 1.0;
+        $reflectionMethod->invoke($this->engine, $state, $acceleratingTfp, $dt);
+
+        $this->assertGreaterThan(MacroEngine::BASE_NATURAL_RATE, $state->naturalRate, 'Natural real rate r* must drift upward when TFP productivity growth accelerates.');
+        $this->assertLessThanOrEqual(MacroEngine::MAX_NATURAL_RATE, $state->naturalRate, 'Natural real rate must respect statutory upper bound.');
+
+        // 2. Depressed TFP growth (0.0% secular stagnation) -> r* should drift downward
+        $stagnationState = new \App\Service\Macro\MacroState();
+        $stagnationState->naturalRate = MacroEngine::BASE_NATURAL_RATE;
+        $reflectionMethod->invoke($this->engine, $stagnationState, 0.00, $dt);
+
+        $this->assertLessThan(MacroEngine::BASE_NATURAL_RATE, $stagnationState->naturalRate, 'Natural real rate r* must drift downward during secular productivity stagnation.');
+        $this->assertGreaterThanOrEqual(MacroEngine::MIN_NATURAL_RATE, $stagnationState->naturalRate, 'Natural real rate must respect statutory floor.');
+    }
+
+    public function testQuantitativeTighteningActivatesDuringOverheating(): void
+    {
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateYieldCurveAndQE');
+
+        // Overheating expansion: output gap +2.5% (> 1.0%), inflation 3.5% (> 2.5%)
+        $overheatingState = new \App\Service\Macro\MacroState();
+        $overheatingState->outputGap = 0.025;
+        $overheatingState->inflation = 0.035;
+        $overheatingState->policyRate = 0.035;
+        $overheatingState->tipsBreakeven = 0.030;
+        $overheatingState->balanceSheetIntensity = 0.0;
+
+        $yieldData = $reflectionMethod->invoke($this->engine, $overheatingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 1.0);
+
+        // Balance sheet intensity should be negative (QT active)
+        $this->assertLessThan(0.0, $yieldData['new_balance_sheet_intensity'], 'Central bank balance sheet intensity must turn negative (QT) during economic overheating.');
+        $this->assertGreaterThan(0.0, $yieldData['new_qt_intensity'], 'QT intensity must be positive during overheating.');
+        $this->assertEquals(0.0, $yieldData['new_qe_intensity'], 'QE asset purchases must be inactive during overheating.');
+    }
+
+    public function testACMTermPremiumDecompositionIntegrity(): void
+    {
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateYieldCurveAndQE');
+
+        $state = new \App\Service\Macro\MacroState();
+        $state->outputGap = 0.01;
+        $state->inflation = 0.02;
+        $state->policyRate = 0.025;
+        $state->tipsBreakeven = 0.02;
+
+        $yieldData = $reflectionMethod->invoke($this->engine, $state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+
+        $yield10y = $yieldData['yield_10y'];
+        $riskNeutral10y = $yieldData['risk_neutral_10y'];
+        $termPremium10y = $yieldData['term_premium_10y'];
+
+        // Identity check: 10Y Yield == Risk Neutral Path + Term Premium
+        $this->assertEqualsWithDelta($yield10y, $riskNeutral10y + $termPremium10y, 0.0001, 'ACM decomposition identity must hold: y10 = RN10 + TP10.');
+    }
+
+    public function testBeveridgeCurveWagePhillipsTransmission(): void
+    {
+        $reflectionLabor = new \ReflectionMethod(MacroEngine::class, 'calculateLaborMarketAndWages');
+        $reflectionInflation = new \ReflectionMethod(MacroEngine::class, 'calculateInflation');
+
+        // Tight labor market scenario: unemployment 2.5% (< 4.0% NAIRU)
+        $tightState = new \App\Service\Macro\MacroState();
+        $tightState->unemploymentRate = 0.025;
+        $tightState->wageGrowth = 0.035;
+
+        $reflectionLabor->invoke($this->engine, $tightState, MacroEngine::TFP_DRIFT, 0.5);
+
+        // Job vacancies must rise via Beveridge curve (k / U) and labor tightness must exceed 1.125
+        $this->assertGreaterThan(MacroEngine::NATURAL_JOB_VACANCIES, $tightState->jobVacanciesRate, 'Job vacancies rate must rise when unemployment drops below NAIRU.');
+        $this->assertGreaterThan(MacroEngine::NATURAL_LABOR_TIGHTNESS, $tightState->laborTightness, 'Labor market tightness (V/U) must exceed equilibrium in a labor shortage.');
+        $this->assertGreaterThan(0.035, $tightState->wageGrowth, 'Wage growth must accelerate when the labor market is tight.');
+
+        // Inflation pass-through check
+        $tightState->outputGap = 0.01;
+        $newInflation = $reflectionInflation->invoke($this->engine, $tightState, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+        $this->assertGreaterThan(0.020, $newInflation, 'Excess wage growth must pass through into headline services inflation.');
+    }
 }

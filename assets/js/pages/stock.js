@@ -142,6 +142,8 @@ function initStockPage() {
     macroSentimentChartInstance = destroyChart(macroSentimentChartInstance);
     macroGovtSpendingChartInstance = destroyChart(macroGovtSpendingChartInstance);
     macroInterbankLiquidityChartInstance = destroyChart(macroInterbankLiquidityChartInstance);
+    macroTermPremiumChartInstance = destroyChart(macroTermPremiumChartInstance);
+    macroBalanceSheetChartInstance = destroyChart(macroBalanceSheetChartInstance);
     profitEngineChartInstance = destroyChart(profitEngineChartInstance);
     revenueStreamsChartInstance = destroyChart(revenueStreamsChartInstance);
     debtEquityChartInstance = destroyChart(debtEquityChartInstance);
@@ -212,7 +214,8 @@ function initStockPage() {
                     macroEconomyChartInstance, macroRatesChartInstance, macroMortgageChartInstance,
                     macroRiskChartInstance, macroLaborCreditChartInstance, macroCommoditiesChartInstance,
                     macroPropertyChartInstance, macroTradeLogisticsChartInstance, macroSentimentChartInstance,
-                    macroGovtSpendingChartInstance, macroInterbankLiquidityChartInstance
+                    macroGovtSpendingChartInstance, macroInterbankLiquidityChartInstance, macroTermPremiumChartInstance,
+                    macroBalanceSheetChartInstance
                 ];
                 chartInstances.forEach(c => {
                     if (c) {
@@ -1651,6 +1654,8 @@ let macroTradeLogisticsChartInstance = null;
 let macroSentimentChartInstance = null;
 let macroGovtSpendingChartInstance = null;
 let macroInterbankLiquidityChartInstance = null;
+let macroTermPremiumChartInstance = null;
+let macroBalanceSheetChartInstance = null;
 
 function updateMacroCharts() {
     if (!rawReports || rawReports.length === 0) return;
@@ -1665,6 +1670,9 @@ function updateMacroCharts() {
     let fxEmaData = [], metalsEmaData = [], govtSpendingEmaData = [], creEmaData = [];
     let retailDefaultData = [], agriEmaData = [], freightEmaData = [], residentialEmaData = [];
     let interbankSpreadBpsData = [], creditSpreadBpsData = [];
+    let jobVacanciesData = [], laborTightnessData = [], wageGrowthData = [];
+    let naturalRateData = [], termPremiumData = [], riskNeutralData = [], balanceSheetData = [];
+    let balanceSheetAssetsData = [];
 
     // Expand and cap the macro charts to show exactly the last 100 quarters (25 years)
     const slicedReports = rawReports.slice(-100);
@@ -1728,19 +1736,44 @@ function updateMacroCharts() {
 
         let rawCreditSpread = report.macro_credit_spread_ema ?? report.macro_credit_spread ?? report.macroCreditSpreadEma ?? report.macroCreditSpread ?? 0.020;
         creditSpreadBpsData.push(parseFloat(rawCreditSpread) * 10000);
+
+        let rawVacancies = report.job_vacancies_rate_ema ?? report.job_vacancies_rate ?? report.jobVacanciesRateEma ?? report.jobVacanciesRate ?? 0.045;
+        jobVacanciesData.push(parseFloat(rawVacancies) * 100);
+
+        let rawTightness = report.labor_tightness_ema ?? report.labor_tightness ?? report.laborTightnessEma ?? report.laborTightness ?? 1.125;
+        laborTightnessData.push(parseFloat(rawTightness));
+
+        let rawWage = report.wage_growth_ema ?? report.wage_growth ?? report.wageGrowthEma ?? report.wageGrowth ?? 0.035;
+        wageGrowthData.push(parseFloat(rawWage) * 100);
+
+        let rawNaturalRate = report.natural_rate_ema ?? report.natural_rate ?? report.naturalRateEma ?? report.naturalRate ?? 0.015;
+        naturalRateData.push(parseFloat(rawNaturalRate) * 100);
+
+        let rawTermPremium = report.term_premium10y_ema ?? report.term_premium10y ?? report.term_premium_10y_ema ?? report.term_premium_10y ?? report.termPremium10yEma ?? report.termPremium10y ?? 0.010;
+        termPremiumData.push(parseFloat(rawTermPremium) * 100);
+
+        let rawRiskNeutral = report.risk_neutral10y_ema ?? report.risk_neutral10y ?? report.risk_neutral_10y_ema ?? report.risk_neutral_10y ?? report.riskNeutral10yEma ?? report.riskNeutral10y ?? (parseFloat(report.yield10y_ema || 0.035) - parseFloat(rawTermPremium));
+        riskNeutralData.push(parseFloat(rawRiskNeutral) * 100);
+
+        let rawBalanceSheet = report.balance_sheet_intensity ?? report.balanceSheetIntensity ?? (report.qe_intensity ? parseFloat(report.qe_intensity) : 0.0);
+        let bsBps = parseFloat(rawBalanceSheet) * 10000;
+        balanceSheetData.push(bsBps);
+        balanceSheetAssetsData.push(7.50 + (bsBps / 10000.0) * 15.0);
     });
 
     renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOverhangData);
     renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData, yield10yData, spread2s10sData);
     renderMacroMortgageChart(labels, policyRateData, yield30yData, spread30yData);
     renderMacroRiskChart(labels, erpData, volData, taxData, corpBorrowingData);
-    renderMacroLaborCreditChart(labels, unemploymentData, retailDefaultData);
+    renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData, wageGrowthData);
     renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agriEmaData);
     renderMacroPropertyChart(labels, creEmaData, residentialEmaData);
     renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData);
-    renderMacroSentimentChart(labels, sentimentData);
+    renderMacroSentimentChart(labels, sentimentData, retailDefaultData);
     renderMacroGovtSpendingChart(labels, govtSpendingEmaData);
     renderMacroInterbankLiquidityChart(labels, interbankSpreadBpsData, creditSpreadBpsData);
+    renderMacroTermPremiumChart(labels, yield10yData, riskNeutralData, termPremiumData, naturalRateData);
+    renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceSheetData);
 }
 
 function renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOverhangData) {
@@ -2004,7 +2037,7 @@ function renderMacroLaborChart(labels, unemploymentData) {
 }
 
 
-function renderMacroLaborCreditChart(labels, unemploymentData, retailDefaultData) {
+function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData, wageGrowthData) {
     if (macroLaborCreditChartInstance) macroLaborCreditChartInstance.destroy();
     const ctx = document.getElementById('macroLaborCreditChart');
     if (!ctx) return;
@@ -2018,19 +2051,30 @@ function renderMacroLaborCreditChart(labels, unemploymentData, retailDefaultData
                     label: 'Unemployment Rate',
                     data: unemploymentData,
                     borderColor: '#f43f5e',
-                    backgroundColor: 'rgba(244, 63, 94, 0.15)',
-                    borderWidth: 2,
-                    tension: 0.2,
+                    backgroundColor: 'rgba(244, 63, 94, 0.12)',
+                    borderWidth: 2.2,
+                    tension: 0.3,
                     fill: true,
                     pointRadius: labels.length > 50 ? 0 : 2
                 },
                 {
-                    label: 'Consumer Default Rate',
-                    data: retailDefaultData,
-                    borderColor: '#f59e0b',
-                    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-                    borderWidth: 2,
-                    tension: 0.2,
+                    label: 'Job Vacancies Rate',
+                    data: jobVacanciesData,
+                    borderColor: '#38bdf8',
+                    backgroundColor: 'rgba(56, 189, 248, 0.08)',
+                    borderWidth: 2.2,
+                    borderDash: [5, 4],
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: labels.length > 50 ? 0 : 2
+                },
+                {
+                    label: 'Wage Growth Rate',
+                    data: wageGrowthData,
+                    borderColor: '#a855f7',
+                    borderWidth: 2.2,
+                    tension: 0.3,
+                    fill: false,
                     pointRadius: labels.length > 50 ? 0 : 2
                 }
             ]
@@ -2040,9 +2084,180 @@ function renderMacroLaborCreditChart(labels, unemploymentData, retailDefaultData
             interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
-                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`
+                    }
+                }
             },
-            scales: { y: { ticks: { callback: (val) => val.toFixed(1) + '%' }, title: { display: true, text: 'Percentage' } } }
+            scales: {
+                y: {
+                    type: 'linear',
+                    display: true,
+                    ticks: { callback: (val) => val.toFixed(1) + '%' },
+                    title: { display: true, text: 'Percentage Rate (%)' }
+                },
+                x: {
+                    ticks: { maxTicksLimit: 10 }
+                }
+            }
+        }
+    });
+}
+
+function renderMacroTermPremiumChart(labels, yield10yData, riskNeutralData, termPremiumData, naturalRateData) {
+    if (macroTermPremiumChartInstance) macroTermPremiumChartInstance.destroy();
+    const ctx = document.getElementById('macroTermPremiumChart');
+    if (!ctx) return;
+
+    macroTermPremiumChartInstance = new Chart(ctx.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: '10Y Sovereign Yield',
+                    data: yield10yData,
+                    borderColor: '#c084fc',
+                    backgroundColor: '#c084fc',
+                    borderWidth: 2.5,
+                    tension: 0.25,
+                    pointRadius: labels.length > 50 ? 0 : 2
+                },
+                {
+                    label: 'Expected Policy Rate Path',
+                    data: riskNeutralData,
+                    borderColor: '#38bdf8',
+                    backgroundColor: '#38bdf8',
+                    borderWidth: 2,
+                    borderDash: [5, 4],
+                    tension: 0.25,
+                    pointRadius: labels.length > 50 ? 0 : 1
+                },
+                {
+                    label: 'Duration Term Premium',
+                    data: termPremiumData,
+                    borderColor: '#fb7185',
+                    backgroundColor: 'rgba(251, 113, 133, 0.12)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.25,
+                    pointRadius: labels.length > 50 ? 0 : 1
+                },
+                {
+                    label: 'Natural Real Rate',
+                    data: naturalRateData,
+                    borderColor: '#34d399',
+                    borderWidth: 1.5,
+                    tension: 0.1,
+                    pointRadius: labels.length > 50 ? 0 : 1
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    display: true,
+                    ticks: { callback: (val) => val.toFixed(1) + '%' },
+                    title: { display: true, text: 'Yield (%)' }
+                },
+                x: {
+                    ticks: { maxTicksLimit: 10 }
+                }
+            }
+        }
+    });
+}
+
+function renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceSheetIntensityData) {
+    if (macroBalanceSheetChartInstance) macroBalanceSheetChartInstance.destroy();
+    const ctx = document.getElementById('macroBalanceSheetChart');
+    if (!ctx) return;
+
+    macroBalanceSheetChartInstance = new Chart(ctx.getContext('2d'), {
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    type: 'line',
+                    label: 'Central Bank Assets Balance',
+                    data: balanceSheetAssetsData,
+                    borderColor: '#38bdf8',
+                    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+                    borderWidth: 2.5,
+                    fill: true,
+                    tension: 0.3,
+                    yAxisID: 'y',
+                    pointRadius: labels.length > 50 ? 0 : 2
+                },
+                {
+                    type: 'bar',
+                    label: 'Operations Intensity (QE / QT)',
+                    data: balanceSheetIntensityData,
+                    backgroundColor: balanceSheetIntensityData.map(val => val > 0 
+                        ? 'rgba(74, 222, 128, 0.50)' 
+                        : (val < 0 ? 'rgba(244, 63, 94, 0.50)' : 'rgba(255, 255, 255, 0.10)')),
+                    borderColor: balanceSheetIntensityData.map(val => val > 0 ? '#4ade80' : (val < 0 ? '#f43f5e' : 'transparent')),
+                    borderWidth: 1,
+                    borderRadius: 3,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => {
+                            if (ctx.dataset.yAxisID === 'y1') {
+                                const val = ctx.raw;
+                                const action = val > 0 ? 'QE Expansion' : (val < 0 ? 'QT Runoff' : 'Neutral');
+                                return `${ctx.dataset.label}: ${val > 0 ? '+' : ''}${val.toFixed(0)} bps (${action})`;
+                            }
+                            return `${ctx.dataset.label}: $${ctx.raw.toFixed(2)}T`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { color: 'rgba(255, 255, 255, 0.7)', callback: (val) => '$' + val.toFixed(2) + 'T' },
+                    title: { display: true, text: 'Total Assets ($T)' }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    ticks: {
+                        maxTicksLimit: 6,
+                        callback: (val) => (val > 0 ? '+' : '') + Math.round(val) + ' bps'
+                    },
+                    title: { display: true, text: 'Operations Intensity (bps)' }
+                },
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 10, color: 'rgba(255, 255, 255, 0.5)' }
+                }
+            }
         }
     });
 }
@@ -2182,38 +2397,73 @@ function renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData) {
     });
 }
 
-function renderMacroSentimentChart(labels, sentimentData) {
+function renderMacroSentimentChart(labels, sentimentData, retailDefaultData) {
     if (macroSentimentChartInstance) macroSentimentChartInstance.destroy();
     const ctx = document.getElementById('macroSentimentChart');
     if (!ctx) return;
 
     macroSentimentChartInstance = new Chart(ctx.getContext('2d'), {
-        type: 'line',
         data: {
             labels: labels,
             datasets: [
                 {
+                    type: 'line',
                     label: 'Consumer Sentiment Index',
                     data: sentimentData,
                     borderColor: '#a855f7',
-                    backgroundColor: 'rgba(168, 85, 247, 0.2)',
-                    borderWidth: 2,
-                    tension: 0.2,
+                    backgroundColor: 'rgba(168, 85, 247, 0.15)',
+                    borderWidth: 2.2,
+                    tension: 0.25,
                     fill: true,
+                    yAxisID: 'y',
                     pointRadius: labels.length > 50 ? 0 : 2
+                },
+                {
+                    type: 'line',
+                    label: 'Household Default Rate',
+                    data: retailDefaultData || [],
+                    borderColor: '#f59e0b',
+                    backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                    borderWidth: 2,
+                    borderDash: [4, 4],
+                    tension: 0.25,
+                    fill: false,
+                    yAxisID: 'y1',
+                    pointRadius: labels.length > 50 ? 0 : 1
                 }
             ]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
-            plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `${ctx.raw.toFixed(1)}` } } },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => ctx.dataset.yAxisID === 'y1'
+                            ? `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`
+                            : `${ctx.dataset.label}: ${ctx.raw.toFixed(1)} pts`
+                    }
+                }
+            },
             scales: {
                 y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
                     min: 40,
-                    max: 120,
+                    max: 130,
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { color: 'rgba(255, 255, 255, 0.7)' }
+                    ticks: { color: 'rgba(255, 255, 255, 0.7)', callback: (val) => val },
+                    title: { display: true, text: 'Sentiment Index (Baseline: 100)' }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    ticks: { callback: (val) => val.toFixed(1) + '%' },
+                    title: { display: true, text: 'Default Rate (%)' }
                 },
                 x: {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },

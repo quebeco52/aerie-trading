@@ -2,6 +2,7 @@
 
 namespace App\Entity;
 
+use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity]
@@ -22,8 +23,8 @@ class UserEtf
     #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
     private Etf $etf;
 
-    #[ORM\Column(options: ['default' => 0])]
-    private int $quantity = 0;
+    #[ORM\Column(type: Types::BIGINT, options: ['default' => 0])]
+    private int|string $quantity = 0;
 
     #[ORM\Version]
     #[ORM\Column(type: 'integer')]
@@ -34,12 +35,12 @@ class UserEtf
         return $this->id;
     }
 
-    public function getQuantity(): ?int
+    public function getQuantity(): int|string
     {
         return $this->quantity;
     }
 
-    public function setQuantity(int $quantity): static
+    public function setQuantity(int|string $quantity): static
     {
         $this->quantity = $quantity;
 

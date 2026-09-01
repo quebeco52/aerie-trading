@@ -411,7 +411,7 @@ class ApparelManufacturingBusinessModelTest extends TestCase
             agriculturalCommodityIndexEma: 150.0, // +50% raw cotton
             freightRateIndexEma: 150.0,            // +50% shipping
             energyPriceIndexEma: 150.0,            // +50% energy
-            energyCostPushLag: 0.0050              // +50% energy shock lagged transmission
+            energyCostPushLag: 0.0025              // +50% energy shock lagged transmission (0.50 * 0.0050)
         );
 
         $mathUtility = new MathUtility();

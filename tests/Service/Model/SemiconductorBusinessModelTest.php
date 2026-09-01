@@ -115,7 +115,7 @@ class SemiconductorBusinessModelTest extends TestCase
         $macroSpike = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema' => 0.0,
             'energy_price_index_ema' => 120.0,
-            'energy_cost_push_lag' => 0.0020,
+            'energy_cost_push_lag' => 0.0010,
         ]);
 
         $resultSpike = $this->model->computeActualFinancials(

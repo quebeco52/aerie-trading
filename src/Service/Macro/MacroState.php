@@ -14,6 +14,15 @@ class MacroState
 
     public float $unemploymentRate = 0.038;
     public float $unemploymentRateEma = 0.038;
+    public float $jobVacanciesRate = 0.045;
+    public float $jobVacanciesRateEma = 0.045;
+    public float $laborTightness = 1.125;
+    public float $laborTightnessEma = 1.125;
+    public float $wageGrowth = 0.035;
+    public float $wageGrowthEma = 0.035;
+
+    public float $naturalRate = MacroEngine::BASE_NATURAL_RATE;
+    public float $naturalRateEma = MacroEngine::BASE_NATURAL_RATE;
 
     public float $energyPriceIndex = 90.0;
     public float $energyPriceIndexEma = 90.0;
@@ -74,8 +83,17 @@ class MacroState
     public float $yield30y = 0.0425;
     public float $yield30yEma = 0.0425;
 
+    public float $termPremium10y = 0.0125;
+    public float $termPremium10yEma = 0.0125;
+    public float $riskNeutral10y = 0.0250;
+    public float $riskNeutral10yEma = 0.0250;
+
     public bool $qeActive = false;
     public float $qeIntensity = 0.0;
+    public bool $qtActive = false;
+    public float $qtIntensity = 0.0;
+    public float $balanceSheetIntensity = 0.0;
+
     public float $inversionDuration = 0.0;
     public float $corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
     public ?string $eventType = null;
@@ -112,8 +130,17 @@ class MacroState
         $state->capitalStockOverhang = (float) ($data['capital_stock_overhang'] ?? 0.0);
         $state->capitalStockOverhangEma = (float) ($data['capital_stock_overhang_ema'] ?? $state->capitalStockOverhang);
 
-        $state->unemploymentRate = $data['unemployment_rate'] ?? 0.038;
-        $state->unemploymentRateEma = $data['unemployment_rate_ema'] ?? $state->unemploymentRate;
+        $state->unemploymentRate = (float) ($data['unemployment_rate'] ?? 0.038);
+        $state->unemploymentRateEma = (float) ($data['unemployment_rate_ema'] ?? $state->unemploymentRate);
+        $state->jobVacanciesRate = (float) ($data['job_vacancies_rate'] ?? 0.045);
+        $state->jobVacanciesRateEma = (float) ($data['job_vacancies_rate_ema'] ?? $state->jobVacanciesRate);
+        $state->laborTightness = (float) ($data['labor_tightness'] ?? 1.125);
+        $state->laborTightnessEma = (float) ($data['labor_tightness_ema'] ?? $state->laborTightness);
+        $state->wageGrowth = (float) ($data['wage_growth'] ?? 0.035);
+        $state->wageGrowthEma = (float) ($data['wage_growth_ema'] ?? $state->wageGrowth);
+
+        $state->naturalRate = (float) ($data['natural_rate'] ?? MacroEngine::BASE_NATURAL_RATE);
+        $state->naturalRateEma = (float) ($data['natural_rate_ema'] ?? $state->naturalRate);
 
         $state->energyPriceIndex = $data['energy_price_index'] ?? 90.0;
         $state->energyPriceIndexEma = $data['energy_price_index_ema'] ?? $state->energyPriceIndex;
@@ -174,8 +201,17 @@ class MacroState
         $state->yield30y = $data['yield_30y'] ?? 0.0425;
         $state->yield30yEma = $data['yield_30y_ema'] ?? $state->yield30y;
 
-        $state->qeActive = $data['qe_active'] ?? false;
-        $state->qeIntensity = $data['qe_intensity'] ?? 0.0;
+        $state->termPremium10y = (float) ($data['term_premium_10y'] ?? 0.0125);
+        $state->termPremium10yEma = (float) ($data['term_premium_10y_ema'] ?? $state->termPremium10y);
+        $state->riskNeutral10y = (float) ($data['risk_neutral_10y'] ?? 0.0250);
+        $state->riskNeutral10yEma = (float) ($data['risk_neutral_10y_ema'] ?? $state->riskNeutral10y);
+
+        $state->balanceSheetIntensity = (float) ($data['balance_sheet_intensity'] ?? ($data['qe_intensity'] ?? 0.0));
+        $state->qeActive = (bool) ($data['qe_active'] ?? ($state->balanceSheetIntensity > 0.0005));
+        $state->qeIntensity = (float) ($data['qe_intensity'] ?? max(0.0, $state->balanceSheetIntensity));
+        $state->qtActive = (bool) ($data['qt_active'] ?? ($state->balanceSheetIntensity < -0.0005));
+        $state->qtIntensity = (float) ($data['qt_intensity'] ?? max(0.0, -$state->balanceSheetIntensity));
+
         $state->inversionDuration = $data['inversion_duration'] ?? 0.0;
         $state->corporateTaxRate = $data['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
         $state->eventType = $data['event_type'] ?? null;
@@ -219,6 +255,14 @@ class MacroState
             'capital_stock_overhang_ema' => $this->capitalStockOverhangEma,
             'unemployment_rate' => $this->unemploymentRate,
             'unemployment_rate_ema' => $this->unemploymentRateEma,
+            'job_vacancies_rate' => $this->jobVacanciesRate,
+            'job_vacancies_rate_ema' => $this->jobVacanciesRateEma,
+            'labor_tightness' => $this->laborTightness,
+            'labor_tightness_ema' => $this->laborTightnessEma,
+            'wage_growth' => $this->wageGrowth,
+            'wage_growth_ema' => $this->wageGrowthEma,
+            'natural_rate' => $this->naturalRate,
+            'natural_rate_ema' => $this->naturalRateEma,
             'energy_price_index' => $this->energyPriceIndex,
             'energy_price_index_ema' => $this->energyPriceIndexEma,
             'energy_price_shock' => $this->energyPriceShock,
@@ -262,8 +306,15 @@ class MacroState
             'yield_10y_ema' => $this->yield10yEma,
             'yield_30y' => $this->yield30y,
             'yield_30y_ema' => $this->yield30yEma,
+            'term_premium_10y' => $this->termPremium10y,
+            'term_premium_10y_ema' => $this->termPremium10yEma,
+            'risk_neutral_10y' => $this->riskNeutral10y,
+            'risk_neutral_10y_ema' => $this->riskNeutral10yEma,
+            'balance_sheet_intensity' => $this->balanceSheetIntensity,
             'qe_active' => $this->qeActive,
             'qe_intensity' => $this->qeIntensity,
+            'qt_active' => $this->qtActive,
+            'qt_intensity' => $this->qtIntensity,
             'inversion_duration' => $this->inversionDuration,
             'corporate_tax_rate' => $this->corporateTaxRate,
             'event_type' => $this->eventType,

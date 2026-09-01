@@ -31,11 +31,11 @@ class TradeOrder
     #[ORM\Column(length: 10)]
     private ?string $orderType = null; // 'MARKET' or 'LIMIT'
 
-    #[ORM\Column]
-    private ?int $quantity = null;
+    #[ORM\Column(type: Types::BIGINT)]
+    private int|string|null $quantity = null;
 
-    #[ORM\Column(options: ['default' => 0])]
-    private int $filledQuantity = 0;
+    #[ORM\Column(type: Types::BIGINT, options: ['default' => 0])]
+    private int|string $filledQuantity = 0;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 18, scale: 4, nullable: true)]
     private ?string $limitPrice = null;
@@ -117,23 +117,23 @@ class TradeOrder
         return $this;
     }
 
-    public function getQuantity(): ?int
+    public function getQuantity(): int|string|null
     {
         return $this->quantity;
     }
 
-    public function setQuantity(int $quantity): static
+    public function setQuantity(int|string $quantity): static
     {
         $this->quantity = $quantity;
         return $this;
     }
 
-    public function getFilledQuantity(): int
+    public function getFilledQuantity(): int|string
     {
         return $this->filledQuantity;
     }
 
-    public function setFilledQuantity(int $filledQuantity): static
+    public function setFilledQuantity(int|string $filledQuantity): static
     {
         $this->filledQuantity = $filledQuantity;
         return $this;

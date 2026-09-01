@@ -13,8 +13,16 @@ class MacroEngine
     // --- Central Bank & Structural Constraints ---
     /** The Federal Reserve's long-term annual inflation target (2%). */
     public const TARGET_INFLATION = 0.02;
-    /** The natural real rate of interest (r*) representing neutral monetary policy. */
-    public const NATURAL_RATE = 0.015;
+    /** The baseline natural real rate of interest (r*) representing neutral monetary policy (1.5%). */
+    public const BASE_NATURAL_RATE = 0.015;
+    /** Backward compatibility alias for the baseline natural rate. */
+    public const NATURAL_RATE = self::BASE_NATURAL_RATE;
+    /** Sensitivity of natural rate r* to annual secular TFP productivity growth deviations from drift. */
+    public const NATURAL_RATE_TFP_SENSITIVITY = 0.50;
+    /** Structural lower bound floor for natural real rate (50 bps). */
+    public const MIN_NATURAL_RATE = 0.005;
+    /** Structural upper bound ceiling for natural real rate (350 bps). */
+    public const MAX_NATURAL_RATE = 0.035;
     /** The baseline corporate tax rate for standard physical companies. */
     public const BASE_CORPORATE_TAX_RATE = 0.21;
     /** The baseline historical equity risk premium expected over risk-free assets. */
@@ -48,9 +56,21 @@ class MacroEngine
     /** Stochastic diffusion volatility of the macroeconomic output gap. */
     public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.010;
 
-    // --- Okun's Law (Labor Market Dynamics) ---
+    // --- Okun's Law & Diamond-Mortensen-Pissarides Beveridge Curve ---
     /** Structural Non-Accelerating Inflation Rate of Unemployment (NAIRU) baseline (4.0%). */
     public const NATURAL_UNEMPLOYMENT = 0.04;
+    /** Structural baseline job vacancies rate (4.5%). */
+    public const NATURAL_JOB_VACANCIES = 0.045;
+    /** Structural Beveridge curve equilibrium constant (k = Natural Unemployment * Natural Vacancies). */
+    public const BEVERIDGE_CURVE_CONSTANT = 0.0018;
+    /** Structural equilibrium labor market tightness (theta* = 4.5% / 4.0% = 1.125). */
+    public const NATURAL_LABOR_TIGHTNESS = 1.125;
+    /** Sensitivity of wage growth to labor market tightness deviations from equilibrium. */
+    public const WAGE_TIGHTNESS_SENSITIVITY = 0.02;
+    /** Annual adjustment speed of nominal wage settlements toward market-clearing equilibrium. */
+    public const WAGE_ADJUSTMENT_SPEED = 2.0;
+    /** Wage-push inflation transmission passing excess wage growth into headline services inflation. */
+    public const WAGE_INFLATION_TRANSMISSION = 0.15;
     /** Okun's beta: sensitivity of equilibrium unemployment deviation to the GDP output gap (~0.40). */
     public const OKUNS_COEFFICIENT = 0.5;
     /** Annual adjustment speed of employment expansion during economic recoveries (search & matching friction). */
@@ -224,7 +244,7 @@ class MacroEngine
     /** Stochastic diffusion volatility (sigma) of consumer animal spirits. */
     public const ANIMAL_SPIRITS_VOLATILITY = 2.5;
 
-    // --- Quantitative Easing (QE) & Yield Curve Suppression ---
+    // --- Central Bank Balance Sheet (QE & QT) ---
     /** Proximity threshold to Zero Lower Bound required before activating QE asset purchases. */
     public const QE_ACTIVATION_ZLB_THRESHOLD = 0.60;
     /** Negative output gap threshold below which central bank initiates QE bond purchases (0.0%). */
@@ -234,7 +254,17 @@ class MacroEngine
     /** Sensitivity multiplier scaling QE bond purchase intensity with recession depth. */
     public const QE_SEVERITY_MULTIPLIER = 1.0;
     /** Annual ramp speed of central bank balance sheet expansion and contraction. */
-    public const QE_RAMP_SPEED = 1.0;
+    public const BALANCE_SHEET_RAMP_SPEED = 1.0;
+    /** Backward compatibility alias for QE ramp speed. */
+    public const QE_RAMP_SPEED = self::BALANCE_SHEET_RAMP_SPEED;
+    /** Positive output gap threshold above which central bank initiates Quantitative Tightening (+1.0%). */
+    public const QT_ACTIVATION_GAP_THRESHOLD = 0.010;
+    /** Inflation threshold above which central bank initiates Quantitative Tightening (2.5%). */
+    public const QT_ACTIVATION_INFLATION_THRESHOLD = 0.025;
+    /** Maximum yield steepening magnitude under full-scale Quantitative Tightening (150 bps). */
+    public const QT_MAX_INTENSITY = 0.015;
+    /** Sensitivity multiplier scaling QT bond runoff with economic overheating. */
+    public const QT_SEVERITY_MULTIPLIER = 0.80;
     /** Nelson-Siegel level weighting on target inflation vs expected inflation. */
     public const INFLATION_LEVEL_WEIGHT = 0.5;
 
@@ -426,15 +456,33 @@ class MacroEngine
         // Advance physical simulation time in years
         $state->totalTime += $dt;
 
+        // 1. Evaluate Total Factor Productivity (TFP) & Secular Drift
+        $oldTfp = $state->totalFactorProductivityIndex ?? self::TFP_BASELINE;
+        $this->calculateTotalFactorProductivity($state, $dt);
+        $newTfp = $state->totalFactorProductivityIndex;
+        $tfpGrowthRate = log($newTfp / max(0.01, $oldTfp)) / max(0.0001, $dt);
+
+        // 2. Laubach-Williams (2003) Dynamic Natural Rate of Interest (r*)
+        $this->calculateNaturalRate($state, $tfpGrowthRate, $dt);
+
+        // 3. Labor Market: Okun's Law & Diamond-Mortensen-Pissarides Beveridge Curve
+        $this->calculateUnemployment($state, $dt);
+        $this->calculateLaborMarketAndWages($state, $tfpGrowthRate, $dt);
+
+        // 4. Inflation Expectations (TIPS Breakeven)
         $state->tipsBreakeven = $this->calculateTipsBreakeven($state, self::TARGET_INFLATION, $dt);
 
-        $state->targetRate = $this->calculateTargetRate($state, self::TARGET_INFLATION, self::NATURAL_RATE);
+        // 5. Central Bank Monetary Policy & Yield Curve
+        $state->targetRate = $this->calculateTargetRate($state, self::TARGET_INFLATION, $state->naturalRate);
         $state->policyRate = $this->updatePolicyRate($state, $state->targetRate, $dt);
 
-        $yieldData = $this->calculateYieldCurveAndQE($state, self::TARGET_INFLATION, self::NATURAL_RATE, $dt);
+        $yieldData = $this->calculateYieldCurveAndQE($state, self::TARGET_INFLATION, $state->naturalRate, $dt);
 
+        $state->balanceSheetIntensity = $yieldData['new_balance_sheet_intensity'];
         $state->qeIntensity = $yieldData['new_qe_intensity'];
         $state->qeActive = $state->qeIntensity > 0.0005;
+        $state->qtIntensity = $yieldData['new_qt_intensity'];
+        $state->qtActive = $state->qtIntensity > 0.0005;
 
         $state->yield2y = $yieldData['yield_2y'];
         $state->yield5y = $yieldData['yield_5y'];
@@ -443,6 +491,9 @@ class MacroEngine
         $state->nsLevel = $yieldData['level'];
         $state->nsCurvature = $yieldData['curvature'];
         $state->nsCurvature2 = $yieldData['curvature2'];
+
+        $state->termPremium10y = $yieldData['term_premium_10y'];
+        $state->riskNeutral10y = $yieldData['risk_neutral_10y'];
 
         $state->nsSlope = $state->yield10y - $state->policyRate;
         $state->structuralSlope = $yieldData['structural_10y'] - $state->policyRate;
@@ -461,9 +512,8 @@ class MacroEngine
         $state->capitalStockOverhang = max(-0.15, min(0.15, $state->capitalStockOverhang));
 
         $stressMultiplier = 1.0 + (abs($state->outputGap) * 10.0);
-        $state->outputGap = $this->calculateOutputGap($state, $state->yield5y, self::NATURAL_RATE, $dt, $stressMultiplier);
+        $state->outputGap = $this->calculateOutputGap($state, $state->yield5y, $state->naturalRate, $dt, $stressMultiplier);
 
-        $this->calculateUnemployment($state, $dt);
         $this->calculateEnergyShock($state, $dt);
         $this->calculateExchangeRate($state, $dt);
         $this->calculateIndustrialMetalsIndex($state, $dt);
@@ -486,7 +536,6 @@ class MacroEngine
         $this->calculateEquityRiskPremium($state);
         $this->calculateConsumerSentiment($state, $dt);
 
-
         $payload = $state->toArray();
         $this->redis->set(self::REDIS_MACRO_STATE, json_encode($payload));
         return \App\DTO\MacroStateDTO::fromMacroState($state);
@@ -496,8 +545,8 @@ class MacroEngine
     {
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
         $conn->executeStatement(
-            "INSERT INTO macro_report (recorded_at, inflation, inflation_ema, output_gap, output_gap_ema, policy_rate, policy_rate_ema, yield2y, yield2y_ema, yield5y, yield5y_ema, yield10y, yield10y_ema, yield30y, yield30y_ema, corporate_tax_rate, equity_risk_premium, nominal_gdp_index, market_volatility, macro_credit_spread, macro_credit_spread_ema, unemployment_rate, unemployment_rate_ema, energy_price_index, energy_price_index_ema, consumer_sentiment_index, consumer_sentiment_index_ema, exchange_rate_index, exchange_rate_index_ema, industrial_metals_index, industrial_metals_index_ema, government_spending_index, government_spending_index_ema, commercial_property_index, commercial_property_index_ema, residential_property_index, residential_property_index_ema, retail_default_rate, retail_default_rate_ema, agricultural_commodity_index, agricultural_commodity_index_ema, freight_rate_index, freight_rate_index_ema, capital_stock_overhang, capital_stock_overhang_ema, interbank_liquidity_spread, interbank_liquidity_spread_ema, total_factor_productivity_index, total_factor_productivity_index_ema) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO macro_report (recorded_at, inflation, inflation_ema, output_gap, output_gap_ema, policy_rate, policy_rate_ema, yield2y, yield2y_ema, yield5y, yield5y_ema, yield10y, yield10y_ema, yield30y, yield30y_ema, corporate_tax_rate, equity_risk_premium, nominal_gdp_index, market_volatility, macro_credit_spread, macro_credit_spread_ema, unemployment_rate, unemployment_rate_ema, energy_price_index, energy_price_index_ema, consumer_sentiment_index, consumer_sentiment_index_ema, exchange_rate_index, exchange_rate_index_ema, industrial_metals_index, industrial_metals_index_ema, government_spending_index, government_spending_index_ema, commercial_property_index, commercial_property_index_ema, residential_property_index, residential_property_index_ema, retail_default_rate, retail_default_rate_ema, agricultural_commodity_index, agricultural_commodity_index_ema, freight_rate_index, freight_rate_index_ema, capital_stock_overhang, capital_stock_overhang_ema, interbank_liquidity_spread, interbank_liquidity_spread_ema, total_factor_productivity_index, total_factor_productivity_index_ema, job_vacancies_rate, job_vacancies_rate_ema, labor_tightness, labor_tightness_ema, wage_growth, wage_growth_ema, natural_rate, natural_rate_ema, term_premium10y, term_premium10y_ema, risk_neutral10y, risk_neutral10y_ema, balance_sheet_intensity) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 $now,
                 $macroState->inflation,
@@ -548,6 +597,19 @@ class MacroEngine
                 $macroState->interbankLiquiditySpreadEma,
                 $macroState->totalFactorProductivityIndex,
                 $macroState->totalFactorProductivityIndexEma,
+                $macroState->jobVacanciesRate,
+                $macroState->jobVacanciesRateEma,
+                $macroState->laborTightness,
+                $macroState->laborTightnessEma,
+                $macroState->wageGrowth,
+                $macroState->wageGrowthEma,
+                $macroState->naturalRate,
+                $macroState->naturalRateEma,
+                $macroState->termPremium10y,
+                $macroState->termPremium10yEma,
+                $macroState->riskNeutral10y,
+                $macroState->riskNeutral10yEma,
+                $macroState->balanceSheetIntensity,
             ]
         );
     }
@@ -617,16 +679,26 @@ class MacroEngine
         $zlbProximity = min(1.0, max(0.0, (self::ZLB_PROXIMITY_THRESHOLD - $state->policyRate) / self::ZLB_PROXIMITY_THRESHOLD));
         $recessionSeverity = max(0.0, -$state->outputGap);
 
-        // Determine target QE intensity based on zero-lower-bound proximity and recession severity
+        // 1. Central Bank Asset Purchases / Quantitative Easing (QE)
         if ($zlbProximity > self::QE_ACTIVATION_ZLB_THRESHOLD && $state->outputGap < self::QE_ACTIVATION_GAP_THRESHOLD) {
             $qeYieldSuppressionTarget = min(self::QE_MAX_SUPPRESSION, $zlbProximity * $recessionSeverity * self::QE_SEVERITY_MULTIPLIER);
         } else {
             $qeYieldSuppressionTarget = 0.0;
         }
 
+        // 2. Central Bank Balance Sheet Runoff / Quantitative Tightening (QT)
+        if ($state->outputGap > self::QT_ACTIVATION_GAP_THRESHOLD && $state->inflation > self::QT_ACTIVATION_INFLATION_THRESHOLD) {
+            $overheating = ($state->outputGap - self::QT_ACTIVATION_GAP_THRESHOLD) + ($state->inflation - self::QT_ACTIVATION_INFLATION_THRESHOLD);
+            $qtTighteningTarget = min(self::QT_MAX_INTENSITY, $overheating * self::QT_SEVERITY_MULTIPLIER);
+        } else {
+            $qtTighteningTarget = 0.0;
+        }
+
+        // Net Balance Sheet target: positive = QE (suppression), negative = QT (steepening)
+        $balanceSheetTarget = $qeYieldSuppressionTarget - $qtTighteningTarget;
+
         // Exact exponential decay to prevent Euler integration overshoot. 
-        // We calculate the new value but DO NOT mutate $state->qeIntensity here to preserve CQS.
-        $newQeIntensity = $qeYieldSuppressionTarget + ($state->qeIntensity - $qeYieldSuppressionTarget) * exp(-self::QE_RAMP_SPEED * $dt);
+        $newBalanceSheetIntensity = $balanceSheetTarget + ($state->balanceSheetIntensity - $balanceSheetTarget) * exp(-self::BALANCE_SHEET_RAMP_SPEED * $dt);
 
         // TIPS-Style Forward-Looking Inflation Expectations anchor the level factor
         $expectedInflation = $state->tipsBreakeven;
@@ -638,27 +710,38 @@ class MacroEngine
         // Svensson Beta 3 (Secondary Curvature / Long-End Hump):
         // Captures long-term sovereign bond supply pressure and fiscal deficit drag (QT / supply indigestion)
         $fiscalShift = ($state->governmentSpendingIndexEma / self::GOVT_SPENDING_BASELINE) - 1.0;
-        $nsBeta3 = self::SVENSSON_CURVATURE2_FISCAL_SCALE * $fiscalShift;
+        $qtCurvatureShift = max(0.0, -$newBalanceSheetIntensity) * 0.50;
+        $nsBeta3 = (self::SVENSSON_CURVATURE2_FISCAL_SCALE * $fiscalShift) + $qtCurvatureShift;
 
-        $yield2y  = $this->calculateSvenssonTenor(2.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $newQeIntensity);
-        $yield5y  = $this->calculateSvenssonTenor(5.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $newQeIntensity);
-        $yield10y = $this->calculateSvenssonTenor(10.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $newQeIntensity);
-        $yield30y = $this->calculateSvenssonTenor(30.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $newQeIntensity);
+        $yield2y  = $this->calculateSvenssonTenor(2.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $newBalanceSheetIntensity);
+        $yield5y  = $this->calculateSvenssonTenor(5.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $newBalanceSheetIntensity);
+        $yield10y = $this->calculateSvenssonTenor(10.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $newBalanceSheetIntensity);
+        $yield30y = $this->calculateSvenssonTenor(30.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $newBalanceSheetIntensity);
+
+        // Adrian-Crump-Moench (2013) 10Y Term Premium Decomposition:
+        // Expected average short rate path over 10 years (Risk-Neutral Yield)
+        $durationFactor10y = (1.0 - exp(-10.0 * self::SVENSSON_LAMBDA_1)) / (10.0 * self::SVENSSON_LAMBDA_1);
+        $riskNeutral10y = $level + ($nsBeta1 * $durationFactor10y);
+        $termPremium10y = $yield10y - $riskNeutral10y;
 
         return [
             'level' => $level,
             'curvature' => $nsBeta2,
             'curvature2' => $nsBeta3,
-            'new_qe_intensity' => $newQeIntensity, // Passed back to the caller to mutate state
-            'structural_10y' => $yield10y + $newQeIntensity, // Unclamped
-            'yield_2y'  => $yield2y,  // Unclamped, allowing negative yields
+            'new_balance_sheet_intensity' => $newBalanceSheetIntensity,
+            'new_qe_intensity' => max(0.0, $newBalanceSheetIntensity),
+            'new_qt_intensity' => max(0.0, -$newBalanceSheetIntensity),
+            'structural_10y' => $yield10y + max(0.0, $newBalanceSheetIntensity),
+            'yield_2y'  => $yield2y,
             'yield_5y'  => $yield5y,
             'yield_10y' => $yield10y,
-            'yield_30y' => $yield30y
+            'yield_30y' => $yield30y,
+            'risk_neutral_10y' => $riskNeutral10y,
+            'term_premium_10y' => $termPremium10y,
         ];
     }
 
-    private function calculateSvenssonTenor(float $t, float $level, float $nsBeta1, float $nsBeta2, float $nsBeta3, MacroState $state, float $qeYieldSuppression): float
+    private function calculateSvenssonTenor(float $t, float $level, float $nsBeta1, float $nsBeta2, float $nsBeta3, MacroState $state, float $balanceSheetIntensity): float
     {
         // Concave duration scaling: anchors 10-year at ~1.0, and 30-year asymptotically flattens out around ~1.58
         // This mirrors real-world term premium flattening at the long end and prevents linear explosion.
@@ -667,8 +750,8 @@ class MacroEngine
         $termPremium = (self::NS_BASE_TERM_PREMIUM * $durationScale)
             + ($state->outputGap * self::NS_GAP_TERM_PREMIUM_SCALE * $durationScale);
 
-        // Apply the same concave scaling to QE to suppress the entire long end properly
-        $qeTargetedSuppression = $qeYieldSuppression * $durationScale;
+        // Apply concave duration scaling: positive (QE) suppresses yields; negative (QT) steepens yields
+        $balanceSheetTargetedAdjustment = $balanceSheetIntensity * $durationScale;
 
         $pureYield = $this->mathUtility->calculateSvenssonYield(
             level: $level,
@@ -680,7 +763,7 @@ class MacroEngine
             lambda2: self::SVENSSON_LAMBDA_2
         );
 
-        return $pureYield + $termPremium - $qeTargetedSuppression;
+        return $pureYield + $termPremium - $balanceSheetTargetedAdjustment;
     }
 
     private function calculateOutputGap(MacroState $state, float $yield5y, float $naturalRate, float $dt, float $stressMultiplier): float
@@ -732,6 +815,34 @@ class MacroEngine
         return max(-0.12, min(0.10, $newGap));
     }
 
+    private function calculateNaturalRate(MacroState $state, float $tfpGrowthRate, float $dt): void
+    {
+        // Laubach & Williams (2003) Dynamic Natural Rate of Interest (r*):
+        // r*_t = r*_base + psi * (g_TFP - g_TFP_drift)
+        $targetNaturalRate = self::BASE_NATURAL_RATE + (self::NATURAL_RATE_TFP_SENSITIVITY * ($tfpGrowthRate - self::TFP_DRIFT));
+        $targetNaturalRate = max(self::MIN_NATURAL_RATE, min(self::MAX_NATURAL_RATE, $targetNaturalRate));
+
+        $state->naturalRate += 1.0 * ($targetNaturalRate - $state->naturalRate) * $dt;
+    }
+
+    private function calculateLaborMarketAndWages(MacroState $state, float $tfpGrowthRate, float $dt): void
+    {
+        // Diamond-Mortensen-Pissarides Beveridge Curve:
+        // Job Vacancies (V) * Unemployment Rate (U) = k_bev
+        $effectiveUnemployment = max(0.01, $state->unemploymentRate);
+        $state->jobVacanciesRate = max(0.01, min(0.15, self::BEVERIDGE_CURVE_CONSTANT / $effectiveUnemployment));
+
+        // Labor market tightness theta = V / U
+        $state->laborTightness = $state->jobVacanciesRate / $effectiveUnemployment;
+
+        // Wage Phillips Curve:
+        // Nominal wage growth = TFP trend + inflation target + beta * (theta - theta*)
+        $targetWageGrowth = $tfpGrowthRate + self::TARGET_INFLATION + (self::WAGE_TIGHTNESS_SENSITIVITY * ($state->laborTightness - self::NATURAL_LABOR_TIGHTNESS));
+        $targetWageGrowth = max(0.0, min(0.15, $targetWageGrowth));
+
+        $state->wageGrowth += self::WAGE_ADJUSTMENT_SPEED * ($targetWageGrowth - $state->wageGrowth) * $dt;
+    }
+
     private function calculateInflation(MacroState $state, float $targetInflation, float $stressMultiplier, float $dt): float
     {
         $infZ = $this->mathUtility->generateStandardNormal();
@@ -755,7 +866,12 @@ class MacroEngine
             lagTimeConstant: self::ENERGY_COST_PUSH_LAG_YEARS
         );
 
-        $phillipsEffect = ($phillipsSlope + $state->energyCostPushLag) * $dt;
+        // Beveridge Wage-Push Inflation Transmission:
+        // Excess wage growth above trend (TFP drift + target inflation = 3.5%) feeds directly into headline services inflation.
+        $excessWageGrowth = max(0.0, $state->wageGrowth - (self::TFP_DRIFT + $targetInflation));
+        $wageCostPush = $excessWageGrowth * self::WAGE_INFLATION_TRANSMISSION;
+
+        $phillipsEffect = ($phillipsSlope + $state->energyCostPushLag + $wageCostPush) * $dt;
 
         $newInflation = $state->inflation + $inflationDrift + $phillipsEffect + (0.005 * $stressMultiplier * sqrt($dt) * $infZ);
         return max(-0.02, min(0.25, $newInflation));
@@ -858,10 +974,18 @@ class MacroEngine
         $state->tipsBreakevenEma += $emaWeight * ($state->tipsBreakeven - $state->tipsBreakevenEma);
         $state->nsSlopeEma += $emaWeight * ($state->nsSlope - $state->nsSlopeEma);
 
+        $state->naturalRateEma += $emaWeight * ($state->naturalRate - $state->naturalRateEma);
+        $state->jobVacanciesRateEma += $emaWeight * ($state->jobVacanciesRate - $state->jobVacanciesRateEma);
+        $state->laborTightnessEma += $emaWeight * ($state->laborTightness - $state->laborTightnessEma);
+        $state->wageGrowthEma += $emaWeight * ($state->wageGrowth - $state->wageGrowthEma);
+
         $state->yield2yEma += $emaWeight * ($state->yield2y - $state->yield2yEma);
         $state->yield5yEma += $emaWeight * ($state->yield5y - $state->yield5yEma);
         $state->yield10yEma += $emaWeight * ($state->yield10y - $state->yield10yEma);
         $state->yield30yEma += $emaWeight * ($state->yield30y - $state->yield30yEma);
+
+        $state->termPremium10yEma += $emaWeight * ($state->termPremium10y - $state->termPremium10yEma);
+        $state->riskNeutral10yEma += $emaWeight * ($state->riskNeutral10y - $state->riskNeutral10yEma);
 
         $state->marketVolatilityEma += $emaWeight * ($state->marketVolatility - $state->marketVolatilityEma);
         $state->macroCreditSpreadEma += $emaWeight * ($state->macroCreditSpread - $state->macroCreditSpreadEma);
@@ -1022,7 +1146,7 @@ class MacroEngine
         $fearPenalty = $excessVolatility * self::SENTIMENT_VOLATILITY_MULTIPLIER;
 
         // Benchmark 10Y yield against neutral 10Y (Natural Rate + Target Inflation + Base Term Premium)
-        $neutral10yYield = self::NATURAL_RATE + self::TARGET_INFLATION + self::NS_BASE_TERM_PREMIUM;
+        $neutral10yYield = $state->naturalRate + self::TARGET_INFLATION + self::NS_BASE_TERM_PREMIUM;
         $excessYield = max(0.0, $state->yield10y - $neutral10yYield);
         $ratePenalty = $excessYield * self::SENTIMENT_RATE_MULTIPLIER;
 

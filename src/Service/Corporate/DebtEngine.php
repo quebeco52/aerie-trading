@@ -29,6 +29,8 @@ class DebtEngine
     private const LEVERAGE_PENALTY_RATE = 0.20;
     /** Base penalty for high leverage. */
     private const LEVERAGE_PENALTY_BASE = 0.010;
+    /** BGG (1999) Financial Accelerator external finance premium sensitivity to leverage during recessions. */
+    private const BGG_ACCELERATOR_SENSITIVITY = 0.050;
 
     // --- CAPM / Beta Limits ---
     /** Prevent runaway WACC in standard CAPM by capping debt to equity ratio. */
@@ -216,7 +218,14 @@ class DebtEngine
             $timeToMaturity
         );
 
-        $dynamicSpread = $baselineCreditSpread + $mertonSpread;
+        // BERNANKE-GERTLER-GILCHRIST (1999) FINANCIAL ACCELERATOR
+        // Agency costs between borrowers and lenders amplify credit friction during economic downturns.
+        // Highly leveraged firms face an external finance premium during recessions.
+        $firmLeverage = $marketCap > 0.0 ? ($totalDebtObligations / $marketCap) : self::MAX_LEVERAGE_RATIO;
+        $recessionDepth = max(0.0, -$macroState->outputGapEma);
+        $bggAcceleratorPremium = min(self::MAX_LEVERAGE_PENALTY, self::BGG_ACCELERATOR_SENSITIVITY * $firmLeverage * $recessionDepth);
+
+        $dynamicSpread = $baselineCreditSpread + $mertonSpread + $bggAcceleratorPremium;
 
         // Fixed-rate corporate debt is priced off the 5-Year Yield curve, not the overnight Policy Rate
         $currentMarketFixedRate = $yield5y + $dynamicSpread;

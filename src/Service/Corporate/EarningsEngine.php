@@ -188,9 +188,15 @@ class EarningsEngine
 
         $fixedCostRatio = (float) $stock->getFixedCostRatio();
         $structuralCosts = $ctx->structuralRevenue * (1.0 - $ctx->stableMargin);
-        $ctx->fixedCosts = $structuralCosts * $fixedCostRatio;
 
-        $structuralVariableCosts = $structuralCosts - $ctx->fixedCosts;
+        // Beveridge Wage-Price Spiral SG&A Squeeze:
+        // When labor tightness causes wage growth above trend (3.5%), corporate overhead/SG&A fixed costs
+        // inflate, squeezing margins for firms that cannot pass costs through via pricing power.
+        $excessWageGrowth = max(0.0, $macroState->wageGrowth - (MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION));
+        $wageInflationFactor = 1.0 + ($excessWageGrowth / max(0.5, $pricingPowerMultiplier));
+        $ctx->fixedCosts = $structuralCosts * $fixedCostRatio * $wageInflationFactor;
+
+        $structuralVariableCosts = $structuralCosts - ($structuralCosts * $fixedCostRatio);
         $ctx->baselineVariableMargin = $structuralVariableCosts / $ctx->structuralRevenue;
     }
 

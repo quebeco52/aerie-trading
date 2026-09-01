@@ -169,7 +169,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $commercialPropertyShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;
 
         $commercialMacroBoost = (($outputGap * 1.5 * $beta) + ($commercialPropertyShift * 0.30) + ($residentialShift * 0.20)) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
-        $commercialCreditDrag = max(0.0, ($policyRate - MacroEngine::NATURAL_RATE) * 2.0 * $beta) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
+        $commercialCreditDrag = max(0.0, ($policyRate - $macroState->naturalRateEma) * 2.0 * $beta) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
         $maintenanceMacroBoost = ($outputGap * 0.3 * $beta);
         $govSpendShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
 

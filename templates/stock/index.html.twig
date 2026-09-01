@@ -639,7 +639,7 @@
 						<div class="h-80 md:h-85 w-full relative"><canvas id="macroRiskChart"></canvas></div>
 					</div>
 
-					{# Chart 5: Labor & Credit Defaults #}
+					{# Chart 5: Labor Market & Wage Growth #}
 					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between">
 						<div class="flex items-center justify-between mb-4">
 							<div class="flex items-center gap-2.5">
@@ -647,11 +647,11 @@
 									<span class="material-symbols-outlined text-lg leading-none">group</span>
 								</div>
 								<div>
-									<h4 class="text-sm font-bold text-on-surface">Labor Market & Consumer Credit Quality</h4>
-									<p class="text-[11px] text-on-surface-variant">Unemployment rate vs retail household default rates</p>
+									<h4 class="text-sm font-bold text-on-surface">Labor Market & Wage Dynamics</h4>
+									<p class="text-[11px] text-on-surface-variant">Unemployment rate vs job vacancies and annual wage growth</p>
 								</div>
 							</div>
-							<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Credit</span>
+							<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Labor</span>
 						</div>
 						<div class="h-80 md:h-85 w-full relative"><canvas id="macroLaborCreditChart"></canvas></div>
 					</div>
@@ -690,7 +690,7 @@
 						<div class="h-80 md:h-85 w-full relative"><canvas id="macroPropertyChart"></canvas></div>
 					</div>
 
-					{# Chart 8: Consumer Sentiment #}
+					{# Chart 8: Consumer Sentiment & Credit Health #}
 					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between">
 						<div class="flex items-center justify-between mb-4">
 							<div class="flex items-center gap-2.5">
@@ -698,11 +698,11 @@
 									<span class="material-symbols-outlined text-lg leading-none">sentiment_satisfied</span>
 								</div>
 								<div>
-									<h4 class="text-sm font-bold text-on-surface">Consumer Sentiment & Confidence</h4>
-									<p class="text-[11px] text-on-surface-variant">Macro consumer confidence survey index (Baseline: 100)</p>
+									<h4 class="text-sm font-bold text-on-surface">Consumer Sentiment & Default Risk</h4>
+									<p class="text-[11px] text-on-surface-variant">Consumer confidence survey index vs retail household default rate</p>
 								</div>
 							</div>
-							<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Sentiment</span>
+							<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Consumer</span>
 						</div>
 						<div class="h-80 md:h-85 w-full relative"><canvas id="macroSentimentChart"></canvas></div>
 					</div>
@@ -742,7 +742,7 @@
 					</div>
 
 					{# Chart 11: Fiscal Spending #}
-					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between lg:col-span-2">
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between">
 						<div class="flex items-center justify-between mb-4">
 							<div class="flex items-center gap-2.5">
 								<div class="p-2 rounded-xl bg-teal-500/10 text-teal-400">
@@ -756,6 +756,40 @@
 							<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Fiscal Policy</span>
 						</div>
 						<div class="h-80 md:h-85 w-full relative"><canvas id="macroGovtSpendingChart"></canvas></div>
+					</div>
+
+					{# Chart 12: 10-Year Yield Decomposition #}
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between">
+						<div class="flex items-center justify-between mb-4">
+							<div class="flex items-center gap-2.5">
+								<div class="p-2 rounded-xl bg-violet-500/10 text-violet-400">
+									<span class="material-symbols-outlined text-lg leading-none">show_chart</span>
+								</div>
+								<div>
+									<h4 class="text-sm font-bold text-on-surface">10-Year Yield Decomposition</h4>
+									<p class="text-[11px] text-on-surface-variant">10Y yield split into expected policy rate path vs duration term premium and natural rate</p>
+								</div>
+							</div>
+							<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Yields</span>
+						</div>
+						<div class="h-80 md:h-85 w-full relative"><canvas id="macroTermPremiumChart"></canvas></div>
+					</div>
+
+					{# Chart 13: Central Bank Balance Sheet & Operations (QE / QT) #}
+					<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between lg:col-span-2">
+						<div class="flex items-center justify-between mb-4">
+							<div class="flex items-center gap-2.5">
+								<div class="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
+									<span class="material-symbols-outlined text-lg leading-none">account_balance</span>
+								</div>
+								<div>
+									<h4 class="text-sm font-bold text-on-surface">Central Bank Balance Sheet & Quantitative Operations</h4>
+									<p class="text-[11px] text-on-surface-variant">Total sovereign asset holdings balance vs quantitative easing (QE) & tightening (QT) intensity</p>
+								</div>
+							</div>
+							<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Balance Sheet</span>
+						</div>
+						<div class="h-80 md:h-85 w-full relative"><canvas id="macroBalanceSheetChart"></canvas></div>
 					</div>
 				</div>
 			</div>

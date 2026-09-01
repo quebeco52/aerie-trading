@@ -419,4 +419,56 @@ class EarningsEngineTest extends TestCase
             'Free Cash Flow should not be massively inflated by a false negative NWC delta caused by annualized previous revenue mismatch.'
         );
     }
+
+    public function testWageInflationOverheatingSqueezesFixedCosts(): void
+    {
+        $createStock = function(): Stock {
+            $stock = new Stock();
+            $stock->setTicker('WAGE_TEST');
+            $stock->setIndustry('Technology');
+            $stock->setEarningsPerShare('2.00');
+            $stock->setSharesOutstanding('1000000');
+            $stock->setVolatility('0.10');
+            $stock->setCurrentVolatility('0.10');
+            $stock->setBeta('1.0');
+            $stock->setTotalEquity('100000000');
+            $stock->setWholesaleDebt('0');
+            $stock->setCorporateTreasury('10000000');
+            $stock->setBaselineRoic('0.10');
+            $stock->setOperatingMargin('0.20');
+            $stock->setPreviousRevenue('100000000');
+            return $stock;
+        };
+
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $reportingTick = $this->getReportingTick('WAGE_TEST');
+
+        // 1. Normal wage growth economy (3.5%)
+        $stockNormal = $createStock();
+        $normalMacro = new \App\DTO\MacroStateDTO(
+            wageGrowth: 0.035,
+            wageGrowthEma: 0.035,
+            inflation: 0.02,
+            inflationEma: 0.02
+        );
+        $this->engine->calculate($stockNormal, $normalMacro, $reportingTick, 252);
+        $normalEps = (float) $stockNormal->getEarningsPerShare();
+
+        // 2. Severe wage-push inflation economy (7.5% wage growth)
+        $stockOverheated = $createStock();
+        $overheatedMacro = new \App\DTO\MacroStateDTO(
+            wageGrowth: 0.075,
+            wageGrowthEma: 0.075,
+            inflation: 0.02,
+            inflationEma: 0.02
+        );
+        $this->engine->calculate($stockOverheated, $overheatedMacro, $reportingTick, 252);
+        $overheatedEps = (float) $stockOverheated->getEarningsPerShare();
+
+        $this->assertLessThan(
+            $normalEps,
+            $overheatedEps,
+            'Excess wage growth above trend must inflate fixed SG&A overhead costs and compress corporate earnings.'
+        );
+    }
 }

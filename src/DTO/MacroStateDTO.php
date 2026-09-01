@@ -21,6 +21,14 @@ readonly class MacroStateDTO
         public float $capitalStockOverhangEma = 0.0,
         public float $unemploymentRate = 0.04,
         public float $unemploymentRateEma = 0.04,
+        public float $jobVacanciesRate = 0.045,
+        public float $jobVacanciesRateEma = 0.045,
+        public float $laborTightness = 1.125,
+        public float $laborTightnessEma = 1.125,
+        public float $wageGrowth = 0.035,
+        public float $wageGrowthEma = 0.035,
+        public float $naturalRate = MacroEngine::BASE_NATURAL_RATE,
+        public float $naturalRateEma = MacroEngine::BASE_NATURAL_RATE,
         public float $energyPriceIndex = 100.0,
         public float $energyPriceIndexEma = 100.0,
         public float $energyPriceShock = 0.0,
@@ -63,6 +71,10 @@ readonly class MacroStateDTO
         public float $yield10yEma = 0.05,
         public float $yield30y = 0.055,
         public float $yield30yEma = 0.055,
+        public float $termPremium10y = 0.0125,
+        public float $termPremium10yEma = 0.0125,
+        public float $riskNeutral10y = 0.0250,
+        public float $riskNeutral10yEma = 0.0250,
         public float $marketVolatility = 0.15,
         public float $marketVolatilityEma = 0.15,
         public float $marketZ = 0.0,
@@ -76,6 +88,9 @@ readonly class MacroStateDTO
         public float $totalFactorProductivityIndexEma = MacroEngine::TFP_BASELINE,
         public bool $qeActive = false,
         public float $qeIntensity = 0.0,
+        public bool $qtActive = false,
+        public float $qtIntensity = 0.0,
+        public float $balanceSheetIntensity = 0.0,
         public float $inversionDuration = 0.0,
         public float $nsLevel = 0.0,
         public float $nsSlope = 0.0,
@@ -104,6 +119,15 @@ readonly class MacroStateDTO
         
         $unemploymentRate = (float) ($data['unemployment_rate'] ?? 0.04);
         $unemploymentRateEma = (float) ($data['unemployment_rate_ema'] ?? $unemploymentRate);
+        $jobVacanciesRate = (float) ($data['job_vacancies_rate'] ?? 0.045);
+        $jobVacanciesRateEma = (float) ($data['job_vacancies_rate_ema'] ?? $jobVacanciesRate);
+        $laborTightness = (float) ($data['labor_tightness'] ?? 1.125);
+        $laborTightnessEma = (float) ($data['labor_tightness_ema'] ?? $laborTightness);
+        $wageGrowth = (float) ($data['wage_growth'] ?? 0.035);
+        $wageGrowthEma = (float) ($data['wage_growth_ema'] ?? $wageGrowth);
+
+        $naturalRate = (float) ($data['natural_rate'] ?? MacroEngine::BASE_NATURAL_RATE);
+        $naturalRateEma = (float) ($data['natural_rate_ema'] ?? $naturalRate);
         
         $energyPriceIndex = (float) ($data['energy_price_index'] ?? 100.0);
         $energyPriceIndexEma = (float) ($data['energy_price_index_ema'] ?? $energyPriceIndex);
@@ -147,6 +171,11 @@ readonly class MacroStateDTO
         $yield30y = (float) ($data['yield_30y'] ?? ($policyRate + 0.015));
         $yield30yEma = (float) ($data['yield_30y_ema'] ?? $yield30y);
 
+        $termPremium10y = (float) ($data['term_premium_10y'] ?? 0.0125);
+        $termPremium10yEma = (float) ($data['term_premium_10y_ema'] ?? $termPremium10y);
+        $riskNeutral10y = (float) ($data['risk_neutral_10y'] ?? 0.0250);
+        $riskNeutral10yEma = (float) ($data['risk_neutral_10y_ema'] ?? $riskNeutral10y);
+
         $marketVolatility = (float) ($data['market_volatility'] ?? 0.15);
         $marketVolatilityEma = (float) ($data['market_volatility_ema'] ?? $marketVolatility);
         $marketZ = (float) ($data['market_z'] ?? 0.0);
@@ -160,8 +189,12 @@ readonly class MacroStateDTO
         $totalFactorProductivityIndex = (float) ($data['total_factor_productivity_index'] ?? MacroEngine::TFP_BASELINE);
         $totalFactorProductivityIndexEma = (float) ($data['total_factor_productivity_index_ema'] ?? $totalFactorProductivityIndex);
 
-        $qeActive = (bool) ($data['qe_active'] ?? false);
-        $qeIntensity = (float) ($data['qe_intensity'] ?? 0.0);
+        $balanceSheetIntensity = (float) ($data['balance_sheet_intensity'] ?? ($data['qe_intensity'] ?? 0.0));
+        $qeActive = (bool) ($data['qe_active'] ?? ($balanceSheetIntensity > 0.0005));
+        $qeIntensity = (float) ($data['qe_intensity'] ?? max(0.0, $balanceSheetIntensity));
+        $qtActive = (bool) ($data['qt_active'] ?? ($balanceSheetIntensity < -0.0005));
+        $qtIntensity = (float) ($data['qt_intensity'] ?? max(0.0, -$balanceSheetIntensity));
+
         $inversionDuration = (float) ($data['inversion_duration'] ?? 0.0);
         $nsLevel = (float) ($data['ns_level'] ?? 0.0);
         $nsSlope = (float) ($data['ns_slope'] ?? 0.0);
@@ -181,6 +214,14 @@ readonly class MacroStateDTO
             capitalStockOverhangEma: $capitalStockOverhangEma,
             unemploymentRate: $unemploymentRate,
             unemploymentRateEma: $unemploymentRateEma,
+            jobVacanciesRate: $jobVacanciesRate,
+            jobVacanciesRateEma: $jobVacanciesRateEma,
+            laborTightness: $laborTightness,
+            laborTightnessEma: $laborTightnessEma,
+            wageGrowth: $wageGrowth,
+            wageGrowthEma: $wageGrowthEma,
+            naturalRate: $naturalRate,
+            naturalRateEma: $naturalRateEma,
             energyPriceIndex: $energyPriceIndex,
             energyPriceIndexEma: $energyPriceIndexEma,
             energyPriceShock: $energyPriceShock,
@@ -223,6 +264,10 @@ readonly class MacroStateDTO
             yield10yEma: $yield10yEma,
             yield30y: $yield30y,
             yield30yEma: $yield30yEma,
+            termPremium10y: $termPremium10y,
+            termPremium10yEma: $termPremium10yEma,
+            riskNeutral10y: $riskNeutral10y,
+            riskNeutral10yEma: $riskNeutral10yEma,
             marketVolatility: $marketVolatility,
             marketVolatilityEma: $marketVolatilityEma,
             marketZ: $marketZ,
@@ -236,6 +281,9 @@ readonly class MacroStateDTO
             totalFactorProductivityIndexEma: $totalFactorProductivityIndexEma,
             qeActive: $qeActive,
             qeIntensity: $qeIntensity,
+            qtActive: $qtActive,
+            qtIntensity: $qtIntensity,
+            balanceSheetIntensity: $balanceSheetIntensity,
             inversionDuration: $inversionDuration,
             nsLevel: $nsLevel,
             nsSlope: $nsSlope,
@@ -261,6 +309,14 @@ readonly class MacroStateDTO
             capitalStockOverhangEma: $state->capitalStockOverhangEma,
             unemploymentRate: $state->unemploymentRate,
             unemploymentRateEma: $state->unemploymentRateEma,
+            jobVacanciesRate: $state->jobVacanciesRate,
+            jobVacanciesRateEma: $state->jobVacanciesRateEma,
+            laborTightness: $state->laborTightness,
+            laborTightnessEma: $state->laborTightnessEma,
+            wageGrowth: $state->wageGrowth,
+            wageGrowthEma: $state->wageGrowthEma,
+            naturalRate: $state->naturalRate,
+            naturalRateEma: $state->naturalRateEma,
             energyPriceIndex: $state->energyPriceIndex,
             energyPriceIndexEma: $state->energyPriceIndexEma,
             energyPriceShock: $state->energyPriceShock,
@@ -303,6 +359,10 @@ readonly class MacroStateDTO
             yield10yEma: $state->yield10yEma,
             yield30y: $state->yield30y,
             yield30yEma: $state->yield30yEma,
+            termPremium10y: $state->termPremium10y,
+            termPremium10yEma: $state->termPremium10yEma,
+            riskNeutral10y: $state->riskNeutral10y,
+            riskNeutral10yEma: $state->riskNeutral10yEma,
             marketVolatility: $state->marketVolatility,
             marketVolatilityEma: $state->marketVolatilityEma,
             marketZ: $state->marketZ,
@@ -316,6 +376,9 @@ readonly class MacroStateDTO
             totalFactorProductivityIndexEma: $state->totalFactorProductivityIndexEma,
             qeActive: $state->qeActive,
             qeIntensity: $state->qeIntensity,
+            qtActive: $state->qtActive,
+            qtIntensity: $state->qtIntensity,
+            balanceSheetIntensity: $state->balanceSheetIntensity,
             inversionDuration: $state->inversionDuration,
             nsLevel: $state->nsLevel,
             nsSlope: $state->nsSlope,
@@ -341,6 +404,14 @@ readonly class MacroStateDTO
             'capital_stock_overhang_ema' => $this->capitalStockOverhangEma,
             'unemployment_rate' => $this->unemploymentRate,
             'unemployment_rate_ema' => $this->unemploymentRateEma,
+            'job_vacancies_rate' => $this->jobVacanciesRate,
+            'job_vacancies_rate_ema' => $this->jobVacanciesRateEma,
+            'labor_tightness' => $this->laborTightness,
+            'labor_tightness_ema' => $this->laborTightnessEma,
+            'wage_growth' => $this->wageGrowth,
+            'wage_growth_ema' => $this->wageGrowthEma,
+            'natural_rate' => $this->naturalRate,
+            'natural_rate_ema' => $this->naturalRateEma,
             'energy_price_index' => $this->energyPriceIndex,
             'energy_price_index_ema' => $this->energyPriceIndexEma,
             'energy_price_shock' => $this->energyPriceShock,
@@ -361,6 +432,7 @@ readonly class MacroStateDTO
             'residential_property_index_ema' => $this->residentialPropertyIndexEma,
             'retail_default_rate' => $this->retailDefaultRate,
             'retail_default_rate_ema' => $this->retailDefaultRateEma,
+            'agriculturalCommodityIndex' => $this->agriculturalCommodityIndex,
             'agricultural_commodity_index' => $this->agriculturalCommodityIndex,
             'agricultural_commodity_index_ema' => $this->agriculturalCommodityIndexEma,
             'agri_chi' => $this->agriChi,
@@ -383,6 +455,10 @@ readonly class MacroStateDTO
             'yield_10y_ema' => $this->yield10yEma,
             'yield_30y' => $this->yield30y,
             'yield_30y_ema' => $this->yield30yEma,
+            'term_premium_10y' => $this->termPremium10y,
+            'term_premium_10y_ema' => $this->termPremium10yEma,
+            'risk_neutral_10y' => $this->riskNeutral10y,
+            'risk_neutral_10y_ema' => $this->riskNeutral10yEma,
             'market_volatility' => $this->marketVolatility,
             'market_volatility_ema' => $this->marketVolatilityEma,
             'market_z' => $this->marketZ,
@@ -394,8 +470,11 @@ readonly class MacroStateDTO
             'interbank_liquidity_spread_ema' => $this->interbankLiquiditySpreadEma,
             'total_factor_productivity_index' => $this->totalFactorProductivityIndex,
             'total_factor_productivity_index_ema' => $this->totalFactorProductivityIndexEma,
+            'balance_sheet_intensity' => $this->balanceSheetIntensity,
             'qe_active' => $this->qeActive,
             'qe_intensity' => $this->qeIntensity,
+            'qt_active' => $this->qtActive,
+            'qt_intensity' => $this->qtIntensity,
             'inversion_duration' => $this->inversionDuration,
             'ns_level' => $this->nsLevel,
             'ns_slope' => $this->nsSlope,
