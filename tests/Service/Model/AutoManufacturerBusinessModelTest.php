@@ -106,8 +106,8 @@ class AutoManufacturerBusinessModelTest extends TestCase
             $neutralResult->streamRevenue['apex_luxury'],
             $wealthBoomResult->streamRevenue['apex_luxury']
         );
-        // Specifically: 25M base * (1.0 + (0.010 * 35.0) + (1.0 * 0.15)) = 25M * 1.50 = 37.50M
-        $this->assertEqualsWithDelta(37_500_000.0, $wealthBoomResult->streamRevenue['apex_luxury'], 1.0);
+        // Specifically: 25M base * (1.0 + (0.010 * 10.0) + (1.0 * 0.15)) = 25M * 1.25 = 31.25M
+        $this->assertEqualsWithDelta(31_250_000.0, $wealthBoomResult->streamRevenue['apex_luxury'], 1.0);
     }
 
     public function testApexLuxuryVeblenInflationPricingPower(): void
@@ -248,4 +248,44 @@ class AutoManufacturerBusinessModelTest extends TestCase
         );
         $this->assertLessThan($calmResult->ebit, $spikeResult->ebit);
     }
+
+    public function testFalcCalibratedFinancialsUnderMacroShifts(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('FALC');
+        $stock->setBeta('1.35');
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $macro = new MacroStateDTO(
+            outputGapEma: -0.02,
+            inflationEma: 0.04,
+            policyRateEma: 0.05,
+            yield10yEma: 0.045,
+            yield2yEma: 0.050, // Inverted curve
+            equityRiskPremium: 0.055,
+            macroCreditSpread: 0.035
+        );
+
+        $result = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 500_000_000_000.0,
+            realizedVariableMargin: 0.35,
+            fixedCosts: 263_900_000_000.0, // 500B * (1 - 0.09 margin) * 0.58 fixed cost ratio
+            baselineVol: 0.35,
+            macroState: $macro,
+            mathUtility: $mathMock
+        );
+
+        $this->assertGreaterThan(0.0, $result->actualRevenue);
+        $this->assertGreaterThan(0.0, $result->actualVariableCosts);
+        $this->assertLessThan(1.0, $result->clampedMargin);
+
+        // Operating margin under stress must remain realistic (bounded, not collapsing to severe math singularities)
+        $operatingMargin = $result->ebit / $result->actualRevenue;
+        $this->assertGreaterThan(-0.25, $operatingMargin);
+        $this->assertLessThan(0.35, $operatingMargin);
+    }
 }
+

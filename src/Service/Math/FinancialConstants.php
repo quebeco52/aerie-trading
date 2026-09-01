@@ -262,5 +262,12 @@ class FinancialConstants
     public const MAX_CIP_CAPITAL_DEDUCTION_RATIO = 0.25;
     /** Maximum CIP balance relative to invested capital allowed before new growth CapEx deployment is paused (25%). */
     public const MAX_CIP_EXPANSION_THRESHOLD_RATIO = 0.25;
+
+    // --- Equity Issuance & TAM Scaling Limits ---
+    /** Maximum fraction of market capitalization that can be raised in a distressed emergency equity offering (25%). */
+    public const MAX_EMERGENCY_EQUITY_RAISE_RATIO = 0.25;
+    /** Maximum structural capacity and revenue multiplier relative to dynamic Sector TAM (150%). */
+    public const MAX_SECTOR_TAM_CAPACITY_RATIO = 1.50;
 }
+
 

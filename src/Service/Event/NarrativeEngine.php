@@ -23,9 +23,9 @@ class NarrativeEngine
                 "Reported a steep drop in active users following negative product reception."
             ]),
             ShockEvent::BANK_RUN => $this->getRandomPhrase([
-                "Suffered a bank run. Forced into emergency borrowing of \${$context['amount']}B to cover deposit flight.",
-                "Faced a sudden liquidity crisis as depositors withdrew \${$context['amount']}B in a panic.",
-                "Experienced severe capital flight requiring a \${$context['amount']}B emergency liquidity injection."
+                "Suffered a bank run. Forced into emergency borrowing of \$" . ($context['amount'] ?? '0.00') . "B to cover deposit flight.",
+                "Faced a sudden liquidity crisis as depositors withdrew \$" . ($context['amount'] ?? '0.00') . "B in a panic.",
+                "Experienced severe capital flight requiring a \$" . ($context['amount'] ?? '0.00') . "B emergency liquidity injection."
             ]),
             ShockEvent::BANK_SEIZURE => $this->getRandomPhrase([
                 "Breached statutory minimum capital requirements. Regulators stepped in with an emergency seizure.",
@@ -252,6 +252,152 @@ class NarrativeEngine
                 "Unanticipated engineering defects and schedule overruns triggered ASC 606 reach-forward project losses.",
                 "Complex developmental milestone delays and supply chain logjams led to programmatic forward loss charges.",
                 "Project delays on fixed-price development contracts resulted in significant cost overrun provisions."
+            ]),
+
+            ShockEvent::RESERVE_RELEASE => $this->getRandomPhrase([
+                "Released credit and loan loss reserves as asset quality outperformed expectations.",
+                "Strong macroeconomic tailwinds allowed substantial reversal of previous credit reserves.",
+                "Lower non-performing loan formations prompted a quarterly credit reserve release."
+            ]),
+            ShockEvent::PERFORMANCE_FEE_SURGE => $this->getRandomPhrase([
+                "Surging asset management performance fees drove record quarterly non-interest income.",
+                "Outperforming benchmark hurdles unlocked outsized quarterly incentive fee allocations.",
+                "Strong fund alpha generation triggered significant performance fee crystallization."
+            ]),
+            ShockEvent::FUND_OUTFLOWS => $this->getRandomPhrase([
+                "Experienced elevated institutional fund outflows and redemption pressures.",
+                "Asset management AUM contracted following market volatility and client rebalancing.",
+                "Net redemption outflows reduced recurring management fee revenues."
+            ]),
+            ShockEvent::TITAN_INTERVENTION => $this->getRandomPhrase([
+                "Emergency liquidity support and capital injections from District Titans restored market confidence.",
+                "Coordinated institutional backstop facility averted systemic credit contagion.",
+                "Strategic cornerstone investment by major financial institutions stabilized asset prices."
+            ]),
+            ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT => $this->getRandomPhrase([
+                "Sovereign wealth funds deployed massive capital reserves to stabilize distressed assets.",
+                "Large-scale sovereign capital injections supported district balance sheets during market turmoil.",
+                "Strategic sovereign liquidity facilities bolstered broad market liquidity."
+            ]),
+            ShockEvent::PE_LEVERAGE_RECAPITALIZATION => $this->getRandomPhrase([
+                "Executed dividend recapitalizations across private equity portfolio assets, unlocking substantial liquidity.",
+                "Completed opportunistic debt refinancing and special dividend payouts across core portfolio holdings.",
+                "Optimized capital structure across buyout assets to return cash to fund LPs."
+            ]),
+            ShockEvent::PE_PORTFOLIO_MARKDOWN => $this->getRandomPhrase([
+                "Marked down private equity portfolio company valuations amid multiple compression.",
+                "Unrealized fair-value adjustments across technology and growth investments weighed on portfolio net worth.",
+                "Weakened public comps required conservative valuation markdowns across private holdings."
+            ]),
+            ShockEvent::GEOPOLITICAL_SANCTIONS => $this->getRandomPhrase([
+                "Sweeping international trade sanctions disrupted global business lines and contract fulfillment.",
+                "Imposition of cross-border trade restrictions halted key international shipment routes.",
+                "Compliance mandates and sanctions enforcement restricted access to foreign enterprise markets."
+            ]),
+            ShockEvent::REINSURANCE_ATTACHMENT_BREACH => $this->getRandomPhrase([
+                "Severe catastrophe losses breached reinsurance attachment points, transferring risk to retrocessionaires.",
+                "Excess-of-loss reinsurance claims exceeded primary retention layers.",
+                "Industry-wide catastrophe events exhausted primary treaty deductibles."
+            ]),
+            ShockEvent::LITIGATION_SETTLEMENT_WIN => $this->getRandomPhrase([
+                "Secured a favorable legal settlement, unlocking substantial contingency fee income.",
+                "Landmark patent infringement verdict awarded significant damages to the firm.",
+                "Resolution of major class-action claims resulted in outsized legal contingency revenues."
+            ]),
+            ShockEvent::LITIGATION_SETTLEMENT_LOSS => $this->getRandomPhrase([
+                "Suffered an adverse litigation verdict, requiring significant legal liability provisions.",
+                "Court ruling against the firm triggered substantial damage awards and settlement charges.",
+                "Unanticipated legal liability findings increased quarterly litigation reserves."
+            ]),
+            ShockEvent::AUTO_SUPPLY_CHAIN_DISRUPTION => $this->getRandomPhrase([
+                "Semiconductor and parts shortages disrupted assembly lines and delayed vehicle deliveries.",
+                "Critical component supply bottlenecks forced temporary factory idling and lower unit volumes.",
+                "Tier-1 supplier delivery delays reduced quarterly automotive production."
+            ]),
+            ShockEvent::AUTO_SUBPRIME_DEFAULT_SURGE => $this->getRandomPhrase([
+                "Elevated subprime auto loan defaults pressured captive finance margins.",
+                "Surge in vehicle repossessions and credit delinquencies increased captive lending provisions.",
+                "Deteriorating consumer credit health reduced financing income across automotive desks."
+            ]),
+            ShockEvent::AUTO_PRICING_POWER_SURGE => $this->getRandomPhrase([
+                "Strong vehicle pricing power and high-margin trim demand drove outsized auto operating margins.",
+                "Favorable vehicle model mix and lean dealer inventories supported record average selling prices.",
+                "Robust consumer demand for flagship models expanded gross automotive margins."
+            ]),
+            ShockEvent::CRISIS_MANAGEMENT_BOOM => $this->getRandomPhrase([
+                "Corporate restructuring and crisis management consulting retainers surged amid corporate distress.",
+                "High-profile corporate turnarounds and turnaround advisory engagements drove record consulting billings.",
+                "Advisory practices captured strong demand for operational restructuring and debtor advisory."
+            ]),
+            ShockEvent::TALENT_PLACEMENT_BOOM => $this->getRandomPhrase([
+                "Executive recruitment and specialized talent placement fees reached record highs.",
+                "Strong corporate demand for leadership recruitment expanded professional search revenues.",
+                "Surge in C-suite placements across growth sectors drove outsized placement retainers."
+            ]),
+            ShockEvent::SUBSIDY_CUT => $this->getRandomPhrase([
+                "Government subsidy reductions and tariff phase-outs squeezed operating margins.",
+                "Regulatory policy shifts eliminated key tax credits and government incentive programs.",
+                "Reduced public grant allocations increased net operational expenses."
+            ]),
+            ShockEvent::LOGISTICS_SURGE_PRICING => $this->getRandomPhrase([
+                "Tight freight capacity enabled dynamic surge pricing across core shipping lanes.",
+                "Peak season carrier capacity constraints drove record contractual and spot freight yields.",
+                "High lane utilization and expedited freight premiums expanded logistics operating margins."
+            ]),
+            ShockEvent::INFRASTRUCTURE_BILL_WIN => $this->getRandomPhrase([
+                "Secured landmark federal infrastructure grants and public-private partnership concessions.",
+                "Awarded multi-billion dollar municipal transportation and civil works construction contracts.",
+                "National infrastructure spending legislation unlocked significant forward project backlog."
+            ]),
+            ShockEvent::ENVIRONMENTAL_DISASTER => $this->getRandomPhrase([
+                "Remediation and cleanup liabilities following an environmental incident weighed on earnings.",
+                "Regulatory fines and remediation mandates following a containment leak increased operating costs.",
+                "Incurred significant environmental compliance charges and containment expenses."
+            ]),
+            ShockEvent::TELECOM_PRICE_WAR => $this->getRandomPhrase([
+                "Aggressive price cuts and promotional discounting triggered margin erosion across telecom tiers.",
+                "Intense competitive discounting and unlimited plan promotions compressed subscriber ARPU.",
+                "Subscriber retention promotions and device subsidy wars squeezed telecom service margins."
+            ]),
+            ShockEvent::SPECTRUM_AUCTION => $this->getRandomPhrase([
+                "Secured prime 5G spectrum licenses in a competitive government auction, expanding network reach.",
+                "Acquired high-capacity mid-band spectrum blocks to expand mobile broadband leadership.",
+                "Strategic spectrum license acquisitions reinforced long-term wireless network capacity."
+            ]),
+            ShockEvent::MANDATORY_HEALTHCARE_EXPANSION => $this->getRandomPhrase([
+                "Mandatory healthcare coverage expansions and higher patient admissions boosted operating volumes.",
+                "Expanded statutory health insurance coverage drove higher patient utilization across medical centers.",
+                "Increased healthcare enrollment supported robust inpatient and outpatient procedure growth."
+            ]),
+            ShockEvent::HEALTHCARE_AUDIT_CLAWBACK => $this->getRandomPhrase([
+                "Regulatory billing audits and reimbursement clawbacks reduced net medical service revenue.",
+                "Statutory Medicare/Medicaid reimbursement revisions resulted in retrospective revenue adjustments.",
+                "Payer claims review findings necessitated reserves for disputed clinical billing codes."
+            ]),
+            ShockEvent::APPAREL_SUPPLY_CHAIN_DISRUPTION => $this->getRandomPhrase([
+                "Port logjams and fabric supply disruptions delayed seasonal apparel collections.",
+                "Textile import bottlenecks and transit delays required costly airfreight expedited shipping.",
+                "Supply logjams led to inventory stockouts across high-demand seasonal product lines."
+            ]),
+            ShockEvent::APPAREL_VIRAL_PRODUCT => $this->getRandomPhrase([
+                "Viral social media momentum and influencer adoption triggered an explosive sell-through of flagship fashion lines.",
+                "Breakthrough viral demand drove record full-price sell-through rates across core apparel collections.",
+                "Culturally trending footwear and apparel releases sold out instantly across digital and retail channels."
+            ]),
+            ShockEvent::CHEMICAL_CRACK_SPREAD_SQUEEZE => $this->getRandomPhrase([
+                "Surging hydrocarbon feedstock costs squeezed petrochemical crack spreads.",
+                "Elevated natural gas and crude input pricing compressed chemical processing margins.",
+                "Upstream commodity inflation narrowed refining and cracking unit margins."
+            ]),
+            ShockEvent::CHEMICAL_PLANT_TURNAROUND => $this->getRandomPhrase([
+                "Unplanned manufacturing outages and extended plant maintenance turnarounds curtailed chemical output.",
+                "Scheduled complex catalyst replacement and facility maintenance temporarily reduced production volumes.",
+                "Extended chemical refinery turnaround cycles resulted in temporary shipment deferrals."
+            ]),
+            ShockEvent::CHEMICAL_AGRI_BOOM => $this->getRandomPhrase([
+                "Surging global fertilizer demand and agricultural commodity prices drove outsized specialty chemical margins.",
+                "Strong crop nutrient pricing and international agronomic demand expanded chemical operating earnings.",
+                "High fertilizer utilization and agricultural input pricing power drove record specialty chemical profits."
             ]),
 
             default => "Experienced an unexpected market event."

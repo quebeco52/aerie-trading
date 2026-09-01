@@ -361,7 +361,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
             case 'shipping':
             case 'logistics':
             case 'railroad':
-                if (in_array($streamKey, ['spot_charter_rates', 'spot_charter', 'freight_forwarding', 'intermodal_freight'])) {
+                if (in_array($streamKey, ['spot_charter_rates', 'spot_charter', 'freight_forwarding', 'intermodal_freight', 'spot_freight_brokerage'])) {
                     $freightShift = ($macro->freightRateIndexEma - 100.0) / 100.0;
                     $drivers[] = [
                         'label'  => 'Spot Freight Charter Rates',
@@ -374,7 +374,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
                         'impact' => round($fxShift * 0.30, 4),
                         'type'   => 'macro',
                     ];
-                } elseif (in_array($streamKey, ['time_charter_contracts', 'warehousing_fulfillment', 'bulk_commodities', 'industrial_carloads'])) {
+                } elseif (in_array($streamKey, ['time_charter_contracts', 'warehousing_fulfillment', 'bulk_commodities', 'industrial_carloads', 'dedicated_fleet_contracts', 'value_added_warehousing'])) {
                     $drivers[] = [
                         'label'  => 'Industrial Bulk Supply Chain Volume',
                         'impact' => round($macro->outputGapEma * 0.60 * $beta, 4),
@@ -383,8 +383,9 @@ class EarningsReportSubscriber implements EventSubscriberInterface
                 }
                 $energyShift = ($macro->energyPriceIndexEma - 100.0) / 100.0;
                 if (abs($energyShift) >= 0.01) {
+                    $fuelLabel = $bm === 'shipping' ? 'Bunker Fuel Surcharge Impact' : 'Diesel Fuel Surcharge Impact';
                     $drivers[] = [
-                        'label'  => 'Bunker Fuel Surcharge Impact',
+                        'label'  => $fuelLabel,
                         'impact' => round(-$energyShift * 0.25, 4),
                         'type'   => 'macro',
                     ];

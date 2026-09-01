@@ -589,6 +589,344 @@ class MathUtilityTest extends TestCase
 
         $this->assertLessThan($baseIntensity, $boomIntensity, 'Boom conditions should tighten working capital intensity below baseline.');
     }
+
+    public function testGenerateUniformAndUniformBetween(): void
+    {
+        for ($i = 0; $i < 100; $i++) {
+            $u = $this->mathUtility->generateUniform();
+            $this->assertGreaterThanOrEqual(0.0, $u);
+            $this->assertLessThanOrEqual(1.0, $u);
+
+            $uBetween = $this->mathUtility->generateUniformBetween(10.0, 20.0);
+            $this->assertGreaterThanOrEqual(10.0, $uBetween);
+            $this->assertLessThanOrEqual(20.0, $uBetween);
+        }
+    }
+
+    public function testCheckProbability(): void
+    {
+        $this->assertFalse($this->mathUtility->checkProbability(0.0), 'Probability of 0.0 must always return false.');
+        $this->assertTrue($this->mathUtility->checkProbability(1.0), 'Probability of 1.0 must always return true.');
+        $this->assertTrue($this->mathUtility->checkProbability(2.0), 'Probability > 1.0 must always return true.');
+    }
+
+    public function testGenerateStandardNormalAndPersistentZ(): void
+    {
+        $z1 = $this->mathUtility->generateStandardNormal();
+        $z2 = $this->mathUtility->generateStandardNormal();
+        $this->assertIsFloat($z1);
+        $this->assertIsFloat($z2);
+
+        // Persistent AR(1) Z-score
+        $zPrev = 1.5;
+        $zZeroPhi = $this->mathUtility->generatePersistentZ($zPrev, 0.0);
+        $this->assertIsFloat($zZeroPhi);
+
+        // When phi = 1.0 (pure persistence with 0 innovation)
+        $zUnitPhi = $this->mathUtility->generatePersistentZ($zPrev, 1.0);
+        $this->assertEqualsWithDelta($zPrev, $zUnitPhi, 0.0001, 'Phi = 1.0 must return the previous Z exactly.');
+    }
+
+    public function testCalculateLogNormalSynergy(): void
+    {
+        for ($i = 0; $i < 50; $i++) {
+            $synergy = $this->mathUtility->calculateLogNormalSynergy(0.05, 0.02);
+            $this->assertGreaterThan(0.0, $synergy, 'LogNormal synergy must always be strictly positive.');
+        }
+    }
+
+    public function testGenerateStudentsT(): void
+    {
+        for ($i = 0; $i < 50; $i++) {
+            $t = $this->mathUtility->generateStudentsT(4);
+            $this->assertIsFloat($t);
+            $this->assertTrue(is_finite($t));
+        }
+    }
+
+    public function testCalculateJumpDiffusion(): void
+    {
+        // Probability = 0 (lambda = 0) -> no jump
+        $noJump = $this->mathUtility->calculateJumpDiffusion(0.0, 0.0, 0.05, 1.0);
+        $this->assertSame(1.0, $noJump['multiplier']);
+        $this->assertNull($noJump['shock_pct']);
+        $this->assertNull($noJump['exponent']);
+
+        // Probability = 1.0 (lambda = 1000, dt = 1.0) -> guaranteed jump
+        $jump = $this->mathUtility->calculateJumpDiffusion(1000.0, 0.05, 0.0, 1.0);
+        $this->assertNotNull($jump['shock_pct']);
+        $this->assertNotNull($jump['exponent']);
+        $this->assertEqualsWithDelta(exp(0.05), $jump['multiplier'], 0.0001);
+        $this->assertEqualsWithDelta((exp(0.05) - 1.0) * 100.0, $jump['shock_pct'], 0.0001);
+    }
+
+    public function testCalculateCIR(): void
+    {
+        // Exact mean reversion without diffusion (dW = 0)
+        $val = $this->mathUtility->calculateCIR(
+            currentValue: 0.02,
+            kappa: 2.0,
+            theta: 0.05,
+            sigma: 0.02,
+            dt: 1.0,
+            dW: 0.0
+        );
+        $this->assertGreaterThan(0.02, $val, 'Value below theta must revert upwards.');
+        $this->assertLessThanOrEqual(0.05, $val, 'Value must not overshoot theta without noise.');
+
+        // Negative diffusion shock with low value must be floored at 0.0001 failsafe
+        $floored = $this->mathUtility->calculateCIR(
+            currentValue: 0.0001,
+            kappa: 2.0,
+            theta: 0.01,
+            sigma: 0.50,
+            dt: 1.0,
+            dW: -10.0
+        );
+        $this->assertGreaterThanOrEqual(0.0001, $floored, 'CIR process must never fall below minimum failsafe floor.');
+    }
+
+    public function testGenerateExponential(): void
+    {
+        for ($i = 0; $i < 50; $i++) {
+            $exp = $this->mathUtility->generateExponential(2.0);
+            $this->assertGreaterThan(0.0, $exp, 'Exponential random variable must be strictly positive.');
+        }
+    }
+
+    public function testCalculateQEVarianceStep(): void
+    {
+        // Low variance of vol (psi <= 1.5, quadratic scheme)
+        $nextVarQuad = $this->mathUtility->calculateQEVarianceStep(
+            currentVar: 0.04,
+            theta: 0.04,
+            kappa: 1.5,
+            sigma: 0.05,
+            dt: 0.25
+        );
+        $this->assertGreaterThan(0.0, $nextVarQuad);
+        $this->assertTrue(is_finite($nextVarQuad));
+
+        // High variance of vol (psi > 1.5, exponential scheme)
+        $nextVarExp = $this->mathUtility->calculateQEVarianceStep(
+            currentVar: 0.01,
+            theta: 0.04,
+            kappa: 0.5,
+            sigma: 1.50,
+            dt: 0.25
+        );
+        $this->assertGreaterThanOrEqual(0.0000001, $nextVarExp);
+        $this->assertTrue(is_finite($nextVarExp));
+    }
+
+    public function testCalculateSVJJJumps(): void
+    {
+        // Zero intensity -> no jump
+        $noJump = $this->mathUtility->calculateSVJJJumps(0.0, 0.5, 10.0, 10.0, 0.05, 1.0);
+        $this->assertSame(1.0, $noJump['price_multiplier']);
+        $this->assertSame(0.0, $noJump['var_jump']);
+        $this->assertNull($noJump['shock_pct']);
+
+        // Guaranteed jump with 100% up-jump probability (pUp = 1.0, lambda = 1000)
+        $upJump = $this->mathUtility->calculateSVJJJumps(1000.0, 1.0, 10.0, 10.0, 0.05, 1.0);
+        $this->assertGreaterThan(1.0, $upJump['price_multiplier']);
+        $this->assertGreaterThan(0.0, $upJump['shock_pct']);
+        $this->assertGreaterThan(0.0, $upJump['var_jump']);
+
+        // Guaranteed jump with 100% down-jump probability (pUp = 0.0, lambda = 1000)
+        $downJump = $this->mathUtility->calculateSVJJJumps(1000.0, 0.0, 10.0, 10.0, 0.05, 1.0);
+        $this->assertLessThan(1.0, $downJump['price_multiplier']);
+        $this->assertLessThan(0.0, $downJump['shock_pct']);
+        $this->assertGreaterThan(0.0, $downJump['var_jump']);
+    }
+
+    public function testCalculateKalmanSmoothedEps(): void
+    {
+        // 1. Stable environment: High asset volatility (noisy measurement) + Low macro uncertainty (trust prior)
+        $structuralEps = 5.00;
+        $noisyQuarterlyEps = 8.00;
+        $smoothedStable = $this->mathUtility->calculateKalmanSmoothedEps(
+            structuralEps: $structuralEps,
+            quarterlyEps: $noisyQuarterlyEps,
+            assetVolatility: 0.50, // Measurement variance = 1.0
+            macroUncertainty: 0.01  // Prior variance = 0.01 -> Kalman Gain ~ 0.01 / 1.01 ~ 0.01
+        );
+        // Should heavily weight towards structural EPS (5.00)
+        $this->assertLessThan(5.50, $smoothedStable);
+        $this->assertGreaterThan(5.00, $smoothedStable);
+
+        // 2. Volatile crisis environment: Low asset volatility (trusted measurement) + High macro uncertainty (distrusted prior)
+        $smoothedCrisis = $this->mathUtility->calculateKalmanSmoothedEps(
+            structuralEps: $structuralEps,
+            quarterlyEps: $noisyQuarterlyEps,
+            assetVolatility: 0.01, // Measurement variance = 0.02
+            macroUncertainty: 0.50  // Prior variance = 0.50 -> Kalman Gain ~ 0.50 / 0.52 ~ 0.96
+        );
+        // Should heavily weight towards new measurement (8.00)
+        $this->assertGreaterThan(7.50, $smoothedCrisis);
+        $this->assertLessThanOrEqual(8.00, $smoothedCrisis);
+    }
+
+    public function testCalculateWACC(): void
+    {
+        // 100% Equity
+        $wacc100Eq = $this->mathUtility->calculateWACC(1.0, 0.10, 0.0, 0.05);
+        $this->assertEqualsWithDelta(0.10, $wacc100Eq, 0.0001);
+
+        // 100% Debt
+        $wacc100Debt = $this->mathUtility->calculateWACC(0.0, 0.10, 1.0, 0.05);
+        $this->assertEqualsWithDelta(0.05, $wacc100Debt, 0.0001);
+
+        // 60% Equity / 40% Debt (Cost of Equity 10%, Post-Tax Cost of Debt 4%) -> 0.6 * 0.10 + 0.4 * 0.04 = 0.076 (7.6%)
+        $waccMix = $this->mathUtility->calculateWACC(0.60, 0.10, 0.40, 0.04);
+        $this->assertEqualsWithDelta(0.076, $waccMix, 0.0001);
+    }
+
+    public function testCalculateCAPM(): void
+    {
+        $rf = 0.04;
+        $erp = 0.05;
+
+        // Beta = 1.0 -> Rf + ERP = 0.09
+        $coe1 = $this->mathUtility->calculateCAPM($rf, 1.0, $erp);
+        $this->assertEqualsWithDelta(0.09, $coe1, 0.0001);
+
+        // Beta = 0.0 -> Rf = 0.04
+        $coe0 = $this->mathUtility->calculateCAPM($rf, 0.0, $erp);
+        $this->assertEqualsWithDelta(0.04, $coe0, 0.0001);
+
+        // Beta = 1.5 -> 0.04 + 1.5 * 0.05 = 0.115
+        $coe15 = $this->mathUtility->calculateCAPM($rf, 1.5, $erp);
+        $this->assertEqualsWithDelta(0.115, $coe15, 0.0001);
+
+        // Negative Beta = -0.5 -> 0.04 - 0.025 = 0.015
+        $coeNeg = $this->mathUtility->calculateCAPM($rf, -0.5, $erp);
+        $this->assertEqualsWithDelta(0.015, $coeNeg, 0.0001);
+    }
+
+    public function testCalculateLeveredBeta(): void
+    {
+        $unleveredBeta = 1.0;
+        $taxRate = 0.20; // (1 - 0.20) = 0.80
+
+        // Zero debt -> levered beta = unlevered beta
+        $betaZeroDebt = $this->mathUtility->calculateLeveredBeta($unleveredBeta, $taxRate, 0.0);
+        $this->assertEqualsWithDelta(1.0, $betaZeroDebt, 0.0001);
+
+        // D/E = 1.0, dampening = 1.0 -> 1.0 * (1 + 0.8 * 1.0) = 1.80
+        $betaStandard = $this->mathUtility->calculateLeveredBeta($unleveredBeta, $taxRate, 1.0, 1.0);
+        $this->assertEqualsWithDelta(1.80, $betaStandard, 0.0001);
+
+        // D/E = 1.0, dampening = 0.5 -> 1.0 * (1 + 0.8 * 0.5) = 1.40
+        $betaDampened = $this->mathUtility->calculateLeveredBeta($unleveredBeta, $taxRate, 1.0, 0.5);
+        $this->assertEqualsWithDelta(1.40, $betaDampened, 0.0001);
+    }
+
+    public function testCalculateNormalCDF(): void
+    {
+        // Standard normal symmetry: N(0) = 0.5
+        $this->assertEqualsWithDelta(0.50, $this->mathUtility->calculateNormalCDF(0.0), 0.0001);
+
+        // N(1.96) ≈ 0.9750
+        $this->assertEqualsWithDelta(0.9750, $this->mathUtility->calculateNormalCDF(1.96), 0.0005);
+
+        // N(-1.96) ≈ 0.0250
+        $this->assertEqualsWithDelta(0.0250, $this->mathUtility->calculateNormalCDF(-1.96), 0.0005);
+
+        // Extreme bounds
+        $this->assertGreaterThan(0.9999, $this->mathUtility->calculateNormalCDF(6.0));
+        $this->assertLessThan(0.0001, $this->mathUtility->calculateNormalCDF(-6.0));
+    }
+
+    public function testCalculateDistanceToDefault(): void
+    {
+        // Zero debt -> safe 10.0 SD default
+        $this->assertSame(10.0, $this->mathUtility->calculateDistanceToDefault(100.0, 0.0, 0.20, 0.04));
+
+        // Healthy balance sheet: Assets = $200M, Debt = $50M, Vol = 20%, Rf = 4%, T = 1yr
+        $ddHealthy = $this->mathUtility->calculateDistanceToDefault(200.0, 50.0, 0.20, 0.04, 1.0);
+        $this->assertGreaterThan(5.0, $ddHealthy, 'Healthy firm should have high distance to default (> 5 SD).');
+
+        // Distressed balance sheet: Assets = $100M, Debt = $120M, Vol = 40%, Rf = 4%, T = 1yr
+        $ddDistressed = $this->mathUtility->calculateDistanceToDefault(100.0, 120.0, 0.40, 0.04, 1.0);
+        $this->assertLessThan(0.0, $ddDistressed, 'Insolvent firm should have negative distance to default (< 0 SD).');
+    }
+
+    public function testCalculateMertonCreditSpread(): void
+    {
+        // Safe firm (DD = 5.0) -> Spread near 0 bps
+        $spreadSafe = $this->mathUtility->calculateMertonCreditSpread(5.0, 0.40, 1.0);
+        $this->assertLessThan(0.0001, $spreadSafe, 'High DD must produce negligible credit spread.');
+
+        // Borderline firm (DD = 2.0) -> Moderate spread (~50-150 bps)
+        $spreadModerate = $this->mathUtility->calculateMertonCreditSpread(2.0, 0.40, 1.0);
+        $this->assertGreaterThan(0.005, $spreadModerate);
+        $this->assertLessThan(0.050, $spreadModerate);
+
+        // Distressed firm (DD = -1.0) -> Blown-out spread
+        $spreadDistressed = $this->mathUtility->calculateMertonCreditSpread(-1.0, 0.40, 1.0);
+        $this->assertGreaterThan(0.20, $spreadDistressed, 'Distressed firm must have high credit spread.');
+        $this->assertLessThanOrEqual(1.0, $spreadDistressed, 'Credit spread must be capped at 1.0 (10,000 bps).');
+    }
+
+    public function testCalculateSchwartz1Factor(): void
+    {
+        // Mean reversion without noise (dW = 0)
+        $currentPrice = 50.0;
+        $theta = 100.0;
+        $nextPrice = $this->mathUtility->calculateSchwartz1Factor(
+            currentPrice: $currentPrice,
+            kappa: 1.0,
+            theta: $theta,
+            sigma: 0.20,
+            dt: 1.0,
+            dW: 0.0
+        );
+
+        $this->assertGreaterThan($currentPrice, $nextPrice, 'Price below theta must revert upwards.');
+        $this->assertLessThanOrEqual($theta, $nextPrice);
+    }
+
+    public function testCalculateEarningsResponseCoefficient(): void
+    {
+        // Moderate SUE (+5% surprise)
+        $erc = $this->mathUtility->calculateEarningsResponseCoefficient(0.05, 1.0, 0.0);
+        $this->assertGreaterThan(0.0, $erc, 'Positive SUE should yield positive ERC price reaction.');
+
+        // High growth premium amplifies the reaction
+        $ercHighGrowth = $this->mathUtility->calculateEarningsResponseCoefficient(0.05, 1.0, 2.0);
+        $this->assertGreaterThan($erc, $ercHighGrowth, 'High growth premium must amplify ERC.');
+    }
+
+    public function testCalculateBayesianAnalystUpdate(): void
+    {
+        // Equal uncertainty -> straight average
+        $updated = $this->mathUtility->calculateBayesianAnalystUpdate(
+            priorEstimate: 100.0,
+            priorVariance: 1.0,
+            newSignal: 120.0,
+            signalVariance: 1.0
+        );
+        $this->assertEqualsWithDelta(110.0, $updated, 0.0001);
+
+        // Highly confident prior (low variance) -> stays close to prior
+        $updatedConfidentPrior = $this->mathUtility->calculateBayesianAnalystUpdate(
+            priorEstimate: 100.0,
+            priorVariance: 0.01,
+            newSignal: 150.0,
+            signalVariance: 1.00
+        );
+        $this->assertLessThan(101.0, $updatedConfidentPrior);
+
+        // Highly confident signal (low variance) -> moves close to signal
+        $updatedConfidentSignal = $this->mathUtility->calculateBayesianAnalystUpdate(
+            priorEstimate: 100.0,
+            priorVariance: 1.00,
+            newSignal: 150.0,
+            signalVariance: 0.01
+        );
+        $this->assertGreaterThan(149.0, $updatedConfidentSignal);
+    }
 }
 
 

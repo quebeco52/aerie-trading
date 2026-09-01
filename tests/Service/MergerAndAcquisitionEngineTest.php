@@ -115,4 +115,93 @@ class MergerAndAcquisitionEngineTest extends TestCase
         $this->assertGreaterThan(0.0, (float) $stock->getOperatingMargin());
         $this->assertGreaterThan(0.0, (float) $stock->getTotalRevenue());
     }
+
+    public function testEvaluateCorporateDivestitureExecutesSuccessfullyAndUpdatesBalanceSheet(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('DIVEST');
+        $stock->setName('Divesting Corp');
+        $stock->setIndustry('Technology');
+        $stock->setPrice('20.00');
+        $stock->setSharesOutstanding('10000000');
+        $stock->setCorporateTreasury('1000000'); // Low cash
+        $stock->setTotalEquity('50000000');
+        $stock->setWholesaleDebt('20000000');
+        $stock->setTotalRevenue('30000000');
+        $stock->setOperatingMargin('-0.05'); // Negative margin -> distressed
+        $stock->setRetainedEarnings('5000000');
+        $stock->setEarningsPerShare('-0.10');
+        $stock->setTotalNetIncome('-1000000');
+
+        $macroState = new MacroStateDTO(
+            policyRateEma: 0.04,
+            corporateTaxRate: 0.20,
+            yield5yEma: 0.04,
+            nominalGdpIndex: 1.0
+        );
+
+        $debtMetricsMock = new DebtMetricsDTO(
+            interestExpense: 1000000.0,
+            blendedRate: 0.05,
+            historicalFixedRate: 0.05,
+            dynamicSpread: 0.02,
+            currentMarketRate: 0.05,
+            wholesaleRate: 0.05,
+            ebit: -1500000.0,
+            revenue: 30000000.0,
+            depreciation: 1000000.0,
+            ebitda: -500000.0
+        );
+
+        $debtHealthMock = new DebtHealthDTO(
+            grossCost: 0.05,
+            effectiveCost: 0.05,
+            cashYield: 0.02,
+            isNegativeCarry: false,
+            isSevereNegativeCarry: false,
+            interestCoverage: -1.5,
+            wantsToPaydownDebt: true,
+            canIssueDebt: false,
+            debtTolerance: 1.0,
+            wacc: 0.12,
+            costOfEquity: 0.14,
+            leveredBeta: 1.5,
+            rawMetrics: $debtMetricsMock,
+            isLiquidityCrisis: true,
+            isLiquidityWarning: false,
+            isUnderLeveraged: false
+        );
+
+        $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($debtHealthMock);
+        $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(10000000.0);
+        $this->corporateMetricsMock->method('calculateMarketShare')->willReturn(0.10);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(true);
+        $this->mathUtilityMock->method('generateUniformBetween')->willReturn(0.25); // Divest 25%
+        $this->marketEventPublisherMock->method('publish')->willReturn(['event_type' => 'DIVESTITURE']);
+
+        $initialTreasury = (float) $stock->getCorporateTreasury();
+        $initialDebt = (float) $stock->getWholesaleDebt();
+
+        $result = $this->engine->evaluateCorporateDivestiture($stock, $macroState, 1.0);
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('event', $result);
+        $this->assertArrayHasKey('shock', $result);
+        // Cash proceeds must increase treasury
+        $this->assertGreaterThan($initialTreasury, (float) $stock->getCorporateTreasury());
+        // Debt must be shed
+        $this->assertLessThan($initialDebt, (float) $stock->getWholesaleDebt());
+    }
+
+    public function testEvaluateCorporateDivestitureAbortsForBankruptStock(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('DEAD');
+        $stock->setIsBankrupt(true);
+
+        $macro = new MacroStateDTO();
+        $result = $this->engine->evaluateCorporateDivestiture($stock, $macro, 1.0);
+
+        $this->assertNull($result);
+    }
 }

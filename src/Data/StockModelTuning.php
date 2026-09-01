@@ -590,8 +590,8 @@ class StockModelTuning
             ModelParam::AutoSalesWeight->value        => 0.55, // Predatory mass-market commuter fleet Trojan horse
             ModelParam::ApexLuxuryWeight->value       => 0.25, // Hyper-exclusive Veblen hypercars (Apex Division cross-subsidy)
             ModelParam::SoftwareServicesWeight->value => 0.20, // Inescapable telemetry, subscription tolls & captive finance
-            ModelParam::PricingPowerIndex->value      => 0.70,
-            ModelParam::RateSensitivityScalar->value  => 2.50,
+            ModelParam::PricingPowerIndex->value      => 0.65,
+            ModelParam::RateSensitivityScalar->value  => 1.25,
         ],
 
         // =====================================================================

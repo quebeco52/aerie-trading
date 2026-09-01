@@ -354,7 +354,9 @@ class TreasuryEngine
 
             if ($isDeathSpiral) {
                 $shortfall = max(0.0, $minOperatingCash - $ctx->newTreasury);
-                $targetRaise = $shortfall * 1.5;
+                $marketCap = max(1.0, $ctx->sharesOutstanding * $ctx->currentPrice);
+                $maxEmergencyRaise = max(FinancialConstants::MIN_OPERATING_BASE_CASH, $marketCap * FinancialConstants::MAX_EMERGENCY_EQUITY_RAISE_RATIO);
+                $targetRaise = min($shortfall * 1.5, $maxEmergencyRaise);
                 $reason = "execute a highly dilutive emergency stock offering to stave off bankruptcy";
                 $shock = -15.0;
             } elseif ($isBubble) {

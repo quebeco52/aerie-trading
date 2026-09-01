@@ -179,4 +179,253 @@ class DebtEngineTest extends TestCase
 
         $this->assertSame('D', $stock->getCreditRating());
     }
+
+    public function testAnalyzeDebtHealthHealthySolventCompany(): void
+    {
+        $realMath = new MathUtility();
+        $realMetrics = new CorporateMetrics();
+        $engine = new DebtEngine($realMath, $realMetrics, $this->creditRatingAgency, $this->marketEventPublisherMock);
+
+        $stock = new Stock();
+        $stock->setTicker('HEALTHY');
+        $stock->setIndustry('Technology');
+        $stock->setPrice('100.00');
+        $stock->setSharesOutstanding('1000000'); // $100M Market Cap
+        $stock->setTotalEquity('80000000');
+        $stock->setWholesaleDebt('20000000');
+        $stock->setCorporateTreasury('30000000');
+        $stock->setTotalRevenue('50000000');
+        $stock->setOperatingMargin('0.25'); // $12.5M EBIT
+        $stock->setBeta('1.0');
+        $stock->setHistoricalFixedRate('0.04');
+        $stock->setCreditSpread('0.01');
+
+        $macro = new MacroStateDTO(
+            policyRateEma: 0.04,
+            corporateTaxRate: 0.20,
+            yield5yEma: 0.04,
+            equityRiskPremium: 0.05
+        );
+
+        $health = $engine->analyzeDebtHealth($stock, $macro);
+
+        $this->assertFalse($health->isLiquidityCrisis);
+        $this->assertFalse($health->isLiquidityWarning);
+        $this->assertTrue($health->canIssueDebt);
+        $this->assertFalse($health->wantsToPaydownDebt);
+        $this->assertGreaterThan(5.0, $health->interestCoverage);
+        $this->assertGreaterThan(0.0, $health->wacc);
+        $this->assertGreaterThan(0.0, $health->costOfEquity);
+        $this->assertGreaterThan(0.0, $health->leveredBeta);
+    }
+
+    public function testAnalyzeDebtHealthSevereNegativeCarryTriggersPaydown(): void
+    {
+        $realMath = new MathUtility();
+        $realMetrics = new CorporateMetrics();
+        $engine = new DebtEngine($realMath, $realMetrics, $this->creditRatingAgency, $this->marketEventPublisherMock);
+
+        $stock = new Stock();
+        $stock->setTicker('NEGCARRY');
+        $stock->setIndustry('Technology');
+        $stock->setPrice('50.00');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setTotalEquity('50000000');
+        $stock->setWholesaleDebt('30000000');
+        $stock->setCorporateTreasury('10000000');
+        $stock->setTotalRevenue('40000000');
+        $stock->setOperatingMargin('0.20');
+        $stock->setBeta('1.0');
+        $stock->setHistoricalFixedRate('0.14'); // Expensive 14% legacy debt
+        $stock->setCreditSpread('0.05');
+
+        $macro = new MacroStateDTO(
+            policyRateEma: 0.01, // Low cash yield (1%)
+            corporateTaxRate: 0.20,
+            yield5yEma: 0.02
+        );
+
+        $health = $engine->analyzeDebtHealth($stock, $macro);
+
+        $this->assertTrue($health->isNegativeCarry, 'Effective cost of debt should exceed yield on cash.');
+        $this->assertTrue($health->isSevereNegativeCarry, 'Severe negative carry should be flagged when spread exceeds hurdle.');
+        $this->assertTrue($health->wantsToPaydownDebt, 'Company should want to pay down expensive debt.');
+    }
+
+    public function testAnalyzeDebtHealthLiquidityCrisisAndWarning(): void
+    {
+        $realMath = new MathUtility();
+        $realMetrics = new CorporateMetrics();
+        $engine = new DebtEngine($realMath, $realMetrics, $this->creditRatingAgency, $this->marketEventPublisherMock);
+
+        // 1. Negative Operating Margin -> Crisis ($ICR < 0$)
+        $stockCrisis = new Stock();
+        $stockCrisis->setTicker('CRISIS');
+        $stockCrisis->setIndustry('Technology');
+        $stockCrisis->setPrice('10.00');
+        $stockCrisis->setSharesOutstanding('1000000');
+        $stockCrisis->setTotalEquity('20000000');
+        $stockCrisis->setWholesaleDebt('10000000');
+        $stockCrisis->setCorporateTreasury('500000'); // Low cash buffer
+        $stockCrisis->setTotalRevenue('20000000');
+        $stockCrisis->setOperatingMargin('-0.10'); // Negative EBIT
+        $stockCrisis->setBeta('1.5');
+        $stockCrisis->setHistoricalFixedRate('0.06');
+
+        $macro = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04);
+        $healthCrisis = $engine->analyzeDebtHealth($stockCrisis, $macro);
+
+        $this->assertTrue($healthCrisis->isLiquidityCrisis);
+        $this->assertFalse($healthCrisis->canIssueDebt);
+
+        // 2. Barely positive Margin -> Warning ($0 \le ICR < minIcr$)
+        $stockWarning = new Stock();
+        $stockWarning->setTicker('WARN');
+        $stockWarning->setIndustry('Technology');
+        $stockWarning->setPrice('20.00');
+        $stockWarning->setSharesOutstanding('1000000');
+        $stockWarning->setTotalEquity('20000000');
+        $stockWarning->setWholesaleDebt('10000000');
+        $stockWarning->setCorporateTreasury('500000');
+        $stockWarning->setTotalRevenue('20000000');
+        $stockWarning->setOperatingMargin('0.02'); // Tiny EBIT ($400k) vs interest ~$600k -> ICR < 1.0 < minIcr (2.5)
+        $stockWarning->setBeta('1.0');
+        $stockWarning->setHistoricalFixedRate('0.06');
+
+        $healthWarning = $engine->analyzeDebtHealth($stockWarning, $macro);
+
+        $this->assertFalse($healthWarning->isLiquidityCrisis);
+        $this->assertTrue($healthWarning->isLiquidityWarning);
+    }
+
+    public function testCalculateAltmanZScoreNonManufacturingZones(): void
+    {
+        $realMath = new MathUtility();
+        $realMetrics = new CorporateMetrics();
+        $engine = new DebtEngine($realMath, $realMetrics, $this->creditRatingAgency, $this->marketEventPublisherMock);
+
+        // Safe Firm (High working capital, high retained earnings, positive EBIT, high market cap)
+        $stockSafe = new Stock();
+        $stockSafe->setTicker('SAFE');
+        $stockSafe->setIndustry('Technology');
+        $stockSafe->setTotalEquity('100000000');
+        $stockSafe->setWholesaleDebt('10000000');
+        $stockSafe->setCorporateTreasury('50000000');
+        $stockSafe->setRetainedEarnings('60000000');
+        $stockSafe->setSharesOutstanding('1000000');
+
+        $resultSafe = $engine->calculateAltmanZScore($stockSafe, 20000000.0, 80000000.0, 150.0);
+        $this->assertSame('Safe', $resultSafe['zone']);
+        $this->assertFalse($resultSafe['is_bankrupt']);
+        $this->assertGreaterThan(2.60, $resultSafe['z_score']);
+
+        // Bankrupt Firm (Negative equity, negative retained earnings, severe operating losses)
+        $stockBankrupt = new Stock();
+        $stockBankrupt->setTicker('DEAD');
+        $stockBankrupt->setIndustry('Technology');
+        $stockBankrupt->setTotalEquity('-20000000');
+        $stockBankrupt->setWholesaleDebt('50000000');
+        $stockBankrupt->setCorporateTreasury('100000');
+        $stockBankrupt->setRetainedEarnings('-80000000');
+        $stockBankrupt->setSharesOutstanding('1000000');
+
+        $resultBankrupt = $engine->calculateAltmanZScore($stockBankrupt, -15000000.0, 10000000.0, 0.05);
+        $this->assertSame('Distress', $resultBankrupt['zone']);
+        $this->assertTrue($resultBankrupt['is_bankrupt']);
+        $this->assertLessThan(0.00, $resultBankrupt['z_score']);
+    }
+
+    public function testCalculateAltmanZScoreBankingAlternativeModel(): void
+    {
+        $realMath = new MathUtility();
+        $realMetrics = new CorporateMetrics();
+        $engine = new DebtEngine($realMath, $realMetrics, $this->creditRatingAgency, $this->marketEventPublisherMock);
+
+        // Bank with healthy capital ratio (Equity / Assets = 100M / 1000M = 10% -> score 10.0 > 8.0 Safe threshold)
+        $bankSafe = new Stock();
+        $bankSafe->setTicker('BNK_SAFE');
+        $bankSafe->setIndustry('Banks - Diversified');
+        $bankSafe->setTotalEquity('100000000');
+        $bankSafe->setCustomerDeposits('900000000');
+        $bankSafe->setWholesaleDebt('0');
+        $bankSafe->setCorporateTreasury('100000000');
+        $bankSafe->setSharesOutstanding('10000000');
+
+        $resultBankSafe = $engine->calculateAltmanZScore($bankSafe, 30000000.0, 100000000.0, 20.0);
+        $this->assertSame('Safe', $resultBankSafe['zone']);
+        $this->assertFalse($resultBankSafe['is_bankrupt']);
+        $this->assertEqualsWithDelta(10.0, $resultBankSafe['z_score'], 0.1);
+
+        // Insolvent Bank below statutory minimum (Equity = $10M / Assets = $1000M = 1% -> score 1.0 < 4.0 Bankrupt threshold)
+        $bankInsolvent = new Stock();
+        $bankInsolvent->setTicker('BNK_DEAD');
+        $bankInsolvent->setIndustry('Banks - Diversified');
+        $bankInsolvent->setTotalEquity('10000000');
+        $bankInsolvent->setCustomerDeposits('990000000');
+        $bankInsolvent->setWholesaleDebt('0');
+        $bankInsolvent->setCorporateTreasury('10000000');
+        $bankInsolvent->setSharesOutstanding('10000000');
+
+        $resultBankInsolvent = $engine->calculateAltmanZScore($bankInsolvent, -20000000.0, 50000000.0, 1.0);
+        $this->assertSame('Distress', $resultBankInsolvent['zone']);
+        $this->assertTrue($resultBankInsolvent['is_bankrupt']);
+    }
+
+    public function testIssueDebtUpdatesWholesaleBalanceAndWeightedHistoricalRate(): void
+    {
+        $realMath = new MathUtility();
+        $realMetrics = new CorporateMetrics();
+        $engine = new DebtEngine($realMath, $realMetrics, $this->creditRatingAgency, $this->marketEventPublisherMock);
+
+        $stock = new Stock();
+        $stock->setWholesaleDebt('100000000.00'); // $100M existing at 4%
+        $stock->setHistoricalFixedRate('0.04');
+
+        // Issue $100M at 6% -> New total $200M at weighted (100*0.04 + 100*0.06)/200 = 5.0%
+        $engine->issueDebt($stock, 100000000.00, 0.06);
+
+        $this->assertEquals('200000000', $stock->getWholesaleDebt());
+        $this->assertEqualsWithDelta(0.05, (float) $stock->getHistoricalFixedRate(), 0.0001);
+
+        // Zero issuance should not mutate anything
+        $engine->issueDebt($stock, 0.0, 0.10);
+        $this->assertEquals('200000000', $stock->getWholesaleDebt());
+        $this->assertEqualsWithDelta(0.05, (float) $stock->getHistoricalFixedRate(), 0.0001);
+    }
+
+    public function testCalculateInterestExpenseAcceleratesRefinancingWhenRatesDrop(): void
+    {
+        $realMath = new MathUtility();
+        $realMetrics = new CorporateMetrics();
+        $engine = new DebtEngine($realMath, $realMetrics, null, null);
+
+        $stock = new Stock();
+        $stock->setTicker('REFIN');
+        $stock->setIndustry('Technology');
+        $stock->setPrice('100.00');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setTotalEquity('100000000');
+        $stock->setWholesaleDebt('50000000');
+        $stock->setHistoricalFixedRate('0.08'); // High legacy rate (8%)
+        $stock->setCreditSpread('0.01');
+        $stock->setTotalRevenue('50000000');
+        $stock->setOperatingMargin('0.20');
+        $stock->setVolatility('0.15');
+
+        // Macro: 5y Yield = 2.0%, Credit Spread ~ 1.0% -> Market Fixed Rate ~ 3.0% (8% - 3% = 500bps drop > 150bps hurdle)
+        $macro = new MacroStateDTO(
+            policyRateEma: 0.02,
+            corporateTaxRate: 0.20,
+            yield5yEma: 0.02,
+            macroCreditSpreadEma: 0.015
+        );
+
+        // With advanceMaturity = true, turnover should accelerate to 15% (0.15)
+        $metrics = $engine->calculateInterestExpense($stock, $macro, true);
+
+        // Expected blended fixed rate: (0.08 * 0.85) + (marketRate * 0.15)
+        $marketRate = $metrics->currentMarketRate;
+        $expectedBlended = (0.08 * 0.85) + ($marketRate * 0.15);
+        $this->assertEqualsWithDelta($expectedBlended, $metrics->historicalFixedRate, 0.001);
+    }
 }

@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Tests\Service;
 
+use App\Entity\Etf;
 use App\Entity\Stock;
 use App\Entity\TradeOrder;
 use App\Entity\User;
+use App\Entity\UserEtf;
 use App\Entity\UserStock;
 use App\Service\Market\TradeExecutionService;
 use App\Service\User\Portfolio;
@@ -25,8 +27,15 @@ class TradeExecutionServiceTest extends TestCase
     private Connection&Stub $connectionMock;
     private Portfolio&Stub $portfolioStub;
     private \Redis&Stub $redisStub;
+    /** @var EntityRepository<Stock>&Stub */
     private EntityRepository&Stub $stockRepoStub;
+    /** @var EntityRepository<Etf>&Stub */
+    private EntityRepository&Stub $etfRepoStub;
+    /** @var EntityRepository<UserStock>&Stub */
     private EntityRepository&Stub $userStockRepoStub;
+    /** @var EntityRepository<UserEtf>&Stub */
+    private EntityRepository&Stub $userEtfRepoStub;
+    /** @var EntityRepository<TradeOrder>&Stub */
     private EntityRepository&Stub $tradeOrderRepoStub;
     private TradeExecutionService $service;
 
@@ -41,13 +50,17 @@ class TradeExecutionServiceTest extends TestCase
         $this->redisStub = $this->createStub(\Redis::class);
 
         $this->stockRepoStub = $this->createStub(EntityRepository::class);
+        $this->etfRepoStub = $this->createStub(EntityRepository::class);
         $this->userStockRepoStub = $this->createStub(EntityRepository::class);
+        $this->userEtfRepoStub = $this->createStub(EntityRepository::class);
         $this->tradeOrderRepoStub = $this->createStub(EntityRepository::class);
 
         $this->emMock->method('getRepository')->willReturnCallback(function (string $entityClass) {
             return match ($entityClass) {
                 Stock::class => $this->stockRepoStub,
+                Etf::class => $this->etfRepoStub,
                 UserStock::class => $this->userStockRepoStub,
+                UserEtf::class => $this->userEtfRepoStub,
                 TradeOrder::class => $this->tradeOrderRepoStub,
                 default => $this->createStub(EntityRepository::class),
             };
@@ -168,5 +181,130 @@ class TradeExecutionServiceTest extends TestCase
         $this->expectExceptionMessage('Invalid quantity.');
 
         $this->service->executeOrder($user, 'APEX', 'BUY', 'MARKET', 0);
+    }
+
+    public function testExecuteOrderRejectsBankruptStock(): void
+    {
+        $user = new User();
+        $user->setCashBalance('1000.00');
+
+        $stock = new Stock();
+        $stock->setTicker('DEAD');
+        $stock->setIsBankrupt(true); // Marked as bankrupt
+
+        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Trading is halted for DEAD. The company is bankrupt.');
+
+        $this->service->executeOrder($user, 'DEAD', 'BUY', 'MARKET', 10);
+    }
+
+    public function testExecuteMarketBuyOnEtf(): void
+    {
+        $user = new User();
+        $user->setCashBalance('1000.00');
+
+        $etf = new Etf();
+        $etf->setTicker('LBI');
+        $etf->setPrice('100.00');
+
+        $this->stockRepoStub->method('findOneBy')->willReturn(null);
+        $this->etfRepoStub->method('findOneBy')->willReturn($etf);
+        $this->userEtfRepoStub->method('findOneBy')->willReturn(null);
+
+        // Buy 5 ETF shares @ $100 = $500
+        $this->service->executeOrder($user, 'LBI', 'BUY', 'MARKET', 5);
+
+        $this->assertEquals('500.0000', $user->getCashBalance());
+    }
+
+    public function testExecuteLimitSellEscrowsShares(): void
+    {
+        $user = new User();
+        $user->setCashBalance('100.00');
+
+        $stock = new Stock();
+        $stock->setTicker('APEX');
+        $stock->setPrice('50.00');
+
+        $userStock = new UserStock();
+        $userStock->setUser($user);
+        $userStock->setStock($stock);
+        $userStock->setQuantity(20);
+
+        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->userStockRepoStub->method('findOneBy')->willReturn($userStock);
+
+        // Limit SELL at $60.00 for 10 shares (price > $50 live price -> remains OPEN)
+        $this->service->executeOrder($user, 'APEX', 'SELL', 'LIMIT', 10, '60.00');
+
+        // Shares should be immediately deducted (escrowed)
+        $this->assertSame(10, $userStock->getQuantity());
+    }
+
+    public function testCancelOpenSellOrderRefundsSharesToUser(): void
+    {
+        $user = new User();
+        $stock = new Stock();
+        $stock->setTicker('APEX');
+
+        $userStock = new UserStock();
+        $userStock->setUser($user);
+        $userStock->setStock($stock);
+        $userStock->setQuantity(10); // currently has 10 unescrowed
+
+        $order = new TradeOrder();
+        $order->setUser($user);
+        $order->setTicker('APEX');
+        $order->setAction('SELL');
+        $order->setOrderType('LIMIT');
+        $order->setQuantity(10);
+        $order->setStatus('OPEN');
+
+        $this->tradeOrderRepoStub->method('findOneBy')->willReturn($order);
+        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->userStockRepoStub->method('findOneBy')->willReturn($userStock);
+
+        $this->service->cancelOrder($user, 1);
+
+        $this->assertSame('CANCELLED', $order->getStatus());
+        $this->assertSame(20, $userStock->getQuantity(), 'Cancelling sell order must refund escrowed shares.');
+    }
+
+    public function testProcessLimitOrdersFillsBuyAndSellOrdersWithPriceImprovement(): void
+    {
+        $buyer = new User();
+        $buyer->setCashBalance('0.00'); // Escrowed $1000 already at limit price $100
+
+        $stock = new Stock();
+        $stock->setTicker('APEX');
+        $stock->setPrice('90.00');
+
+        $buyOrder = new TradeOrder();
+        $buyOrder->setUser($buyer);
+        $buyOrder->setTicker('APEX');
+        $buyOrder->setAction('BUY');
+        $buyOrder->setOrderType('LIMIT');
+        $buyOrder->setQuantity(10);
+        $buyOrder->setLimitPrice('100.00'); // Limit $100
+        $buyOrder->setStatus('OPEN');
+
+        $resultStatementMock = $this->createStub(\Doctrine\DBAL\Result::class);
+        $resultStatementMock->method('fetchOne')->willReturn(null);
+        $this->connectionMock->method('executeQuery')->willReturn($resultStatementMock);
+
+        $this->tradeOrderRepoStub->method('findBy')->willReturn([$buyOrder]);
+        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->userStockRepoStub->method('findOneBy')->willReturn(null);
+
+        // Process limit orders at $90.00 (below $100.00 limit -> fills with $100 refund)
+        $this->service->processLimitOrders('APEX', 90.0);
+
+        $this->assertSame('FILLED', $buyOrder->getStatus());
+        $this->assertSame(10, $buyOrder->getFilledQuantity());
+        $this->assertSame('90', $buyOrder->getExecutionPrice());
+        // Refund: ($100 - $90) * 10 = $100.0000 returned to buyer
+        $this->assertEquals('100.0000', $buyer->getCashBalance());
     }
 }

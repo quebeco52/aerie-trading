@@ -100,11 +100,11 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     public const NEUTRAL_POLICY_RATE = 0.03;
 
     /** Scalar for demand destruction per 100bps of policy rate above neutral. */
-    public const RATE_SENSITIVITY_SCALAR = 2.50;
+    public const RATE_SENSITIVITY_SCALAR = 1.25;
 
     // --- Apex Luxury & Veblen Wealth Effect ---
     /** Sensitivity of ultra-luxury hypercar deliveries to equity risk premium compression (asset wealth expansion). */
-    public const APEX_ERP_COMPRESSION_SCALAR = 35.0;
+    public const APEX_ERP_COMPRESSION_SCALAR = 10.0;
 
     /** Top-line revenue boost multiplier during central bank Quantitative Easing liquidity surges. */
     public const APEX_QE_LIQUIDITY_BOOST = 0.15;
@@ -114,13 +114,13 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
 
     // --- Structural Gross Margin Cost Intensities for Cross-Subsidization ---
     /** Relative variable cost intensity of mass-market commuter fleet (low margin / predatory baseline). */
-    public const MASS_MARKET_COST_INTENSITY = 1.35;
+    public const MASS_MARKET_COST_INTENSITY = 1.15;
 
-    /** Relative variable cost intensity of Apex Division ultra-luxury hypercars (astronomical gross profit margin cross-subsidy). */
-    public const APEX_LUXURY_COST_INTENSITY = 0.50;
+    /** Relative variable cost intensity of Apex Division ultra-luxury hypercars (high gross profit margin cross-subsidy). */
+    public const APEX_LUXURY_COST_INTENSITY = 0.65;
 
     /** Relative variable cost intensity of connected telematics and software services (pure digital/financing tollbooth). */
-    public const SOFTWARE_SERVICES_COST_INTENSITY = 0.25;
+    public const SOFTWARE_SERVICES_COST_INTENSITY = 0.30;
 
     // --- Tail Risk & Event Physics ---
     /** Negative Z-score threshold indicating a massive vehicle safety recall and litigation liability. */

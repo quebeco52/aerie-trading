@@ -167,8 +167,24 @@ class EarningsEngine
         $maxCipDeduction = abs($ctx->investedCapital) * FinancialConstants::MAX_CIP_CAPITAL_DEDUCTION_RATIO;
         $effectiveCip = min($maxCipDeduction, $stock->getTotalCipAmount());
         $revenueGeneratingCapital = max(abs($ctx->investedCapital) * (1.0 - FinancialConstants::MAX_CIP_CAPITAL_DEDUCTION_RATIO), abs($ctx->investedCapital) - $effectiveCip);
-        $ctx->structuralRevenue = max(1.0, $revenueGeneratingCapital * $assetTurnover * $pricingPowerMultiplier);
-        $ctx->expectedRevenue = $ctx->structuralRevenue * $ctx->capacityUtilization;
+
+        $dynamicSam = FinancialConstants::BASELINE_SECTOR_TAM * $macroState->nominalGdpIndex * (float) ($stock->getSamRatio() ?? 1.0);
+        $maxSectorCapacity = $dynamicSam * FinancialConstants::MAX_SECTOR_TAM_CAPACITY_RATIO;
+        
+        if (!$strategy->isFinancial()) {
+            // revenueGeneratingCapital should not be capped by maxSectorCapacity (which is in dollars of revenue)
+            // It will naturally be bottlenecked when structuralRevenue is capped below.
+        }
+        
+        $structuralRevenue = max(1.0, $revenueGeneratingCapital * $assetTurnover * $pricingPowerMultiplier);
+        
+        if (!$strategy->isFinancial()) {
+            $ctx->structuralRevenue = min($maxSectorCapacity, $structuralRevenue);
+            $ctx->expectedRevenue = min($maxSectorCapacity * 1.25, $ctx->structuralRevenue * $ctx->capacityUtilization);
+        } else {
+            $ctx->structuralRevenue = $structuralRevenue;
+            $ctx->expectedRevenue = $ctx->structuralRevenue * $ctx->capacityUtilization;
+        }
 
         $fixedCostRatio = (float) $stock->getFixedCostRatio();
         $structuralCosts = $ctx->structuralRevenue * (1.0 - $ctx->stableMargin);
@@ -202,6 +218,8 @@ class EarningsEngine
 
         $realizedVariableMargin = $this->mathUtility->calculateCIR($currentVariableMargin, $kappa, $dynamicVariableTheta, $marginVol, $ctx->dt, $z2);
 
+        $stock->setStructuralVariableMargin($realizedVariableMargin); // Save true state before asymmetric stickiness noise
+
         // Asymmetric Cost Stickiness (Anderson, Banker, & Janakiraman 2003):
         // Operating costs contract sluggishly when revenue drops, squeezing variable margins during contractions.
         $revRatio = max(0.01, $ctx->expectedRevenue / max(1.0, $ctx->structuralRevenue));
@@ -209,8 +227,6 @@ class EarningsEngine
         $stickyVariableMargin = $this->mathUtility->calculateAsymmetricCostStickiness($realizedVariableMargin, $revenueLogChange);
 
         $ctx->realizedVariableMargin = min(0.99, max(0.01, $stickyVariableMargin));
-
-        $stock->setStructuralVariableMargin($ctx->realizedVariableMargin);
     }
 
     private function calculateExpectedVsActualFinancials(EarningsSimulationContext $ctx): void
@@ -554,8 +570,8 @@ class EarningsEngine
 
         $earningsEvent = $this->marketEvent->publish($stock, 'EARNINGS', $description, $ctx->totalShockPct * 100);
 
-        // Update previous revenue for next quarter's NWC calculation
-        $stock->setPreviousRevenue((string) $ctx->actualRevenue);
+        // Update previous revenue for next quarter's NWC calculation (annualized)
+        $stock->setPreviousRevenue((string) ($ctx->actualRevenue * 4.0));
 
         $this->eventDispatcher->dispatch(new EarningsReportedEvent($ctx));
 
