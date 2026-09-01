@@ -485,6 +485,38 @@
 					{% endif %}
 
 					{% if isEtf %}
+						{# Macro Economic Vitals Card #}
+						<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)]">
+							<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface mb-4 flex items-center gap-2">
+								<span class="material-symbols-outlined text-primary text-base">speed</span>
+								Economic Vitals
+							</h3>
+							<dl class="divide-y divide-outline-variant/5 text-xs">
+								<div class="py-2.5 flex justify-between items-center">
+									<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Inflation (CPI)</dt>
+									<dd class="font-bold text-on-surface font-mono" id="macro-inflation">-</dd>
+								</div>
+								<div class="py-2.5 flex justify-between items-center">
+									<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Output Gap</dt>
+									<dd class="font-bold text-on-surface font-mono" id="macro-output-gap">-</dd>
+								</div>
+								<div class="py-2.5 flex justify-between items-center">
+									<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Central Bank Rate</dt>
+									<dd class="font-bold text-on-surface font-mono" id="macro-policy-rate">-</dd>
+								</div>
+								<div class="py-2.5 flex justify-between items-center">
+									<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">10Y Benchmark Yield</dt>
+									<dd class="font-bold text-on-surface font-mono" id="macro-yield">-</dd>
+								</div>
+								<div class="py-2.5 flex justify-between items-center" id="qe-status-container">
+									<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Quant Easing (QE)</dt>
+									<dd class="font-bold text-on-surface font-mono" id="macro-qe-status">
+										<span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-surface-container-highest/60 text-on-surface-variant border border-outline-variant/10">Inactive</span>
+									</dd>
+								</div>
+							</dl>
+						</div>
+
 						{# ETF Portfolio Allocation Card #}
 						<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)]">
 							<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface mb-4 flex items-center gap-2">
@@ -509,36 +541,6 @@
 									{% endfor %}
 								</div>
 							{% endif %}
-						</div>
-
-						{# Macro Economic Vitals Card #}
-						<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)]">
-							<h3 class="text-xs font-bold uppercase tracking-widest text-on-surface mb-4 flex items-center gap-2">
-								<span class="material-symbols-outlined text-primary text-base">speed</span>
-								Economic Vitals
-							</h3>
-							<dl class="divide-y divide-outline-variant/5 text-xs">
-								<div class="py-2.5 flex justify-between items-center">
-									<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Inflation (CPI)</dt>
-									<dd class="font-bold text-on-surface font-mono" id="macro-inflation">-</dd>
-								</div>
-								<div class="py-2.5 flex justify-between items-center">
-									<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Output Gap</dt>
-									<dd class="font-bold text-on-surface font-mono" id="macro-output-gap">-</dd>
-								</div>
-								<div class="py-2.5 flex justify-between items-center">
-									<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Central Bank Rate</dt>
-									<dd class="font-bold text-on-surface font-mono" id="macro-policy-rate">-</dd>
-								</div>
-								<div class="py-2.5 flex justify-between items-center">
-									<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">10Y Benchmark Yield</dt>
-									<dd class="font-bold text-on-surface font-mono" id="macro-yield">-</dd>
-								</div>
-								<div class="py-2.5 flex justify-between items-center">
-									<dt class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Market Heat</dt>
-									<dd class="font-bold text-on-surface font-mono" id="market-heat-value">-</dd>
-								</div>
-							</dl>
 						</div>
 					{% endif %}
 

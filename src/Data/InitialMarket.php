@@ -426,7 +426,7 @@ class InitialMarket
             'capex_ratio' => 0.50,
             'target_payout_ratio' => 0.10,
             'dividendSpeed' => 0.15,
-            'fixed_cost_ratio' => 0.70,
+            'fixed_cost_ratio' => 0.55,
             'operating_margin' => 0.30,
             'public_float' => 0.75,
             'sam_ratio' => 0.25,
@@ -554,7 +554,7 @@ class InitialMarket
             'total_equity' => 130_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 150_000_000_000.00,
-            'retained_earnings' => 135_000_000_000.00
+            'retained_earnings' => 65_000_000_000.00
         ],
         [
             'ticker' => 'PHIL',
@@ -612,7 +612,7 @@ class InitialMarket
             'total_equity'      => 65_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 55_000_000_000.00,
-            'retained_earnings' => 67_500_000_000.00
+            'retained_earnings' => 36_000_000_000.00
         ],
         [
             'ticker' => 'IBHI',
@@ -641,7 +641,7 @@ class InitialMarket
             'total_equity' => 80_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 70_000_000_000.00,
-            'retained_earnings' => 125_000_000_000.00
+            'retained_earnings' => 45_000_000_000.00
         ],
         [
             'ticker' => 'TICK',
@@ -1192,7 +1192,7 @@ class InitialMarket
             'total_equity'      => 65_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt'    => 50_000_000_000.00,
-            'retained_earnings' => 90_000_000_000.00
+            'retained_earnings' => 32_000_000_000.00
         ],
         [
             'ticker' => 'BRKW',
@@ -1205,7 +1205,7 @@ class InitialMarket
             'beta' => 0.20,
             'jump_intensity' => 0.30,
             'jump_vol' => 0.08,
-            'baseline_roic' => 0.084,
+            'baseline_roic' => 0.080,
             'capex_ratio' => 0.10,
             'target_payout_ratio' => 0.40,
             'dividendSpeed' => 0.02,
@@ -1217,11 +1217,11 @@ class InitialMarket
             'historical_fixed_rate' => 0.030,
             'credit_spread' => 0.0040,
             'depreciation_rate' => 0.03,
-            'corporate_treasury' => 170_000_000_000.00,
-            'total_equity' => 580_000_000_000.00,
+            'corporate_treasury' => 100_000_000_000.00,
+            'total_equity' => 700_000_000_000.00,
             'customer_deposits' => 0.00,
-            'wholesale_debt' => 120_000_000_000.00,
-            'retained_earnings' => 1_200_000_000_000.00
+            'wholesale_debt' => 220_000_000_000.00,
+            'retained_earnings' => 420_000_000_000.00
         ],
         [
             'ticker' => 'ELDE',
@@ -1289,7 +1289,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.24,
-            'beta' => -1.30,
+            'beta' => -0.60,
             'jump_intensity' => 1.25,
             'jump_vol' => 0.13,
             'baseline_roe' => 0.23,
@@ -1376,7 +1376,7 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.24,
-            'beta' => -1.20,
+            'beta' => -0.50,
             'jump_intensity' => 1.25,
             'jump_vol' => 0.11,
             'baseline_roe' => 0.20,
@@ -1424,7 +1424,7 @@ class InitialMarket
             'total_equity' => 80_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 60_000_000_000.00,
-            'retained_earnings' => 140_000_000_000.00
+            'retained_earnings' => 40_000_000_000.00
         ],
         [
             'ticker' => 'SILC',
@@ -1441,7 +1441,7 @@ class InitialMarket
             'capex_ratio' => 0.80,
             'target_payout_ratio' => 0.20,
             'dividendSpeed' => 0.15,
-            'fixed_cost_ratio' => 0.90,
+            'fixed_cost_ratio' => 0.70,
             'operating_margin' => 0.50,
             'public_float' => 0.90,
             'sam_ratio' => 0.75,
@@ -1453,7 +1453,7 @@ class InitialMarket
             'total_equity' => 210_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 100_000_000_000.00,
-            'retained_earnings' => 360_000_000_000.00
+            'retained_earnings' => 140_000_000_000.00
         ],
         [
             'ticker' => 'KSTL',
@@ -1482,7 +1482,7 @@ class InitialMarket
             'total_equity' => 70_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 55_000_000_000.00,
-            'retained_earnings' => 135_000_000_000.00
+            'retained_earnings' => 45_000_000_000.00
         ],
         [
             'ticker' => 'POOL',
@@ -1511,7 +1511,7 @@ class InitialMarket
             'total_equity' => 110_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 800_000_000_000.00,
-            'retained_earnings' => 560_000_000_000.00
+            'retained_earnings' => 65_000_000_000.00
         ],
         [
             'ticker' => 'ACC',
@@ -1557,7 +1557,7 @@ class InitialMarket
             'capex_ratio' => 0.85,
             'target_payout_ratio' => 0.20,
             'dividendSpeed' => 0.40,
-            'fixed_cost_ratio' => 0.85,
+            'fixed_cost_ratio' => 0.65,
             'operating_margin' => 0.22,
             'public_float' => 0.88,
             'sam_ratio' => 0.50,

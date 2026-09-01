@@ -40,11 +40,11 @@ class MacroEngine
     /** Sensitivity of the output gap to physical capital stock overhang (excess capacity drags down growth). */
     public const KALDOR_CAPITAL_DRAG = 0.40;
     /** Elasticity of aggregate demand to household wealth deviations (Modigliani Wealth Effect, ~4% MPC). */
-    public const KALDOR_WEALTH_EFFECT_ELASTICITY = 0.04;
+    public const KALDOR_WEALTH_EFFECT_ELASTICITY = 0.02;
     /** The rate at which business investment (output gap) accumulates into the physical capital stock. */
-    public const CAPITAL_ACCUMULATION_RATE = 0.35;
+    public const CAPITAL_ACCUMULATION_RATE = 0.40;
     /** The rate at which physical capital depreciates, organically clearing overhangs and creating pent-up demand. */
-    public const CAPITAL_DECAY_RATE = 0.25;
+    public const CAPITAL_DECAY_RATE = 0.30;
     /** Stochastic diffusion volatility of the macroeconomic output gap. */
     public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.010;
 
@@ -72,7 +72,7 @@ class MacroEngine
     /** Volatility of energy jump shock magnitude. */
     public const ENERGY_JUMP_VOL = 0.10;
     /** Cost-push transmission coefficient passing energy price spikes into headline inflation. */
-    public const ENERGY_COST_PUSH_TRANSMISSION = 0.010;
+    public const ENERGY_COST_PUSH_TRANSMISSION = 0.005;
 
     // --- GARCH-MIDAS Macroeconomic Volatility Constants (Engle, Ghysels, & Sohn 2013 Eq. 5) ---
     /** Long-run equilibrium baseline volatility (~15% VIX) during neutral economic conditions. */
@@ -121,16 +121,26 @@ class MacroEngine
     public const EVANS_RULE_UNEMPLOYMENT = 0.050;
     /** Evans Rule forward guidance: Maximum inflation ceiling (2.5%) tolerated while holding rates at ZLB. */
     public const EVANS_RULE_INFLATION_CAP = 0.025;
-    /** Central bank baseline interest rate smoothing speed per year. */
-    public const CB_SMOOTHING_SPEED = 1.0;
-    /** Inflation panic reaction multiplier accelerating rate hikes during inflation spikes. */
+    /** Central bank baseline rate hiking smoothing speed per year (Woodford 2003 inertial gradualism). */
+    public const CB_HIKE_SMOOTHING_SPEED = 0.45;
+    /** Central bank baseline rate cutting smoothing speed per year (rapid crisis easing). */
+    public const CB_CUT_SMOOTHING_SPEED = 1.25;
+    /** Inflation panic threshold (3.5%) above which central bank accelerates hiking to Volcker speed. */
+    public const CB_INFLATION_PANIC_THRESHOLD = 0.035;
+    /** Inflation panic reaction multiplier accelerating rate hikes during extreme inflation spikes. */
     public const CB_INFLATION_PANIC_SCALE = 50.0;
     /** Recession panic reaction multiplier accelerating emergency cuts during downturns. */
     public const CB_RECESSION_PANIC_SCALE = 100.0;
+    /** Maximum annual rate hike velocity cap during normal economic expansions (200 bps/year). */
+    public const CB_MAX_NORMAL_HIKE_VELOCITY = 0.020;
+    /** Maximum annual rate hike velocity cap during emergency runaway inflation spikes (400 bps/year). */
+    public const CB_MAX_PANIC_HIKE_VELOCITY = 0.040;
     /** Maximum annual rate hike velocity cap (Volcker-style panic speed cap). */
     public const CB_MAX_HIKE_PANIC_SPEED = 3.0;
     /** Maximum annual rate cut velocity cap during financial crises. */
     public const CB_MAX_CUT_PANIC_SPEED = 10.0;
+    /** Maximum annual rate cut velocity cap during economic downturns and crises (-800 bps/year). */
+    public const CB_MAX_CUT_VELOCITY = -0.080;
     /** Policy rate threshold determining proximity to the Zero Lower Bound. */
     public const ZLB_PROXIMITY_THRESHOLD = 0.015;
 
@@ -217,12 +227,12 @@ class MacroEngine
     // --- Quantitative Easing (QE) & Yield Curve Suppression ---
     /** Proximity threshold to Zero Lower Bound required before activating QE asset purchases. */
     public const QE_ACTIVATION_ZLB_THRESHOLD = 0.60;
-    /** Negative output gap threshold below which central bank initiates QE bond purchases (-1.0%). */
-    public const QE_ACTIVATION_GAP_THRESHOLD = -0.01;
+    /** Negative output gap threshold below which central bank initiates QE bond purchases (0.0%). */
+    public const QE_ACTIVATION_GAP_THRESHOLD = 0.0;
     /** Maximum yield suppression capacity achieved under full-scale QE (200 bps). */
     public const QE_MAX_SUPPRESSION = 0.02;
     /** Sensitivity multiplier scaling QE bond purchase intensity with recession depth. */
-    public const QE_SEVERITY_MULTIPLIER = 0.5;
+    public const QE_SEVERITY_MULTIPLIER = 1.0;
     /** Annual ramp speed of central bank balance sheet expansion and contraction. */
     public const QE_RAMP_SPEED = 1.0;
     /** Nelson-Siegel level weighting on target inflation vs expected inflation. */
@@ -424,7 +434,7 @@ class MacroEngine
         $yieldData = $this->calculateYieldCurveAndQE($state, self::TARGET_INFLATION, self::NATURAL_RATE, $dt);
 
         $state->qeIntensity = $yieldData['new_qe_intensity'];
-        $state->qeActive = $state->qeIntensity > 0.001;
+        $state->qeActive = $state->qeIntensity > 0.0005;
 
         $state->yield2y = $yieldData['yield_2y'];
         $state->yield5y = $yieldData['yield_5y'];
@@ -569,19 +579,28 @@ class MacroEngine
     private function updatePolicyRate(MacroState $state, float $targetRate, float $dt): float
     {
         $currentPolicyRate = $state->policyRate;
-        $cbSpeed = self::CB_SMOOTHING_SPEED;
 
         if ($targetRate > $currentPolicyRate) {
-            $inflationExcess = max(0.0, $state->inflation - self::TARGET_INFLATION);
-            $cbSpeed += min(self::CB_MAX_HIKE_PANIC_SPEED, $inflationExcess * self::CB_INFLATION_PANIC_SCALE);
+            $cbSpeed = self::CB_HIKE_SMOOTHING_SPEED;
+            $inflationPanicExcess = max(0.0, $state->inflation - self::CB_INFLATION_PANIC_THRESHOLD);
+            $panicMultiplier = min(self::CB_MAX_HIKE_PANIC_SPEED, $inflationPanicExcess * self::CB_INFLATION_PANIC_SCALE);
+            $cbSpeed += $panicMultiplier;
+
+            // Interpolate max velocity between normal (200 bps/yr) and panic (400 bps/yr) based on panic scale
+            $panicFraction = min(1.0, $panicMultiplier / self::CB_MAX_HIKE_PANIC_SPEED);
+            $maxHikeVelocity = self::CB_MAX_NORMAL_HIKE_VELOCITY + $panicFraction * (self::CB_MAX_PANIC_HIKE_VELOCITY - self::CB_MAX_NORMAL_HIKE_VELOCITY);
+
+            $rawMove = $cbSpeed * ($targetRate - $currentPolicyRate);
+            $clampedMove = min($maxHikeVelocity, $rawMove);
         } else {
+            $cbSpeed = self::CB_CUT_SMOOTHING_SPEED;
             $deflationPanic = max(0.0, self::TARGET_INFLATION - $state->inflation) * self::CB_INFLATION_PANIC_SCALE;
             $recessionPanic = max(0.0, -$state->outputGap) * self::CB_RECESSION_PANIC_SCALE;
             $cbSpeed += min(self::CB_MAX_CUT_PANIC_SPEED, $deflationPanic + $recessionPanic);
-        }
 
-        $rawMove = $cbSpeed * ($targetRate - $currentPolicyRate);
-        $clampedMove = max(-0.08, min(0.05, $rawMove)); // Tightened max annual velocity to -800 bps to +500 bps/year
+            $rawMove = $cbSpeed * ($targetRate - $currentPolicyRate);
+            $clampedMove = max(self::CB_MAX_CUT_VELOCITY, $rawMove);
+        }
 
         $newRate = $currentPolicyRate + $clampedMove * $dt;
         $newRate = max(0.00, min(0.20, $newRate)); // Explicit bounds

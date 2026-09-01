@@ -37,12 +37,12 @@ class MacroEngineTest extends TestCase
         $mathProperty->setValue($this->engine, $this->mathUtilityMock);
     }
 
-    public function testMacroEngineCanBeInstantiated()
+    public function testMacroEngineCanBeInstantiated(): void
     {
         $this->assertInstanceOf(MacroEngine::class, $this->engine);
     }
 
-    public function testUpdateMacroStateInitializesFromEmptyRedis()
+    public function testUpdateMacroStateInitializesFromEmptyRedis(): void
     {
         // Simulate an empty Redis cache
         $this->redisMock->expects($this->once())
@@ -75,7 +75,7 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(0.0, $result->freightRateIndex);
     }
 
-    public function testUpdateMacroStateWithExistingStateAndRecessionShock()
+    public function testUpdateMacroStateWithExistingStateAndRecessionShock(): void
     {
         $existingState = [
             'inflation' => 0.02,
@@ -107,7 +107,7 @@ class MacroEngineTest extends TestCase
         $this->assertGreaterThan(MacroEngine::BASE_EQUITY_RISK_PREMIUM, $result->equityRiskPremium, 'ERP should rise during a recession.');
     }
 
-    public function testUpdateMacroStateDuringSevereInflationBoom()
+    public function testUpdateMacroStateDuringSevereInflationBoom(): void
     {
         $existingState = [
             'inflation' => 0.08, // Massive 8% inflation
@@ -868,12 +868,12 @@ class MacroEngineTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $gapNeutral, 0.0001, 'Neutral economy with baseline housing should not drift.');
 
         // Crash should cause negative drift (Recession)
-        // Math: -0.20 * 0.04 = -0.008 drag * 0.25 dt = -0.002
-        $this->assertEqualsWithDelta(-0.002, $gapCrash, 0.0001, 'Housing crash must create a negative drag on the output gap.');
+        // Math: -0.20 * 0.02 = -0.004 drag * 0.25 dt = -0.001
+        $this->assertEqualsWithDelta(-0.001, $gapCrash, 0.0001, 'Housing crash must create a negative drag on the output gap.');
 
         // Boom should cause positive drift (Expansion)
-        // Math: +0.20 * 0.04 = +0.008 stimulus * 0.25 dt = +0.002
-        $this->assertEqualsWithDelta(0.002, $gapBoom, 0.0001, 'Housing boom must create a positive stimulus on the output gap.');
+        // Math: +0.20 * 0.02 = +0.004 stimulus * 0.25 dt = +0.001
+        $this->assertEqualsWithDelta(0.001, $gapBoom, 0.0001, 'Housing boom must create a positive stimulus on the output gap.');
     }
 
     public function testInterbankLiquiditySpreadMeanRevertsViaCIR(): void
@@ -964,17 +964,17 @@ class MacroEngineTest extends TestCase
         // Run 1 tick of boom ($dt = 0.25 years / 1 quarter)
         $dtoBoom = $this->engine->updateMacroState(0.25);
 
-        // Boom should accumulate capital stock overhang: dK = (0.05 * 0.35 - 0.25 * 0) * 0.25 = 0.004375
+        // Boom should accumulate capital stock overhang: dK = (0.05 * 0.40 - 0.30 * 0) * 0.25 = 0.0050
         $this->assertGreaterThan(0.0, $dtoBoom->capitalStockOverhang, 'Capital stock overhang must accumulate during economic booms.');
-        $this->assertEqualsWithDelta(0.004375, $dtoBoom->capitalStockOverhang, 0.0001);
+        $this->assertEqualsWithDelta(0.0050, $dtoBoom->capitalStockOverhang, 0.0001);
 
         // Run 1 quarter of recession
         $dtoRecession = $this->engine->updateMacroState(0.25);
 
-        // Recession & decay: dK = (-0.05 * 0.35 - 0.25 * 0.05) * 0.25 = (-0.0175 - 0.0125) * 0.25 = -0.0075
-        // New overhang = 0.05 - 0.0075 = 0.0425
+        // Recession & decay: dK = (-0.05 * 0.40 - 0.30 * 0.05) * 0.25 = (-0.020 - 0.015) * 0.25 = -0.00875
+        // New overhang = 0.05 - 0.00875 = 0.04125
         $this->assertLessThan(0.05, $dtoRecession->capitalStockOverhang, 'Capital stock overhang must decay during recessions.');
-        $this->assertEqualsWithDelta(0.0425, $dtoRecession->capitalStockOverhang, 0.0001);
+        $this->assertEqualsWithDelta(0.04125, $dtoRecession->capitalStockOverhang, 0.0001);
     }
 
     public function testSolowSwanSmoothPotentialGdpGrowth(): void
@@ -1185,5 +1185,76 @@ class MacroEngineTest extends TestCase
         $lagQ2 = $state->energyCostPushLag;
 
         $this->assertGreaterThan($lagQ1, $lagQ2, 'Sticky cost lag should accumulate and rise across successive quarters of elevated energy.');
+    }
+
+    public function testAsymmetricInterestRateSmoothingPacing(): void
+    {
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'updatePolicyRate');
+
+        // 1. Hiking scenario (target 5.0%, current 2.0%, inflation benign at 2.0%)
+        $hikingState = new \App\Service\Macro\MacroState();
+        $hikingState->policyRate = 0.02;
+        $hikingState->inflation = 0.02;
+        $hikingState->outputGap = 0.02;
+
+        $targetRateHike = 0.05; // +300 bps gap
+        $dt = 0.25; // 1 quarter
+
+        $newHikedRate = $reflectionMethod->invoke($this->engine, $hikingState, $targetRateHike, $dt);
+        $quarterlyHike = $newHikedRate - $hikingState->policyRate;
+
+        // 2. Cutting scenario (target 1.0%, current 4.0%, recession gap -3%)
+        $cuttingState = new \App\Service\Macro\MacroState();
+        $cuttingState->policyRate = 0.04;
+        $cuttingState->inflation = 0.015;
+        $cuttingState->outputGap = -0.03;
+
+        $targetRateCut = 0.01; // -300 bps gap
+
+        $newCutRate = $reflectionMethod->invoke($this->engine, $cuttingState, $targetRateCut, $dt);
+        $quarterlyCut = $cuttingState->policyRate - $newCutRate;
+
+        // Rate cut should be significantly swifter than rate hike for an identical 300 bps gap
+        $this->assertGreaterThan($quarterlyHike, $quarterlyCut, 'Central bank must ease rates faster during recession than it hikes during expansion (asymmetric smoothing).');
+    }
+
+    public function testRateHikesDuringNormalExpansionDoNotExceedNormalVelocity(): void
+    {
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'updatePolicyRate');
+
+        $expansionState = new \App\Service\Macro\MacroState();
+        $expansionState->policyRate = 0.01;
+        $expansionState->inflation = 0.025; // Mild healthy expansion inflation (below 3.5% panic threshold)
+        $expansionState->outputGap = 0.03;
+
+        $highTargetRate = 0.08; // High target
+        $dt = 1.0; // 1 full year
+
+        $newRate = $reflectionMethod->invoke($this->engine, $expansionState, $highTargetRate, $dt);
+        $annualHike = $newRate - $expansionState->policyRate;
+
+        // Annual hike during normal expansion must be bounded by CB_MAX_NORMAL_HIKE_VELOCITY (200 bps/year)
+        $this->assertLessThanOrEqual(MacroEngine::CB_MAX_NORMAL_HIKE_VELOCITY + 0.0001, $annualHike, 'Normal expansion rate hike velocity must not exceed 200 bps/year.');
+    }
+
+    public function testInflationPanicAcceleratesHikesAboveEmergencyThreshold(): void
+    {
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'updatePolicyRate');
+
+        // Severe stagflation / runaway inflation shock (8.0% inflation)
+        $panicState = new \App\Service\Macro\MacroState();
+        $panicState->policyRate = 0.02;
+        $panicState->inflation = 0.080;
+        $panicState->outputGap = 0.03;
+
+        $highTargetRate = 0.12;
+        $dt = 1.0; // 1 full year
+
+        $newPanicRate = $reflectionMethod->invoke($this->engine, $panicState, $highTargetRate, $dt);
+        $annualPanicHike = $newPanicRate - $panicState->policyRate;
+
+        // In panic mode, rate hike velocity should exceed normal 200 bps cap up to panic cap (400 bps/year)
+        $this->assertGreaterThan(MacroEngine::CB_MAX_NORMAL_HIKE_VELOCITY, $annualPanicHike, 'Severe runaway inflation must trigger emergency panic rate hiking acceleration.');
+        $this->assertLessThanOrEqual(MacroEngine::CB_MAX_PANIC_HIKE_VELOCITY + 0.0001, $annualPanicHike, 'Panic rate hiking must remain bounded by CB_MAX_PANIC_HIKE_VELOCITY.');
     }
 }

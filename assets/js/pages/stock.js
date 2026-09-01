@@ -304,13 +304,26 @@ function initStockPage() {
             if (rateEl) rateEl.textContent = (payload.macro.policy_rate * 100).toFixed(2) + '%';
             if (yieldEl) {
                 yieldEl.textContent = (payload.macro.yield_10y * 100).toFixed(2) + '%';
-                yieldEl.className = payload.macro.qe_active ? 'text-lg font-bold text-secondary' : 'text-lg font-bold text-on-surface';
+                if (payload.macro.qe_active) {
+                    yieldEl.className = 'font-bold text-emerald-400 font-mono';
+                } else {
+                    yieldEl.className = 'font-bold text-on-surface font-mono';
+                }
             }
 
+            const qeStatusEl = document.getElementById('macro-qe-status');
             const qeContainer = document.getElementById('qe-status-container');
             const qeIntensityEl = document.getElementById('macro-qe-intensity');
+            if (qeStatusEl) {
+                if (payload.macro.qe_active && payload.macro.qe_intensity > 0.0005) {
+                    const suppBps = (payload.macro.qe_intensity * 10000).toFixed(0);
+                    qeStatusEl.innerHTML = `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 shadow-sm"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Active (-${suppBps} bps)</span>`;
+                } else {
+                    qeStatusEl.innerHTML = `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-surface-container-highest/60 text-on-surface-variant border border-outline-variant/10">Inactive</span>`;
+                }
+            }
             if (qeContainer && qeIntensityEl) {
-                if (payload.macro.qe_active && payload.macro.qe_intensity > 0.001) {
+                if (payload.macro.qe_active && payload.macro.qe_intensity > 0.0005) {
                     qeContainer.classList.remove('hidden');
                     qeIntensityEl.textContent = '-' + (payload.macro.qe_intensity * 100).toFixed(2) + '% Yield Suppression';
                 } else {
