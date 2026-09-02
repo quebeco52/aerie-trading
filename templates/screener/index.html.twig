@@ -3,7 +3,7 @@
 {% block title %}Stock Screener | Aerie Exchange{% endblock %}
 
 {% block body %}
-<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full space-y-6">
+<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full space-y-6" data-controller="screener">
 
     {# Hero Section #}
     <div class="bg-surface-container-low shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-6 md:p-8 border border-outline-variant/15 relative overflow-hidden">
@@ -22,7 +22,7 @@
             <div class="w-full md:w-72">
                 <div class="relative">
                     <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-base">search</span>
-                    <input type="text" id="screener-search" placeholder="Filter by ticker or name..." class="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-xl pl-9 pr-4 py-2 text-xs font-mono text-on-surface focus:ring-1 focus:ring-primary outline-none placeholder:text-on-surface-variant/50">
+                    <input type="text" id="screener-search" placeholder="Filter by ticker or name..." class="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-xl pl-9 pr-4 py-2 text-xs font-mono text-on-surface focus:ring-1 focus:ring-primary outline-none placeholder:text-on-surface-variant/50" data-screener-target="searchInput" data-action="input->screener#onSearch">
                 </div>
             </div>
         </div>
@@ -30,7 +30,7 @@
 
     {# Sector Filter Pills #}
     <div class="flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar" id="sector-filters">
-        <button class="sector-filter-btn px-4 py-1.5 rounded-xl text-xs font-bold transition-all bg-primary text-[#001a42] shadow-md shadow-primary/20 whitespace-nowrap" data-sector="ALL">
+        <button class="sector-filter-btn px-4 py-1.5 rounded-xl text-xs font-bold transition-all bg-primary text-[#001a42] shadow-md shadow-primary/20 whitespace-nowrap cursor-pointer" data-sector="ALL" data-screener-target="sectorBtn" data-action="click->screener#filterSector">
             All Sectors
         </button>
         {% set sectors = [] %}
@@ -40,7 +40,7 @@
             {% endif %}
         {% endfor %}
         {% for sec in sectors|sort %}
-            <button class="sector-filter-btn px-4 py-1.5 rounded-xl text-xs font-bold transition-all bg-surface-container text-on-surface-variant hover:bg-surface-container-high whitespace-nowrap" data-sector="{{ sec }}">
+            <button class="sector-filter-btn px-4 py-1.5 rounded-xl text-xs font-bold transition-all bg-surface-container text-on-surface-variant hover:bg-surface-container-high whitespace-nowrap cursor-pointer" data-sector="{{ sec }}" data-screener-target="sectorBtn" data-action="click->screener#filterSector">
                 {{ sec }}
             </button>
         {% endfor %}
@@ -52,22 +52,22 @@
             <table class="w-full text-left border-collapse min-w-225" id="screener-table">
                 <thead>
                     <tr class="bg-surface-container-highest/30 text-on-surface-variant text-[10px] uppercase tracking-widest border-b border-outline-variant/10">
-                        <th class="px-6 py-4 font-bold cursor-pointer select-none hover:text-primary transition-colors" data-col="ticker">Ticker</th>
-                        <th class="px-4 py-4 font-bold cursor-pointer select-none hover:text-primary transition-colors" data-col="name">Company</th>
-                        <th class="px-4 py-4 font-bold cursor-pointer select-none hover:text-primary transition-colors" data-col="sector">Sector</th>
-                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="price">Price</th>
-                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="mcap">Market Cap</th>
-                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="pe">P/E Ratio</th>
-                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="eps">EPS (TTM)</th>
-                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="roic">ROIC / ROE</th>
-                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="equity">Total Equity</th>
-                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="de">D/E Ratio</th>
+                        <th class="px-6 py-4 font-bold cursor-pointer select-none hover:text-primary transition-colors" data-col="ticker" data-screener-target="header" data-action="click->screener#sort">Ticker</th>
+                        <th class="px-4 py-4 font-bold cursor-pointer select-none hover:text-primary transition-colors" data-col="name" data-screener-target="header" data-action="click->screener#sort">Company</th>
+                        <th class="px-4 py-4 font-bold cursor-pointer select-none hover:text-primary transition-colors" data-col="sector" data-screener-target="header" data-action="click->screener#sort">Sector</th>
+                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="price" data-screener-target="header" data-action="click->screener#sort">Price</th>
+                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="mcap" data-screener-target="header" data-action="click->screener#sort">Market Cap</th>
+                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="pe" data-screener-target="header" data-action="click->screener#sort">P/E Ratio</th>
+                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="eps" data-screener-target="header" data-action="click->screener#sort">EPS (TTM)</th>
+                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="roic" data-screener-target="header" data-action="click->screener#sort">ROIC / ROE</th>
+                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="equity" data-screener-target="header" data-action="click->screener#sort">Total Equity</th>
+                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="de" data-screener-target="header" data-action="click->screener#sort">D/E Ratio</th>
                         <th class="px-6 py-4 font-bold text-right">Action</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-outline-variant/5 text-sm" id="screener-tbody">
+                <tbody class="divide-y divide-outline-variant/5 text-sm" id="screener-tbody" data-screener-target="tbody">
                     {% for stock in stocks %}
-                        <tr class="hover:bg-surface-container-high/40 transition-colors group cursor-pointer screener-row {{ stock.isBankrupt ? 'opacity-50 bg-red-950/10' : '' }}" onclick="window.location.href='/stock/{{ stock.ticker }}'" data-ticker="{{ stock.ticker }}" data-name="{{ stock.name|lower }}" data-sector="{{ stock.sector }}">
+                        <tr class="hover:bg-surface-container-high/40 transition-colors group cursor-pointer screener-row {{ stock.isBankrupt ? 'opacity-50 bg-red-950/10' : '' }}" onclick="window.location.href='/stock/{{ stock.ticker }}'" data-ticker="{{ stock.ticker }}" data-name="{{ stock.name|lower }}" data-sector="{{ stock.sector }}" data-screener-target="row">
                             <td class="px-6 py-4" data-value="{{ stock.ticker }}">
                                 <div class="flex items-center gap-2">
                                     <span class="font-bold text-primary font-mono group-hover:underline">{{ stock.ticker }}</span>
@@ -110,95 +110,4 @@
     </div>
 
 </div>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const table = document.getElementById('screener-table');
-    if (!table) return;
-    const headers = table.querySelectorAll('th[data-col]');
-    const tbody = document.getElementById('screener-tbody');
-    const searchInput = document.getElementById('screener-search');
-    const filterButtons = document.querySelectorAll('.sector-filter-btn');
-
-    let currentSort = { colIndex: null, direction: 'asc' };
-    let selectedSector = 'ALL';
-    let searchQuery = '';
-
-    // Sector Filter Buttons
-    filterButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-            filterButtons.forEach(b => {
-                b.classList.remove('bg-primary', 'text-[#001a42]', 'shadow-md', 'shadow-primary/20');
-                b.classList.add('bg-surface-container', 'text-on-surface-variant');
-            });
-            btn.classList.remove('bg-surface-container', 'text-on-surface-variant');
-            btn.classList.add('bg-primary', 'text-[#001a42]', 'shadow-md', 'shadow-primary/20');
-
-            selectedSector = btn.dataset.sector;
-            applyFilters();
-        });
-    });
-
-    // Search Input
-    if (searchInput) {
-        searchInput.addEventListener('input', () => {
-            searchQuery = searchInput.value.trim().toLowerCase();
-            applyFilters();
-        });
-    }
-
-    function applyFilters() {
-        const rows = document.querySelectorAll('.screener-row');
-        rows.forEach(row => {
-            const sec = row.dataset.sector || '';
-            const ticker = (row.dataset.ticker || '').toLowerCase();
-            const name = (row.dataset.name || '').toLowerCase();
-
-            const matchesSector = (selectedSector === 'ALL' || sec === selectedSector);
-            const matchesSearch = (searchQuery === '' || ticker.includes(searchQuery) || name.includes(searchQuery));
-
-            if (matchesSector && matchesSearch) {
-                row.style.display = '';
-            } else {
-                row.style.display = 'none';
-            }
-        });
-    }
-
-    // Column Sorting
-    headers.forEach((header, index) => {
-        header.addEventListener('click', () => {
-            const rows = Array.from(tbody.querySelectorAll('.screener-row'));
-            if (rows.length === 0) return;
-
-            const direction = currentSort.colIndex === index && currentSort.direction === 'desc' ? 'asc' : 'desc';
-
-            headers.forEach(h => {
-                const icon = h.querySelector('.sort-arrow');
-                if (icon) icon.remove();
-            });
-
-            const arrow = document.createElement('span');
-            arrow.className = 'sort-arrow ml-1 text-primary text-xs';
-            arrow.innerText = direction === 'asc' ? '↑' : '↓';
-            header.appendChild(arrow);
-
-            rows.sort((a, b) => {
-                const aVal = a.children[index].getAttribute('data-value') || '';
-                const bVal = b.children[index].getAttribute('data-value') || '';
-                const aNum = parseFloat(aVal);
-                const bNum = parseFloat(bVal);
-
-                if (!isNaN(aNum) && !isNaN(bNum)) {
-                    return direction === 'asc' ? aNum - bNum : bNum - aNum;
-                }
-                return direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-            });
-
-            tbody.append(...rows);
-            currentSort = { colIndex: index, direction };
-        });
-    });
-});
-</script>
 {% endblock %}

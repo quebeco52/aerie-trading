@@ -1,8 +1,12 @@
+import { THEME_COLORS } from '../utils/colors.js';
+import { formatCurrency } from '../utils/formatters.js';
+
 const previousPrices = {};
 let previousPortfolioValue = null;
 let portfolioChart = null;
 let areaSeries = null;
 let currentRange = '1m';
+let chartResizeObserver = null;
 
 function initDashboard() {
     const totalValEl = document.getElementById('portfolio-total-value');
@@ -10,65 +14,25 @@ function initDashboard() {
     if (totalValEl.dataset.initialized) return;
     totalValEl.dataset.initialized = 'true';
 
-    const COLOR_SECONDARY = '#4edea3'; // Positive / Green
-    const COLOR_TERTIARY = '#ffb3ad';  // Negative / Red
-    const COLOR_PRIMARY = '#adc6ff';
-
-    // --- TAB SWITCHING LOGIC ---
-    function setupTabs() {
-        const tabButtons = document.querySelectorAll('.portfolio-tab-btn');
-        const tabPanels = document.querySelectorAll('.portfolio-tab-panel');
-
-        function activateTab(tabId) {
-            tabButtons.forEach(btn => {
-                const isActive = btn.dataset.tab === tabId;
-                if (isActive) {
-                    btn.classList.remove('text-on-surface-variant', 'border-transparent');
-                    btn.classList.add('text-primary', 'border-primary');
-                } else {
-                    btn.classList.remove('text-primary', 'border-primary');
-                    btn.classList.add('text-on-surface-variant', 'border-transparent');
-                }
-            });
-
-            tabPanels.forEach(panel => {
-                if (panel.id === `tab-content-${tabId}`) {
-                    panel.classList.remove('hidden');
-                } else {
-                    panel.classList.add('hidden');
-                }
-            });
-        }
-
-        tabButtons.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const tabId = btn.dataset.tab;
-                activateTab(tabId);
-                if (history.replaceState) {
-                    history.replaceState(null, null, `#${tabId}`);
-                }
-            });
-        });
-
-        // Load tab from URL hash if present
-        const hash = window.location.hash.replace('#', '');
-        if (hash && document.getElementById(`tab-content-${hash}`)) {
-            activateTab(hash);
-        }
-    }
-
-    // --- PERFORMANCE NAV CHART (Lightweight Charts) ---
     function initPortfolioChart() {
         const chartContainer = document.getElementById('portfolioChartContainer');
         if (!chartContainer || typeof LightweightCharts === 'undefined') return;
 
-        // Clear previous chart instance if any
+        if (portfolioChart) {
+            try { portfolioChart.remove(); } catch (e) {}
+            portfolioChart = null;
+        }
+        if (chartResizeObserver) {
+            try { chartResizeObserver.disconnect(); } catch (e) {}
+            chartResizeObserver = null;
+        }
+
         chartContainer.innerHTML = '';
 
         portfolioChart = LightweightCharts.createChart(chartContainer, {
             layout: {
                 background: { color: 'transparent' },
-                textColor: '#c2c6d6',
+                textColor: THEME_COLORS.textMuted,
                 fontFamily: '"Courier Prime", monospace',
             },
             grid: {
@@ -97,19 +61,7 @@ function initDashboard() {
             areaSeries = portfolioChart.addSeries(LightweightCharts.AreaSeries, {
                 topColor: 'rgba(173, 198, 255, 0.4)',
                 bottomColor: 'rgba(173, 198, 255, 0.01)',
-                lineColor: '#adc6ff',
-                lineWidth: 2,
-                priceFormat: {
-                    type: 'price',
-                    precision: 2,
-                    minMove: 0.01,
-                },
-            });
-        } else if (typeof portfolioChart.addAreaSeries === 'function') {
-            areaSeries = portfolioChart.addAreaSeries({
-                topColor: 'rgba(173, 198, 255, 0.4)',
-                bottomColor: 'rgba(173, 198, 255, 0.01)',
-                lineColor: '#adc6ff',
+                lineColor: THEME_COLORS.primary,
                 lineWidth: 2,
                 priceFormat: {
                     type: 'price',
@@ -119,22 +71,20 @@ function initDashboard() {
             });
         }
 
-        // Resize chart observer
-        const resizeObserver = new ResizeObserver(entries => {
+        chartResizeObserver = new ResizeObserver(entries => {
             if (entries.length === 0 || !entries[0].contentRect) return;
             const newRect = entries[0].contentRect;
-            if (newRect.width > 0 && newRect.height > 0) {
+            if (newRect.width > 0 && newRect.height > 0 && portfolioChart) {
                 portfolioChart.applyOptions({ width: newRect.width, height: newRect.height });
             }
         });
-        resizeObserver.observe(chartContainer);
+        chartResizeObserver.observe(chartContainer);
 
         loadPortfolioData(currentRange);
 
-        // Timeframe buttons
         const rangeButtons = document.querySelectorAll('.portfolio-range-btn');
         rangeButtons.forEach(btn => {
-            btn.addEventListener('click', () => {
+            btn.onclick = () => {
                 rangeButtons.forEach(b => {
                     b.classList.remove('bg-primary', 'text-[#001a42]', 'shadow-md', 'shadow-primary/20');
                     b.classList.add('bg-surface-container', 'text-on-surface-variant');
@@ -144,7 +94,7 @@ function initDashboard() {
 
                 currentRange = btn.dataset.range;
                 loadPortfolioData(currentRange);
-            });
+            };
         });
     }
 
@@ -160,14 +110,12 @@ function initDashboard() {
             if (!res.ok) throw new Error('Failed to fetch portfolio history');
             const data = await res.json();
 
-            if (areaSeries && data && data.length > 0) {
-                // Format points for Lightweight Charts (time: timestamp in seconds)
+            if (areaSeries && Array.isArray(data) && data.length > 0) {
                 const chartPoints = [];
                 let lastTime = 0;
 
                 data.forEach(d => {
                     let t = Math.floor(new Date(d.recorded_at).getTime() / 1000);
-                    // Ensure strictly ascending timestamps
                     if (t <= lastTime) {
                         t = lastTime + 1;
                     }
@@ -180,7 +128,7 @@ function initDashboard() {
                 });
 
                 areaSeries.setData(chartPoints);
-                portfolioChart.timeScale().fitContent();
+                if (portfolioChart) portfolioChart.timeScale().fitContent();
             }
         } catch (e) {
             console.error('Error loading portfolio chart data:', e);
@@ -192,7 +140,6 @@ function initDashboard() {
         }
     }
 
-    // --- REAL-TIME WEBSOCKET MARKET UPDATES ---
     function onMarketUpdate(event) {
         const payload = event.detail;
         if (!payload || !payload.stocks) return;
@@ -216,31 +163,28 @@ function initDashboard() {
                 const unrealizedPnL = holdingValue - totalCost;
                 const unrealizedPnLPct = totalCost > 0 ? (unrealizedPnL / totalCost) * 100 : 0.0;
 
-                // Update Price Element
                 const priceEl = document.getElementById(`price-${stock.ticker}`);
                 if (priceEl) {
                     priceEl.innerText = '$' + newPrice.toFixed(2);
                     if (newPrice > oldPrice) {
-                        priceEl.style.color = COLOR_SECONDARY;
+                        priceEl.style.color = THEME_COLORS.secondary;
                     } else if (newPrice < oldPrice) {
-                        priceEl.style.color = COLOR_TERTIARY;
+                        priceEl.style.color = THEME_COLORS.tertiary;
                     }
-                    setTimeout(() => priceEl.style.color = '', 500);
+                    setTimeout(() => { if (priceEl) priceEl.style.color = ''; }, 500);
                 }
 
-                // Update Value Element
                 const valueEl = document.getElementById(`value-${stock.ticker}`);
                 if (valueEl) {
-                    valueEl.innerText = '$' + holdingValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    valueEl.innerText = formatCurrency(holdingValue);
                 }
 
-                // Update PnL Element
                 const pnlEl = document.getElementById(`pnl-${stock.ticker}`);
                 if (pnlEl) {
                     const sign = unrealizedPnL >= 0 ? '+' : '';
                     pnlEl.className = `px-6 py-4 font-mono text-right font-bold ${unrealizedPnL >= 0 ? 'text-secondary' : 'text-tertiary'}`;
                     pnlEl.innerHTML = `
-                        <div>${sign}$${unrealizedPnL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                        <div>${sign}${formatCurrency(unrealizedPnL)}</div>
                         <div class="text-[10px] font-normal opacity-80">${sign}${unrealizedPnLPct.toFixed(2)}%</div>
                     `;
                 }
@@ -249,7 +193,6 @@ function initDashboard() {
             }
         });
 
-        // Recalculate Portfolio Total Value & Total P&L
         if (hasHoldingsUpdates && window.PORTFOLIO_HOLDINGS) {
             let totalInvested = 0;
             let totalInvestedCost = 0;
@@ -268,31 +211,30 @@ function initDashboard() {
 
             const investedEl = document.getElementById('total-invested');
             if (investedEl) {
-                investedEl.innerText = '$' + totalInvested.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                investedEl.innerText = formatCurrency(totalInvested);
             }
 
             const portfolioValEl = document.getElementById('portfolio-total-value');
             if (portfolioValEl) {
                 const oldVal = previousPortfolioValue || totalPortfolioValue;
-                portfolioValEl.innerText = '$' + totalPortfolioValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                portfolioValEl.innerText = formatCurrency(totalPortfolioValue);
 
                 if (totalPortfolioValue > oldVal) {
-                    portfolioValEl.style.color = COLOR_SECONDARY;
+                    portfolioValEl.style.color = THEME_COLORS.secondary;
                 } else if (totalPortfolioValue < oldVal) {
-                    portfolioValEl.style.color = COLOR_TERTIARY;
+                    portfolioValEl.style.color = THEME_COLORS.tertiary;
                 }
                 previousPortfolioValue = totalPortfolioValue;
-                setTimeout(() => portfolioValEl.style.color = '', 500);
+                setTimeout(() => { if (portfolioValEl) portfolioValEl.style.color = ''; }, 500);
             }
 
-            // Update PnL Badge in Header
             const pnlValEl = document.getElementById('portfolio-pnl-val');
             const pnlPctEl = document.getElementById('portfolio-pnl-pct');
             const pnlBadge = document.getElementById('portfolio-pnl-badge');
 
             if (pnlValEl && pnlPctEl && pnlBadge) {
                 const sign = totalPnL >= 0 ? '+' : '';
-                pnlValEl.innerText = `${sign}$${totalPnL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                pnlValEl.innerText = `${sign}${formatCurrency(totalPnL)}`;
                 pnlPctEl.innerText = `(${sign}${totalPnLPct.toFixed(2)}%)`;
 
                 if (totalPnL >= 0) {
@@ -304,14 +246,15 @@ function initDashboard() {
         }
     }
 
-    setupTabs();
     initPortfolioChart();
-
     document.addEventListener('market:update', onMarketUpdate);
 
-    // Clean up when navigating via Turbo
     document.addEventListener('turbo:before-render', () => {
         document.removeEventListener('market:update', onMarketUpdate);
+        if (chartResizeObserver) {
+            chartResizeObserver.disconnect();
+            chartResizeObserver = null;
+        }
         if (portfolioChart) {
             portfolioChart.remove();
             portfolioChart = null;

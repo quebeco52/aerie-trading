@@ -240,25 +240,25 @@ class Stock
     /**
      * @var string The dynamic, current Return on Invested Capital.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, options: ['default' => '0.0000'])]
     private string $currentRoic = '0.0000';
 
     /**
      * @var string The Trailing Twelve Months (TTM) Return on Invested Capital.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, options: ['default' => '0.0000'])]
     private string $roicTtm = '0.0000';
 
     /**
      * @var string The dynamic, current Return on Equity.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, options: ['default' => '0.0000'])]
     private string $currentRoe = '0.0000';
 
     /**
      * @var string The Trailing Twelve Months (TTM) Return on Equity.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, options: ['default' => '0.0000'])]
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, options: ['default' => '0.0000'])]
     private string $roeTtm = '0.0000';
 
     /**

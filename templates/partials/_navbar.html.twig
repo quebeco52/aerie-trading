@@ -20,10 +20,10 @@
             </div>
             
             <div class="flex items-center gap-4">
-                <div class="relative hidden sm:block">
+                <div class="relative hidden sm:block" data-controller="navbar-search">
                     <form action="/search" method="GET" id="search-form">
-                        <input id="market-search-input" name="q" type="text" placeholder="Search company or ticker..." class="bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-4 py-1.5 text-sm focus:ring-1 focus:ring-primary w-64 text-on-surface outline-none placeholder:text-outline-variant font-mono" autocomplete="off">
-                        <div id="search-results-dropdown" class="absolute left-0 mt-1 w-full bg-surface-container-high border border-outline-variant/20 rounded-md shadow-lg hidden z-50 overflow-hidden">
+                        <input id="market-search-input" name="q" type="text" placeholder="Search company or ticker..." class="bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-4 py-1.5 text-sm focus:ring-1 focus:ring-primary w-64 text-on-surface outline-none placeholder:text-outline-variant font-mono" autocomplete="off" data-navbar-search-target="input" data-action="input->navbar-search#onInput keydown->navbar-search#onKeyDown">
+                        <div id="search-results-dropdown" data-navbar-search-target="dropdown" class="absolute left-0 mt-1 w-full bg-surface-container-high border border-outline-variant/20 rounded-md shadow-lg hidden z-50 overflow-hidden">
                         </div>
                     </form>
                 </div>
@@ -39,80 +39,4 @@
             </div>
         </div>
     </div>
-
-    <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const searchInput = document.getElementById('market-search-input');
-        const dropdown = document.getElementById('search-results-dropdown');
-        let debounceTimer;
-        let currentFocus = -1;
-
-        if (searchInput && dropdown) {
-            searchInput.addEventListener('input', function() {
-                clearTimeout(debounceTimer);
-                const query = this.value.trim();
-
-                if (query.length < 1) {
-                    dropdown.classList.add('hidden');
-                    return;
-                }
-
-                debounceTimer = setTimeout(() => {
-                    fetch(`/search/autocomplete?q=${encodeURIComponent(query)}`)
-                        .then(response => response.json())
-                        .then(data => {
-                            dropdown.innerHTML = '';
-                            currentFocus = -1;
-                            if (data.length > 0) {
-                                data.forEach(item => {
-                                    const a = document.createElement('a');
-                                    a.href = `/stock/${item.ticker}`;
-                                    a.className = 'block px-4 py-2 text-sm text-on-surface hover:bg-surface-bright transition-colors cursor-pointer';
-                                    a.innerHTML = `<span class="font-bold text-primary">${item.ticker}</span> <span class="text-on-surface-variant text-xs ml-2">${item.name}</span>`;
-                                    dropdown.appendChild(a);
-                                });
-                            } else {
-                                dropdown.innerHTML = '<div class="px-4 py-2 text-sm text-on-surface-variant">No results found</div>';
-                            }
-                            dropdown.classList.remove('hidden');
-                        });
-                }, 250);
-            });
-
-            searchInput.addEventListener('keydown', function(e) {
-                const items = dropdown.querySelectorAll('a');
-                if (!items || items.length === 0) return;
-
-                if (e.key === 'ArrowDown') {
-                    currentFocus++;
-                    addActive(items);
-                } else if (e.key === 'ArrowUp') {
-                    currentFocus--;
-                    addActive(items);
-                } else if (e.key === 'Enter') {
-                    if (currentFocus > -1) {
-                        e.preventDefault();
-                        items[currentFocus].click();
-                    }
-                }
-            });
-
-            function addActive(items) {
-                if (!items) return false;
-                for (let i = 0; i < items.length; i++) {
-                    items[i].classList.remove('bg-surface-bright');
-                }
-                if (currentFocus >= items.length) currentFocus = 0;
-                if (currentFocus < 0) currentFocus = (items.length - 1);
-                items[currentFocus].classList.add('bg-surface-bright');
-            }
-
-            document.addEventListener('click', function(e) {
-                if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
-                    dropdown.classList.add('hidden');
-                }
-            });
-        }
-    });
-    </script>
 </nav>

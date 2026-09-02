@@ -36,6 +36,8 @@ class StockControllerTest extends WebTestCase
         $this->assertSelectorExists('h1');
         $this->assertSelectorTextContains('h1', 'Steel Wings');
         $this->assertSelectorExists('#mainChartContainer');
+        $this->assertSelectorExists('[data-controller="tabs"]');
+        $this->assertSelectorExists('[data-controller="navbar-search"]');
         $this->assertSelectorExists('.stock-tab-btn[data-tab="overview"]');
         $this->assertSelectorExists('.stock-tab-btn[data-tab="financials"]');
         $this->assertSelectorExists('.stock-tab-btn[data-tab="sector"]');

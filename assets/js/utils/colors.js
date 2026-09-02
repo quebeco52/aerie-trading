@@ -4,6 +4,20 @@ export const UI_COLORS = {
     GRID: '#2d3449'
 };
 
+export const THEME_COLORS = {
+    primary: '#adc6ff',
+    secondary: '#4edea3',
+    tertiary: '#ffb3ad',
+    positive: '#4edea3',
+    negative: '#ffb3ad',
+    warning: '#ff9800',
+    grid: '#2d3449',
+    surface: '#131b2e',
+    textPrimary: '#dae2fd',
+    textMuted: '#c2c6d6',
+    border: 'rgba(66, 71, 84, 0.3)'
+};
+
 export const BRAND_COLORS = {
     'LAKE': '#045729',  // Green
     'SWAN': '#770707',  // Red

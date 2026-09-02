@@ -31,7 +31,7 @@ class CorporateReport
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
     private ?string $treasury = null;
 
-    #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, nullable: true)]
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $roic = null;
 
     #[ORM\Column(type: Types::BOOLEAN, options: ['default' => false])]

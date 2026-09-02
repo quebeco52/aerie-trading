@@ -1,17 +1,7 @@
 import { Controller } from '@hotwired/stimulus';
+import { formatLarge } from '../js/utils/formatters.js';
 
-function formatSankeyValue(num) {
-    if (num === null || num === undefined) return '$0.00';
-    const isNeg = num < 0;
-    const abs = Math.abs(num);
-    let formatted;
-    if (abs >= 1e12) formatted = (abs / 1e12).toFixed(2) + 'T';
-    else if (abs >= 1e9) formatted = (abs / 1e9).toFixed(2) + 'B';
-    else if (abs >= 1e6) formatted = (abs / 1e6).toFixed(2) + 'M';
-    else if (abs >= 1e3) formatted = (abs / 1e3).toFixed(2) + 'K';
-    else formatted = abs.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    return (isNeg ? '-$' : '$') + formatted;
-}
+const formatSankeyValue = (num) => formatLarge(num, '$');
 
 export default class extends Controller {
     static targets = ['container'];

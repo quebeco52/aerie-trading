@@ -16,5 +16,7 @@ class ScreenerControllerTest extends WebTestCase
         $this->assertSelectorTextContains('h1', 'Stock Screener');
         $this->assertSelectorExists('table');
         $this->assertSelectorExists('input#screener-search');
+        $this->assertSelectorExists('[data-controller="screener"]');
+        $this->assertSelectorExists('[data-screener-target="searchInput"]');
     }
 }

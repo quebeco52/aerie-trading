@@ -84,39 +84,40 @@
 		</div>
 
 		{# --- TAB NAVIGATION BAR (ALL ENGLISH) --- #}
-		<div class="flex border-b border-outline-variant/15 overflow-x-auto gap-2 sm:gap-6 pb-px custom-scrollbar">
-			<button class="stock-tab-btn pb-3 px-1 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-primary border-primary" data-tab="overview">
-				<span class="material-symbols-outlined text-base">monitoring</span>
-				Overview
-			</button>
-			{% if isEtf %}
-				<button class="stock-tab-btn pb-3 px-1 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent" data-tab="macro">
-					<span class="material-symbols-outlined text-base">public</span>
-					Macro Trends & Indicators
+		<div class="space-y-6" data-controller="tabs" data-tabs-default-tab-value="overview">
+			<div class="flex border-b border-outline-variant/15 overflow-x-auto gap-2 sm:gap-6 pb-px custom-scrollbar">
+				<button class="stock-tab-btn pb-3 px-1 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-primary border-primary cursor-pointer" data-tab="overview" data-tabs-target="tab" data-action="click->tabs#select">
+					<span class="material-symbols-outlined text-base">monitoring</span>
+					Overview
 				</button>
-			{% else %}
-				<button class="stock-tab-btn pb-3 px-1 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent" data-tab="financials">
-					<span class="material-symbols-outlined text-base">analytics</span>
-					Financials & Fundamentals
-				</button>
-				<button class="stock-tab-btn pb-3 px-1 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent" data-tab="sector">
-					<span class="material-symbols-outlined text-base">corporate_fare</span>
-					Company & Sector
-				</button>
-			{% endif %}
-			<button class="stock-tab-btn pb-3 px-1 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent" data-tab="orders">
-				<span class="material-symbols-outlined text-base">swap_vert</span>
-				Order Depth & Trades
-				{% if openOrders|length > 0 %}
-					<span class="px-2 py-0.5 rounded-full text-[10px] bg-primary/20 text-primary font-mono font-bold">{{ openOrders|length }}</span>
+				{% if isEtf %}
+					<button class="stock-tab-btn pb-3 px-1 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="macro" data-tabs-target="tab" data-action="click->tabs#select">
+						<span class="material-symbols-outlined text-base">public</span>
+						Macro Trends & Indicators
+					</button>
+				{% else %}
+					<button class="stock-tab-btn pb-3 px-1 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="financials" data-tabs-target="tab" data-action="click->tabs#select">
+						<span class="material-symbols-outlined text-base">analytics</span>
+						Financials & Fundamentals
+					</button>
+					<button class="stock-tab-btn pb-3 px-1 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="sector" data-tabs-target="tab" data-action="click->tabs#select">
+						<span class="material-symbols-outlined text-base">corporate_fare</span>
+						Company & Sector
+					</button>
 				{% endif %}
-			</button>
-		</div>
+				<button class="stock-tab-btn pb-3 px-1 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="orders" data-tabs-target="tab" data-action="click->tabs#select">
+					<span class="material-symbols-outlined text-base">swap_vert</span>
+					Order Depth & Trades
+					{% if openOrders|length > 0 %}
+						<span class="px-2 py-0.5 rounded-full text-[10px] bg-primary/20 text-primary font-mono font-bold">{{ openOrders|length }}</span>
+					{% endif %}
+				</button>
+			</div>
 
-		{# ========================================================================= #}
-		{# TAB 1: OVERVIEW #}
-		{# ========================================================================= #}
-		<div id="stock-tab-content-overview" class="stock-tab-panel">
+			{# ========================================================================= #}
+			{# TAB 1: OVERVIEW #}
+			{# ========================================================================= #}
+			<div id="stock-tab-content-overview" class="stock-tab-panel" data-tabs-target="panel" data-tab-panel="overview">
 			<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
 				
 				{# Left Column: Chart & About #}
@@ -552,7 +553,7 @@
 		{# TAB 2 (ETF): MACROECONOMIC TRENDS & INDICATORS #}
 		{# ========================================================================= #}
 		{% if isEtf %}
-			<div id="stock-tab-content-macro" class="stock-tab-panel hidden space-y-6">
+			<div id="stock-tab-content-macro" class="stock-tab-panel hidden space-y-6" data-tabs-target="panel" data-tab-panel="macro">
 				{# Header #}
 				<div class="flex flex-col md:flex-row justify-between items-start md:items-center bg-surface-container-low p-6 rounded-2xl border border-outline-variant/15 shadow-lg gap-4">
 					<div>
@@ -799,7 +800,7 @@
 		{# TAB 2: FINANCIALS & FUNDAMENTALS #}
 		{# ========================================================================= #}
 		{% if not isEtf %}
-			<div id="stock-tab-content-financials" class="stock-tab-panel hidden space-y-6">
+			<div id="stock-tab-content-financials" class="stock-tab-panel hidden space-y-6" data-tabs-target="panel" data-tab-panel="financials">
 				
 				{# Financials Header & Timeframe Switcher #}
 				<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-surface-container-low border border-outline-variant/15 rounded-2xl p-4 gap-4 shadow-lg">
@@ -1055,7 +1056,7 @@
 		{# TAB 3: COMPANY & SECTOR #}
 		{# ========================================================================= #}
 		{% if not isEtf %}
-			<div id="stock-tab-content-sector" class="stock-tab-panel hidden space-y-6">
+			<div id="stock-tab-content-sector" class="stock-tab-panel hidden space-y-6" data-tabs-target="panel" data-tab-panel="sector">
 				
 				{# Sector Profile & Business Model Details #}
 				<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)]">
@@ -1149,7 +1150,7 @@
 		{# ========================================================================= #}
 		{# TAB 4: ORDER DEPTH & TRADES #}
 		{# ========================================================================= #}
-		<div id="stock-tab-content-orders" class="stock-tab-panel hidden space-y-6">
+		<div id="stock-tab-content-orders" class="stock-tab-panel hidden space-y-6" data-tabs-target="panel" data-tab-panel="orders">
 			
 			{# Open Limit Orders for this Ticker #}
 			<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)]">
@@ -1245,6 +1246,7 @@
 				{% endif %}
 			</div>
 
+		</div>
 		</div>
 
 	</div>
