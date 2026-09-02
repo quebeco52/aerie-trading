@@ -14,6 +14,7 @@ let macroSentimentChartInstance = null;
 let macroGovtSpendingChartInstance = null;
 let macroInterbankLiquidityChartInstance = null;
 let macroTermPremiumChartInstance = null;
+let macroGdpGrowthChartInstance = null;
 let macroBalanceSheetChartInstance = null;
 
 export function updateMacroCharts(reports) {
@@ -32,6 +33,7 @@ export function updateMacroCharts(reports) {
     let jobVacanciesData = [], laborTightnessData = [], wageGrowthData = [];
     let naturalRateData = [], termPremiumData = [], riskNeutralData = [], balanceSheetData = [];
     let balanceSheetAssetsData = [];
+    let nominalGdpGrowthData = [], realGdpGrowthData = [], potentialGdpGrowthData = [], tfpGrowthData = [];
 
     const slicedReports = reports.slice(-100);
     let qCount = slicedReports.length;
@@ -115,7 +117,39 @@ export function updateMacroCharts(reports) {
         let rawBalanceSheet = report.balance_sheet_intensity ?? report.balanceSheetIntensity ?? (report.qe_intensity ? parseFloat(report.qe_intensity) : 0.0);
         let bsBps = parseFloat(rawBalanceSheet) * 10000;
         balanceSheetData.push(bsBps);
-        balanceSheetAssetsData.push(7.50 + (bsBps / 10000.0) * 15.0);
+        balanceSheetAssetsData.push(100.0 + (bsBps / 10.0));
+
+        // Economic Growth Momentum & Solow-Swan Productivity Decomposition
+        let inf = parseFloat(report.inflation_ema ?? report.inflation ?? 0.02) * 100;
+        let currentTfp = parseFloat(report.total_factor_productivity_index_ema ?? report.total_factor_productivity_index ?? report.totalFactorProductivityIndexEma ?? report.totalFactorProductivityIndex ?? 100.0);
+        let currentGap = parseFloat(report.output_gap_ema ?? report.output_gap ?? 0.0) * 100;
+
+        let prevTfp = index > 0
+            ? parseFloat(slicedReports[index - 1].total_factor_productivity_index_ema ?? slicedReports[index - 1].total_factor_productivity_index ?? slicedReports[index - 1].totalFactorProductivityIndexEma ?? slicedReports[index - 1].totalFactorProductivityIndex ?? currentTfp)
+            : currentTfp / Math.exp(0.015 * 0.25);
+        let prevGap = index > 0
+            ? parseFloat(slicedReports[index - 1].output_gap_ema ?? slicedReports[index - 1].output_gap ?? currentGap) * 100
+            : currentGap;
+
+        // Annualized TFP productivity growth rate (%) - allowing negative values during recessions
+        let tfpGrowth = Math.max(-6.0, Math.min(8.0, (Math.log(Math.max(1.0, currentTfp) / Math.max(1.0, prevTfp)) / 0.25) * 100));
+        
+        // Solow-Swan Real Potential GDP Growth (%): Structural Labor (0.5%) + TFP Growth
+        let potentialGrowth = 0.50 + tfpGrowth;
+
+        // Realized Cyclical Output Gap Shift Annualized (%): dGap / dt
+        let cyclicalGapShift = (currentGap - prevGap) / 0.25;
+
+        // Real GDP Annualized Growth Rate (%): Potential Growth + Cyclical Gap Momentum
+        let realGrowth = Math.max(-12.0, Math.min(15.0, potentialGrowth + cyclicalGapShift));
+
+        // Nominal GDP Annualized Growth Rate (%): Real GDP Growth + Inflation
+        let nominalGrowth = realGrowth + inf;
+
+        tfpGrowthData.push(tfpGrowth);
+        potentialGdpGrowthData.push(potentialGrowth);
+        realGdpGrowthData.push(realGrowth);
+        nominalGdpGrowthData.push(nominalGrowth);
     });
 
     renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOverhangData);
@@ -130,6 +164,7 @@ export function updateMacroCharts(reports) {
     renderMacroGovtSpendingChart(labels, govtSpendingEmaData);
     renderMacroInterbankLiquidityChart(labels, interbankSpreadBpsData, creditSpreadBpsData);
     renderMacroTermPremiumChart(labels, yield10yData, riskNeutralData, termPremiumData, naturalRateData);
+    renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthData, potentialGdpGrowthData, tfpGrowthData);
     renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceSheetData);
 }
 
@@ -493,6 +528,85 @@ function renderMacroTermPremiumChart(labels, yield10yData, riskNeutralData, term
     });
 }
 
+function renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthData, potentialGdpGrowthData, tfpGrowthData) {
+    const canvas = document.getElementById('macroGdpGrowthChart');
+    if (!canvas) return;
+    macroGdpGrowthChartInstance = destroyChartInstance(macroGdpGrowthChartInstance);
+    const ctx = canvas.getContext('2d');
+
+    macroGdpGrowthChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Nominal GDP Growth (Ann.)',
+                    data: nominalGdpGrowthData,
+                    borderColor: '#38bdf8',
+                    backgroundColor: '#38bdf8',
+                    borderWidth: 2.2,
+                    tension: 0.25,
+                    pointRadius: labels.length > 50 ? 0 : 2
+                },
+                {
+                    label: 'Real GDP Growth (Momentum)',
+                    data: realGdpGrowthData,
+                    borderColor: '#4ade80',
+                    backgroundColor: 'rgba(74, 222, 128, 0.12)',
+                    borderWidth: 2.5,
+                    fill: true,
+                    tension: 0.25,
+                    pointRadius: labels.length > 50 ? 0 : 2
+                },
+                {
+                    label: 'Potential Capacity Trend (Y*)',
+                    data: potentialGdpGrowthData,
+                    borderColor: '#fbbf24',
+                    backgroundColor: '#fbbf24',
+                    borderWidth: 1.8,
+                    borderDash: [5, 4],
+                    tension: 0.25,
+                    pointRadius: labels.length > 50 ? 0 : 1
+                },
+                {
+                    label: 'TFP Productivity Growth',
+                    data: tfpGrowthData,
+                    borderColor: '#c084fc',
+                    backgroundColor: '#c084fc',
+                    borderWidth: 1.5,
+                    tension: 0.2,
+                    pointRadius: labels.length > 50 ? 0 : 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => {
+                            const val = ctx.raw;
+                            return `${ctx.dataset.label}: ${val >= 0 ? '+' : ''}${val.toFixed(2)}%`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    display: true,
+                    ticks: { callback: (val) => (val >= 0 ? '+' : '') + val.toFixed(1) + '%' },
+                    title: { display: true, text: 'Annualized Rate (%)' }
+                },
+                x: { ticks: { maxTicksLimit: 10 } }
+            }
+        }
+    });
+}
+
 function renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceSheetIntensityData) {
     const canvas = document.getElementById('macroBalanceSheetChart');
     if (!canvas) return;
@@ -505,7 +619,7 @@ function renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceShe
             datasets: [
                 {
                     type: 'line',
-                    label: 'Central Bank Assets Balance',
+                    label: 'Balance Sheet Index',
                     data: balanceSheetAssetsData,
                     borderColor: '#38bdf8',
                     backgroundColor: 'rgba(56, 189, 248, 0.12)',
@@ -542,7 +656,7 @@ function renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceShe
                                 const action = val > 0 ? 'QE Expansion' : (val < 0 ? 'QT Runoff' : 'Neutral');
                                 return `${ctx.dataset.label}: ${val > 0 ? '+' : ''}${val.toFixed(0)} bps (${action})`;
                             }
-                            return `${ctx.dataset.label}: $${ctx.raw.toFixed(2)}T`;
+                            return `${ctx.dataset.label}: ${ctx.raw.toFixed(1)}`;
                         }
                     }
                 }
@@ -553,8 +667,8 @@ function renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceShe
                     display: true,
                     position: 'left',
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { color: 'rgba(255, 255, 255, 0.7)', callback: (val) => '$' + val.toFixed(2) + 'T' },
-                    title: { display: true, text: 'Total Assets ($T)' }
+                    ticks: { color: 'rgba(255, 255, 255, 0.7)', callback: (val) => Math.round(val) },
+                    title: { display: true, text: 'Balance Sheet Index' }
                 },
                 y1: {
                     type: 'linear',
@@ -773,7 +887,7 @@ function renderMacroSentimentChart(labels, sentimentData, retailDefaultData) {
                     max: 130,
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { color: 'rgba(255, 255, 255, 0.7)', callback: (val) => val },
-                    title: { display: true, text: 'Sentiment Index (Baseline: 100)' }
+                    title: { display: true, text: 'Sentiment Index' }
                 },
                 y1: {
                     type: 'linear',
@@ -884,7 +998,7 @@ export function resizeMacroCharts() {
         macroRiskChartInstance, macroLaborChartInstance, macroLaborCreditChartInstance,
         macroCommoditiesChartInstance, macroPropertyChartInstance, macroTradeLogisticsChartInstance,
         macroSentimentChartInstance, macroGovtSpendingChartInstance, macroInterbankLiquidityChartInstance,
-        macroTermPremiumChartInstance, macroBalanceSheetChartInstance
+        macroTermPremiumChartInstance, macroGdpGrowthChartInstance, macroBalanceSheetChartInstance
     ];
     instances.forEach(c => {
         if (c) {
@@ -907,5 +1021,6 @@ export function destroyMacroCharts() {
     macroGovtSpendingChartInstance = destroyChartInstance(macroGovtSpendingChartInstance);
     macroInterbankLiquidityChartInstance = destroyChartInstance(macroInterbankLiquidityChartInstance);
     macroTermPremiumChartInstance = destroyChartInstance(macroTermPremiumChartInstance);
+    macroGdpGrowthChartInstance = destroyChartInstance(macroGdpGrowthChartInstance);
     macroBalanceSheetChartInstance = destroyChartInstance(macroBalanceSheetChartInstance);
 }

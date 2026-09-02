@@ -19,6 +19,8 @@ class MacroEngine
     public const NATURAL_RATE = self::BASE_NATURAL_RATE;
     /** Sensitivity of natural rate r* to annual secular TFP productivity growth deviations from drift. */
     public const NATURAL_RATE_TFP_SENSITIVITY = 0.50;
+    /** Speed of adjustment (kappa) of natural real rate toward fundamental equilibrium (1.0 = annual adjustment speed). */
+    public const NATURAL_RATE_ADJUSTMENT_SPEED = 1.0;
     /** Structural lower bound floor for natural real rate (50 bps). */
     public const MIN_NATURAL_RATE = 0.005;
     /** Structural upper bound ceiling for natural real rate (350 bps). */
@@ -40,17 +42,17 @@ class MacroEngine
     /** Linear momentum of aggregate demand feedback loop. */
     public const KALDOR_MOMENTUM = 0.15;
     /** Cubic stabilization factor bounding extreme boom/bust expansions. */
-    public const KALDOR_CAPACITY = 160.0;
+    public const KALDOR_CAPACITY = 220.0;
     /** Sensitivity of aggregate demand to real interest rate deviations from natural rate. */
     public const KALDOR_MONETARY_DRAG = 1.25;
     /** Countercyclical fiscal stimulus multiplier from corporate tax rate cuts. */
     public const KALDOR_FISCAL_MULTIPLIER = 0.50;
     /** Sensitivity of the output gap to physical capital stock overhang (excess capacity drags down growth). */
-    public const KALDOR_CAPITAL_DRAG = 0.40;
+    public const KALDOR_CAPITAL_DRAG = 0.15;
     /** Elasticity of aggregate demand to household wealth deviations (Modigliani Wealth Effect, ~4% MPC). */
     public const KALDOR_WEALTH_EFFECT_ELASTICITY = 0.02;
     /** The rate at which business investment (output gap) accumulates into the physical capital stock. */
-    public const CAPITAL_ACCUMULATION_RATE = 0.40;
+    public const CAPITAL_ACCUMULATION_RATE = 0.25;
     /** The rate at which physical capital depreciates, organically clearing overhangs and creating pent-up demand. */
     public const CAPITAL_DECAY_RATE = 0.30;
     /** Stochastic diffusion volatility of the macroeconomic output gap. */
@@ -61,6 +63,8 @@ class MacroEngine
     public const NATURAL_UNEMPLOYMENT = 0.04;
     /** Structural baseline job vacancies rate (4.5%). */
     public const NATURAL_JOB_VACANCIES = 0.045;
+    /** Asymptotic frictional lower bound on unemployment during extreme economic expansions (2.0%). */
+    public const MIN_FRICTIONAL_UNEMPLOYMENT = 0.020;
     /** Structural Beveridge curve equilibrium constant (k = Natural Unemployment * Natural Vacancies). */
     public const BEVERIDGE_CURVE_CONSTANT = 0.0018;
     /** Structural equilibrium labor market tightness (theta* = 4.5% / 4.0% = 1.125). */
@@ -70,7 +74,7 @@ class MacroEngine
     /** Annual adjustment speed of nominal wage settlements toward market-clearing equilibrium. */
     public const WAGE_ADJUSTMENT_SPEED = 2.0;
     /** Wage-push inflation transmission passing excess wage growth into headline services inflation. */
-    public const WAGE_INFLATION_TRANSMISSION = 0.15;
+    public const WAGE_INFLATION_TRANSMISSION = 0.10;
     /** Okun's beta: sensitivity of equilibrium unemployment deviation to the GDP output gap (~0.40). */
     public const OKUNS_COEFFICIENT = 0.5;
     /** Annual adjustment speed of employment expansion during economic recoveries (search & matching friction). */
@@ -92,7 +96,7 @@ class MacroEngine
     /** Volatility of energy jump shock magnitude. */
     public const ENERGY_JUMP_VOL = 0.10;
     /** Cost-push transmission coefficient passing energy price spikes into headline inflation. */
-    public const ENERGY_COST_PUSH_TRANSMISSION = 0.005;
+    public const ENERGY_COST_PUSH_TRANSMISSION = 0.010;
 
     // --- GARCH-MIDAS Macroeconomic Volatility Constants (Engle, Ghysels, & Sohn 2013 Eq. 5) ---
     /** Long-run equilibrium baseline volatility (~15% VIX) during neutral economic conditions. */
@@ -257,14 +261,14 @@ class MacroEngine
     public const BALANCE_SHEET_RAMP_SPEED = 1.0;
     /** Backward compatibility alias for QE ramp speed. */
     public const QE_RAMP_SPEED = self::BALANCE_SHEET_RAMP_SPEED;
-    /** Positive output gap threshold above which central bank initiates Quantitative Tightening (+1.0%). */
-    public const QT_ACTIVATION_GAP_THRESHOLD = 0.010;
-    /** Inflation threshold above which central bank initiates Quantitative Tightening (2.5%). */
-    public const QT_ACTIVATION_INFLATION_THRESHOLD = 0.025;
-    /** Maximum yield steepening magnitude under full-scale Quantitative Tightening (150 bps). */
-    public const QT_MAX_INTENSITY = 0.015;
+    /** Positive output gap threshold above which central bank initiates Quantitative Tightening. */
+    public const QT_ACTIVATION_GAP_THRESHOLD = 0.015;
+    /** Inflation threshold above which central bank initiates Quantitative Tightening */
+    public const QT_ACTIVATION_INFLATION_THRESHOLD = 0.030;
+    /** Maximum yield steepening magnitude under full-scale Quantitative Tightening. */
+    public const QT_MAX_INTENSITY = 0.005;
     /** Sensitivity multiplier scaling QT bond runoff with economic overheating. */
-    public const QT_SEVERITY_MULTIPLIER = 0.80;
+    public const QT_SEVERITY_MULTIPLIER = 0.40;
     /** Nelson-Siegel level weighting on target inflation vs expected inflation. */
     public const INFLATION_LEVEL_WEIGHT = 0.5;
 
@@ -425,6 +429,20 @@ class MacroEngine
     public const TFP_BASELINE = 100.0;
     /** Secular annual drift rate of continuous technological progress (1.5% base innovation rate). */
     public const TFP_DRIFT = 0.015;
+    /** Annual volatility (sigma) of technological innovation and diffusion shocks. */
+    public const TFP_VOLATILITY = 0.022;
+    /** Endogenous R&D knowledge spillover sensitivity to economic expansion and capital utilization. */
+    public const TFP_OUTPUT_GAP_SENSITIVITY = 0.05;
+    /** Poisson arrival intensity (lambda) of major breakthrough innovation jump shocks per year. */
+    public const TFP_JUMP_PROBABILITY = 0.03;
+    /** Mean log-scale magnitude of a major technological breakthrough jump. */
+    public const TFP_JUMP_MEAN = 0.010;
+    /** Volatility of breakthrough technological jump shocks. */
+    public const TFP_JUMP_VOL = 0.005;
+    /** Structural lower bound floor for annual TFP growth rate (-3.0% recession contraction). */
+    public const MIN_TFP_GROWTH_RATE = -0.030;
+    /** Structural upper bound ceiling for annual TFP growth rate (5.0%). */
+    public const MAX_TFP_GROWTH_RATE = 0.050;
     /** Structural baseline demographic and labor force growth rate (0.5%). */
     public const STRUCTURAL_LABOR_GROWTH_RATE = 0.005;
 
@@ -531,7 +549,7 @@ class MacroEngine
         $this->calculateMacroCreditSpread($state);
         $this->calculateInterbankLiquiditySpread($state, $dt);
 
-        $this->calculatePotentialAndNominalGdp($state, $dt);
+        $this->calculatePotentialAndNominalGdp($state, $dt, $tfpGrowthRate);
         $this->calculateDynamicFiscalPolicy($state, $dt);
         $this->calculateEquityRiskPremium($state);
         $this->calculateConsumerSentiment($state, $dt);
@@ -710,7 +728,7 @@ class MacroEngine
         // Svensson Beta 3 (Secondary Curvature / Long-End Hump):
         // Captures long-term sovereign bond supply pressure and fiscal deficit drag (QT / supply indigestion)
         $fiscalShift = ($state->governmentSpendingIndexEma / self::GOVT_SPENDING_BASELINE) - 1.0;
-        $qtCurvatureShift = max(0.0, -$newBalanceSheetIntensity) * 0.50;
+        $qtCurvatureShift = max(0.0, -$newBalanceSheetIntensity) * 0.20;
         $nsBeta3 = (self::SVENSSON_CURVATURE2_FISCAL_SCALE * $fiscalShift) + $qtCurvatureShift;
 
         $yield2y  = $this->calculateSvenssonTenor(2.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $newBalanceSheetIntensity);
@@ -822,15 +840,15 @@ class MacroEngine
         $targetNaturalRate = self::BASE_NATURAL_RATE + (self::NATURAL_RATE_TFP_SENSITIVITY * ($tfpGrowthRate - self::TFP_DRIFT));
         $targetNaturalRate = max(self::MIN_NATURAL_RATE, min(self::MAX_NATURAL_RATE, $targetNaturalRate));
 
-        $state->naturalRate += 1.0 * ($targetNaturalRate - $state->naturalRate) * $dt;
+        $state->naturalRate += self::NATURAL_RATE_ADJUSTMENT_SPEED * ($targetNaturalRate - $state->naturalRate) * $dt;
     }
 
     private function calculateLaborMarketAndWages(MacroState $state, float $tfpGrowthRate, float $dt): void
     {
         // Diamond-Mortensen-Pissarides Beveridge Curve:
         // Job Vacancies (V) * Unemployment Rate (U) = k_bev
-        $effectiveUnemployment = max(0.01, $state->unemploymentRate);
-        $state->jobVacanciesRate = max(0.01, min(0.15, self::BEVERIDGE_CURVE_CONSTANT / $effectiveUnemployment));
+        $effectiveUnemployment = max(self::MIN_FRICTIONAL_UNEMPLOYMENT, $state->unemploymentRate);
+        $state->jobVacanciesRate = max(0.01, min(0.12, self::BEVERIDGE_CURVE_CONSTANT / $effectiveUnemployment));
 
         // Labor market tightness theta = V / U
         $state->laborTightness = $state->jobVacanciesRate / $effectiveUnemployment;
@@ -838,7 +856,7 @@ class MacroEngine
         // Wage Phillips Curve:
         // Nominal wage growth = TFP trend + inflation target + beta * (theta - theta*)
         $targetWageGrowth = $tfpGrowthRate + self::TARGET_INFLATION + (self::WAGE_TIGHTNESS_SENSITIVITY * ($state->laborTightness - self::NATURAL_LABOR_TIGHTNESS));
-        $targetWageGrowth = max(0.0, min(0.15, $targetWageGrowth));
+        $targetWageGrowth = max(0.0, min(0.08, $targetWageGrowth));
 
         $state->wageGrowth += self::WAGE_ADJUSTMENT_SPEED * ($targetWageGrowth - $state->wageGrowth) * $dt;
     }
@@ -919,32 +937,58 @@ class MacroEngine
     {
         $currentTfp = $state->totalFactorProductivityIndex ?? self::TFP_BASELINE;
 
-        // Continuous innovation drift (Deterministic Secular Growth)
-        // Technology grows secularly at the exact structural drift rate.
-        $continuousMultiplier = exp(self::TFP_DRIFT * $dt);
+        // Endogenous R&D / Capital Deepening feedback (Arrow 1962, Romer 1990):
+        // Booms accelerate innovation and knowledge accumulation; recessions dampen R&D intensity.
+        $endogenousGrowth = $state->outputGapEma * self::TFP_OUTPUT_GAP_SENSITIVITY;
 
-        // Monotonically non-decreasing knowledge frontier
-        $state->totalFactorProductivityIndex = max($currentTfp, $currentTfp * $continuousMultiplier);
+        // Stochastic innovation & diffusion shock (Solow-Swan / RBC technology wave)
+        $dW = $this->mathUtility->generateStandardNormal();
+        $innovationDiffusion = self::TFP_VOLATILITY * sqrt($dt) * $dW;
+
+        // Exogenous Schumpeterian Breakthrough Jumps (General Purpose Technologies)
+        $jumpData = $this->mathUtility->calculateJumpDiffusion(
+            lambda: self::TFP_JUMP_PROBABILITY,
+            jumpMean: self::TFP_JUMP_MEAN,
+            jumpVol: self::TFP_JUMP_VOL,
+            dt: $dt
+        );
+
+        $jumpExponent = (float) ($jumpData['exponent'] ?? 0.0);
+
+        // Realized log increment: Secular Drift + Endogenous Spillover + Stochastic Diffusion + Breakthrough Jump
+        $logIncrement = ((self::TFP_DRIFT + $endogenousGrowth) * $dt) + $innovationDiffusion + $jumpExponent;
+
+        // Bounded within structural economic growth bounds [-3.0%, +5.0%]
+        $clampedLogIncrement = max(self::MIN_TFP_GROWTH_RATE * $dt, min(self::MAX_TFP_GROWTH_RATE * $dt, $logIncrement));
+
+        // TFP index (un-clamped from monotonic floor to reflect empirical cyclical productivity contractions)
+        $state->totalFactorProductivityIndex = max(1.0, $currentTfp * exp($clampedLogIncrement));
     }
 
-    private function calculatePotentialAndNominalGdp(MacroState $state, float $dt): void
+    private function calculatePotentialAndNominalGdp(MacroState $state, float $dt, ?float $tfpGrowthRate = null): void
     {
-        // 1. Evaluate Total Factor Productivity (TFP)
-        $oldTfp = $state->totalFactorProductivityIndex ?? self::TFP_BASELINE;
-        $this->calculateTotalFactorProductivity($state, $dt);
-        $newTfp = $state->totalFactorProductivityIndex;
+        // 1. Evaluate Total Factor Productivity (TFP) if not pre-computed
+        if ($tfpGrowthRate === null) {
+            $oldTfp = $state->totalFactorProductivityIndex ?? self::TFP_BASELINE;
+            $this->calculateTotalFactorProductivity($state, $dt);
+            $newTfp = $state->totalFactorProductivityIndex;
+            $tfpGrowthRate = log($newTfp / max(0.01, $oldTfp)) / max(0.0001, $dt);
+        }
 
-        // 2. Solow-Swan Potential Growth
+        // 2. Solow-Swan Real Potential Growth
         // Real Potential Growth = Structural Demographic/Labor Growth + TFP Growth Rate
-        $tfpGrowthRate = log($newTfp / max(0.01, $oldTfp)) / $dt;
         $realPotentialGrowth = self::STRUCTURAL_LABOR_GROWTH_RATE + $tfpGrowthRate;
 
-        // 3. Real Potential GDP Capacity (Real Output Capacity)
+        // 3. Real Potential GDP Capacity (Constant Price Real Output Capacity at full employment)
         $currentPotential = $state->potentialGdpIndex > 0.0 ? $state->potentialGdpIndex : 1.0;
         $state->potentialGdpIndex = max(0.10, $currentPotential * exp($realPotentialGrowth * $dt));
 
-        // 4. Nominal GDP Index tracks real potential capacity adjusted for cyclical output gap
-        $state->nominalGdpIndex = $state->potentialGdpIndex * (1.0 + $state->outputGap);
+        // 4. GDP Price Deflator Accumulation (Price Level Index P_t)
+        $currentDeflator = $state->gdpDeflator > 0.0 ? $state->gdpDeflator : 1.0;
+        $state->gdpDeflator = max(0.01, $currentDeflator * exp($state->inflation * $dt));
+
+        // 5. Nominal GDP Index: Real Output * Price Deflator
+        $state->nominalGdpIndex = max(0.10, $state->potentialGdpIndex * (1.0 + $state->outputGap) * $state->gdpDeflator);
     }
 
     private function calculateTipsBreakeven(MacroState $state, float $targetInflation, float $dt): float
@@ -1085,13 +1129,19 @@ class MacroEngine
 
     private function calculateUnemployment(MacroState $state, float $dt): void
     {
-        // Dynamic Okun's Law with Asymmetric Hysteresis
-        // Recessions cause rapid spikes in unemployment (firing is fast), expansions cause slow decay (hiring is slow/frictional)
-        $targetUnemployment = max(0.01, self::NATURAL_UNEMPLOYMENT - (self::OKUNS_COEFFICIENT * $state->outputGap));
+        // Dynamic Okun's Law with Convex Search-Matching Friction (Knotek 2007)
+        // In recessions (y <= 0): linear response (firing is fast).
+        // In expansions (y > 0): convex exponential deceleration toward the frictional search floor (hiring becomes harder).
+        if ($state->outputGap <= 0.0) {
+            $targetUnemployment = self::NATURAL_UNEMPLOYMENT - (self::OKUNS_COEFFICIENT * $state->outputGap);
+        } else {
+            $effectiveRange = self::NATURAL_UNEMPLOYMENT - self::MIN_FRICTIONAL_UNEMPLOYMENT;
+            $targetUnemployment = self::MIN_FRICTIONAL_UNEMPLOYMENT + ($effectiveRange * exp(- (self::OKUNS_COEFFICIENT * $state->outputGap) / $effectiveRange));
+        }
 
         $unemploymentGap = $targetUnemployment - $state->unemploymentRate;
 
-        // Asymmetric speed of adjustment
+        // Asymmetric speed of adjustment (recession firing is fast, expansion hiring is frictional)
         $adjustmentSpeed = $unemploymentGap > 0 ? self::OKUNS_FIRING_SPEED : self::OKUNS_HIRING_SPEED;
 
         $state->unemploymentRate += $adjustmentSpeed * $unemploymentGap * $dt;

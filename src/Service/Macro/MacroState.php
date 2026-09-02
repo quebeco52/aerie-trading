@@ -101,6 +101,7 @@ class MacroState
 
     public float $potentialGdpIndex = 1.0;
     public float $nominalGdpIndex = 1.0;
+    public float $gdpDeflator = 1.0;
 
     public float $marketVolatility = 0.13;
     public float $marketVolatilityEma = 0.13;
@@ -219,6 +220,7 @@ class MacroState
 
         $state->nominalGdpIndex = $data['nominal_gdp_index'] ?? 1.0;
         $state->potentialGdpIndex = $data['potential_gdp_index'] ?? ($state->nominalGdpIndex / (1.0 + $state->outputGap));
+        $state->gdpDeflator = (float) ($data['gdp_deflator'] ?? 1.0);
 
         $state->marketVolatility = $data['market_volatility'] ?? 0.13;
         $state->marketVolatilityEma = $data['market_volatility_ema'] ?? $state->marketVolatility;
@@ -321,6 +323,7 @@ class MacroState
             'equity_risk_premium' => $this->equityRiskPremium,
             'potential_gdp_index' => $this->potentialGdpIndex,
             'nominal_gdp_index' => $this->nominalGdpIndex,
+            'gdp_deflator' => $this->gdpDeflator,
             'market_volatility' => $this->marketVolatility,
             'market_volatility_ema' => $this->marketVolatilityEma,
             'market_z' => $this->marketZ,

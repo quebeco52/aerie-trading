@@ -99,6 +99,7 @@ readonly class MacroStateDTO
         public float $nsCurvature2 = 0.0,
         public float $potentialGdpIndex = 1.0,
         public float $nominalGdpIndex = 1.0,
+        public float $gdpDeflator = 1.0,
         public ?string $eventType = null,
     ) {}
 
@@ -204,6 +205,7 @@ readonly class MacroStateDTO
 
         $nominalGdpIndex = (float) ($data['nominal_gdp_index'] ?? 1.0);
         $potentialGdpIndex = (float) ($data['potential_gdp_index'] ?? ($nominalGdpIndex / (1.0 + $outputGap)));
+        $gdpDeflator = (float) ($data['gdp_deflator'] ?? 1.0);
         $eventType = isset($data['event_type']) ? (string) $data['event_type'] : null;
 
         return new self(
@@ -292,6 +294,7 @@ readonly class MacroStateDTO
             nsCurvature2: $nsCurvature2,
             potentialGdpIndex: $potentialGdpIndex,
             nominalGdpIndex: $nominalGdpIndex,
+            gdpDeflator: $gdpDeflator,
             eventType: $eventType,
         );
     }
@@ -387,6 +390,7 @@ readonly class MacroStateDTO
             nsCurvature2: $state->nsCurvature2,
             potentialGdpIndex: $state->potentialGdpIndex,
             nominalGdpIndex: $state->nominalGdpIndex,
+            gdpDeflator: $state->gdpDeflator,
             eventType: $state->eventType,
         );
     }
@@ -483,6 +487,7 @@ readonly class MacroStateDTO
             'ns_curvature2' => $this->nsCurvature2,
             'potential_gdp_index' => $this->potentialGdpIndex,
             'nominal_gdp_index' => $this->nominalGdpIndex,
+            'gdp_deflator' => $this->gdpDeflator,
             'event_type' => $this->eventType,
         ];
     }

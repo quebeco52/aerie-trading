@@ -101,7 +101,7 @@ class CorporateActionEngine
             $splitFactor *= self::FORWARD_SPLIT_FACTOR;
         }
 
-        $sharesOutstanding = max(1.0, $sharesOutstanding * $splitFactor);
+        $sharesOutstanding = max(1.0, min(9223372036854775807.0, $sharesOutstanding * $splitFactor));
 
         $oldDiv = (float) $stock->getLastDividend();
         $oldFcf = (float) $stock->getFreeCashFlowPerShare();

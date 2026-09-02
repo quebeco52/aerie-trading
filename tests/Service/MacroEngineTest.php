@@ -964,17 +964,17 @@ class MacroEngineTest extends TestCase
         // Run 1 tick of boom ($dt = 0.25 years / 1 quarter)
         $dtoBoom = $this->engine->updateMacroState(0.25);
 
-        // Boom should accumulate capital stock overhang: dK = (0.05 * 0.40 - 0.30 * 0) * 0.25 = 0.0050
+        // Boom should accumulate capital stock overhang: dK = (0.05 * 0.35 - 0.30 * 0) * 0.25 = 0.004375
         $this->assertGreaterThan(0.0, $dtoBoom->capitalStockOverhang, 'Capital stock overhang must accumulate during economic booms.');
-        $this->assertEqualsWithDelta(0.0050, $dtoBoom->capitalStockOverhang, 0.0001);
+        $this->assertEqualsWithDelta(0.004375, $dtoBoom->capitalStockOverhang, 0.0001);
 
         // Run 1 quarter of recession
         $dtoRecession = $this->engine->updateMacroState(0.25);
 
-        // Recession & decay: dK = (-0.05 * 0.40 - 0.30 * 0.05) * 0.25 = (-0.020 - 0.015) * 0.25 = -0.00875
-        // New overhang = 0.05 - 0.00875 = 0.04125
+        // Recession & decay: dK = (-0.05 * 0.35 - 0.30 * 0.05) * 0.25 = (-0.0175 - 0.015) * 0.25 = -0.008125
+        // New overhang = 0.05 - 0.008125 = 0.041875
         $this->assertLessThan(0.05, $dtoRecession->capitalStockOverhang, 'Capital stock overhang must decay during recessions.');
-        $this->assertEqualsWithDelta(0.04125, $dtoRecession->capitalStockOverhang, 0.0001);
+        $this->assertEqualsWithDelta(0.041875, $dtoRecession->capitalStockOverhang, 0.0001);
     }
 
     public function testSolowSwanSmoothPotentialGdpGrowth(): void
@@ -990,7 +990,10 @@ class MacroEngineTest extends TestCase
         $state = new \App\Service\Macro\MacroState();
         $state->totalFactorProductivityIndex = 100.0;
         $state->potentialGdpIndex = 1.0;
+        $state->nominalGdpIndex = 1.0;
         $state->outputGap = 0.0;
+        $state->outputGapEma = 0.0;
+        $state->inflation = 0.02;
         $state->inflationEma = 0.02;
 
         $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculatePotentialAndNominalGdp');
@@ -1004,8 +1007,9 @@ class MacroEngineTest extends TestCase
         $expectedPotential = 1.0 * exp((MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT) * 0.25);
         $this->assertEqualsWithDelta($expectedPotential, $state->potentialGdpIndex, 0.0001, 'Potential GDP must grow by real labor + TFP growth.');
 
-        // When output gap is 0, Nominal GDP should equal Real Potential GDP
-        $this->assertEqualsWithDelta($expectedPotential, $state->nominalGdpIndex, 0.0001, 'Nominal GDP must match Real Potential GDP when output gap is 0.');
+        // Nominal GDP compounds Real Potential Growth + Inflation Deflator:
+        $expectedNominal = 1.0 * exp((MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT + 0.02) * 0.25);
+        $this->assertEqualsWithDelta($expectedNominal, $state->nominalGdpIndex, 0.0001, 'Nominal GDP must accumulate real capacity growth and inflation deflator.');
     }
 
     public function testSolowSwanOutputGapImpactsNominalGdp(): void
@@ -1021,34 +1025,43 @@ class MacroEngineTest extends TestCase
         $state = new \App\Service\Macro\MacroState();
         $state->totalFactorProductivityIndex = 100.0;
         $state->potentialGdpIndex = 1.0;
+        $state->nominalGdpIndex = 1.0;
         $state->outputGap = 0.05; // 5% positive output gap (economic boom)
+        $state->outputGapEma = 0.0;
+        $state->inflation = 0.02;
         $state->inflationEma = 0.02;
 
         $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculatePotentialAndNominalGdp');
         $reflectionMethod->invoke($macroEngine, $state, 0.25);
 
         $expectedPotential = 1.0 * exp((MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT) * 0.25);
-        $expectedNominal = $expectedPotential * 1.05;
+        $expectedNominal = 1.0 * exp((MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT + 0.02) * 0.25) * 1.05;
 
         $this->assertEqualsWithDelta($expectedPotential, $state->potentialGdpIndex, 0.0001);
-        $this->assertEqualsWithDelta($expectedNominal, $state->nominalGdpIndex, 0.0001, 'Nominal GDP must scale with cyclical output gap.');
+        $this->assertEqualsWithDelta($expectedNominal, $state->nominalGdpIndex, 0.0001, 'Nominal GDP must scale with cyclical output gap and inflation.');
     }
 
-    public function testSolowSwanKnowledgeFrontierMonotonic(): void
+    public function testSolowSwanTfpCanContractDuringSevereRecession(): void
     {
         $mathUtility = $this->createMock(MathUtility::class);
         $logger = $this->createMock(\Psr\Log\LoggerInterface::class);
         $redis = $this->createMock(\Redis::class);
 
+        // Severe negative productivity shock (e.g. supply chain disruption)
+        $mathUtility->method('generateStandardNormal')->willReturn(-3.0);
+
         $macroEngine = new MacroEngine($mathUtility, $logger, $redis);
 
         $state = new \App\Service\Macro\MacroState();
         $state->totalFactorProductivityIndex = 120.0;
+        $state->outputGapEma = -0.06; // Deep 6% economic recession
 
         $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateTotalFactorProductivity');
         $reflectionMethod->invoke($macroEngine, $state, 0.25);
 
-        $this->assertGreaterThanOrEqual(120.0, $state->totalFactorProductivityIndex, 'TFP index must never decline.');
+        $this->assertLessThan(120.0, $state->totalFactorProductivityIndex, 'TFP index can and should contract during deep recessions with negative innovation shocks.');
+        $minAllowedTfp = 120.0 * exp(MacroEngine::MIN_TFP_GROWTH_RATE * 0.25);
+        $this->assertGreaterThanOrEqual($minAllowedTfp, $state->totalFactorProductivityIndex, 'TFP contraction must be bounded by structural MIN_TFP_GROWTH_RATE floor.');
     }
 
     public function testExchangeRateAppreciationDragsDownOutputGap(): void
@@ -1343,5 +1356,55 @@ class MacroEngineTest extends TestCase
         $tightState->outputGap = 0.01;
         $newInflation = $reflectionInflation->invoke($this->engine, $tightState, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
         $this->assertGreaterThan(0.020, $newInflation, 'Excess wage growth must pass through into headline services inflation.');
+    }
+
+    public function testStochasticTfpDiffusionAndEndogenousSpillover(): void
+    {
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateTotalFactorProductivity');
+
+        // 1. Positive innovation shock + economic boom -> accelerated TFP growth
+        $boomState = new \App\Service\Macro\MacroState();
+        $boomState->totalFactorProductivityIndex = 100.0;
+        $boomState->outputGapEma = 0.03; // 3% boom
+
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturnOnConsecutiveCalls(1.5, -3.0);
+        $reflectionMethod->invoke($this->engine, $boomState, 0.25);
+
+        $baselineDeterministicTfp = 100.0 * exp(MacroEngine::TFP_DRIFT * 0.25);
+        $this->assertGreaterThan($baselineDeterministicTfp, $boomState->totalFactorProductivityIndex, 'Positive innovation shock and expansion must accelerate TFP accumulation.');
+
+        // 2. Severe recession + negative productivity shock leads to contraction bounded by MIN_TFP_GROWTH_RATE
+        $slumpState = new \App\Service\Macro\MacroState();
+        $slumpState->totalFactorProductivityIndex = 100.0;
+        $slumpState->outputGapEma = -0.05; // 5% recession
+
+        $reflectionMethod->invoke($this->engine, $slumpState, 0.25);
+
+        $this->assertLessThan(100.0, $slumpState->totalFactorProductivityIndex, 'TFP can and should contract during severe recessions with negative shocks.');
+        $minAllowedTfp = 100.0 * exp(MacroEngine::MIN_TFP_GROWTH_RATE * 0.25);
+        $this->assertGreaterThanOrEqual($minAllowedTfp, $slumpState->totalFactorProductivityIndex, 'TFP contraction must be bounded by structural MIN_TFP_GROWTH_RATE.');
+    }
+
+    public function testNaturalRateEvolvesDynamicallyDuringFullMacroUpdate(): void
+    {
+        $existingState = [
+            'inflation' => 0.02,
+            'output_gap' => 0.03,
+            'output_gap_ema' => 0.03,
+            'natural_rate' => MacroEngine::BASE_NATURAL_RATE,
+            'natural_rate_ema' => MacroEngine::BASE_NATURAL_RATE,
+            'total_factor_productivity_index' => 100.0,
+        ];
+
+        $this->redisMock->method('get')->willReturn(json_encode($existingState));
+        $this->redisMock->method('set')->willReturn(true);
+
+        // Positive technology wave
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(2.0);
+
+        $result = $this->engine->updateMacroState(0.5);
+
+        $this->assertNotEquals(MacroEngine::BASE_NATURAL_RATE, $result->naturalRate, 'Natural real rate r* must move dynamically and not remain static.');
+        $this->assertGreaterThan(MacroEngine::BASE_NATURAL_RATE, $result->naturalRate, 'Natural rate must rise during a technology/productivity expansion.');
     }
 }

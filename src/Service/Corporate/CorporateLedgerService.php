@@ -112,7 +112,7 @@ class CorporateLedgerService
                 );
             } else {
                 $conn->executeStatement(
-                    'UPDATE user_stocks SET quantity = quantity * :factor, version = version + 1 WHERE stock_id = :stock_id',
+                    'UPDATE user_stocks SET quantity = IF(quantity > 9223372036854775807 / :factor, 9223372036854775807, quantity * :factor), version = version + 1 WHERE stock_id = :stock_id',
                     ['factor' => $splitFactor, 'stock_id' => $stock->getId()]
                 );
 
@@ -122,12 +122,12 @@ class CorporateLedgerService
                 );
 
                 $conn->executeStatement(
-                    'UPDATE corporate_report SET shares = shares * :factor WHERE stock_id = :stock_id',
+                    'UPDATE corporate_report SET shares = IF(shares > 9223372036854775807 / :factor, 9223372036854775807, shares * :factor) WHERE stock_id = :stock_id',
                     ['factor' => $splitFactor, 'stock_id' => $stock->getId()]
                 );
 
                 $conn->executeStatement(
-                    "UPDATE trade_orders SET quantity = quantity * :factor, limit_price = ROUND(limit_price / :factor, 8) WHERE ticker = :ticker AND status = 'OPEN'",
+                    "UPDATE trade_orders SET quantity = IF(quantity > 9223372036854775807 / :factor, 9223372036854775807, quantity * :factor), limit_price = ROUND(limit_price / :factor, 8) WHERE ticker = :ticker AND status = 'OPEN'",
                     ['factor' => $splitFactor, 'ticker' => $stock->getTicker()]
                 );
             }
