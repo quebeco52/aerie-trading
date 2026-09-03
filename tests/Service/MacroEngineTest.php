@@ -965,17 +965,18 @@ class MacroEngineTest extends TestCase
         // Run 1 tick of boom ($dt = 0.25 years / 1 quarter)
         $dtoBoom = $this->engine->updateMacroState(0.25);
 
-        // Boom should accumulate capital stock overhang: dK = (0.05 * 0.30 - 0.30 * 0) * 0.25 = 0.00375
+        // Boom should accumulate capital stock overhang: dK = (y * ACCUMULATION_RATE - DECAY_RATE * K) * dt
+        $expectedBoomOverhang = (0.05 * MacroEngine::CAPITAL_ACCUMULATION_RATE - MacroEngine::CAPITAL_DECAY_RATE * 0.0) * 0.25;
         $this->assertGreaterThan(0.0, $dtoBoom->capitalStockOverhang, 'Capital stock overhang must accumulate during economic booms.');
-        $this->assertEqualsWithDelta(0.00375, $dtoBoom->capitalStockOverhang, 0.0001);
+        $this->assertEqualsWithDelta($expectedBoomOverhang, $dtoBoom->capitalStockOverhang, 0.0001);
 
         // Run 1 quarter of recession
         $dtoRecession = $this->engine->updateMacroState(0.25);
 
-        // Recession & decay: dK = (-0.05 * 0.30 - 0.30 * 0.05) * 0.25 = (-0.015 - 0.015) * 0.25 = -0.0075
-        // New overhang = 0.05 - 0.0075 = 0.0425
+        // Recession & decay: dK = (y * ACCUMULATION_RATE - DECAY_RATE * K) * dt
+        $expectedRecessionOverhang = 0.05 + ((-0.05 * MacroEngine::CAPITAL_ACCUMULATION_RATE - MacroEngine::CAPITAL_DECAY_RATE * 0.05) * 0.25);
         $this->assertLessThan(0.05, $dtoRecession->capitalStockOverhang, 'Capital stock overhang must decay during recessions.');
-        $this->assertEqualsWithDelta(0.0425, $dtoRecession->capitalStockOverhang, 0.0001);
+        $this->assertEqualsWithDelta($expectedRecessionOverhang, $dtoRecession->capitalStockOverhang, 0.0001);
     }
 
     public function testSolowSwanSmoothPotentialGdpGrowth(): void

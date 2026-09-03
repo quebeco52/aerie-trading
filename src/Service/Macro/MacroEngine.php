@@ -49,7 +49,7 @@ class MacroEngine
     /** Linear momentum of aggregate demand feedback loop. */
     public const KALDOR_MOMENTUM = 0.18;
     /** Cubic stabilization factor bounding extreme boom/bust expansions. */
-    public const KALDOR_CAPACITY = 400.0;
+    public const KALDOR_CAPACITY = 350.0;
     /** Sensitivity of aggregate demand to real interest rate deviations from natural rate. */
     public const KALDOR_MONETARY_DRAG = 1.00;
     /** Countercyclical fiscal stimulus multiplier from corporate tax rate cuts. */
