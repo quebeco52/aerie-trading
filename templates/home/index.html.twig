@@ -4,103 +4,93 @@
 {% endblock %}
 
 {% block body %}
-	<div
-		class="max-w-400 mx-auto space-y-8 mt-6 px-4 sm:px-6 lg:px-8 pb-12">
+	<div class="max-w-400 mx-auto space-y-6 mt-4 px-4 sm:px-6 lg:px-8 pb-12">
 
 		{# Hero Section #}
-		<div class="flex flex-col md:flex-row justify-between items-center bg-surface-container-low shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-6 md:p-8 lg:p-10 border border-outline-variant/15 relative overflow-hidden">
-			<div class="absolute -right-20 -top-20 w-64 h-64 bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
-
-			<div class="relative z-10 w-full">
-				<div class="flex items-center gap-2 mb-3">
-					<span class="w-2 h-2 rounded-full bg-secondary animate-pulse shadow-[0_0_8px_rgba(78,222,163,0.6)]"></span>
-					<span class="text-[10px] font-bold tracking-widest text-secondary uppercase">Live Market Data</span>
+		<div class="flex flex-col md:flex-row justify-between items-start md:items-center bg-surface-container-low rounded-lg p-5 md:p-6 border border-outline-variant/25">
+			<div class="w-full">
+				<div class="flex items-center gap-2 mb-2">
+					<span class="w-2 h-2 rounded-full bg-secondary"></span>
+					<span class="text-xs font-bold tracking-wider text-secondary uppercase">Live Market Feed</span>
 				</div>
-				<h1 class="text-4xl md:text-5xl font-bold text-on-surface tracking-tight mb-2">The Aerie Exchange</h1>
-				<p class="text-on-surface-variant text-sm">The central financial hub. All markets are currently open.</p>
+				<h1 class="text-2xl md:text-3xl font-bold text-on-surface tracking-tight mb-1">The Aerie Exchange</h1>
+				<p class="text-on-surface-variant text-xs">The central financial hub. All markets are currently open.</p>
 			</div>
 		</div>
 
 		{# Macroeconomic Indicators #}
 		{% if macro is defined %}
-		<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 			{# Economic Cycle #}
-			<div class="bg-surface-container-low shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-6 border border-outline-variant/15 flex flex-col justify-between relative overflow-hidden group">
-				<div class="absolute -right-10 -top-10 w-32 h-32 bg-primary/5 rounded-full blur-2xl pointer-events-none"></div>
-				<div class="relative z-10">
-					<p class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-2 flex items-center gap-2"><span class="material-symbols-outlined text-[14px]">public</span> Economic Cycle</p>
+			<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/25 flex flex-col justify-between">
+				<div>
+					<p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Economic Cycle</p>
 					<div class="flex items-end gap-2">
-						<p id="macro-cycle" class="text-3xl font-bold text-on-surface tracking-tight transition-colors">{{ macro.output_gap > 0.01 ? 'Boom' : (macro.output_gap < -0.01 ? 'Bust' : 'Neutral') }}</p>
+						<p id="macro-cycle" class="text-2xl font-bold text-on-surface tracking-tight">{{ macro.output_gap > 0.01 ? 'Boom' : (macro.output_gap < -0.01 ? 'Bust' : 'Neutral') }}</p>
 					</div>
 				</div>
 			</div>
-
-
-
-
 		</div>
 		{% endif %}
 
 		{# The Market Index Highlight #}
 		{% if etf %}
-			<a href="/stock/{{ etf.ticker }}" class="block bg-surface-container-low shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-6 md:p-8 border border-outline-variant/15 hover:border-primary/30 transition-all cursor-pointer group relative overflow-hidden">
-				<div class="absolute right-0 top-0 w-48 h-48 bg-primary/5 rounded-full -mr-16 -mt-16 blur-3xl group-hover:bg-primary/10 transition-colors pointer-events-none"></div>
-
-				<div class="flex flex-col md:flex-row justify-between md:items-center relative z-10 gap-4">
+			<a href="/stock/{{ etf.ticker }}" class="block bg-surface-container-low rounded-lg p-5 md:p-6 border border-outline-variant/25 hover:border-primary/50 transition-colors cursor-pointer group">
+				<div class="flex flex-col md:flex-row justify-between md:items-center gap-4">
 					<div>
-						<h2 class="text-2xl md:text-3xl font-bold text-on-surface group-hover:text-primary transition-colors tracking-tight">{{ etf.name }}</h2>
-						<span class="inline-flex items-center rounded bg-primary/10 px-2 py-1 text-[10px] font-bold text-primary border border-primary/20 mt-3 uppercase tracking-widest">
+						<h2 class="text-xl md:text-2xl font-bold text-on-surface group-hover:text-primary transition-colors tracking-tight">{{ etf.name }}</h2>
+						<span class="inline-flex items-center rounded bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary border border-primary/20 mt-2 uppercase tracking-wider">
 							Market Index ({{ etf.ticker }})
 						</span>
 					</div>
 					<div class="md:text-right">
-						<p class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">Live Valuation</p>
-						<p id="etf-price" class="text-4xl md:text-5xl font-bold text-on-surface tracking-tighter">${{ etf.price|number_format(2) }}</p>
+						<p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Live Valuation</p>
+						<p id="etf-price" class="text-3xl md:text-4xl font-bold text-on-surface tracking-tight font-mono tabular-nums">${{ etf.price|number_format(2) }}</p>
 					</div>
 				</div>
 			</a>
 		{% endif %}
 
 		{# The Global Stock Leaderboard #}
-		<div class="bg-surface-container-low shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl border border-outline-variant/15 overflow-hidden">
-			<div class="px-8 py-6 border-b border-outline-variant/10 flex items-center justify-between">
+		<div class="bg-surface-container-low rounded-lg border border-outline-variant/25 overflow-hidden">
+			<div class="px-5 py-4 border-b border-outline-variant/15 flex items-center justify-between">
 				<div>
-					<h3 class="text-xl font-bold text-on-surface tracking-tight">Market Cap Leaderboard</h3>
-					<p class="text-xs text-on-surface-variant mt-1">Sorted by total network valuation.</p>
+					<h3 class="text-base font-bold text-on-surface tracking-tight uppercase">Market Cap Leaderboard</h3>
+					<p class="text-xs text-on-surface-variant mt-0.5">Sorted by total network valuation.</p>
 				</div>
 			</div>
 
 			<div class="overflow-x-auto">
 				<table class="w-full text-left border-collapse">
 					<thead>
-						<tr class="bg-surface-container-highest/30 text-on-surface-variant text-[10px] md:text-[12px] font-bold uppercase tracking-widest border-b border-outline-variant/10">
-							<th scope="col" class="px-4 md:px-8 py-5">Asset</th>
-							<th scope="col" class="px-4 md:px-6 py-5 hidden sm:table-cell">Sector</th>
-							<th scope="col" class="px-4 md:px-6 py-5 text-right">Price</th>
-							<th scope="col" class="px-4 md:px-8 py-5 text-right">Market Cap</th>
+						<tr class="bg-surface-container-highest/20 text-on-surface-variant text-xs font-bold uppercase tracking-wider border-b border-outline-variant/15">
+							<th scope="col" class="px-5 py-3">Asset</th>
+							<th scope="col" class="px-4 py-3 hidden sm:table-cell">Sector</th>
+							<th scope="col" class="px-4 py-3 text-right">Price</th>
+							<th scope="col" class="px-5 py-3 text-right">Market Cap</th>
 						</tr>
 					</thead>
-					<tbody id="market-table-body" class="divide-y divide-outline-variant/5 text-sm relative">
+					<tbody id="market-table-body" class="divide-y divide-outline-variant/10 text-sm relative">
 						{% for stock in stocks|default([]) %}
-							<tr id="row-{{ stock.ticker }}" data-mcap="{{ stock.isBankrupt ? 0 : stock.marketCap }}" data-bankrupt="{{ stock.isBankrupt ? 'true' : 'false' }}" class="{{ stock.isBankrupt ? 'opacity-50 hover:opacity-80 bg-red-950/10' : 'hover:bg-surface-container-high/40' }} transition-colors cursor-pointer group" onclick="window.location.href='/stock/{{ stock.ticker }}'">
-								<td class="px-4 md:px-8 py-5">
+							<tr id="row-{{ stock.ticker }}" data-mcap="{{ stock.isBankrupt ? 0 : stock.marketCap }}" data-bankrupt="{{ stock.isBankrupt ? 'true' : 'false' }}" class="{{ stock.isBankrupt ? 'opacity-50 hover:opacity-80 bg-red-950/10' : 'hover:bg-surface-container-high/30' }} transition-colors cursor-pointer group" onclick="window.location.href='/stock/{{ stock.ticker }}'">
+								<td class="px-5 py-3">
 									<div class="flex flex-col">
 										<div class="flex items-center gap-2">
-											<span class="font-bold text-on-surface text-base group-hover:text-primary transition-colors">{{ stock.name }}</span>
+											<span class="font-bold text-on-surface text-sm group-hover:text-primary transition-colors">{{ stock.name }}</span>
 											{% if stock.isBankrupt %}
 												<span class="inline-flex items-center rounded bg-red-500/10 px-1.5 py-0.5 text-[9px] font-bold text-red-400 border border-red-500/20 uppercase tracking-widest">BANKRUPT</span>
 											{% endif %}
 										</div>
-										<div class="text-on-surface-variant text-[12px] uppercase tracking-widest mt-0.5">{{ stock.ticker }}</div>
+										<div class="text-on-surface-variant text-xs uppercase tracking-wider font-mono mt-0.5">{{ stock.ticker }}</div>
 									</div>
 								</td>
-								<td class="px-4 md:px-6 py-5 hidden sm:table-cell text-on-surface-variant">
+								<td class="px-4 py-3 hidden sm:table-cell text-on-surface-variant text-xs">
 									{{ stock.sector }}
 								</td>
-								<td id="price-{{ stock.ticker }}" class="px-4 md:px-6 py-5 text-right font-bold {{ stock.isBankrupt ? 'text-tertiary line-through' : 'text-on-surface' }} transition-colors duration-300">
+								<td id="price-{{ stock.ticker }}" class="px-4 py-3 text-right font-bold font-mono tabular-nums text-xs sm:text-sm {{ stock.isBankrupt ? 'text-tertiary line-through' : 'text-on-surface' }} transition-colors duration-300">
 									${{ (stock.isBankrupt ? 0.00 : stock.price)|number_format(2) }}
 								</td>
-								<td id="mcap-{{ stock.ticker }}" class="px-4 md:px-8 py-5 text-right font-medium text-on-surface-variant transition-colors duration-300">
+								<td id="mcap-{{ stock.ticker }}" class="px-5 py-3 text-right font-medium font-mono tabular-nums text-xs sm:text-sm text-on-surface-variant transition-colors duration-300">
 									${{ stock.isBankrupt ? '0.00' : ((stock.marketCap / 1000000000)|number_format(2) ~ 'B') }}
 								</td>
 							</tr>

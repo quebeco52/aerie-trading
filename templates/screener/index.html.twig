@@ -3,34 +3,31 @@
 {% block title %}Stock Screener | Aerie Exchange{% endblock %}
 
 {% block body %}
-<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full space-y-6" data-controller="screener">
+<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-5 w-full space-y-5" data-controller="screener">
 
     {# Hero Section #}
-    <div class="bg-surface-container-low shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)] rounded-2xl p-6 md:p-8 border border-outline-variant/15 relative overflow-hidden">
-        <div class="absolute -right-20 -top-20 w-64 h-64 bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
-
-        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative z-10">
+    <div class="bg-surface-container-low rounded-lg p-5 md:p-6 border border-outline-variant/25">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
                 <div class="flex items-center gap-2 mb-2">
-                    <span class="material-symbols-outlined text-primary text-base">filter_alt</span>
-                    <span class="text-[10px] font-bold tracking-widest text-primary uppercase">Market Intelligence</span>
+                    <span class="text-xs font-bold tracking-wider text-primary uppercase">Market Intelligence</span>
                 </div>
-                <h1 class="text-3xl md:text-4xl font-bold text-on-surface tracking-tight">Stock Screener</h1>
+                <h1 class="text-2xl md:text-3xl font-bold text-on-surface tracking-tight">Stock Screener</h1>
                 <p class="text-xs text-on-surface-variant mt-1">Filter, sort, and analyze corporate fundamentals across the entire exchange.</p>
             </div>
 
             <div class="w-full md:w-72">
                 <div class="relative">
                     <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-base">search</span>
-                    <input type="text" id="screener-search" placeholder="Filter by ticker or name..." class="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-xl pl-9 pr-4 py-2 text-xs font-mono text-on-surface focus:ring-1 focus:ring-primary outline-none placeholder:text-on-surface-variant/50" data-screener-target="searchInput" data-action="input->screener#onSearch">
+                    <input type="text" id="screener-search" placeholder="Filter ticker or name..." class="w-full bg-surface-container-lowest border border-outline-variant/25 rounded pl-9 pr-3 py-1.5 text-xs font-mono text-on-surface focus:ring-1 focus:ring-primary outline-none placeholder:text-on-surface-variant/50" data-screener-target="searchInput" data-action="input->screener#onSearch">
                 </div>
             </div>
         </div>
     </div>
 
     {# Sector Filter Pills #}
-    <div class="flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar" id="sector-filters">
-        <button class="sector-filter-btn px-4 py-1.5 rounded-xl text-xs font-bold transition-all bg-primary text-[#001a42] shadow-md shadow-primary/20 whitespace-nowrap cursor-pointer" data-sector="ALL" data-screener-target="sectorBtn" data-action="click->screener#filterSector">
+    <div class="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar" id="sector-filters">
+        <button class="sector-filter-btn px-3 py-1 rounded text-xs font-bold transition-all bg-primary text-[#001a42] whitespace-nowrap cursor-pointer uppercase tracking-wider" data-sector="ALL" data-screener-target="sectorBtn" data-action="click->screener#filterSector">
             All Sectors
         </button>
         {% set sectors = [] %}
@@ -40,35 +37,35 @@
             {% endif %}
         {% endfor %}
         {% for sec in sectors|sort %}
-            <button class="sector-filter-btn px-4 py-1.5 rounded-xl text-xs font-bold transition-all bg-surface-container text-on-surface-variant hover:bg-surface-container-high whitespace-nowrap cursor-pointer" data-sector="{{ sec }}" data-screener-target="sectorBtn" data-action="click->screener#filterSector">
+            <button class="sector-filter-btn px-3 py-1 rounded text-xs font-bold transition-all bg-surface-container text-on-surface-variant hover:bg-surface-container-high border border-outline-variant/20 whitespace-nowrap cursor-pointer uppercase tracking-wider" data-sector="{{ sec }}" data-screener-target="sectorBtn" data-action="click->screener#filterSector">
                 {{ sec }}
             </button>
         {% endfor %}
     </div>
 
     {# Screener Table #}
-    <div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl overflow-hidden shadow-[0_30px_60px_-5px_rgba(6,14,32,0.4)]">
+    <div class="bg-surface-container-low border border-outline-variant/25 rounded-lg overflow-hidden">
         <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse min-w-225" id="screener-table">
                 <thead>
-                    <tr class="bg-surface-container-highest/30 text-on-surface-variant text-[10px] uppercase tracking-widest border-b border-outline-variant/10">
-                        <th class="px-6 py-4 font-bold cursor-pointer select-none hover:text-primary transition-colors" data-col="ticker" data-screener-target="header" data-action="click->screener#sort">Ticker</th>
-                        <th class="px-4 py-4 font-bold cursor-pointer select-none hover:text-primary transition-colors" data-col="name" data-screener-target="header" data-action="click->screener#sort">Company</th>
-                        <th class="px-4 py-4 font-bold cursor-pointer select-none hover:text-primary transition-colors" data-col="sector" data-screener-target="header" data-action="click->screener#sort">Sector</th>
-                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="price" data-screener-target="header" data-action="click->screener#sort">Price</th>
-                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="mcap" data-screener-target="header" data-action="click->screener#sort">Market Cap</th>
-                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="pe" data-screener-target="header" data-action="click->screener#sort">P/E Ratio</th>
-                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="eps" data-screener-target="header" data-action="click->screener#sort">EPS (TTM)</th>
-                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="roic" data-screener-target="header" data-action="click->screener#sort">ROIC / ROE</th>
-                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="equity" data-screener-target="header" data-action="click->screener#sort">Total Equity</th>
-                        <th class="px-4 py-4 font-bold text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="de" data-screener-target="header" data-action="click->screener#sort">D/E Ratio</th>
-                        <th class="px-6 py-4 font-bold text-right">Action</th>
+                    <tr class="bg-surface-container-highest/20 text-on-surface-variant text-xs uppercase tracking-wider font-bold border-b border-outline-variant/15">
+                        <th class="px-5 py-3 cursor-pointer select-none hover:text-primary transition-colors" data-col="ticker" data-screener-target="header" data-action="click->screener#sort">Ticker</th>
+                        <th class="px-4 py-3 cursor-pointer select-none hover:text-primary transition-colors" data-col="name" data-screener-target="header" data-action="click->screener#sort">Company</th>
+                        <th class="px-4 py-3 cursor-pointer select-none hover:text-primary transition-colors" data-col="sector" data-screener-target="header" data-action="click->screener#sort">Sector</th>
+                        <th class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="price" data-screener-target="header" data-action="click->screener#sort">Price</th>
+                        <th class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="mcap" data-screener-target="header" data-action="click->screener#sort">Market Cap</th>
+                        <th class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="pe" data-screener-target="header" data-action="click->screener#sort">P/E</th>
+                        <th class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="eps" data-screener-target="header" data-action="click->screener#sort">EPS</th>
+                        <th class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="roic" data-screener-target="header" data-action="click->screener#sort">ROIC</th>
+                        <th class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="equity" data-screener-target="header" data-action="click->screener#sort">Equity</th>
+                        <th class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="de" data-screener-target="header" data-action="click->screener#sort">D/E</th>
+                        <th class="px-5 py-3 text-right">Action</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-outline-variant/5 text-sm" id="screener-tbody" data-screener-target="tbody">
+                <tbody class="divide-y divide-outline-variant/10 text-xs sm:text-sm" id="screener-tbody" data-screener-target="tbody">
                     {% for stock in stocks %}
-                        <tr class="hover:bg-surface-container-high/40 transition-colors group cursor-pointer screener-row {{ stock.isBankrupt ? 'opacity-50 bg-red-950/10' : '' }}" onclick="window.location.href='/stock/{{ stock.ticker }}'" data-ticker="{{ stock.ticker }}" data-name="{{ stock.name|lower }}" data-sector="{{ stock.sector }}" data-screener-target="row">
-                            <td class="px-6 py-4" data-value="{{ stock.ticker }}">
+                        <tr class="hover:bg-surface-container-high/30 transition-colors group cursor-pointer screener-row {{ stock.isBankrupt ? 'opacity-50 bg-red-950/10' : '' }}" onclick="window.location.href='/stock/{{ stock.ticker }}'" data-ticker="{{ stock.ticker }}" data-name="{{ stock.name|lower }}" data-sector="{{ stock.sector }}" data-screener-target="row">
+                            <td class="px-5 py-2.5" data-value="{{ stock.ticker }}">
                                 <div class="flex items-center gap-2">
                                     <span class="font-bold text-primary font-mono group-hover:underline">{{ stock.ticker }}</span>
                                     {% if stock.isBankrupt %}
@@ -76,32 +73,32 @@
                                     {% endif %}
                                 </div>
                             </td>
-                            <td class="px-4 py-4 font-bold text-on-surface max-w-55 truncate" data-value="{{ stock.name }}">{{ stock.name }}</td>
-                            <td class="px-4 py-4 text-on-surface-variant text-xs" data-value="{{ stock.sector }}">
-                                <span class="px-2.5 py-1 rounded-md bg-surface-container text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">{{ stock.sector }}</span>
+                            <td class="px-4 py-2.5 font-bold text-on-surface max-w-55 truncate" data-value="{{ stock.name }}">{{ stock.name }}</td>
+                            <td class="px-4 py-2.5 text-on-surface-variant text-xs" data-value="{{ stock.sector }}">
+                                <span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant text-xs font-mono border border-outline-variant/15">{{ stock.sector }}</span>
                             </td>
-                            <td class="px-4 py-4 font-mono text-right font-bold {{ stock.isBankrupt ? 'text-tertiary line-through' : 'text-on-surface' }}" data-value="{{ stock.isBankrupt ? 0 : stock.price }}">${{ (stock.isBankrupt ? 0.00 : stock.price)|number_format(2) }}</td>
-                            <td class="px-4 py-4 font-mono text-right text-on-surface" data-value="{{ stock.isBankrupt ? 0 : stock.marketCap }}">${{ stock.isBankrupt ? '0.00' : stock.marketCap|format_large }}</td>
-                            <td class="px-4 py-4 font-mono text-right text-on-surface" data-value="{{ stock.isBankrupt ? 0 : (stock.peRatio ?? 0) }}">
+                            <td class="px-4 py-2.5 font-mono tabular-nums text-right font-bold {{ stock.isBankrupt ? 'text-tertiary line-through' : 'text-on-surface' }}" data-value="{{ stock.isBankrupt ? 0 : stock.price }}">${{ (stock.isBankrupt ? 0.00 : stock.price)|number_format(2) }}</td>
+                            <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.isBankrupt ? 0 : stock.marketCap }}">${{ stock.isBankrupt ? '0.00' : stock.marketCap|format_large }}</td>
+                            <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.isBankrupt ? 0 : (stock.peRatio ?? 0) }}">
                                 {{ not stock.isBankrupt and stock.peRatio is not null ? stock.peRatio|number_format(2) ~ 'x' : '-' }}
                             </td>
-                            <td class="px-4 py-4 font-mono text-right text-on-surface" data-value="{{ stock.eps }}">${{ stock.eps|number_format(2) }}</td>
-                            <td class="px-4 py-4 font-mono text-right font-bold {{ stock.currentRoic >= 0 ? 'text-secondary' : 'text-tertiary' }}" data-value="{{ stock.currentRoic }}">
+                            <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.eps }}">${{ stock.eps|number_format(2) }}</td>
+                            <td class="px-4 py-2.5 font-mono tabular-nums text-right font-bold {{ stock.currentRoic >= 0 ? 'text-secondary' : 'text-tertiary' }}" data-value="{{ stock.currentRoic }}">
                                 {{ (stock.currentRoic * 100)|number_format(2) }}%
                             </td>
-                            <td class="px-4 py-4 font-mono text-right text-on-surface" data-value="{{ stock.equity }}">${{ stock.equity|format_large }}</td>
-                            <td class="px-4 py-4 font-mono text-right text-on-surface" data-value="{{ stock.debtToEquity ?? 0 }}">
+                            <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.equity }}">${{ stock.equity|format_large }}</td>
+                            <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.debtToEquity ?? 0 }}">
                                 {{ stock.debtToEquity is not null ? stock.debtToEquity|number_format(2) ~ 'x' : '-' }}
                             </td>
-                            <td class="px-6 py-4 text-right">
-                                <a href="/stock/{{ stock.ticker }}" onclick="event.stopPropagation();" class="inline-flex items-center px-3 py-1 rounded-lg bg-surface-container hover:bg-primary/20 text-primary border border-primary/20 text-xs font-bold transition-colors">
+                            <td class="px-5 py-2.5 text-right">
+                                <a href="/stock/{{ stock.ticker }}" onclick="event.stopPropagation();" class="inline-flex items-center px-2.5 py-0.5 rounded bg-surface-container hover:bg-primary/20 text-primary border border-primary/20 text-xs font-bold transition-colors uppercase tracking-wider">
                                     View
                                 </a>
                             </td>
                         </tr>
                     {% else %}
                         <tr>
-                            <td colspan="11" class="px-6 py-12 text-center text-on-surface-variant text-sm font-serif">No stocks available in the market.</td>
+                            <td colspan="11" class="px-6 py-10 text-center text-on-surface-variant text-xs">No stocks available in the market.</td>
                         </tr>
                     {% endfor %}
                 </tbody>

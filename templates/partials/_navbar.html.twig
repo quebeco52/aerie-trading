@@ -1,40 +1,40 @@
-<nav class="sticky top-0 z-50 bg-surface/80 backdrop-blur-xl border-b border-outline-variant/10 w-full">
+<nav class="sticky top-0 z-50 bg-surface border-b border-outline-variant/20 w-full">
     <div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between items-center h-16">
+        <div class="flex justify-between items-center h-14">
             <div class="flex items-center gap-8">
-                <a href="/" class="text-xl font-bold tracking-tighter text-primary flex items-center gap-2">
-                    <span class="material-symbols-outlined">monitoring</span>
-                    Aerie Exchange
+                <a href="/" class="text-lg font-bold tracking-tight text-primary flex items-center gap-2">
+                    <span class="material-symbols-outlined text-xl">monitoring</span>
+                    <span>Aerie Exchange</span>
                 </a>
-                <div class="hidden md:flex gap-6 mt-1">
+                <div class="hidden md:flex gap-6">
                     {% set current_path = app.request.pathInfo %}
                     
-                    <a href="/" class="text-sm font-bold pb-1 border-b-2 transition-colors {{ current_path == '/' ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">Markets</a>
+                    <a href="/" class="text-xs font-bold uppercase tracking-wider pb-1 border-b-2 transition-colors {{ current_path == '/' ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">Markets</a>
                     
-                    <a href="/dashboard" class="text-sm font-bold pb-1 border-b-2 transition-colors {{ current_path == '/dashboard' ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">Portfolio</a>
+                    <a href="/dashboard" class="text-xs font-bold uppercase tracking-wider pb-1 border-b-2 transition-colors {{ current_path == '/dashboard' ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">Portfolio</a>
                     
-                    <a href="/leaderboard" class="text-sm font-bold pb-1 border-b-2 transition-colors {{ current_path == '/leaderboard' ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">Leaderboard</a>
+                    <a href="/leaderboard" class="text-xs font-bold uppercase tracking-wider pb-1 border-b-2 transition-colors {{ current_path == '/leaderboard' ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">Leaderboard</a>
 
-                    <a href="/screener" class="text-sm font-bold pb-1 border-b-2 transition-colors {{ current_path == '/screener' ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">Screener</a>
+                    <a href="/screener" class="text-xs font-bold uppercase tracking-wider pb-1 border-b-2 transition-colors {{ current_path == '/screener' ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">Screener</a>
                 </div>
             </div>
             
             <div class="flex items-center gap-4">
                 <div class="relative hidden sm:block" data-controller="navbar-search">
                     <form action="/search" method="GET" id="search-form">
-                        <input id="market-search-input" name="q" type="text" placeholder="Search company or ticker..." class="bg-surface-container-lowest border border-outline-variant/20 rounded-lg px-4 py-1.5 text-sm focus:ring-1 focus:ring-primary w-64 text-on-surface outline-none placeholder:text-outline-variant font-mono" autocomplete="off" data-navbar-search-target="input" data-action="input->navbar-search#onInput keydown->navbar-search#onKeyDown">
-                        <div id="search-results-dropdown" data-navbar-search-target="dropdown" class="absolute left-0 mt-1 w-full bg-surface-container-high border border-outline-variant/20 rounded-md shadow-lg hidden z-50 overflow-hidden">
+                        <input id="market-search-input" name="q" type="text" placeholder="Search ticker or company..." class="bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1 text-xs focus:ring-1 focus:ring-primary focus:border-primary w-64 text-on-surface outline-none placeholder:text-on-surface-variant/50 font-mono" autocomplete="off" data-navbar-search-target="input" data-action="input->navbar-search#onInput keydown->navbar-search#onKeyDown">
+                        <div id="search-results-dropdown" data-navbar-search-target="dropdown" class="absolute left-0 mt-1 w-full bg-surface-container-high border border-outline-variant/30 rounded shadow-md hidden z-50 overflow-hidden text-xs">
                         </div>
                     </form>
                 </div>
                 
                 {% if app.user %}
-                    <a href="/dashboard" class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-primary border border-outline-variant/20 hover:bg-surface-bright transition-colors" title="Logged in as {{ app.user.userIdentifier }}">
+                    <a href="/dashboard" class="w-7 h-7 rounded bg-surface-container-high flex items-center justify-center text-primary border border-outline-variant/20 hover:bg-surface-bright transition-colors" title="Logged in as {{ app.user.userIdentifier }}">
                         <span class="material-symbols-outlined text-sm">account_circle</span>
                     </a>
-                    <a href="{{ path('app_logout') }}" class="material-symbols-outlined text-on-surface-variant hover:text-on-surface transition-colors active:scale-95" title="Sign Out">logout</a>
+                    <a href="{{ path('app_logout') }}" class="material-symbols-outlined text-on-surface-variant hover:text-on-surface transition-colors active:scale-95 text-lg" title="Sign Out">logout</a>
                 {% else %}
-                    <a href="{{ path('app_login') }}" class="material-symbols-outlined text-on-surface-variant hover:text-on-surface transition-colors active:scale-95" title="Sign In">account_circle</a>
+                    <a href="{{ path('app_login') }}" class="material-symbols-outlined text-on-surface-variant hover:text-on-surface transition-colors active:scale-95 text-lg" title="Sign In">account_circle</a>
                 {% endif %}
             </div>
         </div>

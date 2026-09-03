@@ -24,16 +24,19 @@
 
 @layer utilities {
   .glass-panel {
-    background: rgba(19, 27, 46, 0.6);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
+    background: rgba(19, 27, 46, 0.75);
+    border: 1px solid rgba(66, 71, 84, 0.25);
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
   }
 
   .custom-scrollbar::-webkit-scrollbar { width: 4px; }
   .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
   .custom-scrollbar::-webkit-scrollbar-thumb { 
     background: var(--color-outline-variant); 
-    border-radius: 10px; 
+    border-radius: 4px; 
   }
 
   .material-symbols-outlined { 

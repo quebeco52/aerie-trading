@@ -42,9 +42,9 @@ class MacroEngine
     /** Linear momentum of aggregate demand feedback loop. */
     public const KALDOR_MOMENTUM = 0.15;
     /** Cubic stabilization factor bounding extreme boom/bust expansions. */
-    public const KALDOR_CAPACITY = 450.0;
+    public const KALDOR_CAPACITY = 400.0;
     /** Sensitivity of aggregate demand to real interest rate deviations from natural rate. */
-    public const KALDOR_MONETARY_DRAG = 1.25;
+    public const KALDOR_MONETARY_DRAG = 1.00;
     /** Countercyclical fiscal stimulus multiplier from corporate tax rate cuts. */
     public const KALDOR_FISCAL_MULTIPLIER = 0.50;
     /** Sensitivity of the output gap to physical capital stock overhang (excess capacity drags down growth). */
@@ -52,11 +52,11 @@ class MacroEngine
     /** Elasticity of aggregate demand to household wealth deviations (Modigliani Wealth Effect, ~4% MPC). */
     public const KALDOR_WEALTH_EFFECT_ELASTICITY = 0.02;
     /** The rate at which business investment (output gap) accumulates into the physical capital stock. */
-    public const CAPITAL_ACCUMULATION_RATE = 0.35;
+    public const CAPITAL_ACCUMULATION_RATE = 0.30;
     /** The rate at which physical capital depreciates, organically clearing overhangs and creating pent-up demand. */
     public const CAPITAL_DECAY_RATE = 0.30;
     /** Stochastic diffusion volatility of the macroeconomic output gap. */
-    public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.010;
+    public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.005;
 
     // --- Okun's Law & Diamond-Mortensen-Pissarides Beveridge Curve ---
     /** Structural Non-Accelerating Inflation Rate of Unemployment (NAIRU) baseline (4.0%). */
