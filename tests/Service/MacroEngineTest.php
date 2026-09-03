@@ -1407,4 +1407,62 @@ class MacroEngineTest extends TestCase
         $this->assertNotEquals(MacroEngine::BASE_NATURAL_RATE, $result->naturalRate, 'Natural real rate r* must move dynamically and not remain static.');
         $this->assertGreaterThan(MacroEngine::BASE_NATURAL_RATE, $result->naturalRate, 'Natural rate must rise during a technology/productivity expansion.');
     }
+
+    public function testSymmetricWagePushAndWageDragInflationTransmission(): void
+    {
+        $reflectionInflation = new \ReflectionMethod(MacroEngine::class, 'calculateInflation');
+
+        // Zero standard normal shocks to isolate deterministic wage transmission
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        // 1. Overheating wage scenario (w = 4.5% > 3.5% trend)
+        $hotWageState = new \App\Service\Macro\MacroState();
+        $hotWageState->inflation = 0.02;
+        $hotWageState->inflationEma = 0.02;
+        $hotWageState->outputGap = 0.0;
+        $hotWageState->wageGrowth = 0.045; // +1.0% excess wage growth
+        $hotWageState->energyPriceShock = 0.0;
+        $hotWageState->energyCostPushLag = 0.0;
+
+        $hotInflation = $reflectionInflation->invoke($this->engine, $hotWageState, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+        $this->assertGreaterThan(0.02, $hotInflation, 'Excess wage growth above 3.5% must exert positive cost-push inflation pressure.');
+
+        // 2. Slack wage scenario (w = 2.5% < 3.5% trend)
+        $slackWageState = new \App\Service\Macro\MacroState();
+        $slackWageState->inflation = 0.02;
+        $slackWageState->inflationEma = 0.02;
+        $slackWageState->outputGap = 0.0;
+        $slackWageState->wageGrowth = 0.025; // -1.0% slack wage growth
+        $slackWageState->energyPriceShock = 0.0;
+        $slackWageState->energyCostPushLag = 0.0;
+
+        $slackInflation = $reflectionInflation->invoke($this->engine, $slackWageState, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+        $this->assertLessThan(0.02, $slackInflation, 'Slack wage growth below 3.5% must exert symmetric disinflationary wage-drag.');
+
+        // 3. Check symmetry of transmission magnitude around 2.0%
+        $hotDelta = $hotInflation - 0.02;
+        $slackDelta = 0.02 - $slackInflation;
+        $this->assertEqualsWithDelta($hotDelta, $slackDelta, 0.0001, 'Wage inflation transmission must be symmetric for equal deviations above and below trend.');
+    }
+
+    public function testTfpTrendGrowthRatePassesCleanlyWithoutDiffusionNoise(): void
+    {
+        $reflectionTfp = new \ReflectionMethod(MacroEngine::class, 'calculateTotalFactorProductivity');
+
+        // Neutral state: output gap = 0, no R&D acceleration
+        $neutralState = new \App\Service\Macro\MacroState();
+        $neutralState->totalFactorProductivityIndex = 100.0;
+        $neutralState->outputGapEma = 0.0;
+
+        // Severe negative diffusion shock
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(-3.0);
+
+        // Calculate TFP with dt = 1/3600 (tick-level)
+        $dt = 1.0 / 3600.0;
+        $trendRate = $reflectionTfp->invoke($this->engine, $neutralState, $dt);
+
+        // The trend growth rate returned for economic models must be the true structural drift (1.5%), unaffected by tick diffusion
+        $this->assertEqualsWithDelta(MacroEngine::TFP_DRIFT, $trendRate, 0.0001, 'TFP trend growth rate must equal structural secular drift at neutral output gap.');
+    }
 }
+

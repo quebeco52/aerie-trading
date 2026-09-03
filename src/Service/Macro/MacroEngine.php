@@ -42,7 +42,7 @@ class MacroEngine
     /** Linear momentum of aggregate demand feedback loop. */
     public const KALDOR_MOMENTUM = 0.15;
     /** Cubic stabilization factor bounding extreme boom/bust expansions. */
-    public const KALDOR_CAPACITY = 220.0;
+    public const KALDOR_CAPACITY = 450.0;
     /** Sensitivity of aggregate demand to real interest rate deviations from natural rate. */
     public const KALDOR_MONETARY_DRAG = 1.25;
     /** Countercyclical fiscal stimulus multiplier from corporate tax rate cuts. */
@@ -52,7 +52,7 @@ class MacroEngine
     /** Elasticity of aggregate demand to household wealth deviations (Modigliani Wealth Effect, ~4% MPC). */
     public const KALDOR_WEALTH_EFFECT_ELASTICITY = 0.02;
     /** The rate at which business investment (output gap) accumulates into the physical capital stock. */
-    public const CAPITAL_ACCUMULATION_RATE = 0.25;
+    public const CAPITAL_ACCUMULATION_RATE = 0.35;
     /** The rate at which physical capital depreciates, organically clearing overhangs and creating pent-up demand. */
     public const CAPITAL_DECAY_RATE = 0.30;
     /** Stochastic diffusion volatility of the macroeconomic output gap. */
@@ -70,7 +70,7 @@ class MacroEngine
     /** Structural equilibrium labor market tightness (theta* = 4.5% / 4.0% = 1.125). */
     public const NATURAL_LABOR_TIGHTNESS = 1.125;
     /** Sensitivity of wage growth to labor market tightness deviations from equilibrium. */
-    public const WAGE_TIGHTNESS_SENSITIVITY = 0.02;
+    public const WAGE_TIGHTNESS_SENSITIVITY = 0.010;
     /** Annual adjustment speed of nominal wage settlements toward market-clearing equilibrium. */
     public const WAGE_ADJUSTMENT_SPEED = 2.0;
     /** Wage-push inflation transmission passing excess wage growth into headline services inflation. */
@@ -146,7 +146,7 @@ class MacroEngine
     /** Evans Rule forward guidance: Maximum inflation ceiling (2.5%) tolerated while holding rates at ZLB. */
     public const EVANS_RULE_INFLATION_CAP = 0.025;
     /** Central bank baseline rate hiking smoothing speed per year (Woodford 2003 inertial gradualism). */
-    public const CB_HIKE_SMOOTHING_SPEED = 0.45;
+    public const CB_HIKE_SMOOTHING_SPEED = 0.80;
     /** Central bank baseline rate cutting smoothing speed per year (rapid crisis easing). */
     public const CB_CUT_SMOOTHING_SPEED = 1.25;
     /** Inflation panic threshold (3.5%) above which central bank accelerates hiking to Volcker speed. */
@@ -475,17 +475,14 @@ class MacroEngine
         $state->totalTime += $dt;
 
         // 1. Evaluate Total Factor Productivity (TFP) & Secular Drift
-        $oldTfp = $state->totalFactorProductivityIndex ?? self::TFP_BASELINE;
-        $this->calculateTotalFactorProductivity($state, $dt);
-        $newTfp = $state->totalFactorProductivityIndex;
-        $tfpGrowthRate = log($newTfp / max(0.01, $oldTfp)) / max(0.0001, $dt);
+        $tfpTrendGrowthRate = $this->calculateTotalFactorProductivity($state, $dt);
 
         // 2. Laubach-Williams (2003) Dynamic Natural Rate of Interest (r*)
-        $this->calculateNaturalRate($state, $tfpGrowthRate, $dt);
+        $this->calculateNaturalRate($state, $tfpTrendGrowthRate, $dt);
 
         // 3. Labor Market: Okun's Law & Diamond-Mortensen-Pissarides Beveridge Curve
         $this->calculateUnemployment($state, $dt);
-        $this->calculateLaborMarketAndWages($state, $tfpGrowthRate, $dt);
+        $this->calculateLaborMarketAndWages($state, $tfpTrendGrowthRate, $dt);
 
         // 4. Inflation Expectations (TIPS Breakeven)
         $state->tipsBreakeven = $this->calculateTipsBreakeven($state, self::TARGET_INFLATION, $dt);
@@ -549,7 +546,7 @@ class MacroEngine
         $this->calculateMacroCreditSpread($state);
         $this->calculateInterbankLiquiditySpread($state, $dt);
 
-        $this->calculatePotentialAndNominalGdp($state, $dt, $tfpGrowthRate);
+        $this->calculatePotentialAndNominalGdp($state, $dt, $tfpTrendGrowthRate);
         $this->calculateDynamicFiscalPolicy($state, $dt);
         $this->calculateEquityRiskPremium($state);
         $this->calculateConsumerSentiment($state, $dt);
@@ -884,10 +881,11 @@ class MacroEngine
             lagTimeConstant: self::ENERGY_COST_PUSH_LAG_YEARS
         );
 
-        // Beveridge Wage-Push Inflation Transmission:
-        // Excess wage growth above trend (TFP drift + target inflation = 3.5%) feeds directly into headline services inflation.
-        $excessWageGrowth = max(0.0, $state->wageGrowth - (self::TFP_DRIFT + $targetInflation));
-        $wageCostPush = $excessWageGrowth * self::WAGE_INFLATION_TRANSMISSION;
+        // Beveridge Wage-Push / Wage-Drag Inflation Transmission:
+        // Wage growth deviations from trend (TFP drift + target inflation = 3.5%) pass symmetrically into headline services inflation.
+        // Excess wage growth accelerates unit labor costs (cost-push); depressed wage growth provides disinflationary relief (wage-drag).
+        $wageGap = $state->wageGrowth - (self::TFP_DRIFT + $targetInflation);
+        $wageCostPush = $wageGap * self::WAGE_INFLATION_TRANSMISSION;
 
         $phillipsEffect = ($phillipsSlope + $state->energyCostPushLag + $wageCostPush) * $dt;
 
@@ -933,13 +931,17 @@ class MacroEngine
         return max(0.08, min(0.80, sqrt($nextVar)));
     }
 
-    private function calculateTotalFactorProductivity(MacroState $state, float $dt): void
+    private function calculateTotalFactorProductivity(MacroState $state, float $dt): float
     {
         $currentTfp = $state->totalFactorProductivityIndex ?? self::TFP_BASELINE;
 
         // Endogenous R&D / Capital Deepening feedback (Arrow 1962, Romer 1990):
         // Booms accelerate innovation and knowledge accumulation; recessions dampen R&D intensity.
         $endogenousGrowth = $state->outputGapEma * self::TFP_OUTPUT_GAP_SENSITIVITY;
+        $trendGrowthRate = self::TFP_DRIFT + $endogenousGrowth;
+
+        // Bounded within structural economic growth bounds [-3.0%, +5.0%]
+        $clampedTrendGrowthRate = max(self::MIN_TFP_GROWTH_RATE, min(self::MAX_TFP_GROWTH_RATE, $trendGrowthRate));
 
         // Stochastic innovation & diffusion shock (Solow-Swan / RBC technology wave)
         $dW = $this->mathUtility->generateStandardNormal();
@@ -956,23 +958,22 @@ class MacroEngine
         $jumpExponent = (float) ($jumpData['exponent'] ?? 0.0);
 
         // Realized log increment: Secular Drift + Endogenous Spillover + Stochastic Diffusion + Breakthrough Jump
-        $logIncrement = ((self::TFP_DRIFT + $endogenousGrowth) * $dt) + $innovationDiffusion + $jumpExponent;
+        $logIncrement = ($clampedTrendGrowthRate * $dt) + $innovationDiffusion + $jumpExponent;
 
         // Bounded within structural economic growth bounds [-3.0%, +5.0%]
         $clampedLogIncrement = max(self::MIN_TFP_GROWTH_RATE * $dt, min(self::MAX_TFP_GROWTH_RATE * $dt, $logIncrement));
 
         // TFP index (un-clamped from monotonic floor to reflect empirical cyclical productivity contractions)
         $state->totalFactorProductivityIndex = max(1.0, $currentTfp * exp($clampedLogIncrement));
+
+        return $clampedTrendGrowthRate;
     }
 
     private function calculatePotentialAndNominalGdp(MacroState $state, float $dt, ?float $tfpGrowthRate = null): void
     {
-        // 1. Evaluate Total Factor Productivity (TFP) if not pre-computed
+        // 1. Evaluate Total Factor Productivity (TFP) trend if not pre-computed
         if ($tfpGrowthRate === null) {
-            $oldTfp = $state->totalFactorProductivityIndex ?? self::TFP_BASELINE;
-            $this->calculateTotalFactorProductivity($state, $dt);
-            $newTfp = $state->totalFactorProductivityIndex;
-            $tfpGrowthRate = log($newTfp / max(0.01, $oldTfp)) / max(0.0001, $dt);
+            $tfpGrowthRate = $this->calculateTotalFactorProductivity($state, $dt);
         }
 
         // 2. Solow-Swan Real Potential Growth
