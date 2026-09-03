@@ -854,8 +854,9 @@ class MacroEngineTest extends TestCase
         // 2. Act: Calculate Output Gap manually using Reflection (or simply call public update Macro if testing full cycle)
         $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateOutputGap');
         
-        // Assume 5Y Yield is neutral (3.5% + ~78bps term premium = ~4.28%)
-        $neutral5yYield = 0.0428; 
+        // Assume 5Y Yield is neutral (naturalRate + targetInflation + NS_BASE_TERM_PREMIUM * durationScale)
+        $neutral5yDurationScale = (1.0 - exp(-5.0 / 10.0)) / (1.0 - exp(-1.0));
+        $neutral5yYield = MacroEngine::NATURAL_RATE + MacroEngine::TARGET_INFLATION + (MacroEngine::NS_BASE_TERM_PREMIUM * $neutral5yDurationScale);
         $dt = 0.25;
         $stressMultiplier = 1.0;
 
@@ -964,17 +965,17 @@ class MacroEngineTest extends TestCase
         // Run 1 tick of boom ($dt = 0.25 years / 1 quarter)
         $dtoBoom = $this->engine->updateMacroState(0.25);
 
-        // Boom should accumulate capital stock overhang: dK = (0.05 * 0.35 - 0.30 * 0) * 0.25 = 0.004375
+        // Boom should accumulate capital stock overhang: dK = (0.05 * 0.30 - 0.30 * 0) * 0.25 = 0.00375
         $this->assertGreaterThan(0.0, $dtoBoom->capitalStockOverhang, 'Capital stock overhang must accumulate during economic booms.');
-        $this->assertEqualsWithDelta(0.004375, $dtoBoom->capitalStockOverhang, 0.0001);
+        $this->assertEqualsWithDelta(0.00375, $dtoBoom->capitalStockOverhang, 0.0001);
 
         // Run 1 quarter of recession
         $dtoRecession = $this->engine->updateMacroState(0.25);
 
-        // Recession & decay: dK = (-0.05 * 0.35 - 0.30 * 0.05) * 0.25 = (-0.0175 - 0.015) * 0.25 = -0.008125
-        // New overhang = 0.05 - 0.008125 = 0.041875
+        // Recession & decay: dK = (-0.05 * 0.30 - 0.30 * 0.05) * 0.25 = (-0.015 - 0.015) * 0.25 = -0.0075
+        // New overhang = 0.05 - 0.0075 = 0.0425
         $this->assertLessThan(0.05, $dtoRecession->capitalStockOverhang, 'Capital stock overhang must decay during recessions.');
-        $this->assertEqualsWithDelta(0.041875, $dtoRecession->capitalStockOverhang, 0.0001);
+        $this->assertEqualsWithDelta(0.0425, $dtoRecession->capitalStockOverhang, 0.0001);
     }
 
     public function testSolowSwanSmoothPotentialGdpGrowth(): void
@@ -1335,6 +1336,105 @@ class MacroEngineTest extends TestCase
         $this->assertEqualsWithDelta($yield10y, $riskNeutral10y + $termPremium10y, 0.0001, 'ACM decomposition identity must hold: y10 = RN10 + TP10.');
     }
 
+    public function testForwardLookingBetaCurvatureLeadsPolicyRate(): void
+    {
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateYieldCurveAndQE');
+
+        // 1. Hiking cycle expectation: policyRate = 2.5%, but Taylor targetRate = 5.0%
+        $hikingState = new \App\Service\Macro\MacroState();
+        $hikingState->policyRate = 0.025;
+        $hikingState->targetRate = 0.050; // +250 bps hike signaled
+        $hikingState->outputGap = 0.0;
+        $hikingState->tipsBreakeven = 0.02;
+
+        // 2. Neutral policy expectation: policyRate = 2.5%, targetRate = 2.5%
+        $neutralState = new \App\Service\Macro\MacroState();
+        $neutralState->policyRate = 0.025;
+        $neutralState->targetRate = 0.025;
+        $neutralState->outputGap = 0.0;
+        $neutralState->tipsBreakeven = 0.02;
+
+        // 3. Easing cycle expectation: policyRate = 4.0%, targetRate = 1.5% (crisis cuts)
+        $easingState = new \App\Service\Macro\MacroState();
+        $easingState->policyRate = 0.040;
+        $easingState->targetRate = 0.015; // -250 bps cut signaled
+        $easingState->outputGap = 0.0;
+        $easingState->tipsBreakeven = 0.02;
+
+        $yieldDataHiking = $reflectionMethod->invoke($this->engine, $hikingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $yieldDataNeutral = $reflectionMethod->invoke($this->engine, $neutralState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $yieldDataEasing = $reflectionMethod->invoke($this->engine, $easingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+
+        // β₂ (curvature) must hump upward during a hiking cycle and dip during an easing cycle
+        $this->assertGreaterThan($yieldDataNeutral['curvature'], $yieldDataHiking['curvature'], 'Curvature beta2 must rise during a central bank rate hike cycle.');
+        $this->assertLessThan(0.0, $yieldDataEasing['curvature'], 'Curvature beta2 must turn negative during a central bank emergency cutting cycle.');
+
+        // 2Y yield must price in expected hikes ahead of policy rate moves
+        $this->assertGreaterThan($yieldDataNeutral['yield_2y'], $yieldDataHiking['yield_2y'], '2Y sovereign yield must rise ahead of central bank rate hikes.');
+    }
+
+    public function testInflationRiskPremiumExpandsTermPremiumWhenBreakevenElevated(): void
+    {
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateYieldCurveAndQE');
+
+        // Anchored neutral state: TIPS breakeven = 2.0% (target), macro vol = 15%
+        $stateAnchored = new \App\Service\Macro\MacroState();
+        $stateAnchored->policyRate = 0.03;
+        $stateAnchored->targetRate = 0.03;
+        $stateAnchored->tipsBreakeven = 0.02;
+        $stateAnchored->marketVolatilityEma = 0.15;
+        $stateAnchored->outputGap = 0.0;
+
+        // Un-anchored high-inflation state: TIPS breakeven = 4.0%, elevated macro vol = 28%
+        $stateUnanchored = new \App\Service\Macro\MacroState();
+        $stateUnanchored->policyRate = 0.03;
+        $stateUnanchored->targetRate = 0.03;
+        $stateUnanchored->tipsBreakeven = 0.04;
+        $stateUnanchored->marketVolatilityEma = 0.28;
+        $stateUnanchored->outputGap = 0.0;
+
+        $yieldDataAnchored = $reflectionMethod->invoke($this->engine, $stateAnchored, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $yieldDataUnanchored = $reflectionMethod->invoke($this->engine, $stateUnanchored, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+
+        // Term premium must expand when inflation expectations un-anchor and volatility spikes (Wright 2011 IRP)
+        $this->assertGreaterThan(
+            $yieldDataAnchored['term_premium_10y'],
+            $yieldDataUnanchored['term_premium_10y'],
+            '10Y term premium must expand when inflation breakeven exceeds target and macro volatility is elevated.'
+        );
+    }
+
+    public function testFlightToSafetyCompressesTermPremiumDuringRecession(): void
+    {
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateYieldCurveAndQE');
+
+        // Neutral state: outputGap = 0.0
+        $stateNeutral = new \App\Service\Macro\MacroState();
+        $stateNeutral->policyRate = 0.03;
+        $stateNeutral->targetRate = 0.03;
+        $stateNeutral->tipsBreakeven = 0.02;
+        $stateNeutral->marketVolatilityEma = 0.15;
+        $stateNeutral->outputGap = 0.0;
+
+        // Deep recession: outputGap = -0.05 (-5% GDP gap)
+        $stateRecession = new \App\Service\Macro\MacroState();
+        $stateRecession->policyRate = 0.03;
+        $stateRecession->targetRate = 0.03;
+        $stateRecession->tipsBreakeven = 0.02;
+        $stateRecession->marketVolatilityEma = 0.15;
+        $stateRecession->outputGap = -0.05;
+
+        $yieldDataNeutral = $reflectionMethod->invoke($this->engine, $stateNeutral, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $yieldDataRecession = $reflectionMethod->invoke($this->engine, $stateRecession, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+
+        // Flight-to-safety: recessions compress sovereign term premium as investors seek safe duration
+        $this->assertLessThan(
+            $yieldDataNeutral['term_premium_10y'],
+            $yieldDataRecession['term_premium_10y'],
+            'Recessions must compress duration term premium via flight-to-safety demand (Campbell et al. 2017).'
+        );
+    }
+
     public function testBeveridgeCurveWagePhillipsTransmission(): void
     {
         $reflectionLabor = new \ReflectionMethod(MacroEngine::class, 'calculateLaborMarketAndWages');
@@ -1463,6 +1563,51 @@ class MacroEngineTest extends TestCase
 
         // The trend growth rate returned for economic models must be the true structural drift (1.5%), unaffected by tick diffusion
         $this->assertEqualsWithDelta(MacroEngine::TFP_DRIFT, $trendRate, 0.0001, 'TFP trend growth rate must equal structural secular drift at neutral output gap.');
+    }
+
+    public function testYieldCurveInvertsAtPeakOfTighteningCycleAndSteepensDuringEasing(): void
+    {
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateYieldCurveAndQE');
+
+        // 1. Peak tightening cycle: policyRate = 5.25%, targetRate = 5.25%, outputGap = +2.5%, elevated inflation
+        $peakState = new \App\Service\Macro\MacroState();
+        $peakState->policyRate = 0.0525;
+        $peakState->targetRate = 0.0525;
+        $peakState->outputGap = 0.025;
+        $peakState->inflation = 0.035;
+        $peakState->inflationEma = 0.035;
+        $peakState->tipsBreakeven = 0.026;
+        $peakState->marketVolatilityEma = 0.16;
+
+        $curvePeak = $reflectionMethod->invoke($this->engine, $peakState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+
+        // 2s10s spread must invert at the peak of monetary policy tightening
+        $spreadPeak = $curvePeak['yield_10y'] - $curvePeak['yield_2y'];
+        $this->assertLessThan(
+            0.0,
+            $spreadPeak,
+            sprintf('2s10s yield curve spread must invert at the peak of a monetary policy tightening campaign (got %0.2f bps).', $spreadPeak * 10000)
+        );
+
+        // 2. Recession / easing cycle: policyRate = 1.0%, targetRate = 0.5%, outputGap = -2.5%
+        $easingState = new \App\Service\Macro\MacroState();
+        $easingState->policyRate = 0.010;
+        $easingState->targetRate = 0.005;
+        $easingState->outputGap = -0.025;
+        $easingState->inflation = 0.015;
+        $easingState->inflationEma = 0.015;
+        $easingState->tipsBreakeven = 0.018;
+        $easingState->marketVolatilityEma = 0.22;
+
+        $curveEasing = $reflectionMethod->invoke($this->engine, $easingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+
+        // 2s10s spread must exhibit strong bull steepening (> +100 bps) during emergency rate cutting
+        $spreadEasing = $curveEasing['yield_10y'] - $curveEasing['yield_2y'];
+        $this->assertGreaterThan(
+            0.0100,
+            $spreadEasing,
+            sprintf('2s10s yield curve spread must bull-steepen significantly during monetary easing (got %0.2f bps).', $spreadEasing * 10000)
+        );
     }
 }
 
