@@ -88,7 +88,7 @@ class CreditFiscalSubsystem
      */
     public function calculateRetailDefaultRate(MacroState $state, float $dt): void
     {
-        $unemploymentShock = ($state->unemploymentRateEma - MacroEngine::NATURAL_UNEMPLOYMENT) * MacroEngine::RETAIL_UNEMPLOYMENT_SENSITIVITY;
+        $unemploymentShock = ($state->unemploymentRateEma - $state->nairu) * MacroEngine::RETAIL_UNEMPLOYMENT_SENSITIVITY;
         $inflationShock = ($state->inflationEma - MacroEngine::TARGET_INFLATION) * MacroEngine::RETAIL_INFLATION_SENSITIVITY;
 
         $dW = $this->mathUtility->generateStandardNormal();
@@ -159,5 +159,33 @@ class CreditFiscalSubsystem
         $targetTaxRate = max(MacroEngine::MIN_CORPORATE_TAX_RATE, min(MacroEngine::MAX_CORPORATE_TAX_RATE, $targetTaxRate));
 
         $state->corporateTaxRate += MacroEngine::FISCAL_ADJUSTMENT_SPEED * ($targetTaxRate - $state->corporateTaxRate) * $dt;
+    }
+
+    /**
+     * Sovereign Debt-to-GDP Stock Accumulation (Blanchard 2019, Greenwood-Vayanos 2014).
+     *
+     * Accumulates sovereign debt-to-GDP ratio from primary deficit flow, net interest expenses,
+     * and nominal GDP growth erosion:
+     *   d(Debt/GDP) = [ (G - T)/GDP + (r_10y - g_nominal) * (Debt/GDP) ] * dt
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateSovereignDebt(MacroState $state, float $dt): void
+    {
+        $taxRevenue = $state->corporateTaxRate * $state->nominalGdpIndex * (1.0 + $state->outputGap);
+        $govtSpendingFlow = ($state->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE)
+            * MacroEngine::TARGET_CORPORATE_TAX_RATE * $state->nominalGdpIndex;
+        $primaryDeficit = $govtSpendingFlow - $taxRevenue;
+        $interestCost = $state->yield10yEma * $state->sovereignDebtToGdp;
+
+        // Blanchard (2019): Nominal GDP growth includes real potential growth trend (labor + TFP) + cyclical gap + inflation
+        $realPotentialGrowth = MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT;
+        $nominalGrowthRate = $realPotentialGrowth + $state->outputGap + $state->inflationEma;
+        $growthErosion = $nominalGrowthRate * $state->sovereignDebtToGdp;
+
+        $dDebt = ($primaryDeficit / max(0.1, $state->nominalGdpIndex)) + $interestCost - $growthErosion;
+        $state->sovereignDebtToGdp += $dDebt * $dt;
+        $state->sovereignDebtToGdp = max(0.20, min(2.50, $state->sovereignDebtToGdp));
     }
 }

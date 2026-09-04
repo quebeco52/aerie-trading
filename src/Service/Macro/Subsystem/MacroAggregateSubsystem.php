@@ -68,7 +68,10 @@ class MacroAggregateSubsystem
      */
     public function calculateNaturalRate(MacroState $state, float $tfpGrowthRate, float $dt): void
     {
-        $targetNaturalRate = MacroEngine::BASE_NATURAL_RATE + (MacroEngine::NATURAL_RATE_TFP_SENSITIVITY * ($tfpGrowthRate - MacroEngine::TFP_DRIFT));
+        // Holston-Laubach-Williams (2017): Natural rate r* tracks secular TFP trend drift and cyclical investment demand
+        $tfpEffect = MacroEngine::NATURAL_RATE_TFP_SENSITIVITY * ($tfpGrowthRate - MacroEngine::TFP_DRIFT);
+        $demandEffect = MacroEngine::NATURAL_RATE_OUTPUT_GAP_SENSITIVITY * $state->outputGapEma;
+        $targetNaturalRate = MacroEngine::BASE_NATURAL_RATE + $tfpEffect + $demandEffect;
         $targetNaturalRate = max(MacroEngine::MIN_NATURAL_RATE, min(MacroEngine::MAX_NATURAL_RATE, $targetNaturalRate));
 
         $state->naturalRate += MacroEngine::NATURAL_RATE_ADJUSTMENT_SPEED * ($targetNaturalRate - $state->naturalRate) * $dt;
@@ -92,14 +95,19 @@ class MacroAggregateSubsystem
         $y = $state->outputGap;
         $outZ = $this->mathUtility->generateStandardNormal();
 
-        $borrowingCost = (MacroEngine::BORROWING_POLICY_WEIGHT * $state->policyRate) + (MacroEngine::BORROWING_YIELD5Y_WEIGHT * $yield5y);
+        $borrowingCost = (MacroEngine::BORROWING_POLICY_WEIGHT * $state->policyRate)
+            + (MacroEngine::BORROWING_YIELD5Y_WEIGHT * $yield5y)
+            + $state->macroCreditSpreadEma
+            + $state->interbankLiquiditySpreadEma;
         $realRate = $borrowingCost - $state->inflation;
 
         $neutral5yDurationScale = (1.0 - exp(-5.0 / 10.0)) / (1.0 - exp(-1.0));
         $neutral5yYield = $naturalRate + MacroEngine::TARGET_INFLATION + (MacroEngine::NS_BASE_TERM_PREMIUM * $neutral5yDurationScale);
 
         $neutralBorrowingRate = (MacroEngine::BORROWING_POLICY_WEIGHT * ($naturalRate + MacroEngine::TARGET_INFLATION))
-            + (MacroEngine::BORROWING_YIELD5Y_WEIGHT * $neutral5yYield);
+            + (MacroEngine::BORROWING_YIELD5Y_WEIGHT * $neutral5yYield)
+            + MacroEngine::BASE_CREDIT_SPREAD
+            + MacroEngine::INTERBANK_BASELINE_SPREAD;
 
         $neutralRealRate = $neutralBorrowingRate - MacroEngine::TARGET_INFLATION;
 
@@ -113,7 +121,11 @@ class MacroAggregateSubsystem
         $fxShift = ($state->exchangeRateIndexEma / MacroEngine::EXCHANGE_RATE_BASELINE) - 1.0;
         $netExportDrag = MacroEngine::KALDOR_FX_ELASTICITY * $fxShift;
 
-        $drift = ($momentum - $cubicConstraint - $monetaryDrag + $fiscalStimulus - $capitalDrag + $housingWealthEffect - $netExportDrag) * $dt;
+        $energySupplyDrag = max(0.0, $state->energyPriceShock / 100.0) * MacroEngine::KALDOR_ENERGY_SUPPLY_DRAG;
+        $freightShift = max(0.0, ($state->freightRateIndexEma / MacroEngine::FREIGHT_BASELINE) - 1.0);
+        $freightSupplyDrag = $freightShift * MacroEngine::KALDOR_FREIGHT_SUPPLY_DRAG;
+
+        $drift = ($momentum - $cubicConstraint - $monetaryDrag + $fiscalStimulus - $capitalDrag + $housingWealthEffect - $netExportDrag - $energySupplyDrag - $freightSupplyDrag) * $dt;
         $volatility = MacroEngine::OUTPUT_GAP_DIFFUSION_SIGMA * $stressMultiplier * sqrt($dt) * $outZ;
 
         $newGap = $y + $drift + $volatility;
@@ -150,10 +162,18 @@ class MacroAggregateSubsystem
             lagTimeConstant: MacroEngine::ENERGY_COST_PUSH_LAG_YEARS
         );
 
+        $rawAgriCostPush = max(0.0, ($state->agriculturalCommodityIndex / MacroEngine::AGRI_BASELINE) - 1.0) * MacroEngine::AGRI_COST_PUSH_TRANSMISSION;
+        $state->agriCostPushLag = $this->mathUtility->calculateDistributedLag(
+            currentLaggedValue: $state->agriCostPushLag,
+            targetValue: $rawAgriCostPush,
+            dt: $dt,
+            lagTimeConstant: MacroEngine::AGRI_COST_PUSH_LAG_YEARS
+        );
+
         $wageGap = $state->wageGrowth - (MacroEngine::TFP_DRIFT + $targetInflation);
         $wageCostPush = $wageGap * MacroEngine::WAGE_INFLATION_TRANSMISSION;
 
-        $phillipsEffect = ($phillipsSlope + $state->energyCostPushLag + $wageCostPush) * $dt;
+        $phillipsEffect = ($phillipsSlope + $state->energyCostPushLag + $state->agriCostPushLag + $wageCostPush) * $dt;
 
         $newInflation = $state->inflation + $inflationDrift + $phillipsEffect + (0.005 * $stressMultiplier * sqrt($dt) * $infZ);
         return max(-0.02, min(0.25, $newInflation));
@@ -173,8 +193,12 @@ class MacroAggregateSubsystem
     public function calculateTipsBreakeven(MacroState $state, float $targetInflation, float $dt): float
     {
         $cyclicalForecast = $state->outputGapEma * MacroEngine::PHILLIPS_SLOPE;
-        $excessVol = max(0.0, $state->marketVolatilityEma - MacroEngine::MACRO_VOL_BASE_ANCHOR);
-        $inflationRiskPremium = $excessVol * MacroEngine::TIPS_INFLATION_RISK_PREMIUM_SCALE;
+
+        // Pflueger & Viceira (2011): Inflation Risk Premium (IRP) reflects upside inflation uncertainty
+        // driven by actual inflation deviations above target and cost-push supply shocks, not equity market crash panic.
+        $excessInflation = max(0.0, $state->inflationEma - $targetInflation);
+        $costPushStress = $state->energyCostPushLag + $state->agriCostPushLag;
+        $inflationRiskPremium = ($excessInflation + $costPushStress) * MacroEngine::TIPS_INFLATION_RISK_PREMIUM_SCALE;
 
         $fundamentalBreakeven = (MacroEngine::TIPS_TARGET_WEIGHT * $targetInflation)
             + (MacroEngine::TIPS_TREND_WEIGHT * $state->inflationEma)
@@ -258,5 +282,8 @@ class MacroAggregateSubsystem
         $state->capitalStockOverhangEma += $emaWeight * ($state->capitalStockOverhang - $state->capitalStockOverhangEma);
         $state->residentialPropertyIndexEma += $emaWeight * ($state->residentialPropertyIndex - $state->residentialPropertyIndexEma);
         $state->commercialPropertyIndexEma += $emaWeight * ($state->commercialPropertyIndex - $state->commercialPropertyIndexEma);
+        $state->nairuEma += $emaWeight * ($state->nairu - $state->nairuEma);
+        $state->sovereignDebtToGdpEma += $emaWeight * ($state->sovereignDebtToGdp - $state->sovereignDebtToGdpEma);
+        $state->financialConditionsIndexEma += $emaWeight * ($state->financialConditionsIndex - $state->financialConditionsIndexEma);
     }
 }

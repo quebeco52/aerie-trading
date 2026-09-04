@@ -20,6 +20,8 @@ class MacroState
     public float $laborTightnessEma = 1.125;
     public float $wageGrowth = 0.035;
     public float $wageGrowthEma = 0.035;
+    public float $nairu = MacroEngine::NATURAL_UNEMPLOYMENT;
+    public float $nairuEma = MacroEngine::NATURAL_UNEMPLOYMENT;
 
     public float $naturalRate = MacroEngine::BASE_NATURAL_RATE;
     public float $naturalRateEma = MacroEngine::BASE_NATURAL_RATE;
@@ -66,6 +68,7 @@ class MacroState
     public float $tipsBreakeven = MacroEngine::TARGET_INFLATION;
     public float $tipsBreakevenEma = MacroEngine::TARGET_INFLATION;
     public float $energyCostPushLag = 0.0;
+    public float $agriCostPushLag = 0.0;
 
     public float $nsLevel = 0.0425;
     public float $nsSlope = -0.0150;
@@ -93,9 +96,12 @@ class MacroState
     public bool $qtActive = false;
     public float $qtIntensity = 0.0;
     public float $balanceSheetIntensity = 0.0;
+    public float $balanceSheetHoldTimer = 0.0;
 
     public float $inversionDuration = 0.0;
     public float $corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE;
+    public float $sovereignDebtToGdp = MacroEngine::INITIAL_DEBT_TO_GDP;
+    public float $sovereignDebtToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP;
     public ?string $eventType = null;
     public float $equityRiskPremium = MacroEngine::BASE_EQUITY_RISK_PREMIUM;
 
@@ -106,9 +112,11 @@ class MacroState
     public float $marketVolatility = 0.13;
     public float $marketVolatilityEma = 0.13;
     public float $marketZ = 0.0;
+    public float $financialConditionsIndex = 0.0;
+    public float $financialConditionsIndexEma = 0.0;
 
-    public float $macroCreditSpread = 0.015;
-    public float $macroCreditSpreadEma = 0.015;
+    public float $macroCreditSpread = MacroEngine::BASE_CREDIT_SPREAD;
+    public float $macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD;
 
     public float $interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD;
     public float $interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD;
@@ -139,6 +147,8 @@ class MacroState
         $state->laborTightnessEma = (float) ($data['labor_tightness_ema'] ?? $state->laborTightness);
         $state->wageGrowth = (float) ($data['wage_growth'] ?? 0.035);
         $state->wageGrowthEma = (float) ($data['wage_growth_ema'] ?? $state->wageGrowth);
+        $state->nairu = (float) ($data['nairu'] ?? MacroEngine::NATURAL_UNEMPLOYMENT);
+        $state->nairuEma = (float) ($data['nairu_ema'] ?? $state->nairu);
 
         $state->naturalRate = (float) ($data['natural_rate'] ?? MacroEngine::BASE_NATURAL_RATE);
         $state->naturalRateEma = (float) ($data['natural_rate_ema'] ?? $state->naturalRate);
@@ -147,6 +157,7 @@ class MacroState
         $state->energyPriceIndexEma = $data['energy_price_index_ema'] ?? $state->energyPriceIndex;
         $state->energyPriceShock = $data['energy_price_shock'] ?? 0.0;
         $state->energyCostPushLag = (float) ($data['energy_cost_push_lag'] ?? 0.0);
+        $state->agriCostPushLag = (float) ($data['agri_cost_push_lag'] ?? 0.0);
         $state->consumerSentimentIndex = $data['consumer_sentiment_index'] ?? 108.0;
         $state->consumerSentimentIndexEma = $data['consumer_sentiment_index_ema'] ?? $state->consumerSentimentIndex;
 
@@ -208,6 +219,7 @@ class MacroState
         $state->riskNeutral10yEma = (float) ($data['risk_neutral_10y_ema'] ?? $state->riskNeutral10y);
 
         $state->balanceSheetIntensity = (float) ($data['balance_sheet_intensity'] ?? ($data['qe_intensity'] ?? 0.0));
+        $state->balanceSheetHoldTimer = (float) ($data['balance_sheet_hold_timer'] ?? 0.0);
         $state->qeActive = (bool) ($data['qe_active'] ?? ($state->balanceSheetIntensity > 0.0005));
         $state->qeIntensity = (float) ($data['qe_intensity'] ?? max(0.0, $state->balanceSheetIntensity));
         $state->qtActive = (bool) ($data['qt_active'] ?? ($state->balanceSheetIntensity < -0.0005));
@@ -215,6 +227,8 @@ class MacroState
 
         $state->inversionDuration = $data['inversion_duration'] ?? 0.0;
         $state->corporateTaxRate = $data['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE;
+        $state->sovereignDebtToGdp = (float) ($data['sovereign_debt_to_gdp'] ?? MacroEngine::INITIAL_DEBT_TO_GDP);
+        $state->sovereignDebtToGdpEma = (float) ($data['sovereign_debt_to_gdp_ema'] ?? $state->sovereignDebtToGdp);
         $state->eventType = $data['event_type'] ?? null;
         $state->equityRiskPremium = $data['equity_risk_premium'] ?? MacroEngine::BASE_EQUITY_RISK_PREMIUM;
 
@@ -225,9 +239,11 @@ class MacroState
         $state->marketVolatility = $data['market_volatility'] ?? 0.13;
         $state->marketVolatilityEma = $data['market_volatility_ema'] ?? $state->marketVolatility;
         $state->marketZ = $data['market_z'] ?? 0.0;
+        $state->financialConditionsIndex = (float) ($data['financial_conditions_index'] ?? 0.0);
+        $state->financialConditionsIndexEma = (float) ($data['financial_conditions_index_ema'] ?? $state->financialConditionsIndex);
 
-        $state->macroCreditSpread = $data['macro_credit_spread'] ?? 0.015;
-        $state->macroCreditSpreadEma = $data['macro_credit_spread_ema'] ?? $state->macroCreditSpread;
+        $state->macroCreditSpread = (float) ($data['macro_credit_spread'] ?? MacroEngine::BASE_CREDIT_SPREAD);
+        $state->macroCreditSpreadEma = (float) ($data['macro_credit_spread_ema'] ?? $state->macroCreditSpread);
 
         $state->interbankLiquiditySpread = $data['interbank_liquidity_spread'] ?? MacroEngine::INTERBANK_BASELINE_SPREAD;
         $state->interbankLiquiditySpreadEma = $data['interbank_liquidity_spread_ema'] ?? $state->interbankLiquiditySpread;
@@ -250,6 +266,7 @@ class MacroState
             'tips_breakeven' => $this->tipsBreakeven,
             'tips_breakeven_ema' => $this->tipsBreakevenEma,
             'energy_cost_push_lag' => $this->energyCostPushLag,
+            'agri_cost_push_lag' => $this->agriCostPushLag,
             'output_gap' => $this->outputGap,
             'output_gap_ema' => $this->outputGapEma,
             'capitalStockOverhang' => $this->capitalStockOverhang,
@@ -263,6 +280,8 @@ class MacroState
             'labor_tightness_ema' => $this->laborTightnessEma,
             'wage_growth' => $this->wageGrowth,
             'wage_growth_ema' => $this->wageGrowthEma,
+            'nairu' => $this->nairu,
+            'nairu_ema' => $this->nairuEma,
             'natural_rate' => $this->naturalRate,
             'natural_rate_ema' => $this->naturalRateEma,
             'energy_price_index' => $this->energyPriceIndex,
@@ -313,12 +332,15 @@ class MacroState
             'risk_neutral_10y' => $this->riskNeutral10y,
             'risk_neutral_10y_ema' => $this->riskNeutral10yEma,
             'balance_sheet_intensity' => $this->balanceSheetIntensity,
+            'balance_sheet_hold_timer' => $this->balanceSheetHoldTimer,
             'qe_active' => $this->qeActive,
             'qe_intensity' => $this->qeIntensity,
             'qt_active' => $this->qtActive,
             'qt_intensity' => $this->qtIntensity,
             'inversion_duration' => $this->inversionDuration,
             'corporate_tax_rate' => $this->corporateTaxRate,
+            'sovereign_debt_to_gdp' => $this->sovereignDebtToGdp,
+            'sovereign_debt_to_gdp_ema' => $this->sovereignDebtToGdpEma,
             'event_type' => $this->eventType,
             'equity_risk_premium' => $this->equityRiskPremium,
             'potential_gdp_index' => $this->potentialGdpIndex,
@@ -327,6 +349,8 @@ class MacroState
             'market_volatility' => $this->marketVolatility,
             'market_volatility_ema' => $this->marketVolatilityEma,
             'market_z' => $this->marketZ,
+            'financial_conditions_index' => $this->financialConditionsIndex,
+            'financial_conditions_index_ema' => $this->financialConditionsIndexEma,
             'macro_credit_spread' => $this->macroCreditSpread,
             'macro_credit_spread_ema' => $this->macroCreditSpreadEma,
             'interbank_liquidity_spread' => $this->interbankLiquiditySpread,

@@ -26,6 +26,8 @@ class MacroEngine
     public const NATURAL_RATE = self::BASE_NATURAL_RATE;
     /** Sensitivity of natural rate r* to annual secular TFP productivity growth deviations from drift. */
     public const NATURAL_RATE_TFP_SENSITIVITY = 0.50;
+    /** Laubach-Williams sensitivity of natural rate r* to cyclical output gap investment demand. */
+    public const NATURAL_RATE_OUTPUT_GAP_SENSITIVITY = 0.25;
     /** Speed of adjustment (kappa) of natural real rate toward fundamental equilibrium. */
     public const NATURAL_RATE_ADJUSTMENT_SPEED = 1.0;
     /** Structural lower bound floor for natural real rate. */
@@ -58,6 +60,10 @@ class MacroEngine
     public const KALDOR_CAPITAL_DRAG = 0.15;
     /** Elasticity of aggregate demand to household wealth deviations (Modigliani Wealth Effect). */
     public const KALDOR_WEALTH_EFFECT_ELASTICITY = 0.02;
+    /** Bruno-Sachs (1985) supply-side elasticity of output to energy price shock. */
+    public const KALDOR_ENERGY_SUPPLY_DRAG = 0.03;
+    /** Supply-side elasticity of output to excess freight/logistics costs. */
+    public const KALDOR_FREIGHT_SUPPLY_DRAG = 0.01;
     /** The rate at which business investment (output gap) accumulates into the physical capital stock. */
     public const CAPITAL_ACCUMULATION_RATE = 0.30;
     /** The rate at which physical capital depreciates, organically clearing overhangs and creating pent-up demand. */
@@ -88,6 +94,16 @@ class MacroEngine
     public const OKUNS_HIRING_SPEED = 1.5;
     /** Annual adjustment speed of workforce reduction during economic contractions (rapid labor shedding). */
     public const OKUNS_FIRING_SPEED = 3.0;
+    /** Annual OU speed of NAIRU scarring drift toward sustained excess unemployment (Blanchard & Summers 1986). */
+    public const NAIRU_HYSTERESIS_SPEED = 0.10;
+    /** Excess unemployment above NAIRU required before structural scarring activates. */
+    public const NAIRU_HYSTERESIS_THRESHOLD = 0.005;
+    /** Structural floor for NAIRU (frictional minimum). */
+    public const MIN_NAIRU = 0.025;
+    /** Structural ceiling for NAIRU (maximum structural deterioration). */
+    public const MAX_NAIRU = 0.08;
+    /** Downward wage adjustment speed as fraction of upward speed (nominal rigidity, Bewley 1999). */
+    public const WAGE_DOWNWARD_RIGIDITY_FACTOR = 0.30;
 
     // --- Energy Shock Jump-Diffusion (Schwartz 1997 Commodity Dynamics) ---
     /** Baseline index value for energy prices (neutral commodity equilibrium). */
@@ -144,10 +160,14 @@ class MacroEngine
     // --- Taylor Rule & The Evans Rule (Forward Guidance) ---
     /** Weight on inflation deviations from the target in the Taylor Rule. */
     public const TAYLOR_INFLATION_WEIGHT = 0.50;
-    /** Weight on positive output gap during economic expansions. */
-    public const TAYLOR_BOOM_WEIGHT = 0.15;
+    /** Canonical Taylor (1993) weight on the output gap in the Taylor Rule. */
+    public const TAYLOR_OUTPUT_GAP_WEIGHT = 0.50;
     /** Non-linear scaling factor amplifying rate cuts during deep recessions. */
     public const TAYLOR_RECESSION_SCALE = 5.0;
+    /** Bernanke (2015) blend: weight on realized core inflation (EMA) in the Taylor Rule inflation measure. */
+    public const TAYLOR_INFLATION_CORE_WEIGHT = 0.70;
+    /** Bernanke (2015) blend: weight on forward inflation expectations (TIPS breakeven) in the Taylor Rule inflation measure. */
+    public const TAYLOR_INFLATION_ANCHOR_WEIGHT = 0.30;
     /** Evans Rule forward guidance: Unemployment threshold required before lifting off from ZLB. */
     public const EVANS_RULE_UNEMPLOYMENT = 0.050;
     /** Evans Rule forward guidance: Maximum inflation ceiling tolerated while holding rates at ZLB. */
@@ -162,10 +182,10 @@ class MacroEngine
     public const CB_INFLATION_PANIC_SCALE = 50.0;
     /** Recession panic reaction multiplier accelerating emergency cuts during downturns. */
     public const CB_RECESSION_PANIC_SCALE = 150.0;
-    /** Maximum annual rate hike velocity cap during normal economic expansions. */
-    public const CB_MAX_NORMAL_HIKE_VELOCITY = 0.020;
-    /** Maximum annual rate hike velocity cap during emergency runaway inflation spikes. */
-    public const CB_MAX_PANIC_HIKE_VELOCITY = 0.040;
+    /** Maximum annual rate hike velocity cap during normal economic expansions (8 × 25bps meetings). */
+    public const CB_MAX_NORMAL_HIKE_VELOCITY = 0.025;
+    /** Maximum annual rate hike velocity cap during emergency runaway inflation spikes (525bps in 15 months annualized). */
+    public const CB_MAX_PANIC_HIKE_VELOCITY = 0.060;
     /** Maximum annual rate hike velocity cap (Volcker-style panic speed cap). */
     public const CB_MAX_HIKE_PANIC_SPEED = 3.0;
     /** Maximum annual rate cut velocity cap during financial crises. */
@@ -175,15 +195,19 @@ class MacroEngine
     /** Policy rate threshold determining proximity to the Zero Lower Bound. */
     public const ZLB_PROXIMITY_THRESHOLD = 0.015;
 
+    // --- Central Bank Effective Lower Bound ---
+    /** Wu-Xia (2016) Effective Lower Bound on nominal policy rates (ECB deposit facility floor). */
+    public const EFFECTIVE_LOWER_BOUND = -0.005;
+
     // --- Nelson-Siegel-Svensson Term Structure Dynamics (Svensson 1994) ---
     /** Baseline structural term premium for long-term Treasury yields. */
     public const NS_BASE_TERM_PREMIUM = 0.0070;
     /** Flight-to-safety sensitivity: recessions compress term premium via safe-haven demand (Campbell et al. 2017). */
     public const NS_GAP_TERM_PREMIUM_SCALE = 0.05;
     /** Diebold-Li (2006) curvature sensitivity to central bank target-policy rate gap (forward guidance channel). */
-    public const SVENSSON_CURVATURE1_TARGET_SCALE = 1.20;
+    public const SVENSSON_CURVATURE1_TARGET_SCALE = 0.25;
     /** Cyclical curvature sensitivity to output gap (positive gap leads to steeper belly). */
-    public const SVENSSON_CURVATURE1_GAP_SCALE = 0.60;
+    public const SVENSSON_CURVATURE1_GAP_SCALE = 0.15;
     /** Primary Nelson-Siegel decay parameter governing the medium-term hump. */
     public const SVENSSON_LAMBDA_1 = 0.65;
     /** Secondary Svensson decay parameter governing the long-term hump. */
@@ -204,12 +228,16 @@ class MacroEngine
     public const TIPS_TREND_WEIGHT = 0.40;
     /** Weight on forward-looking output gap pressure in TIPS breakeven inflation expectation. */
     public const TIPS_CYCLICAL_WEIGHT = 0.20;
-    /** Inflation risk premium sensitivity scaling with macroeconomic volatility. */
-    public const TIPS_INFLATION_RISK_PREMIUM_SCALE = 0.05;
+    /** Pflueger & Viceira (2011) inflation risk premium sensitivity to excess inflation and supply shocks. */
+    public const TIPS_INFLATION_RISK_PREMIUM_SCALE = 0.25;
 
     // --- Distributed Lag Transmission Constants ---
     /** Characteristic half-life time constant in years for energy cost-push pass-through into core inflation. */
     public const ENERGY_COST_PUSH_LAG_YEARS = 0.50;
+    /** Cost-push transmission coefficient passing agricultural price spikes into headline inflation. */
+    public const AGRI_COST_PUSH_TRANSMISSION = 0.005;
+    /** Characteristic half-life in years for food cost-push pass-through into core inflation. */
+    public const AGRI_COST_PUSH_LAG_YEARS = 0.75;
 
     // --- New Keynesian Phillips Curve Dynamics ---
     /** Adaptive unanchoring weight of inflation expectations to sustained trend deviations. */
@@ -276,6 +304,8 @@ class MacroEngine
     public const QE_SEVERITY_MULTIPLIER = 1.0;
     /** Annual ramp speed of central bank balance sheet expansion and contraction. */
     public const BALANCE_SHEET_RAMP_SPEED = 1.0;
+    /** Minimum reinvestment hold period (years) after QE ends before QT runoff can begin (Bernanke 2020). */
+    public const BALANCE_SHEET_REINVESTMENT_HOLD_YEARS = 2.0;
     /** Backward compatibility alias for QE ramp speed. */
     public const QE_RAMP_SPEED = self::BALANCE_SHEET_RAMP_SPEED;
     /** Positive output gap threshold above which central bank initiates Quantitative Tightening. */
@@ -463,6 +493,28 @@ class MacroEngine
     /** Structural baseline demographic and labor force growth rate. */
     public const STRUCTURAL_LABOR_GROWTH_RATE = 0.005;
 
+    // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
+    /** Initial sovereign debt-to-GDP ratio at simulation start (Maastricht 60% benchmark). */
+    public const INITIAL_DEBT_TO_GDP = 0.60;
+    /** Long-end term premium sensitivity per unit excess debt/GDP above neutral threshold. */
+    public const SOVEREIGN_DEBT_YIELD_SENSITIVITY = 0.01;
+    /** Debt-to-GDP baseline level below which no excess fiscal term premium applies. */
+    public const SOVEREIGN_DEBT_NEUTRAL_THRESHOLD = 0.70;
+
+    // --- Financial Conditions Index (Goldman Sachs / Chicago Fed) ---
+    /** Weight on corporate credit spread deviation in FCI composite. */
+    public const FCI_CREDIT_SPREAD_WEIGHT = 0.30;
+    /** Weight on equity risk premium deviation in FCI composite. */
+    public const FCI_ERP_WEIGHT = 0.25;
+    /** Weight on currency appreciation/depreciation in FCI composite. */
+    public const FCI_EXCHANGE_RATE_WEIGHT = 0.15;
+    /** Weight on yield curve slope inversion in FCI composite. */
+    public const FCI_YIELD_SLOPE_WEIGHT = 0.15;
+    /** Weight on excess market volatility in FCI composite. */
+    public const FCI_VOLATILITY_WEIGHT = 0.15;
+    /** OU smoothing speed of FCI toward fundamental composite value. */
+    public const FCI_MEAN_REVERSION = 2.0;
+
     // --- Continuous EMA Indicator Smoothing Horizons ---
     /** Standard quarterly macro indicator EMA smoothing horizon. */
     public const STANDARD_EMA_HORIZON_YEARS = 0.25;
@@ -578,11 +630,13 @@ class MacroEngine
 
         // 5. Central Bank Monetary Policy & Yield Curve
         $state->targetRate = $this->calculateTargetRate($state, self::TARGET_INFLATION, $state->naturalRate);
-        $state->policyRate = $this->updatePolicyRate($state, $state->targetRate, $dt);
+        $clampedTarget = max(self::EFFECTIVE_LOWER_BOUND, min(0.20, $state->targetRate));
+        $state->policyRate = $this->updatePolicyRate($state, $clampedTarget, $dt);
 
         $yieldData = $this->calculateYieldCurveAndQE($state, self::TARGET_INFLATION, $state->naturalRate, $dt);
 
         $state->balanceSheetIntensity = $yieldData['new_balance_sheet_intensity'];
+        $state->balanceSheetHoldTimer = $yieldData['new_hold_timer'];
         $state->qeIntensity = $yieldData['new_qe_intensity'];
         $state->qeActive = $state->qeIntensity > 0.0005;
         $state->qtIntensity = $yieldData['new_qt_intensity'];
@@ -637,7 +691,9 @@ class MacroEngine
 
         $this->calculatePotentialAndNominalGdp($state, $dt, $tfpTrendGrowthRate);
         $this->calculateDynamicFiscalPolicy($state, $dt);
+        $this->calculateSovereignDebt($state, $dt);
         $this->calculateEquityRiskPremium($state);
+        $this->calculateFinancialConditionsIndex($state, $dt);
         $this->calculateConsumerSentiment($state, $dt);
 
         $payload = $state->toArray();
@@ -798,5 +854,15 @@ class MacroEngine
     private function calculateResidentialPropertyIndex(MacroState $state, float $dt): void
     {
         $this->getAssetSubsystem()->calculateResidentialPropertyIndex($state, $dt);
+    }
+
+    private function calculateSovereignDebt(MacroState $state, float $dt): void
+    {
+        $this->getCreditFiscalSubsystem()->calculateSovereignDebt($state, $dt);
+    }
+
+    private function calculateFinancialConditionsIndex(MacroState $state, float $dt): void
+    {
+        $this->getAssetSubsystem()->calculateFinancialConditionsIndex($state, $dt);
     }
 }

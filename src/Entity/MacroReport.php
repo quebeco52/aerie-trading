@@ -34,6 +34,9 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $policyRateEma = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $targetRate = null;
+
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $yield10y = null;
 
@@ -210,6 +213,27 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $balanceSheetIntensity = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $nairu = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $nairuEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $sovereignDebtToGdp = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $sovereignDebtToGdpEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $financialConditionsIndex = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $financialConditionsIndexEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $agriCostPushLag = null;
+
     // --- Standard Getters & Setters ---
 
     public function getId(): ?int { return $this->id; }
@@ -234,6 +258,9 @@ class MacroReport
 
     public function getPolicyRateEma(): ?string { return $this->policyRateEma; }
     public function setPolicyRateEma(string $policyRateEma): self { $this->policyRateEma = $policyRateEma; return $this; }
+
+    public function getTargetRate(): ?string { return $this->targetRate; }
+    public function setTargetRate(?string $targetRate): self { $this->targetRate = $targetRate; return $this; }
 
     public function getYield10y(): ?string { return $this->yield10y; }
     public function setYield10y(string $yield10y): self { $this->yield10y = $yield10y; return $this; }
@@ -410,4 +437,25 @@ class MacroReport
 
     public function getBalanceSheetIntensity(): ?string { return $this->balanceSheetIntensity; }
     public function setBalanceSheetIntensity(?string $balanceSheetIntensity): self { $this->balanceSheetIntensity = $balanceSheetIntensity; return $this; }
+
+    public function getNairu(): ?string { return $this->nairu; }
+    public function setNairu(?string $nairu): self { $this->nairu = $nairu; return $this; }
+
+    public function getNairuEma(): ?string { return $this->nairuEma; }
+    public function setNairuEma(?string $nairuEma): self { $this->nairuEma = $nairuEma; return $this; }
+
+    public function getSovereignDebtToGdp(): ?string { return $this->sovereignDebtToGdp; }
+    public function setSovereignDebtToGdp(?string $sovereignDebtToGdp): self { $this->sovereignDebtToGdp = $sovereignDebtToGdp; return $this; }
+
+    public function getSovereignDebtToGdpEma(): ?string { return $this->sovereignDebtToGdpEma; }
+    public function setSovereignDebtToGdpEma(?string $sovereignDebtToGdpEma): self { $this->sovereignDebtToGdpEma = $sovereignDebtToGdpEma; return $this; }
+
+    public function getFinancialConditionsIndex(): ?string { return $this->financialConditionsIndex; }
+    public function setFinancialConditionsIndex(?string $financialConditionsIndex): self { $this->financialConditionsIndex = $financialConditionsIndex; return $this; }
+
+    public function getFinancialConditionsIndexEma(): ?string { return $this->financialConditionsIndexEma; }
+    public function setFinancialConditionsIndexEma(?string $financialConditionsIndexEma): self { $this->financialConditionsIndexEma = $financialConditionsIndexEma; return $this; }
+
+    public function getAgriCostPushLag(): ?string { return $this->agriCostPushLag; }
+    public function setAgriCostPushLag(?string $agriCostPushLag): self { $this->agriCostPushLag = $agriCostPushLag; return $this; }
 }

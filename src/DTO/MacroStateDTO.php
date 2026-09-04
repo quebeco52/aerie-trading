@@ -27,12 +27,15 @@ readonly class MacroStateDTO
         public float $laborTightnessEma = 1.125,
         public float $wageGrowth = 0.035,
         public float $wageGrowthEma = 0.035,
+        public float $nairu = MacroEngine::NATURAL_UNEMPLOYMENT,
+        public float $nairuEma = MacroEngine::NATURAL_UNEMPLOYMENT,
         public float $naturalRate = MacroEngine::BASE_NATURAL_RATE,
         public float $naturalRateEma = MacroEngine::BASE_NATURAL_RATE,
         public float $energyPriceIndex = 100.0,
         public float $energyPriceIndexEma = 100.0,
         public float $energyPriceShock = 0.0,
         public float $energyCostPushLag = 0.0,
+        public float $agriCostPushLag = 0.0,
         public float $consumerSentimentIndex = 100.0,
         public float $consumerSentimentIndexEma = 100.0,
         public float $exchangeRateIndex = 100.0,
@@ -79,6 +82,8 @@ readonly class MacroStateDTO
         public float $marketVolatilityEma = 0.15,
         public float $marketZ = 0.0,
         public float $corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE,
+        public float $sovereignDebtToGdp = MacroEngine::INITIAL_DEBT_TO_GDP,
+        public float $sovereignDebtToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP,
         public float $equityRiskPremium = MacroEngine::BASE_EQUITY_RISK_PREMIUM,
         public float $macroCreditSpread = 0.02,
         public float $macroCreditSpreadEma = 0.02,
@@ -86,11 +91,14 @@ readonly class MacroStateDTO
         public float $interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD,
         public float $totalFactorProductivityIndex = MacroEngine::TFP_BASELINE,
         public float $totalFactorProductivityIndexEma = MacroEngine::TFP_BASELINE,
+        public float $financialConditionsIndex = 0.0,
+        public float $financialConditionsIndexEma = 0.0,
         public bool $qeActive = false,
         public float $qeIntensity = 0.0,
         public bool $qtActive = false,
         public float $qtIntensity = 0.0,
         public float $balanceSheetIntensity = 0.0,
+        public float $balanceSheetHoldTimer = 0.0,
         public float $inversionDuration = 0.0,
         public float $nsLevel = 0.0,
         public float $nsSlope = 0.0,
@@ -126,6 +134,8 @@ readonly class MacroStateDTO
         $laborTightnessEma = (float) ($data['labor_tightness_ema'] ?? $laborTightness);
         $wageGrowth = (float) ($data['wage_growth'] ?? 0.035);
         $wageGrowthEma = (float) ($data['wage_growth_ema'] ?? $wageGrowth);
+        $nairu = (float) ($data['nairu'] ?? MacroEngine::NATURAL_UNEMPLOYMENT);
+        $nairuEma = (float) ($data['nairu_ema'] ?? $nairu);
 
         $naturalRate = (float) ($data['natural_rate'] ?? MacroEngine::BASE_NATURAL_RATE);
         $naturalRateEma = (float) ($data['natural_rate_ema'] ?? $naturalRate);
@@ -134,6 +144,7 @@ readonly class MacroStateDTO
         $energyPriceIndexEma = (float) ($data['energy_price_index_ema'] ?? $energyPriceIndex);
         $energyPriceShock = (float) ($data['energy_price_shock'] ?? 0.0);
         $energyCostPushLag = (float) ($data['energy_cost_push_lag'] ?? 0.0);
+        $agriCostPushLag = (float) ($data['agri_cost_push_lag'] ?? 0.0);
         $consumerSentimentIndex = (float) ($data['consumer_sentiment_index'] ?? 100.0);
         $consumerSentimentIndexEma = (float) ($data['consumer_sentiment_index_ema'] ?? $consumerSentimentIndex);
 
@@ -182,6 +193,8 @@ readonly class MacroStateDTO
         $marketZ = (float) ($data['market_z'] ?? 0.0);
 
         $corporateTaxRate = (float) ($data['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE);
+        $sovereignDebtToGdp = (float) ($data['sovereign_debt_to_gdp'] ?? MacroEngine::INITIAL_DEBT_TO_GDP);
+        $sovereignDebtToGdpEma = (float) ($data['sovereign_debt_to_gdp_ema'] ?? $sovereignDebtToGdp);
         $equityRiskPremium = (float) ($data['equity_risk_premium'] ?? MacroEngine::BASE_EQUITY_RISK_PREMIUM);
         $macroCreditSpread = (float) ($data['macro_credit_spread'] ?? 0.02);
         $macroCreditSpreadEma = (float) ($data['macro_credit_spread_ema'] ?? $macroCreditSpread);
@@ -189,8 +202,11 @@ readonly class MacroStateDTO
         $interbankLiquiditySpreadEma = (float) ($data['interbank_liquidity_spread_ema'] ?? $interbankLiquiditySpread);
         $totalFactorProductivityIndex = (float) ($data['total_factor_productivity_index'] ?? MacroEngine::TFP_BASELINE);
         $totalFactorProductivityIndexEma = (float) ($data['total_factor_productivity_index_ema'] ?? $totalFactorProductivityIndex);
+        $financialConditionsIndex = (float) ($data['financial_conditions_index'] ?? 0.0);
+        $financialConditionsIndexEma = (float) ($data['financial_conditions_index_ema'] ?? $financialConditionsIndex);
 
         $balanceSheetIntensity = (float) ($data['balance_sheet_intensity'] ?? ($data['qe_intensity'] ?? 0.0));
+        $balanceSheetHoldTimer = (float) ($data['balance_sheet_hold_timer'] ?? 0.0);
         $qeActive = (bool) ($data['qe_active'] ?? ($balanceSheetIntensity > 0.0005));
         $qeIntensity = (float) ($data['qe_intensity'] ?? max(0.0, $balanceSheetIntensity));
         $qtActive = (bool) ($data['qt_active'] ?? ($balanceSheetIntensity < -0.0005));
@@ -222,12 +238,15 @@ readonly class MacroStateDTO
             laborTightnessEma: $laborTightnessEma,
             wageGrowth: $wageGrowth,
             wageGrowthEma: $wageGrowthEma,
+            nairu: $nairu,
+            nairuEma: $nairuEma,
             naturalRate: $naturalRate,
             naturalRateEma: $naturalRateEma,
             energyPriceIndex: $energyPriceIndex,
             energyPriceIndexEma: $energyPriceIndexEma,
             energyPriceShock: $energyPriceShock,
             energyCostPushLag: $energyCostPushLag,
+            agriCostPushLag: $agriCostPushLag,
             consumerSentimentIndex: $consumerSentimentIndex,
             consumerSentimentIndexEma: $consumerSentimentIndexEma,
             exchangeRateIndex: $exchangeRateIndex,
@@ -274,6 +293,8 @@ readonly class MacroStateDTO
             marketVolatilityEma: $marketVolatilityEma,
             marketZ: $marketZ,
             corporateTaxRate: $corporateTaxRate,
+            sovereignDebtToGdp: $sovereignDebtToGdp,
+            sovereignDebtToGdpEma: $sovereignDebtToGdpEma,
             equityRiskPremium: $equityRiskPremium,
             macroCreditSpread: $macroCreditSpread,
             macroCreditSpreadEma: $macroCreditSpreadEma,
@@ -281,11 +302,14 @@ readonly class MacroStateDTO
             interbankLiquiditySpreadEma: $interbankLiquiditySpreadEma,
             totalFactorProductivityIndex: $totalFactorProductivityIndex,
             totalFactorProductivityIndexEma: $totalFactorProductivityIndexEma,
+            financialConditionsIndex: $financialConditionsIndex,
+            financialConditionsIndexEma: $financialConditionsIndexEma,
             qeActive: $qeActive,
             qeIntensity: $qeIntensity,
             qtActive: $qtActive,
             qtIntensity: $qtIntensity,
             balanceSheetIntensity: $balanceSheetIntensity,
+            balanceSheetHoldTimer: $balanceSheetHoldTimer,
             inversionDuration: $inversionDuration,
             nsLevel: $nsLevel,
             nsSlope: $nsSlope,
@@ -318,12 +342,15 @@ readonly class MacroStateDTO
             laborTightnessEma: $state->laborTightnessEma,
             wageGrowth: $state->wageGrowth,
             wageGrowthEma: $state->wageGrowthEma,
+            nairu: $state->nairu,
+            nairuEma: $state->nairuEma,
             naturalRate: $state->naturalRate,
             naturalRateEma: $state->naturalRateEma,
             energyPriceIndex: $state->energyPriceIndex,
             energyPriceIndexEma: $state->energyPriceIndexEma,
             energyPriceShock: $state->energyPriceShock,
             energyCostPushLag: $state->energyCostPushLag,
+            agriCostPushLag: $state->agriCostPushLag,
             consumerSentimentIndex: $state->consumerSentimentIndex,
             consumerSentimentIndexEma: $state->consumerSentimentIndexEma,
             exchangeRateIndex: $state->exchangeRateIndex,
@@ -370,6 +397,8 @@ readonly class MacroStateDTO
             marketVolatilityEma: $state->marketVolatilityEma,
             marketZ: $state->marketZ,
             corporateTaxRate: $state->corporateTaxRate,
+            sovereignDebtToGdp: $state->sovereignDebtToGdp,
+            sovereignDebtToGdpEma: $state->sovereignDebtToGdpEma,
             equityRiskPremium: $state->equityRiskPremium,
             macroCreditSpread: $state->macroCreditSpread,
             macroCreditSpreadEma: $state->macroCreditSpreadEma,
@@ -377,11 +406,14 @@ readonly class MacroStateDTO
             interbankLiquiditySpreadEma: $state->interbankLiquiditySpreadEma,
             totalFactorProductivityIndex: $state->totalFactorProductivityIndex,
             totalFactorProductivityIndexEma: $state->totalFactorProductivityIndexEma,
+            financialConditionsIndex: $state->financialConditionsIndex,
+            financialConditionsIndexEma: $state->financialConditionsIndexEma,
             qeActive: $state->qeActive,
             qeIntensity: $state->qeIntensity,
             qtActive: $state->qtActive,
             qtIntensity: $state->qtIntensity,
             balanceSheetIntensity: $state->balanceSheetIntensity,
+            balanceSheetHoldTimer: $state->balanceSheetHoldTimer,
             inversionDuration: $state->inversionDuration,
             nsLevel: $state->nsLevel,
             nsSlope: $state->nsSlope,
@@ -414,12 +446,15 @@ readonly class MacroStateDTO
             'labor_tightness_ema' => $this->laborTightnessEma,
             'wage_growth' => $this->wageGrowth,
             'wage_growth_ema' => $this->wageGrowthEma,
+            'nairu' => $this->nairu,
+            'nairu_ema' => $this->nairuEma,
             'natural_rate' => $this->naturalRate,
             'natural_rate_ema' => $this->naturalRateEma,
             'energy_price_index' => $this->energyPriceIndex,
             'energy_price_index_ema' => $this->energyPriceIndexEma,
             'energy_price_shock' => $this->energyPriceShock,
             'energy_cost_push_lag' => $this->energyCostPushLag,
+            'agri_cost_push_lag' => $this->agriCostPushLag,
             'consumer_sentiment_index' => $this->consumerSentimentIndex,
             'consumer_sentiment_index_ema' => $this->consumerSentimentIndexEma,
             'exchange_rate_index' => $this->exchangeRateIndex,
@@ -436,7 +471,6 @@ readonly class MacroStateDTO
             'residential_property_index_ema' => $this->residentialPropertyIndexEma,
             'retail_default_rate' => $this->retailDefaultRate,
             'retail_default_rate_ema' => $this->retailDefaultRateEma,
-            'agriculturalCommodityIndex' => $this->agriculturalCommodityIndex,
             'agricultural_commodity_index' => $this->agriculturalCommodityIndex,
             'agricultural_commodity_index_ema' => $this->agriculturalCommodityIndexEma,
             'agri_chi' => $this->agriChi,
@@ -467,6 +501,8 @@ readonly class MacroStateDTO
             'market_volatility_ema' => $this->marketVolatilityEma,
             'market_z' => $this->marketZ,
             'corporate_tax_rate' => $this->corporateTaxRate,
+            'sovereign_debt_to_gdp' => $this->sovereignDebtToGdp,
+            'sovereign_debt_to_gdp_ema' => $this->sovereignDebtToGdpEma,
             'equity_risk_premium' => $this->equityRiskPremium,
             'macro_credit_spread' => $this->macroCreditSpread,
             'macro_credit_spread_ema' => $this->macroCreditSpreadEma,
@@ -474,7 +510,10 @@ readonly class MacroStateDTO
             'interbank_liquidity_spread_ema' => $this->interbankLiquiditySpreadEma,
             'total_factor_productivity_index' => $this->totalFactorProductivityIndex,
             'total_factor_productivity_index_ema' => $this->totalFactorProductivityIndexEma,
+            'financial_conditions_index' => $this->financialConditionsIndex,
+            'financial_conditions_index_ema' => $this->financialConditionsIndexEma,
             'balance_sheet_intensity' => $this->balanceSheetIntensity,
+            'balance_sheet_hold_timer' => $this->balanceSheetHoldTimer,
             'qe_active' => $this->qeActive,
             'qe_intensity' => $this->qeIntensity,
             'qt_active' => $this->qtActive,

@@ -593,7 +593,7 @@
 									</div>
 									<div>
 										<h4 class="text-sm font-bold text-on-surface">Inflation & Economic Output Gap</h4>
-										<p class="text-[11px] text-on-surface-variant">Consumer price inflation (EMA) vs economic capacity output gap</p>
+										<p class="text-[11px] text-on-surface-variant">Consumer price inflation (EMA) & 10Y TIPS breakeven vs capacity output gap</p>
 									</div>
 								</div>
 								<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Prices</span>
@@ -669,7 +669,7 @@
 									</div>
 									<div>
 										<h4 class="text-sm font-bold text-on-surface">Labor Market & Wage Dynamics</h4>
-										<p class="text-[11px] text-on-surface-variant">Unemployment rate vs job vacancies and annual wage growth</p>
+										<p class="text-[11px] text-on-surface-variant">Unemployment rate vs structural NAIRU, job vacancies and annual wage growth</p>
 									</div>
 								</div>
 								<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Labor</span>
@@ -782,11 +782,11 @@
 										<span class="material-symbols-outlined text-lg leading-none">account_balance_wallet</span>
 									</div>
 									<div>
-										<h4 class="text-sm font-bold text-on-surface">Government Fiscal & Infrastructure Stimulus</h4>
-										<p class="text-[11px] text-on-surface-variant">Public sector expenditure and infrastructure investment index</p>
+										<h4 class="text-sm font-bold text-on-surface">Fiscal Policy & Sovereign Debt Dynamics</h4>
+										<p class="text-[11px] text-on-surface-variant">Public expenditure index vs cumulative sovereign debt-to-GDP accumulation</p>
 									</div>
 								</div>
-								<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Fiscal Policy</span>
+								<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Fiscal & Debt</span>
 							</div>
 							<div class="h-80 md:h-85 w-full relative">
 								<canvas id="macroGovtSpendingChart"></canvas>
@@ -847,6 +847,44 @@
 							</div>
 							<div class="h-80 md:h-85 w-full relative">
 								<canvas id="macroBalanceSheetChart"></canvas>
+							</div>
+						</div>
+
+						{# Chart 15: Financial Conditions Index (FCI) #}
+						<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between">
+							<div class="flex items-center justify-between mb-4">
+								<div class="flex items-center gap-2.5">
+									<div class="p-2 rounded-xl bg-rose-500/10 text-rose-400">
+										<span class="material-symbols-outlined text-lg leading-none">tune</span>
+									</div>
+									<div>
+										<h4 class="text-sm font-bold text-on-surface">Financial Conditions Index (FCI)</h4>
+										<p class="text-[11px] text-on-surface-variant">Composite index: credit spreads, equity risk premium, dollar, yield slope & volatility</p>
+									</div>
+								</div>
+								<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Conditions</span>
+							</div>
+							<div class="h-80 md:h-85 w-full relative">
+								<canvas id="macroFciChart"></canvas>
+							</div>
+						</div>
+
+						{# Chart 16: Supply-Side Cost Pressures & Food CPI #}
+						<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between">
+							<div class="flex items-center justify-between mb-4">
+								<div class="flex items-center gap-2.5">
+									<div class="p-2 rounded-xl bg-lime-500/10 text-lime-400">
+										<span class="material-symbols-outlined text-lg leading-none">agriculture</span>
+									</div>
+									<div>
+										<h4 class="text-sm font-bold text-on-surface">Supply-Side Cost Pressures & Food CPI</h4>
+										<p class="text-[11px] text-on-surface-variant">Agricultural food CPI pass-through lag vs energy & freight logistics supply drags</p>
+									</div>
+								</div>
+								<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Supply Shocks</span>
+							</div>
+							<div class="h-80 md:h-85 w-full relative">
+								<canvas id="macroCostPushChart"></canvas>
 							</div>
 						</div>
 					</div>

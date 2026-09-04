@@ -32,11 +32,21 @@ class CreditFiscalSubsystemTest extends TestCase
 
     public function testGovernmentSpendingExpandsCountercyclically(): void
     {
+        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathMock->method('calculateSchwartz1Factor')->willReturnCallback(function ($currentPrice, $kappa, $theta, $sigma, $dt, $dW) {
+            $drift = $kappa * ($theta - $currentPrice) * $dt;
+            return $currentPrice + $drift;
+        });
+        $mathMock->method('calculateJumpDiffusion')->willReturn(['jumped' => false, 'multiplier' => 1.0]);
+
+        $subsystem = new CreditFiscalSubsystem($mathMock);
+
         $state = new MacroState();
         $state->outputGapEma = -0.04;
         $state->governmentSpendingIndex = 100.0;
 
-        $this->subsystem->calculateGovernmentSpending($state, 0.25);
+        $subsystem->calculateGovernmentSpending($state, 0.25);
         $this->assertGreaterThan(100.0, $state->governmentSpendingIndex);
     }
 

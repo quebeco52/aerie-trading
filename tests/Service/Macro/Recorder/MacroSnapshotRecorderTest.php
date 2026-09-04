@@ -22,10 +22,14 @@ class MacroSnapshotRecorderTest extends TestCase
                 $this->stringContains('INSERT INTO macro_report'),
                 $this->callback(function (array $params) use ($dto) {
                     // Check that key fields are mapped into parameters
-                    return count($params) === 62
+                    return count($params) === 73
                         && $params[1] === $dto->inflation
                         && $params[3] === $dto->outputGap
-                        && $params[5] === $dto->policyRate;
+                        && $params[5] === $dto->policyRate
+                        && $params[7] === $dto->targetRate
+                        && $params[66] === $dto->nairu
+                        && $params[68] === $dto->sovereignDebtToGdp
+                        && $params[70] === $dto->financialConditionsIndex;
                 })
             );
 

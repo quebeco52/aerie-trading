@@ -27,11 +27,11 @@ class AssetMarketSubsystem
      */
     public function calculateCommercialPropertyIndex(MacroState $state, float $dt): void
     {
-        $excessUnemployment = $state->unemploymentRateEma - MacroEngine::NATURAL_UNEMPLOYMENT;
+        $excessUnemployment = $state->unemploymentRateEma - $state->nairu;
         $occupancyFactor = 1.0 - ($excessUnemployment * MacroEngine::CRE_OCCUPANCY_UNEMPLOYMENT_SENSITIVITY);
         $occupancyFactor = max(0.30, min(1.80, $occupancyFactor));
 
-        $capRate = max(MacroEngine::CRE_MIN_CAP_RATE, $state->yield10y + $state->macroCreditSpread + MacroEngine::CRE_CAP_RATE_RISK_PREMIUM);
+        $capRate = max(MacroEngine::CRE_MIN_CAP_RATE, $state->yield10yEma + $state->macroCreditSpreadEma + MacroEngine::CRE_CAP_RATE_RISK_PREMIUM);
         $fundamentalValue = MacroEngine::CRE_BASELINE * $occupancyFactor * (MacroEngine::CRE_NEUTRAL_CAP_RATE / $capRate);
 
         $dW = $this->mathUtility->generateStandardNormal();
@@ -61,7 +61,7 @@ class AssetMarketSubsystem
         $mortgageRate = $state->yield30yEma + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD;
         $userCost = max(0.015, $mortgageRate + MacroEngine::RESIDENTIAL_DEPRECIATION_TAX_RATE - $state->inflationEma);
 
-        $excessUnemployment = $state->unemploymentRateEma - MacroEngine::NATURAL_UNEMPLOYMENT;
+        $excessUnemployment = $state->unemploymentRateEma - $state->nairu;
         $laborFactor = 1.0 - ($excessUnemployment * MacroEngine::RESIDENTIAL_UNEMPLOYMENT_SENSITIVITY);
         $incomeFactor = 1.0 + ($state->outputGapEma * MacroEngine::RESIDENTIAL_INCOME_ELASTICITY);
         $demandMultiplier = max(MacroEngine::RESIDENTIAL_MIN_LABOR_FACTOR, min(MacroEngine::RESIDENTIAL_MAX_LABOR_FACTOR, $laborFactor * $incomeFactor));
@@ -182,7 +182,7 @@ class AssetMarketSubsystem
     public function calculateConsumerSentiment(MacroState $state, float $dt): void
     {
         $excessInflation = max(0.0, $state->inflation - MacroEngine::TARGET_INFLATION);
-        $excessUnemployment = max(0.0, $state->unemploymentRate - MacroEngine::NATURAL_UNEMPLOYMENT);
+        $excessUnemployment = max(0.0, $state->unemploymentRate - $state->nairu);
         $miseryPenalty = ($excessInflation + $excessUnemployment) * MacroEngine::SENTIMENT_MISERY_MULTIPLIER;
 
         $inflationMomentum = max(0.0, $state->inflation - $state->inflationEma);
@@ -211,5 +211,33 @@ class AssetMarketSubsystem
 
         $newSentiment = $currentSentiment + $drift + $diffusion;
         $state->consumerSentimentIndex = max(40.0, min(120.0, $newSentiment));
+    }
+
+    /**
+     * Financial Conditions Index (FCI) Composite Model (Goldman Sachs / Chicago Fed).
+     *
+     * Constructs a normalized macroeconomic financial conditions index tracking wholesale credit spreads,
+     * equity risk premium, real exchange rate deviations, term structure slope, and equity market volatility:
+     *   FCI > 0 indicates restrictive financial conditions; FCI < 0 indicates accommodative conditions.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateFinancialConditionsIndex(MacroState $state, float $dt): void
+    {
+        $creditZ = ($state->macroCreditSpreadEma - MacroEngine::BASE_CREDIT_SPREAD) / MacroEngine::BASE_CREDIT_SPREAD;
+        $erpZ = ($state->equityRiskPremium - MacroEngine::BASE_EQUITY_RISK_PREMIUM) / MacroEngine::BASE_EQUITY_RISK_PREMIUM;
+        $fxZ = ($state->exchangeRateIndexEma - MacroEngine::EXCHANGE_RATE_BASELINE) / (MacroEngine::EXCHANGE_RATE_BASELINE * 0.10);
+        $slopeZ = -$state->nsSlopeEma / 0.02;
+        $volZ = ($state->marketVolatilityEma - MacroEngine::MACRO_VOL_BASE_ANCHOR) / MacroEngine::MACRO_VOL_BASE_ANCHOR;
+
+        $fundamentalFci = (MacroEngine::FCI_CREDIT_SPREAD_WEIGHT * $creditZ)
+            + (MacroEngine::FCI_ERP_WEIGHT * $erpZ)
+            + (MacroEngine::FCI_EXCHANGE_RATE_WEIGHT * $fxZ)
+            + (MacroEngine::FCI_YIELD_SLOPE_WEIGHT * $slopeZ)
+            + (MacroEngine::FCI_VOLATILITY_WEIGHT * $volZ);
+
+        $state->financialConditionsIndex += MacroEngine::FCI_MEAN_REVERSION
+            * ($fundamentalFci - $state->financialConditionsIndex) * $dt;
     }
 }

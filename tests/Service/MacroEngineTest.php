@@ -826,10 +826,10 @@ class MacroEngineTest extends TestCase
         // 1. Arrange: Create MathUtility with mocked 0.0 standard normal to eliminate noise
         $mathUtility = $this->createMock(MathUtility::class);
         $mathUtility->method('generateStandardNormal')->willReturn(0.0);
-        
+
         $logger = $this->createMock(\Psr\Log\LoggerInterface::class);
         $redis = $this->createMock(\Redis::class);
-        
+
         $macroEngine = new MacroEngine($mathUtility, $logger, $redis);
 
         // Create a perfectly neutral baseline state
@@ -839,13 +839,13 @@ class MacroEngineTest extends TestCase
         $stateNeutral->policyRate = 0.035; // Natural rate (1.5%) + Target Inflation (2%)
         $stateNeutral->corporateTaxRate = 0.21;
         $stateNeutral->capitalStockOverhang = 0.0;
-        
+
         // Neutral Housing Market
-        $stateNeutral->residentialPropertyIndexEma = 100.0; 
+        $stateNeutral->residentialPropertyIndexEma = 100.0;
 
         // Create an identical state, but with a collapsed housing market (20% crash)
         $stateCrash = clone $stateNeutral;
-        $stateCrash->residentialPropertyIndexEma = 80.0; 
+        $stateCrash->residentialPropertyIndexEma = 80.0;
 
         // Create an identical state, but with a booming housing market (20% surge)
         $stateBoom = clone $stateNeutral;
@@ -853,7 +853,7 @@ class MacroEngineTest extends TestCase
 
         // 2. Act: Calculate Output Gap manually using Reflection (or simply call public update Macro if testing full cycle)
         $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateOutputGap');
-        
+
         // Assume 5Y Yield is neutral (naturalRate + targetInflation + NS_BASE_TERM_PREMIUM * durationScale)
         $neutral5yDurationScale = (1.0 - exp(-5.0 / 10.0)) / (1.0 - exp(-1.0));
         $neutral5yYield = MacroEngine::NATURAL_RATE + MacroEngine::TARGET_INFLATION + (MacroEngine::NS_BASE_TERM_PREMIUM * $neutral5yDurationScale);
@@ -1610,5 +1610,291 @@ class MacroEngineTest extends TestCase
             sprintf('2s10s yield curve spread must bull-steepen significantly during monetary easing (got %0.2f bps).', $spreadEasing * 10000)
         );
     }
-}
 
+    public function testBggFinancialAcceleratorAmplifiesCreditCrunch(): void
+    {
+        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateOutputGap');
+        $dt = 0.25;
+        $stressMultiplier = 1.0;
+        $naturalRate = MacroEngine::BASE_NATURAL_RATE;
+        $yield5y = 0.04;
+
+        // Baseline state: credit spreads at equilibrium (200 bps credit, 10 bps interbank)
+        $stateBaseline = new \App\Service\Macro\MacroState();
+        $stateBaseline->outputGap = 0.0;
+        $stateBaseline->macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD;
+        $stateBaseline->interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD;
+
+        // Crisis state: credit spreads blown out (600 bps credit, 150 bps interbank)
+        $stateCrisis = clone $stateBaseline;
+        $stateCrisis->macroCreditSpreadEma = 0.06;
+        $stateCrisis->interbankLiquiditySpreadEma = 0.015;
+
+        $gapBaseline = $reflectionMethod->invoke($this->engine, $stateBaseline, $yield5y, $naturalRate, $dt, $stressMultiplier);
+        $gapCrisis   = $reflectionMethod->invoke($this->engine, $stateCrisis, $yield5y, $naturalRate, $dt, $stressMultiplier);
+
+        $this->assertLessThan(
+            $gapBaseline,
+            $gapCrisis,
+            'BGG financial accelerator: blown-out credit & interbank spreads must contract output gap more than baseline.'
+        );
+    }
+
+    public function testStagflationFromEnergyShock(): void
+    {
+        $reflectionOutputGap = new \ReflectionMethod(MacroEngine::class, 'calculateOutputGap');
+        $reflectionInflation = new \ReflectionMethod(MacroEngine::class, 'calculateInflation');
+        $dt = 0.25;
+        $stressMultiplier = 1.0;
+        $yield5y = 0.04;
+
+        $stateNormal = new \App\Service\Macro\MacroState();
+        $stateNormal->energyPriceShock = 0.0;
+
+        $stateShock = clone $stateNormal;
+        $stateShock->energyPriceShock = 100.0; // 100% price surge
+
+        $gapNormal = $reflectionOutputGap->invoke($this->engine, $stateNormal, $yield5y, MacroEngine::BASE_NATURAL_RATE, $dt, $stressMultiplier);
+        $gapShock  = $reflectionOutputGap->invoke($this->engine, $stateShock, $yield5y, MacroEngine::BASE_NATURAL_RATE, $dt, $stressMultiplier);
+
+        $this->assertLessThan($gapNormal, $gapShock, 'Supply-side stagflation: energy price spike must drag down output gap.');
+
+        $infNormal = $reflectionInflation->invoke($this->engine, $stateNormal, MacroEngine::TARGET_INFLATION, $stressMultiplier, $dt);
+        $infShock  = $reflectionInflation->invoke($this->engine, $stateShock, MacroEngine::TARGET_INFLATION, $stressMultiplier, $dt);
+
+        $this->assertGreaterThan($infNormal, $infShock, 'Cost-push channel: energy price spike must raise headline inflation.');
+    }
+
+    public function testFoodCpiChannelFromAgriculturalSpike(): void
+    {
+        $reflectionInflation = new \ReflectionMethod(MacroEngine::class, 'calculateInflation');
+        $dt = 0.25;
+        $stressMultiplier = 1.0;
+
+        $stateNormal = new \App\Service\Macro\MacroState();
+        $stateNormal->agriculturalCommodityIndex = 100.0;
+
+        $stateSpike = clone $stateNormal;
+        $stateSpike->agriculturalCommodityIndex = 200.0; // 100% agri commodity surge
+
+        $infNormal = $reflectionInflation->invoke($this->engine, $stateNormal, MacroEngine::TARGET_INFLATION, $stressMultiplier, $dt);
+        $infSpike  = $reflectionInflation->invoke($this->engine, $stateSpike, MacroEngine::TARGET_INFLATION, $stressMultiplier, $dt);
+
+        $this->assertGreaterThan($infNormal, $infSpike, 'Food CPI channel: agricultural commodity spike must increase headline inflation.');
+        $this->assertGreaterThan(0.0, $stateSpike->agriCostPushLag, 'Distributed lag accumulator for food CPI must be positive.');
+    }
+
+    public function testNairuHysteresisScarsAfterDeepRecession(): void
+    {
+        $laborSubsystem = new \App\Service\Macro\Subsystem\LaborMarketSubsystem();
+
+        $state = new \App\Service\Macro\MacroState();
+        $state->nairu = 0.04;
+        $state->unemploymentRate = 0.08;
+        $state->unemploymentRateEma = 0.08; // Sustained deep labor market slack
+
+        $laborSubsystem->calculateUnemployment($state, 1.0); // 1 year of deep recession
+
+        $this->assertGreaterThan(
+            0.04,
+            $state->nairu,
+            'Sustained high unemployment must cause structural scarring, drifting NAIRU upward.'
+        );
+    }
+
+    public function testNairuRecoveryDuringTightLaborMarket(): void
+    {
+        $laborSubsystem = new \App\Service\Macro\Subsystem\LaborMarketSubsystem();
+
+        $state = new \App\Service\Macro\MacroState();
+        $state->nairu = 0.06; // Scarred from prior downturn
+        $state->unemploymentRate = 0.03;
+        $state->unemploymentRateEma = 0.03; // Booming tight labor market
+
+        $laborSubsystem->calculateUnemployment($state, 1.0); // 1 year of tight labor market
+
+        $this->assertLessThan(
+            0.06,
+            $state->nairu,
+            'Prolonged expansion with unemployment below NAIRU must heal structural scarring, drifting NAIRU downward.'
+        );
+    }
+
+    public function testDownwardWageRigidity(): void
+    {
+        $laborSubsystem = new \App\Service\Macro\Subsystem\LaborMarketSubsystem();
+        $dt = 0.25;
+        $tfpGrowth = MacroEngine::TFP_DRIFT;
+
+        // Baseline: wageGrowth at equilibrium (3.5%)
+        $stateUp = new \App\Service\Macro\MacroState();
+        $stateUp->unemploymentRate = 0.025; // Tight -> high vacancies -> high tightness -> wage growth wants to rise
+        $stateUp->wageGrowth = 0.035;
+
+        $laborSubsystem->calculateLaborMarketAndWages($stateUp, $tfpGrowth, $dt);
+        $upwardDelta = $stateUp->wageGrowth - 0.035;
+
+        $stateDown = new \App\Service\Macro\MacroState();
+        $stateDown->unemploymentRate = 0.08; // Slack -> low vacancies -> low tightness -> wage growth wants to fall
+        $stateDown->wageGrowth = 0.035;
+
+        $laborSubsystem->calculateLaborMarketAndWages($stateDown, $tfpGrowth, $dt);
+        $downwardDelta = 0.035 - $stateDown->wageGrowth;
+
+        $this->assertGreaterThan(0.0, $upwardDelta, 'Wages must rise during tight labor conditions.');
+        $this->assertGreaterThan(0.0, $downwardDelta, 'Wages must fall during slack labor conditions.');
+        $this->assertGreaterThan(
+            $downwardDelta,
+            $upwardDelta,
+            'Bewley downward wage rigidity: wages must resist falling faster than they rise.'
+        );
+    }
+
+    public function testForwardLookingTaylorHikesOnUnanchoredExpectations(): void
+    {
+        $monetarySubsystem = new \App\Service\Macro\Subsystem\MonetaryPolicySubsystem($this->mathUtilityMock);
+
+        $stateAnchored = new \App\Service\Macro\MacroState();
+        $stateAnchored->inflationEma = 0.020;
+        $stateAnchored->tipsBreakeven = 0.020;
+        $stateAnchored->outputGap = 0.0;
+
+        $stateUnanchored = clone $stateAnchored;
+        $stateUnanchored->tipsBreakeven = 0.040; // Forward expectations unanchored to 4.0%
+
+        $targetAnchored   = $monetarySubsystem->calculateTargetRate($stateAnchored, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        $targetUnanchored = $monetarySubsystem->calculateTargetRate($stateUnanchored, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+
+        $this->assertGreaterThan(
+            $targetAnchored,
+            $targetUnanchored,
+            'Forward-looking Taylor rule must hike aggressively when TIPS breakeven expectations unanchor.'
+        );
+    }
+
+    public function testSovereignDebtAccumulatesDuringFiscalDeficit(): void
+    {
+        $creditFiscalSubsystem = new \App\Service\Macro\Subsystem\CreditFiscalSubsystem($this->mathUtilityMock);
+
+        $state = new \App\Service\Macro\MacroState();
+        $state->sovereignDebtToGdp = 0.60;
+        $state->governmentSpendingIndex = 140.0; // High fiscal spending
+        $state->outputGap = -0.02; // Contraction reducing corporate tax base
+        $state->corporateTaxRate = 0.18;
+        $state->yield10yEma = 0.04;
+        $state->inflation = 0.015;
+
+        $creditFiscalSubsystem->calculateSovereignDebt($state, 1.0);
+
+        $this->assertGreaterThan(
+            0.60,
+            $state->sovereignDebtToGdp,
+            'Persistent primary fiscal deficit must accumulate sovereign debt-to-GDP stock.'
+        );
+    }
+
+    public function testSovereignDebtSteepensYieldCurve(): void
+    {
+        $monetarySubsystem = new \App\Service\Macro\Subsystem\MonetaryPolicySubsystem($this->mathUtilityMock);
+        $dt = 0.25;
+
+        $stateLowDebt = new \App\Service\Macro\MacroState();
+        $stateLowDebt->sovereignDebtToGdpEma = 0.60;
+
+        $stateHighDebt = clone $stateLowDebt;
+        $stateHighDebt->sovereignDebtToGdpEma = 1.20; // 120% of GDP
+
+        $curveLow  = $monetarySubsystem->calculateYieldCurveAndQE($stateLowDebt, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
+        $curveHigh = $monetarySubsystem->calculateYieldCurveAndQE($stateHighDebt, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
+
+        $this->assertGreaterThan(
+            $curveLow['yield_30y'],
+            $curveHigh['yield_30y'],
+            'Greenwood-Vayanos preferred habitat: higher sovereign debt must increase long-end yields.'
+        );
+        $this->assertGreaterThan(
+            $curveLow['term_premium_10y'],
+            $curveHigh['term_premium_10y'],
+            'Excess sovereign debt supply must expand the 10Y term premium.'
+        );
+    }
+
+    public function testFinancialConditionsIndexTightensDuringCrisis(): void
+    {
+        $assetSubsystem = new \App\Service\Macro\Subsystem\AssetMarketSubsystem($this->mathUtilityMock);
+
+        $stateCrisis = new \App\Service\Macro\MacroState();
+        $stateCrisis->macroCreditSpreadEma = 0.05; // 500 bps
+        $stateCrisis->equityRiskPremium = 0.08;    // 800 bps
+        $stateCrisis->marketVolatilityEma = 0.28;  // High vol
+        $stateCrisis->nsSlopeEma = -0.015;         // Inverted curve
+        $stateCrisis->exchangeRateIndexEma = 115.0; // Strong dollar
+
+        $assetSubsystem->calculateFinancialConditionsIndex($stateCrisis, 0.25);
+
+        $this->assertGreaterThan(
+            0.20,
+            $stateCrisis->financialConditionsIndex,
+            'Crisis conditions (wide spreads, inverted curve, high vol) must produce positive (restrictive) FCI.'
+        );
+    }
+
+    public function testFinancialConditionsIndexLooseDuringGoldilocks(): void
+    {
+        $assetSubsystem = new \App\Service\Macro\Subsystem\AssetMarketSubsystem($this->mathUtilityMock);
+
+        $stateGoldilocks = new \App\Service\Macro\MacroState();
+        $stateGoldilocks->macroCreditSpreadEma = 0.012; // Narrow spreads
+        $stateGoldilocks->equityRiskPremium = 0.040;   // Narrow ERP
+        $stateGoldilocks->marketVolatilityEma = 0.11;  // Low vol
+        $stateGoldilocks->nsSlopeEma = 0.020;          // Steep healthy curve
+        $stateGoldilocks->exchangeRateIndexEma = 95.0; // Mildly soft currency
+
+        $assetSubsystem->calculateFinancialConditionsIndex($stateGoldilocks, 0.25);
+
+        $this->assertLessThan(
+            -0.10,
+            $stateGoldilocks->financialConditionsIndex,
+            'Goldilocks conditions (tight spreads, steep curve, low vol) must produce negative (accommodative) FCI.'
+        );
+    }
+
+    public function testPfluegerViceiraTipsBreakevenDropsDuringDeflationaryRecessionDespiteHighEquityVolatility(): void
+    {
+        $aggregateSubsystem = new \App\Service\Macro\Subsystem\MacroAggregateSubsystem($this->mathUtilityMock);
+
+        // Recession state with market panic (high VIX = 40%), but low inflation (1.2%) and slack output gap (-2.5%)
+        $stateRecessionPanic = new \App\Service\Macro\MacroState();
+        $stateRecessionPanic->inflationEma = 0.012;
+        $stateRecessionPanic->outputGapEma = -0.025;
+        $stateRecessionPanic->marketVolatilityEma = 0.40; // Panic volatility
+        $stateRecessionPanic->energyCostPushLag = 0.0;
+        $stateRecessionPanic->agriCostPushLag = 0.0;
+
+        $tipsRecession = $aggregateSubsystem->calculateTipsBreakeven($stateRecessionPanic, MacroEngine::TARGET_INFLATION, 0.25);
+
+        // TIPS breakeven must drop below 2.0% target reflecting deflation/slack risk, NOT spike from equity panic
+        $this->assertLessThan(
+            MacroEngine::TARGET_INFLATION,
+            $tipsRecession,
+            'Under Pflueger & Viceira (2011), TIPS breakeven must drop below 2.0% during deflationary recessions even if equity VIX is high.'
+        );
+
+        // Inflation shock state (inflation 4.5% + energy spike)
+        $stateInflationShock = new \App\Service\Macro\MacroState();
+        $stateInflationShock->inflationEma = 0.045;
+        $stateInflationShock->outputGapEma = 0.020;
+        $stateInflationShock->marketVolatilityEma = 0.20;
+        $stateInflationShock->energyCostPushLag = 0.010; // 100 bps energy cost push
+        $stateInflationShock->agriCostPushLag = 0.005;
+
+        $tipsShock = $aggregateSubsystem->calculateTipsBreakeven($stateInflationShock, MacroEngine::TARGET_INFLATION, 0.25);
+
+        // TIPS breakeven must price in both fundamental expected inflation and positive inflation risk premium
+        $this->assertGreaterThan(
+            0.040,
+            $tipsShock,
+            'TIPS breakeven must incorporate substantial inflation risk premium when inflation and cost-push shocks are elevated.'
+        );
+    }
+}
