@@ -104,8 +104,12 @@ class CreditFiscalSubsystem
         $unemploymentShock = ($state->unemploymentRateEma - $state->nairu) * MacroEngine::RETAIL_UNEMPLOYMENT_SENSITIVITY;
         $inflationShock = ($state->inflationEma - MacroEngine::TARGET_INFLATION) * MacroEngine::RETAIL_INFLATION_SENSITIVITY;
 
+        $borrowingSpreadStress = max(0.0, $state->macroCreditSpreadEma - MacroEngine::BASE_CREDIT_SPREAD);
+        $interbankStress = max(0.0, $state->interbankLiquiditySpreadEma - MacroEngine::INTERBANK_BASELINE_SPREAD);
+        $debtServiceShock = ($borrowingSpreadStress + $interbankStress) * MacroEngine::RETAIL_DEBT_SERVICE_SENSITIVITY;
+
         $dW = $this->mathUtility->generateStandardNormal();
-        $macroZ = - ($unemploymentShock + $inflationShock) + ($dW * MacroEngine::RETAIL_CREDIT_VOLATILITY);
+        $macroZ = - ($unemploymentShock + $inflationShock + $debtServiceShock) + ($dW * MacroEngine::RETAIL_CREDIT_VOLATILITY);
 
         $conditionalPd = $this->mathUtility->calculateVasicekExpectedLoss(
             macroZ: $macroZ,
@@ -189,7 +193,12 @@ class CreditFiscalSubsystem
         $taxRevenue = $state->corporateTaxRate * $state->nominalGdpIndex * (1.0 + $state->outputGap);
         $govtSpendingFlow = ($state->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE)
             * MacroEngine::TARGET_CORPORATE_TAX_RATE * $state->nominalGdpIndex;
-        $primaryDeficit = ($govtSpendingFlow - $taxRevenue) + (MacroEngine::SOVEREIGN_STRUCTURAL_DEFICIT * $state->nominalGdpIndex);
+
+        // Bohn (1998) Fiscal Reaction Function: primary budget surpluses emerge when debt/GDP exceeds neutral threshold
+        $excessDebt = max(0.0, $state->sovereignDebtToGdp - MacroEngine::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD);
+        $bohnFiscalAdjustment = MacroEngine::BOHN_FISCAL_REACTION_SENSITIVITY * $excessDebt * $state->nominalGdpIndex;
+
+        $primaryDeficit = ($govtSpendingFlow - $taxRevenue) + (MacroEngine::SOVEREIGN_STRUCTURAL_DEFICIT * $state->nominalGdpIndex) - $bohnFiscalAdjustment;
         $interestCost = $state->yield10yEma * $state->sovereignDebtToGdp;
 
         // Blanchard (2019): Nominal GDP growth includes real potential growth trend (labor + TFP) + cyclical gap + inflation

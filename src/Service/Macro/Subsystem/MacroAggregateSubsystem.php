@@ -202,7 +202,7 @@ class MacroAggregateSubsystem
         // Shapiro (2022) Disaggregated Inflation Dynamics:
         // 1. Supercore Services: wage growth gap above productivity drift + convex demand
         $wageGap = $state->wageGrowth - (MacroEngine::TFP_DRIFT + $targetInflation);
-        $wageCostPush = $wageGap * MacroEngine::WAGE_INFLATION_TRANSMISSION;
+        $wageCostPush = $wageGap * MacroEngine::SUPERCORE_WAGE_TRANSMISSION;
         $targetSupercore = $targetInflation + $anchorSlip + $convexDemandPressure + $wageCostPush;
 
         // 2. Core Goods: supply chain freight + industrial metals + convex goods demand
@@ -224,7 +224,7 @@ class MacroAggregateSubsystem
 
         $freightShift = ($state->freightRateIndexEma / MacroEngine::FREIGHT_BASELINE) - 1.0;
         $metalsShift = ($state->industrialMetalsIndexEma / MacroEngine::METALS_BASELINE) - 1.0;
-        $goodsSupplyFriction = ($freightShift * 0.005) + ($metalsShift * 0.003);
+        $goodsSupplyFriction = ($freightShift * MacroEngine::CORE_GOODS_FREIGHT_SENSITIVITY) + ($metalsShift * MacroEngine::CORE_GOODS_METALS_SENSITIVITY);
         $targetCoreGoods = $targetInflation + $anchorSlip + (0.8 * $convexDemandPressure) + $goodsSupplyFriction;
 
         $reversionWeight = 1.0 - exp(-MacroEngine::INFLATION_MEAN_REVERSION * $dt);

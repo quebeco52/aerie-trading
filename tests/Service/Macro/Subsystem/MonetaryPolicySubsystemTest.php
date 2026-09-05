@@ -274,5 +274,84 @@ class MonetaryPolicySubsystemTest extends TestCase
         // 30Y duration extraction must be 3x greater than 10Y and 15x greater than 2Y
         $this->assertEqualsWithDelta(3.0 * $shift10y, $shift30y, 0.0001);
         $this->assertEqualsWithDelta(5.0 * $shift2y, $shift10y, 0.0001);
+        $this->assertEqualsWithDelta(-0.020, $shift10y, 0.0001, '10Y yield suppression under 200bps QE intensity must be exactly -200bps');
+    }
+
+    public function testQeActivationRespectsRateRoomThreshold(): void
+    {
+        $dt = 0.25;
+
+        // Rate above threshold (3.0% > 2.5% threshold): conventional room remains, no QE even in recession
+        $stateHighRate = new MacroState();
+        $stateHighRate->policyRate = 0.030;
+        $stateHighRate->outputGap = -0.020;
+        $highRateCurve = $this->subsystem->calculateYieldCurveAndQE($stateHighRate, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
+        $this->assertEquals(0.0, $highRateCurve['new_qe_intensity'], 'QE must not activate when policy rate has conventional cutting room (> 2.5%)');
+
+        // Rate below threshold (1.5% < 2.5% threshold): conventional room exhausted, QE triggers
+        $stateLowRate = new MacroState();
+        $stateLowRate->policyRate = 0.015;
+        $stateLowRate->outputGap = -0.020;
+        $lowRateCurve = $this->subsystem->calculateYieldCurveAndQE($stateLowRate, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
+        $this->assertGreaterThan(0.0, $lowRateCurve['new_qe_intensity'], 'QE must activate when policy rate is low and output gap is negative');
+    }
+
+    public function testTighteningCompressionDecaysWithProlongedInversion(): void
+    {
+        $stateFreshInversion = new MacroState();
+        $stateFreshInversion->policyRate = 0.055; // Restrictive policy rate well above r* + pi = 0.035
+        $stateFreshInversion->tipsBreakeven = 0.02;
+        $stateFreshInversion->outputGap = 0.01;
+        $stateFreshInversion->inversionDuration = 0.0; // Fresh tightening cycle
+
+        $yieldsFresh = $this->subsystem->calculateYieldCurveAndQE($stateFreshInversion, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+
+        $stateProlongedInversion = new MacroState();
+        $stateProlongedInversion->policyRate = 0.055; // Same restrictive policy rate
+        $stateProlongedInversion->tipsBreakeven = 0.02;
+        $stateProlongedInversion->outputGap = 0.01;
+        $stateProlongedInversion->inversionDuration = 3.0; // 3 years of prolonged high rates
+
+        $yieldsProlonged = $this->subsystem->calculateYieldCurveAndQE($stateProlongedInversion, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+
+        // After 3 years of persistent inversion, compression decays and term premium rebounds
+        $this->assertGreaterThan($yieldsFresh['term_premium_10y'], $yieldsProlonged['term_premium_10y'], 'Prolonged inversion must attenuate tightening compression and restore term premium');
+        $this->assertGreaterThan($yieldsFresh['yield_10y'], $yieldsProlonged['yield_10y'], '10Y yield must steepen as compression decays');
+    }
+
+    public function testCalculateBalanceSheetOperationsDirectly(): void
+    {
+        $state = new MacroState();
+        $state->policyRate = 0.010;
+        $state->outputGap = -0.025;
+        $state->balanceSheetIntensity = 0.0;
+
+        $bs = $this->subsystem->calculateBalanceSheetOperations($state, 0.25);
+
+        $this->assertGreaterThan(0.0, $bs['new_balance_sheet_intensity']);
+        $this->assertGreaterThan(0.0, $bs['new_qe_intensity']);
+        $this->assertEquals(0.0, $bs['new_qt_intensity']);
+        $this->assertEquals(0.0, $bs['new_hold_timer']);
+    }
+
+    public function testCalculateYieldCurveDirectly(): void
+    {
+        $state = new MacroState();
+        $state->policyRate = 0.035;
+        $state->targetRate = 0.035;
+        $state->outputGap = 0.0;
+        $state->tipsBreakeven = 0.02;
+        $state->balanceSheetIntensity = 0.0;
+
+        $yieldCurve = $this->subsystem->calculateYieldCurve($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+
+        $this->assertArrayHasKey('yield_2y', $yieldCurve);
+        $this->assertArrayHasKey('yield_5y', $yieldCurve);
+        $this->assertArrayHasKey('yield_10y', $yieldCurve);
+        $this->assertArrayHasKey('yield_30y', $yieldCurve);
+        $this->assertArrayHasKey('risk_neutral_10y', $yieldCurve);
+        $this->assertArrayHasKey('term_premium_10y', $yieldCurve);
+        $this->assertArrayNotHasKey('new_balance_sheet_intensity', $yieldCurve);
     }
 }
+

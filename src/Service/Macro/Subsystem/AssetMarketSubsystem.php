@@ -31,8 +31,13 @@ class AssetMarketSubsystem
         $occupancyFactor = 1.0 - ($excessUnemployment * MacroEngine::CRE_OCCUPANCY_UNEMPLOYMENT_SENSITIVITY);
         $occupancyFactor = max(0.30, min(1.80, $occupancyFactor));
 
+        // DiPasquale-Wheaton (1996): Commercial rent contracts adjust with trend inflation and cyclical demand
+        $rentGrowthFactor = 1.0 + (($state->inflationEma - MacroEngine::TARGET_INFLATION) * MacroEngine::CRE_RENT_GROWTH_ELASTICITY)
+            + ($state->outputGapEma * 0.50);
+        $rentGrowthFactor = max(0.50, min(2.0, $rentGrowthFactor));
+
         $capRate = max(MacroEngine::CRE_MIN_CAP_RATE, $state->yield10yEma + $state->macroCreditSpreadEma + MacroEngine::CRE_CAP_RATE_RISK_PREMIUM);
-        $fundamentalValue = MacroEngine::CRE_BASELINE * $occupancyFactor * (MacroEngine::CRE_NEUTRAL_CAP_RATE / $capRate);
+        $fundamentalValue = MacroEngine::CRE_BASELINE * $occupancyFactor * $rentGrowthFactor * (MacroEngine::CRE_NEUTRAL_CAP_RATE / $capRate);
 
         $dW = $this->mathUtility->generateStandardNormal();
         $newIndex = $this->mathUtility->calculateSchwartz1Factor(

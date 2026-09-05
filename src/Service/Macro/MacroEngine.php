@@ -143,7 +143,7 @@ class MacroEngine
     /** Annual mean-reversion speed of physical inventories toward structural baseline. */
     public const COMMODITY_INVENTORY_REVERSION_SPEED = 0.50;
     /** Sensitivity of inventory drawdown to economic output gap and geopolitical supply shocks. */
-    public const COMMODITY_INVENTORY_DRAWDOWN_SENSITIVITY = 0.30;
+    public const COMMODITY_INVENTORY_DRAWDOWN_SENSITIVITY = 1.20;
 
     // --- GARCH-MIDAS Macroeconomic Volatility Constants (Engle, Ghysels, & Sohn 2013 Eq. 5) ---
     /** Long-run equilibrium baseline volatility during neutral economic conditions. */
@@ -187,7 +187,7 @@ class MacroEngine
     /** Canonical Taylor (1993) weight on the output gap in the Taylor Rule. */
     public const TAYLOR_OUTPUT_GAP_WEIGHT = 0.50;
     /** Non-linear scaling factor amplifying rate cuts during deep recessions. */
-    public const TAYLOR_RECESSION_SCALE = 2.0;
+    public const TAYLOR_RECESSION_SCALE = 20.0;
     /** Bernanke (2015) blend: weight on realized core inflation (EMA) in the Taylor Rule inflation measure. */
     public const TAYLOR_INFLATION_CORE_WEIGHT = 0.70;
     /** Bernanke (2015) blend: weight on forward inflation expectations (TIPS breakeven) in the Taylor Rule inflation measure. */
@@ -256,10 +256,12 @@ class MacroEngine
     public const FLIGHT_TO_SAFETY_SENSITIVITY = 0.015;
     /** Restrictive monetary policy stance term premium compression sensitivity (ACM 2013). */
     public const TERM_PREMIUM_TIGHTENING_COMPRESSION = 0.15;
+    /** Annual attenuation speed at which persistent tightening compression decays back toward structural term premium. */
+    public const TERM_PREMIUM_COMPRESSION_DECAY_RATE = 0.50;
 
     // --- Preferred-Habitat Duration Extraction (Vayanos-Vila 2021) ---
     /** Sensitivity of duration-weighted term premium extraction to central bank balance sheet intensity. */
-    public const PREFERRED_HABITAT_DURATION_SENSITIVITY = 0.0050;
+    public const PREFERRED_HABITAT_DURATION_SENSITIVITY = 1.0;
 
     // --- Forward-Looking TIPS Breakeven & Phillips Expectations ---
     /** Weight on anchored central bank target in TIPS breakeven inflation expectation. */
@@ -298,6 +300,14 @@ class MacroEngine
     public const INFLATION_WEIGHT_GOODS = 0.25;
     /** Weight of energy and agricultural food commodities in headline basket. */
     public const INFLATION_WEIGHT_COMMODITY = 0.20;
+
+    // --- Sectoral Inflation Sensitivities (Shapiro 2022) ---
+    /** Wage-push transmission factor passing excess wage growth into supercore services inflation. */
+    public const SUPERCORE_WAGE_TRANSMISSION = 0.25;
+    /** Pass-through elasticity of ocean freight logistics bottlenecks into core goods inflation. */
+    public const CORE_GOODS_FREIGHT_SENSITIVITY = 0.015;
+    /** Pass-through elasticity of industrial metals supply friction into core goods inflation. */
+    public const CORE_GOODS_METALS_SENSITIVITY = 0.008;
 
     // --- Merton Structural Corporate Credit Spreads (Merton 1974) ---
     /** Sensitivity of corporate credit spreads to wholesale interbank funding stress. */
@@ -365,7 +375,7 @@ class MacroEngine
     /** Maximum yield suppression capacity achieved under full-scale QE. */
     public const QE_MAX_SUPPRESSION = 0.02;
     /** Sensitivity multiplier scaling QE bond purchase intensity with recession depth. */
-    public const QE_SEVERITY_MULTIPLIER = 1.0;
+    public const QE_SEVERITY_MULTIPLIER = 2.0;
     /** Annual ramp speed of central bank balance sheet expansion and contraction. */
     public const BALANCE_SHEET_RAMP_SPEED = 1.0;
     /** Minimum reinvestment hold period (years) after QE ends before QT runoff can begin (Bernanke 2020). */
@@ -436,6 +446,8 @@ class MacroEngine
     public const CRE_CAP_RATE_RISK_PREMIUM = 0.02;
     /** Pre-calibrated neutral cap rate at macro equilibrium. */
     public const CRE_NEUTRAL_CAP_RATE = 0.0904;
+    /** Elasticity of commercial net operating income (NOI) to general price inflation and GDP demand. */
+    public const CRE_RENT_GROWTH_ELASTICITY = 0.80;
     /** Mean-reversion speed of commercial property values toward fundamental equilibrium. */
     public const CRE_MEAN_REVERSION = 0.25;
     /** Stochastic volatility of commercial property valuations. */
@@ -452,6 +464,8 @@ class MacroEngine
     public const RETAIL_UNEMPLOYMENT_SENSITIVITY = 40.0;
     /** Sensitivity of consumer macro credit Z-score to inflation deviations from target. */
     public const RETAIL_INFLATION_SENSITIVITY = 25.0;
+    /** Sensitivity of consumer macro credit Z-score to debt service and corporate borrowing spread stress. */
+    public const RETAIL_DEBT_SERVICE_SENSITIVITY = 15.0;
     /** Stochastic volatility of idiosyncratic consumer credit shocks. */
     public const RETAIL_CREDIT_VOLATILITY = 0.35;
 
@@ -568,6 +582,8 @@ class MacroEngine
     public const SOVEREIGN_DEBT_YIELD_SENSITIVITY = 0.01;
     /** Debt-to-GDP baseline level below which no excess fiscal term premium applies. */
     public const SOVEREIGN_DEBT_NEUTRAL_THRESHOLD = 0.70;
+    /** Sensitivity of Bohn (1998) primary fiscal surplus reaction to excess sovereign debt above neutral threshold. */
+    public const BOHN_FISCAL_REACTION_SENSITIVITY = 0.05;
 
     // --- Financial Conditions Index (Goldman Sachs / Chicago Fed) ---
     /** Weight on corporate credit spread deviation in FCI composite. */
@@ -714,19 +730,22 @@ class MacroEngine
         // 4. Inflation Expectations (TIPS Breakeven)
         $state->tipsBreakeven = $this->calculateTipsBreakeven($state, self::TARGET_INFLATION, $dt);
 
-        // 5. Central Bank Monetary Policy & Yield Curve
+        // 5. Central Bank Monetary Policy Target & Rate Setting
         $state->targetRate = $this->calculateTargetRate($state, self::TARGET_INFLATION, self::BASE_NATURAL_RATE, $dt);
         $clampedTarget = max(self::EFFECTIVE_LOWER_BOUND, min(0.20, $state->targetRate));
         $state->policyRate = $this->updatePolicyRate($state, $clampedTarget, $dt);
 
-        $yieldData = $this->calculateYieldCurveAndQE($state, self::TARGET_INFLATION, $state->naturalRate, $dt);
-
-        $state->balanceSheetIntensity = $yieldData['new_balance_sheet_intensity'];
-        $state->balanceSheetHoldTimer = $yieldData['new_hold_timer'];
-        $state->qeIntensity = $yieldData['new_qe_intensity'];
+        // 6. Central Bank Balance Sheet Operations (QE / QT)
+        $balanceSheetData = $this->calculateBalanceSheetOperations($state, $dt);
+        $state->balanceSheetIntensity = $balanceSheetData['new_balance_sheet_intensity'];
+        $state->balanceSheetHoldTimer = $balanceSheetData['new_hold_timer'];
+        $state->qeIntensity = $balanceSheetData['new_qe_intensity'];
         $state->qeActive = $state->qeIntensity > 0.0005;
-        $state->qtIntensity = $yieldData['new_qt_intensity'];
+        $state->qtIntensity = $balanceSheetData['new_qt_intensity'];
         $state->qtActive = $state->qtIntensity > 0.0005;
+
+        // 7. Sovereign Yield Curve & Term Structure Decomposition
+        $yieldData = $this->calculateYieldCurve($state, self::TARGET_INFLATION, $state->naturalRate);
 
         $state->yield2y = $yieldData['yield_2y'];
         $state->yield5y = $yieldData['yield_5y'];
@@ -810,6 +829,16 @@ class MacroEngine
     private function updatePolicyRate(MacroState $state, float $targetRate, float $dt): float
     {
         return $this->getMonetarySubsystem()->updatePolicyRate($state, $targetRate, $dt);
+    }
+
+    private function calculateBalanceSheetOperations(MacroState $state, float $dt): array
+    {
+        return $this->getMonetarySubsystem()->calculateBalanceSheetOperations($state, $dt);
+    }
+
+    private function calculateYieldCurve(MacroState $state, float $targetInflation, float $naturalRate): array
+    {
+        return $this->getMonetarySubsystem()->calculateYieldCurve($state, $targetInflation, $naturalRate);
     }
 
     private function calculateYieldCurveAndQE(MacroState $state, float $targetInflation, float $naturalRate, float $dt): array

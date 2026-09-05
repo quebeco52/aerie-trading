@@ -1228,7 +1228,7 @@ class MathUtility
     public function calculatePreferredHabitatTermPremiumShift(
         float $balanceSheetIntensity,
         float $tau,
-        float $habitatSensitivity = 0.0050
+        float $habitatSensitivity = 1.0
     ): float {
         $durationWeight = $tau / 10.0;
         return -$balanceSheetIntensity * $durationWeight * $habitatSensitivity;

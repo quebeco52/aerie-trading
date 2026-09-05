@@ -97,4 +97,32 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertGreaterThan(0.0, $state->inventoryStockGap, 'Demand slowdown must induce involuntary inventory overhang');
         $this->assertLessThan(0.0, $updatedGap, 'Output gap should reflect negative shock and inventory liquidation drag');
     }
+
+    public function testSectoralInflationShowsDifferentiation(): void
+    {
+        // 1. Wage shock scenario: high wage growth, neutral freight
+        $stateWage = new MacroState();
+        $stateWage->wageGrowth = 0.06; // 6% wage growth
+        $stateWage->freightRateIndexEma = 100.0;
+        $stateWage->industrialMetalsIndexEma = 100.0;
+        $stateWage->inflation = 0.02;
+
+        $this->subsystem->calculateInflation($stateWage, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+
+        // Supercore Services must absorb wage-push inflation more heavily than Core Goods
+        $this->assertGreaterThan($stateWage->coreGoodsInflation, $stateWage->supercoreInflation, 'Wage surge must drive supercore services higher than core goods');
+
+        // 2. Supply chain shock scenario: neutral wage growth, high freight
+        $stateSupply = new MacroState();
+        $stateSupply->wageGrowth = 0.035; // Neutral wage growth
+        $stateSupply->freightRateIndexEma = 200.0; // 100% freight surge
+        $stateSupply->industrialMetalsIndexEma = 150.0;
+        $stateSupply->inflation = 0.02;
+
+        $this->subsystem->calculateInflation($stateSupply, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+
+        // Core Goods must absorb supply chain frictions more heavily than Supercore Services
+        $this->assertGreaterThan($stateSupply->supercoreInflation, $stateSupply->coreGoodsInflation, 'Supply chain bottleneck must drive core goods higher than supercore services');
+    }
 }
+

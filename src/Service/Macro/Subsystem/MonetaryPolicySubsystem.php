@@ -148,20 +148,22 @@ class MonetaryPolicySubsystem
     }
 
     /**
-     * Nelson-Siegel-Svensson (1994) Term Structure & Adrian-Crump-Moench (2013) ACM Decomposition.
+     * Central Bank Balance Sheet Operations (Bernanke 2020, Vayanos & Vila 2021).
      *
-     * Fits the full zero-coupon sovereign yield curve (2Y, 5Y, 10Y, 30Y) with Diebold-Li (2006)
-     * forward monetary guidance curvature (beta2) and long-end fiscal/QT supply curvature (beta3).
-     * Decomposes the 10Y yield into expected risk-neutral policy rate path and duration term premium.
-     * Models Central Bank Quantitative Easing (QE) and Quantitative Tightening (QT) balance sheet runoff.
+     * Evaluates quantitative asset purchase/runoff targets based on conventional rate room,
+     * recession severity, and economic overheating. Manages the reinvestment hold timer
+     * and exponential dynamic adjustment speed toward the balance sheet target.
      *
-     * @param MacroState $state           Current macroeconomic state.
-     * @param float      $targetInflation Central bank inflation target.
-     * @param float      $naturalRate     Dynamic natural real rate of interest (r*).
-     * @param float      $dt              Time increment in years.
-     * @return array<string, float> Decomposition containing yields, NSS factors, and QE/QT intensities.
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     * @return array{
+     *     new_balance_sheet_intensity: float,
+     *     new_hold_timer: float,
+     *     new_qe_intensity: float,
+     *     new_qt_intensity: float
+     * } Updated balance sheet intensity and component intensities.
      */
-    public function calculateYieldCurveAndQE(MacroState $state, float $targetInflation, float $naturalRate, float $dt): array
+    public function calculateBalanceSheetOperations(MacroState $state, float $dt): array
     {
         $rateRoomProximity = min(1.0, max(0.0, (MacroEngine::QE_ACTIVATION_RATE_THRESHOLD - $state->policyRate) / MacroEngine::QE_ACTIVATION_RATE_THRESHOLD));
         $recessionSeverity = max(0.0, -$state->outputGap);
@@ -178,6 +180,7 @@ class MonetaryPolicySubsystem
         } else {
             $qtTighteningTarget = 0.0;
         }
+
         // --- Balance Sheet Phase Logic (Bernanke 2020, Vayanos-Vila 2021) ---
         if ($qeYieldSuppressionTarget > 0.0) {
             // Active QE: reset hold timer, ramp toward QE target
@@ -202,10 +205,34 @@ class MonetaryPolicySubsystem
 
         $newBalanceSheetIntensity = $balanceSheetTarget + ($state->balanceSheetIntensity - $balanceSheetTarget) * exp(-MacroEngine::BALANCE_SHEET_RAMP_SPEED * $dt);
 
+        return [
+            'new_balance_sheet_intensity' => $newBalanceSheetIntensity,
+            'new_hold_timer' => $newHoldTimer,
+            'new_qe_intensity' => max(0.0, $newBalanceSheetIntensity),
+            'new_qt_intensity' => max(0.0, -$newBalanceSheetIntensity),
+        ];
+    }
+
+    /**
+     * Nelson-Siegel-Svensson (1994) Term Structure & Adrian-Crump-Moench (2013) ACM Decomposition.
+     *
+     * Fits the full zero-coupon sovereign yield curve (2Y, 5Y, 10Y, 30Y) with Diebold-Li (2006)
+     * forward monetary guidance curvature (beta2) and long-end fiscal/QT supply curvature (beta3).
+     * Decomposes the 10Y yield into expected risk-neutral policy rate path and duration term premium.
+     *
+     * @param MacroState $state           Current macroeconomic state.
+     * @param float      $targetInflation Central bank inflation target.
+     * @param float      $naturalRate     Dynamic natural real rate of interest (r*).
+     * @return array<string, float> Sovereign yield curve tenors, NSS factors, risk-neutral rate, and term premium.
+     */
+    public function calculateYieldCurve(MacroState $state, float $targetInflation, float $naturalRate): array
+    {
         $inflationRiskPremium = MacroEngine::TERM_PREMIUM_IRP_EXPECTATION_SCALE * max(0.0, $state->tipsBreakeven - MacroEngine::TARGET_INFLATION);
         $flightToSafetyShift = MacroEngine::FLIGHT_TO_SAFETY_SENSITIVITY * max(0.0, $state->marketVolatilityEma - 0.25);
         $cyclicalTermPremium = $state->outputGap * MacroEngine::NS_GAP_TERM_PREMIUM_SCALE;
-        $restrictiveCompression = MacroEngine::TERM_PREMIUM_TIGHTENING_COMPRESSION * max(0.0, $state->policyRate - ($naturalRate + MacroEngine::TARGET_INFLATION));
+        $rawTighteningCompression = MacroEngine::TERM_PREMIUM_TIGHTENING_COMPRESSION * max(0.0, $state->policyRate - ($naturalRate + MacroEngine::TARGET_INFLATION));
+        $compressionDecay = exp(-MacroEngine::TERM_PREMIUM_COMPRESSION_DECAY_RATE * $state->inversionDuration);
+        $restrictiveCompression = $rawTighteningCompression * $compressionDecay;
         $totalBaseTermPremium = max(0.0, MacroEngine::NS_BASE_TERM_PREMIUM + $inflationRiskPremium + $cyclicalTermPremium - $flightToSafetyShift - $restrictiveCompression);
 
         // Long-term asymptotic yield level beta0 (Nelson-Siegel 1987, Diebold-Li 2006):
@@ -244,10 +271,6 @@ class MonetaryPolicySubsystem
             'level' => $level,
             'curvature' => $nsBeta2,
             'curvature2' => $nsBeta3,
-            'new_balance_sheet_intensity' => $newBalanceSheetIntensity,
-            'new_hold_timer' => $newHoldTimer,
-            'new_qe_intensity' => max(0.0, $newBalanceSheetIntensity),
-            'new_qt_intensity' => max(0.0, -$newBalanceSheetIntensity),
             'structural_10y' => $structural10y,
             'yield_2y'  => $yield2y,
             'yield_5y'  => $yield5y,
@@ -256,6 +279,30 @@ class MonetaryPolicySubsystem
             'risk_neutral_10y' => $riskNeutral10y,
             'term_premium_10y' => $termPremium10y,
         ];
+    }
+
+    /**
+     * Nelson-Siegel-Svensson Term Structure & Balance Sheet Composite Wrapper.
+     *
+     * Preserves backward compatibility by evaluating both central bank balance sheet
+     * operations and the resulting sovereign term structure decomposition in a single call.
+     *
+     * @param MacroState $state           Current macroeconomic state.
+     * @param float      $targetInflation Central bank inflation target.
+     * @param float      $naturalRate     Dynamic natural real rate of interest (r*).
+     * @param float      $dt              Time increment in years.
+     * @return array<string, float> Decomposition containing yields, NSS factors, and QE/QT intensities.
+     */
+    public function calculateYieldCurveAndQE(MacroState $state, float $targetInflation, float $naturalRate, float $dt): array
+    {
+        $bsData = $this->calculateBalanceSheetOperations($state, $dt);
+
+        $evalState = clone $state;
+        $evalState->balanceSheetIntensity = $bsData['new_balance_sheet_intensity'];
+
+        $yieldData = $this->calculateYieldCurve($evalState, $targetInflation, $naturalRate);
+
+        return array_merge($bsData, $yieldData);
     }
 
     /**

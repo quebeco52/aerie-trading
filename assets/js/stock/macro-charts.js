@@ -54,6 +54,19 @@ export function updateMacroCharts(reports) {
     const slicedReports = reports.slice(-100);
     let qCount = slicedReports.length;
 
+    // Cumulative central bank balance sheet asset stock holdings (Base 100)
+    let runningAssetIndex = 100.0;
+    const assetStockHistory = [];
+    const bsMeanReversionSpeed = 0.50; // Annual speed mean-reverting toward structural baseline 100
+    reports.forEach((r) => {
+        let rawBs = r.balance_sheet_intensity ?? r.balanceSheetIntensity ?? (r.qe_intensity ? parseFloat(r.qe_intensity) : 0.0);
+        let bsBps = parseFloat(rawBs) * 10000;
+        runningAssetIndex += ((bsBps / 10.0) + bsMeanReversionSpeed * (100.0 - runningAssetIndex)) * 0.25;
+        runningAssetIndex = Math.max(50.0, Math.min(200.0, runningAssetIndex));
+        assetStockHistory.push(runningAssetIndex);
+    });
+    const slicedAssetStock = assetStockHistory.slice(-slicedReports.length);
+
     slicedReports.forEach((report, index) => {
         let labelQ = qCount - index - 1;
         labels.push(labelQ === 0 ? 'Now' : `-${labelQ}Q`);
@@ -148,7 +161,7 @@ export function updateMacroCharts(reports) {
         let rawBalanceSheet = report.balance_sheet_intensity ?? report.balanceSheetIntensity ?? (report.qe_intensity ? parseFloat(report.qe_intensity) : 0.0);
         let bsBps = parseFloat(rawBalanceSheet) * 10000;
         balanceSheetData.push(bsBps);
-        balanceSheetAssetsData.push(100.0 + (bsBps / 10.0));
+        balanceSheetAssetsData.push(slicedAssetStock[index] ?? 100.0);
 
         // Financial Conditions Index (FCI)
         let rawFci = report.financial_conditions_index ?? report.financialConditionsIndex ?? 0.0;
@@ -222,11 +235,11 @@ export function updateMacroCharts(reports) {
         let rawEnergyBuf = report.energy_inventory_index_ema ?? report.energyInventoryIndexEma ?? 100.0;
         energyBufferData.push(parseFloat(rawEnergyBuf));
 
-        // Powell (2020) FAIT Memory
+        // Powell (2020) FAIT Memory: Asymmetric make-up buffer for cumulative inflation shortfall (clamped <= 0)
         let rawFaitGap = report.cumulative_inflation_gap_ema ?? report.cumulativeInflationGapEma ?? 0.0;
         let faitGapPct = parseFloat(rawFaitGap) * 100;
         faitCumulativeGapData.push(faitGapPct);
-        faitOffsetBpsData.push(faitGapPct * 25.0); // 25 bps per 1% cumulative gap
+        faitOffsetBpsData.push(Math.min(0.0, faitGapPct * 25.0)); // Asymmetric make-up buffer: tolerates overshoots without hiking extra
     });
 
     renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOverhangData, tipsBreakevenData);
@@ -1324,7 +1337,7 @@ function renderMacroCostPushChart(labels, agriLagData, energySupplyDragData, fre
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => `${ctx.dataset.label}: +${ctx.raw.toFixed(1)} bps`
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw >= 0 ? '+' : ''}${ctx.raw.toFixed(1)} bps`
                     }
                 }
             },
@@ -1333,7 +1346,7 @@ function renderMacroCostPushChart(labels, agriLagData, energySupplyDragData, fre
                     type: 'linear',
                     display: true,
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { callback: (val) => '+' + val.toFixed(0) + ' bps' },
+                    ticks: { callback: (val) => (val >= 0 ? '+' : '') + val.toFixed(0) + ' bps' },
                     title: { display: true, text: 'Basis Points (bps)' }
                 },
                 x: {

@@ -45,4 +45,30 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertGreaterThan(0.0, $state->commercialPropertyIndex);
         $this->assertGreaterThan(0.0, $state->residentialPropertyIndex);
     }
+
+    public function testCommercialPropertyRentIndexationProtectsValuationsDuringInflation(): void
+    {
+        $stateNoInflation = new MacroState();
+        $stateNoInflation->yield10yEma = 0.055;
+        $stateNoInflation->macroCreditSpreadEma = 0.02;
+        $stateNoInflation->unemploymentRateEma = 0.04;
+        $stateNoInflation->inflationEma = 0.02;
+        $stateNoInflation->outputGapEma = 0.01;
+        $stateNoInflation->commercialPropertyIndex = 100.0;
+
+        $stateWithInflation = new MacroState();
+        $stateWithInflation->yield10yEma = 0.055;
+        $stateWithInflation->macroCreditSpreadEma = 0.02;
+        $stateWithInflation->unemploymentRateEma = 0.04;
+        $stateWithInflation->inflationEma = 0.04; // Higher inflation boosts contract rents
+        $stateWithInflation->outputGapEma = 0.01;
+        $stateWithInflation->commercialPropertyIndex = 100.0;
+
+        $this->subsystem->calculateCommercialPropertyIndex($stateNoInflation, 0.25);
+        $this->subsystem->calculateCommercialPropertyIndex($stateWithInflation, 0.25);
+
+        // Rent growth indexation must support commercial property values when inflation is elevated
+        $this->assertGreaterThan($stateNoInflation->commercialPropertyIndex, $stateWithInflation->commercialPropertyIndex);
+    }
 }
+

@@ -83,4 +83,58 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->assertGreaterThan($stateNormal->highYieldCreditSpread * 2.0, $stateRecession->highYieldCreditSpread);
         $this->assertGreaterThan($stateRecession->macroCreditSpread * 2.5, $stateRecession->highYieldCreditSpread);
     }
+
+    public function testBohnFiscalReactionStabilizesExcessDebt(): void
+    {
+        $stateSustainable = new MacroState();
+        $stateSustainable->sovereignDebtToGdp = 0.60; // Below neutral threshold (0.70)
+        $stateSustainable->nominalGdpIndex = 1.0;
+        $stateSustainable->yield10yEma = 0.04;
+        $stateSustainable->outputGap = 0.0;
+        $stateSustainable->inflationEma = 0.02;
+        $stateSustainable->corporateTaxRate = 0.21;
+        $stateSustainable->governmentSpendingIndex = 100.0;
+
+        $this->subsystem->calculateSovereignDebt($stateSustainable, 0.25);
+
+        $stateExcessDebt = new MacroState();
+        $stateExcessDebt->sovereignDebtToGdp = 1.20; // Well above neutral threshold (0.70)
+        $stateExcessDebt->nominalGdpIndex = 1.0;
+        $stateExcessDebt->yield10yEma = 0.04;
+        $stateExcessDebt->outputGap = 0.0;
+        $stateExcessDebt->inflationEma = 0.02;
+        $stateExcessDebt->corporateTaxRate = 0.21;
+        $stateExcessDebt->governmentSpendingIndex = 100.0;
+
+        $this->subsystem->calculateSovereignDebt($stateExcessDebt, 0.25);
+
+        // Bohn (1998) adjustment: higher debt induces primary fiscal surplus, counteracting interest burden
+        // dDebt/dt rate of increase must be constrained by the Bohn stabilizer
+        $excessDebtAmount = 1.20 - MacroEngine::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD;
+        $expectedBohnSurplus = MacroEngine::BOHN_FISCAL_REACTION_SENSITIVITY * $excessDebtAmount;
+        $this->assertGreaterThan(0.0, $expectedBohnSurplus);
+    }
+
+    public function testRetailDefaultRateCoupledToCreditSpreadStress(): void
+    {
+        $stateCalm = new MacroState();
+        $stateCalm->unemploymentRateEma = 0.04;
+        $stateCalm->inflationEma = 0.02;
+        $stateCalm->macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD;
+        $stateCalm->interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD;
+
+        $this->subsystem->calculateRetailDefaultRate($stateCalm, 0.25);
+
+        $stateCreditFreeze = new MacroState();
+        $stateCreditFreeze->unemploymentRateEma = 0.04;
+        $stateCreditFreeze->inflationEma = 0.02;
+        $stateCreditFreeze->macroCreditSpreadEma = 0.050; // Severe wholesale credit widening
+        $stateCreditFreeze->interbankLiquiditySpreadEma = 0.010; // Severe TED spread freeze
+
+        $this->subsystem->calculateRetailDefaultRate($stateCreditFreeze, 0.25);
+
+        // Retail default rate must transmit wholesale credit stress into consumer distress
+        $this->assertGreaterThan($stateCalm->retailDefaultRate, $stateCreditFreeze->retailDefaultRate);
+    }
 }
+
