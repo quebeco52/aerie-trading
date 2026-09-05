@@ -181,11 +181,10 @@ class MacroAggregateSubsystem
     {
         $infZ = $this->mathUtility->generateStandardNormal();
 
+        // 1. Adaptive Inflation Expectations Unanchoring
         $anchorSlip = ($state->inflationEma - $targetInflation) * MacroEngine::INFLATION_ADAPTIVE_EXPECTATIONS_WEIGHT;
-        $effectiveTarget = $targetInflation + $anchorSlip;
-        $inflationDrift = MacroEngine::INFLATION_MEAN_REVERSION * ($effectiveTarget - $state->inflation) * $dt;
 
-        // Benigno & Eggertsson (2023): Non-linear convex demand-pull curve
+        // 2. Benigno & Eggertsson (2023): Non-linear convex demand-pull curve
         $convexDemandPressure = $this->mathUtility->calculateConvexPhillipsCurve(
             outputGap: $state->outputGap,
             maxCapacity: MacroEngine::PHILLIPS_MAX_CAPACITY,
@@ -193,14 +192,28 @@ class MacroAggregateSubsystem
             downwardRigidityFactor: MacroEngine::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR
         );
 
-        // Shapiro (2022) Disaggregated Inflation Dynamics:
-        // 1. Supercore Services: wage growth gap above productivity drift + convex demand
+        // 3. Shapiro (2022) Sector 1: Supercore Services (Labor / Wage-Push Channel)
         $wageGap = $state->wageGrowth - (MacroEngine::TFP_DRIFT + $targetInflation);
         $wageCostPush = $wageGap * MacroEngine::SUPERCORE_WAGE_TRANSMISSION;
         $targetSupercore = $targetInflation + $anchorSlip + $convexDemandPressure + $wageCostPush;
 
-        // 2. Core Goods: supply chain freight + industrial metals + convex goods demand
-        $rawEnergyCostPush = ($state->energyPriceShock / 100.0) * MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
+        // 4. Shapiro (2022) Sector 2: Core Goods (Supply Chain / Freight / Materials)
+        $freightShift = ($state->freightRateIndexEma / MacroEngine::FREIGHT_BASELINE) - 1.0;
+        $metalsShift = ($state->industrialMetalsIndexEma / MacroEngine::METALS_BASELINE) - 1.0;
+        $gscpiFriction = max(-0.01, $state->supplyChainPressureIndexEma * MacroEngine::CORE_GOODS_GSCPI_SENSITIVITY);
+        $goodsSupplyFriction = ($freightShift * MacroEngine::CORE_GOODS_FREIGHT_SENSITIVITY) + ($metalsShift * MacroEngine::CORE_GOODS_METALS_SENSITIVITY) + $gscpiFriction;
+        $targetCoreGoods = $targetInflation + $anchorSlip + (MacroEngine::CORE_GOODS_DEMAND_SENSITIVITY * $convexDemandPressure) + $goodsSupplyFriction;
+
+        // Dynamic AR(1) state updating for sticky core baskets
+        $reversionWeight = 1.0 - exp(-MacroEngine::INFLATION_MEAN_REVERSION * $dt);
+        $state->supercoreInflation += $reversionWeight * ($targetSupercore - $state->supercoreInflation);
+        $state->supercoreInflation = max(-0.01, min(0.20, $state->supercoreInflation));
+
+        $state->coreGoodsInflation += $reversionWeight * ($targetCoreGoods - $state->coreGoodsInflation);
+        $state->coreGoodsInflation = max(-0.02, min(0.20, $state->coreGoodsInflation));
+
+        // 5. Shapiro (2022) Sector 3: Commodity Pass-Through (Energy & Agriculture)
+        $rawEnergyCostPush = ($state->energyPriceShock / MacroEngine::ENERGY_BASELINE) * MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
         $state->energyCostPushLag = $this->mathUtility->calculateDistributedLag(
             currentLaggedValue: $state->energyCostPushLag,
             targetValue: $rawEnergyCostPush,
@@ -216,28 +229,16 @@ class MacroAggregateSubsystem
             lagTimeConstant: MacroEngine::AGRI_COST_PUSH_LAG_YEARS
         );
 
-        $freightShift = ($state->freightRateIndexEma / MacroEngine::FREIGHT_BASELINE) - 1.0;
-        $metalsShift = ($state->industrialMetalsIndexEma / MacroEngine::METALS_BASELINE) - 1.0;
-        $gscpiFriction = max(-0.01, $state->supplyChainPressureIndexEma * MacroEngine::CORE_GOODS_GSCPI_SENSITIVITY);
-        $goodsSupplyFriction = ($freightShift * MacroEngine::CORE_GOODS_FREIGHT_SENSITIVITY) + ($metalsShift * MacroEngine::CORE_GOODS_METALS_SENSITIVITY) + $gscpiFriction;
-        $targetCoreGoods = $targetInflation + $anchorSlip + (0.8 * $convexDemandPressure) + $goodsSupplyFriction;
+        // Scaled to commodity basket weight so headline receives the full intended shock
+        $commodityBasketInflation = $targetInflation + $anchorSlip
+            + (($state->energyCostPushLag + $state->agriCostPushLag) / MacroEngine::INFLATION_WEIGHT_COMMODITY);
 
-        $reversionWeight = 1.0 - exp(-MacroEngine::INFLATION_MEAN_REVERSION * $dt);
-        $state->supercoreInflation += $reversionWeight * ($targetSupercore - $state->supercoreInflation);
-        $state->supercoreInflation = max(-0.01, min(0.20, $state->supercoreInflation));
-
-        $state->coreGoodsInflation += $reversionWeight * ($targetCoreGoods - $state->coreGoodsInflation);
-        $state->coreGoodsInflation = max(-0.02, min(0.20, $state->coreGoodsInflation));
-
-        // 3. Commodity Cost-Push Component (Energy and Agricultural Food)
-        $commodityCostPush = $state->energyCostPushLag + $state->agriCostPushLag;
-
-        // Blended Headline Inflation (Shapiro 2022 expenditure basket aggregation)
+        // 6. Blended Headline Inflation (Shapiro 2022 expenditure basket aggregation)
         $blendedInflation = (MacroEngine::INFLATION_WEIGHT_SUPERCORE * $state->supercoreInflation)
             + (MacroEngine::INFLATION_WEIGHT_GOODS * $state->coreGoodsInflation)
-            + (MacroEngine::INFLATION_WEIGHT_COMMODITY * ($targetInflation + $anchorSlip + $commodityCostPush));
+            + (MacroEngine::INFLATION_WEIGHT_COMMODITY * $commodityBasketInflation);
 
-        $newInflation = $blendedInflation + (0.002 * $stressMultiplier * sqrt($dt) * $infZ);
+        $newInflation = $blendedInflation + (MacroEngine::INFLATION_DIFFUSION_SIGMA * $stressMultiplier * sqrt($dt) * $infZ);
         return max(-0.02, min(0.25, $newInflation));
     }
 

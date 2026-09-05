@@ -135,4 +135,39 @@ class DistressedDebtBusinessModelTest extends TestCase
         $this->assertTrue($mega['is_hoarder']);
         $this->assertTrue($mega['is_mega_hoarder']);
     }
+
+    public function testHighYieldCreditSpreadAndDefaultRateSurgeBoostRecoveryRevenue(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('VULT');
+        $stock->setBeta('-1.3');
+
+        $calmMacro = new MacroStateDTO(
+            outputGapEma: 0.0,
+            macroCreditSpread: 0.02,
+            macroCreditSpreadEma: 0.02,
+            highYieldCreditSpreadEma: 0.048, // Baseline 480 bps
+            corporateDefaultRateEma: 0.020   // Baseline 2.0%
+        );
+
+        $hySpikeMacro = new MacroStateDTO(
+            outputGapEma: 0.0,
+            macroCreditSpread: 0.02,
+            macroCreditSpreadEma: 0.02,
+            highYieldCreditSpreadEma: 0.088, // Blowout to 880 bps (+400 bps)
+            corporateDefaultRateEma: 0.060   // Surging to 6.0% (+200% shift)
+        );
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $calmResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 10_000_000.0, 0.0, $calmMacro, $mathMock);
+        $spikeResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 10_000_000.0, 0.0, $hySpikeMacro, $mathMock);
+
+        $this->assertGreaterThan(
+            $calmResult->streamRevenue['turnaround_recovery'],
+            $spikeResult->streamRevenue['turnaround_recovery'],
+            'Surging high-yield credit spreads and corporate default rates must explode distressed debt recovery revenue.'
+        );
+    }
 }

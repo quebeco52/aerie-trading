@@ -50,6 +50,12 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     public const BULL_MARKET_GAP_THRESHOLD      = 0.020;
     /** Revenue contraction multiplier during prolonged bull markets with tight credit spreads. */
     public const BULL_MARKET_REVENUE_DRAG       = -0.10;
+    /** Baseline high-yield credit spread (~480bps) above which distressed turnaround opportunities surge. */
+    public const HY_SPREAD_BLOWOUT_BASELINE     = 0.048;
+    /** Sensitivity multiplier translating excess high-yield credit spreads into turnaround recovery revenue. */
+    public const HY_SPREAD_SURGE_SCALAR         = 10.00;
+    /** Sensitivity multiplier translating corporate default rate surges into turnaround acquisition opportunities. */
+    public const DEFAULT_RATE_SURGE_SCALAR      = 1.50;
 
     // --- Stream Weights & Variances ---
     public const RESTRUCTURING_ADVISORY_WEIGHT = 0.40;
@@ -72,15 +78,24 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
         $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
 
         // Counter-Cyclical Credit Spread Trigger
-        $creditSpread = $macroState->macroCreditSpread;
+        $creditSpread = ($macroState->macroCreditSpread !== MacroEngine::BASE_CREDIT_SPREAD)
+            ? $macroState->macroCreditSpread
+            : $macroState->macroCreditSpreadEma;
         $outputGap = $macroState->outputGapEma;
+
+        $hySpreadSurge = max(0.0, $macroState->highYieldCreditSpreadEma - self::HY_SPREAD_BLOWOUT_BASELINE) * self::HY_SPREAD_SURGE_SCALAR;
+        $corporateDefaultShift = max(0.0, ($macroState->corporateDefaultRateEma - MacroEngine::CORPORATE_DEFAULT_BASELINE) / MacroEngine::CORPORATE_DEFAULT_BASELINE);
+        $defaultRateSurge = $corporateDefaultShift * self::DEFAULT_RATE_SURGE_SCALAR;
 
         $distressMultiplier = 0.0;
         $eventType = null;
 
-        // When credit spreads exceed 2.5% or output gap is negative, distressed debt opportunities explode
-        if ($creditSpread > self::SPREAD_BLOWOUT_THRESHOLD || $outputGap < self::RECESSION_GAP_THRESHOLD) {
-            $distressMultiplier = ($creditSpread - self::DEFAULT_CREDIT_SPREAD_FALLBACK) * self::SPREAD_SURGE_SCALAR + abs(min(0.0, $outputGap)) * self::RECESSION_SURGE_SCALAR;
+        // When credit spreads exceed 2.5%, high-yield spreads blow out, default rates surge, or output gap is negative, distressed debt opportunities explode
+        if ($creditSpread > self::SPREAD_BLOWOUT_THRESHOLD || $outputGap < self::RECESSION_GAP_THRESHOLD || $hySpreadSurge > 0.0 || $defaultRateSurge > 0.0) {
+            $distressMultiplier = ($creditSpread - self::DEFAULT_CREDIT_SPREAD_FALLBACK) * self::SPREAD_SURGE_SCALAR
+                + abs(min(0.0, $outputGap)) * self::RECESSION_SURGE_SCALAR
+                + $hySpreadSurge
+                + $defaultRateSurge;
         } elseif ($outputGap > self::BULL_MARKET_GAP_THRESHOLD && $creditSpread < self::DEFAULT_CREDIT_SPREAD_FALLBACK) {
             $distressMultiplier = self::BULL_MARKET_REVENUE_DRAG;
         }

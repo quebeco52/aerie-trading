@@ -36,6 +36,8 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     // --- Macro Demand Physics ---
     /** Macroeconomic demand shift sensitivity to output gap. */
     public const MACRO_DEMAND_SCALAR = 0.50;
+    /** Sensitivity of brokerage capital markets advisory revenue to aggregate deal activity. */
+    public const DEAL_ACTIVITY_ADVISORY_SCALAR = 0.25;
 
         public function getWholesaleLeverageLimit(): float { return 8.0; }
     public function getMoatSpread(): float { return 0.005; }
@@ -143,8 +145,11 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         $vixEma = $macroState->marketVolatilityEma;
         $volatilityBonus = max(0.0, ($vixEma - self::VIX_BASELINE_THRESHOLD) * self::VIX_REVENUE_SCALAR);
 
+        $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
+        $advisoryDealBonus = $dealActivityShift * self::DEAL_ACTIVITY_ADVISORY_SCALAR;
+
         $tradingRevenue  = max(0.0, $expectedRevenue * $tradingWeight * (1.0 + ($tradingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $volatilityBonus));
-        $advisoryRevenue = max(0.0, $expectedRevenue * $advisoryWeight * (1.0 + ($advisoryZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
+        $advisoryRevenue = max(0.0, $expectedRevenue * $advisoryWeight * (1.0 + ($advisoryZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $advisoryDealBonus));
         
         $streamRevenues = [
             'trading'  => $tradingRevenue,
@@ -167,7 +172,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
 
         // observableShockZ: the VIX bonus is completely public via daily VIX tracking — analysts can anticipate it fully.
         $primaryShockZ = $streams->resolveDominantShockZ([$tradingZ, $advisoryZ]);
-        $observableShockZ = $volatilityBonus * $tradingWeight;
+        $observableShockZ = ($volatilityBonus * $tradingWeight) + ($advisoryDealBonus * $advisoryWeight);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

@@ -77,7 +77,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /** Baseline volatility multiplier for loan origination and fee revenue shocks. */
     public const REVENUE_VARIANCE_SCALAR = 0.15;
     /** LGD (Loss-Given-Default) multiplier: collateralized loans suffer lower realized losses than unsecured credit. */
-    public const MACRO_DEFAULT_LGD_DRAG  = 0.40;
+    public const MACRO_DEFAULT_LGD_DRAG  = 0.040;
     /** Maximum quarterly reserve release clamp (4% of revenue — avoids unlimited reversal). */
     public const MAX_PROVISION_REVERSAL  = 0.04;
 
@@ -613,7 +613,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $newTtm += MathUtility::getInstance()->calculateReversionPull($newTtm, $costOfEquity, $scaledKappa, $effectiveMoat);
         $stock->setRoeTtm((string) max(self::ROE_CLAMP_MIN, min(self::ROE_CLAMP_MAX, $newTtm)));
 
-        return $truePostTaxReturn;
+        return max(self::ROE_CLAMP_MIN, min(self::ROE_CLAMP_MAX, $truePostTaxReturn));
     }
 
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
@@ -657,9 +657,15 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
     public function calculateMaxBuybackSpend(float $excessCash, float $retainedEarningsThisQuarter, bool $isMegaHoarder): float
     {
-        return $isMegaHoarder
+        if ($retainedEarningsThisQuarter <= 0.0) {
+            return 0.0;
+        }
+
+        $spendCap = $isMegaHoarder
             ? $excessCash * self::BUYBACK_MEGA_HOARDER_LIMIT
-            : max(0.0, min($excessCash * self::BUYBACK_HOARDER_LIMIT, $retainedEarningsThisQuarter));
+            : $excessCash * self::BUYBACK_HOARDER_LIMIT;
+
+        return max(0.0, min($spendCap, $retainedEarningsThisQuarter));
     }
 
     public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array
@@ -690,9 +696,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
     public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float
     {
-        // Banks maintain a structural mix of wholesale debt for regulatory liquidity metrics,
-        // so we do not subtract their deposit-driven excess cash from their expansion capacity.
-        return $baseCapacity;
+        return max(0.0, $baseCapacity - $excessCash);
     }
 
     public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float
@@ -760,27 +764,43 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
     public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): array
     {
-        $probability = self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT);
-        $aggressiveness = self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier);
+        $depositRatio = $totalDebt > 0.0 ? ($customerDeposits / $totalDebt) : 0.0;
 
-        $wholesaleDebt = max(0.0, $totalDebt - $customerDeposits);
-        $wholesaleRatio = $totalDebt > 0 ? ($wholesaleDebt / $totalDebt) : 0.0;
-
-        if ($currentTreasury < $targetOperatingCash && $targetOperatingCash > 0) {
-            // Urgent liquidity backstop during deposit runoff
+        if ($currentTreasury < $targetOperatingCash && $targetOperatingCash > 0.0) {
+            // Urgent liquidity backstop during deposit runoff or cash shortfall
             $shortfallRatio = ($targetOperatingCash - $currentTreasury) / $targetOperatingCash;
-            $probability += (self::WHOLESALE_URGENCY_PROB_BOOST * $shortfallRatio);
-            $aggressiveness += (self::WHOLESALE_URGENCY_AGGR_BOOST * $shortfallRatio);
-        } elseif ($wholesaleRatio < self::WHOLESALE_TARGET_RATIO) {
-            // Under-target in wholesale debt: actively issue bonds to reach the structural 10% target
-            $gapRatio = (self::WHOLESALE_TARGET_RATIO - $wholesaleRatio) / self::WHOLESALE_TARGET_RATIO;
-            $probability = min(self::WHOLESALE_GAP_PROB_CAP, $probability + (self::WHOLESALE_GAP_PROB_BOOST_MULT * $gapRatio));
-            $aggressiveness = min(self::WHOLESALE_GAP_AGGR_CAP, $aggressiveness + (self::WHOLESALE_GAP_AGGR_BOOST_MULT * $gapRatio));
+            $probability = self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT) + (self::WHOLESALE_URGENCY_PROB_BOOST * $shortfallRatio);
+            $aggressiveness = self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier) + (self::WHOLESALE_URGENCY_AGGR_BOOST * $shortfallRatio);
+
+            return [
+                'probability' => min(self::DEBT_EXPANSION_PROB_MAX, max(self::DEBT_EXPANSION_PROB_MIN, $probability)),
+                'aggressiveness' => min(self::DEBT_EXPANSION_AGGR_MAX, max(self::DEBT_EXPANSION_AGGR_MIN, $aggressiveness)),
+            ];
+        }
+
+        // Deposit Throttle: When liquid treasury is sufficient and the bank is well-funded by customer deposits,
+        // wholesale debt borrowing is throttled down to zero to prevent balance sheet inflation.
+        if ($depositRatio >= self::DEPOSIT_THROTTLE_UPPER_BOUND) {
+            return [
+                'probability' => 0.0,
+                'aggressiveness' => 0.0,
+            ];
+        }
+
+        // For banks with lower deposit coverage, scale borrowing capacity smoothly between UPPER and LOWER bounds
+        $baseProb = self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT);
+        $baseAggr = self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier);
+
+        if ($depositRatio > self::DEPOSIT_THROTTLE_LOWER_BOUND) {
+            $depositFactor = 1.0 - (($depositRatio - self::DEPOSIT_THROTTLE_LOWER_BOUND) / (self::DEPOSIT_THROTTLE_UPPER_BOUND - self::DEPOSIT_THROTTLE_LOWER_BOUND));
+            $throttleMultiplier = max(self::DEPOSIT_THROTTLE_FLOOR, $depositFactor);
+            $baseProb *= $throttleMultiplier;
+            $baseAggr *= $throttleMultiplier;
         }
 
         return [
-            'probability' => min(self::DEBT_EXPANSION_PROB_MAX, max(self::DEBT_EXPANSION_PROB_MIN, $probability)),
-            'aggressiveness' => min(self::DEBT_EXPANSION_AGGR_MAX, max(self::DEBT_EXPANSION_AGGR_MIN, $aggressiveness))
+            'probability' => min(self::DEBT_EXPANSION_PROB_MAX, max(self::DEBT_EXPANSION_PROB_MIN, $baseProb)),
+            'aggressiveness' => min(self::DEBT_EXPANSION_AGGR_MAX, max(self::DEBT_EXPANSION_AGGR_MIN, $baseAggr)),
         ];
     }
 

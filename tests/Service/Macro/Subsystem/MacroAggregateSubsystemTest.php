@@ -148,5 +148,34 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->subsystem->calculateCapacityUtilization($stateOverhang);
         $this->assertLessThan(MacroEngine::CU_BASELINE, $stateOverhang->capacityUtilizationRate);
     }
+
+    public function testCommodityCostPushPassesThroughToHeadlineInflationWithoutAttenuation(): void
+    {
+        $stateNormal = new MacroState();
+        $stateNormal->inflation = 0.02;
+        $stateNormal->inflationEma = 0.02;
+        $stateNormal->outputGap = 0.0;
+        $stateNormal->wageGrowth = MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION;
+        $stateNormal->energyPriceShock = 0.0;
+        $stateNormal->agriculturalCommodityIndex = 100.0;
+
+        $stateEnergy = clone $stateNormal;
+        $stateEnergy->energyPriceShock = 100.0; // 100% price surge (doubling)
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathMock->method('calculateConvexPhillipsCurve')->willReturn(0.0);
+        $mathMock->method('calculateDistributedLag')->willReturnCallback(
+            fn(float $curr, float $target, float $dt, float $tau) => $target
+        );
+
+        $subsystemWithMock = new MacroAggregateSubsystem($mathMock);
+
+        $infNormal = $subsystemWithMock->calculateInflation($stateNormal, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+        $infEnergy = $subsystemWithMock->calculateInflation($stateEnergy, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+
+        $expectedLift = MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
+        $this->assertEqualsWithDelta($expectedLift, $infEnergy - $infNormal, 0.0001, 'Energy shock must transmit to headline inflation without being diluted by basket weight.');
+    }
 }
 

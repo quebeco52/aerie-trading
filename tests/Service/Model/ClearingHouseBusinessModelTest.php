@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model;
 
 use PHPUnit\Framework\TestCase;
+use App\DTO\MacroStateDTO;
+use App\Entity\Stock;
 use App\Service\Model\Sector\ClearingHouseBusinessModel;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Math\MathUtility;
@@ -172,6 +174,35 @@ class ClearingHouseBusinessModelTest extends TestCase
         $this->assertSame(1_000_000_000_000.0 + ($operatingBase * 0.05), $targetCash);
         $this->assertSame(1_000_000_000_000.0 + ($operatingBase * 0.02), $minCash);
         $this->assertGreaterThan($minCash, $targetCash);
+    }
+
+    public function testCorporateDefaultRateSurgeIncreasesClearingHouseDefaultStress(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('ACC');
+        $stock->setBeta('0.8');
+
+        $calmMacro = new MacroStateDTO(
+            corporateDefaultRateEma: 0.020, // Baseline 2.0%
+            marketVolatilityEma: 0.18
+        );
+
+        $distressMacro = new MacroStateDTO(
+            corporateDefaultRateEma: 0.080, // Default wave (8.0%)
+            marketVolatilityEma: 0.18
+        );
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $calmResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $calmMacro, $mathMock);
+        $distressResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, $distressMacro, $mathMock);
+
+        $this->assertGreaterThan(
+            $calmResult->clampedMargin,
+            $distressResult->clampedMargin,
+            'Systemic corporate default waves must increase member insolvency risk and default waterfall provisioning.'
+        );
     }
 }
 

@@ -122,4 +122,51 @@ class LawFirmBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(35_000_000.0, $result->streamRevenue['litigation_settlements'], 1.0);
         $this->assertEqualsWithDelta(25_000_000.0, $result->streamRevenue['restructuring_advisory'], 1.0);
     }
+
+    public function testDealActivityAndCorporateDefaultRateChannels(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('CLAW');
+        $stock->setBeta('0.3');
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $baselineMacro = new MacroStateDTO(
+            outputGapEma: 0.0,
+            dealActivityIndexEma: 100.0,
+            corporateDefaultRateEma: 0.020,
+            macroCreditSpread: 0.015
+        );
+
+        $dealBoomMacro = new MacroStateDTO(
+            outputGapEma: 0.0,
+            dealActivityIndexEma: 150.0, // Active M&A deal making
+            corporateDefaultRateEma: 0.020,
+            macroCreditSpread: 0.015
+        );
+
+        $defaultSurgeMacro = new MacroStateDTO(
+            outputGapEma: 0.0,
+            dealActivityIndexEma: 100.0,
+            corporateDefaultRateEma: 0.060, // Surging corporate default wave
+            macroCreditSpread: 0.015
+        );
+
+        $baseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 10_000_000.0, 0.0, $baselineMacro, $mathMock);
+        $dealResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 10_000_000.0, 0.0, $dealBoomMacro, $mathMock);
+        $defaultResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 10_000_000.0, 0.0, $defaultSurgeMacro, $mathMock);
+
+        $this->assertGreaterThan(
+            $baseResult->streamRevenue['corporate_retainers'],
+            $dealResult->streamRevenue['corporate_retainers'],
+            'Active M&A deal activity expands corporate advisory and retainer billing.'
+        );
+
+        $this->assertGreaterThan(
+            $baseResult->streamRevenue['restructuring_advisory'],
+            $defaultResult->streamRevenue['restructuring_advisory'],
+            'Surging corporate default waves expand Chapter 11 bankruptcy restructuring billing.'
+        );
+    }
 }

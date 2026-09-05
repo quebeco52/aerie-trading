@@ -185,7 +185,7 @@ class MacroEngine
     /** Canonical Taylor (1993) weight on the output gap in the Taylor Rule. */
     public const TAYLOR_OUTPUT_GAP_WEIGHT = 0.50;
     /** Non-linear scaling factor amplifying rate cuts during deep recessions. */
-    public const TAYLOR_RECESSION_SCALE = 20.0;
+    public const TAYLOR_RECESSION_SCALE = 35.0;
     /** Bernanke (2015) blend: weight on realized core inflation (EMA) in the Taylor Rule inflation measure. */
     public const TAYLOR_INFLATION_CORE_WEIGHT = 0.70;
     /** Bernanke (2015) blend: weight on forward inflation expectations (TIPS breakeven) in the Taylor Rule inflation measure. */
@@ -203,7 +203,7 @@ class MacroEngine
     /** Inflation panic reaction multiplier accelerating rate hikes during extreme inflation spikes. */
     public const CB_INFLATION_PANIC_SCALE = 50.0;
     /** Recession panic reaction multiplier accelerating emergency cuts during downturns. */
-    public const CB_RECESSION_PANIC_SCALE = 50.0;
+    public const CB_RECESSION_PANIC_SCALE = 20.0;
     /** Maximum annual rate hike velocity cap during normal economic expansions (8 × 25bps meetings). */
     public const CB_MAX_NORMAL_HIKE_VELOCITY = 0.025;
     /** Maximum annual rate hike velocity cap during emergency runaway inflation spikes (525bps in 15 months annualized). */
@@ -302,12 +302,16 @@ class MacroEngine
     // --- Sectoral Inflation Sensitivities (Shapiro 2022) ---
     /** Wage-push transmission factor passing excess wage growth into supercore services inflation. */
     public const SUPERCORE_WAGE_TRANSMISSION = 0.25;
+    /** Demand sensitivity factor scaling aggregate output gap pressure into core goods prices. */
+    public const CORE_GOODS_DEMAND_SENSITIVITY = 0.80;
     /** Pass-through elasticity of ocean freight logistics bottlenecks into core goods inflation. */
     public const CORE_GOODS_FREIGHT_SENSITIVITY = 0.015;
     /** Pass-through elasticity of industrial metals supply friction into core goods inflation. */
     public const CORE_GOODS_METALS_SENSITIVITY = 0.008;
     /** Pass-through elasticity of global supply chain pressure index (GSCPI Z-score) into core goods inflation. */
     public const CORE_GOODS_GSCPI_SENSITIVITY = 0.003;
+    /** Stochastic diffusion volatility (sigma) of headline inflation fluctuations. */
+    public const INFLATION_DIFFUSION_SIGMA = 0.002;
 
     // --- Merton Structural Corporate Credit Spreads (Merton 1974) ---
     /** Sensitivity of corporate credit spreads to wholesale interbank funding stress. */

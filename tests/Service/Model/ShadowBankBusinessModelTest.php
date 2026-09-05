@@ -203,4 +203,42 @@ class ShadowBankBusinessModelTest extends TestCase
             'Surging corporate default rates and forward recession risk must increase shadow bank loss provisions and CECL reserves.'
         );
     }
+
+    public function testBaselineCreditSpreadDoesNotImposeUnprovokedCeclDrag(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('BXSL');
+        $stock->setBeta('1.0');
+
+        $neutralMacro = new MacroStateDTO(
+            macroCreditSpreadEma: 0.020, // Baseline 200 bps
+            recessionProbabilityEma: 0.15, // Baseline 15%
+            yield30yEma: 0.055,
+            policyRateEma: 0.040,
+            interbankLiquiditySpreadEma: 0.0010
+        );
+
+        $widenedMacro = new MacroStateDTO(
+            macroCreditSpreadEma: 0.040, // 400 bps blowout (+200 bps)
+            recessionProbabilityEma: 0.15,
+            yield30yEma: 0.055,
+            policyRateEma: 0.040,
+            interbankLiquiditySpreadEma: 0.0010
+        );
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $neutralResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $neutralMacro, $mathMock);
+        $widenedResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $widenedMacro, $mathMock);
+
+        // At baseline credit spread, CECL forward provision is 0.0 (spreadGap is 0.0).
+        // Widened credit spread must produce a strictly higher variable cost ratio.
+        $this->assertGreaterThan(
+            $neutralResult->clampedMargin,
+            $widenedResult->clampedMargin,
+            'Widened credit spread must increase forward CECL provisions above baseline.'
+        );
+        $this->assertEqualsWithDelta(0.030, $widenedResult->clampedMargin - $neutralResult->clampedMargin, 0.001);
+    }
 }

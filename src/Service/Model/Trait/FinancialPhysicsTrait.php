@@ -62,7 +62,7 @@ trait FinancialPhysicsTrait
         $newTtm += \App\Service\Math\MathUtility::getInstance()->calculateReversionPull($newTtm, $costOfEquity, $scaledKappa, $effectiveMoat);
         $stock->setRoeTtm((string) max(-0.50, min(1.0, $newTtm)));
 
-        return $truePostTaxReturn;
+        return max(-0.50, min(1.0, $truePostTaxReturn));
     }
 
     public function calculateCapacityModifier(float $totalDebt, float $equity, float $equityLimit, ?float $coreLiabilities = null): float

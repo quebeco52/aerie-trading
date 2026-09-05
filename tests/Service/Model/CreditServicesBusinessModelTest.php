@@ -144,4 +144,35 @@ class CreditServicesBusinessModelTest extends TestCase
             'Commercial bank credit tightening gates revolving credit originations and contracts lending asset growth.'
         );
     }
+
+    public function testInterbankLiquidityFreezeSqueezesCreditServicesNim(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('COF');
+        $stock->setBeta('1.0');
+
+        $calmMacro = new MacroStateDTO(
+            yield10yEma: 0.05,
+            yield2yEma: 0.04,
+            interbankLiquiditySpreadEma: 0.0010
+        );
+
+        $freezeMacro = new MacroStateDTO(
+            yield10yEma: 0.05,
+            yield2yEma: 0.04,
+            interbankLiquiditySpreadEma: 0.0150 // 150 bps blowout
+        );
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $calmResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.55, 20_000_000.0, 0.0, $calmMacro, $mathMock);
+        $freezeResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.55, 20_000_000.0, 0.0, $freezeMacro, $mathMock);
+
+        $this->assertGreaterThan(
+            $calmResult->clampedMargin,
+            $freezeResult->clampedMargin,
+            'Interbank liquidity freeze must compress lending spreads and inflate variable funding costs.'
+        );
+    }
 }

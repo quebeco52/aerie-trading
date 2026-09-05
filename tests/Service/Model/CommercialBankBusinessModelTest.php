@@ -538,4 +538,94 @@ class CommercialBankBusinessModelTest extends TestCase
 
         $this->assertGreaterThan($resultLowRisk->clampedMargin, $resultHighRisk->clampedMargin, 'High 12M forward recession probability must build forward CECL reserves.');
     }
+
+    public function testDepositThrottleSuppressesWholesaleDebtExpansionWhenAdequatelyFunded(): void
+    {
+        // Bank funded 80% by deposits with adequate treasury cash
+        $totalDebt = 100_000_000_000.0;
+        $customerDeposits = 80_000_000_000.0; // 80% deposit ratio >= 50% upper bound
+        $targetOperatingCash = 10_000_000_000.0;
+        $currentTreasury = 15_000_000_000.0; // Sufficient treasury
+
+        $result = $this->model->getDebtExpansionAggressiveness(
+            spreadMultiplier: 1.0,
+            totalDebt: $totalDebt,
+            customerDeposits: $customerDeposits,
+            targetOperatingCash: $targetOperatingCash,
+            currentTreasury: $currentTreasury
+        );
+
+        $this->assertSame(0.0, $result['probability'], 'Deposit-funded bank with adequate cash must not borrow wholesale debt.');
+        $this->assertSame(0.0, $result['aggressiveness'], 'Aggressiveness must be 0 for deposit-funded bank.');
+    }
+
+    public function testLiquidityShortfallTriggersUrgentWholesaleBorrowing(): void
+    {
+        // Bank suffering liquidity shortfall (treasury < targetOperatingCash)
+        $totalDebt = 100_000_000_000.0;
+        $customerDeposits = 80_000_000_000.0;
+        $targetOperatingCash = 10_000_000_000.0;
+        $currentTreasury = 2_000_000_000.0; // 80% shortfall
+
+        $result = $this->model->getDebtExpansionAggressiveness(
+            spreadMultiplier: 0.5,
+            totalDebt: $totalDebt,
+            customerDeposits: $customerDeposits,
+            targetOperatingCash: $targetOperatingCash,
+            currentTreasury: $currentTreasury
+        );
+
+        $this->assertGreaterThan(0.50, $result['probability'], 'Liquidity shortfall must boost borrowing probability.');
+        $this->assertGreaterThan(0.20, $result['aggressiveness'], 'Liquidity shortfall must boost borrowing aggressiveness.');
+    }
+
+    public function testUnfundedExpansionCapacityDeductsExcessCash(): void
+    {
+        $baseCapacity = 10_000_000_000.0;
+        $excessCash = 4_000_000_000.0;
+
+        $unfunded = $this->model->getUnfundedExpansionCapacity($baseCapacity, $excessCash);
+        $this->assertEqualsWithDelta(6_000_000_000.0, $unfunded, 1.0, 'Unfunded expansion capacity must deduct excess treasury cash.');
+
+        // When excess cash exceeds base capacity, unfunded is zero
+        $unfundedZero = $this->model->getUnfundedExpansionCapacity($baseCapacity, 15_000_000_000.0);
+        $this->assertSame(0.0, $unfundedZero);
+    }
+
+    public function testBuybacksStrictlyProhibitedDuringNegativeEarnings(): void
+    {
+        $excessCash = 50_000_000_000.0;
+        $negativeEarnings = -5_000_000_000.0;
+
+        // Even for a mega-hoarder, negative earnings must yield zero buyback budget
+        $spendMega = $this->model->calculateMaxBuybackSpend($excessCash, $negativeEarnings, true);
+        $this->assertSame(0.0, $spendMega, 'Mega-hoarder bank cannot spend depositor cash on buybacks during net losses.');
+
+        $spendNormal = $this->model->calculateMaxBuybackSpend($excessCash, $negativeEarnings, false);
+        $this->assertSame(0.0, $spendNormal, 'Bank cannot buy back shares during net losses.');
+
+        // Positive earnings: buybacks are capped by positive retained earnings
+        $positiveEarnings = 2_000_000_000.0;
+        $spendPositive = $this->model->calculateMaxBuybackSpend($excessCash, $positiveEarnings, true);
+        $this->assertLessThanOrEqual($positiveEarnings, $spendPositive, 'Buyback spend must never exceed retained earnings.');
+    }
+
+    public function testUpdateDynamicRoicClampsExtremeReturns(): void
+    {
+        $stock = new Stock();
+        $stock->setTotalEquity('1000.0'); // Near-zero equity
+        $hugeIncome = 50_000_000_000.0; // Trillions in return if unclamped
+
+        $roic = $this->model->updateDynamicRoic(
+            $stock,
+            actualTotalNetIncome: $hugeIncome,
+            investedCapital: 1_000_000.0,
+            ebit: 60_000_000_000.0,
+            corporateTaxRate: 0.21
+        );
+
+        $this->assertLessThanOrEqual(CommercialBankBusinessModel::ROE_CLAMP_MAX, $roic);
+        $this->assertGreaterThanOrEqual(CommercialBankBusinessModel::ROE_CLAMP_MIN, $roic);
+        $this->assertEqualsWithDelta(CommercialBankBusinessModel::ROE_CLAMP_MAX, (float) $stock->getCurrentRoe(), 0.0001);
+    }
 }

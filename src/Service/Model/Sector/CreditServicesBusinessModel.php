@@ -126,6 +126,8 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public const NIM_LINEAR_SENSITIVITY     = 1.50;
     /** Quadratic coefficient amplifying funding costs during yield curve inversions. */
     public const NIM_QUADRATIC_COEFF        = 0.15;
+    /** Sensitivity of unsecured lending funding cost squeeze to interbank liquidity freezes (TED spread). */
+    public const TED_SPREAD_NIM_PENALTY     = 1.50;
 
     // --- Event Lore Thresholds ---
     /** Severe credit z-score threshold indicating massive unsecured credit default provisions. */
@@ -231,7 +233,8 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         // Net Interest Margin (NIM) Squeeze (1.5x more sensitive than banks due to wholesale funding dependency)
         $yield10y = $macroState->yield10yEma;
         $yield2y  = $macroState->yield2yEma;
-        $bankSpread = $yield10y - $yield2y;
+        $tedSpread = max(0.0, $macroState->interbankLiquiditySpreadEma - MacroEngine::INTERBANK_BASELINE_SPREAD);
+        $bankSpread = ($yield10y - $yield2y) - ($tedSpread * self::TED_SPREAD_NIM_PENALTY);
 
         if ($bankSpread < 0) {
             $nimSqueeze = (self::NIM_SPREAD_BUFFER - $bankSpread)

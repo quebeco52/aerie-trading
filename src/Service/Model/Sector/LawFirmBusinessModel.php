@@ -73,6 +73,10 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
 
     /** Baseline credit spread above which corporate bankruptcy workouts accelerate. */
     public const DEFAULT_CREDIT_SPREAD_BASELINE = 0.015;
+    /** Sensitivity of corporate legal retainers and M&A compliance to aggregate deal activity. */
+    public const DEAL_ACTIVITY_RETAINER_SCALAR = 0.20;
+    /** Sensitivity of bankruptcy restructuring legal billing to macroeconomic corporate default rate surges. */
+    public const CORPORATE_DEFAULT_RESTRUCTURING_SCALAR = 0.30;
 
     // --- Associate Wage Inflation ---
     /** Sensitivity of law firm variable margin to legal talent and associate wage inflation. */
@@ -170,16 +174,22 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
 
         // --- Macro Sensitivities & Restructuring Surge ---
         $outputGap = $macroState->outputGapEma;
-        $creditSpread = $macroState->macroCreditSpread;
+        $creditSpread = ($macroState->macroCreditSpread !== MacroEngine::BASE_CREDIT_SPREAD)
+            ? $macroState->macroCreditSpread
+            : $macroState->macroCreditSpreadEma;
 
-        // Retainers expand slightly during corporate booms
-        $retainerMacroBoost = max(0.0, $outputGap * self::RETAINER_MACRO_SCALAR * $beta);
+        // Retainers expand during corporate booms and active M&A deal flow
+        $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
+        $retainerMacroBoost = max(0.0, $outputGap * self::RETAINER_MACRO_SCALAR * $beta)
+            + ($dealActivityShift * self::DEAL_ACTIVITY_RETAINER_SCALAR);
 
         // Restructuring surges counter-cyclically during economic recessions and credit default waves
         $recessionDepth = max(0.0, -$outputGap);
         $excessSpread   = max(0.0, $creditSpread - self::DEFAULT_CREDIT_SPREAD_BASELINE);
+        $corporateDefaultShift = max(0.0, ($macroState->corporateDefaultRateEma - MacroEngine::CORPORATE_DEFAULT_BASELINE) / MacroEngine::CORPORATE_DEFAULT_BASELINE);
         $restructuringSurge = ($recessionDepth * self::RESTRUCTURING_RECESSION_SCALAR * $beta)
-            + ($excessSpread * self::RESTRUCTURING_SPREAD_SCALAR);
+            + ($excessSpread * self::RESTRUCTURING_SPREAD_SCALAR)
+            + ($corporateDefaultShift * self::CORPORATE_DEFAULT_RESTRUCTURING_SCALAR);
 
         // --- Tail Risk & Settlement Events ---
         $litigationMult = 1.0;

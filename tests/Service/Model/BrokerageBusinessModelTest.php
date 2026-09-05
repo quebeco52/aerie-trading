@@ -170,4 +170,32 @@ class BrokerageBusinessModelTest extends TestCase
     {
         $this->assertSame(8.0, $this->model->getWholesaleLeverageLimit());
     }
+
+    public function testDealActivityExpandsAdvisoryRevenue(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('ROOK');
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $baselineMacro = new MacroStateDTO(
+            dealActivityIndexEma: 100.0,
+            marketVolatilityEma: 0.20
+        );
+
+        $boomMacro = new MacroStateDTO(
+            dealActivityIndexEma: 140.0, // +40% surge in M&A/capital markets deal flow
+            marketVolatilityEma: 0.20
+        );
+
+        $baseResult = $this->model->computeActualFinancials($stock, 1000.0, 0.35, 100.0, 0.0, $baselineMacro, $mathMock);
+        $boomResult = $this->model->computeActualFinancials($stock, 1000.0, 0.35, 100.0, 0.0, $boomMacro, $mathMock);
+
+        $this->assertGreaterThan(
+            $baseResult->streamRevenue['advisory'],
+            $boomResult->streamRevenue['advisory'],
+            'Elevated capital markets deal activity must boost brokerage advisory and underwriting revenue.'
+        );
+    }
 }

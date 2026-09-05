@@ -154,7 +154,7 @@ class DebtEngine
         }
 
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
-        $totalDebtObligations = max(0.01, $debt + $wholesaleDebt);
+        $totalDebtObligations = max(0.01, $strategy->getDeleveragingEvaluationDebt($debt, $wholesaleDebt));
         $netDebt = max(0.0, $strategy->getNetDebtCapital($debt, $wholesaleDebt, $treasury));
         $totalEquity = (float) $stock->getTotalEquity();
 
