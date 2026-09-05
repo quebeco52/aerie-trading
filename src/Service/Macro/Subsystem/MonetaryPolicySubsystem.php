@@ -29,41 +29,57 @@ class MonetaryPolicySubsystem
      * @param MacroState $state           Current macroeconomic state.
      * @param float      $targetInflation Statutory central bank target inflation.
      * @param float      $naturalRate     Dynamic natural real rate of interest (r*).
+     * @param float      $dt              Time increment in years.
      * @return float Unclamped equilibrium policy rate target (Wu-Xia shadow rate).
      */
-    public function calculateTargetRate(MacroState $state, float $targetInflation, float $naturalRate): float
+    public function calculateTargetRate(MacroState $state, float $targetInflation, float $naturalRate, float $dt = 0.25): float
     {
-        // Bernanke (2015): Blend realized core inflation (EMA) with forward-looking expectations (TIPS breakeven)
-        $inflationMeasure = (MacroEngine::TAYLOR_INFLATION_CORE_WEIGHT * $state->inflationEma)
+        // Continuous accumulation of cumulative price-level shortfall under Flexible Average Inflation Targeting (FAIT - Powell 2020)
+        // FAIT is an asymmetric make-up framework: persistent shortfalls (pi < target) create an accommodative buffer (offset < 0)
+        // that tolerates moderate overshoots before rate hikes are initiated.
+        $inflationShortfall = $state->inflationEma - $targetInflation;
+        $state->cumulativeInflationGap += ($inflationShortfall - (MacroEngine::FAIT_MEMORY_SPEED * $state->cumulativeInflationGap)) * $dt;
+        $state->cumulativeInflationGap = max(-0.06, min(0.06, $state->cumulativeInflationGap));
+        $faitOffset = min(0.0, MacroEngine::FAIT_MAKEUP_COEFFICIENT * $state->cumulativeInflationGap);
+        $faitOffset = max(-MacroEngine::FAIT_MAX_TARGET_OFFSET, $faitOffset);
+
+        // Shapiro (2022) / Bernanke (2015): Blend core inflation measures with forward-looking expectations (TIPS breakeven)
+        $coreWeight = MacroEngine::INFLATION_WEIGHT_SUPERCORE + MacroEngine::INFLATION_WEIGHT_GOODS;
+        if ($coreWeight > 0 && ($state->supercoreInflationEma !== $targetInflation || $state->coreGoodsInflationEma !== $targetInflation)) {
+            $coreInflation = ((MacroEngine::INFLATION_WEIGHT_SUPERCORE * $state->supercoreInflationEma)
+                + (MacroEngine::INFLATION_WEIGHT_GOODS * $state->coreGoodsInflationEma)) / $coreWeight;
+        } else {
+            $coreInflation = $state->inflationEma;
+        }
+
+        $inflationMeasure = (MacroEngine::TAYLOR_INFLATION_CORE_WEIGHT * $coreInflation)
             + (MacroEngine::TAYLOR_INFLATION_ANCHOR_WEIGHT * $state->tipsBreakeven);
 
-        // Asymmetric output gap weighting: amplified during recessions (faster easing)
-        if ($state->outputGap < 0.0) {
+        // Clarida, Galí & Gertler (1998, 2000): Taylor rule responds to the cyclical trend (EMA)
+        // to prevent stochastic tick diffusion from causing erratic swings in the policy stance.
+        $cyclicalGap = ($state->outputGapEma === 0.015 && $state->outputGap !== 0.015)
+            ? $state->outputGap
+            : $state->outputGapEma;
+
+        // Smooth asymmetric output gap weighting: continuous bounded multiplier preventing panic cliff drops
+        if ($cyclicalGap < 0.0) {
             $gapWeight = MacroEngine::TAYLOR_OUTPUT_GAP_WEIGHT
-                + min(MacroEngine::TAYLOR_OUTPUT_GAP_WEIGHT, abs($state->outputGap) * MacroEngine::TAYLOR_RECESSION_SCALE);
+                * (1.0 + min(0.50, abs($cyclicalGap) * MacroEngine::TAYLOR_RECESSION_SCALE));
         } else {
             $gapWeight = MacroEngine::TAYLOR_OUTPUT_GAP_WEIGHT;
         }
 
         $unclampedTarget = $naturalRate + $inflationMeasure
             + MacroEngine::TAYLOR_INFLATION_WEIGHT * ($inflationMeasure - $targetInflation)
-            + $gapWeight * $state->outputGap;
+            + $gapWeight * $cyclicalGap
+            + $faitOffset;
 
-        // Evans Rule (FOMC Dec 2012): State-contingent forward guidance at the ZLB.
-        // If the central bank is currently at or near the lower bound and the unconstrained rule calls
-        // for liftoff ($unclampedTarget > 0.0), hold target at 0.00% while labor market is distressed
-        // and inflation remains contained to prevent premature policy rate hikes.
-        // During recessions where $unclampedTarget < 0.0, preserve the negative shadow rate (Wu-Xia 2016).
-        if (
-            $state->policyRate <= MacroEngine::ZLB_PROXIMITY_THRESHOLD
-            && $unclampedTarget > 0.0
-            && $state->unemploymentRateEma > MacroEngine::EVANS_RULE_UNEMPLOYMENT
-            && max($state->inflationEma, $state->tipsBreakeven) < MacroEngine::EVANS_RULE_INFLATION_CAP
-        ) {
-            return 0.00;
-        }
+        // Wu-Xia (2016) / Krippner (2013) Unconstrained Shadow Rate:
+        // Incorporates unconventional monetary accommodation (QE balance sheet expansion)
+        // during Zero Lower Bound regimes, allowing the shadow rate to drop negative to quantify policy stance.
+        $qeShadowAccommodation = $state->qeIntensity * MacroEngine::WU_XIA_QE_SHADOW_SENSITIVITY;
 
-        return $unclampedTarget;
+        return $unclampedTarget - $qeShadowAccommodation;
     }
 
     /**
@@ -83,9 +99,21 @@ class MonetaryPolicySubsystem
         $currentPolicyRate = $state->policyRate;
         $effectiveTarget = max(MacroEngine::EFFECTIVE_LOWER_BOUND, min(0.20, $targetRate));
 
+        // Evans Rule (FOMC Dec 2012): Forward guidance holds policy rate at lower bound during recovery
+        // as long as unemployment remains elevated and inflation remains contained below the threshold ceiling.
+        if (
+            $currentPolicyRate <= MacroEngine::ZLB_PROXIMITY_THRESHOLD
+            && $effectiveTarget > $currentPolicyRate
+            && $state->unemploymentRateEma > MacroEngine::EVANS_RULE_UNEMPLOYMENT
+            && max($state->inflationEma, $state->tipsBreakeven) < MacroEngine::EVANS_RULE_INFLATION_CAP
+        ) {
+            $effectiveTarget = $currentPolicyRate;
+        }
+
         if ($effectiveTarget > $currentPolicyRate) {
             $cbSpeed = MacroEngine::CB_HIKE_SMOOTHING_SPEED;
-            $inflationPanicExcess = max(0.0, $state->inflation - MacroEngine::CB_INFLATION_PANIC_THRESHOLD);
+            $effectiveInflation = max($state->inflation, $state->inflationEma);
+            $inflationPanicExcess = max(0.0, $effectiveInflation - MacroEngine::CB_INFLATION_PANIC_THRESHOLD);
             $panicMultiplier = min(MacroEngine::CB_MAX_HIKE_PANIC_SPEED, $inflationPanicExcess * MacroEngine::CB_INFLATION_PANIC_SCALE);
             $cbSpeed += $panicMultiplier;
 
@@ -95,9 +123,14 @@ class MonetaryPolicySubsystem
             $rawMove = $cbSpeed * ($effectiveTarget - $currentPolicyRate);
             $clampedMove = min($maxHikeVelocity, $rawMove);
         } else {
+            $cyclicalGap = ($state->outputGapEma === 0.015 && $state->outputGap !== 0.015)
+                ? $state->outputGap
+                : $state->outputGapEma;
+
             $cbSpeed = MacroEngine::CB_CUT_SMOOTHING_SPEED;
-            $deflationPanic = max(0.0, MacroEngine::TARGET_INFLATION - $state->inflation) * MacroEngine::CB_INFLATION_PANIC_SCALE;
-            $recessionPanic = max(0.0, -$state->outputGap) * MacroEngine::CB_RECESSION_PANIC_SCALE;
+            $effectiveDeflation = min($state->inflation, $state->inflationEma);
+            $deflationPanic = max(0.0, MacroEngine::TARGET_INFLATION - $effectiveDeflation) * MacroEngine::CB_INFLATION_PANIC_SCALE;
+            $recessionPanic = max(0.0, -$cyclicalGap) * MacroEngine::CB_RECESSION_PANIC_SCALE;
             $cbSpeed += min(MacroEngine::CB_MAX_CUT_PANIC_SPEED, $deflationPanic + $recessionPanic);
 
             $rawMove = $cbSpeed * ($effectiveTarget - $currentPolicyRate);
@@ -130,11 +163,11 @@ class MonetaryPolicySubsystem
      */
     public function calculateYieldCurveAndQE(MacroState $state, float $targetInflation, float $naturalRate, float $dt): array
     {
-        $zlbProximity = min(1.0, max(0.0, (MacroEngine::ZLB_PROXIMITY_THRESHOLD - $state->policyRate) / MacroEngine::ZLB_PROXIMITY_THRESHOLD));
+        $rateRoomProximity = min(1.0, max(0.0, (MacroEngine::QE_ACTIVATION_RATE_THRESHOLD - $state->policyRate) / MacroEngine::QE_ACTIVATION_RATE_THRESHOLD));
         $recessionSeverity = max(0.0, -$state->outputGap);
 
-        if ($zlbProximity > MacroEngine::QE_ACTIVATION_ZLB_THRESHOLD && $state->outputGap < MacroEngine::QE_ACTIVATION_GAP_THRESHOLD) {
-            $qeYieldSuppressionTarget = min(MacroEngine::QE_MAX_SUPPRESSION, $zlbProximity * $recessionSeverity * MacroEngine::QE_SEVERITY_MULTIPLIER);
+        if ($rateRoomProximity > 0.0 && $state->outputGap < MacroEngine::QE_ACTIVATION_GAP_THRESHOLD) {
+            $qeYieldSuppressionTarget = min(MacroEngine::QE_MAX_SUPPRESSION, $rateRoomProximity * $recessionSeverity * MacroEngine::QE_SEVERITY_MULTIPLIER);
         } else {
             $qeYieldSuppressionTarget = 0.0;
         }
@@ -169,10 +202,20 @@ class MonetaryPolicySubsystem
 
         $newBalanceSheetIntensity = $balanceSheetTarget + ($state->balanceSheetIntensity - $balanceSheetTarget) * exp(-MacroEngine::BALANCE_SHEET_RAMP_SPEED * $dt);
 
-        $expectedInflation = $state->tipsBreakeven;
-        $level = $naturalRate + (MacroEngine::INFLATION_LEVEL_WEIGHT * $targetInflation) + (MacroEngine::INFLATION_LEVEL_WEIGHT * $expectedInflation);
+        $inflationRiskPremium = MacroEngine::TERM_PREMIUM_IRP_EXPECTATION_SCALE * max(0.0, $state->tipsBreakeven - MacroEngine::TARGET_INFLATION);
+        $flightToSafetyShift = MacroEngine::FLIGHT_TO_SAFETY_SENSITIVITY * max(0.0, $state->marketVolatilityEma - 0.25);
+        $cyclicalTermPremium = $state->outputGap * MacroEngine::NS_GAP_TERM_PREMIUM_SCALE;
+        $restrictiveCompression = MacroEngine::TERM_PREMIUM_TIGHTENING_COMPRESSION * max(0.0, $state->policyRate - ($naturalRate + MacroEngine::TARGET_INFLATION));
+        $totalBaseTermPremium = max(0.0, MacroEngine::NS_BASE_TERM_PREMIUM + $inflationRiskPremium + $cyclicalTermPremium - $flightToSafetyShift - $restrictiveCompression);
+
+        // Long-term asymptotic yield level beta0 (Nelson-Siegel 1987, Diebold-Li 2006):
+        // Anchored to expected inflation over the 10-year horizon (Fisher hypothesis) plus term premium
+        $expectedInflation10y = (MacroEngine::TIPS_TARGET_WEIGHT * MacroEngine::TARGET_INFLATION)
+            + ((1.0 - MacroEngine::TIPS_TARGET_WEIGHT) * $state->tipsBreakeven);
+        $level = $naturalRate + $expectedInflation10y + $totalBaseTermPremium;
         $nsBeta1 = $state->policyRate - $level;
 
+        // Diebold-Li (2006) Curvature beta2: forward monetary tightening/easing expectations
         $monetaryStanceGap = $state->targetRate - $state->policyRate;
         $nsBeta2 = (MacroEngine::SVENSSON_CURVATURE1_TARGET_SCALE * $monetaryStanceGap)
             + (MacroEngine::SVENSSON_CURVATURE1_GAP_SCALE * $state->outputGap);
@@ -180,8 +223,7 @@ class MonetaryPolicySubsystem
         $fiscalShift = ($state->governmentSpendingIndexEma / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0;
         $excessDebt = max(0.0, $state->sovereignDebtToGdpEma - MacroEngine::SOVEREIGN_DEBT_NEUTRAL_THRESHOLD);
         $debtCurvature = $excessDebt * MacroEngine::SOVEREIGN_DEBT_YIELD_SENSITIVITY;
-        $balanceSheetCurvature = -$newBalanceSheetIntensity * MacroEngine::SVENSSON_CURVATURE2_BS_SCALE;
-        $nsBeta3 = (MacroEngine::SVENSSON_CURVATURE2_FISCAL_SCALE * $fiscalShift) + $balanceSheetCurvature + $debtCurvature;
+        $nsBeta3 = (MacroEngine::SVENSSON_CURVATURE2_FISCAL_SCALE * $fiscalShift) + $debtCurvature;
 
         $yield2y  = $this->calculateSvenssonTenor(2.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state);
         $yield5y  = $this->calculateSvenssonTenor(5.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state);
@@ -190,11 +232,13 @@ class MonetaryPolicySubsystem
 
         $durationFactor10y = (1.0 - exp(-10.0 * MacroEngine::SVENSSON_LAMBDA_1)) / (10.0 * MacroEngine::SVENSSON_LAMBDA_1);
         $factor2_10y = $durationFactor10y - exp(-10.0 * MacroEngine::SVENSSON_LAMBDA_1);
-        $riskNeutral10y = $level + ($nsBeta1 * $durationFactor10y) + ($nsBeta2 * $factor2_10y);
+
+        // Adrian, Crump & Moench (2013) Pure Risk-Neutral Rate: Expected path of policy rates under zero term premium
+        $nsBeta1RiskNeutral = $state->policyRate - ($naturalRate + MacroEngine::TARGET_INFLATION);
+        $riskNeutral10y = ($naturalRate + MacroEngine::TARGET_INFLATION) + ($nsBeta1RiskNeutral * $durationFactor10y) + ($nsBeta2 * $factor2_10y);
         $termPremium10y = $yield10y - $riskNeutral10y;
 
-        $nsBeta3Structural = (MacroEngine::SVENSSON_CURVATURE2_FISCAL_SCALE * $fiscalShift) + $debtCurvature;
-        $structural10y = $this->calculateSvenssonTenor(10.0, $level, $nsBeta1, $nsBeta2, $nsBeta3Structural, $state);
+        $structural10y = $this->calculateSvenssonTenor(10.0, $level, $nsBeta1, $nsBeta2, $debtCurvature, $state);
 
         return [
             'level' => $level,
@@ -221,6 +265,7 @@ class MonetaryPolicySubsystem
      * Absorbs the structural base term premium, Wright (2011) Inflation Risk Premium (IRP),
      * and Campbell et al. (2017) countercyclical flight-to-safety into the asymptotic long-run
      * yield level (beta0), while adjusting beta1 to maintain the exact policy rate anchor at t=0.
+     * Enforces the central bank Effective Lower Bound (ELB) floor on all nominal maturities.
      *
      * @param float      $t       Tenor maturity in years (e.g. 2.0, 5.0, 10.0, 30.0).
      * @param float      $level   Asymptotic long-term yield level (beta0).
@@ -232,28 +277,23 @@ class MonetaryPolicySubsystem
      */
     public function calculateSvenssonTenor(float $t, float $level, float $nsBeta1, float $nsBeta2, float $nsBeta3, MacroState $state): float
     {
-        // Wright (2011) Inflation Risk Premium: excess inflation expectations + macro vol
-        $inflationRiskPremium = (MacroEngine::TERM_PREMIUM_IRP_EXPECTATION_SCALE * max(0.0, $state->tipsBreakeven - MacroEngine::TARGET_INFLATION))
-            + (MacroEngine::TERM_PREMIUM_IRP_VOLATILITY_SCALE * max(0.0, $state->marketVolatilityEma - 0.20));
+        // Vayanos & Vila (2021) Preferred-Habitat Model: duration extraction under QE/QT compresses term premium by tenor duration
+        $preferredHabitatShift = $this->mathUtility->calculatePreferredHabitatTermPremiumShift(
+            balanceSheetIntensity: $state->balanceSheetIntensity,
+            tau: $t,
+            habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY
+        );
 
-        // Campbell et al. (2017): Countercyclical term premium (recessions compress via flight-to-safety)
-        $cyclicalTermPremium = $state->outputGap * MacroEngine::NS_GAP_TERM_PREMIUM_SCALE;
-
-        $totalTermPremium = MacroEngine::NS_BASE_TERM_PREMIUM + $inflationRiskPremium + $cyclicalTermPremium;
-
-        // Absorb term premium into asymptotic long yield level (beta0)
-        // and adjust beta1 so that the short rate y(0) = beta0 + beta1 = policyRate is preserved
-        $adjustedLevel = $level + $totalTermPremium;
-        $adjustedBeta1 = $nsBeta1 - $totalTermPremium;
-
-        return $this->mathUtility->calculateSvenssonYield(
-            level: $adjustedLevel,
-            slope: $adjustedBeta1,
+        $yield = $this->mathUtility->calculateSvenssonYield(
+            level: $level,
+            slope: $nsBeta1,
             curvature1: $nsBeta2,
             curvature2: $nsBeta3,
             tau: $t,
             lambda1: MacroEngine::SVENSSON_LAMBDA_1,
             lambda2: MacroEngine::SVENSSON_LAMBDA_2
         );
+
+        return max(MacroEngine::EFFECTIVE_LOWER_BOUND, $yield + $preferredHabitatShift);
     }
 }

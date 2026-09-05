@@ -46,30 +46,44 @@ class MacroEngine
     public const CASH_YIELD_SPREAD = 0.0025;
 
     // --- KALDOR-KALECKI 2D LIMIT CYCLE ---
+    /** Autonomous secular aggregate demand expansion propensity (Solow-Swan & Schumpeterian growth drift). */
+    public const KALDOR_AUTONOMOUS_PROPENSITY = 0.008;
     /** Elasticity of aggregate demand to exchange rate deviations (Marshall-Lerner Net Export Drag). */
     public const KALDOR_FX_ELASTICITY = 0.04;
     /** Linear momentum of aggregate demand feedback loop. */
     public const KALDOR_MOMENTUM = 0.18;
     /** Cubic stabilization factor bounding extreme boom/bust expansions. */
-    public const KALDOR_CAPACITY = 350.0;
+    public const KALDOR_CAPACITY = 500.0;
     /** Sensitivity of aggregate demand to real interest rate deviations from natural rate. */
-    public const KALDOR_MONETARY_DRAG = 1.00;
+    public const KALDOR_MONETARY_DRAG = 1.30;
+    /** Sensitivity of aggregate demand to wholesale credit spread and interbank liquidity friction (Bernanke-Gertler 1999). */
+    public const KALDOR_CREDIT_FRICTION_DRAG = 0.25;
     /** Countercyclical fiscal stimulus multiplier from corporate tax rate cuts. */
     public const KALDOR_FISCAL_MULTIPLIER = 0.50;
     /** Sensitivity of the output gap to physical capital stock overhang (excess capacity drags down growth). */
     public const KALDOR_CAPITAL_DRAG = 0.15;
     /** Elasticity of aggregate demand to household wealth deviations (Modigliani Wealth Effect). */
     public const KALDOR_WEALTH_EFFECT_ELASTICITY = 0.02;
-    /** Bruno-Sachs (1985) supply-side elasticity of output to energy price shock. */
-    public const KALDOR_ENERGY_SUPPLY_DRAG = 0.03;
+    /** Bruno-Sachs (1985) supply-side elasticity of output to energy price shock (Blanchard-Gali 2007). */
+    public const KALDOR_ENERGY_SUPPLY_DRAG = 0.004;
     /** Supply-side elasticity of output to excess freight/logistics costs. */
-    public const KALDOR_FREIGHT_SUPPLY_DRAG = 0.01;
+    public const KALDOR_FREIGHT_SUPPLY_DRAG = 0.002;
     /** The rate at which business investment (output gap) accumulates into the physical capital stock. */
-    public const CAPITAL_ACCUMULATION_RATE = 0.30;
+    public const CAPITAL_ACCUMULATION_RATE = 0.25;
     /** The rate at which physical capital depreciates, organically clearing overhangs and creating pent-up demand. */
     public const CAPITAL_DECAY_RATE = 0.30;
     /** Stochastic diffusion volatility of the macroeconomic output gap. */
     public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.005;
+
+    // --- Metzler-Blinder Inventory Investment Cycle (Metzler 1941, Blinder 1982) ---
+    /** Sensitivity of output gap drift to involuntary inventory liquidation and restocking. */
+    public const METZLER_INVENTORY_DRAG = 0.08;
+    /** Annual adjustment speed of firm inventory target replenishment. */
+    public const INVENTORY_ADJUSTMENT_SPEED = 0.80;
+    /** Sensitivity of involuntary inventory accumulation to unexpected output gap deceleration. */
+    public const INVENTORY_SURPRISE_SENSITIVITY = 0.60;
+    /** Cyclical target inventory sensitivity to real output gap demand. */
+    public const INVENTORY_CYCLICAL_DEMAND_SENSITIVITY = 0.80;
 
     // --- Okun's Law & Diamond-Mortensen-Pissarides Beveridge Curve ---
     /** Structural Non-Accelerating Inflation Rate of Unemployment (NAIRU) baseline. */
@@ -121,6 +135,16 @@ class MacroEngine
     /** Cost-push transmission coefficient passing energy price spikes into headline inflation. */
     public const ENERGY_COST_PUSH_TRANSMISSION = 0.010;
 
+    // --- Theory of Storage & Commodity Buffer Stocks (Working 1949, Litzenberger-Rabinowitz 1995) ---
+    /** Baseline physical commodity inventory index (neutral buffer stock). */
+    public const COMMODITY_INVENTORY_BASELINE = 100.0;
+    /** Critical minimum physical buffer stock floor before extreme convenience yield spike. */
+    public const COMMODITY_MIN_BUFFER_STOCK = 50.0;
+    /** Annual mean-reversion speed of physical inventories toward structural baseline. */
+    public const COMMODITY_INVENTORY_REVERSION_SPEED = 0.50;
+    /** Sensitivity of inventory drawdown to economic output gap and geopolitical supply shocks. */
+    public const COMMODITY_INVENTORY_DRAWDOWN_SENSITIVITY = 0.30;
+
     // --- GARCH-MIDAS Macroeconomic Volatility Constants (Engle, Ghysels, & Sohn 2013 Eq. 5) ---
     /** Long-run equilibrium baseline volatility during neutral economic conditions. */
     public const MACRO_VOL_BASE_ANCHOR            = 0.15;
@@ -163,7 +187,7 @@ class MacroEngine
     /** Canonical Taylor (1993) weight on the output gap in the Taylor Rule. */
     public const TAYLOR_OUTPUT_GAP_WEIGHT = 0.50;
     /** Non-linear scaling factor amplifying rate cuts during deep recessions. */
-    public const TAYLOR_RECESSION_SCALE = 5.0;
+    public const TAYLOR_RECESSION_SCALE = 2.0;
     /** Bernanke (2015) blend: weight on realized core inflation (EMA) in the Taylor Rule inflation measure. */
     public const TAYLOR_INFLATION_CORE_WEIGHT = 0.70;
     /** Bernanke (2015) blend: weight on forward inflation expectations (TIPS breakeven) in the Taylor Rule inflation measure. */
@@ -175,13 +199,13 @@ class MacroEngine
     /** Central bank baseline rate hiking smoothing speed per year (Woodford 2003 inertial gradualism). */
     public const CB_HIKE_SMOOTHING_SPEED = 0.80;
     /** Central bank baseline rate cutting smoothing speed per year (rapid crisis easing). */
-    public const CB_CUT_SMOOTHING_SPEED = 2.00;
+    public const CB_CUT_SMOOTHING_SPEED = 1.20;
     /** Inflation panic threshold above which central bank accelerates hiking to Volcker speed. */
     public const CB_INFLATION_PANIC_THRESHOLD = 0.035;
     /** Inflation panic reaction multiplier accelerating rate hikes during extreme inflation spikes. */
     public const CB_INFLATION_PANIC_SCALE = 50.0;
     /** Recession panic reaction multiplier accelerating emergency cuts during downturns. */
-    public const CB_RECESSION_PANIC_SCALE = 150.0;
+    public const CB_RECESSION_PANIC_SCALE = 20.0;
     /** Maximum annual rate hike velocity cap during normal economic expansions (8 × 25bps meetings). */
     public const CB_MAX_NORMAL_HIKE_VELOCITY = 0.025;
     /** Maximum annual rate hike velocity cap during emergency runaway inflation spikes (525bps in 15 months annualized). */
@@ -195,21 +219,31 @@ class MacroEngine
     /** Policy rate threshold determining proximity to the Zero Lower Bound. */
     public const ZLB_PROXIMITY_THRESHOLD = 0.015;
 
-    // --- Central Bank Effective Lower Bound ---
+    // --- Flexible Average Inflation Targeting (FAIT - Powell 2020) ---
+    /** FAIT rolling memory persistence speed per year for cumulative price level shortfall. */
+    public const FAIT_MEMORY_SPEED = 0.50;
+    /** Central bank reaction sensitivity to cumulative inflation shortfall/overshoot. */
+    public const FAIT_MAKEUP_COEFFICIENT = 0.25;
+    /** Maximum policy rate target offset allowed from FAIT cumulative memory. */
+    public const FAIT_MAX_TARGET_OFFSET = 0.015;
+
+    // --- Central Bank Effective Lower Bound & Shadow Rates ---
     /** Wu-Xia (2016) Effective Lower Bound on nominal policy rates (ECB deposit facility floor). */
     public const EFFECTIVE_LOWER_BOUND = -0.005;
+    /** Sensitivity of shadow policy rate accommodation to central bank QE balance sheet expansion. */
+    public const WU_XIA_QE_SHADOW_SENSITIVITY = 1.50;
 
     // --- Nelson-Siegel-Svensson Term Structure Dynamics (Svensson 1994) ---
-    /** Baseline structural term premium for long-term Treasury yields. */
-    public const NS_BASE_TERM_PREMIUM = 0.0070;
+    /** Baseline structural term premium for long-term Treasury yields (Adrian-Crump-Moench 2013 benchmark). */
+    public const NS_BASE_TERM_PREMIUM = 0.0090;
     /** Flight-to-safety sensitivity: recessions compress term premium via safe-haven demand (Campbell et al. 2017). */
     public const NS_GAP_TERM_PREMIUM_SCALE = 0.05;
     /** Diebold-Li (2006) curvature sensitivity to central bank target-policy rate gap (forward guidance channel). */
-    public const SVENSSON_CURVATURE1_TARGET_SCALE = 0.25;
+    public const SVENSSON_CURVATURE1_TARGET_SCALE = 0.85;
     /** Cyclical curvature sensitivity to output gap (positive gap leads to steeper belly). */
     public const SVENSSON_CURVATURE1_GAP_SCALE = 0.15;
     /** Primary Nelson-Siegel decay parameter governing the medium-term hump. */
-    public const SVENSSON_LAMBDA_1 = 0.65;
+    public const SVENSSON_LAMBDA_1 = 0.42;
     /** Secondary Svensson decay parameter governing the long-term hump. */
     public const SVENSSON_LAMBDA_2 = 0.15;
     /** Sensitivity of secondary curvature (beta3) to quantitative tightening and long-term fiscal deficits. */
@@ -218,8 +252,14 @@ class MacroEngine
     public const SVENSSON_CURVATURE2_BS_SCALE = 0.40;
     /** Wright (2011) IRP: term premium sensitivity to excess inflation expectations above target. */
     public const TERM_PREMIUM_IRP_EXPECTATION_SCALE = 0.40;
-    /** Wright (2011) IRP: term premium sensitivity to excess macro volatility above neutral threshold. */
-    public const TERM_PREMIUM_IRP_VOLATILITY_SCALE = 0.03;
+    /** Safe-haven flight to safety: financial market panic compresses sovereign term premium (Campbell et al. 2020). */
+    public const FLIGHT_TO_SAFETY_SENSITIVITY = 0.015;
+    /** Restrictive monetary policy stance term premium compression sensitivity (ACM 2013). */
+    public const TERM_PREMIUM_TIGHTENING_COMPRESSION = 0.15;
+
+    // --- Preferred-Habitat Duration Extraction (Vayanos-Vila 2021) ---
+    /** Sensitivity of duration-weighted term premium extraction to central bank balance sheet intensity. */
+    public const PREFERRED_HABITAT_DURATION_SENSITIVITY = 0.0050;
 
     // --- Forward-Looking TIPS Breakeven & Phillips Expectations ---
     /** Weight on anchored central bank target in TIPS breakeven inflation expectation. */
@@ -246,6 +286,18 @@ class MacroEngine
     public const PHILLIPS_SLOPE = 0.25;
     /** Speed of inflation expectations mean-reverting toward central bank target (anchored expectations). */
     public const INFLATION_MEAN_REVERSION = 0.75;
+    /** Maximum asymptotic output gap capacity ceiling where supply bottlenecks bind (Benigno & Eggertsson 2023). */
+    public const PHILLIPS_MAX_CAPACITY = 0.08;
+    /** Base slope sensitivity of convex Phillips curve to output gap capacity. */
+    public const PHILLIPS_CONVEX_KAPPA = 0.020;
+    /** Downward nominal rigidity factor dampening deflationary pressure during recessions (Bewley 1999). */
+    public const PHILLIPS_DOWNWARD_RIGIDITY_FACTOR = 0.35;
+    /** Weight of supercore services inflation in headline PCE/CPI basket (Shapiro 2022). */
+    public const INFLATION_WEIGHT_SUPERCORE = 0.55;
+    /** Weight of core goods inflation in headline basket. */
+    public const INFLATION_WEIGHT_GOODS = 0.25;
+    /** Weight of energy and agricultural food commodities in headline basket. */
+    public const INFLATION_WEIGHT_COMMODITY = 0.20;
 
     // --- Merton Structural Corporate Credit Spreads (Merton 1974) ---
     /** Sensitivity of corporate credit spreads to wholesale interbank funding stress. */
@@ -260,6 +312,14 @@ class MacroEngine
     public const MAX_CREDIT_SPREAD = 0.10;
     /** Macroeconomic volatility threshold above which excess volatility widens corporate credit spreads. */
     public const CREDIT_SPREAD_EXCESS_VOL_THRESHOLD = 0.20;
+
+    // --- Dual-Tranche Corporate Credit Spreads & Rating Migration (Jarrow-Lando-Turnbull 1997) ---
+    /** Baseline multiple of speculative high-yield credit spread over investment-grade spread. */
+    public const HY_BASE_SPREAD_MULTIPLIER = 2.4;
+    /** Non-linear sensitivity of high-yield spread to fallen angel downgrade cliff during contractions. */
+    public const FALLEN_ANGEL_CLIFF_SENSITIVITY = 8.0;
+    /** Statutory ceiling cap for aggregate high-yield corporate credit spread. */
+    public const MAX_HY_CREDIT_SPREAD = 0.25;
 
     // --- Barro Tax-Smoothing & Automatic Fiscal Stabilizers (Barro 1979) ---
     /** Structural baseline statutory corporate tax rate. */
@@ -277,27 +337,31 @@ class MacroEngine
     /** Baseline consumer sentiment index value (neutral consumer confidence). */
     public const SENTIMENT_BASELINE = 100.0;
     /** Sensitivity of consumer misery index (unemployment and inflation) on sentiment. */
-    public const SENTIMENT_MISERY_MULTIPLIER = 200.0;
+    public const SENTIMENT_MISERY_MULTIPLIER = 500.0;
     /** Sensitivity of financial market volatility on consumer sentiment confidence. */
-    public const SENTIMENT_VOLATILITY_MULTIPLIER = 50.0;
+    public const SENTIMENT_VOLATILITY_MULTIPLIER = 80.0;
     /** Momentum sensitivity of worsening inflation and unemployment shifts on consumer confidence. */
-    public const SENTIMENT_MOMENTUM_MULTIPLIER = 250.0;
+    public const SENTIMENT_MOMENTUM_MULTIPLIER = 300.0;
     /** Sensitivity of interest rate environment on consumer sentiment borrowing costs. */
-    public const SENTIMENT_RATE_MULTIPLIER = 250.0;
+    public const SENTIMENT_RATE_MULTIPLIER = 300.0;
     /** Sensitivity of consumer sentiment expansion boost during positive GDP output gaps. */
-    public const SENTIMENT_EXPANSION_MULTIPLIER = 300.0;
+    public const SENTIMENT_EXPANSION_MULTIPLIER = 400.0;
+    /** Sensitivity penalty on consumer sentiment during GDP output contractions. */
+    public const SENTIMENT_CONTRACTION_MULTIPLIER = 500.0;
     /** Sensitivity coefficient penalizing consumer sentiment during retail energy price shocks. */
-    public const SENTIMENT_ENERGY_PANIC_SCALE = 0.15;
+    public const SENTIMENT_ENERGY_PANIC_SCALE = 0.25;
     /** Mean-reversion speed (theta) of psychological animal spirits returning to fundamentals. */
     public const ANIMAL_SPIRITS_MEAN_REVERSION = 2.0;
     /** Stochastic diffusion volatility (sigma) of consumer animal spirits. */
     public const ANIMAL_SPIRITS_VOLATILITY = 2.5;
 
     // --- Central Bank Balance Sheet (QE & QT) ---
+    /** Policy rate threshold below which QE bond purchases can be initiated during recessions. */
+    public const QE_ACTIVATION_RATE_THRESHOLD = 0.025;
     /** Proximity threshold to Zero Lower Bound required before activating QE asset purchases. */
     public const QE_ACTIVATION_ZLB_THRESHOLD = 0.60;
     /** Negative output gap threshold below which central bank initiates QE bond purchases. */
-    public const QE_ACTIVATION_GAP_THRESHOLD = 0.0;
+    public const QE_ACTIVATION_GAP_THRESHOLD = -0.005;
     /** Maximum yield suppression capacity achieved under full-scale QE. */
     public const QE_MAX_SUPPRESSION = 0.02;
     /** Sensitivity multiplier scaling QE bond purchase intensity with recession depth. */
@@ -305,13 +369,13 @@ class MacroEngine
     /** Annual ramp speed of central bank balance sheet expansion and contraction. */
     public const BALANCE_SHEET_RAMP_SPEED = 1.0;
     /** Minimum reinvestment hold period (years) after QE ends before QT runoff can begin (Bernanke 2020). */
-    public const BALANCE_SHEET_REINVESTMENT_HOLD_YEARS = 2.0;
+    public const BALANCE_SHEET_REINVESTMENT_HOLD_YEARS = 1.5;
     /** Backward compatibility alias for QE ramp speed. */
     public const QE_RAMP_SPEED = self::BALANCE_SHEET_RAMP_SPEED;
     /** Positive output gap threshold above which central bank initiates Quantitative Tightening. */
-    public const QT_ACTIVATION_GAP_THRESHOLD = 0.015;
+    public const QT_ACTIVATION_GAP_THRESHOLD = 0.010;
     /** Inflation threshold above which central bank initiates Quantitative Tightening */
-    public const QT_ACTIVATION_INFLATION_THRESHOLD = 0.030;
+    public const QT_ACTIVATION_INFLATION_THRESHOLD = 0.022;
     /** Maximum yield steepening magnitude under full-scale Quantitative Tightening. */
     public const QT_MAX_INTENSITY = 0.005;
     /** Sensitivity multiplier scaling QT bond runoff with economic overheating. */
@@ -464,6 +528,8 @@ class MacroEngine
     public const INTERBANK_SPREAD_KAPPA = 2.50;
     /** Volatility (sigma) of the continuous interbank liquidity spread diffusion. */
     public const INTERBANK_SPREAD_SIGMA = 0.02;
+    /** Sensitivity coupling wholesale interbank lending spread to corporate credit stress. */
+    public const INTERBANK_CREDIT_COUPLING = 0.20;
     /** Poisson intensity of severe interbank credit freeze/panic events. */
     public const INTERBANK_JUMP_PROBABILITY = 0.05;
     /** Mean log-return magnitude of an interbank liquidity panic jump. */
@@ -496,6 +562,8 @@ class MacroEngine
     // --- Sovereign Debt Dynamics (Greenwood-Vayanos 2014) ---
     /** Initial sovereign debt-to-GDP ratio at simulation start (Maastricht 60% benchmark). */
     public const INITIAL_DEBT_TO_GDP = 0.60;
+    /** Baseline structural primary fiscal deficit as a fraction of GDP. */
+    public const SOVEREIGN_STRUCTURAL_DEFICIT = 0.020;
     /** Long-end term premium sensitivity per unit excess debt/GDP above neutral threshold. */
     public const SOVEREIGN_DEBT_YIELD_SENSITIVITY = 0.01;
     /** Debt-to-GDP baseline level below which no excess fiscal term premium applies. */
@@ -512,6 +580,24 @@ class MacroEngine
     public const FCI_YIELD_SLOPE_WEIGHT = 0.15;
     /** Weight on excess market volatility in FCI composite. */
     public const FCI_VOLATILITY_WEIGHT = 0.15;
+    /** Historical mean benchmark for investment-grade credit spreads in Chicago Fed NFCI normalization. */
+    public const FCI_CREDIT_MEAN = 0.022;
+    /** Historical standard deviation for investment-grade credit spreads in FCI normalization. */
+    public const FCI_CREDIT_STD = 0.008;
+    /** Historical mean benchmark for equity risk premium in FCI normalization. */
+    public const FCI_ERP_MEAN = 0.050;
+    /** Historical standard deviation for equity risk premium in FCI normalization. */
+    public const FCI_ERP_STD = 0.015;
+    /** Historical standard deviation for currency index deviations in FCI normalization. */
+    public const FCI_FX_STD = 10.0;
+    /** Historical mean structural yield curve slope (10Y minus policy rate) in FCI normalization. */
+    public const FCI_SLOPE_MEAN = 0.010;
+    /** Historical standard deviation for yield curve slope in FCI normalization. */
+    public const FCI_SLOPE_STD = 0.012;
+    /** Historical mean benchmark for equity market volatility in FCI normalization. */
+    public const FCI_VOL_MEAN = 0.18;
+    /** Historical standard deviation for equity market volatility in FCI normalization. */
+    public const FCI_VOL_STD = 0.06;
     /** OU smoothing speed of FCI toward fundamental composite value. */
     public const FCI_MEAN_REVERSION = 2.0;
 
@@ -629,7 +715,7 @@ class MacroEngine
         $state->tipsBreakeven = $this->calculateTipsBreakeven($state, self::TARGET_INFLATION, $dt);
 
         // 5. Central Bank Monetary Policy & Yield Curve
-        $state->targetRate = $this->calculateTargetRate($state, self::TARGET_INFLATION, $state->naturalRate);
+        $state->targetRate = $this->calculateTargetRate($state, self::TARGET_INFLATION, self::BASE_NATURAL_RATE, $dt);
         $clampedTarget = max(self::EFFECTIVE_LOWER_BOUND, min(0.20, $state->targetRate));
         $state->policyRate = $this->updatePolicyRate($state, $clampedTarget, $dt);
 
@@ -716,9 +802,9 @@ class MacroEngine
         $this->getSnapshotRecorder()->recordSnapshot($macroState, $conn);
     }
 
-    private function calculateTargetRate(MacroState $state, float $targetInflation, float $naturalRate): float
+    private function calculateTargetRate(MacroState $state, float $targetInflation, float $naturalRate, float $dt = 0.25): float
     {
-        return $this->getMonetarySubsystem()->calculateTargetRate($state, $targetInflation, $naturalRate);
+        return $this->getMonetarySubsystem()->calculateTargetRate($state, $targetInflation, $naturalRate, $dt);
     }
 
     private function updatePolicyRate(MacroState $state, float $targetRate, float $dt): float

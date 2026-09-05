@@ -11,8 +11,8 @@ class TradeFlowPantherTest extends BasePantherTestCase
         $client = static::createPantherClient();
         $this->loginUser($client);
 
-        // Navigate to WING stock page
-        $client->request('GET', '/stock/WING');
+        // Navigate to LAKE stock page
+        $client->request('GET', '/stock/LAKE');
 
         $this->assertSelectorExists('#mainChartContainer');
         $this->assertSelectorExists('form[action="/trade/execute"]');
@@ -32,7 +32,7 @@ class TradeFlowPantherTest extends BasePantherTestCase
         $this->assertSelectorExists('body');
 
         // Test Limit order toggle and placement
-        $client->request('GET', '/stock/WING');
+        $client->request('GET', '/stock/LAKE');
         $client->executeScript("
             const limitRadio = document.querySelector('input[name=\"orderType\"][value=\"LIMIT\"]');
             if (limitRadio) {
@@ -42,8 +42,8 @@ class TradeFlowPantherTest extends BasePantherTestCase
         ");
 
         // Limit price container should be visible
-        $client->waitFor('#limitPriceContainer', 2);
-        $this->assertSelectorExists('#limitPriceContainer');
+        $client->waitFor('#limit-price-group:not(.hidden)', 2);
+        $this->assertSelectorExists('#limit-price-group');
 
         // Submit Limit BUY order at low price ($1.00) so it remains open
         $client->executeScript("

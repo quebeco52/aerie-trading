@@ -39,10 +39,10 @@ class StockPagePantherTest extends BasePantherTestCase
     public function testRegularStockPageLoadsWithFinancialsAndSectorTabs(): void
     {
         $client = static::createPantherClient();
-        $client->request('GET', '/stock/WING');
+        $client->request('GET', '/stock/LAKE');
 
         $this->assertSelectorExists('#mainChartContainer');
-        $this->assertSelectorTextContains('h1', 'Steel Wings');
+        $this->assertSelectorTextContains('h1', 'Lakebird Bank');
 
         // Click Financials & Fundamentals tab
         $client->executeScript("document.querySelector('button[data-tab=\"financials\"]').click()");
@@ -65,7 +65,7 @@ class StockPagePantherTest extends BasePantherTestCase
                 limitRadio.dispatchEvent(new Event('change', { bubbles: true }));
             }
         ");
-        $client->waitFor('#limitPriceContainer', 2);
-        $this->assertSelectorExists('#limitPriceContainer');
+        $client->waitFor('#limit-price-group:not(.hidden)', 2);
+        $this->assertSelectorExists('#limit-price-group');
     }
 }

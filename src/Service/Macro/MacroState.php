@@ -29,6 +29,7 @@ class MacroState
     public float $energyPriceIndex = 90.0;
     public float $energyPriceIndexEma = 90.0;
     public float $energyPriceShock = 0.0;
+    public float $energyBasePrice = 90.0;
     public float $consumerSentimentIndex = 108.0;
     public float $consumerSentimentIndexEma = 108.0;
 
@@ -124,6 +125,23 @@ class MacroState
     public float $totalFactorProductivityIndex = MacroEngine::TFP_BASELINE;
     public float $totalFactorProductivityIndexEma = MacroEngine::TFP_BASELINE;
 
+    public float $supercoreInflation = MacroEngine::TARGET_INFLATION;
+    public float $supercoreInflationEma = MacroEngine::TARGET_INFLATION;
+    public float $coreGoodsInflation = MacroEngine::TARGET_INFLATION;
+    public float $coreGoodsInflationEma = MacroEngine::TARGET_INFLATION;
+
+    public float $cumulativeInflationGap = 0.0;
+    public float $cumulativeInflationGapEma = 0.0;
+
+    public float $highYieldCreditSpread = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
+    public float $highYieldCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
+
+    public float $inventoryStockGap = 0.0;
+    public float $inventoryStockGapEma = 0.0;
+
+    public float $energyInventoryIndex = MacroEngine::COMMODITY_INVENTORY_BASELINE;
+    public float $energyInventoryIndexEma = MacroEngine::COMMODITY_INVENTORY_BASELINE;
+
     /**
      * Initializes the MacroState from a decoded JSON array payload.
      */
@@ -156,6 +174,7 @@ class MacroState
         $state->energyPriceIndex = $data['energy_price_index'] ?? 90.0;
         $state->energyPriceIndexEma = $data['energy_price_index_ema'] ?? $state->energyPriceIndex;
         $state->energyPriceShock = $data['energy_price_shock'] ?? 0.0;
+        $state->energyBasePrice = (float) ($data['energy_base_price'] ?? $state->energyPriceIndex);
         $state->energyCostPushLag = (float) ($data['energy_cost_push_lag'] ?? 0.0);
         $state->agriCostPushLag = (float) ($data['agri_cost_push_lag'] ?? 0.0);
         $state->consumerSentimentIndex = $data['consumer_sentiment_index'] ?? 108.0;
@@ -251,6 +270,23 @@ class MacroState
         $state->totalFactorProductivityIndex = (float) ($data['total_factor_productivity_index'] ?? MacroEngine::TFP_BASELINE);
         $state->totalFactorProductivityIndexEma = (float) ($data['total_factor_productivity_index_ema'] ?? $state->totalFactorProductivityIndex);
 
+        $state->supercoreInflation = (float) ($data['supercore_inflation'] ?? $state->inflation);
+        $state->supercoreInflationEma = (float) ($data['supercore_inflation_ema'] ?? $state->supercoreInflation);
+        $state->coreGoodsInflation = (float) ($data['core_goods_inflation'] ?? $state->inflation);
+        $state->coreGoodsInflationEma = (float) ($data['core_goods_inflation_ema'] ?? $state->coreGoodsInflation);
+
+        $state->cumulativeInflationGap = (float) ($data['cumulative_inflation_gap'] ?? 0.0);
+        $state->cumulativeInflationGapEma = (float) ($data['cumulative_inflation_gap_ema'] ?? $state->cumulativeInflationGap);
+
+        $state->highYieldCreditSpread = (float) ($data['high_yield_credit_spread'] ?? ($state->macroCreditSpread * MacroEngine::HY_BASE_SPREAD_MULTIPLIER));
+        $state->highYieldCreditSpreadEma = (float) ($data['high_yield_credit_spread_ema'] ?? $state->highYieldCreditSpread);
+
+        $state->inventoryStockGap = (float) ($data['inventory_stock_gap'] ?? 0.0);
+        $state->inventoryStockGapEma = (float) ($data['inventory_stock_gap_ema'] ?? $state->inventoryStockGap);
+
+        $state->energyInventoryIndex = (float) ($data['energy_inventory_index'] ?? MacroEngine::COMMODITY_INVENTORY_BASELINE);
+        $state->energyInventoryIndexEma = (float) ($data['energy_inventory_index_ema'] ?? $state->energyInventoryIndex);
+
         return $state;
     }
 
@@ -287,6 +323,7 @@ class MacroState
             'energy_price_index' => $this->energyPriceIndex,
             'energy_price_index_ema' => $this->energyPriceIndexEma,
             'energy_price_shock' => $this->energyPriceShock,
+            'energy_base_price' => $this->energyBasePrice,
             'consumer_sentiment_index' => $this->consumerSentimentIndex,
             'consumer_sentiment_index_ema' => $this->consumerSentimentIndexEma,
             'exchange_rate_index' => $this->exchangeRateIndex,
@@ -356,7 +393,19 @@ class MacroState
             'interbank_liquidity_spread' => $this->interbankLiquiditySpread,
             'interbank_liquidity_spread_ema' => $this->interbankLiquiditySpreadEma,
             'total_factor_productivity_index' => $this->totalFactorProductivityIndex,
-            'total_factor_productivity_index_ema' => $this->totalFactorProductivityIndexEma
+            'total_factor_productivity_index_ema' => $this->totalFactorProductivityIndexEma,
+            'supercore_inflation' => $this->supercoreInflation,
+            'supercore_inflation_ema' => $this->supercoreInflationEma,
+            'core_goods_inflation' => $this->coreGoodsInflation,
+            'core_goods_inflation_ema' => $this->coreGoodsInflationEma,
+            'cumulative_inflation_gap' => $this->cumulativeInflationGap,
+            'cumulative_inflation_gap_ema' => $this->cumulativeInflationGapEma,
+            'high_yield_credit_spread' => $this->highYieldCreditSpread,
+            'high_yield_credit_spread_ema' => $this->highYieldCreditSpreadEma,
+            'inventory_stock_gap' => $this->inventoryStockGap,
+            'inventory_stock_gap_ema' => $this->inventoryStockGapEma,
+            'energy_inventory_index' => $this->energyInventoryIndex,
+            'energy_inventory_index_ema' => $this->energyInventoryIndexEma,
         ];
     }
 }

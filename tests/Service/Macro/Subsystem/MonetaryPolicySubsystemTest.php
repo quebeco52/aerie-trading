@@ -55,7 +55,11 @@ class MonetaryPolicySubsystemTest extends TestCase
         $state->outputGap = -0.005;
 
         $target = $this->subsystem->calculateTargetRate($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
-        $this->assertEquals(0.00, $target, 'Evans Rule must lock target at 0.00% when at ZLB with elevated unemployment.');
+        $this->assertGreaterThan(0.0, $target, 'Wu-Xia shadow rate must remain continuous and positive');
+
+        // Under Evans Rule forward guidance, the policy rate remains anchored at ZLB (0.00%)
+        $newPolicyRate = $this->subsystem->updatePolicyRate($state, $target, 0.25);
+        $this->assertEquals(0.00, $newPolicyRate, 'Evans Rule must lock policy rate at 0.00% when at ZLB with elevated unemployment.');
     }
 
     public function testEvansRuleDoesNotFireDuringNormalExpansion(): void
@@ -68,7 +72,8 @@ class MonetaryPolicySubsystemTest extends TestCase
         $state->outputGap = 0.005;
 
         $target = $this->subsystem->calculateTargetRate($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
-        // Normal Taylor rate should be ~3.8%, NOT collapsing to 0%
+        $newPolicyRate = $this->subsystem->updatePolicyRate($state, $target, 0.25);
+        // Normal Taylor rate should be ~3.8%, and rate hikes proceed
         $this->assertGreaterThan(0.030, $target, 'Evans Rule must NOT fire when central bank is in normal expansion regime.');
     }
 
@@ -82,7 +87,8 @@ class MonetaryPolicySubsystemTest extends TestCase
         $state->outputGap = -0.01;
 
         $target = $this->subsystem->calculateTargetRate($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
-        $this->assertGreaterThan(0.00, $target, 'Evans Rule must release and allow rate hikes when inflation breaches ceiling.');
+        $newPolicyRate = $this->subsystem->updatePolicyRate($state, $target, 0.25);
+        $this->assertGreaterThan(0.00, $newPolicyRate, 'Evans Rule must release and allow rate hikes when inflation breaches ceiling.');
     }
 
     public function testEvansRuleReleasesWhenUnemploymentThresholdAchieved(): void
@@ -95,7 +101,8 @@ class MonetaryPolicySubsystemTest extends TestCase
         $state->outputGap = 0.005;
 
         $target = $this->subsystem->calculateTargetRate($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
-        $this->assertGreaterThan(0.00, $target, 'Evans Rule must release when unemployment drops below threshold.');
+        $newPolicyRate = $this->subsystem->updatePolicyRate($state, $target, 0.25);
+        $this->assertGreaterThan(0.00, $newPolicyRate, 'Evans Rule must release when unemployment drops below threshold.');
     }
 
     public function testCalculateTargetRateReturnsUnclampedShadowRateInDeepRecession(): void
@@ -220,12 +227,52 @@ class MonetaryPolicySubsystemTest extends TestCase
 
         $curve = $this->subsystem->calculateYieldCurveAndQE($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
-        // Curvature beta2 = (0.25 * 0.06) + (0.15 * 0.02) = 0.0150 + 0.0030 = 0.0180 (180 bps)
-        $this->assertEqualsWithDelta(0.0180, $curve['curvature'], 0.0001);
+        // Curvature beta2 = (SVENSSON_CURVATURE1_TARGET_SCALE * 0.06) + (SVENSSON_CURVATURE1_GAP_SCALE * 0.02)
+        $expectedCurvature = (MacroEngine::SVENSSON_CURVATURE1_TARGET_SCALE * 0.06) + (MacroEngine::SVENSSON_CURVATURE1_GAP_SCALE * 0.02);
+        $this->assertEqualsWithDelta($expectedCurvature, $curve['curvature'], 0.0001);
 
         // 2Y yield should price policy hikes above the 0% policy rate
         $this->assertGreaterThan($state->policyRate, $curve['yield_2y']);
         // 10Y yield anchored by fundamentals, yields realistic spread
         $this->assertGreaterThan(0.0, $curve['yield_10y']);
+    }
+
+    public function testFaitAccommodativeBufferAfterInflationShortfall(): void
+    {
+        $stateNeutral = new MacroState();
+        $stateNeutral->inflationEma = 0.025; // Moderate overshoot
+        $stateNeutral->tipsBreakeven = 0.025;
+        $stateNeutral->outputGap = 0.01;
+        $stateNeutral->cumulativeInflationGap = 0.0; // No historical shortfall
+
+        $targetNeutral = $this->subsystem->calculateTargetRate($stateNeutral, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+
+        $statePostRecession = new MacroState();
+        $statePostRecession->inflationEma = 0.025; // Same overshoot
+        $statePostRecession->tipsBreakeven = 0.025;
+        $statePostRecession->outputGap = 0.01;
+        $statePostRecession->cumulativeInflationGap = -0.04; // Prior 2-year low inflation shortfall
+
+        $targetPostRecession = $this->subsystem->calculateTargetRate($statePostRecession, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+
+        // FAIT make-up strategy must keep target rate lower to tolerate overshoot after shortfall
+        $this->assertLessThan($targetNeutral, $targetPostRecession);
+        $this->assertEqualsWithDelta(0.010, $targetNeutral - $targetPostRecession, 0.003, 'FAIT offset should provide ~100bps accommodation buffer');
+    }
+
+    public function testPreferredHabitatDurationExtraction(): void
+    {
+        $shift2y = $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.02, 2.0, MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY);
+        $shift10y = $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.02, 10.0, MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY);
+        $shift30y = $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.02, 30.0, MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY);
+
+        // QE extracts duration, so term premium shifts must be negative (suppression)
+        $this->assertLessThan(0.0, $shift2y);
+        $this->assertLessThan(0.0, $shift10y);
+        $this->assertLessThan(0.0, $shift30y);
+
+        // 30Y duration extraction must be 3x greater than 10Y and 15x greater than 2Y
+        $this->assertEqualsWithDelta(3.0 * $shift10y, $shift30y, 0.0001);
+        $this->assertEqualsWithDelta(5.0 * $shift2y, $shift10y, 0.0001);
     }
 }

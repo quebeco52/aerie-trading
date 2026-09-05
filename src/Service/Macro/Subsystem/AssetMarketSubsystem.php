@@ -201,6 +201,8 @@ class AssetMarketSubsystem
         $fundamentalSentiment = MacroEngine::SENTIMENT_BASELINE - $miseryPenalty - $momentumPenalty - $fearPenalty - $ratePenalty - $gasPanic;
         if ($state->outputGap > 0.0) {
             $fundamentalSentiment += ($state->outputGap * MacroEngine::SENTIMENT_EXPANSION_MULTIPLIER);
+        } else {
+            $fundamentalSentiment += ($state->outputGap * MacroEngine::SENTIMENT_CONTRACTION_MULTIPLIER);
         }
 
         $currentSentiment = $state->consumerSentimentIndex ?? MacroEngine::SENTIMENT_BASELINE;
@@ -225,11 +227,11 @@ class AssetMarketSubsystem
      */
     public function calculateFinancialConditionsIndex(MacroState $state, float $dt): void
     {
-        $creditZ = ($state->macroCreditSpreadEma - MacroEngine::BASE_CREDIT_SPREAD) / MacroEngine::BASE_CREDIT_SPREAD;
-        $erpZ = ($state->equityRiskPremium - MacroEngine::BASE_EQUITY_RISK_PREMIUM) / MacroEngine::BASE_EQUITY_RISK_PREMIUM;
-        $fxZ = ($state->exchangeRateIndexEma - MacroEngine::EXCHANGE_RATE_BASELINE) / (MacroEngine::EXCHANGE_RATE_BASELINE * 0.10);
-        $slopeZ = -$state->nsSlopeEma / 0.02;
-        $volZ = ($state->marketVolatilityEma - MacroEngine::MACRO_VOL_BASE_ANCHOR) / MacroEngine::MACRO_VOL_BASE_ANCHOR;
+        $creditZ = ($state->macroCreditSpreadEma - MacroEngine::FCI_CREDIT_MEAN) / MacroEngine::FCI_CREDIT_STD;
+        $erpZ = ($state->equityRiskPremium - MacroEngine::FCI_ERP_MEAN) / MacroEngine::FCI_ERP_STD;
+        $fxZ = ($state->exchangeRateIndexEma - MacroEngine::EXCHANGE_RATE_BASELINE) / MacroEngine::FCI_FX_STD;
+        $slopeZ = -($state->nsSlopeEma - MacroEngine::FCI_SLOPE_MEAN) / MacroEngine::FCI_SLOPE_STD;
+        $volZ = ($state->marketVolatilityEma - MacroEngine::FCI_VOL_MEAN) / MacroEngine::FCI_VOL_STD;
 
         $fundamentalFci = (MacroEngine::FCI_CREDIT_SPREAD_WEIGHT * $creditZ)
             + (MacroEngine::FCI_ERP_WEIGHT * $erpZ)

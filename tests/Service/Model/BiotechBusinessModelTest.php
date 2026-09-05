@@ -124,7 +124,7 @@ class BiotechBusinessModelTest extends TestCase
         $stock->setTicker('BIO');
         $stock->setBeta('1.0');
 
-        $mathUtilityMock = $this->createMock(MathUtility::class);
+        $mathUtilityMock = $this->createStub(MathUtility::class);
         $mathUtilityMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(1.0, 1.0, 0.0);
 
         $macro = new \App\DTO\MacroStateDTO();

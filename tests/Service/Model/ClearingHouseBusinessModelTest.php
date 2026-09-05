@@ -87,10 +87,7 @@ class ClearingHouseBusinessModelTest extends TestCase
 
     public function testProcessPassiveLiabilityGrowthCapacityClamping(): void
     {
-        $stockMock = $this->getMockBuilder(\App\Entity\Stock::class)
-            ->onlyMethods(['getTotalEquity', 'setCustomerDeposits'])
-            ->getMock();
-            
+        $stockMock = $this->createStub(\App\Entity\Stock::class);
         $stockMock->method('getTotalEquity')->willReturn('35000000000.0'); // 35B
 
         $mathMock = $this->createStub(MathUtility::class);

@@ -63,7 +63,10 @@
             "symfony/runtime": true
         },
         "bump-after-update": true,
-        "sort-packages": true
+        "sort-packages": true,
+        "platform": {
+            "ext-zip": "1.0"
+        }
     },
     "autoload": {
         "psr-4": {
@@ -114,6 +117,7 @@
         }
     },
     "require-dev": {
+        "dama/doctrine-test-bundle": "^8.6",
         "doctrine/doctrine-fixtures-bundle": "^4.3.1",
         "phpstan/extension-installer": ">=1.4.3",
         "phpstan/phpstan": ">=2.2.1",

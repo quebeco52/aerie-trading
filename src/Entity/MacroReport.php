@@ -234,6 +234,24 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $agriCostPushLag = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $supercoreInflationEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $coreGoodsInflationEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $cumulativeInflationGapEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $highYieldCreditSpreadEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $inventoryStockGapEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $energyInventoryIndexEma = null;
+
     // --- Standard Getters & Setters ---
 
     public function getId(): ?int { return $this->id; }
@@ -458,4 +476,22 @@ class MacroReport
 
     public function getAgriCostPushLag(): ?string { return $this->agriCostPushLag; }
     public function setAgriCostPushLag(?string $agriCostPushLag): self { $this->agriCostPushLag = $agriCostPushLag; return $this; }
+
+    public function getSupercoreInflationEma(): ?string { return $this->supercoreInflationEma; }
+    public function setSupercoreInflationEma(?string $supercoreInflationEma): self { $this->supercoreInflationEma = $supercoreInflationEma; return $this; }
+
+    public function getCoreGoodsInflationEma(): ?string { return $this->coreGoodsInflationEma; }
+    public function setCoreGoodsInflationEma(?string $coreGoodsInflationEma): self { $this->coreGoodsInflationEma = $coreGoodsInflationEma; return $this; }
+
+    public function getCumulativeInflationGapEma(): ?string { return $this->cumulativeInflationGapEma; }
+    public function setCumulativeInflationGapEma(?string $cumulativeInflationGapEma): self { $this->cumulativeInflationGapEma = $cumulativeInflationGapEma; return $this; }
+
+    public function getHighYieldCreditSpreadEma(): ?string { return $this->highYieldCreditSpreadEma; }
+    public function setHighYieldCreditSpreadEma(?string $highYieldCreditSpreadEma): self { $this->highYieldCreditSpreadEma = $highYieldCreditSpreadEma; return $this; }
+
+    public function getInventoryStockGapEma(): ?string { return $this->inventoryStockGapEma; }
+    public function setInventoryStockGapEma(?string $inventoryStockGapEma): self { $this->inventoryStockGapEma = $inventoryStockGapEma; return $this; }
+
+    public function getEnergyInventoryIndexEma(): ?string { return $this->energyInventoryIndexEma; }
+    public function setEnergyInventoryIndexEma(?string $energyInventoryIndexEma): self { $this->energyInventoryIndexEma = $energyInventoryIndexEma; return $this; }
 }

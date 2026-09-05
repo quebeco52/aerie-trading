@@ -887,6 +887,82 @@
 								<canvas id="macroCostPushChart"></canvas>
 							</div>
 						</div>
+
+						{# Chart 17: Sectoral Inflation Breakdown (Shapiro 2022) #}
+						<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between">
+							<div class="flex items-center justify-between mb-4">
+								<div class="flex items-center gap-2.5">
+									<div class="p-2 rounded-xl bg-amber-500/10 text-amber-400">
+										<span class="material-symbols-outlined text-lg leading-none">pie_chart</span>
+									</div>
+									<div>
+										<h4 class="text-sm font-bold text-on-surface">Sectoral Inflation Breakdown (Shapiro 2022)</h4>
+										<p class="text-[11px] text-on-surface-variant">Headline CPI decomposed into supercore services, core goods & commodity cost-push</p>
+									</div>
+								</div>
+								<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Inflation</span>
+							</div>
+							<div class="h-80 md:h-85 w-full relative">
+								<canvas id="macroSectoralInflationChart"></canvas>
+							</div>
+						</div>
+
+						{# Chart 18: Dual-Tranche Corporate Credit Spreads (Jarrow-Lando-Turnbull 1997) #}
+						<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between">
+							<div class="flex items-center justify-between mb-4">
+								<div class="flex items-center gap-2.5">
+									<div class="p-2 rounded-xl bg-rose-500/10 text-rose-400">
+										<span class="material-symbols-outlined text-lg leading-none">stacked_bar_chart</span>
+									</div>
+									<div>
+										<h4 class="text-sm font-bold text-on-surface">Corporate Credit Spreads & Rating Cliff</h4>
+										<p class="text-[11px] text-on-surface-variant">Investment Grade (IG) vs High Yield (HY) credit spreads & the fallen angel cliff</p>
+									</div>
+								</div>
+								<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Credit</span>
+							</div>
+							<div class="h-80 md:h-85 w-full relative">
+								<canvas id="macroCreditCliffChart"></canvas>
+							</div>
+						</div>
+
+						{# Chart 19: Inventory Investment Cycle & Commodity Storage (Metzler 1941, Working 1949) #}
+						<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between">
+							<div class="flex items-center justify-between mb-4">
+								<div class="flex items-center gap-2.5">
+									<div class="p-2 rounded-xl bg-cyan-500/10 text-cyan-400">
+										<span class="material-symbols-outlined text-lg leading-none">inventory_2</span>
+									</div>
+									<div>
+										<h4 class="text-sm font-bold text-on-surface">Inventory Investment Cycle & Commodity Storage</h4>
+										<p class="text-[11px] text-on-surface-variant">Metzler inventory stock overhang gap (%) vs physical strategic reserve buffer index</p>
+									</div>
+								</div>
+								<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Inventories</span>
+							</div>
+							<div class="h-80 md:h-85 w-full relative">
+								<canvas id="macroInventoryCycleChart"></canvas>
+							</div>
+						</div>
+
+						{# Chart 20: Average Inflation Targeting & Policy Gap (Powell 2020 FAIT) #}
+						<div class="bg-surface-container-low border border-outline-variant/15 rounded-2xl p-6 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between">
+							<div class="flex items-center justify-between mb-4">
+								<div class="flex items-center gap-2.5">
+									<div class="p-2 rounded-xl bg-purple-500/10 text-purple-400">
+										<span class="material-symbols-outlined text-lg leading-none">balance</span>
+									</div>
+									<div>
+										<h4 class="text-sm font-bold text-on-surface">Average Inflation Targeting (FAIT)</h4>
+										<p class="text-[11px] text-on-surface-variant">Cumulative inflation shortfall/overshoot gap vs policy rate target make-up offset</p>
+									</div>
+								</div>
+								<span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Monetary FAIT</span>
+							</div>
+							<div class="h-80 md:h-85 w-full relative">
+								<canvas id="macroFaitChart"></canvas>
+							</div>
+						</div>
 					</div>
 				</div>
 			{% endif %}
@@ -1385,7 +1461,33 @@ ticksPerYear: {{ ticksPerYear|default(14400) }},
 pieLabels: {{ pieLabels is defined and pieLabels ? pieLabels|json_encode|raw : '[]' }},
 pieData: {{ pieData is defined and pieData ? pieData|json_encode|raw : '[]' }},
 sharesMap: {{ sharesMap is defined and sharesMap ? sharesMap|json_encode|raw : '{}' }}
-};
+		};
+
+		window.toggleLimitPrice = function(isLimit) {
+			const group = document.getElementById('limit-price-group');
+			if (group) {
+				if (isLimit) {
+					group.classList.remove('hidden');
+				} else {
+					group.classList.add('hidden');
+				}
+			}
+			window.updateEstimatedTotal();
+		};
+
+		window.updateEstimatedTotal = function() {
+			const qtyInput = document.getElementById('quantity');
+			const estTotal = document.getElementById('estimated-total');
+			const limitInput = document.getElementById('limitPrice');
+			const orderType = document.querySelector('input[name="orderType"]:checked')?.value || 'MARKET';
+			const price = (orderType === 'LIMIT' && limitInput && limitInput.value)
+				? parseFloat(limitInput.value)
+				: (window.AERIE_DATA?.currentPrice || 0);
+			const qty = parseInt(qtyInput?.value || '0', 10);
+			if (estTotal) {
+				estTotal.textContent = '$' + (price * qty).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+			}
+		};
 	</script>
 
 	<script type="module">

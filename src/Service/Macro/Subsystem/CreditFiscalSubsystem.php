@@ -17,23 +17,30 @@ class CreditFiscalSubsystem
     ) {}
 
     /**
-     * Merton (1974) Structural Distance-to-Default Corporate Credit Spread Model.
+     * Merton (1974) Structural Distance-to-Default Corporate Credit Spread Model
+     * with Jarrow, Lando & Turnbull (1997) Dual-Tranche (IG vs HY) Rating Migration Cliff.
      *
-     * Models aggregate investment-grade corporate credit spread over risk-free Treasuries
-     * driven by leverage decay during downturns, equity volatility, and wholesale interbank contagion.
+     * Models investment-grade (IG) and speculative high-yield (HY) corporate credit spreads
+     * over risk-free Treasuries driven by leverage decay, equity volatility, wholesale interbank contagion,
+     * and the non-linear "fallen angel" rating migration cliff during contractions.
      *
      * @param MacroState $state Current macroeconomic state.
      */
     public function calculateMacroCreditSpread(MacroState $state): void
     {
-        $cycleSpread = MacroEngine::BASE_CREDIT_SPREAD * exp(-MacroEngine::MERTON_LEVERAGE_SENSITIVITY * $state->outputGapEma);
-        $excessVol = max(0.0, $state->marketVolatilityEma - 0.20);
-        $volSpread = MacroEngine::MERTON_VOL_SENSITIVITY * $excessVol;
-
         $interbankStress = max(0.0, $state->interbankLiquiditySpreadEma - MacroEngine::INTERBANK_BASELINE_SPREAD);
-        $contagionSpread = $interbankStress * MacroEngine::INTERBANK_CREDIT_CONTAGION_SENSITIVITY;
 
-        $state->macroCreditSpread = max(0.008, min(MacroEngine::MAX_CREDIT_SPREAD, $cycleSpread + $volSpread + $contagionSpread));
+        $trancheSpreads = $this->mathUtility->calculateDualTrancheCreditSpreads(
+            baseIgSpread: MacroEngine::BASE_CREDIT_SPREAD,
+            outputGapEma: $state->outputGapEma,
+            marketVolEma: $state->marketVolatilityEma,
+            interbankStress: $interbankStress,
+            hyBaseMultiplier: MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
+            fallenAngelSens: MacroEngine::FALLEN_ANGEL_CLIFF_SENSITIVITY
+        );
+
+        $state->macroCreditSpread = min(MacroEngine::MAX_CREDIT_SPREAD, $trancheSpreads['ig']);
+        $state->highYieldCreditSpread = min(MacroEngine::MAX_HY_CREDIT_SPREAD, $trancheSpreads['hy']);
     }
 
     /**
@@ -49,18 +56,24 @@ class CreditFiscalSubsystem
     {
         $currentSpread = $state->interbankLiquiditySpread ?? MacroEngine::INTERBANK_BASELINE_SPREAD;
 
+        // Systemic credit risk coupling (Brunnermeier 2009, Gorton & Metrick 2012):
+        // Interbank lending risk premium rises with wholesale corporate credit spreads
+        $excessCreditSpread = max(0.0, $state->macroCreditSpread - MacroEngine::BASE_CREDIT_SPREAD);
+        $creditCoupledTheta = MacroEngine::INTERBANK_BASELINE_SPREAD + ($excessCreditSpread * MacroEngine::INTERBANK_CREDIT_COUPLING);
+
         $dW = $this->mathUtility->generateStandardNormal();
         $baseProcess = $this->mathUtility->calculateCIR(
             currentValue: $currentSpread,
             kappa: MacroEngine::INTERBANK_SPREAD_KAPPA,
-            theta: MacroEngine::INTERBANK_BASELINE_SPREAD,
+            theta: $creditCoupledTheta,
             sigma: MacroEngine::INTERBANK_SPREAD_SIGMA,
             dt: $dt,
             dW: $dW
         );
 
         $volatilityRatio = max(1.0, $state->marketVolatilityEma / MacroEngine::MACRO_VOL_BASE_ANCHOR);
-        $jumpProbability = min(0.10, MacroEngine::INTERBANK_JUMP_PROBABILITY * $volatilityRatio);
+        $creditRatio = max(1.0, $state->macroCreditSpreadEma / MacroEngine::BASE_CREDIT_SPREAD);
+        $jumpProbability = min(0.20, MacroEngine::INTERBANK_JUMP_PROBABILITY * $volatilityRatio * (1.0 + 0.5 * ($creditRatio - 1.0)));
 
         $jumpData = $this->mathUtility->calculateJumpDiffusion(
             lambda: $jumpProbability,
@@ -176,7 +189,7 @@ class CreditFiscalSubsystem
         $taxRevenue = $state->corporateTaxRate * $state->nominalGdpIndex * (1.0 + $state->outputGap);
         $govtSpendingFlow = ($state->governmentSpendingIndex / MacroEngine::GOVT_SPENDING_BASELINE)
             * MacroEngine::TARGET_CORPORATE_TAX_RATE * $state->nominalGdpIndex;
-        $primaryDeficit = $govtSpendingFlow - $taxRevenue;
+        $primaryDeficit = ($govtSpendingFlow - $taxRevenue) + (MacroEngine::SOVEREIGN_STRUCTURAL_DEFICIT * $state->nominalGdpIndex);
         $interestCost = $state->yield10yEma * $state->sovereignDebtToGdp;
 
         // Blanchard (2019): Nominal GDP growth includes real potential growth trend (labor + TFP) + cyclical gap + inflation

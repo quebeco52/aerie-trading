@@ -120,7 +120,7 @@ class AssetManagementBusinessModelTest extends TestCase
         $macro = new \App\DTO\MacroStateDTO(outputGapEma: 0.0);
 
         // Alpha Z = 2.50 (above 1.50 threshold), BaseFee Z = 0.0
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, 2.50);
 
         $result = $model->computeActualFinancials(
@@ -155,7 +155,7 @@ class AssetManagementBusinessModelTest extends TestCase
         $macro = new \App\DTO\MacroStateDTO(outputGapEma: 0.0);
 
         // Alpha Z = -2.50 (severe redemptions below -1.50), BaseFee Z = 0.0
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, -2.50);
 
         $result = $model->computeActualFinancials(

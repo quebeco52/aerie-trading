@@ -37,4 +37,23 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $this->assertGreaterThan(20.0, $state->agriculturalCommodityIndex);
         $this->assertGreaterThan(20.0, $state->freightRateIndex);
     }
+
+    public function testConvenienceYieldSpikesWhenPhysicalInventoryDrawsDown(): void
+    {
+        $ampleYield = $this->mathUtility->calculateConvenienceYield(105.0, 50.0);
+        $this->assertEquals(0.0, $ampleYield, 'Ample buffer stocks must have zero convenience yield (contango)');
+
+        $tightYield = $this->mathUtility->calculateConvenienceYield(75.0, 50.0);
+        $criticalYield = $this->mathUtility->calculateConvenienceYield(55.0, 50.0);
+
+        $this->assertGreaterThan(0.0, $tightYield);
+        $this->assertGreaterThan(3.0 * $tightYield, $criticalYield, 'Critical inventory depletion must spike convenience yield non-linearly');
+
+        $state = new MacroState();
+        $state->energyPriceIndex = 100.0;
+        $state->energyInventoryIndex = 55.0; // Very tight inventory buffer
+
+        $this->subsystem->calculateEnergyShock($state, 0.25);
+        $this->assertGreaterThan(0.0, $state->energyPriceShock, 'Depleted buffer inventory must generate backwardation price shock');
+    }
 }

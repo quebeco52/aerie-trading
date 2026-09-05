@@ -32,7 +32,7 @@ class CreditFiscalSubsystemTest extends TestCase
 
     public function testGovernmentSpendingExpandsCountercyclically(): void
     {
-        $mathMock = $this->createMock(MathUtility::class);
+        $mathMock = $this->createStub(MathUtility::class);
         $mathMock->method('generateStandardNormal')->willReturn(0.0);
         $mathMock->method('calculateSchwartz1Factor')->willReturnCallback(function ($currentPrice, $kappa, $theta, $sigma, $dt, $dW) {
             $drift = $kappa * ($theta - $currentPrice) * $dt;
@@ -58,5 +58,29 @@ class CreditFiscalSubsystemTest extends TestCase
 
         $this->subsystem->calculateDynamicFiscalPolicy($state, 0.25);
         $this->assertLessThan(0.21, $state->corporateTaxRate);
+    }
+
+    public function testDualTrancheCreditSpreadsReflectFallenAngelCliff(): void
+    {
+        $stateNormal = new MacroState();
+        $stateNormal->outputGapEma = 0.01;
+        $stateNormal->marketVolatilityEma = 0.15;
+        $stateNormal->interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD;
+
+        $this->subsystem->calculateMacroCreditSpread($stateNormal);
+        $this->assertEqualsWithDelta(MacroEngine::BASE_CREDIT_SPREAD, $stateNormal->macroCreditSpread, 0.005);
+        $this->assertGreaterThan($stateNormal->macroCreditSpread, $stateNormal->highYieldCreditSpread);
+
+        $stateRecession = new MacroState();
+        $stateRecession->outputGapEma = -0.05;
+        $stateRecession->marketVolatilityEma = 0.35;
+        $stateRecession->interbankLiquiditySpreadEma = 0.006;
+
+        $this->subsystem->calculateMacroCreditSpread($stateRecession);
+        // Investment grade widens moderately
+        $this->assertGreaterThan($stateNormal->macroCreditSpread, $stateRecession->macroCreditSpread);
+        // High yield blows out exponentially due to fallen angel downgrade cliff
+        $this->assertGreaterThan($stateNormal->highYieldCreditSpread * 2.0, $stateRecession->highYieldCreditSpread);
+        $this->assertGreaterThan($stateRecession->macroCreditSpread * 2.5, $stateRecession->highYieldCreditSpread);
     }
 }

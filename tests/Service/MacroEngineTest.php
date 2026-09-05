@@ -596,7 +596,9 @@ class MacroEngineTest extends TestCase
 
         $result = $this->engine->updateMacroState(0.25);
 
-        $this->assertEquals(0.00, $result->targetRate, 'Evans Rule must lock target rate at 0.00% while unemployment exceeds 5.0% and inflation is below 2.5%.');
+        // Evans Rule holds the policy rate at the ZLB (does not hike), while targetRate reflects the unconstrained shadow rate
+        $this->assertEquals(0.01, $result->policyRate, 'Evans Rule must lock policy rate at ZLB while unemployment exceeds 5.0% and inflation is below 2.5%.');
+        $this->assertGreaterThan(0.00, $result->targetRate, 'Wu-Xia shadow target rate remains continuous and positive.');
     }
 
     public function testEvansRuleLiftsOffWhenInflationBreachesThreshold(): void
@@ -653,7 +655,7 @@ class MacroEngineTest extends TestCase
 
     public function testEvansRuleOverridesTaylorRule(): void
     {
-        // When unemployment is > 5.0% and inflation < 2.5%, calculateTargetRate returns exactly 0.00
+        // When unemployment is > 5.0% and inflation < 2.5%, Evans Rule prevents premature policy rate liftoff
         $recoveryState = [
             'unemployment_rate' => 0.052,
             'unemployment_rate_ema' => 0.052,
@@ -674,7 +676,8 @@ class MacroEngineTest extends TestCase
 
         $result = $this->engine->updateMacroState(0.25);
 
-        $this->assertSame(0.00, $result->targetRate, 'Evans Rule must override Taylor Rule and return 0.00% target rate when unemployment is above 5.0% and inflation is below 2.5%.');
+        $this->assertLessThanOrEqual(0.015, $result->policyRate, 'Evans Rule must prevent rate hikes while unemployment is above 5.0% and inflation is below 2.5%.');
+        $this->assertGreaterThan(0.00, $result->targetRate, 'Taylor shadow target rate calculates continuously without artificial zero clamping.');
     }
 
     public function testEvansRuleUsesTrendUnemploymentRatherThanHighFrequencyNoise(): void
@@ -700,7 +703,7 @@ class MacroEngineTest extends TestCase
 
         $result = $this->engine->updateMacroState(0.25);
 
-        $this->assertSame(0.00, $result->targetRate, 'Evans Rule must anchor on trend unemployment (EMA) to avoid premature liftoff from single-period noise.');
+        $this->assertEquals(0.01, $result->policyRate, 'Evans Rule must anchor on trend unemployment (EMA) to avoid premature liftoff from single-period noise.');
     }
 
     public function testCapitalOverhangDragsOutputGap(): void
@@ -840,8 +843,10 @@ class MacroEngineTest extends TestCase
         $stateNeutral->corporateTaxRate = 0.21;
         $stateNeutral->capitalStockOverhang = 0.0;
 
-        // Neutral Housing Market
+        // Neutral Housing & Commodity Markets
         $stateNeutral->residentialPropertyIndexEma = 100.0;
+        $stateNeutral->energyPriceIndexEma = MacroEngine::ENERGY_BASELINE;
+        $stateNeutral->freightRateIndexEma = MacroEngine::FREIGHT_BASELINE;
 
         // Create an identical state, but with a collapsed housing market (20% crash)
         $stateCrash = clone $stateNeutral;
@@ -865,16 +870,17 @@ class MacroEngineTest extends TestCase
         $gapBoom    = $reflectionMethod->invoke($macroEngine, $stateBoom, $neutral5yYield, MacroEngine::NATURAL_RATE, $dt, $stressMultiplier);
 
         // 3. Assert: 
-        // Neutral should not drift
-        $this->assertEqualsWithDelta(0.0, $gapNeutral, 0.0001, 'Neutral economy with baseline housing should not drift.');
+        // Neutral incorporates autonomous secular drift:
+        $expectedNeutralDrift = MacroEngine::KALDOR_AUTONOMOUS_PROPENSITY * $dt;
+        $this->assertEqualsWithDelta($expectedNeutralDrift, $gapNeutral, 0.0001, 'Neutral economy should reflect autonomous secular drift.');
 
-        // Crash should cause negative drift (Recession)
+        // Crash should cause negative drift (Recession relative to neutral)
         // Math: -0.20 * 0.02 = -0.004 drag * 0.25 dt = -0.001
-        $this->assertEqualsWithDelta(-0.001, $gapCrash, 0.0001, 'Housing crash must create a negative drag on the output gap.');
+        $this->assertEqualsWithDelta($gapNeutral - 0.001, $gapCrash, 0.0001, 'Housing crash must create a negative drag on the output gap.');
 
-        // Boom should cause positive drift (Expansion)
+        // Boom should cause positive drift (Expansion relative to neutral)
         // Math: +0.20 * 0.02 = +0.004 stimulus * 0.25 dt = +0.001
-        $this->assertEqualsWithDelta(0.001, $gapBoom, 0.0001, 'Housing boom must create a positive stimulus on the output gap.');
+        $this->assertEqualsWithDelta($gapNeutral + 0.001, $gapBoom, 0.0001, 'Housing boom must create a positive stimulus on the output gap.');
     }
 
     public function testInterbankLiquiditySpreadMeanRevertsViaCIR(): void
@@ -1897,4 +1903,135 @@ class MacroEngineTest extends TestCase
             'TIPS breakeven must incorporate substantial inflation risk premium when inflation and cost-push shocks are elevated.'
         );
     }
+
+    public function testNormalEconomyProducesUpwardSlopingYieldCurveAndTighteningProducesInversion(): void
+    {
+        $monetarySubsystem = new \App\Service\Macro\Subsystem\MonetaryPolicySubsystem($this->mathUtilityMock);
+        $dt = 0.25;
+
+        // 1. Normal, balanced macroeconomic state:
+        // Output gap = 0, Inflation = 2%, Policy Rate = 3.5% (neutral r* 1.5% + pi* 2.0%)
+        $normalState = new \App\Service\Macro\MacroState();
+        $normalState->outputGap = 0.0;
+        $normalState->outputGapEma = 0.0;
+        $normalState->inflation = MacroEngine::TARGET_INFLATION;
+        $normalState->inflationEma = MacroEngine::TARGET_INFLATION;
+        $normalState->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $normalState->targetRate = $normalState->policyRate;
+        $normalState->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+        $normalState->marketVolatilityEma = MacroEngine::MACRO_VOL_BASE_ANCHOR;
+
+        $curveNormal = $monetarySubsystem->calculateYieldCurveAndQE($normalState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
+
+        // In a normal economy, the yield curve must be upward sloping (2Y < 5Y < 10Y < 30Y)
+        $this->assertLessThan($curveNormal['yield_5y'], $curveNormal['yield_2y'], 'In a normal economy, 2Y yield must be below 5Y yield.');
+        $this->assertLessThan($curveNormal['yield_10y'], $curveNormal['yield_5y'], 'In a normal economy, 5Y yield must be below 10Y yield.');
+        $this->assertLessThan($curveNormal['yield_30y'], $curveNormal['yield_10y'], 'In a normal economy, 10Y yield must be below 30Y yield.');
+        $spread2s10sNormal = $curveNormal['yield_10y'] - $curveNormal['yield_2y'];
+        $this->assertGreaterThan(0.0030, $spread2s10sNormal, '2s10s spread must be positive and healthy in normal economic conditions.');
+
+        // 2. Late-cycle restrictive overtightening:
+        // Policy rate = 5.25%, inflation slowing to 2.4%, output gap cooling
+        $tightState = new \App\Service\Macro\MacroState();
+        $tightState->outputGap = 0.010;
+        $tightState->outputGapEma = 0.010;
+        $tightState->inflation = 0.024;
+        $tightState->inflationEma = 0.024;
+        $tightState->policyRate = 0.0525;
+        $tightState->targetRate = 0.0400; // Target rate cooling as inflation contained
+        $tightState->tipsBreakeven = 0.022;
+        $tightState->marketVolatilityEma = 0.18;
+
+        $curveTight = $monetarySubsystem->calculateYieldCurveAndQE($tightState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
+
+        // 2s10s yield spread must invert during late-cycle overtightening
+        $spread2s10sTight = $curveTight['yield_10y'] - $curveTight['yield_2y'];
+        $this->assertLessThan(0.0, $spread2s10sTight, '2s10s spread must invert when policy rate is overtightened.');
+    }
+
+    public function testQuantitativeEasingActivatesWhenPolicyRateLowDuringRecession(): void
+    {
+        $monetarySubsystem = new \App\Service\Macro\Subsystem\MonetaryPolicySubsystem($this->mathUtilityMock);
+        $dt = 0.25;
+
+        // Low rates (1.5%) and negative output gap (-2.0%)
+        $recessionState = new \App\Service\Macro\MacroState();
+        $recessionState->outputGap = -0.020;
+        $recessionState->policyRate = 0.015;
+        $recessionState->inflation = 0.012;
+        $recessionState->tipsBreakeven = 0.015;
+
+        $yieldData = $monetarySubsystem->calculateYieldCurveAndQE($recessionState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, $dt);
+
+        $this->assertGreaterThan(0.0, $yieldData['new_balance_sheet_intensity'], 'QE intensity must expand when policy rates are low during a recession.');
+        $this->assertGreaterThan(0.0, $yieldData['new_qe_intensity'], 'QE asset purchase intensity must be positive.');
+        $this->assertEquals(0.0, $yieldData['new_qt_intensity'], 'QT runoff must be zero when QE is active.');
+    }
+
+    public function testInterbankLiquiditySpreadCoupledToCorporateCreditStress(): void
+    {
+        $creditSubsystem = new \App\Service\Macro\Subsystem\CreditFiscalSubsystem($this->mathUtilityMock);
+        $dt = 0.25;
+
+        $stateCalm = new \App\Service\Macro\MacroState();
+        $stateCalm->macroCreditSpread = MacroEngine::BASE_CREDIT_SPREAD;
+        $stateCalm->macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD;
+        $stateCalm->interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD;
+        $stateCalm->marketVolatilityEma = MacroEngine::MACRO_VOL_BASE_ANCHOR;
+
+        $stateStressed = new \App\Service\Macro\MacroState();
+        $stateStressed->macroCreditSpread = 0.045; // 450 bps credit spread
+        $stateStressed->macroCreditSpreadEma = 0.045;
+        $stateStressed->interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD;
+        $stateStressed->marketVolatilityEma = 0.30;
+
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(false);
+
+        $creditSubsystem->calculateInterbankLiquiditySpread($stateCalm, $dt);
+        $creditSubsystem->calculateInterbankLiquiditySpread($stateStressed, $dt);
+
+        $this->assertGreaterThan(
+            $stateCalm->interbankLiquiditySpread,
+            $stateStressed->interbankLiquiditySpread,
+            'Wholesale interbank liquidity spread must widen when corporate credit risk surges.'
+        );
+    }
+
+    public function testConsumerSentimentDropsRealisticallyDuringRecession(): void
+    {
+        $assetSubsystem = new \App\Service\Macro\Subsystem\AssetMarketSubsystem($this->mathUtilityMock);
+        $dt = 0.25;
+
+        $stateNormal = new \App\Service\Macro\MacroState();
+        $stateNormal->outputGap = 0.0;
+        $stateNormal->inflation = MacroEngine::TARGET_INFLATION;
+        $stateNormal->inflationEma = MacroEngine::TARGET_INFLATION;
+        $stateNormal->unemploymentRate = MacroEngine::NATURAL_UNEMPLOYMENT;
+        $stateNormal->unemploymentRateEma = MacroEngine::NATURAL_UNEMPLOYMENT;
+        $stateNormal->consumerSentimentIndex = MacroEngine::SENTIMENT_BASELINE;
+
+        $stateCrisis = new \App\Service\Macro\MacroState();
+        $stateCrisis->outputGap = -0.025; // -2.5% contraction
+        $stateCrisis->inflation = 0.040; // 4% inflation (stagflation shock)
+        $stateCrisis->inflationEma = 0.030;
+        $stateCrisis->unemploymentRate = 0.055;
+        $stateCrisis->unemploymentRateEma = 0.045;
+        $stateCrisis->consumerSentimentIndex = MacroEngine::SENTIMENT_BASELINE;
+
+        $assetSubsystem->calculateConsumerSentiment($stateNormal, $dt);
+        $assetSubsystem->calculateConsumerSentiment($stateCrisis, $dt);
+
+        $this->assertLessThan(
+            $stateNormal->consumerSentimentIndex,
+            $stateCrisis->consumerSentimentIndex,
+            'Consumer sentiment must decline during economic contractions and inflation surges.'
+        );
+        $this->assertLessThan(
+            90.0,
+            $stateCrisis->consumerSentimentIndex,
+            'Consumer sentiment must reflect meaningful distress (< 90 pts) during a stagflation contraction.'
+        );
+    }
 }
+

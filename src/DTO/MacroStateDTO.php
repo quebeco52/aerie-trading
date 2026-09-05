@@ -34,6 +34,7 @@ readonly class MacroStateDTO
         public float $energyPriceIndex = 100.0,
         public float $energyPriceIndexEma = 100.0,
         public float $energyPriceShock = 0.0,
+        public float $energyBasePrice = 100.0,
         public float $energyCostPushLag = 0.0,
         public float $agriCostPushLag = 0.0,
         public float $consumerSentimentIndex = 100.0,
@@ -109,6 +110,18 @@ readonly class MacroStateDTO
         public float $nominalGdpIndex = 1.0,
         public float $gdpDeflator = 1.0,
         public ?string $eventType = null,
+        public float $supercoreInflation = MacroEngine::TARGET_INFLATION,
+        public float $supercoreInflationEma = MacroEngine::TARGET_INFLATION,
+        public float $coreGoodsInflation = MacroEngine::TARGET_INFLATION,
+        public float $coreGoodsInflationEma = MacroEngine::TARGET_INFLATION,
+        public float $cumulativeInflationGap = 0.0,
+        public float $cumulativeInflationGapEma = 0.0,
+        public float $highYieldCreditSpread = 0.048,
+        public float $highYieldCreditSpreadEma = 0.048,
+        public float $inventoryStockGap = 0.0,
+        public float $inventoryStockGapEma = 0.0,
+        public float $energyInventoryIndex = MacroEngine::COMMODITY_INVENTORY_BASELINE,
+        public float $energyInventoryIndexEma = MacroEngine::COMMODITY_INVENTORY_BASELINE,
     ) {}
 
     /**
@@ -143,6 +156,7 @@ readonly class MacroStateDTO
         $energyPriceIndex = (float) ($data['energy_price_index'] ?? 100.0);
         $energyPriceIndexEma = (float) ($data['energy_price_index_ema'] ?? $energyPriceIndex);
         $energyPriceShock = (float) ($data['energy_price_shock'] ?? 0.0);
+        $energyBasePrice = (float) ($data['energy_base_price'] ?? $energyPriceIndex);
         $energyCostPushLag = (float) ($data['energy_cost_push_lag'] ?? 0.0);
         $agriCostPushLag = (float) ($data['agri_cost_push_lag'] ?? 0.0);
         $consumerSentimentIndex = (float) ($data['consumer_sentiment_index'] ?? 100.0);
@@ -245,6 +259,7 @@ readonly class MacroStateDTO
             energyPriceIndex: $energyPriceIndex,
             energyPriceIndexEma: $energyPriceIndexEma,
             energyPriceShock: $energyPriceShock,
+            energyBasePrice: $energyBasePrice,
             energyCostPushLag: $energyCostPushLag,
             agriCostPushLag: $agriCostPushLag,
             consumerSentimentIndex: $consumerSentimentIndex,
@@ -320,6 +335,18 @@ readonly class MacroStateDTO
             nominalGdpIndex: $nominalGdpIndex,
             gdpDeflator: $gdpDeflator,
             eventType: $eventType,
+            supercoreInflation: (float) ($data['supercore_inflation'] ?? $inflation),
+            supercoreInflationEma: (float) ($data['supercore_inflation_ema'] ?? ($data['supercore_inflation'] ?? $inflation)),
+            coreGoodsInflation: (float) ($data['core_goods_inflation'] ?? $inflation),
+            coreGoodsInflationEma: (float) ($data['core_goods_inflation_ema'] ?? ($data['core_goods_inflation'] ?? $inflation)),
+            cumulativeInflationGap: (float) ($data['cumulative_inflation_gap'] ?? 0.0),
+            cumulativeInflationGapEma: (float) ($data['cumulative_inflation_gap_ema'] ?? ($data['cumulative_inflation_gap'] ?? 0.0)),
+            highYieldCreditSpread: (float) ($data['high_yield_credit_spread'] ?? ($macroCreditSpread * MacroEngine::HY_BASE_SPREAD_MULTIPLIER)),
+            highYieldCreditSpreadEma: (float) ($data['high_yield_credit_spread_ema'] ?? ($data['high_yield_credit_spread'] ?? ($macroCreditSpread * MacroEngine::HY_BASE_SPREAD_MULTIPLIER))),
+            inventoryStockGap: (float) ($data['inventory_stock_gap'] ?? 0.0),
+            inventoryStockGapEma: (float) ($data['inventory_stock_gap_ema'] ?? ($data['inventory_stock_gap'] ?? 0.0)),
+            energyInventoryIndex: (float) ($data['energy_inventory_index'] ?? MacroEngine::COMMODITY_INVENTORY_BASELINE),
+            energyInventoryIndexEma: (float) ($data['energy_inventory_index_ema'] ?? ($data['energy_inventory_index'] ?? MacroEngine::COMMODITY_INVENTORY_BASELINE)),
         );
     }
 
@@ -349,6 +376,7 @@ readonly class MacroStateDTO
             energyPriceIndex: $state->energyPriceIndex,
             energyPriceIndexEma: $state->energyPriceIndexEma,
             energyPriceShock: $state->energyPriceShock,
+            energyBasePrice: $state->energyBasePrice,
             energyCostPushLag: $state->energyCostPushLag,
             agriCostPushLag: $state->agriCostPushLag,
             consumerSentimentIndex: $state->consumerSentimentIndex,
@@ -424,6 +452,18 @@ readonly class MacroStateDTO
             nominalGdpIndex: $state->nominalGdpIndex,
             gdpDeflator: $state->gdpDeflator,
             eventType: $state->eventType,
+            supercoreInflation: $state->supercoreInflation,
+            supercoreInflationEma: $state->supercoreInflationEma,
+            coreGoodsInflation: $state->coreGoodsInflation,
+            coreGoodsInflationEma: $state->coreGoodsInflationEma,
+            cumulativeInflationGap: $state->cumulativeInflationGap,
+            cumulativeInflationGapEma: $state->cumulativeInflationGapEma,
+            highYieldCreditSpread: $state->highYieldCreditSpread,
+            highYieldCreditSpreadEma: $state->highYieldCreditSpreadEma,
+            inventoryStockGap: $state->inventoryStockGap,
+            inventoryStockGapEma: $state->inventoryStockGapEma,
+            energyInventoryIndex: $state->energyInventoryIndex,
+            energyInventoryIndexEma: $state->energyInventoryIndexEma,
         );
     }
 
@@ -453,6 +493,7 @@ readonly class MacroStateDTO
             'energy_price_index' => $this->energyPriceIndex,
             'energy_price_index_ema' => $this->energyPriceIndexEma,
             'energy_price_shock' => $this->energyPriceShock,
+            'energy_base_price' => $this->energyBasePrice,
             'energy_cost_push_lag' => $this->energyCostPushLag,
             'agri_cost_push_lag' => $this->agriCostPushLag,
             'consumer_sentiment_index' => $this->consumerSentimentIndex,
@@ -528,6 +569,18 @@ readonly class MacroStateDTO
             'nominal_gdp_index' => $this->nominalGdpIndex,
             'gdp_deflator' => $this->gdpDeflator,
             'event_type' => $this->eventType,
+            'supercore_inflation' => $this->supercoreInflation,
+            'supercore_inflation_ema' => $this->supercoreInflationEma,
+            'core_goods_inflation' => $this->coreGoodsInflation,
+            'core_goods_inflation_ema' => $this->coreGoodsInflationEma,
+            'cumulative_inflation_gap' => $this->cumulativeInflationGap,
+            'cumulative_inflation_gap_ema' => $this->cumulativeInflationGapEma,
+            'high_yield_credit_spread' => $this->highYieldCreditSpread,
+            'high_yield_credit_spread_ema' => $this->highYieldCreditSpreadEma,
+            'inventory_stock_gap' => $this->inventoryStockGap,
+            'inventory_stock_gap_ema' => $this->inventoryStockGapEma,
+            'energy_inventory_index' => $this->energyInventoryIndex,
+            'energy_inventory_index_ema' => $this->energyInventoryIndexEma,
         ];
     }
 }

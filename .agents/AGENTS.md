@@ -24,6 +24,10 @@ public const NIM_BASE_SPREAD_BUFFER = 0.005;
 
 ## Testing
 * All tests must be written in PHPUnit.
+
+**Test Suites & Execution:**
+  * Run `make test` for the default rapid feedback loop (runs Unit, Integration, Functional, and Financial suites in ~1.2s).
+  * Use targeted test commands where appropriate: `make test-unit`, `make test-integration`, `make test-functional`, `make test-financial`, or `make test-e2e` (Panther/Selenium).
 * After implementing a new model or a new feature, you must write a new test for it and test it.
 * After modifying or creating PHP files, always run static analysis on the affected files using `make phpstan FILE=<relative/path/to/file.php>`.
 

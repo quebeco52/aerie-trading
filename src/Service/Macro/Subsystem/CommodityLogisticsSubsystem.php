@@ -17,10 +17,12 @@ class CommodityLogisticsSubsystem
     ) {}
 
     /**
-     * Schwartz (1997) One-Factor Mean-Reverting Commodity Model with Poisson Supply Jumps.
+     * Schwartz (1997) One-Factor Mean-Reverting Commodity Model with Poisson Supply Jumps
+     * and Working (1949) / Litzenberger & Rabinowitz (1995) Theory of Storage Convenience Yield.
      *
      * Simulates global retail energy commodity prices (crude oil & refined products benchmark)
-     * using mean-reverting log-prices driven by Ornstein-Uhlenbeck drift and geopolitical supply disruption jumps.
+     * using mean-reverting log-prices driven by Ornstein-Uhlenbeck drift, geopolitical supply disruption jumps,
+     * and non-linear convenience yield backwardation spikes when physical inventory buffer stocks deplete.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -28,14 +30,16 @@ class CommodityLogisticsSubsystem
     public function calculateEnergyShock(MacroState $state, float $dt): void
     {
         $dW = $this->mathUtility->generateStandardNormal();
+        $currentBase = $state->energyBasePrice > 0.0 ? $state->energyBasePrice : $state->energyPriceIndex;
         $baseProcess = $this->mathUtility->calculateSchwartz1Factor(
-            currentPrice: $state->energyPriceIndex,
+            currentPrice: $currentBase,
             kappa: MacroEngine::ENERGY_MEAN_REVERSION,
             theta: MacroEngine::ENERGY_BASELINE,
             sigma: MacroEngine::ENERGY_VOLATILITY,
             dt: $dt,
             dW: $dW
         );
+        $state->energyBasePrice = max(10.0, min(250.0, $baseProcess));
 
         $jumpData = $this->mathUtility->calculateJumpDiffusion(
             lambda: MacroEngine::ENERGY_JUMP_PROBABILITY,
@@ -49,8 +53,21 @@ class CommodityLogisticsSubsystem
             $jumpAmount = $baseProcess * ($jumpData['multiplier'] - 1.0);
         }
 
-        $state->energyPriceIndex = $baseProcess + $jumpAmount;
-        $state->energyPriceIndex = max(10.0, min(500.0, $state->energyPriceIndex));
+        // Physical inventory buffer evolution
+        $demandDraw = $state->outputGapEma * MacroEngine::COMMODITY_INVENTORY_DRAWDOWN_SENSITIVITY * 100.0;
+        $shockDraw = ($jumpData['multiplier'] > 1.0) ? (log($jumpData['multiplier']) * 40.0) : 0.0;
+        $reversionFlow = MacroEngine::COMMODITY_INVENTORY_REVERSION_SPEED * (MacroEngine::COMMODITY_INVENTORY_BASELINE - $state->energyInventoryIndex);
+        $dInventory = ($reversionFlow - $demandDraw - $shockDraw) * $dt;
+        $state->energyInventoryIndex = max(MacroEngine::COMMODITY_MIN_BUFFER_STOCK, min(160.0, $state->energyInventoryIndex + $dInventory));
+
+        // Theory of Storage (Working 1949): Non-linear convenience yield backwardation add-on
+        $convenienceYield = $this->mathUtility->calculateConvenienceYield(
+            inventoryLevel: $state->energyInventoryIndex,
+            minBufferStock: MacroEngine::COMMODITY_MIN_BUFFER_STOCK
+        );
+        $conveniencePricePremium = MacroEngine::ENERGY_BASELINE * $convenienceYield;
+
+        $state->energyPriceIndex = max(10.0, min(350.0, $baseProcess + $jumpAmount + $conveniencePricePremium));
         $state->energyPriceShock = $state->energyPriceIndex - MacroEngine::ENERGY_BASELINE;
     }
 

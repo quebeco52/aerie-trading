@@ -95,25 +95,27 @@ class MacroAggregateSubsystem
         $y = $state->outputGap;
         $outZ = $this->mathUtility->generateStandardNormal();
 
-        $borrowingCost = (MacroEngine::BORROWING_POLICY_WEIGHT * $state->policyRate)
-            + (MacroEngine::BORROWING_YIELD5Y_WEIGHT * $yield5y)
-            + $state->macroCreditSpreadEma
-            + $state->interbankLiquiditySpreadEma;
-        $realRate = $borrowingCost - $state->inflation;
+        $borrowingPolicy = (MacroEngine::BORROWING_POLICY_WEIGHT * $state->policyRate)
+            + (MacroEngine::BORROWING_YIELD5Y_WEIGHT * $yield5y);
+        $realRate = $borrowingPolicy - $state->inflation;
 
         $neutral5yDurationScale = (1.0 - exp(-5.0 / 10.0)) / (1.0 - exp(-1.0));
         $neutral5yYield = $naturalRate + MacroEngine::TARGET_INFLATION + (MacroEngine::NS_BASE_TERM_PREMIUM * $neutral5yDurationScale);
 
-        $neutralBorrowingRate = (MacroEngine::BORROWING_POLICY_WEIGHT * ($naturalRate + MacroEngine::TARGET_INFLATION))
-            + (MacroEngine::BORROWING_YIELD5Y_WEIGHT * $neutral5yYield)
-            + MacroEngine::BASE_CREDIT_SPREAD
-            + MacroEngine::INTERBANK_BASELINE_SPREAD;
+        $neutralBorrowingPolicy = (MacroEngine::BORROWING_POLICY_WEIGHT * ($naturalRate + MacroEngine::TARGET_INFLATION))
+            + (MacroEngine::BORROWING_YIELD5Y_WEIGHT * $neutral5yYield);
+        $neutralRealRate = $neutralBorrowingPolicy - MacroEngine::TARGET_INFLATION;
 
-        $neutralRealRate = $neutralBorrowingRate - MacroEngine::TARGET_INFLATION;
+        // Pure risk-free real monetary policy transmission stance (Curdia & Woodford 2010 Eq. 14)
+        $monetaryDrag = MacroEngine::KALDOR_MONETARY_DRAG * ($realRate - $neutralRealRate);
+
+        // Bernanke, Gertler, & Gilchrist (1999) Financial Accelerator & Wholesale Credit Friction
+        $excessCreditSpread = max(-MacroEngine::BASE_CREDIT_SPREAD * 0.5, $state->macroCreditSpreadEma - MacroEngine::BASE_CREDIT_SPREAD);
+        $excessInterbankSpread = max(-MacroEngine::INTERBANK_BASELINE_SPREAD * 0.5, $state->interbankLiquiditySpreadEma - MacroEngine::INTERBANK_BASELINE_SPREAD);
+        $creditFrictionDrag = MacroEngine::KALDOR_CREDIT_FRICTION_DRAG * ($excessCreditSpread + $excessInterbankSpread);
 
         $momentum = MacroEngine::KALDOR_MOMENTUM * $y;
         $cubicConstraint = MacroEngine::KALDOR_CAPACITY * pow($y, 3);
-        $monetaryDrag = MacroEngine::KALDOR_MONETARY_DRAG * ($realRate - $neutralRealRate);
         $fiscalStimulus = MacroEngine::KALDOR_FISCAL_MULTIPLIER * (MacroEngine::TARGET_CORPORATE_TAX_RATE - $state->corporateTaxRate);
         $capitalDrag = MacroEngine::KALDOR_CAPITAL_DRAG * $state->capitalStockOverhang;
 
@@ -121,11 +123,46 @@ class MacroAggregateSubsystem
         $fxShift = ($state->exchangeRateIndexEma / MacroEngine::EXCHANGE_RATE_BASELINE) - 1.0;
         $netExportDrag = MacroEngine::KALDOR_FX_ELASTICITY * $fxShift;
 
-        $energySupplyDrag = max(0.0, $state->energyPriceShock / 100.0) * MacroEngine::KALDOR_ENERGY_SUPPLY_DRAG;
-        $freightShift = max(0.0, ($state->freightRateIndexEma / MacroEngine::FREIGHT_BASELINE) - 1.0);
-        $freightSupplyDrag = $freightShift * MacroEngine::KALDOR_FREIGHT_SUPPLY_DRAG;
+        // Symmetric supply shocks (Bruno-Sachs 1985 & Blanchard-Gali 2007): below baseline is cost dividend
+        $energyShock = $state->energyPriceShock != 0.0
+            ? $state->energyPriceShock
+            : (($state->energyPriceIndexEma > 0.0 ? $state->energyPriceIndexEma : $state->energyPriceIndex) - MacroEngine::ENERGY_BASELINE);
+        $energySupplyShift = $energyShock / MacroEngine::ENERGY_BASELINE;
+        $energySupplyDrag = $energySupplyShift * MacroEngine::KALDOR_ENERGY_SUPPLY_DRAG;
 
-        $drift = ($momentum - $cubicConstraint - $monetaryDrag + $fiscalStimulus - $capitalDrag + $housingWealthEffect - $netExportDrag - $energySupplyDrag - $freightSupplyDrag) * $dt;
+        $freightRate = $state->freightRateIndexEma > 0.0 ? $state->freightRateIndexEma : $state->freightRateIndex;
+        $freightSupplyShift = ($freightRate - MacroEngine::FREIGHT_BASELINE) / MacroEngine::FREIGHT_BASELINE;
+        $freightSupplyDrag = $freightSupplyShift * MacroEngine::KALDOR_FREIGHT_SUPPLY_DRAG;
+
+        // Metzler (1941) & Blinder (1982) Inventory Investment Cycle Step
+        $state->inventoryStockGap = $this->mathUtility->calculateInventoryCycleStep(
+            currentInventoryGap: $state->inventoryStockGap,
+            outputGap: $y,
+            outputGapEma: $state->outputGapEma,
+            speed: MacroEngine::INVENTORY_ADJUSTMENT_SPEED,
+            surpriseSens: MacroEngine::INVENTORY_SURPRISE_SENSITIVITY,
+            dt: $dt,
+            cyclicalSens: MacroEngine::INVENTORY_CYCLICAL_DEMAND_SENSITIVITY
+        );
+        $inventoryDrag = MacroEngine::METZLER_INVENTORY_DRAG * $state->inventoryStockGap;
+
+        // State-dependent autonomous expansion propensity (Schumpeter 1939, Kaldor 1940):
+        // Innovation and capital expansion thrive in expansions; during recessions, new project capex freezes
+        $autonomousScale = $y >= 0.0 ? 1.0 : max(0.0, 1.0 + 30.0 * $y);
+        $autonomousPropensity = MacroEngine::KALDOR_AUTONOMOUS_PROPENSITY * $autonomousScale;
+
+        $drift = ($autonomousPropensity
+            + $momentum
+            - $cubicConstraint
+            - $monetaryDrag
+            - $creditFrictionDrag
+            + $fiscalStimulus
+            - $capitalDrag
+            - $inventoryDrag
+            + $housingWealthEffect
+            - $netExportDrag
+            - $energySupplyDrag
+            - $freightSupplyDrag) * $dt;
         $volatility = MacroEngine::OUTPUT_GAP_DIFFUSION_SIGMA * $stressMultiplier * sqrt($dt) * $outZ;
 
         $newGap = $y + $drift + $volatility;
@@ -133,10 +170,12 @@ class MacroAggregateSubsystem
     }
 
     /**
-     * Hybrid New Keynesian Phillips Curve (Galí & Gertler 1999) with Distributed Lag Stickiness.
+     * Hybrid New Keynesian Phillips Curve with Benigno & Eggertsson (2023) Convexity
+     * and Shapiro (2022) Sectoral Disaggregation (Supercore Services vs Core Goods vs Commodity).
      *
-     * Models headline inflation driven by adaptive expectations un-anchoring, output gap pressure,
-     * distributed-lag energy cost-push shocks, and Beveridge wage-push unit labor costs.
+     * Models non-linear capacity-constrained inflation where output gaps approaching capacity
+     * accelerate inflation non-linearly, while downward nominal wage/price rigidity flattens the curve during recessions.
+     * Decomposes inflation into wage-push supercore services, freight/materials core goods, and energy/food pass-through.
      *
      * @param MacroState $state            Current macroeconomic state.
      * @param float      $targetInflation Central bank inflation target.
@@ -152,8 +191,21 @@ class MacroAggregateSubsystem
         $effectiveTarget = $targetInflation + $anchorSlip;
         $inflationDrift = MacroEngine::INFLATION_MEAN_REVERSION * ($effectiveTarget - $state->inflation) * $dt;
 
-        $phillipsSlope = $state->outputGap * MacroEngine::PHILLIPS_SLOPE;
+        // Benigno & Eggertsson (2023): Non-linear convex demand-pull curve
+        $convexDemandPressure = $this->mathUtility->calculateConvexPhillipsCurve(
+            outputGap: $state->outputGap,
+            maxCapacity: MacroEngine::PHILLIPS_MAX_CAPACITY,
+            kappa: MacroEngine::PHILLIPS_CONVEX_KAPPA,
+            downwardRigidityFactor: MacroEngine::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR
+        );
 
+        // Shapiro (2022) Disaggregated Inflation Dynamics:
+        // 1. Supercore Services: wage growth gap above productivity drift + convex demand
+        $wageGap = $state->wageGrowth - (MacroEngine::TFP_DRIFT + $targetInflation);
+        $wageCostPush = $wageGap * MacroEngine::WAGE_INFLATION_TRANSMISSION;
+        $targetSupercore = $targetInflation + $anchorSlip + $convexDemandPressure + $wageCostPush;
+
+        // 2. Core Goods: supply chain freight + industrial metals + convex goods demand
         $rawEnergyCostPush = ($state->energyPriceShock / 100.0) * MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
         $state->energyCostPushLag = $this->mathUtility->calculateDistributedLag(
             currentLaggedValue: $state->energyCostPushLag,
@@ -170,12 +222,27 @@ class MacroAggregateSubsystem
             lagTimeConstant: MacroEngine::AGRI_COST_PUSH_LAG_YEARS
         );
 
-        $wageGap = $state->wageGrowth - (MacroEngine::TFP_DRIFT + $targetInflation);
-        $wageCostPush = $wageGap * MacroEngine::WAGE_INFLATION_TRANSMISSION;
+        $freightShift = ($state->freightRateIndexEma / MacroEngine::FREIGHT_BASELINE) - 1.0;
+        $metalsShift = ($state->industrialMetalsIndexEma / MacroEngine::METALS_BASELINE) - 1.0;
+        $goodsSupplyFriction = ($freightShift * 0.005) + ($metalsShift * 0.003);
+        $targetCoreGoods = $targetInflation + $anchorSlip + (0.8 * $convexDemandPressure) + $goodsSupplyFriction;
 
-        $phillipsEffect = ($phillipsSlope + $state->energyCostPushLag + $state->agriCostPushLag + $wageCostPush) * $dt;
+        $reversionWeight = 1.0 - exp(-MacroEngine::INFLATION_MEAN_REVERSION * $dt);
+        $state->supercoreInflation += $reversionWeight * ($targetSupercore - $state->supercoreInflation);
+        $state->supercoreInflation = max(-0.01, min(0.20, $state->supercoreInflation));
 
-        $newInflation = $state->inflation + $inflationDrift + $phillipsEffect + (0.005 * $stressMultiplier * sqrt($dt) * $infZ);
+        $state->coreGoodsInflation += $reversionWeight * ($targetCoreGoods - $state->coreGoodsInflation);
+        $state->coreGoodsInflation = max(-0.02, min(0.20, $state->coreGoodsInflation));
+
+        // 3. Commodity Cost-Push Component (Energy and Agricultural Food)
+        $commodityCostPush = $state->energyCostPushLag + $state->agriCostPushLag;
+
+        // Blended Headline Inflation (Shapiro 2022 expenditure basket aggregation)
+        $blendedInflation = (MacroEngine::INFLATION_WEIGHT_SUPERCORE * $state->supercoreInflation)
+            + (MacroEngine::INFLATION_WEIGHT_GOODS * $state->coreGoodsInflation)
+            + (MacroEngine::INFLATION_WEIGHT_COMMODITY * ($targetInflation + $anchorSlip + $commodityCostPush));
+
+        $newInflation = $blendedInflation + (0.002 * $stressMultiplier * sqrt($dt) * $infZ);
         return max(-0.02, min(0.25, $newInflation));
     }
 
@@ -192,7 +259,12 @@ class MacroAggregateSubsystem
      */
     public function calculateTipsBreakeven(MacroState $state, float $targetInflation, float $dt): float
     {
-        $cyclicalForecast = $state->outputGapEma * MacroEngine::PHILLIPS_SLOPE;
+        $cyclicalForecast = $this->mathUtility->calculateConvexPhillipsCurve(
+            outputGap: $state->outputGapEma,
+            maxCapacity: MacroEngine::PHILLIPS_MAX_CAPACITY,
+            kappa: MacroEngine::PHILLIPS_CONVEX_KAPPA,
+            downwardRigidityFactor: MacroEngine::PHILLIPS_DOWNWARD_RIGIDITY_FACTOR
+        );
 
         // Pflueger & Viceira (2011): Inflation Risk Premium (IRP) reflects upside inflation uncertainty
         // driven by actual inflation deviations above target and cost-push supply shocks, not equity market crash panic.
@@ -285,5 +357,12 @@ class MacroAggregateSubsystem
         $state->nairuEma += $emaWeight * ($state->nairu - $state->nairuEma);
         $state->sovereignDebtToGdpEma += $emaWeight * ($state->sovereignDebtToGdp - $state->sovereignDebtToGdpEma);
         $state->financialConditionsIndexEma += $emaWeight * ($state->financialConditionsIndex - $state->financialConditionsIndexEma);
+
+        $state->supercoreInflationEma += $emaWeight * ($state->supercoreInflation - $state->supercoreInflationEma);
+        $state->coreGoodsInflationEma += $emaWeight * ($state->coreGoodsInflation - $state->coreGoodsInflationEma);
+        $state->cumulativeInflationGapEma += $emaWeight * ($state->cumulativeInflationGap - $state->cumulativeInflationGapEma);
+        $state->highYieldCreditSpreadEma += $emaWeight * ($state->highYieldCreditSpread - $state->highYieldCreditSpreadEma);
+        $state->inventoryStockGapEma += $emaWeight * ($state->inventoryStockGap - $state->inventoryStockGapEma);
+        $state->energyInventoryIndexEma += $emaWeight * ($state->energyInventoryIndex - $state->energyInventoryIndexEma);
     }
 }

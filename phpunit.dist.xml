@@ -9,6 +9,7 @@
          failOnWarning="true"
          failOnRisky="true"
          stopOnDefect="true"
+         defaultTestSuite="Fast"
          bootstrap="tests/bootstrap.php"
          cacheDirectory=".phpunit.cache"
 >
@@ -27,21 +28,46 @@
     </php>
 
     <testsuites>
+        <!-- Default Fast Suite (< 1.5s): Excludes slow browser Panther E2E tests -->
+        <testsuite name="Fast">
+            <directory>tests/DTO</directory>
+            <directory>tests/Data</directory>
+            <directory>tests/Twig</directory>
+            <directory>tests/Command</directory>
+            <directory>tests/MessageHandler</directory>
+            <directory>tests/EventSubscriber</directory>
+            <directory>tests/Security</directory>
+            <directory>tests/Financial</directory>
+            <directory>tests/Service</directory>
+            <directory>tests/Controller</directory>
+        </testsuite>
+
         <testsuite name="Unit">
             <directory>tests/DTO</directory>
             <directory>tests/Data</directory>
+            <directory>tests/Twig</directory>
             <directory>tests/Service/Model</directory>
             <directory>tests/Service/Math</directory>
         </testsuite>
+
         <testsuite name="Integration">
             <directory>tests/Service</directory>
+            <directory>tests/Command</directory>
+            <directory>tests/MessageHandler</directory>
             <directory>tests/EventSubscriber</directory>
+            <directory>tests/Security</directory>
             <exclude>tests/Service/Model</exclude>
             <exclude>tests/Service/Math</exclude>
         </testsuite>
+
         <testsuite name="Functional">
             <directory>tests/Controller</directory>
         </testsuite>
+
+        <testsuite name="Financial">
+            <directory>tests/Financial</directory>
+        </testsuite>
+
         <testsuite name="E2E">
             <directory>tests/Panther</directory>
         </testsuite>
@@ -64,6 +90,7 @@
     </source>
 
     <extensions>
+        <bootstrap class="DAMA\DoctrineTestBundle\PHPUnit\PHPUnitExtension" />
         <bootstrap class="Symfony\Component\Panther\ServerExtension" />
     </extensions>
 </phpunit>

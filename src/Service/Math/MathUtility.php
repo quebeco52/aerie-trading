@@ -1177,5 +1177,175 @@ class MathUtility
 
         return max(FinancialConstants::MIN_POSITIVE_NWC_INTENSITY, min(FinancialConstants::MAX_POSITIVE_NWC_INTENSITY, $dynamicIntensity));
     }
+
+    /**
+     * Calculates the non-linear capacity-constrained output gap effect on inflation
+     * using the Benigno & Eggertsson (2023) / Harding, Lindé, & Trabandt (2022) convex Phillips curve.
+     *
+     * During economic expansions, as output gap y approaches structural capacity ceiling y_max, supply bottlenecks
+     * bind asymptotically, causing non-linear inflation acceleration. During contractions (y < 0),
+     * downward nominal wage and price rigidity flattens the curve toward a sticky minimum slope.
+     *
+     * Formula:
+     *   For y >= 0: f(y) = kappa * (y / max(0.001, y_max - y))
+     *   For y < 0:  f(y) = kappa * downwardRigidityFactor * y
+     *
+     * @param float $outputGap              Current macroeconomic output gap (e.g., 0.02 for +2%).
+     * @param float $maxCapacity            Asymptotic output gap ceiling where capacity binds (e.g., 0.08).
+     * @param float $kappa                  Baseline slope sensitivity parameter.
+     * @param float $downwardRigidityFactor Downward nominal rigidity slope multiplier (0 < factor < 1).
+     * @return float Non-linear demand-pull Phillips curve inflation pressure.
+     */
+    public function calculateConvexPhillipsCurve(
+        float $outputGap,
+        float $maxCapacity = 0.08,
+        float $kappa = 0.020,
+        float $downwardRigidityFactor = 0.35
+    ): float {
+        if ($outputGap >= 0.0) {
+            $effectiveCeiling = max(0.005, $maxCapacity - $outputGap);
+            return $kappa * ($outputGap / $effectiveCeiling);
+        }
+
+        $baseSlope = $maxCapacity > 0 ? ($kappa / $maxCapacity) : 0.25;
+        return $baseSlope * $downwardRigidityFactor * $outputGap;
+    }
+
+    /**
+     * Calculates the duration-weighted preferred-habitat term premium shift under QE/QT (Vayanos & Vila 2021).
+     *
+     * When the central bank expands its balance sheet via Quantitative Easing (QE), it extracts net duration
+     * from the market, reducing the duration risk absorbed by private arbitrageurs and compressing term premia.
+     * The effect scales proportionally with bond maturity/tenor duration.
+     *
+     * Formula: Delta TP(tau) = - lambda_habitat * (tau / 10.0) * balanceSheetIntensity
+     *
+     * @param float $balanceSheetIntensity Positive for QE (yield suppression), negative for QT (steepening).
+     * @param float $tau                   Bond tenor maturity in years (e.g. 2.0, 5.0, 10.0, 30.0).
+     * @param float $habitatSensitivity    Sensitivity parameter scaling duration extraction.
+     * @return float Term premium shift in decimal (e.g., -0.0050 for -50bps).
+     */
+    public function calculatePreferredHabitatTermPremiumShift(
+        float $balanceSheetIntensity,
+        float $tau,
+        float $habitatSensitivity = 0.0050
+    ): float {
+        $durationWeight = $tau / 10.0;
+        return -$balanceSheetIntensity * $durationWeight * $habitatSensitivity;
+    }
+
+    /**
+     * Calculates Investment Grade (IG) and High Yield (HY) corporate credit spreads
+     * incorporating the Jarrow, Lando, & Turnbull (1997) rating migration model and "fallen angel" cliff.
+     *
+     * During severe macroeconomic contractions, corporate credit rating transitions migrate toward speculative
+     * grades, where institutional investment mandates trigger forced selling, exponentially blowing out HY spreads.
+     *
+     * @param float $baseIgSpread     Baseline investment-grade spread (e.g. 0.020).
+     * @param float $outputGapEma     Smoothed macroeconomic output gap.
+     * @param float $marketVolEma     Smoothed equity market volatility.
+     * @param float $interbankStress  Wholesale interbank liquidity stress above baseline.
+     * @param float $hyBaseMultiplier Baseline multiple of HY spread over IG spread (e.g. 2.4x).
+     * @param float $fallenAngelSens  Sensitivity coefficient for non-linear HY spread blowout on contractions.
+     * @return array{ig: float, hy: float} Calculated IG and HY credit spreads.
+     */
+    public function calculateDualTrancheCreditSpreads(
+        float $baseIgSpread,
+        float $outputGapEma,
+        float $marketVolEma,
+        float $interbankStress,
+        float $hyBaseMultiplier = 2.4,
+        float $fallenAngelSens = 8.0
+    ): array {
+        $cycleSpread = $baseIgSpread * exp(-2.5 * $outputGapEma);
+        $excessVol = max(0.0, $marketVolEma - 0.20);
+        $volSpread = 0.15 * $excessVol;
+        $contagionSpread = $interbankStress * 2.0;
+
+        $igSpread = max(0.008, min(0.10, $cycleSpread + $volSpread + $contagionSpread));
+
+        // Jarrow-Lando-Turnbull (1997): Speculative-grade default intensity surges exponentially during recessions
+        $contractionDepth = max(0.0, -$outputGapEma);
+        $fallenAngelMultiplier = exp($fallenAngelSens * $contractionDepth);
+        $hySpread = max($igSpread * 1.5, min(0.25, $igSpread * $hyBaseMultiplier * $fallenAngelMultiplier));
+
+        return [
+            'ig' => $igSpread,
+            'hy' => $hySpread,
+        ];
+    }
+
+    /**
+     * Models the Metzler (1941) & Blinder (1982) macroeconomic inventory investment cycle.
+     *
+     * Evaluates inventory stock acceleration: when aggregate demand decelerates, involuntary inventory
+     * accumulation occurs (+gap). In response, firms cut production below sales to aggressively liquidate stock,
+     * driving industrial recessions. Once depleted (-gap), the restocking rebound accelerates output recovery.
+     *
+     * @param float $currentInventoryGap Current inventory overhang (+gap is excess stock, -gap is depleted).
+     * @param float $outputGap           Current output gap level.
+     * @param float $outputGapEma        Smoothed output gap trend.
+     * @param float $speed               Annual speed of inventory adjustment toward desired ratio.
+     * @param float $surpriseSens        Sensitivity of involuntary inventory build to growth slowdown.
+     * @param float $dt                  Time step in years.
+     * @return float Updated inventory gap bounded between -0.15 and +0.15.
+     */
+    public function calculateInventoryCycleStep(
+        float $currentInventoryGap,
+        float $outputGap,
+        float $outputGapEma,
+        float $speed,
+        float $surpriseSens,
+        float $dt,
+        float $cyclicalSens = 0.80
+    ): float {
+        // Involuntary inventory change driven by unexpected demand deceleration
+        $demandDeceleration = $outputGapEma - $outputGap;
+        $involuntaryFlow = $surpriseSens * $demandDeceleration;
+
+        // Cyclical stock target: contractions cause inventory-to-sales ratios to spike (overhang),
+        // while expansions lean out inventories (depletion).
+        $cyclicalTarget = -$cyclicalSens * $outputGap;
+
+        // Desired inventory correction: firms adjust production toward cyclical target
+        $targetCorrection = -$speed * ($currentInventoryGap - $cyclicalTarget);
+
+        $dInventory = ($involuntaryFlow + $targetCorrection) * $dt;
+        $newInventoryGap = $currentInventoryGap + $dInventory;
+
+        return max(-0.15, min(0.15, $newInventoryGap));
+    }
+
+    /**
+     * Calculates the non-linear convenience yield under the Theory of Storage (Working 1949, Litzenberger & Rabinowitz 1995).
+     *
+     * When physical inventory levels are ample (above baseline), the market is in contango and convenience yield is near zero.
+     * When physical inventories drop toward a critical buffer threshold, convenience yield spikes asymptotically,
+     * inducing extreme spot price inelasticity and backwardation.
+     *
+     * @param float $inventoryLevel Normalized inventory index (100 = neutral, < 80 = tight, < 55 = critical).
+     * @param float $minBufferStock Critical structural minimum buffer stock floor.
+     * @param float $yieldScale     Scaling multiplier.
+     * @param float $exponent       Asymptotic curvature exponent.
+     * @return float Annualized convenience yield percentage add-on.
+     */
+    public function calculateConvenienceYield(
+        float $inventoryLevel,
+        float $minBufferStock = 50.0,
+        float $yieldScale = 0.10,
+        float $exponent = 1.8
+    ): float {
+        $bufferSlack = max(1.0, $inventoryLevel - $minBufferStock);
+        $neutralSlack = max(1.0, 100.0 - $minBufferStock);
+
+        if ($inventoryLevel >= 100.0) {
+            // Contango regime: convenience yield negligible
+            return 0.0;
+        }
+
+        // Backwardation regime: convenience yield rises non-linearly as inventories deplete
+        $tightnessRatio = $neutralSlack / $bufferSlack;
+        return $yieldScale * (pow($tightnessRatio, $exponent) - 1.0);
+    }
 }
 
