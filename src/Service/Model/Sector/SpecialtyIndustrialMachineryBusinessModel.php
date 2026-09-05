@@ -50,6 +50,12 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     /** Low scalar sensitivity of machinery equipment orders to aggregate industrial capital capacity overhang. */
     public const CAPITAL_OVERHANG_SCALAR = 0.15;
 
+    // --- Capacity Utilization & Supply Chain Physics ---
+    /** Sensitivity of precision equipment sales expansion to industrial capacity utilization deviations. */
+    public const CU_EQUIPMENT_EXPANSION_SENSITIVITY = 0.50;
+    /** Variable margin penalty per standard deviation of global supply chain friction (GSCPI). */
+    public const GSCPI_MARGIN_PENALTY_SCALAR        = 0.015;
+
     // --- Tail Risk & Shock Events ---
     /** Negative z-score threshold indicating a severe specialty supply chain or parts disruption. */
     public const SUPPLY_CHAIN_DISRUPTION_Z_SCORE = -2.20;
@@ -134,8 +140,11 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
 
         // --- Macro Sensitivities ---
         // Equipment is highly exposed to GDP, but cushioned by the backlog
+        // High industrial capacity utilization triggers capex expansion for factory automation
         $overhangDrag = ($macroState->capitalStockOverhangEma * self::CAPITAL_OVERHANG_SCALAR) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
-        $macroEquipmentBoost = (($macroState->outputGapEma * self::MACRO_GDP_SENSITIVITY * $beta) * (1.0 - self::BACKLOG_DAMPING_FACTOR)) - $overhangDrag;
+        $cuShift = ($macroState->capacityUtilizationRateEma - MacroEngine::CU_BASELINE) / 10.0;
+        $cuEquipmentBoost = ($cuShift * self::CU_EQUIPMENT_EXPANSION_SENSITIVITY) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
+        $macroEquipmentBoost = (($macroState->outputGapEma * self::MACRO_GDP_SENSITIVITY * $beta) * (1.0 - self::BACKLOG_DAMPING_FACTOR)) - $overhangDrag + $cuEquipmentBoost;
 
         // --- Tail Risk Events ---
         $dealMultiplier = 1.0;
@@ -186,9 +195,12 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         $baseInflationPenalty = ($energyShift > 0 ? ($energyShift * $beta * self::INFLATION_PENALTY_SCALAR) : 0.0) + $metalsCostDrag;
         $inflationPenalty = $baseInflationPenalty * $inflationMultiplier;
 
+        $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma);
+        $gscpiCostDrag = $gscpiShift * self::GSCPI_MARGIN_PENALTY_SCALAR;
+
         // Effective blended variable cost ratio
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
-        $rawMargin = $effectiveMargin + $supplyChainPenalty + $inflationPenalty;
+        $rawMargin = $effectiveMargin + $supplyChainPenalty + $inflationPenalty + $gscpiCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock is whichever stream deviated the most, overridden by tail events

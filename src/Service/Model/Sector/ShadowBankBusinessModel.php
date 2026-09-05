@@ -65,6 +65,16 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     /** Lower clamp for realized variable margin. */
     public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
+    // --- Private Credit & Corporate Default Physics ---
+    /** Expansion sensitivity of direct lending origination when commercial banks tighten credit standards (SLOOS). */
+    public const SLOOS_PRIVATE_CREDIT_EXPANSION = 0.30;
+    /** Weight of corporate speculative default rate surges applied to direct lending portfolio provisions. */
+    public const SHOCK_WEIGHT_CORPORATE_DEFAULT = 0.12;
+    /** Baseline 12-month forward recession probability threshold before proactive CECL reserve builds begin. */
+    public const CECL_BASELINE_RECESSION_PROB   = 0.15;
+    /** Sensitivity of shadow bank CECL forward credit reserves to elevated 12-month recession risk. */
+    public const CECL_RECESSION_SENSITIVITY     = 0.25;
+
     // --- NIM Squeeze & Repo Market Freeze ---
     /** Default 30Y Treasury yield fallback when macroeconomic yield curve data is missing. */
     public const DEFAULT_30Y_YIELD_FALLBACK = 0.045;
@@ -173,11 +183,13 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
 
         // 2. Direct Lending Floating-Rate Channel:
         // Private debt / direct lending loans float on base policy rates (SOFR + spread), expanding yield during high-rate regimes.
+        // Bank credit retreat (SLOOS tightening) stimulates private credit borrower migration.
         $policyRate = $macroState->policyRateEma;
         $directLendingRateBonus = max(0.0, ($policyRate - 0.03) * 1.5);
+        $sloosDirectLendingBoost = max(0.0, $macroState->sloosTighteningIndexEma) * self::SLOOS_PRIVATE_CREDIT_EXPANSION;
 
         $mortgageRevenue = max(0.0, $expectedRevenue * $mortgageWeight * (1.0 + ($originationZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5)) - $mortgageRateDrag + $propertyOriginationBoost));
-        $lendingRevenue  = max(0.0, $expectedRevenue * $lendingWeight * (1.0 + ($lendingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.8)) + $directLendingRateBonus));
+        $lendingRevenue  = max(0.0, $expectedRevenue * $lendingWeight * (1.0 + ($lendingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.8)) + $directLendingRateBonus + $sloosDirectLendingBoost));
         
         $streamRevenues = [
             'origination_fees' => $mortgageRevenue,
@@ -191,13 +203,16 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         // Shadow Banks primarily hold highly leveraged mortgages and direct loans.
         $outputGap = $macroState->outputGapEma;
         $retailDefaultShift = max(0.0, ($macroState->retailDefaultRateEma - MacroEngine::RETAIL_DEFAULT_BASELINE) / MacroEngine::RETAIL_DEFAULT_BASELINE);
+        $corporateDefaultShift = max(0.0, ($macroState->corporateDefaultRateEma - MacroEngine::CORPORATE_DEFAULT_BASELINE) / MacroEngine::CORPORATE_DEFAULT_BASELINE);
         $creShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;
         
         $propertyDrag = ($creShift < 0.0 ? abs($creShift) * 0.05 : 0.0) + ($residentialShift < 0.0 ? abs($residentialShift) * 0.05 : 0.0);
-        $macroDefaultDrag = ($outputGap < 0.0 ? abs($outputGap) * self::MACRO_DEFAULT_SCALAR : 0.0) + ($retailDefaultShift * 0.10) + $propertyDrag;
+        $corporateLendingDrag = $corporateDefaultShift * self::SHOCK_WEIGHT_CORPORATE_DEFAULT * $lendingWeight;
+        $macroDefaultDrag = ($outputGap < 0.0 ? abs($outputGap) * self::MACRO_DEFAULT_SCALAR : 0.0) + ($retailDefaultShift * 0.10) + $propertyDrag + $corporateLendingDrag;
 
         $creditSpread = $macroState->macroCreditSpreadEma;
-        $ceclForwardProvision = $creditSpread * self::CECL_FORWARD_SENSITIVITY;
+        $recessionCeclDrag = max(0.0, ($macroState->recessionProbabilityEma - self::CECL_BASELINE_RECESSION_PROB) * self::CECL_RECESSION_SENSITIVITY);
+        $ceclForwardProvision = ($creditSpread * self::CECL_FORWARD_SENSITIVITY) + $recessionCeclDrag;
 
         $lossProvisionShock = ($creditZ < self::CREDIT_STRESS_Z_THRESHOLD
             ? abs($creditZ) * self::LOSS_PROVISION_SCALAR

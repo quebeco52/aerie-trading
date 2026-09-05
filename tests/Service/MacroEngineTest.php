@@ -870,17 +870,16 @@ class MacroEngineTest extends TestCase
         $gapBoom    = $reflectionMethod->invoke($macroEngine, $stateBoom, $neutral5yYield, MacroEngine::NATURAL_RATE, $dt, $stressMultiplier);
 
         // 3. Assert: 
-        // Neutral incorporates autonomous secular drift:
-        $expectedNeutralDrift = MacroEngine::KALDOR_AUTONOMOUS_PROPENSITY * $dt;
-        $this->assertEqualsWithDelta($expectedNeutralDrift, $gapNeutral, 0.0001, 'Neutral economy should reflect autonomous secular drift.');
+        // Neutral economy: output gap is 0, so neutral drift is 0.0:
+        $this->assertEqualsWithDelta(0.0, $gapNeutral, 0.0001, 'Neutral economy should have zero drift on the output gap.');
 
         // Crash should cause negative drift (Recession relative to neutral)
         // Math: -0.20 * 0.02 = -0.004 drag * 0.25 dt = -0.001
-        $this->assertEqualsWithDelta($gapNeutral - 0.001, $gapCrash, 0.0001, 'Housing crash must create a negative drag on the output gap.');
+        $this->assertEqualsWithDelta(-0.001, $gapCrash, 0.0001, 'Housing crash must create a negative drag on the output gap.');
 
         // Boom should cause positive drift (Expansion relative to neutral)
         // Math: +0.20 * 0.02 = +0.004 stimulus * 0.25 dt = +0.001
-        $this->assertEqualsWithDelta($gapNeutral + 0.001, $gapBoom, 0.0001, 'Housing boom must create a positive stimulus on the output gap.');
+        $this->assertEqualsWithDelta(0.001, $gapBoom, 0.0001, 'Housing boom must create a positive stimulus on the output gap.');
     }
 
     public function testInterbankLiquiditySpreadMeanRevertsViaCIR(): void

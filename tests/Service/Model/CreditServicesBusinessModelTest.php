@@ -100,4 +100,48 @@ class CreditServicesBusinessModelTest extends TestCase
         );
         $this->assertLessThan($baseResult->ebit, $surgeResult->ebit);
     }
+
+    public function testRecessionRiskExpandsForwardCeclReserves(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('DFS');
+        $stock->setBeta('1.1');
+
+        $lowRecessionMacro = new MacroStateDTO(recessionProbabilityEma: 0.05, macroCreditSpreadEma: 0.020);
+        $highRecessionMacro = new MacroStateDTO(recessionProbabilityEma: 0.60, macroCreditSpreadEma: 0.020);
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $lowResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.55, 20_000_000.0, 0.0, $lowRecessionMacro, $mathMock);
+        $highResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.55, 20_000_000.0, 0.0, $highRecessionMacro, $mathMock);
+
+        $this->assertGreaterThan(
+            $lowResult->clampedMargin,
+            $highResult->clampedMargin,
+            'Elevated forward recession risk must trigger proactive CECL reserve builds on revolving loan portfolios.'
+        );
+    }
+
+    public function testSloosCreditTighteningDampsRevolvingLendingVolume(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('COF');
+        $stock->setBeta('1.0');
+
+        $looseMacro = new MacroStateDTO(sloosTighteningIndexEma: -0.10);
+        $tightMacro = new MacroStateDTO(sloosTighteningIndexEma: 0.50);
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $looseResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.55, 20_000_000.0, 0.0, $looseMacro, $mathMock);
+        $tightResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.55, 20_000_000.0, 0.0, $tightMacro, $mathMock);
+
+        $this->assertGreaterThan(
+            $tightResult->streamRevenue['lending'],
+            $looseResult->streamRevenue['lending'],
+            'Commercial bank credit tightening gates revolving credit originations and contracts lending asset growth.'
+        );
+    }
 }

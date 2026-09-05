@@ -64,6 +64,8 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
     public const CRACK_SPREAD_DEMAND_ELASTICITY = 2.00;
     /** Input drag: Sensitivity of refining margins to the cost of raw crude/energy inputs squeezing the spread. */
     public const CRACK_SPREAD_INPUT_DRAG = 0.80;
+    /** Sensitivity of merchant refining revenue to macro 3:2:1 refining crack spread index deviation from baseline. */
+    public const CRACK_SPREAD_INDEX_SENSITIVITY = 0.35;
 
     // --- Ricardian Diminishing Returns (Marginal Cost) ---
     /** Quadratic variable cost penalty per unit of excess extraction volume (tapping lower grade reserves). */
@@ -200,7 +202,8 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         // Refineries buy raw energy (energyShift) and sell end products governed by industrial demand (outputGapEma).
         $crackSpreadDemand = $macroState->outputGapEma * self::CRACK_SPREAD_DEMAND_ELASTICITY * $beta;
         $crackSpreadCostSqueeze = max(0.0, $energyShift) * self::CRACK_SPREAD_INPUT_DRAG;
-        $crackSpreadBonus = $crackSpreadDemand - $crackSpreadCostSqueeze;
+        $crackSpreadIndexShift = ($macroState->refiningCrackSpreadEma - MacroEngine::CRACK_SPREAD_BASELINE) / MacroEngine::CRACK_SPREAD_BASELINE;
+        $crackSpreadBonus = $crackSpreadDemand - $crackSpreadCostSqueeze + ($crackSpreadIndexShift * self::CRACK_SPREAD_INDEX_SENSITIVITY);
 
         // --- Tri-Stream Revenue Calculation ---
         $extractionShock = $extractionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);

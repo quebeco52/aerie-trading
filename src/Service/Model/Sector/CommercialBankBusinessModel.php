@@ -91,9 +91,19 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
     // --- CECL Forward Provisioning (Credit Spread Channel) ---
     /** Baseline investment-grade corporate credit spread (~200bps). Widening above this triggers proactive reserve builds. */
-    public const CECL_BASELINE_CREDIT_SPREAD  = 0.020;
+    public const CECL_BASELINE_CREDIT_SPREAD   = 0.020;
     /** Variable cost add-on per unit of spread widening above baseline. +100bps widening = +8% cost add-on. */
     public const CECL_SPREAD_SENSITIVITY       = 0.80;
+    /** Baseline 12-month forward recession probability (~15%). Increases above this trigger CECL lifetime reserve builds. */
+    public const CECL_BASELINE_RECESSION_PROB  = 0.15;
+    /** Sensitivity of CECL lifetime loss provisioning to 12-month forward recession probability. */
+    public const CECL_RECESSION_PROB_SENSITIVITY = 0.12;
+
+    // --- C&I Corporate Default & SLOOS Lending Standards ---
+    /** Weight of speculative-grade corporate default rate shift on commercial & industrial loan loss provisions. */
+    public const SHOCK_WEIGHT_CORPORATE_DEFAULT   = 0.040;
+    /** Sensitivity of NII loan origination volume to net percentage of domestic banks tightening standards (SLOOS). */
+    public const SLOOS_NII_ORIGINATION_SENSITIVITY = 0.20;
 
     // --- Macaulay Duration Gap & IRRBB NIM Physics ---
     /** Weighted average Macaulay duration of bank loan and mortgage assets in years. */
@@ -449,8 +459,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $outputGap = $macroState->outputGapEma;
 
         // Blended dual-stream revenue (NII vs. Non-Interest Fee Income)
+        // Fed SLOOS channel: Credit standards tightening (SLOOS > 0) dampens loan origination volume; easing (SLOOS < 0) expands it.
+        $sloosOriginationDrag = $macroState->sloosTighteningIndexEma * self::SLOOS_NII_ORIGINATION_SENSITIVITY;
         $niiRevenue = max(0.0, $expectedRevenue * $niiWeight
-            * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
+            * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) - $sloosOriginationDrag));
         $feeRevenue = max(0.0, $expectedRevenue * $feeWeight
             * (1.0 + ($feeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + ($outputGap * self::SECTOR_SHOCK_FEE_OUTPUT_GAP_MULT)));
 
@@ -490,21 +502,27 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / self::INDEX_NORMALIZATION_BASE;
         $retailDefaultShift = max(0.0, ($macroState->retailDefaultRateEma - MacroEngine::RETAIL_DEFAULT_BASELINE) / MacroEngine::RETAIL_DEFAULT_BASELINE);
+        $corporateDefaultShift = max(0.0, ($macroState->corporateDefaultRateEma - MacroEngine::CORPORATE_DEFAULT_BASELINE) / MacroEngine::CORPORATE_DEFAULT_BASELINE);
 
         $creShift = ($macroState->commercialPropertyIndexEma - self::INDEX_NORMALIZATION_BASE) / self::INDEX_NORMALIZATION_BASE;
         $residentialShift = ($macroState->residentialPropertyIndexEma - self::INDEX_NORMALIZATION_BASE) / self::INDEX_NORMALIZATION_BASE;
         $propertyDrag = ($creShift < 0.0 ? abs($creShift) * self::SHOCK_WEIGHT_CRE_DECLINE : 0.0) + ($residentialShift < 0.0 ? abs($residentialShift) * self::SHOCK_WEIGHT_RESIDENTIAL_DECLINE : 0.0);
 
-        $macroDefaultDrag = ($sentimentShift < 0.0 ? abs($sentimentShift) * self::MACRO_DEFAULT_LGD_DRAG : 0.0) + ($retailDefaultShift * self::SHOCK_WEIGHT_RETAIL_DEFAULT) + $propertyDrag;
+        $macroDefaultDrag = ($sentimentShift < 0.0 ? abs($sentimentShift) * self::MACRO_DEFAULT_LGD_DRAG : 0.0)
+            + ($retailDefaultShift * self::SHOCK_WEIGHT_RETAIL_DEFAULT)
+            + ($corporateDefaultShift * self::SHOCK_WEIGHT_CORPORATE_DEFAULT)
+            + $propertyDrag;
 
         // Clamp reserve release to MAX_PROVISION_REVERSAL to avoid unbounded write-backs
         $lossProvisionShock = max(-self::MAX_PROVISION_REVERSAL, $provisionCostAddon) + $macroDefaultDrag;
 
-        // CECL Forward Provisioning (Credit Spread Channel):
-        // Under CECL accounting, banks must provision against EXPECTED future losses.
-        // When corporate credit spreads widen, banks build reserves proactively — before loans actually default.
+        // CECL Forward Provisioning (Credit Spread & Recession Forecast Channels):
+        // Under CECL accounting, banks must provision against EXPECTED future lifetime losses.
+        // When corporate credit spreads widen or forward recession probability rises, banks build reserves proactively.
         $creditSpread = $macroState->macroCreditSpreadEma;
-        $ceclDrag = max(0.0, ($creditSpread - self::CECL_BASELINE_CREDIT_SPREAD) * self::CECL_SPREAD_SENSITIVITY);
+        $spreadCeclDrag = max(0.0, ($creditSpread - self::CECL_BASELINE_CREDIT_SPREAD) * self::CECL_SPREAD_SENSITIVITY);
+        $recessionCeclDrag = max(0.0, ($macroState->recessionProbabilityEma - self::CECL_BASELINE_RECESSION_PROB) * self::CECL_RECESSION_PROB_SENSITIVITY);
+        $ceclDrag = $spreadCeclDrag + $recessionCeclDrag;
 
         // Macaulay Duration Gap & IRRBB NIM Physics:
         // Bank assets (long-term loans/mortgages) have higher duration than liabilities (short-term deposits/repo).

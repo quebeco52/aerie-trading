@@ -23,8 +23,55 @@ let macroCreditCliffChartInstance = null;
 let macroInventoryCycleChartInstance = null;
 let macroFaitChartInstance = null;
 
-export function updateMacroCharts(reports) {
+let currentMacroReports = [];
+let currentMacroTimeframe = '10Y';
+
+export function setMacroTimeframe(timeframe) {
+    currentMacroTimeframe = timeframe;
+    if (currentMacroReports && currentMacroReports.length > 0) {
+        updateMacroCharts(currentMacroReports, timeframe);
+    }
+}
+
+function setHud(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+}
+
+function updateMacroHud(d) {
+    const last = (arr, def = 0) => (arr && arr.length > 0 && arr[arr.length - 1] !== null && !isNaN(arr[arr.length - 1])) ? arr[arr.length - 1] : def;
+
+    setHud('hud-macroEconomyChart', `CPI: ${last(d.inflationData).toFixed(1)}% | Gap: ${last(d.outputGapData) >= 0 ? '+' : ''}${last(d.outputGapData).toFixed(1)}%`);
+    setHud('hud-macroRatesChart', `PR: ${last(d.policyRateData).toFixed(2)}% | 10Y: ${last(d.yield10yData).toFixed(2)}%`);
+    setHud('hud-macroMortgageChart', `30Y: ${last(d.mortgageYieldData).toFixed(2)}% | Spr: ${last(d.spread30yData).toFixed(2)}%`);
+    setHud('hud-macroRiskChart', `VIX: ${last(d.volData).toFixed(1)}% | ERP: ${last(d.erpData).toFixed(1)}%`);
+    setHud('hud-macroLaborCreditChart', `Unemp: ${last(d.unemploymentData).toFixed(1)}% | Wage: ${last(d.wageGrowthData).toFixed(1)}%`);
+    setHud('hud-macroInterbankLiquidityChart', `TED: ${last(d.interbankSpreadBpsData).toFixed(0)} bps`);
+    setHud('hud-macroPropertyChart', `CRE: ${last(d.creEmaData).toFixed(1)} | Resi: ${last(d.residentialEmaData).toFixed(1)}`);
+    setHud('hud-macroSentimentChart', `Sent: ${last(d.sentimentData).toFixed(0)} | M&A: ${last(d.dealActivityData).toFixed(0)}`);
+    setHud('hud-macroCommoditiesChart', `Energy: ${last(d.energyPriceData).toFixed(1)} | Crack: $${last(d.crackSpreadData).toFixed(1)}`);
+    setHud('hud-macroTradeLogisticsChart', `GSCPI: ${last(d.gscpiData) >= 0 ? '+' : ''}${last(d.gscpiData).toFixed(2)}σ`);
+    setHud('hud-macroGovtSpendingChart', `Debt/GDP: ${last(d.sovereignDebtData).toFixed(1)}%`);
+    setHud('hud-macroTermPremiumChart', `10Y: ${last(d.yield10yData).toFixed(2)}% | Term: ${last(d.termPremiumData) >= 0 ? '+' : ''}${last(d.termPremiumData).toFixed(2)}%`);
+    setHud('hud-macroGdpGrowthChart', `Real: ${last(d.realGdpGrowthData) >= 0 ? '+' : ''}${last(d.realGdpGrowthData).toFixed(1)}% | Rec: ${last(d.recessionProbData).toFixed(0)}%`);
+    setHud('hud-macroBalanceSheetChart', `Stock: ${last(d.slicedAssetStock).toFixed(1)}`);
+    setHud('hud-macroFciChart', `Z: ${last(d.fciData) >= 0 ? '+' : ''}${last(d.fciData).toFixed(2)}σ | SLOOS: ${last(d.sloosData) >= 0 ? '+' : ''}${last(d.sloosData).toFixed(0)}%`);
+    setHud('hud-macroCostPushChart', `Agri Drag: ${last(d.agriLagData) >= 0 ? '+' : ''}${last(d.agriLagData).toFixed(0)} bps`);
+    setHud('hud-macroSectoralInflationChart', `Supercore: ${last(d.supercoreInflationData).toFixed(1)}% | Goods: ${last(d.coreGoodsInflationData).toFixed(1)}%`);
+    setHud('hud-macroCreditCliffChart', `HY: ${last(d.highYieldSpreadBpsData).toFixed(0)} bps | Cliff: ${last(d.creditCliffRatioData).toFixed(2)}x`);
+    setHud('hud-macroInventoryCycleChart', `Overhang: ${last(d.inventoryStockGapData) >= 0 ? '+' : ''}${last(d.inventoryStockGapData).toFixed(1)}% | CU: ${last(d.capacityUtilizationData).toFixed(1)}%`);
+    setHud('hud-macroFaitChart', `Cum Gap: ${last(d.faitCumulativeGapData) >= 0 ? '+' : ''}${last(d.faitCumulativeGapData).toFixed(0)} bps`);
+}
+
+export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
     if (!reports || reports.length === 0 || typeof Chart === 'undefined') return;
+
+    currentMacroReports = reports;
+    currentMacroTimeframe = timeframe;
+
+    let limit = 40;
+    if (timeframe === '5Y') limit = 20;
+    else if (timeframe === '25Y' || timeframe === 'MAX') limit = 100;
 
     let labels = [];
     let inflationData = [], outputGapData = [], capitalOverhangData = [], corpBorrowingData = [];
@@ -50,8 +97,12 @@ export function updateMacroCharts(reports) {
     let highYieldSpreadBpsData = [], creditCliffRatioData = [];
     let inventoryStockGapData = [], energyBufferData = [];
     let faitCumulativeGapData = [], faitOffsetBpsData = [];
+    let capacityUtilizationData = [], recessionProbData = [];
+    let crackSpreadData = [], gscpiData = [];
+    let corporateDefaultPctData = [], corporateDefaultBpsData = [];
+    let sloosData = [], dealActivityData = [];
 
-    const slicedReports = reports.slice(-100);
+    const slicedReports = reports.slice(-limit);
     let qCount = slicedReports.length;
 
     // Cumulative central bank balance sheet asset stock holdings (Base 100)
@@ -196,7 +247,7 @@ export function updateMacroCharts(reports) {
 
         // Annualized TFP productivity growth rate (%) - allowing negative values during recessions
         let tfpGrowth = Math.max(-6.0, Math.min(8.0, (Math.log(Math.max(1.0, currentTfp) / Math.max(1.0, prevTfp)) / 0.25) * 100));
-        
+
         // Solow-Swan Real Potential GDP Growth (%): Structural Labor (0.5%) + TFP Growth
         let potentialGrowth = 0.50 + tfpGrowth;
 
@@ -240,6 +291,54 @@ export function updateMacroCharts(reports) {
         let faitGapPct = parseFloat(rawFaitGap) * 100;
         faitCumulativeGapData.push(faitGapPct);
         faitOffsetBpsData.push(Math.min(0.0, faitGapPct * 25.0)); // Asymmetric make-up buffer: tolerates overshoots without hiking extra
+
+        // 7 New Macro & Financial Indicators
+        let rawCu = report.capacity_utilization_rate_ema ?? report.capacity_utilization_rate ?? report.capacityUtilizationRateEma ?? report.capacityUtilizationRate ?? 0.785;
+        capacityUtilizationData.push(parseFloat(rawCu) * 100);
+
+        let rawRec = report.recession_probability_ema ?? report.recession_probability ?? report.recessionProbabilityEma ?? report.recessionProbability ?? 0.05;
+        recessionProbData.push(parseFloat(rawRec) * 100);
+
+        let rawCrack = report.refining_crack_spread_ema ?? report.refining_crack_spread ?? report.refiningCrackSpreadEma ?? report.refiningCrackSpread ?? 22.0;
+        crackSpreadData.push(parseFloat(rawCrack));
+
+        let rawGscpi = report.supply_chain_pressure_index_ema ?? report.supply_chain_pressure_index ?? report.supplyChainPressureIndexEma ?? report.supplyChainPressureIndex ?? 0.0;
+        gscpiData.push(parseFloat(rawGscpi));
+
+        let rawCdr = report.corporate_default_rate_ema ?? report.corporate_default_rate ?? report.corporateDefaultRateEma ?? report.corporateDefaultRate ?? 0.018;
+        corporateDefaultPctData.push(parseFloat(rawCdr) * 100);
+        corporateDefaultBpsData.push(parseFloat(rawCdr) * 10000);
+
+        let rawSloos = report.sloos_tightening_index_ema ?? report.sloos_tightening_index ?? report.sloosTighteningIndexEma ?? report.sloosTighteningIndex ?? 0.0;
+        sloosData.push(parseFloat(rawSloos) * 100);
+
+        let rawDeal = report.deal_activity_index_ema ?? report.deal_activity_index ?? report.dealActivityIndexEma ?? report.dealActivityIndex ?? 100.0;
+        dealActivityData.push(parseFloat(rawDeal));
+    });
+
+    updateMacroHud({
+        inflationData, outputGapData, policyRateData, yield10yData,
+        mortgageYieldData, spread30yData, volData, erpData,
+        unemploymentData, wageGrowthData, interbankSpreadBpsData,
+        creEmaData, residentialEmaData, sentimentData, dealActivityData,
+        energyPriceData, crackSpreadData, gscpiData, sovereignDebtData,
+        termPremiumData, realGdpGrowthData, tfpGrowthData, recessionProbData,
+        slicedAssetStock, fciData, sloosData, agriLagData,
+        supercoreInflationData, coreGoodsInflationData,
+        highYieldSpreadBpsData, creditCliffRatioData,
+        inventoryStockGapData, faitCumulativeGapData,
+        capacityUtilizationData
+    });
+
+    ['5Y', '10Y', '25Y'].forEach(tf => {
+        const btn = document.getElementById(`btn-macro-${tf}`);
+        if (btn) {
+            if (tf === currentMacroTimeframe) {
+                btn.className = 'macro-range-btn px-3 py-1 text-xs font-bold rounded-lg bg-primary text-[#001a42] shadow-md shadow-primary/20 transition-all cursor-pointer';
+            } else {
+                btn.className = 'macro-range-btn px-3 py-1 text-xs font-bold rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-all cursor-pointer';
+            }
+        }
     });
 
     renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOverhangData, tipsBreakevenData);
@@ -247,20 +346,20 @@ export function updateMacroCharts(reports) {
     renderMacroMortgageChart(labels, policyRateData, mortgageYieldData, spread30yData);
     renderMacroRiskChart(labels, erpData, volData, creditSpreadBpsData, corpBorrowingData);
     renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData, wageGrowthData, nairuData);
-    renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agriEmaData);
+    renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agriEmaData, crackSpreadData);
     renderMacroPropertyChart(labels, creEmaData, residentialEmaData);
-    renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData);
-    renderMacroSentimentChart(labels, sentimentData, retailDefaultData);
+    renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData, gscpiData);
+    renderMacroSentimentChart(labels, sentimentData, retailDefaultData, dealActivityData, corporateDefaultPctData);
     renderMacroGovtSpendingChart(labels, govtSpendingEmaData, sovereignDebtData);
     renderMacroInterbankLiquidityChart(labels, interbankSpreadBpsData, creditSpreadBpsData);
     renderMacroTermPremiumChart(labels, yield10yData, riskNeutralData, termPremiumData, naturalRateData);
-    renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthData, potentialGdpGrowthData, tfpGrowthData);
+    renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthData, potentialGdpGrowthData, tfpGrowthData, recessionProbData);
     renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceSheetData);
-    renderMacroFciChart(labels, fciData, fciEmaData);
+    renderMacroFciChart(labels, fciData, fciEmaData, sloosData);
     renderMacroCostPushChart(labels, agriLagData, energySupplyDragData, freightSupplyDragData);
     renderMacroSectoralInflationChart(labels, inflationData, supercoreInflationData, coreGoodsInflationData, foodLagPctData);
-    renderMacroCreditCliffChart(labels, creditSpreadBpsData, highYieldSpreadBpsData, creditCliffRatioData);
-    renderMacroInventoryCycleChart(labels, inventoryStockGapData, outputGapData, energyBufferData);
+    renderMacroCreditCliffChart(labels, creditSpreadBpsData, highYieldSpreadBpsData, creditCliffRatioData, corporateDefaultBpsData);
+    renderMacroInventoryCycleChart(labels, inventoryStockGapData, outputGapData, energyBufferData, capacityUtilizationData);
     renderMacroFaitChart(labels, faitCumulativeGapData, faitOffsetBpsData, policyRateData, targetRateData);
 }
 
@@ -269,60 +368,85 @@ function renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOv
     if (!canvas) return;
     macroEconomyChartInstance = destroyChartInstance(macroEconomyChartInstance);
     const ctx = canvas.getContext('2d');
+
+    const datasets = [
+        {
+            type: 'line',
+            label: 'Inflation (EMA)',
+            data: inflationData,
+            borderColor: '#facc15',
+            backgroundColor: '#facc15',
+            borderWidth: 2.2,
+            tension: 0.3,
+            pointRadius: labels.length > 50 ? 0 : 1,
+            yAxisID: 'y'
+        },
+        {
+            type: 'line',
+            label: '10Y TIPS Breakeven (Exp.)',
+            data: tipsBreakevenData,
+            borderColor: '#38bdf8',
+            backgroundColor: '#38bdf8',
+            borderWidth: 1.8,
+            borderDash: [5, 4],
+            tension: 0.3,
+            pointRadius: labels.length > 50 ? 0 : 1,
+            yAxisID: 'y'
+        },
+        {
+            type: 'line',
+            label: 'Capital Overhang (EMA)',
+            data: capitalOverhangData,
+            borderColor: '#c084fc',
+            backgroundColor: '#c084fc',
+            borderWidth: 1.5,
+            borderDash: [4, 4],
+            tension: 0.3,
+            pointRadius: labels.length > 50 ? 0 : 1,
+            yAxisID: 'y'
+        },
+        {
+            type: 'bar',
+            label: 'Output Gap (EMA)',
+            data: outputGapData,
+            backgroundColor: outputGapData.map(val => val < 0 ? 'rgba(255, 179, 173, 0.45)' : 'rgba(78, 222, 163, 0.45)'),
+            borderRadius: 2,
+            barPercentage: 0.65,
+            categoryPercentage: 0.85,
+            yAxisID: 'y'
+        }
+    ];
+
     macroEconomyChartInstance = new Chart(ctx, {
         type: 'bar',
         data: {
             labels: labels,
-            datasets: [
-                {
-                    type: 'line',
-                    label: 'Inflation (EMA)',
-                    data: inflationData,
-                    borderColor: '#facc15',
-                    backgroundColor: '#facc15',
-                    borderWidth: 2,
-                    tension: 0.3,
-                    pointRadius: labels.length > 50 ? 0 : 1,
-                    yAxisID: 'y'
-                },
-                {
-                    type: 'line',
-                    label: '10Y TIPS Breakeven (Exp.)',
-                    data: tipsBreakevenData,
-                    borderColor: '#38bdf8',
-                    backgroundColor: '#38bdf8',
-                    borderWidth: 2,
-                    borderDash: [5, 4],
-                    tension: 0.3,
-                    pointRadius: labels.length > 50 ? 0 : 1,
-                    yAxisID: 'y'
-                },
-                {
-                    type: 'line',
-                    label: 'Capital Overhang (EMA)',
-                    data: capitalOverhangData,
-                    borderColor: '#c084fc',
-                    backgroundColor: '#c084fc',
-                    borderWidth: 2,
-                    tension: 0.3,
-                    pointRadius: labels.length > 50 ? 0 : 1,
-                    yAxisID: 'y'
-                },
-                {
-                    type: 'bar',
-                    label: 'Output Gap (EMA)',
-                    data: outputGapData,
-                    backgroundColor: outputGapData.map(val => val < 0 ? 'rgba(255, 179, 173, 0.4)' : 'rgba(78, 222, 163, 0.4)'),
-                    borderRadius: 4,
-                    yAxisID: 'y'
-                }
-            ]
+            datasets: datasets
         },
         options: {
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
-            plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } } },
-            scales: { y: { ticks: { callback: (val) => val + '%' }, title: { display: true, text: 'Percentage' } } }
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.raw !== null && ctx.raw !== undefined ? ctx.raw.toFixed(2) + '%' : 'N/A'}`
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    suggestedMin: -2.5,
+                    suggestedMax: 4.0,
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { callback: (val) => val + '%' },
+                    title: { display: true, text: 'Gaps & Inflation (%)' }
+                },
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                }
+            }
         }
     });
 }
@@ -338,31 +462,12 @@ function renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData,
             type: 'line',
             label: 'Policy Rate',
             data: policyRateData,
-            borderColor: '#7dd3fc',
-            backgroundColor: '#7dd3fc',
-            borderWidth: 2,
+            borderColor: '#38bdf8',
+            backgroundColor: '#38bdf8',
+            borderWidth: 2.5,
             tension: 0.1,
-            pointRadius: labels.length > 50 ? 0 : 1
-        },
-        {
-            type: 'line',
-            label: '2Y Yield',
-            data: yield2yData,
-            borderColor: '#4ade80',
-            backgroundColor: '#4ade80',
-            borderWidth: 2,
-            tension: 0.3,
-            pointRadius: labels.length > 50 ? 0 : 1
-        },
-        {
-            type: 'line',
-            label: '5Y Yield',
-            data: yield5yData,
-            borderColor: '#facc15',
-            backgroundColor: '#facc15',
-            borderWidth: 2,
-            tension: 0.3,
-            pointRadius: labels.length > 50 ? 0 : 1
+            pointRadius: labels.length > 50 ? 0 : 1,
+            yAxisID: 'y'
         },
         {
             type: 'line',
@@ -370,16 +475,44 @@ function renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData,
             data: yield10yData,
             borderColor: '#c084fc',
             backgroundColor: '#c084fc',
-            borderWidth: 2,
-            tension: 0.3,
-            pointRadius: labels.length > 50 ? 0 : 1
+            borderWidth: 2.5,
+            tension: 0.25,
+            pointRadius: labels.length > 50 ? 0 : 1,
+            yAxisID: 'y'
         },
         {
-            type: 'bar',
+            type: 'line',
+            label: '2Y Yield',
+            data: yield2yData,
+            borderColor: '#4ade80',
+            backgroundColor: '#4ade80',
+            borderWidth: 1.8,
+            tension: 0.25,
+            pointRadius: labels.length > 50 ? 0 : 1,
+            yAxisID: 'y'
+        },
+        {
+            type: 'line',
+            label: '5Y Yield',
+            data: yield5yData,
+            borderColor: '#facc15',
+            backgroundColor: '#facc15',
+            borderWidth: 1.8,
+            tension: 0.25,
+            pointRadius: labels.length > 50 ? 0 : 1,
+            yAxisID: 'y'
+        },
+        {
+            type: 'line',
             label: '2s10s Spread (10Y-2Y)',
             data: spread2s10sData,
-            backgroundColor: spread2s10sData.map(val => val !== null && val < 0 ? 'rgba(255, 179, 173, 0.4)' : 'rgba(192, 132, 252, 0.4)'),
-            borderRadius: 4
+            borderColor: '#a78bfa',
+            backgroundColor: '#a78bfa',
+            borderWidth: 1.5,
+            borderDash: [3, 2],
+            tension: 0.25,
+            pointRadius: labels.length > 50 ? 0 : 1,
+            yAxisID: 'y'
         }
     ];
 
@@ -392,15 +525,16 @@ function renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData,
             borderColor: '#fb923c',
             backgroundColor: '#fb923c',
             borderWidth: 1.8,
-            borderDash: [5, 4],
+            borderDash: [4, 4],
             tension: 0.2,
             spanGaps: true,
-            pointRadius: labels.length > 50 ? 0 : 1
+            pointRadius: labels.length > 50 ? 0 : 1,
+            yAxisID: 'y'
         });
     }
 
     macroRatesChartInstance = new Chart(ctx, {
-        type: 'bar',
+        type: 'line',
         data: {
             labels: labels,
             datasets: datasets
@@ -412,7 +546,17 @@ function renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData,
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw !== null ? ctx.raw.toFixed(2) + '%' : 'N/A'}` } }
             },
-            scales: { y: { ticks: { callback: (val) => val + '%' } } }
+            scales: {
+                y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { callback: (val) => val + '%' },
+                    title: { display: true, text: 'Rates & Spreads (%)' }
+                },
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                }
+            }
         }
     });
 }
@@ -431,8 +575,8 @@ function renderMacroMortgageChart(labels, policyRateData, yield30yData, spread30
                     type: 'line',
                     label: 'Policy Rate',
                     data: policyRateData,
-                    borderColor: '#7dd3fc',
-                    backgroundColor: '#7dd3fc',
+                    borderColor: '#38bdf8',
+                    backgroundColor: '#38bdf8',
                     borderWidth: 2,
                     tension: 0.1,
                     pointRadius: labels.length > 50 ? 0 : 1
@@ -443,7 +587,7 @@ function renderMacroMortgageChart(labels, policyRateData, yield30yData, spread30
                     data: yield30yData,
                     borderColor: '#fb7185',
                     backgroundColor: '#fb7185',
-                    borderWidth: 2,
+                    borderWidth: 2.2,
                     tension: 0.3,
                     pointRadius: labels.length > 50 ? 0 : 1
                 },
@@ -452,7 +596,9 @@ function renderMacroMortgageChart(labels, policyRateData, yield30yData, spread30
                     label: 'Mortgage Spread (30Y-PR)',
                     data: spread30yData,
                     backgroundColor: spread30yData.map(val => val !== null && val < 0 ? 'rgba(255, 179, 173, 0.4)' : 'rgba(251, 113, 133, 0.4)'),
-                    borderRadius: 4
+                    borderRadius: 3,
+                    barPercentage: 0.6,
+                    categoryPercentage: 0.85
                 }
             ]
         },
@@ -460,7 +606,17 @@ function renderMacroMortgageChart(labels, policyRateData, yield30yData, spread30
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
             plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } } },
-            scales: { y: { ticks: { callback: (val) => val + '%' } } }
+            scales: {
+                y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { callback: (val) => val + '%' },
+                    title: { display: true, text: 'Rate & Spread (%)' }
+                },
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                }
+            }
         }
     });
 }
@@ -481,46 +637,77 @@ function renderMacroRiskChart(labels, erpData, volData, creditSpreadBpsData, cor
                     borderColor: '#f43f5e',
                     backgroundColor: '#f43f5e',
                     borderWidth: 2,
-                    borderDash: [5, 5],
                     tension: 0.3,
-                    pointRadius: labels.length > 50 ? 0 : 1
-                },
-                {
-                    label: 'Market Volatility (VIX)',
-                    data: volData,
-                    borderColor: THEME_COLORS.negative,
-                    backgroundColor: 'rgba(255, 179, 173, 0.15)',
-                    borderWidth: 2,
-                    tension: 0.3,
-                    fill: true,
-                    pointRadius: 0
+                    pointRadius: labels.length > 50 ? 0 : 1,
+                    yAxisID: 'y'
                 },
                 {
                     label: 'Equity Risk Premium',
                     data: erpData,
                     borderColor: '#fde047',
                     backgroundColor: '#fde047',
-                    borderWidth: 2,
+                    borderWidth: 2.2,
                     tension: 0.3,
-                    pointRadius: labels.length > 50 ? 0 : 1
+                    pointRadius: labels.length > 50 ? 0 : 1,
+                    yAxisID: 'y'
                 },
                 {
                     label: 'Corp Credit Spread',
                     data: creditSpreadBpsData.map(val => val !== null ? val / 100 : null),
                     borderColor: THEME_COLORS.primary,
                     backgroundColor: THEME_COLORS.primary,
+                    borderWidth: 1.8,
+                    borderDash: [4, 3],
+                    tension: 0.2,
+                    pointRadius: 0,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Market Volatility (VIX)',
+                    data: volData,
+                    borderColor: '#fb923c',
+                    backgroundColor: 'rgba(251, 146, 60, 0.12)',
                     borderWidth: 2,
-                    borderDash: [5, 5],
-                    tension: 0.1,
-                    pointRadius: 0
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 0,
+                    yAxisID: 'y1'
                 }
             ]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
-            plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } } },
-            scales: { y: { ticks: { callback: (val) => val + '%' } } }
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
+                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
+            },
+            scales: {
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    min: 0,
+                    suggestedMax: 12,
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { callback: (val) => val.toFixed(1) + '%' },
+                    title: { display: true, text: 'Rates & Premia (%)' }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    min: 0,
+                    max: 60,
+                    grid: { drawOnChartArea: false },
+                    ticks: { callback: (val) => val.toFixed(0) + '%' },
+                    title: { display: true, text: 'VIX Volatility (%)' }
+                },
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                }
+            }
         }
     });
 }
@@ -540,7 +727,7 @@ function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData,
                     label: 'Unemployment Rate',
                     data: unemploymentData,
                     borderColor: '#f43f5e',
-                    backgroundColor: 'rgba(244, 63, 94, 0.12)',
+                    backgroundColor: 'rgba(244, 63, 94, 0.10)',
                     borderWidth: 2.2,
                     tension: 0.3,
                     fill: true,
@@ -551,7 +738,7 @@ function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData,
                     data: nairuData,
                     borderColor: '#fbbf24',
                     backgroundColor: '#fbbf24',
-                    borderWidth: 2,
+                    borderWidth: 1.8,
                     borderDash: [4, 4],
                     tension: 0.3,
                     fill: false,
@@ -562,10 +749,9 @@ function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData,
                     data: jobVacanciesData,
                     borderColor: '#38bdf8',
                     backgroundColor: 'rgba(56, 189, 248, 0.08)',
-                    borderWidth: 2.2,
-                    borderDash: [5, 4],
+                    borderWidth: 2,
                     tension: 0.3,
-                    fill: true,
+                    fill: false,
                     pointRadius: labels.length > 50 ? 0 : 2
                 },
                 {
@@ -590,10 +776,14 @@ function renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData,
                 y: {
                     type: 'linear',
                     display: true,
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
                     title: { display: true, text: 'Percentage Rate (%)' }
                 },
-                x: { ticks: { maxTicksLimit: 10 } }
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                }
             }
         }
     });
@@ -660,65 +850,91 @@ function renderMacroTermPremiumChart(labels, yield10yData, riskNeutralData, term
                 y: {
                     type: 'linear',
                     display: true,
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
                     title: { display: true, text: 'Yield (%)' }
                 },
-                x: { ticks: { maxTicksLimit: 10 } }
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                }
             }
         }
     });
 }
 
-function renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthData, potentialGdpGrowthData, tfpGrowthData) {
+function renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthData, potentialGdpGrowthData, tfpGrowthData, recessionProbData = []) {
     const canvas = document.getElementById('macroGdpGrowthChart');
     if (!canvas) return;
     macroGdpGrowthChartInstance = destroyChartInstance(macroGdpGrowthChartInstance);
     const ctx = canvas.getContext('2d');
 
+    const datasets = [
+        {
+            label: 'Nominal GDP Growth (Ann.)',
+            data: nominalGdpGrowthData,
+            borderColor: '#38bdf8',
+            backgroundColor: '#38bdf8',
+            borderWidth: 2.2,
+            tension: 0.25,
+            yAxisID: 'y',
+            pointRadius: labels.length > 50 ? 0 : 2
+        },
+        {
+            label: 'Real GDP Growth (Momentum)',
+            data: realGdpGrowthData,
+            borderColor: '#4ade80',
+            backgroundColor: 'rgba(74, 222, 128, 0.12)',
+            borderWidth: 2.5,
+            fill: true,
+            tension: 0.25,
+            yAxisID: 'y',
+            pointRadius: labels.length > 50 ? 0 : 2
+        },
+        {
+            label: 'Potential Capacity Trend (Y*)',
+            data: potentialGdpGrowthData,
+            borderColor: '#fbbf24',
+            backgroundColor: '#fbbf24',
+            borderWidth: 1.8,
+            borderDash: [5, 4],
+            tension: 0.25,
+            yAxisID: 'y',
+            pointRadius: labels.length > 50 ? 0 : 1
+        },
+        {
+            label: 'TFP Productivity Growth',
+            data: tfpGrowthData,
+            borderColor: '#c084fc',
+            backgroundColor: '#c084fc',
+            borderWidth: 1.5,
+            tension: 0.2,
+            yAxisID: 'y',
+            pointRadius: labels.length > 50 ? 0 : 1
+        }
+    ];
+
+    if (recessionProbData && recessionProbData.length > 0) {
+        datasets.push({
+            type: 'line',
+            label: '12M Recession Prob (Probit)',
+            data: recessionProbData,
+            borderColor: '#f87171',
+            backgroundColor: 'rgba(248, 113, 113, 0.10)',
+            borderWidth: 2,
+            borderDash: [4, 3],
+            fill: true,
+            tension: 0.25,
+            pointRadius: labels.length > 50 ? 0 : 1,
+            yAxisID: 'y1'
+        });
+    }
+
     macroGdpGrowthChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
-            datasets: [
-                {
-                    label: 'Nominal GDP Growth (Ann.)',
-                    data: nominalGdpGrowthData,
-                    borderColor: '#38bdf8',
-                    backgroundColor: '#38bdf8',
-                    borderWidth: 2.2,
-                    tension: 0.25,
-                    pointRadius: labels.length > 50 ? 0 : 2
-                },
-                {
-                    label: 'Real GDP Growth (Momentum)',
-                    data: realGdpGrowthData,
-                    borderColor: '#4ade80',
-                    backgroundColor: 'rgba(74, 222, 128, 0.12)',
-                    borderWidth: 2.5,
-                    fill: true,
-                    tension: 0.25,
-                    pointRadius: labels.length > 50 ? 0 : 2
-                },
-                {
-                    label: 'Potential Capacity Trend (Y*)',
-                    data: potentialGdpGrowthData,
-                    borderColor: '#fbbf24',
-                    backgroundColor: '#fbbf24',
-                    borderWidth: 1.8,
-                    borderDash: [5, 4],
-                    tension: 0.25,
-                    pointRadius: labels.length > 50 ? 0 : 1
-                },
-                {
-                    label: 'TFP Productivity Growth',
-                    data: tfpGrowthData,
-                    borderColor: '#c084fc',
-                    backgroundColor: '#c084fc',
-                    borderWidth: 1.5,
-                    tension: 0.2,
-                    pointRadius: labels.length > 50 ? 0 : 1
-                }
-            ]
+            datasets: datasets
         },
         options: {
             responsive: true,
@@ -730,6 +946,10 @@ function renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthDa
                     callbacks: {
                         label: (ctx) => {
                             const val = ctx.raw;
+                            if (val === null || val === undefined || isNaN(val)) return `${ctx.dataset.label}: N/A`;
+                            if (ctx.dataset.yAxisID === 'y1') {
+                                return `${ctx.dataset.label}: ${val.toFixed(1)}%`;
+                            }
                             return `${ctx.dataset.label}: ${val >= 0 ? '+' : ''}${val.toFixed(2)}%`;
                         }
                     }
@@ -739,10 +959,25 @@ function renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthDa
                 y: {
                     type: 'linear',
                     display: true,
+                    position: 'left',
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { callback: (val) => (val >= 0 ? '+' : '') + val.toFixed(1) + '%' },
-                    title: { display: true, text: 'Annualized Rate (%)' }
+                    title: { display: true, text: 'Growth Rate (%)' }
                 },
-                x: { ticks: { maxTicksLimit: 10 } }
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    min: 0,
+                    max: 100,
+                    grid: { drawOnChartArea: false },
+                    ticks: { callback: (val) => val + '%' },
+                    title: { display: true, text: 'Recession Prob (%)' }
+                },
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                }
             }
         }
     });
@@ -857,61 +1092,100 @@ function renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceShe
                 },
                 x: {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { maxTicksLimit: 10 }
+                    ticks: { maxTicksLimit: 8 }
                 }
             }
         }
     });
 }
 
-function renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agriEmaData) {
+function renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agriEmaData, crackSpreadData = []) {
     const canvas = document.getElementById('macroCommoditiesChart');
     if (!canvas) return;
     macroCommoditiesChartInstance = destroyChartInstance(macroCommoditiesChartInstance);
     const ctx = canvas.getContext('2d');
 
+    const datasets = [
+        {
+            label: 'Energy Price Index',
+            data: energyPriceData,
+            borderColor: '#eab308',
+            backgroundColor: 'rgba(234, 179, 8, 0.15)',
+            borderWidth: 2,
+            tension: 0.2,
+            pointRadius: labels.length > 50 ? 0 : 2,
+            yAxisID: 'y'
+        },
+        {
+            label: 'Industrial Metals Index',
+            data: metalsEmaData,
+            borderColor: '#fb923c',
+            backgroundColor: 'rgba(251, 146, 60, 0.15)',
+            borderWidth: 2,
+            tension: 0.2,
+            pointRadius: labels.length > 50 ? 0 : 2,
+            yAxisID: 'y'
+        },
+        {
+            label: 'Agricultural Commodities',
+            data: agriEmaData,
+            borderColor: '#a3e635',
+            backgroundColor: 'rgba(163, 230, 53, 0.15)',
+            borderWidth: 2,
+            tension: 0.2,
+            pointRadius: labels.length > 50 ? 0 : 2,
+            yAxisID: 'y'
+        }
+    ];
+
+    if (crackSpreadData && crackSpreadData.length > 0) {
+        datasets.push({
+            label: '3:2:1 Crack Spread ($/bbl)',
+            data: crackSpreadData,
+            borderColor: '#38bdf8',
+            backgroundColor: 'rgba(56, 189, 248, 0.15)',
+            borderWidth: 2,
+            borderDash: [4, 4],
+            tension: 0.2,
+            pointRadius: labels.length > 50 ? 0 : 2,
+            yAxisID: 'y1'
+        });
+    }
+
     macroCommoditiesChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
-            datasets: [
-                {
-                    label: 'Energy Price Index',
-                    data: energyPriceData,
-                    borderColor: '#eab308',
-                    backgroundColor: 'rgba(234, 179, 8, 0.15)',
-                    borderWidth: 2,
-                    tension: 0.2,
-                    pointRadius: labels.length > 50 ? 0 : 2
-                },
-                {
-                    label: 'Industrial Metals Index',
-                    data: metalsEmaData,
-                    borderColor: '#fb923c',
-                    backgroundColor: 'rgba(251, 146, 60, 0.15)',
-                    borderWidth: 2,
-                    tension: 0.2,
-                    pointRadius: labels.length > 50 ? 0 : 2
-                },
-                {
-                    label: 'Agricultural Commodities',
-                    data: agriEmaData,
-                    borderColor: '#a3e635',
-                    backgroundColor: 'rgba(163, 230, 53, 0.15)',
-                    borderWidth: 2,
-                    tension: 0.2,
-                    pointRadius: labels.length > 50 ? 0 : 2
-                }
-            ]
+            datasets: datasets
         },
         options: {
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
-                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}` } }
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.dataset.yAxisID === 'y1' ? '$' + ctx.raw.toFixed(2) : ctx.raw.toFixed(2)}`
+                    }
+                }
             },
-            scales: { y: { ticks: { callback: (val) => val } } }
+            scales: {
+                y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { callback: (val) => val },
+                    title: { display: true, text: 'Commodity Index (Base 100)' }
+                },
+                y1: {
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    ticks: { callback: (val) => '$' + val },
+                    title: { display: true, text: 'Crack Spread ($/bbl)' }
+                },
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                }
+            }
         }
     });
 }
@@ -954,55 +1228,105 @@ function renderMacroPropertyChart(labels, creEmaData, residentialEmaData) {
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}` } }
             },
-            scales: { y: { ticks: { callback: (val) => val } } }
+            scales: {
+                y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { callback: (val) => val },
+                    title: { display: true, text: 'Property Index' }
+                },
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                }
+            }
         }
     });
 }
 
-function renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData) {
+function renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData, gscpiData = []) {
     const canvas = document.getElementById('macroTradeLogisticsChart');
     if (!canvas) return;
     macroTradeLogisticsChartInstance = destroyChartInstance(macroTradeLogisticsChartInstance);
     const ctx = canvas.getContext('2d');
 
+    const datasets = [
+        {
+            label: 'Exchange Rate Index (FX)',
+            data: fxEmaData,
+            borderColor: '#38bdf8',
+            backgroundColor: 'rgba(56, 189, 248, 0.15)',
+            borderWidth: 2,
+            tension: 0.2,
+            pointRadius: labels.length > 50 ? 0 : 2,
+            yAxisID: 'y'
+        },
+        {
+            label: 'Freight Rate Index',
+            data: freightEmaData,
+            borderColor: '#f97316',
+            backgroundColor: 'rgba(249, 115, 22, 0.15)',
+            borderWidth: 2,
+            tension: 0.2,
+            pointRadius: labels.length > 50 ? 0 : 2,
+            yAxisID: 'y'
+        }
+    ];
+
+    if (gscpiData && gscpiData.length > 0) {
+        datasets.push({
+            label: 'Supply Chain Pressure (GSCPI σ)',
+            data: gscpiData,
+            borderColor: '#e879f9',
+            backgroundColor: 'rgba(232, 121, 249, 0.15)',
+            borderWidth: 2,
+            borderDash: [3, 3],
+            tension: 0.2,
+            pointRadius: labels.length > 50 ? 0 : 2,
+            yAxisID: 'y1'
+        });
+    }
+
     macroTradeLogisticsChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
-            datasets: [
-                {
-                    label: 'Exchange Rate Index (FX)',
-                    data: fxEmaData,
-                    borderColor: '#38bdf8',
-                    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-                    borderWidth: 2,
-                    tension: 0.2,
-                    pointRadius: labels.length > 50 ? 0 : 2
-                },
-                {
-                    label: 'Freight Rate Index',
-                    data: freightEmaData,
-                    borderColor: '#f97316',
-                    backgroundColor: 'rgba(249, 115, 22, 0.15)',
-                    borderWidth: 2,
-                    tension: 0.2,
-                    pointRadius: labels.length > 50 ? 0 : 2
-                }
-            ]
+            datasets: datasets
         },
         options: {
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
-                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}` } }
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.dataset.yAxisID === 'y1' ? (ctx.raw >= 0 ? '+' : '') + ctx.raw.toFixed(2) + ' σ' : ctx.raw.toFixed(2)}`
+                    }
+                }
             },
-            scales: { y: { ticks: { callback: (val) => val } } }
+            scales: {
+                y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { callback: (val) => val },
+                    title: { display: true, text: 'Trade Index (Base 100)' }
+                },
+                y1: {
+                    position: 'right',
+                    suggestedMin: -1.5,
+                    suggestedMax: 3.0,
+                    grid: { drawOnChartArea: false },
+                    ticks: { callback: (val) => (val >= 0 ? '+' : '') + val.toFixed(1) + 'σ' },
+                    title: { display: true, text: 'GSCPI (Std Dev σ)' }
+                },
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                }
+            }
         }
     });
 }
 
-function renderMacroSentimentChart(labels, sentimentData, retailDefaultData) {
+function renderMacroSentimentChart(labels, sentimentData, retailDefaultData, dealActivityData = [], corporateDefaultPctData = []) {
     const canvas = document.getElementById('macroSentimentChart');
     if (!canvas) return;
     macroSentimentChartInstance = destroyChartInstance(macroSentimentChartInstance);
@@ -1026,12 +1350,37 @@ function renderMacroSentimentChart(labels, sentimentData, retailDefaultData) {
                 },
                 {
                     type: 'line',
+                    label: 'Capital Markets Deal Flow',
+                    data: dealActivityData || [],
+                    borderColor: '#06b6d4',
+                    backgroundColor: 'rgba(6, 182, 212, 0.15)',
+                    borderWidth: 2,
+                    tension: 0.25,
+                    fill: false,
+                    yAxisID: 'y',
+                    pointRadius: labels.length > 50 ? 0 : 2
+                },
+                {
+                    type: 'line',
                     label: 'Household Default Rate',
                     data: retailDefaultData || [],
                     borderColor: '#f59e0b',
                     backgroundColor: 'rgba(245, 158, 11, 0.08)',
                     borderWidth: 2,
                     borderDash: [4, 4],
+                    tension: 0.25,
+                    fill: false,
+                    yAxisID: 'y1',
+                    pointRadius: labels.length > 50 ? 0 : 1
+                },
+                {
+                    type: 'line',
+                    label: 'Corporate Default Rate (ASRF)',
+                    data: corporateDefaultPctData || [],
+                    borderColor: '#f43f5e',
+                    backgroundColor: 'rgba(244, 63, 94, 0.08)',
+                    borderWidth: 2,
+                    borderDash: [5, 3],
                     tension: 0.25,
                     fill: false,
                     yAxisID: 'y1',
@@ -1057,23 +1406,25 @@ function renderMacroSentimentChart(labels, sentimentData, retailDefaultData) {
                     type: 'linear',
                     display: true,
                     position: 'left',
-                    min: 40,
-                    max: 130,
+                    min: 0,
+                    suggestedMax: 220,
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { callback: (val) => val },
-                    title: { display: true, text: 'Sentiment Index' }
+                    title: { display: true, text: 'Confidence & Deal Activity (Base 100)' }
                 },
                 y1: {
                     type: 'linear',
                     display: true,
                     position: 'right',
+                    min: 0,
+                    suggestedMax: 20,
                     grid: { drawOnChartArea: false },
                     ticks: { callback: (val) => val.toFixed(1) + '%' },
                     title: { display: true, text: 'Default Rate (%)' }
                 },
                 x: {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { maxTicksLimit: 10 }
+                    ticks: { maxTicksLimit: 8 }
                 }
             }
         }
@@ -1150,7 +1501,7 @@ function renderMacroGovtSpendingChart(labels, govtSpendingEmaData, sovereignDebt
                 },
                 x: {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { maxTicksLimit: 10 }
+                    ticks: { maxTicksLimit: 8 }
                 }
             }
         }
@@ -1203,48 +1554,69 @@ function renderMacroInterbankLiquidityChart(labels, interbankSpreadBpsData, cred
             },
             scales: {
                 y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { callback: (val) => val + ' bps' },
                     title: { display: true, text: 'Basis Points (bps)' }
+                },
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
                 }
             }
         }
     });
 }
 
-function renderMacroFciChart(labels, fciData, fciEmaData) {
+function renderMacroFciChart(labels, fciData, fciEmaData, sloosData = []) {
     const canvas = document.getElementById('macroFciChart');
     if (!canvas) return;
     macroFciChartInstance = destroyChartInstance(macroFciChartInstance);
     const ctx = canvas.getContext('2d');
 
+    const datasets = [
+        {
+            type: 'line',
+            label: 'FCI Trend (EMA)',
+            data: fciEmaData,
+            borderColor: '#c084fc',
+            backgroundColor: '#c084fc',
+            borderWidth: 2,
+            borderDash: [4, 4],
+            tension: 0.3,
+            pointRadius: labels.length > 50 ? 0 : 2,
+            yAxisID: 'y'
+        },
+        {
+            type: 'bar',
+            label: 'Financial Conditions (Z-Score)',
+            data: fciData,
+            backgroundColor: fciData.map(val => val > 0 ? 'rgba(244, 63, 94, 0.45)' : 'rgba(74, 222, 128, 0.45)'),
+            borderColor: fciData.map(val => val > 0 ? '#f43f5e' : '#4ade80'),
+            borderWidth: 1,
+            borderRadius: 3,
+            yAxisID: 'y'
+        }
+    ];
+
+    if (sloosData && sloosData.length > 0) {
+        datasets.push({
+            type: 'line',
+            label: 'SLOOS Bank Lending Standards (Net %)',
+            data: sloosData,
+            borderColor: '#f59e0b',
+            backgroundColor: '#f59e0b',
+            borderWidth: 2,
+            tension: 0.25,
+            pointRadius: labels.length > 50 ? 0 : 2,
+            yAxisID: 'y1'
+        });
+    }
+
     macroFciChartInstance = new Chart(ctx, {
         type: 'bar',
         data: {
             labels: labels,
-            datasets: [
-                {
-                    type: 'line',
-                    label: 'FCI Trend (EMA)',
-                    data: fciEmaData,
-                    borderColor: '#c084fc',
-                    backgroundColor: '#c084fc',
-                    borderWidth: 2,
-                    borderDash: [4, 4],
-                    tension: 0.3,
-                    pointRadius: labels.length > 50 ? 0 : 2,
-                    yAxisID: 'y'
-                },
-                {
-                    type: 'bar',
-                    label: 'Financial Conditions (Z-Score)',
-                    data: fciData,
-                    backgroundColor: fciData.map(val => val > 0 ? 'rgba(244, 63, 94, 0.45)' : 'rgba(74, 222, 128, 0.45)'),
-                    borderColor: fciData.map(val => val > 0 ? '#f43f5e' : '#4ade80'),
-                    borderWidth: 1,
-                    borderRadius: 3,
-                    yAxisID: 'y'
-                }
-            ]
+            datasets: datasets
         },
         options: {
             responsive: true,
@@ -1256,6 +1628,9 @@ function renderMacroFciChart(labels, fciData, fciEmaData) {
                     callbacks: {
                         label: (ctx) => {
                             const val = ctx.raw;
+                            if (ctx.dataset.yAxisID === 'y1') {
+                                return `${ctx.dataset.label}: ${val >= 0 ? '+' : ''}${val.toFixed(1)}%`;
+                            }
                             if (ctx.dataset.type === 'bar') {
                                 const stance = val > 0 ? 'Restrictive (Tight)' : (val < 0 ? 'Accommodative (Loose)' : 'Neutral');
                                 return `${ctx.dataset.label}: ${val >= 0 ? '+' : ''}${val.toFixed(2)} σ (${stance})`;
@@ -1273,11 +1648,20 @@ function renderMacroFciChart(labels, fciData, fciEmaData) {
                     ticks: {
                         callback: (val) => (val > 0.001 ? '+' : '') + val.toFixed(2) + ' σ'
                     },
-                    title: { display: true, text: 'Z-Score (σ)' }
+                    title: { display: true, text: 'FCI Z-Score (σ)' }
+                },
+                y1: {
+                    type: 'linear',
+                    position: 'right',
+                    grid: { drawOnChartArea: false },
+                    ticks: {
+                        callback: (val) => (val > 0.001 ? '+' : '') + val.toFixed(0) + '%'
+                    },
+                    title: { display: true, text: 'SLOOS Net Tightening (%)' }
                 },
                 x: {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { maxTicksLimit: 10 }
+                    ticks: { maxTicksLimit: 8 }
                 }
             }
         }
@@ -1311,7 +1695,6 @@ function renderMacroCostPushChart(labels, agriLagData, energySupplyDragData, fre
                     borderColor: '#eab308',
                     backgroundColor: 'rgba(234, 179, 8, 0.10)',
                     borderWidth: 2,
-                    borderDash: [5, 4],
                     tension: 0.25,
                     fill: false,
                     pointRadius: labels.length > 50 ? 0 : 1
@@ -1322,7 +1705,6 @@ function renderMacroCostPushChart(labels, agriLagData, energySupplyDragData, fre
                     borderColor: '#f97316',
                     backgroundColor: 'rgba(249, 115, 22, 0.10)',
                     borderWidth: 2,
-                    borderDash: [3, 3],
                     tension: 0.25,
                     fill: false,
                     pointRadius: labels.length > 50 ? 0 : 1
@@ -1351,7 +1733,7 @@ function renderMacroCostPushChart(labels, agriLagData, energySupplyDragData, fre
                 },
                 x: {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { maxTicksLimit: 10 }
+                    ticks: { maxTicksLimit: 8 }
                 }
             }
         }
@@ -1425,57 +1807,74 @@ function renderMacroSectoralInflationChart(labels, headlineData, supercoreData, 
                 },
                 x: {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { maxTicksLimit: 10 }
+                    ticks: { maxTicksLimit: 8 }
                 }
             }
         }
     });
 }
 
-function renderMacroCreditCliffChart(labels, igBpsData, hyBpsData, cliffRatioData) {
+function renderMacroCreditCliffChart(labels, igBpsData, hyBpsData, cliffRatioData, corporateDefaultBpsData = []) {
     const canvas = document.getElementById('macroCreditCliffChart');
     if (!canvas) return;
     macroCreditCliffChartInstance = destroyChartInstance(macroCreditCliffChartInstance);
     const ctx = canvas.getContext('2d');
 
+    const datasets = [
+        {
+            label: 'High Yield (HY) Spread',
+            data: hyBpsData,
+            borderColor: '#f43f5e',
+            backgroundColor: 'rgba(244, 63, 94, 0.12)',
+            borderWidth: 2.5,
+            tension: 0.25,
+            fill: true,
+            yAxisID: 'y',
+            pointRadius: labels.length > 50 ? 0 : 1.5
+        },
+        {
+            label: 'Investment Grade (IG) Spread',
+            data: igBpsData,
+            borderColor: '#38bdf8',
+            backgroundColor: 'rgba(56, 189, 248, 0.15)',
+            borderWidth: 2,
+            tension: 0.25,
+            fill: true,
+            yAxisID: 'y',
+            pointRadius: labels.length > 50 ? 0 : 1.5
+        }
+    ];
+
+    if (corporateDefaultBpsData && corporateDefaultBpsData.length > 0) {
+        datasets.push({
+            label: 'Corporate Default Rate (ASRF)',
+            data: corporateDefaultBpsData,
+            borderColor: '#fb7185',
+            backgroundColor: 'rgba(251, 113, 133, 0.1)',
+            borderWidth: 2,
+            borderDash: [4, 4],
+            tension: 0.25,
+            fill: false,
+            yAxisID: 'y',
+            pointRadius: labels.length > 50 ? 0 : 1.5
+        });
+    }
+
+    datasets.push({
+        label: 'HY/IG Cliff Multiplier',
+        data: cliffRatioData,
+        borderColor: '#fbbf24',
+        borderWidth: 2,
+        tension: 0.25,
+        yAxisID: 'y1',
+        pointRadius: 0
+    });
+
     macroCreditCliffChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
-            datasets: [
-                {
-                    label: 'High Yield (HY) Spread',
-                    data: hyBpsData,
-                    borderColor: '#f43f5e',
-                    backgroundColor: 'rgba(244, 63, 94, 0.12)',
-                    borderWidth: 2.5,
-                    tension: 0.25,
-                    fill: true,
-                    yAxisID: 'y',
-                    pointRadius: labels.length > 50 ? 0 : 1.5
-                },
-                {
-                    label: 'Investment Grade (IG) Spread',
-                    data: igBpsData,
-                    borderColor: '#38bdf8',
-                    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-                    borderWidth: 2,
-                    tension: 0.25,
-                    fill: true,
-                    yAxisID: 'y',
-                    pointRadius: labels.length > 50 ? 0 : 1.5
-                },
-                {
-                    label: 'HY/IG Cliff Multiplier',
-                    data: cliffRatioData,
-                    borderColor: '#fbbf24',
-                    borderWidth: 2,
-                    borderDash: [5, 4],
-                    tension: 0.25,
-                    yAxisID: 'y1',
-                    pointRadius: 0
-                }
-            ]
+            datasets: datasets
         },
         options: {
             responsive: true,
@@ -1497,66 +1896,86 @@ function renderMacroCreditCliffChart(labels, igBpsData, hyBpsData, cliffRatioDat
                     position: 'left',
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { callback: (val) => val.toFixed(0) + ' bps' },
-                    title: { display: true, text: 'Credit Spread (bps)' }
+                    title: { display: true, text: 'Credit Spread & Defaults (bps)' }
                 },
                 y1: {
                     type: 'linear',
                     position: 'right',
+                    suggestedMin: 1.5,
+                    suggestedMax: 4.0,
                     grid: { drawOnChartArea: false },
                     ticks: { callback: (val) => val.toFixed(1) + 'x' },
                     title: { display: true, text: 'Spread Ratio' }
                 },
                 x: {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { maxTicksLimit: 10 }
+                    ticks: { maxTicksLimit: 8 }
                 }
             }
         }
     });
 }
 
-function renderMacroInventoryCycleChart(labels, invGapData, outputGapData, energyBufData) {
+function renderMacroInventoryCycleChart(labels, invGapData, outputGapData, energyBufData, capacityUtilizationData = []) {
     const canvas = document.getElementById('macroInventoryCycleChart');
     if (!canvas) return;
     macroInventoryCycleChartInstance = destroyChartInstance(macroInventoryCycleChartInstance);
     const ctx = canvas.getContext('2d');
 
+    const datasets = [
+        {
+            label: 'Metzler Inventory Overhang Gap',
+            data: invGapData,
+            borderColor: '#2dd4bf',
+            backgroundColor: 'rgba(45, 212, 191, 0.15)',
+            borderWidth: 2,
+            tension: 0.3,
+            fill: true,
+            yAxisID: 'y',
+            pointRadius: labels.length > 50 ? 0 : 1.5
+        },
+        {
+            label: 'Cyclical Output Gap',
+            data: outputGapData,
+            borderColor: '#818cf8',
+            borderWidth: 2,
+            borderDash: [4, 4],
+            tension: 0.3,
+            yAxisID: 'y',
+            pointRadius: labels.length > 50 ? 0 : 1
+        }
+    ];
+
+    if (capacityUtilizationData && capacityUtilizationData.length > 0) {
+        datasets.push({
+            label: 'Capacity Utilization (G.17)',
+            data: capacityUtilizationData,
+            borderColor: '#4ade80',
+            borderWidth: 2,
+            tension: 0.25,
+            fill: false,
+            yAxisID: 'y1',
+            pointRadius: labels.length > 50 ? 0 : 1
+        });
+    }
+
+    datasets.push({
+        label: 'Strategic Energy Buffer Stock',
+        data: energyBufData,
+        borderColor: '#f59e0b',
+        borderWidth: 2,
+        borderDash: [5, 3],
+        tension: 0.25,
+        fill: false,
+        yAxisID: 'y1',
+        pointRadius: 0
+    });
+
     macroInventoryCycleChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
-            datasets: [
-                {
-                    label: 'Metzler Inventory Overhang Gap',
-                    data: invGapData,
-                    borderColor: '#2dd4bf',
-                    backgroundColor: 'rgba(45, 212, 191, 0.15)',
-                    borderWidth: 2,
-                    tension: 0.3,
-                    fill: true,
-                    yAxisID: 'y',
-                    pointRadius: labels.length > 50 ? 0 : 1.5
-                },
-                {
-                    label: 'Cyclical Output Gap',
-                    data: outputGapData,
-                    borderColor: '#818cf8',
-                    borderWidth: 2,
-                    borderDash: [4, 4],
-                    tension: 0.3,
-                    yAxisID: 'y',
-                    pointRadius: labels.length > 50 ? 0 : 1
-                },
-                {
-                    label: 'Strategic Energy Buffer Stock',
-                    data: energyBufData,
-                    borderColor: '#f59e0b',
-                    borderWidth: 2,
-                    tension: 0.25,
-                    yAxisID: 'y1',
-                    pointRadius: 0
-                }
-            ]
+            datasets: datasets
         },
         options: {
             responsive: true,
@@ -1566,9 +1985,12 @@ function renderMacroInventoryCycleChart(labels, invGapData, outputGapData, energ
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => ctx.dataset.yAxisID === 'y1'
-                            ? `${ctx.dataset.label}: ${ctx.raw.toFixed(1)}`
-                            : `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`
+                        label: (ctx) => {
+                            if (ctx.dataset.label.includes('Buffer')) {
+                                return `${ctx.dataset.label}: ${ctx.raw !== null && ctx.raw !== undefined ? ctx.raw.toFixed(1) : 'N/A'}`;
+                            }
+                            return `${ctx.dataset.label}: ${ctx.raw !== null && ctx.raw !== undefined ? ctx.raw.toFixed(2) + '%' : 'N/A'}`;
+                        }
                     }
                 }
             },
@@ -1583,13 +2005,15 @@ function renderMacroInventoryCycleChart(labels, invGapData, outputGapData, energ
                 y1: {
                     type: 'linear',
                     position: 'right',
+                    min: 50,
+                    suggestedMax: 110,
                     grid: { drawOnChartArea: false },
                     ticks: { callback: (val) => val.toFixed(0) },
-                    title: { display: true, text: 'Buffer Index (Base 100)' }
+                    title: { display: true, text: 'Capacity (%) & Buffer Index' }
                 },
                 x: {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { maxTicksLimit: 10 }
+                    ticks: { maxTicksLimit: 8 }
                 }
             }
         }
@@ -1673,13 +2097,18 @@ function renderMacroFaitChart(labels, faitGapData, faitOffsetBpsData, policyRate
                 y1: {
                     type: 'linear',
                     position: 'right',
+                    min: -50,
+                    max: 10,
                     grid: { drawOnChartArea: false },
-                    ticks: { callback: (val) => val.toFixed(0) + ' bps' },
+                    ticks: {
+                        stepSize: 10,
+                        callback: (val) => val.toFixed(0) + ' bps'
+                    },
                     title: { display: true, text: 'Policy Offset (bps)' }
                 },
                 x: {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { maxTicksLimit: 10 }
+                    ticks: { maxTicksLimit: 8 }
                 }
             }
         }
@@ -1699,7 +2128,7 @@ export function resizeMacroCharts() {
     ];
     instances.forEach(c => {
         if (c) {
-            try { c.resize(); } catch (e) {}
+            try { c.resize(); } catch (e) { }
         }
     });
 }

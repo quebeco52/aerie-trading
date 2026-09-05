@@ -152,4 +152,55 @@ class ShadowBankBusinessModelTest extends TestCase
         );
         $this->assertLessThan($calmResult->ebit, $spikeResult->ebit);
     }
+
+    public function testSloosCreditTighteningExpandsDirectLendingOrigination(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('BXSL');
+        $stock->setBeta('1.0');
+
+        $neutralMacro = new MacroStateDTO(sloosTighteningIndexEma: 0.0, policyRateEma: 0.05);
+        $tighteningMacro = new MacroStateDTO(sloosTighteningIndexEma: 0.40, policyRateEma: 0.05);
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $neutralResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $neutralMacro, $mathMock);
+        $tighteningResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $tighteningMacro, $mathMock);
+
+        $this->assertGreaterThan(
+            $neutralResult->streamRevenue['direct_lending'],
+            $tighteningResult->streamRevenue['direct_lending'],
+            'Commercial bank credit tightening (SLOOS) drives corporate borrowers to private credit, expanding direct lending volume.'
+        );
+    }
+
+    public function testCorporateDefaultAndRecessionRiskIncreaseLossProvisions(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('BXSL');
+        $stock->setBeta('1.0');
+
+        $benignMacro = new MacroStateDTO(
+            corporateDefaultRateEma: 0.018,
+            recessionProbabilityEma: 0.05
+        );
+
+        $stressMacro = new MacroStateDTO(
+            corporateDefaultRateEma: 0.080,
+            recessionProbabilityEma: 0.65
+        );
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $benignResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $benignMacro, $mathMock);
+        $stressResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.50, 20_000_000.0, 0.0, $stressMacro, $mathMock);
+
+        $this->assertGreaterThan(
+            $benignResult->clampedMargin,
+            $stressResult->clampedMargin,
+            'Surging corporate default rates and forward recession risk must increase shadow bank loss provisions and CECL reserves.'
+        );
+    }
 }

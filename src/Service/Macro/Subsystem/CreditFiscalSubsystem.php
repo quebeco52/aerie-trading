@@ -210,4 +210,57 @@ class CreditFiscalSubsystem
         $state->sovereignDebtToGdp += $dDebt * $dt;
         $state->sovereignDebtToGdp = max(0.20, min(2.50, $state->sovereignDebtToGdp));
     }
+
+    /**
+     * Federal Reserve Senior Loan Officer Opinion Survey (SLOOS) Credit Standards Index.
+     *
+     * Evaluates net percentage of commercial banks tightening C&I loan standards
+     * based on wholesale credit spreads and macroeconomic output gap.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateSloosCreditStandards(MacroState $state, float $dt): void
+    {
+        $excessCreditSpread = max(0.0, $state->macroCreditSpread - MacroEngine::BASE_CREDIT_SPREAD);
+        $dW = $this->mathUtility->generateStandardNormal();
+
+        $state->sloosTighteningIndex = $this->mathUtility->calculateSloosCreditStandards(
+            currentSloos: $state->sloosTighteningIndex,
+            outputGap: $state->outputGapEma,
+            excessCreditSpread: $excessCreditSpread,
+            dt: $dt,
+            dW: $dW,
+            kappa: MacroEngine::SLOOS_KAPPA,
+            creditSensitivity: MacroEngine::SLOOS_CREDIT_SENSITIVITY,
+            gapSensitivity: MacroEngine::SLOOS_GAP_SENSITIVITY,
+            sigma: MacroEngine::SLOOS_SIGMA
+        );
+    }
+
+    /**
+     * Moody's / S&P Speculative-Grade Corporate Default Rate Model.
+     *
+     * Derives realized corporate probability of default (CDR) driven by a structural
+     * macroeconomic credit factor combining output gap, speculative high-yield credit spreads,
+     * and bank lending standards (SLOOS).
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateCorporateDefaultRate(MacroState $state, float $dt): void
+    {
+        $baseHySpread = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
+        $excessHySpread = max(0.0, $state->highYieldCreditSpread - $baseHySpread);
+
+        $macroZ = ($state->outputGapEma * MacroEngine::CORPORATE_DEFAULT_GAP_SENSITIVITY)
+            - ($excessHySpread * MacroEngine::CORPORATE_DEFAULT_SPREAD_SENSITIVITY)
+            - ($state->sloosTighteningIndexEma * MacroEngine::CORPORATE_DEFAULT_SLOOS_SENSITIVITY);
+
+        $state->corporateDefaultRate = $this->mathUtility->calculateCorporateDefaultRate(
+            macroZ: $macroZ,
+            baseDefaultRate: MacroEngine::CORPORATE_DEFAULT_BASELINE,
+            rho: MacroEngine::CORPORATE_DEFAULT_RHO
+        );
+    }
 }

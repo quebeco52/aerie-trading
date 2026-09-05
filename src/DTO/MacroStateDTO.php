@@ -122,6 +122,20 @@ readonly class MacroStateDTO
         public float $inventoryStockGapEma = 0.0,
         public float $energyInventoryIndex = MacroEngine::COMMODITY_INVENTORY_BASELINE,
         public float $energyInventoryIndexEma = MacroEngine::COMMODITY_INVENTORY_BASELINE,
+        public float $capacityUtilizationRate = MacroEngine::CU_BASELINE,
+        public float $capacityUtilizationRateEma = MacroEngine::CU_BASELINE,
+        public float $recessionProbability = 0.15,
+        public float $recessionProbabilityEma = 0.15,
+        public float $corporateDefaultRate = MacroEngine::CORPORATE_DEFAULT_BASELINE,
+        public float $corporateDefaultRateEma = MacroEngine::CORPORATE_DEFAULT_BASELINE,
+        public float $sloosTighteningIndex = 0.0,
+        public float $sloosTighteningIndexEma = 0.0,
+        public float $supplyChainPressureIndex = 0.0,
+        public float $supplyChainPressureIndexEma = 0.0,
+        public float $refiningCrackSpread = MacroEngine::CRACK_SPREAD_BASELINE,
+        public float $refiningCrackSpreadEma = MacroEngine::CRACK_SPREAD_BASELINE,
+        public float $dealActivityIndex = MacroEngine::DEAL_ACTIVITY_BASELINE,
+        public float $dealActivityIndexEma = MacroEngine::DEAL_ACTIVITY_BASELINE,
     ) {}
 
     /**
@@ -347,6 +361,20 @@ readonly class MacroStateDTO
             inventoryStockGapEma: (float) ($data['inventory_stock_gap_ema'] ?? ($data['inventory_stock_gap'] ?? 0.0)),
             energyInventoryIndex: (float) ($data['energy_inventory_index'] ?? MacroEngine::COMMODITY_INVENTORY_BASELINE),
             energyInventoryIndexEma: (float) ($data['energy_inventory_index_ema'] ?? ($data['energy_inventory_index'] ?? MacroEngine::COMMODITY_INVENTORY_BASELINE)),
+            capacityUtilizationRate: (float) ($data['capacity_utilization_rate'] ?? MacroEngine::CU_BASELINE),
+            capacityUtilizationRateEma: (float) ($data['capacity_utilization_rate_ema'] ?? ($data['capacity_utilization_rate'] ?? MacroEngine::CU_BASELINE)),
+            recessionProbability: (float) ($data['recession_probability'] ?? 0.15),
+            recessionProbabilityEma: (float) ($data['recession_probability_ema'] ?? ($data['recession_probability'] ?? 0.15)),
+            corporateDefaultRate: (float) ($data['corporate_default_rate'] ?? MacroEngine::CORPORATE_DEFAULT_BASELINE),
+            corporateDefaultRateEma: (float) ($data['corporate_default_rate_ema'] ?? ($data['corporate_default_rate'] ?? MacroEngine::CORPORATE_DEFAULT_BASELINE)),
+            sloosTighteningIndex: (float) ($data['sloos_tightening_index'] ?? 0.0),
+            sloosTighteningIndexEma: (float) ($data['sloos_tightening_index_ema'] ?? ($data['sloos_tightening_index'] ?? 0.0)),
+            supplyChainPressureIndex: (float) ($data['supply_chain_pressure_index'] ?? 0.0),
+            supplyChainPressureIndexEma: (float) ($data['supply_chain_pressure_index_ema'] ?? ($data['supply_chain_pressure_index'] ?? 0.0)),
+            refiningCrackSpread: (float) ($data['refining_crack_spread'] ?? MacroEngine::CRACK_SPREAD_BASELINE),
+            refiningCrackSpreadEma: (float) ($data['refining_crack_spread_ema'] ?? ($data['refining_crack_spread'] ?? MacroEngine::CRACK_SPREAD_BASELINE)),
+            dealActivityIndex: (float) ($data['deal_activity_index'] ?? MacroEngine::DEAL_ACTIVITY_BASELINE),
+            dealActivityIndexEma: (float) ($data['deal_activity_index_ema'] ?? ($data['deal_activity_index'] ?? MacroEngine::DEAL_ACTIVITY_BASELINE)),
         );
     }
 
@@ -464,6 +492,20 @@ readonly class MacroStateDTO
             inventoryStockGapEma: $state->inventoryStockGapEma,
             energyInventoryIndex: $state->energyInventoryIndex,
             energyInventoryIndexEma: $state->energyInventoryIndexEma,
+            capacityUtilizationRate: $state->capacityUtilizationRate,
+            capacityUtilizationRateEma: $state->capacityUtilizationRateEma,
+            recessionProbability: $state->recessionProbability,
+            recessionProbabilityEma: $state->recessionProbabilityEma,
+            corporateDefaultRate: $state->corporateDefaultRate,
+            corporateDefaultRateEma: $state->corporateDefaultRateEma,
+            sloosTighteningIndex: $state->sloosTighteningIndex,
+            sloosTighteningIndexEma: $state->sloosTighteningIndexEma,
+            supplyChainPressureIndex: $state->supplyChainPressureIndex,
+            supplyChainPressureIndexEma: $state->supplyChainPressureIndexEma,
+            refiningCrackSpread: $state->refiningCrackSpread,
+            refiningCrackSpreadEma: $state->refiningCrackSpreadEma,
+            dealActivityIndex: $state->dealActivityIndex,
+            dealActivityIndexEma: $state->dealActivityIndexEma,
         );
     }
 
@@ -581,6 +623,20 @@ readonly class MacroStateDTO
             'inventory_stock_gap_ema' => $this->inventoryStockGapEma,
             'energy_inventory_index' => $this->energyInventoryIndex,
             'energy_inventory_index_ema' => $this->energyInventoryIndexEma,
+            'capacity_utilization_rate' => $this->capacityUtilizationRate,
+            'capacity_utilization_rate_ema' => $this->capacityUtilizationRateEma,
+            'recession_probability' => $this->recessionProbability,
+            'recession_probability_ema' => $this->recessionProbabilityEma,
+            'corporate_default_rate' => $this->corporateDefaultRate,
+            'corporate_default_rate_ema' => $this->corporateDefaultRateEma,
+            'sloos_tightening_index' => $this->sloosTighteningIndex,
+            'sloos_tightening_index_ema' => $this->sloosTighteningIndexEma,
+            'supply_chain_pressure_index' => $this->supplyChainPressureIndex,
+            'supply_chain_pressure_index_ema' => $this->supplyChainPressureIndexEma,
+            'refining_crack_spread' => $this->refiningCrackSpread,
+            'refining_crack_spread_ema' => $this->refiningCrackSpreadEma,
+            'deal_activity_index' => $this->dealActivityIndex,
+            'deal_activity_index_ema' => $this->dealActivityIndexEma,
         ];
     }
 }

@@ -56,4 +56,35 @@ class CommodityLogisticsSubsystemTest extends TestCase
         $this->subsystem->calculateEnergyShock($state, 0.25);
         $this->assertGreaterThan(0.0, $state->energyPriceShock, 'Depleted buffer inventory must generate backwardation price shock');
     }
+
+    public function testCalculateRefiningCrackSpread(): void
+    {
+        $state = new MacroState();
+        $state->refiningCrackSpread = 22.0;
+        $state->outputGapEma = 0.02;
+        $state->energyInventoryIndexEma = 75.0; // Tight inventory
+
+        $this->subsystem->calculateRefiningCrackSpread($state, 0.25);
+        $this->assertGreaterThan(10.0, $state->refiningCrackSpread);
+        $this->assertLessThan(80.0, $state->refiningCrackSpread);
+    }
+
+    public function testCalculateSupplyChainPressureIndex(): void
+    {
+        $stateNeutral = new MacroState();
+        $stateNeutral->freightRateIndexEma = 100.0;
+        $stateNeutral->inventoryStockGapEma = 0.0;
+        $stateNeutral->industrialMetalsIndexEma = 100.0;
+
+        $this->subsystem->calculateSupplyChainPressureIndex($stateNeutral);
+        $this->assertEqualsWithDelta(0.0, $stateNeutral->supplyChainPressureIndex, 0.0001);
+
+        $stateChoked = new MacroState();
+        $stateChoked->freightRateIndexEma = 220.0; // Huge ocean freight spike
+        $stateChoked->inventoryStockGapEma = -0.04; // Severe inventory depletion
+        $stateChoked->industrialMetalsIndexEma = 140.0;
+
+        $this->subsystem->calculateSupplyChainPressureIndex($stateChoked);
+        $this->assertGreaterThan(1.5, $stateChoked->supplyChainPressureIndex, 'Logistics bottlenecks must generate positive GSCPI stress.');
+    }
 }

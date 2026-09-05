@@ -248,4 +248,56 @@ class InvestmentBankBusinessModelTest extends TestCase
         $this->assertSame(0.0, $result->streamZ['weight:advisory'] ?? null);
         $this->assertArrayNotHasKey('advisory', $result->streamRevenue);
     }
+
+    public function testDealActivityIndexStimulatesAdvisoryRevenue(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('ADVISORY_IB');
+
+        $mathMock = $this->getMockBuilder(MathUtility::class)
+            ->onlyMethods(['generateStandardNormal', 'generateUniform'])
+            ->getMock();
+        $mathMock->method('generateStandardNormal')->willReturn(0.0);
+        $mathMock->method('generateUniform')->willReturn(0.50);
+
+        $macroNormal = \App\DTO\MacroStateDTO::fromArray([
+            'output_gap_ema'          => 0.0,
+            'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
+            'macro_credit_spread_ema' => InvestmentBankBusinessModel::DEAL_BASELINE_CREDIT_SPREAD,
+            'policy_rate_ema'         => 0.04,
+            'yield_5y_ema'            => 0.04,
+            'deal_activity_index_ema' => 100.0,
+        ]);
+
+        $resultNormal = $this->model->computeActualFinancials(
+            $stock,
+            1000.0,
+            0.50,
+            100.0,
+            0.0,
+            $macroNormal,
+            $mathMock
+        );
+
+        $macroBoom = \App\DTO\MacroStateDTO::fromArray([
+            'output_gap_ema'          => 0.0,
+            'equity_risk_premium'     => MacroEngine::BASE_EQUITY_RISK_PREMIUM,
+            'macro_credit_spread_ema' => InvestmentBankBusinessModel::DEAL_BASELINE_CREDIT_SPREAD,
+            'policy_rate_ema'         => 0.04,
+            'yield_5y_ema'            => 0.04,
+            'deal_activity_index_ema' => 150.0, // High deal activity
+        ]);
+
+        $resultBoom = $this->model->computeActualFinancials(
+            $stock,
+            1000.0,
+            0.50,
+            100.0,
+            0.0,
+            $macroBoom,
+            $mathMock
+        );
+
+        $this->assertGreaterThan($resultNormal->streamRevenue['advisory'], $resultBoom->streamRevenue['advisory'], 'Elevated deal activity index must expand advisory deal flow revenue.');
+    }
 }

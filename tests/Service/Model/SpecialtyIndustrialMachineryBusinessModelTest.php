@@ -101,4 +101,48 @@ class SpecialtyIndustrialMachineryBusinessModelTest extends TestCase
             'Excess capital capacity overhang must dampen specialty equipment orders relative to capital scarcity.'
         );
     }
+
+    public function testCapacityUtilizationExpandsEquipmentSalesOrders(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('SPEC_MACH');
+        $stock->setBeta('1.0');
+
+        $lowCuMacro = new MacroStateDTO(capacityUtilizationRateEma: 0.72);
+        $highCuMacro = new MacroStateDTO(capacityUtilizationRateEma: 0.84);
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $lowCuResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $lowCuMacro, $mathMock);
+        $highCuResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $highCuMacro, $mathMock);
+
+        $this->assertGreaterThan(
+            $lowCuResult->streamRevenue['equipment_sales'],
+            $highCuResult->streamRevenue['equipment_sales'],
+            'Tight industrial capacity utilization triggers factory capex expansion, increasing specialty machinery sales.'
+        );
+    }
+
+    public function testGscpiDisruptionAddsVariableCostPenalty(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('SPEC_MACH');
+        $stock->setBeta('1.0');
+
+        $normalMacro = new MacroStateDTO(supplyChainPressureIndexEma: 0.0);
+        $delayedMacro = new MacroStateDTO(supplyChainPressureIndexEma: 2.0);
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $normalResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $normalMacro, $mathMock);
+        $delayedResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.30, 20_000_000.0, 0.0, $delayedMacro, $mathMock);
+
+        $this->assertGreaterThan(
+            $normalResult->clampedMargin,
+            $delayedResult->clampedMargin,
+            'Global supply chain bottlenecks (GSCPI) delay precision parts and increase variable margin drag.'
+        );
+    }
 }

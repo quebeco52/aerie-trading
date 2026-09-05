@@ -11,6 +11,7 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
 
 /**
  * Earnings strategy for Private Equity & Alternative Asset Managers.
@@ -53,6 +54,8 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     public const DEAL_FLOW_BOOM_MULT       = 3.00;
     /** Deal flow volume multiplier during macroeconomic output gap contractions. */
     public const DEAL_FLOW_BUST_MULT       = 5.00;
+    /** Sensitivity of PE deal exit velocity and carried interest realization to capital markets deal activity. */
+    public const DEAL_ACTIVITY_EXIT_SCALAR = 0.50;
     /** Standard deviation multiplier for firm-wide revenue variance. */
     public const REVENUE_VARIANCE_SCALAR   = 0.15;
     /** Minimum structural operating cost-to-revenue ratio reflecting PE overhead. */
@@ -279,9 +282,11 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $carryZ = $streams->generateZ('carried_interest', 0.15);
         $principalZ = $principalWeight > 0.0 ? $streams->generateZ('principal_investments', 0.20) : 0.0;
 
-        // 2. GDP Deal Flow Multiplier (Affects exit realizations)
+        // 2. GDP & Capital Markets Deal Flow Multiplier (Affects exit realizations)
         $outputGap = $macroState->outputGapEma;
-        $dealFlowMultiplier = $outputGap > 0.0 ? ($outputGap * self::DEAL_FLOW_BOOM_MULT) : ($outputGap * self::DEAL_FLOW_BUST_MULT);
+        $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
+        $dealFlowMultiplier = ($outputGap > 0.0 ? ($outputGap * self::DEAL_FLOW_BOOM_MULT) : ($outputGap * self::DEAL_FLOW_BUST_MULT))
+            + ($dealActivityShift * self::DEAL_ACTIVITY_EXIT_SCALAR);
 
         // 3. Cost of Debt LBO Elasticity (Multiple Compression)
         $creditSpread = $macroState->macroCreditSpreadEma;

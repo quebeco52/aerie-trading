@@ -124,5 +124,29 @@ class MacroAggregateSubsystemTest extends TestCase
         // Core Goods must absorb supply chain frictions more heavily than Supercore Services
         $this->assertGreaterThan($stateSupply->supercoreInflation, $stateSupply->coreGoodsInflation, 'Supply chain bottleneck must drive core goods higher than supercore services');
     }
+
+    public function testCalculateCapacityUtilization(): void
+    {
+        $stateNormal = new MacroState();
+        $stateNormal->outputGap = 0.0;
+        $stateNormal->capitalStockOverhang = 0.0;
+
+        $this->subsystem->calculateCapacityUtilization($stateNormal);
+        $this->assertEqualsWithDelta(MacroEngine::CU_BASELINE, $stateNormal->capacityUtilizationRate, 0.0001);
+
+        $stateBoom = new MacroState();
+        $stateBoom->outputGap = 0.03;
+        $stateBoom->capitalStockOverhang = 0.0;
+
+        $this->subsystem->calculateCapacityUtilization($stateBoom);
+        $this->assertGreaterThan(MacroEngine::CU_BASELINE, $stateBoom->capacityUtilizationRate);
+
+        $stateOverhang = new MacroState();
+        $stateOverhang->outputGap = 0.0;
+        $stateOverhang->capitalStockOverhang = 0.15;
+
+        $this->subsystem->calculateCapacityUtilization($stateOverhang);
+        $this->assertLessThan(MacroEngine::CU_BASELINE, $stateOverhang->capacityUtilizationRate);
+    }
 }
 

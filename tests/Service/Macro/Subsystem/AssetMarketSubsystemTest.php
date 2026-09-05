@@ -70,5 +70,18 @@ class AssetMarketSubsystemTest extends TestCase
         // Rent growth indexation must support commercial property values when inflation is elevated
         $this->assertGreaterThan($stateNoInflation->commercialPropertyIndex, $stateWithInflation->commercialPropertyIndex);
     }
+
+    public function testCalculateCapitalMarketsDealIndex(): void
+    {
+        $state = new MacroState();
+        $state->dealActivityIndex = 100.0;
+        $state->equityRiskPremium = 0.035;
+        $state->highYieldCreditSpread = 0.030;
+        $state->marketVolatility = 0.12;
+
+        $this->subsystem->calculateCapitalMarketsDealIndex($state, 0.25);
+        $this->assertGreaterThan(50.0, $state->dealActivityIndex);
+        $this->assertLessThan(250.0, $state->dealActivityIndex);
+    }
 }
 

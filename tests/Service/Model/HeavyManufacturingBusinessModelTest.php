@@ -93,4 +93,48 @@ class HeavyManufacturingBusinessModelTest extends TestCase
             'Industrial capital capacity overhang must dampen OEM equipment demand relative to capital scarcity.'
         );
     }
+
+    public function testCapacityUtilizationOverheadAbsorptionExpandsMargins(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('CATP');
+        $stock->setBeta('1.0');
+
+        $lowCuMacro = new MacroStateDTO(capacityUtilizationRateEma: 0.70); // 70% low utilization
+        $highCuMacro = new MacroStateDTO(capacityUtilizationRateEma: 0.85); // 85% high utilization
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $lowCuResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $lowCuMacro, $mathMock);
+        $highCuResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $highCuMacro, $mathMock);
+
+        $this->assertLessThan(
+            $lowCuResult->clampedMargin,
+            $highCuResult->clampedMargin,
+            'High industrial capacity utilization improves factory fixed overhead absorption, reducing variable cost margin.'
+        );
+    }
+
+    public function testGscpiBottlenecksIncreaseVariableCostDrag(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('CATP');
+        $stock->setBeta('1.2');
+
+        $normalMacro = new MacroStateDTO(supplyChainPressureIndexEma: 0.0);
+        $chokedMacro = new MacroStateDTO(supplyChainPressureIndexEma: 2.5);
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $normalResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $normalMacro, $mathMock);
+        $chokedResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.35, 20_000_000.0, 0.0, $chokedMacro, $mathMock);
+
+        $this->assertGreaterThan(
+            $normalResult->clampedMargin,
+            $chokedResult->clampedMargin,
+            'Global supply chain bottlenecks (GSCPI) must increase component procurement costs and variable margin drag.'
+        );
+    }
 }

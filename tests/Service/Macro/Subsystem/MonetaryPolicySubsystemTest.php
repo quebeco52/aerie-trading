@@ -353,5 +353,26 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertArrayHasKey('term_premium_10y', $yieldCurve);
         $this->assertArrayNotHasKey('new_balance_sheet_intensity', $yieldCurve);
     }
+
+    public function testCalculateRecessionProbability(): void
+    {
+        $stateNormal = new MacroState();
+        $stateNormal->yield10y = 0.045;
+        $stateNormal->policyRate = 0.025; // +200bps steep curve
+        $stateNormal->termPremium10y = 0.005;
+        $stateNormal->financialConditionsIndexEma = 0.0;
+
+        $this->subsystem->calculateRecessionProbability($stateNormal);
+        $this->assertLessThan(0.20, $stateNormal->recessionProbability, 'Steep curve and neutral financial conditions must yield low recession probability.');
+
+        $stateInverted = new MacroState();
+        $stateInverted->yield10y = 0.035;
+        $stateInverted->policyRate = 0.055; // -200bps inverted curve
+        $stateInverted->termPremium10y = -0.005;
+        $stateInverted->financialConditionsIndexEma = 1.80;
+
+        $this->subsystem->calculateRecessionProbability($stateInverted);
+        $this->assertGreaterThan(0.70, $stateInverted->recessionProbability, 'Inverted yield curve and tight FCI must yield high recession probability.');
+    }
 }
 

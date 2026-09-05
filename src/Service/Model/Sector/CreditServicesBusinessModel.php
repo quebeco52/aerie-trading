@@ -104,6 +104,12 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public const CECL_BASELINE_CREDIT_SPREAD = 0.020;
     /** Variable cost add-on per unit of spread widening. Unsecured credit is 1.5x more sensitive than collateralized bank loans. */
     public const CECL_SPREAD_SENSITIVITY     = 1.50;
+    /** Baseline 12-month forward recession probability threshold before proactive CECL reserve builds begin. */
+    public const CECL_BASELINE_RECESSION_PROB   = 0.15;
+    /** Sensitivity of unsecured credit CECL forward reserves to elevated 12-month recession risk. */
+    public const CECL_RECESSION_SENSITIVITY     = 0.35;
+    /** Sensitivity of revolving credit loan origination volume drag to commercial bank credit tightening (SLOOS). */
+    public const SLOOS_LENDING_DRAG_SENSITIVITY = 0.15;
 
     // --- Structural Efficiency Floor ---
     /** Minimum cost-to-revenue ratio: even at perfect NIM, structural fixed costs (personnel, compliance, tech) prevent margin going below 50%. */
@@ -174,7 +180,10 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $inflationBonus = ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta());
 
         // Blended dual-stream revenue (Lending vs. Payment Network Interchange)
+        // Bank credit tightening (SLOOS) gates unsecured credit card line extensions and origination volume
+        $sloosLendingDrag = max(0.0, $macroState->sloosTighteningIndexEma) * self::SLOOS_LENDING_DRAG_SENSITIVITY;
         $lendingRevenue = max(0.0, $expectedRevenue * $lendingWeight
+            * max(0.0, 1.0 - $sloosLendingDrag)
             * (1.0 + ($lendingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
         $networkRevenue = max(0.0, $expectedRevenue * $networkWeight
             * (1.0 + ($swipeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $inflationBonus));
@@ -206,16 +215,18 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         }
         $lossProvisionShock = $provisionShock + $macroDefaultDrag;
 
-        // CECL Forward Provisioning (Credit Spread Channel):
+        // CECL Forward Provisioning (Credit Spread & Forward Recession Channels):
         // Unsecured credit companies are far more sensitive to spread widening than banks.
         // Subprime Spread Beta: lenders taking on higher credit spread risk earn a higher spread
         // yield margin in benign credit environments, eliminating low-sensitivity free-money exploits.
         $creditSpread = $macroState->macroCreditSpreadEma;
         $spreadBeta = $ceclSensitivity / self::CECL_SPREAD_SENSITIVITY;
         $spreadGap = $creditSpread - self::CECL_BASELINE_CREDIT_SPREAD;
-        $ceclDrag = $spreadGap > 0.0
+        $spreadCeclDrag = $spreadGap > 0.0
             ? $spreadGap * $ceclSensitivity
             : max(-0.03, $spreadGap * ($spreadBeta - 1.0));
+        $recessionCeclDrag = max(0.0, ($macroState->recessionProbabilityEma - self::CECL_BASELINE_RECESSION_PROB) * self::CECL_RECESSION_SENSITIVITY);
+        $ceclDrag = $spreadCeclDrag + $recessionCeclDrag;
 
         // Net Interest Margin (NIM) Squeeze (1.5x more sensitive than banks due to wholesale funding dependency)
         $yield10y = $macroState->yield10yEma;

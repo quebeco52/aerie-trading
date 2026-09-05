@@ -22,7 +22,7 @@ class MacroSnapshotRecorderTest extends TestCase
                 $this->stringContains('INSERT INTO macro_report'),
                 $this->callback(function (array $params) use ($dto) {
                     // Check that key fields are mapped into parameters
-                    return count($params) === 79
+                    return count($params) === 93
                         && $params[1] === $dto->inflation
                         && $params[3] === $dto->outputGap
                         && $params[5] === $dto->policyRate
@@ -35,7 +35,21 @@ class MacroSnapshotRecorderTest extends TestCase
                         && $params[75] === $dto->cumulativeInflationGapEma
                         && $params[76] === $dto->highYieldCreditSpreadEma
                         && $params[77] === $dto->inventoryStockGapEma
-                        && $params[78] === $dto->energyInventoryIndexEma;
+                        && $params[78] === $dto->energyInventoryIndexEma
+                        && $params[79] === $dto->capacityUtilizationRate
+                        && $params[80] === $dto->capacityUtilizationRateEma
+                        && $params[81] === $dto->recessionProbability
+                        && $params[82] === $dto->recessionProbabilityEma
+                        && $params[83] === $dto->corporateDefaultRate
+                        && $params[84] === $dto->corporateDefaultRateEma
+                        && $params[85] === $dto->sloosTighteningIndex
+                        && $params[86] === $dto->sloosTighteningIndexEma
+                        && $params[87] === $dto->supplyChainPressureIndex
+                        && $params[88] === $dto->supplyChainPressureIndexEma
+                        && $params[89] === $dto->refiningCrackSpread
+                        && $params[90] === $dto->refiningCrackSpreadEma
+                        && $params[91] === $dto->dealActivityIndex
+                        && $params[92] === $dto->dealActivityIndexEma;
                 })
             );
 

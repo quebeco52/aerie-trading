@@ -146,13 +146,7 @@ class MacroAggregateSubsystem
         );
         $inventoryDrag = MacroEngine::METZLER_INVENTORY_DRAG * $state->inventoryStockGap;
 
-        // State-dependent autonomous expansion propensity (Schumpeter 1939, Kaldor 1940):
-        // Innovation and capital expansion thrive in expansions; during recessions, new project capex freezes
-        $autonomousScale = $y >= 0.0 ? 1.0 : max(0.0, 1.0 + 30.0 * $y);
-        $autonomousPropensity = MacroEngine::KALDOR_AUTONOMOUS_PROPENSITY * $autonomousScale;
-
-        $drift = ($autonomousPropensity
-            + $momentum
+        $drift = ($momentum
             - $cubicConstraint
             - $monetaryDrag
             - $creditFrictionDrag
@@ -224,7 +218,8 @@ class MacroAggregateSubsystem
 
         $freightShift = ($state->freightRateIndexEma / MacroEngine::FREIGHT_BASELINE) - 1.0;
         $metalsShift = ($state->industrialMetalsIndexEma / MacroEngine::METALS_BASELINE) - 1.0;
-        $goodsSupplyFriction = ($freightShift * MacroEngine::CORE_GOODS_FREIGHT_SENSITIVITY) + ($metalsShift * MacroEngine::CORE_GOODS_METALS_SENSITIVITY);
+        $gscpiFriction = max(-0.01, $state->supplyChainPressureIndexEma * MacroEngine::CORE_GOODS_GSCPI_SENSITIVITY);
+        $goodsSupplyFriction = ($freightShift * MacroEngine::CORE_GOODS_FREIGHT_SENSITIVITY) + ($metalsShift * MacroEngine::CORE_GOODS_METALS_SENSITIVITY) + $gscpiFriction;
         $targetCoreGoods = $targetInflation + $anchorSlip + (0.8 * $convexDemandPressure) + $goodsSupplyFriction;
 
         $reversionWeight = 1.0 - exp(-MacroEngine::INFLATION_MEAN_REVERSION * $dt);
@@ -364,5 +359,31 @@ class MacroAggregateSubsystem
         $state->highYieldCreditSpreadEma += $emaWeight * ($state->highYieldCreditSpread - $state->highYieldCreditSpreadEma);
         $state->inventoryStockGapEma += $emaWeight * ($state->inventoryStockGap - $state->inventoryStockGapEma);
         $state->energyInventoryIndexEma += $emaWeight * ($state->energyInventoryIndex - $state->energyInventoryIndexEma);
+        $state->capacityUtilizationRateEma += $emaWeight * ($state->capacityUtilizationRate - $state->capacityUtilizationRateEma);
+        $state->recessionProbabilityEma += $emaWeight * ($state->recessionProbability - $state->recessionProbabilityEma);
+        $state->corporateDefaultRateEma += $emaWeight * ($state->corporateDefaultRate - $state->corporateDefaultRateEma);
+        $state->sloosTighteningIndexEma += $emaWeight * ($state->sloosTighteningIndex - $state->sloosTighteningIndexEma);
+        $state->supplyChainPressureIndexEma += $emaWeight * ($state->supplyChainPressureIndex - $state->supplyChainPressureIndexEma);
+        $state->refiningCrackSpreadEma += $emaWeight * ($state->refiningCrackSpread - $state->refiningCrackSpreadEma);
+        $state->dealActivityIndexEma += $emaWeight * ($state->dealActivityIndex - $state->dealActivityIndexEma);
+    }
+
+    /**
+     * Federal Reserve G.17 Industrial Capacity Utilization Index.
+     *
+     * Evaluates real aggregate physical factory, mining, and utility capacity utilization (CU_t)
+     * based on macroeconomic output gap demand and capital stock overhang.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     */
+    public function calculateCapacityUtilization(MacroState $state): void
+    {
+        $state->capacityUtilizationRate = $this->mathUtility->calculateCapacityUtilization(
+            outputGap: $state->outputGap,
+            capitalStockOverhang: $state->capitalStockOverhang,
+            baselineCu: MacroEngine::CU_BASELINE,
+            gapSensitivity: MacroEngine::CU_GAP_SENSITIVITY,
+            overhangSensitivity: MacroEngine::CU_OVERHANG_SENSITIVITY
+        );
     }
 }

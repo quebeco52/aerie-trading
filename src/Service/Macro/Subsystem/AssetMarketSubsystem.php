@@ -237,14 +237,42 @@ class AssetMarketSubsystem
         $fxZ = ($state->exchangeRateIndexEma - MacroEngine::EXCHANGE_RATE_BASELINE) / MacroEngine::FCI_FX_STD;
         $slopeZ = -($state->nsSlopeEma - MacroEngine::FCI_SLOPE_MEAN) / MacroEngine::FCI_SLOPE_STD;
         $volZ = ($state->marketVolatilityEma - MacroEngine::FCI_VOL_MEAN) / MacroEngine::FCI_VOL_STD;
+        $sloosZ = ($state->sloosTighteningIndexEma - MacroEngine::FCI_SLOOS_MEAN) / MacroEngine::FCI_SLOOS_STD;
 
         $fundamentalFci = (MacroEngine::FCI_CREDIT_SPREAD_WEIGHT * $creditZ)
             + (MacroEngine::FCI_ERP_WEIGHT * $erpZ)
             + (MacroEngine::FCI_EXCHANGE_RATE_WEIGHT * $fxZ)
             + (MacroEngine::FCI_YIELD_SLOPE_WEIGHT * $slopeZ)
-            + (MacroEngine::FCI_VOLATILITY_WEIGHT * $volZ);
+            + (MacroEngine::FCI_VOLATILITY_WEIGHT * $volZ)
+            + (MacroEngine::FCI_SLOOS_WEIGHT * $sloosZ);
 
         $state->financialConditionsIndex += MacroEngine::FCI_MEAN_REVERSION
             * ($fundamentalFci - $state->financialConditionsIndex) * $dt;
+    }
+
+    /**
+     * Jovanovic-Rousseau (2002) Capital Markets & M&A Deal Flow Model.
+     *
+     * Evaluates global investment banking advisory, private equity LBO, and IPO volume
+     * driven by valuation liquidity (equity risk premium, high-yield spreads, and volatility).
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateCapitalMarketsDealIndex(MacroState $state, float $dt): void
+    {
+        $dW = $this->mathUtility->generateStandardNormal();
+        $currentDealIndex = $state->dealActivityIndex > 0.0 ? $state->dealActivityIndex : MacroEngine::DEAL_ACTIVITY_BASELINE;
+
+        $state->dealActivityIndex = $this->mathUtility->calculateCapitalMarketsDealIndexStep(
+            currentDealIndex: $currentDealIndex,
+            equityRiskPremium: $state->equityRiskPremium,
+            hyCreditSpread: $state->highYieldCreditSpread,
+            marketVolatility: $state->marketVolatility,
+            dt: $dt,
+            dW: $dW,
+            kappa: MacroEngine::DEAL_ACTIVITY_KAPPA,
+            sigma: MacroEngine::DEAL_ACTIVITY_SIGMA
+        );
     }
 }

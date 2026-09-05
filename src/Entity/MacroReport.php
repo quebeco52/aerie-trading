@@ -252,6 +252,48 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $energyInventoryIndexEma = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $capacityUtilizationRate = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $capacityUtilizationRateEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $recessionProbability = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $recessionProbabilityEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $corporateDefaultRate = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $corporateDefaultRateEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $sloosTighteningIndex = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $sloosTighteningIndexEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $supplyChainPressureIndex = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $supplyChainPressureIndexEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $refiningCrackSpread = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $refiningCrackSpreadEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $dealActivityIndex = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $dealActivityIndexEma = null;
+
     // --- Standard Getters & Setters ---
 
     public function getId(): ?int { return $this->id; }
@@ -494,4 +536,46 @@ class MacroReport
 
     public function getEnergyInventoryIndexEma(): ?string { return $this->energyInventoryIndexEma; }
     public function setEnergyInventoryIndexEma(?string $energyInventoryIndexEma): self { $this->energyInventoryIndexEma = $energyInventoryIndexEma; return $this; }
+
+    public function getCapacityUtilizationRate(): ?string { return $this->capacityUtilizationRate; }
+    public function setCapacityUtilizationRate(?string $capacityUtilizationRate): self { $this->capacityUtilizationRate = $capacityUtilizationRate; return $this; }
+
+    public function getCapacityUtilizationRateEma(): ?string { return $this->capacityUtilizationRateEma; }
+    public function setCapacityUtilizationRateEma(?string $capacityUtilizationRateEma): self { $this->capacityUtilizationRateEma = $capacityUtilizationRateEma; return $this; }
+
+    public function getRecessionProbability(): ?string { return $this->recessionProbability; }
+    public function setRecessionProbability(?string $recessionProbability): self { $this->recessionProbability = $recessionProbability; return $this; }
+
+    public function getRecessionProbabilityEma(): ?string { return $this->recessionProbabilityEma; }
+    public function setRecessionProbabilityEma(?string $recessionProbabilityEma): self { $this->recessionProbabilityEma = $recessionProbabilityEma; return $this; }
+
+    public function getCorporateDefaultRate(): ?string { return $this->corporateDefaultRate; }
+    public function setCorporateDefaultRate(?string $corporateDefaultRate): self { $this->corporateDefaultRate = $corporateDefaultRate; return $this; }
+
+    public function getCorporateDefaultRateEma(): ?string { return $this->corporateDefaultRateEma; }
+    public function setCorporateDefaultRateEma(?string $corporateDefaultRateEma): self { $this->corporateDefaultRateEma = $corporateDefaultRateEma; return $this; }
+
+    public function getSloosTighteningIndex(): ?string { return $this->sloosTighteningIndex; }
+    public function setSloosTighteningIndex(?string $sloosTighteningIndex): self { $this->sloosTighteningIndex = $sloosTighteningIndex; return $this; }
+
+    public function getSloosTighteningIndexEma(): ?string { return $this->sloosTighteningIndexEma; }
+    public function setSloosTighteningIndexEma(?string $sloosTighteningIndexEma): self { $this->sloosTighteningIndexEma = $sloosTighteningIndexEma; return $this; }
+
+    public function getSupplyChainPressureIndex(): ?string { return $this->supplyChainPressureIndex; }
+    public function setSupplyChainPressureIndex(?string $supplyChainPressureIndex): self { $this->supplyChainPressureIndex = $supplyChainPressureIndex; return $this; }
+
+    public function getSupplyChainPressureIndexEma(): ?string { return $this->supplyChainPressureIndexEma; }
+    public function setSupplyChainPressureIndexEma(?string $supplyChainPressureIndexEma): self { $this->supplyChainPressureIndexEma = $supplyChainPressureIndexEma; return $this; }
+
+    public function getRefiningCrackSpread(): ?string { return $this->refiningCrackSpread; }
+    public function setRefiningCrackSpread(?string $refiningCrackSpread): self { $this->refiningCrackSpread = $refiningCrackSpread; return $this; }
+
+    public function getRefiningCrackSpreadEma(): ?string { return $this->refiningCrackSpreadEma; }
+    public function setRefiningCrackSpreadEma(?string $refiningCrackSpreadEma): self { $this->refiningCrackSpreadEma = $refiningCrackSpreadEma; return $this; }
+
+    public function getDealActivityIndex(): ?string { return $this->dealActivityIndex; }
+    public function setDealActivityIndex(?string $dealActivityIndex): self { $this->dealActivityIndex = $dealActivityIndex; return $this; }
+
+    public function getDealActivityIndexEma(): ?string { return $this->dealActivityIndexEma; }
+    public function setDealActivityIndexEma(?string $dealActivityIndexEma): self { $this->dealActivityIndexEma = $dealActivityIndexEma; return $this; }
 }

@@ -136,5 +136,36 @@ class CreditFiscalSubsystemTest extends TestCase
         // Retail default rate must transmit wholesale credit stress into consumer distress
         $this->assertGreaterThan($stateCalm->retailDefaultRate, $stateCreditFreeze->retailDefaultRate);
     }
+
+    public function testCalculateCorporateDefaultRate(): void
+    {
+        $stateNormal = new MacroState();
+        $stateNormal->outputGapEma = 0.0;
+        $stateNormal->highYieldCreditSpread = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
+        $stateNormal->sloosTighteningIndexEma = 0.0;
+
+        $this->subsystem->calculateCorporateDefaultRate($stateNormal, 0.25);
+        $this->assertGreaterThan(0.005, $stateNormal->corporateDefaultRate);
+        $this->assertLessThan(0.030, $stateNormal->corporateDefaultRate);
+
+        $stateCrisis = new MacroState();
+        $stateCrisis->outputGapEma = -0.04;
+        $stateCrisis->highYieldCreditSpread = 0.090; // Severe junk spread widening
+        $stateCrisis->sloosTighteningIndexEma = 0.40;   // Bank lending freeze
+
+        $this->subsystem->calculateCorporateDefaultRate($stateCrisis, 0.25);
+        $this->assertGreaterThan($stateNormal->corporateDefaultRate * 2.0, $stateCrisis->corporateDefaultRate, 'Recession with credit freeze must spike speculative defaults.');
+    }
+
+    public function testCalculateSloosCreditStandards(): void
+    {
+        $state = new MacroState();
+        $state->sloosTighteningIndex = 0.0;
+        $state->macroCreditSpreadEma = 0.050; // +300bps widening above baseline
+        $state->outputGapEma = -0.03;         // Recession
+
+        $this->subsystem->calculateSloosCreditStandards($state, 0.25);
+        $this->assertGreaterThan(0.05, $state->sloosTighteningIndex, 'Wide credit spreads and recession must trigger net bank tightening.');
+    }
 }
 

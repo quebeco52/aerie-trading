@@ -65,6 +65,12 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const REVENUE_VARIANCE_SCALAR = 0.35; // Volatile sales
     public const INFLATION_PENALTY_SCALAR = 0.80; // Input costs hit hard
 
+    // --- Capacity Utilization & Global Supply Chain Physics ---
+    /** Sensitivity of heavy factory fixed overhead absorption and variable margin to capacity utilization deviations. */
+    public const CU_MARGIN_ABSORPTION_SENSITIVITY = 0.15;
+    /** Variable margin cost drag per standard deviation of global supply chain pressure (GSCPI). */
+    public const GSCPI_COST_PENALTY_SCALAR        = 0.020;
+
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
@@ -140,12 +146,20 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         $energyShift = $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
         $freightShift = max(0.0, ($macroState->freightRateIndexEma - 100.0) / 100.0);
-        $combinedCommodityDrag = max(0.0, $energyShift + $metalsShift + ($freightShift * 0.30));
+        $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma);
+        $gscpiCostDrag = $gscpiShift * self::GSCPI_COST_PENALTY_SCALAR;
+
+        $combinedCommodityDrag = max(0.0, $energyShift + $metalsShift + ($freightShift * 0.30)) + $gscpiCostDrag;
         $baseInflationPenalty = $combinedCommodityDrag > 0 ? $combinedCommodityDrag * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0;
         $inflationPenalty = $baseInflationPenalty * $inflationMultiplier;
 
+        // Capacity Utilization Overhead Absorption:
+        // High industrial capacity utilization improves factory fixed overhead absorption, expanding margins.
+        $cuDeviation = ($macroState->capacityUtilizationRateEma - MacroEngine::CU_BASELINE) / 100.0;
+        $cuMarginAdjustment = - ($cuDeviation * self::CU_MARGIN_ABSORPTION_SENSITIVITY);
+
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
-        $clampedMargin = $this->clampMargin($effectiveMargin + $inflationPenalty);
+        $clampedMargin = $this->clampMargin($effectiveMargin + $inflationPenalty + $cuMarginAdjustment);
 
         $primaryShockZ = $streams->resolveDominantShockZ([$oemZ, $mroZ]);
         $observableShockZ = ($oemZ * $oemWeight * self::OEM_VARIANCE_SCALAR * (1.0 - self::BACKLOG_DAMPING_FACTOR)) +

@@ -132,4 +132,45 @@ class SemiconductorBusinessModelTest extends TestCase
         $this->assertLessThan($resultBaseline->ebit, $resultSpike->ebit);
         $this->assertEqualsWithDelta(359.5, $resultSpike->actualVariableCosts, 0.1);
     }
+
+    public function testCapacityUtilizationDrivesFoundryLeverage(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('FOUNDRY');
+        $stock->setCapexRatio('0.80');
+
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $macroNormal = \App\DTO\MacroStateDTO::fromArray([
+            'output_gap_ema' => 0.0,
+            'capacity_utilization_rate_ema' => 0.785,
+        ]);
+
+        $resultNormal = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 1000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 200.0,
+            baselineVol: 0.0,
+            macroState: $macroNormal,
+            mathUtility: $this->mathUtilityMock
+        );
+
+        $macroBoom = \App\DTO\MacroStateDTO::fromArray([
+            'output_gap_ema' => 0.0,
+            'capacity_utilization_rate_ema' => 0.835, // +5% above baseline
+        ]);
+
+        $resultBoom = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 1000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 200.0,
+            baselineVol: 0.0,
+            macroState: $macroBoom,
+            mathUtility: $this->mathUtilityMock
+        );
+
+        $this->assertGreaterThan($resultNormal->streamRevenue['foundry'], $resultBoom->streamRevenue['foundry'], 'Elevated industrial capacity utilization must expand foundry throughput.');
+    }
 }

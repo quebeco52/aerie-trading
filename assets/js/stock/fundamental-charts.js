@@ -407,6 +407,120 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
     } else if (['commodity', 'shipping'].includes(businessModel)) {
         renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, treasuryData);
     }
+
+    let payoutRatio = 0;
+    if (ltmInc > 0 && ltmDiv > 0) {
+        payoutRatio = Math.min(100, (ltmDiv / ltmInc) * 100);
+    } else if (ltmDiv > 0 && ltmInc <= 0) {
+        payoutRatio = 100;
+    }
+    let retainedRatio = Math.max(0, 100 - payoutRatio);
+
+    updateFinancialHud({
+        revenueData, netIncomeData, operatingMarginData: displayMarginData, marginLabel,
+        revenueStreamsKeys, rawStreamsData: revenueStreamsDataRaw,
+        debtData, equityData,
+        spreadData, blendedRateData,
+        returnLabel: isFinancial ? 'ROE' : (businessModel === 'reit' ? 'Cap Rate' : 'ROIC'),
+        hurdleLabel: isFinancial ? 'Cost of Equity' : 'WACC',
+        returnData: isFinancial ? roeData : roicData,
+        hurdleData: isFinancial ? coeData : waccData,
+        evaData,
+        dividendData, buybackData, dividendYieldData,
+        payoutRatio, retainedRatio,
+        peData, pbData,
+        epsData, bvpsData,
+        fcfData, fcfConversionData,
+        interestIncomeData, interestExpenseData, netInterestSpreadData,
+        capitalRatioData, customerDepositRatioData,
+        underwritingProfitData, displayMarginData,
+        reitPayoutRatioData, reitLtvData,
+        capexRevenueRatioData, roicData,
+        treasuryData, businessModel, isFinancial
+    });
+}
+
+function setHud(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+}
+
+function updateFinancialHud(m) {
+    const last = (arr, def = 0) => (arr && arr.length > 0 && arr[arr.length - 1] !== null && !isNaN(arr[arr.length - 1])) ? arr[arr.length - 1] : def;
+
+    const lastRev = last(m.revenueData);
+    const lastNet = last(m.netIncomeData);
+    const lastMargin = last(m.operatingMarginData);
+    setHud('hud-netIncomeChart', `Rev: $${formatLarge(lastRev)} | Net: $${formatLarge(lastNet)} (${lastMargin.toFixed(1)}%)`);
+    setHud('hud-profitEngineChart', `Rev: $${formatLarge(lastRev)} | Net: $${formatLarge(lastNet)} (${lastMargin.toFixed(1)}%)`);
+
+    const streamsCount = m.revenueStreamsKeys ? m.revenueStreamsKeys.size : 0;
+    setHud('hud-revenueStreamsChart', `Streams: ${streamsCount} | Rev: $${formatLarge(lastRev)}`);
+
+    const lastDebt = last(m.debtData);
+    const lastEq = last(m.equityData);
+    const deRatio = lastEq > 0 ? (lastDebt / lastEq) : 0;
+    setHud('hud-debtEquityChart', `Debt: $${formatLarge(lastDebt)} | Eq: $${formatLarge(lastEq)} (D/E: ${deRatio.toFixed(2)}x)`);
+
+    const lastRate = last(m.blendedRateData);
+    const lastSpread = last(m.spreadData);
+    setHud('hud-creditHealthChart', `Rate: ${lastRate.toFixed(2)}% | Spr: ${lastSpread.toFixed(0)} bps`);
+
+    const lastRet = last(m.returnData);
+    const lastHurd = last(m.hurdleData);
+    const lastEva = last(m.evaData);
+    setHud('hud-capitalEfficiencyChart', `${m.returnLabel || 'ROIC'}: ${lastRet.toFixed(1)}% | ${m.hurdleLabel || 'WACC'}: ${lastHurd.toFixed(1)}% | EVA: $${formatLarge(lastEva)}`);
+
+    const lastDiv = last(m.dividendData);
+    const lastBuyback = last(m.buybackData);
+    const lastYield = last(m.dividendYieldData);
+    setHud('hud-capitalReturnChart', `Div: $${formatLarge(lastDiv)} | Buyback: $${formatLarge(lastBuyback)} | Yield: ${lastYield.toFixed(2)}%`);
+
+    setHud('hud-payoutRatioChart', `Payout: ${m.payoutRatio.toFixed(1)}% | Retained: ${m.retainedRatio.toFixed(1)}%`);
+
+    const lastPe = last(m.peData);
+    const lastPb = last(m.pbData);
+    setHud('hud-valuationMultiplesChart', `P/E: ${lastPe > 0 ? lastPe.toFixed(1) + 'x' : '-'} | P/B: ${lastPb > 0 ? lastPb.toFixed(2) + 'x' : '-'}`);
+
+    const lastEps = last(m.epsData);
+    const lastBvps = last(m.bvpsData);
+    setHud('hud-shareholderValueChart', `EPS: $${lastEps.toFixed(2)} | BVPS: $${lastBvps.toFixed(2)}`);
+
+    const lastFcf = last(m.fcfData);
+    const lastConv = last(m.fcfConversionData);
+    setHud('hud-cashFlowSummaryChart', `FCF: $${formatLarge(lastFcf)} | FCF/NI: ${lastConv.toFixed(0)}%`);
+
+    if (['commercial_bank', 'credit_services', 'shadow_bank'].includes(m.businessModel)) {
+        const lastNii = last(m.interestIncomeData) - last(m.interestExpenseData);
+        const lastNim = last(m.netInterestSpreadData);
+        setHud('hud-netInterestEngineChart', `NII: $${formatLarge(lastNii)} | NIM: ${lastNim.toFixed(2)}%`);
+    }
+    if (m.isFinancial) {
+        const lastCap = last(m.capitalRatioData);
+        const lastDep = last(m.customerDepositRatioData);
+        setHud('hud-regulatoryRatiosChart', `Capital: ${lastCap.toFixed(1)}% | Reserves: ${lastDep ? lastDep.toFixed(1) + '%' : '-'}`);
+    }
+    if (m.businessModel === 'insurance') {
+        const lastUw = last(m.underwritingProfitData);
+        const lastFloat = last(m.interestIncomeData);
+        const lastComb = last(m.displayMarginData);
+        setHud('hud-insuranceDualEngineChart', `UW: $${formatLarge(lastUw)} | Float: $${formatLarge(lastFloat)} | CR: ${lastComb.toFixed(1)}%`);
+    }
+    if (m.businessModel === 'reit') {
+        const lastCov = last(m.reitPayoutRatioData);
+        const lastLtv = last(m.reitLtvData);
+        setHud('hud-reitCoverageChart', `AFFO Cov: ${lastCov.toFixed(0)}% | LTV: ${lastLtv.toFixed(1)}%`);
+    }
+    if (['tech', 'semiconductor', 'biotech', 'defense_contractor'].includes(m.businessModel)) {
+        const lastCapEx = last(m.capexRevenueRatioData);
+        const lastRoic = last(m.roicData);
+        setHud('hud-reinvestmentIntensityChart', `CapEx/Rev: ${lastCapEx.toFixed(1)}% | ROIC: ${lastRoic.toFixed(1)}%`);
+    }
+    if (['commodity', 'shipping'].includes(m.businessModel)) {
+        const lastMargin = last(m.operatingMarginData);
+        const lastCash = last(m.treasuryData);
+        setHud('hud-cyclicalDynamicsChart', `Margin: ${lastMargin.toFixed(1)}% | Cash: $${formatLarge(lastCash)}`);
+    }
 }
 
 function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, operatingMarginData, marginLabel = 'Operating Margin') {
@@ -468,6 +582,7 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
@@ -482,10 +597,15 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
                 }
             },
             scales: {
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                },
                 y: {
                     type: 'linear',
                     position: 'left',
-                    ticks: { callback: (val) => formatLarge(val) }
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { callback: (val) => '$' + formatLarge(val) }
                 },
                 y1: {
                     type: 'linear',
@@ -534,11 +654,17 @@ function renderRevenueStreamsChart(labels, streamsKeysSet, rawStreamsData, strea
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
             scales: {
-                x: { stacked: true },
+                x: {
+                    stacked: true,
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                },
                 y: {
                     stacked: true,
-                    ticks: { callback: (val) => formatLarge(val) }
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { callback: (val) => '$' + formatLarge(val) }
                 }
             },
             plugins: {
@@ -612,7 +738,12 @@ function renderRegulatoryRatiosChart(labels, capitalRatioData, secondaryData, se
                 tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
             },
             scales: {
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                },
                 y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { callback: (val) => val + '%' },
                     beginAtZero: true
                 }
@@ -655,12 +786,20 @@ function renderDebtEquityChart(labels, debtData, equityData, treasuryData) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: $${formatLarge(ctx.raw)}` } }
             },
             scales: {
-                y: { ticks: { callback: (val) => formatLarge(val) } }
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                },
+                y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { callback: (val) => '$' + formatLarge(val) }
+                }
             }
         }
     });
@@ -725,7 +864,12 @@ function renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRat
                 tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
             },
             scales: {
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                },
                 y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { callback: (val) => val + '%' },
                     beginAtZero: true
                 }
@@ -809,9 +953,14 @@ function renderCapitalEfficiencyChart(labels, returnData, hurdleData, evaData, r
                 }
             },
             scales: {
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                },
                 y: {
                     type: 'linear',
                     position: 'left',
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { callback: (val) => val + '%' },
                     title: { display: true, text: 'Percentage' }
                 },
@@ -819,7 +968,7 @@ function renderCapitalEfficiencyChart(labels, returnData, hurdleData, evaData, r
                     type: 'linear',
                     position: 'right',
                     grid: { drawOnChartArea: false },
-                    ticks: { callback: (val) => formatLarge(val) },
+                    ticks: { callback: (val) => '$' + formatLarge(val) },
                 }
             }
         }
@@ -888,11 +1037,15 @@ function renderCapitalReturnChart(labels, dividendData, buybackData, dividendYie
                 }
             },
             scales: {
-                x: {},
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                },
                 y: {
                     type: 'linear',
                     position: 'left',
-                    ticks: { callback: (val) => formatLarge(val) },
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { callback: (val) => '$' + formatLarge(val) },
                     beginAtZero: true,
                     suggestedMax: 100000000
                 },
@@ -1018,7 +1171,12 @@ function renderValuationMultiplesChart(labels, peData, pbData, psData) {
                 }
             },
             scales: {
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                },
                 y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { callback: (val) => val.toFixed(1) + 'x' }
                 }
             }
@@ -1090,9 +1248,14 @@ function renderShareholderValueChart(labels, epsData, bvpsData, sharesData) {
                 }
             },
             scales: {
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                },
                 y: {
                     type: 'linear',
                     position: 'left',
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { callback: (val) => '$' + val.toFixed(2) }
                 },
                 y1: {
@@ -1167,9 +1330,14 @@ function renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retained
                 }
             },
             scales: {
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                },
                 y: {
                     type: 'linear',
                     position: 'left',
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { callback: (val) => '$' + formatLarge(val) }
                 },
                 y1: {
@@ -1244,9 +1412,14 @@ function renderNetInterestEngineChart(labels, interestIncomeData, interestExpens
                 }
             },
             scales: {
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                },
                 y: {
                     type: 'linear',
                     position: 'left',
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { callback: (val) => '$' + formatLarge(val) }
                 },
                 y1: {
@@ -1321,9 +1494,14 @@ function renderInsuranceDualEngineChart(labels, underwritingProfitData, interest
                 }
             },
             scales: {
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                },
                 y: {
                     type: 'linear',
                     position: 'left',
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { callback: (val) => '$' + formatLarge(val) }
                 },
                 y1: {
@@ -1389,9 +1567,14 @@ function renderReitCoverageChart(labels, payoutRatioData, ltvData, capRateSpread
                 tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
             },
             scales: {
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                },
                 y: {
                     type: 'linear',
                     position: 'left',
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { callback: (val) => val.toFixed(0) + '%' }
                 },
                 y1: {
@@ -1455,7 +1638,14 @@ function renderReinvestmentIntensityChart(labels, capexRevenueRatioData, operati
                 tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%` } }
             },
             scales: {
-                y: { ticks: { callback: (val) => val.toFixed(0) + '%' } }
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                },
+                y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { callback: (val) => val.toFixed(0) + '%' }
+                }
             }
         }
     });
@@ -1522,9 +1712,14 @@ function renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, trea
                 }
             },
             scales: {
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { maxTicksLimit: 8 }
+                },
                 y: {
                     type: 'linear',
                     position: 'left',
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { callback: (val) => '$' + formatLarge(val) }
                 },
                 y1: {

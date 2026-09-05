@@ -3,7 +3,7 @@ import { initPriceChart, updateLivePricePoint, resizePriceChart, destroyPriceCha
 import { initEtfChart, updateEtfPie, resizeEtfChart, destroyEtfChart } from '../stock/etf-chart.js';
 import { updatePriceUI, updateMacroIndicators, resetPriceHistoryState } from '../stock/stats-updater.js';
 import { renderEvents } from '../stock/events-feed.js';
-import { updateMacroCharts, resizeMacroCharts, destroyMacroCharts } from '../stock/macro-charts.js';
+import { updateMacroCharts, resizeMacroCharts, destroyMacroCharts, setMacroTimeframe } from '../stock/macro-charts.js';
 import { updateFundamentalCharts, resizeFundamentalCharts, destroyFundamentalCharts } from '../stock/fundamental-charts.js';
 
 let rawReports = [];
@@ -119,6 +119,8 @@ function initStockPage() {
     window.addEventListener('resize', tabChangeHandler);
 
     setupExpandableCards();
+    setupMacroFilters();
+    setupFinancialFilters();
 
     // Turbo cleanup
     document.addEventListener('turbo:before-render', () => {
@@ -154,29 +156,136 @@ function setupExpandableCards() {
             const canvasContainer = card.querySelector('.chart-canvas-container');
             const allCards = grid.querySelectorAll('.chart-card');
 
-            const isExpanded = card.classList.contains('md:col-span-2');
+            const isExpanded = card.classList.contains('md:col-span-2') || card.classList.contains('lg:col-span-2');
             if (isExpanded) {
-                card.classList.remove('md:col-span-2');
+                card.classList.remove('md:col-span-2', 'lg:col-span-2');
                 canvasContainer?.classList.remove('h-96', 'md:h-[500px]');
-                canvasContainer?.classList.add('h-48');
                 if (icon) icon.textContent = 'open_in_full';
-                allCards.forEach(c => { if (c !== card) c.style.display = ''; });
+                if (grid.id === 'macroChartsGrid' && typeof window.applyMacroFilters === 'function') {
+                    window.applyMacroFilters();
+                } else if (grid.id === 'financialChartsGrid' && typeof window.applyFinancialFilters === 'function') {
+                    window.applyFinancialFilters();
+                } else {
+                    allCards.forEach(c => { if (c !== card) c.style.display = ''; });
+                }
             } else {
-                card.classList.add('md:col-span-2');
-                canvasContainer?.classList.remove('h-48');
+                card.classList.add('md:col-span-2', 'lg:col-span-2');
                 canvasContainer?.classList.add('h-96', 'md:h-[500px]');
                 if (icon) icon.textContent = 'close_fullscreen';
                 allCards.forEach(c => { if (c !== card) c.style.display = 'none'; });
             }
-            setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+            setTimeout(() => {
+                window.dispatchEvent(new Event('resize'));
+                resizeMacroCharts();
+                resizeFundamentalCharts();
+            }, 60);
         };
     });
 }
 
-// Global hook for timeframe switching (12Q vs 12Y buttons in Twig)
+function setupFinancialFilters() {
+    let currentCategory = 'all';
+    let currentSearch = '';
+
+    window.applyFinancialFilters = function () {
+        const query = currentSearch.toLowerCase().trim();
+        const cards = document.querySelectorAll('#financialChartsGrid .chart-card');
+        cards.forEach(card => {
+            const cat = card.dataset.financialCategory || '';
+            const text = (card.innerText || '').toLowerCase();
+            const matchesCat = (currentCategory === 'all' || cat === currentCategory);
+            const matchesSearch = (!query || text.includes(query));
+            if (matchesCat && matchesSearch) {
+                card.style.display = '';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+        setTimeout(() => resizeFundamentalCharts(), 50);
+    };
+
+    const catButtons = document.querySelectorAll('.financial-cat-btn');
+    catButtons.forEach(btn => {
+        btn.onclick = () => {
+            currentCategory = btn.dataset.category || 'all';
+            catButtons.forEach(b => {
+                if (b === btn) {
+                    b.className = 'financial-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap bg-primary text-[#001a42] shadow-md shadow-primary/20 cursor-pointer';
+                } else {
+                    b.className = 'financial-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface cursor-pointer';
+                }
+            });
+            window.applyFinancialFilters();
+        };
+    });
+
+    const searchInput = document.getElementById('financialIndicatorSearch');
+    if (searchInput) {
+        searchInput.oninput = (e) => {
+            currentSearch = e.target.value;
+            window.applyFinancialFilters();
+        };
+    }
+}
+
+function setupMacroFilters() {
+    let currentCategory = 'all';
+    let currentSearch = '';
+
+    window.applyMacroFilters = function () {
+        const query = currentSearch.toLowerCase().trim();
+        const cards = document.querySelectorAll('#macroChartsGrid .chart-card');
+        cards.forEach(card => {
+            const cat = card.dataset.macroCategory || '';
+            const text = (card.innerText || '').toLowerCase();
+            const matchesCat = (currentCategory === 'all' || cat === currentCategory);
+            const matchesSearch = (!query || text.includes(query));
+            if (matchesCat && matchesSearch) {
+                card.style.display = '';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+        setTimeout(() => resizeMacroCharts(), 50);
+    };
+
+    const catButtons = document.querySelectorAll('.macro-cat-btn');
+    catButtons.forEach(btn => {
+        btn.onclick = () => {
+            currentCategory = btn.dataset.category || 'all';
+            catButtons.forEach(b => {
+                if (b === btn) {
+                    b.className = 'macro-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap bg-primary text-[#001a42] shadow-md shadow-primary/20 cursor-pointer';
+                } else {
+                    b.className = 'macro-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface cursor-pointer';
+                }
+            });
+            window.applyMacroFilters();
+        };
+    });
+
+    const searchInput = document.getElementById('macroIndicatorSearch');
+    if (searchInput) {
+        searchInput.oninput = (e) => {
+            currentSearch = e.target.value;
+            window.applyMacroFilters();
+        };
+    }
+
+    const rangeButtons = document.querySelectorAll('.macro-range-btn');
+    rangeButtons.forEach(btn => {
+        btn.onclick = () => {
+            const tf = btn.dataset.macroTimeframe;
+            if (tf) setMacroTimeframe(tf);
+        };
+    });
+}
+
+// Global hooks
 window.updateCharts = function(timeframe) {
     updateFundamentalCharts(timeframe, rawReports, currentContext);
 };
+window.setMacroTimeframe = setMacroTimeframe;
 
 document.addEventListener('turbo:load', initStockPage);
 initStockPage();

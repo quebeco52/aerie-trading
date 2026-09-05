@@ -1347,5 +1347,230 @@ class MathUtility
         $tightnessRatio = $neutralSlack / $bufferSlack;
         return $yieldScale * (pow($tightnessRatio, $exponent) - 1.0);
     }
+
+    /**
+     * Calculates the 12-month forward recession probability using the Estrella & Mishkin (1998) probit model.
+     *
+     * Evaluates market-implied recession probability based on yield curve slope (10Y minus policy rate),
+     * term premium, and the Financial Conditions Index:
+     *   P(Recession) = NormalCDF(beta0 + betaSlope * slope + betaTp * termPremium + betaFci * FCI)
+     *
+     * @param float $slope       Yield curve slope (Yield10Y minus policy rate).
+     * @param float $termPremium Sovereign 10Y term premium.
+     * @param float $fci         Financial Conditions Index (FCI > 0 is restrictive).
+     * @param float $beta0       Probit intercept parameter (calibrated to ~15% baseline probability at neutral slope).
+     * @param float $betaSlope   Sensitivity to yield curve slope.
+     * @param float $betaTp      Sensitivity to term premium compression.
+     * @param float $betaFci     Sensitivity to financial conditions tightening.
+     * @return float 12-month forward recession probability clamped between 1% and 99%.
+     */
+    public function calculateEstrellaMishkinProbability(
+        float $slope,
+        float $termPremium,
+        float $fci,
+        float $beta0 = -0.55,
+        float $betaSlope = -80.0,
+        float $betaTp = -20.0,
+        float $betaFci = 0.35
+    ): float {
+        $probitIndex = $beta0 + ($betaSlope * $slope) + ($betaTp * $termPremium) + ($betaFci * $fci);
+        $probability = $this->calculateNormalCDF($probitIndex);
+        return max(0.01, min(0.99, $probability));
+    }
+
+    /**
+     * Calculates the Federal Reserve G.17 Industrial Capacity Utilization Rate.
+     *
+     * Models real physical factory and equipment load factor based on the macroeconomic output gap
+     * and physical capital stock overhang:
+     *   CU = baselineCu + gapSens * outputGap - overhangSens * capitalStockOverhang
+     *
+     * @param float $outputGap              Macroeconomic output gap.
+     * @param float $capitalStockOverhang   Accumulated capital stock overhang.
+     * @param float $baselineCu             Historical neutral capacity utilization (~78.5%).
+     * @param float $gapSensitivity         Sensitivity to cyclical demand fluctuations.
+     * @param float $overhangSensitivity    Sensitivity to excess installed capacity overhang.
+     * @return float Realized capacity utilization rate clamped between 60% and 92%.
+     */
+    public function calculateCapacityUtilization(
+        float $outputGap,
+        float $capitalStockOverhang,
+        float $baselineCu = 0.785,
+        float $gapSensitivity = 0.85,
+        float $overhangSensitivity = 0.40
+    ): float {
+        $rawCu = $baselineCu + ($gapSensitivity * $outputGap) - ($overhangSensitivity * $capitalStockOverhang);
+        return max(0.60, min(0.92, $rawCu));
+    }
+
+    /**
+     * Calculates the aggregate speculative-grade corporate default rate (Moody's / S&P Speculative Default Model).
+     *
+     * Derives realized corporate defaults via the Merton/Vasicek structural credit portfolio transition:
+     *   CDR = NormalCDF( (InverseNormalCDF(baseDefault) - sqrt(rho) * macroZ) / sqrt(1 - rho) )
+     *
+     * @param float $macroZ          Composite macroeconomic credit Z-score.
+     * @param float $baseDefaultRate Long-run average speculative corporate default rate (~1.8%).
+     * @param float $rho             Corporate asset correlation factor (~20% under Basel II/III).
+     * @return float Realized annual corporate default rate clamped between 0.2% and 18%.
+     */
+    public function calculateCorporateDefaultRate(
+        float $macroZ,
+        float $baseDefaultRate = 0.018,
+        float $rho = 0.20
+    ): float {
+        $invPd = $this->calculateInverseNormalCDF($baseDefaultRate);
+        $sqrtRho = sqrt($rho);
+        $numerator = $invPd - ($sqrtRho * $macroZ);
+        $denominator = sqrt(1.0 - $rho);
+        $conditionalPd = $this->calculateNormalCDF($numerator / $denominator);
+
+        return max(0.002, min(0.18, $conditionalPd));
+    }
+
+    /**
+     * Models the Federal Reserve Senior Loan Officer Opinion Survey (SLOOS) Credit Standards Index.
+     *
+     * Evaluates the net percentage of domestic commercial banks tightening lending standards for C&I loans
+     * via an Ornstein-Uhlenbeck continuous adjustment process driven by wholesale credit spreads and the output gap:
+     *   Target = baseline + creditSens * excessCreditSpread - gapSens * outputGap
+     *
+     * @param float $currentSloos        Current net tightening percentage.
+     * @param float $outputGap           Current output gap.
+     * @param float $excessCreditSpread  Corporate credit spread above baseline.
+     * @param float $dt                  Time increment in years.
+     * @param float $dW                  Standard normal random shock.
+     * @param float $kappa               Speed of adjustment toward target standards.
+     * @param float $creditSensitivity   Sensitivity to corporate credit spread widening.
+     * @param float $gapSensitivity      Sensitivity to economic contraction.
+     * @param float $sigma               Diffusion volatility of bank underwriting standards.
+     * @return float Updated net tightening fraction clamped between -40% (easing) and +85% (severe credit crunch).
+     */
+    public function calculateSloosCreditStandards(
+        float $currentSloos,
+        float $outputGap,
+        float $excessCreditSpread,
+        float $dt,
+        float $dW,
+        float $kappa = 1.80,
+        float $creditSensitivity = 15.0,
+        float $gapSensitivity = 3.0,
+        float $sigma = 0.08
+    ): float {
+        $targetSloos = ($creditSensitivity * $excessCreditSpread) - ($gapSensitivity * $outputGap);
+        $drift = $kappa * ($targetSloos - $currentSloos) * $dt;
+        $diffusion = $sigma * sqrt($dt) * $dW;
+        $newSloos = $currentSloos + $drift + $diffusion;
+
+        return max(-0.40, min(0.85, $newSloos));
+    }
+
+    /**
+     * Models the 3:2:1 Refining Crack Spread Index (Bourgeon et al. 1998, U.S. EIA).
+     *
+     * Evaluates gross refining margin per barrel ($/bbl) for refined products over crude oil feedstocks
+     * using Schwartz (1997) mean-reverting dynamics driven by demand cycles and physical inventory tightness:
+     *   Target = baseline * (1 + gapSens * outputGap) + convenienceAddOn
+     *
+     * @param float $currentCrack          Current crack spread in $/bbl.
+     * @param float $outputGap             Current macroeconomic output gap.
+     * @param float $energyInventoryIndex  Physical energy buffer inventory index.
+     * @param float $dt                    Time increment in years.
+     * @param float $dW                    Standard normal random shock.
+     * @param float $baselineCrack         Neutral long-run crack spread (~$22/bbl).
+     * @param float $kappa                 Speed of mean reversion.
+     * @param float $sigma                 Volatility of crack margins.
+     * @return float Updated refining crack spread in $/bbl clamped between $4.00 and $80.00.
+     */
+    public function calculateRefiningCrackSpreadStep(
+        float $currentCrack,
+        float $outputGap,
+        float $energyInventoryIndex,
+        float $dt,
+        float $dW,
+        float $baselineCrack = 22.0,
+        float $kappa = 1.50,
+        float $sigma = 0.25
+    ): float {
+        $demandFactor = 1.0 + (1.20 * $outputGap);
+        $inventoryTightness = max(0.0, (100.0 - $energyInventoryIndex) / 100.0) * 15.0;
+        $targetCrack = ($baselineCrack * max(0.30, $demandFactor)) + $inventoryTightness;
+
+        $drift = $kappa * ($targetCrack - $currentCrack) * $dt;
+        $diffusion = $sigma * $currentCrack * sqrt($dt) * $dW;
+        $newCrack = $currentCrack + $drift + $diffusion;
+
+        return max(4.0, min(80.0, $newCrack));
+    }
+
+    /**
+     * Calculates the NY Fed Global Supply Chain Pressure Index (GSCPI) (Benigno et al. 2022).
+     *
+     * Constructs a normalized composite Z-score measuring cross-border logistics friction,
+     * combining container freight rates, inventory stock gaps, and raw material price pressures:
+     *   GSCPI = wFreight * ((Freight - Base) / sigmaFreight) + wInv * (InventoryGap / sigmaInv) + wMetals * ((Metals - Base) / sigmaMetals)
+     *
+     * @param float $freightRateIndex       Ocean freight index.
+     * @param float $inventoryStockGap      Metzler inventory cycle gap.
+     * @param float $industrialMetalsIndex  Industrial metals price index.
+     * @param float $freightBase            Neutral freight baseline (100.0).
+     * @param float $metalsBase             Neutral metals baseline (100.0).
+     * @return float Normalized GSCPI Z-score clamped between -2.0 and +4.0.
+     */
+    public function calculateGscpiComposite(
+        float $freightRateIndex,
+        float $inventoryStockGap,
+        float $industrialMetalsIndex,
+        float $freightBase = 100.0,
+        float $metalsBase = 100.0
+    ): float {
+        $freightZ = ($freightRateIndex - $freightBase) / 25.0;
+        $inventoryZ = -$inventoryStockGap / 0.05; // Inventory shortages create supply chain stress
+        $metalsZ = ($industrialMetalsIndex - $metalsBase) / 25.0;
+
+        $composite = (0.50 * $freightZ) + (0.30 * $inventoryZ) + (0.20 * $metalsZ);
+        return max(-2.0, min(4.0, $composite));
+    }
+
+    /**
+     * Models the Capital Markets & M&A Deal Flow Index (Jovanovic & Rousseau 2002).
+     *
+     * Simulates global investment banking, private equity LBO, and IPO advisory volume
+     * as an exponential function of valuation liquidity (ERP compression, tight high-yield spreads, and low volatility):
+     *   Target = 100 * exp(-betaErp * erpExcess - betaHy * hySpreadExcess - betaVol * volExcess)
+     *
+     * @param float $currentDealIndex   Current deal flow index.
+     * @param float $equityRiskPremium  Current equity risk premium.
+     * @param float $hyCreditSpread     Current speculative high-yield credit spread.
+     * @param float $marketVolatility   Current equity market volatility.
+     * @param float $dt                 Time increment in years.
+     * @param float $dW                 Standard normal random shock.
+     * @param float $kappa              Speed of adjustment toward fundamental deal capacity.
+     * @param float $sigma              Stochastic deal volatility.
+     * @return float Updated deal activity index clamped between 20.0 and 250.0.
+     */
+    public function calculateCapitalMarketsDealIndexStep(
+        float $currentDealIndex,
+        float $equityRiskPremium,
+        float $hyCreditSpread,
+        float $marketVolatility,
+        float $dt,
+        float $dW,
+        float $kappa = 1.60,
+        float $sigma = 0.15
+    ): float {
+        $erpExcess = ($equityRiskPremium - 0.045) / 0.015;
+        $hyExcess = ($hyCreditSpread - 0.048) / 0.020;
+        $volExcess = ($marketVolatility - 0.15) / 0.06;
+
+        $stressExponent = - (0.35 * $erpExcess + 0.45 * $hyExcess + 0.20 * $volExcess);
+        $targetIndex = 100.0 * exp(max(-2.0, min(1.5, $stressExponent)));
+
+        $drift = $kappa * ($targetIndex - $currentDealIndex) * $dt;
+        $diffusion = $sigma * $currentDealIndex * sqrt($dt) * $dW;
+        $newIndex = $currentDealIndex + $drift + $diffusion;
+
+        return max(20.0, min(250.0, $newIndex));
+    }
 }
 

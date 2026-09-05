@@ -353,4 +353,45 @@ class CommodityBusinessModelTest extends TestCase
         $modernizedMargin = (float) $stock->getOperatingMargin();
         $this->assertGreaterThan($decayedMargin, $modernizedMargin);
     }
+
+    public function testRefiningCrackSpreadDrivesDownstreamRefiningRevenue(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('REFINER');
+        $stock->setBeta('1.0');
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+        $macroNormal = new MacroStateDTO(
+            outputGapEma: 0.0,
+            refiningCrackSpreadEma: 22.0
+        );
+
+        $resultNormal = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 20_000_000.0,
+            baselineVol: 0.0,
+            macroState: $macroNormal,
+            mathUtility: $mathMock
+        );
+
+        $macroSpike = new MacroStateDTO(
+            outputGapEma: 0.0,
+            refiningCrackSpreadEma: 35.0 // Wide 3:2:1 crack spread
+        );
+
+        $resultSpike = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 100_000_000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 20_000_000.0,
+            baselineVol: 0.0,
+            macroState: $macroSpike,
+            mathUtility: $mathMock
+        );
+
+        $this->assertGreaterThan($resultNormal->streamRevenue['refining_spread'], $resultSpike->streamRevenue['refining_spread'], 'Elevated 3:2:1 refining crack spread index must expand refining revenue.');
+    }
 }

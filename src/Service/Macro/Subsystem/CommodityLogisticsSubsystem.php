@@ -186,4 +186,49 @@ class CommodityLogisticsSubsystem
 
         $state->freightRateIndex = max(20.0, min(500.0, $newFreight));
     }
+
+    /**
+     * 3:2:1 Refining Crack Spread Model (Bourgeon et al. 1998, U.S. EIA).
+     *
+     * Evaluates gross refining margin per barrel ($/bbl) for refined products over crude oil feedstocks
+     * based on cyclical demand and physical energy inventory tightness.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateRefiningCrackSpread(MacroState $state, float $dt): void
+    {
+        $dW = $this->mathUtility->generateStandardNormal();
+        $currentCrack = $state->refiningCrackSpread > 0.0 ? $state->refiningCrackSpread : MacroEngine::CRACK_SPREAD_BASELINE;
+
+        $state->refiningCrackSpread = $this->mathUtility->calculateRefiningCrackSpreadStep(
+            currentCrack: $currentCrack,
+            outputGap: $state->outputGapEma,
+            energyInventoryIndex: $state->energyInventoryIndexEma,
+            dt: $dt,
+            dW: $dW,
+            baselineCrack: MacroEngine::CRACK_SPREAD_BASELINE,
+            kappa: MacroEngine::CRACK_SPREAD_KAPPA,
+            sigma: MacroEngine::CRACK_SPREAD_SIGMA
+        );
+    }
+
+    /**
+     * NY Fed Global Supply Chain Pressure Index (GSCPI) (Benigno et al. 2022).
+     *
+     * Synthesizes cross-border freight rates, inventory stock gaps, and raw material frictions
+     * into a standardized Z-score composite.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     */
+    public function calculateSupplyChainPressureIndex(MacroState $state): void
+    {
+        $state->supplyChainPressureIndex = $this->mathUtility->calculateGscpiComposite(
+            freightRateIndex: $state->freightRateIndexEma,
+            inventoryStockGap: $state->inventoryStockGapEma,
+            industrialMetalsIndex: $state->industrialMetalsIndexEma,
+            freightBase: MacroEngine::FREIGHT_BASELINE,
+            metalsBase: MacroEngine::METALS_BASELINE
+        );
+    }
 }

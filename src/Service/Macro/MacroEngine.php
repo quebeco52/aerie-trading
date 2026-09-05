@@ -27,7 +27,7 @@ class MacroEngine
     /** Sensitivity of natural rate r* to annual secular TFP productivity growth deviations from drift. */
     public const NATURAL_RATE_TFP_SENSITIVITY = 0.50;
     /** Laubach-Williams sensitivity of natural rate r* to cyclical output gap investment demand. */
-    public const NATURAL_RATE_OUTPUT_GAP_SENSITIVITY = 0.25;
+    public const NATURAL_RATE_OUTPUT_GAP_SENSITIVITY = 0.15;
     /** Speed of adjustment (kappa) of natural real rate toward fundamental equilibrium. */
     public const NATURAL_RATE_ADJUSTMENT_SPEED = 1.0;
     /** Structural lower bound floor for natural real rate. */
@@ -46,12 +46,10 @@ class MacroEngine
     public const CASH_YIELD_SPREAD = 0.0025;
 
     // --- KALDOR-KALECKI 2D LIMIT CYCLE ---
-    /** Autonomous secular aggregate demand expansion propensity (Solow-Swan & Schumpeterian growth drift). */
-    public const KALDOR_AUTONOMOUS_PROPENSITY = 0.008;
     /** Elasticity of aggregate demand to exchange rate deviations (Marshall-Lerner Net Export Drag). */
     public const KALDOR_FX_ELASTICITY = 0.04;
     /** Linear momentum of aggregate demand feedback loop. */
-    public const KALDOR_MOMENTUM = 0.18;
+    public const KALDOR_MOMENTUM = 0.12;
     /** Cubic stabilization factor bounding extreme boom/bust expansions. */
     public const KALDOR_CAPACITY = 500.0;
     /** Sensitivity of aggregate demand to real interest rate deviations from natural rate. */
@@ -73,7 +71,7 @@ class MacroEngine
     /** The rate at which physical capital depreciates, organically clearing overhangs and creating pent-up demand. */
     public const CAPITAL_DECAY_RATE = 0.30;
     /** Stochastic diffusion volatility of the macroeconomic output gap. */
-    public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.005;
+    public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.010;
 
     // --- Metzler-Blinder Inventory Investment Cycle (Metzler 1941, Blinder 1982) ---
     /** Sensitivity of output gap drift to involuntary inventory liquidation and restocking. */
@@ -205,7 +203,7 @@ class MacroEngine
     /** Inflation panic reaction multiplier accelerating rate hikes during extreme inflation spikes. */
     public const CB_INFLATION_PANIC_SCALE = 50.0;
     /** Recession panic reaction multiplier accelerating emergency cuts during downturns. */
-    public const CB_RECESSION_PANIC_SCALE = 20.0;
+    public const CB_RECESSION_PANIC_SCALE = 50.0;
     /** Maximum annual rate hike velocity cap during normal economic expansions (8 × 25bps meetings). */
     public const CB_MAX_NORMAL_HIKE_VELOCITY = 0.025;
     /** Maximum annual rate hike velocity cap during emergency runaway inflation spikes (525bps in 15 months annualized). */
@@ -308,6 +306,8 @@ class MacroEngine
     public const CORE_GOODS_FREIGHT_SENSITIVITY = 0.015;
     /** Pass-through elasticity of industrial metals supply friction into core goods inflation. */
     public const CORE_GOODS_METALS_SENSITIVITY = 0.008;
+    /** Pass-through elasticity of global supply chain pressure index (GSCPI Z-score) into core goods inflation. */
+    public const CORE_GOODS_GSCPI_SENSITIVITY = 0.003;
 
     // --- Merton Structural Corporate Credit Spreads (Merton 1974) ---
     /** Sensitivity of corporate credit spreads to wholesale interbank funding stress. */
@@ -587,15 +587,17 @@ class MacroEngine
 
     // --- Financial Conditions Index (Goldman Sachs / Chicago Fed) ---
     /** Weight on corporate credit spread deviation in FCI composite. */
-    public const FCI_CREDIT_SPREAD_WEIGHT = 0.30;
+    public const FCI_CREDIT_SPREAD_WEIGHT = 0.25;
     /** Weight on equity risk premium deviation in FCI composite. */
-    public const FCI_ERP_WEIGHT = 0.25;
+    public const FCI_ERP_WEIGHT = 0.20;
     /** Weight on currency appreciation/depreciation in FCI composite. */
     public const FCI_EXCHANGE_RATE_WEIGHT = 0.15;
     /** Weight on yield curve slope inversion in FCI composite. */
     public const FCI_YIELD_SLOPE_WEIGHT = 0.15;
     /** Weight on excess market volatility in FCI composite. */
     public const FCI_VOLATILITY_WEIGHT = 0.15;
+    /** Weight on bank lending standards (SLOOS net tightening) in the composite FCI. */
+    public const FCI_SLOOS_WEIGHT = 0.10;
     /** Historical mean benchmark for investment-grade credit spreads in Chicago Fed NFCI normalization. */
     public const FCI_CREDIT_MEAN = 0.022;
     /** Historical standard deviation for investment-grade credit spreads in FCI normalization. */
@@ -614,8 +616,72 @@ class MacroEngine
     public const FCI_VOL_MEAN = 0.18;
     /** Historical standard deviation for equity market volatility in FCI normalization. */
     public const FCI_VOL_STD = 0.06;
+    /** Historical mean benchmark for SLOOS net tightening index in FCI normalization. */
+    public const FCI_SLOOS_MEAN = 0.0;
+    /** Historical standard deviation for SLOOS net tightening index in FCI normalization. */
+    public const FCI_SLOOS_STD = 0.20;
     /** OU smoothing speed of FCI toward fundamental composite value. */
     public const FCI_MEAN_REVERSION = 2.0;
+
+    // --- Federal Reserve G.17 Industrial Capacity Utilization Index ---
+    /** Baseline long-run historical capacity utilization rate (~78.5%). */
+    public const CU_BASELINE = 0.785;
+    /** Sensitivity of capacity utilization to macroeconomic output gap. */
+    public const CU_GAP_SENSITIVITY = 0.85;
+    /** Sensitivity of capacity utilization to accumulated physical capital stock overhang. */
+    public const CU_OVERHANG_SENSITIVITY = 0.40;
+
+    // --- Estrella & Mishkin (1998) Yield Curve Recession Probit ---
+    /** Probit intercept parameter anchoring baseline recession probability around 15%. */
+    public const RECESSION_PROBIT_BETA_0 = -0.55;
+    /** Probit sensitivity to sovereign yield curve slope (10Y minus policy rate). */
+    public const RECESSION_PROBIT_BETA_SLOPE = -80.0;
+    /** Probit sensitivity to term premium compression. */
+    public const RECESSION_PROBIT_BETA_TP = -20.0;
+    /** Probit sensitivity to financial conditions tightening. */
+    public const RECESSION_PROBIT_BETA_FCI = 0.35;
+
+    // --- Speculative-Grade Corporate Default Dynamics (Moody's / Altman) ---
+    /** Long-run average through-the-cycle speculative corporate probability of default (~1.8%). */
+    public const CORPORATE_DEFAULT_BASELINE = 0.018;
+    /** Basel II/III corporate asset correlation factor for speculative exposures. */
+    public const CORPORATE_DEFAULT_RHO = 0.20;
+    /** Sensitivity of corporate credit Z-score to macroeconomic output gap. */
+    public const CORPORATE_DEFAULT_GAP_SENSITIVITY = 25.0;
+    /** Sensitivity of corporate credit Z-score to high-yield credit spread widening. */
+    public const CORPORATE_DEFAULT_SPREAD_SENSITIVITY = 40.0;
+    /** Sensitivity of corporate credit Z-score to banking credit standards tightening (SLOOS). */
+    public const CORPORATE_DEFAULT_SLOOS_SENSITIVITY = 2.0;
+
+    // --- Federal Reserve Senior Loan Officer Opinion Survey (SLOOS) ---
+    /** Mean-reversion speed (kappa) of bank lending standards toward fundamental target. */
+    public const SLOOS_KAPPA = 1.80;
+    /** Sensitivity of net tightening percentage to wholesale corporate credit spread widening. */
+    public const SLOOS_CREDIT_SENSITIVITY = 15.0;
+    /** Sensitivity of net tightening percentage to output gap contraction. */
+    public const SLOOS_GAP_SENSITIVITY = 3.0;
+    /** Stochastic diffusion volatility of commercial bank underwriting standards. */
+    public const SLOOS_SIGMA = 0.08;
+
+    // --- NY Fed Global Supply Chain Pressure Index (GSCPI - Benigno et al. 2022) ---
+    /** Neutral baseline index for GSCPI composite (standard deviations). */
+    public const GSCPI_BASELINE = 0.0;
+
+    // --- 3:2:1 Refining Crack Spread & Distillate Margins (Bourgeon et al. 1998) ---
+    /** Baseline long-run equilibrium refining crack spread in $/bbl. */
+    public const CRACK_SPREAD_BASELINE = 22.0;
+    /** Mean-reversion speed (kappa) of refining crack margins toward baseline equilibrium. */
+    public const CRACK_SPREAD_KAPPA = 1.50;
+    /** Stochastic volatility of spot crack margins. */
+    public const CRACK_SPREAD_SIGMA = 0.25;
+
+    // --- Jovanovic-Rousseau (2002) Capital Markets & M&A Deal Flow ---
+    /** Baseline neutral capital markets deal flow index (neutral advisory environment). */
+    public const DEAL_ACTIVITY_BASELINE = 100.0;
+    /** Mean-reversion speed (kappa) of deal activity toward fundamental valuation capacity. */
+    public const DEAL_ACTIVITY_KAPPA = 1.60;
+    /** Stochastic volatility of deal activity volume. */
+    public const DEAL_ACTIVITY_SIGMA = 0.15;
 
     // --- Continuous EMA Indicator Smoothing Horizons ---
     /** Standard quarterly macro indicator EMA smoothing horizon. */
@@ -777,7 +843,9 @@ class MacroEngine
         $stressMultiplier = 1.0 + (abs($state->outputGap) * 10.0);
         $state->outputGap = $this->calculateOutputGap($state, $state->yield5y, $state->naturalRate, $dt, $stressMultiplier);
 
+        $this->calculateCapacityUtilization($state);
         $this->calculateEnergyShock($state, $dt);
+        $this->calculateRefiningCrackSpread($state, $dt);
         $this->calculateExchangeRate($state, $dt);
         $this->calculateIndustrialMetalsIndex($state, $dt);
         $this->calculateGovernmentSpending($state, $dt);
@@ -785,6 +853,7 @@ class MacroEngine
         $this->calculateRetailDefaultRate($state, $dt);
         $this->calculateAgriculturalCommodityIndex($state, $dt);
         $this->calculateFreightRateIndex($state, $dt);
+        $this->calculateSupplyChainPressureIndex($state);
         $this->calculateResidentialPropertyIndex($state, $dt);
 
         $state->inflation = $this->calculateInflation($state, self::TARGET_INFLATION, $stressMultiplier, $dt);
@@ -793,6 +862,8 @@ class MacroEngine
         $this->updateExponentialMovingAverages($state, $dt);
         $this->calculateMacroCreditSpread($state);
         $this->calculateInterbankLiquiditySpread($state, $dt);
+        $this->calculateSloosCreditStandards($state, $dt);
+        $this->calculateCorporateDefaultRate($state, $dt);
 
         $this->calculatePotentialAndNominalGdp($state, $dt, $tfpTrendGrowthRate);
         $this->calculateDynamicFiscalPolicy($state, $dt);
@@ -800,6 +871,8 @@ class MacroEngine
         $this->calculateEquityRiskPremium($state);
         $this->calculateFinancialConditionsIndex($state, $dt);
         $this->calculateConsumerSentiment($state, $dt);
+        $this->calculateRecessionProbability($state);
+        $this->calculateCapitalMarketsDealIndex($state, $dt);
 
         $payload = $state->toArray();
         $this->redis->set(self::REDIS_MACRO_STATE, json_encode($payload));
@@ -979,5 +1052,40 @@ class MacroEngine
     private function calculateFinancialConditionsIndex(MacroState $state, float $dt): void
     {
         $this->getAssetSubsystem()->calculateFinancialConditionsIndex($state, $dt);
+    }
+
+    private function calculateCapacityUtilization(MacroState $state): void
+    {
+        $this->getAggregateSubsystem()->calculateCapacityUtilization($state);
+    }
+
+    private function calculateRecessionProbability(MacroState $state): void
+    {
+        $this->getMonetarySubsystem()->calculateRecessionProbability($state);
+    }
+
+    private function calculateSloosCreditStandards(MacroState $state, float $dt): void
+    {
+        $this->getCreditFiscalSubsystem()->calculateSloosCreditStandards($state, $dt);
+    }
+
+    private function calculateCorporateDefaultRate(MacroState $state, float $dt): void
+    {
+        $this->getCreditFiscalSubsystem()->calculateCorporateDefaultRate($state, $dt);
+    }
+
+    private function calculateRefiningCrackSpread(MacroState $state, float $dt): void
+    {
+        $this->getCommoditySubsystem()->calculateRefiningCrackSpread($state, $dt);
+    }
+
+    private function calculateSupplyChainPressureIndex(MacroState $state): void
+    {
+        $this->getCommoditySubsystem()->calculateSupplyChainPressureIndex($state);
+    }
+
+    private function calculateCapitalMarketsDealIndex(MacroState $state, float $dt): void
+    {
+        $this->getAssetSubsystem()->calculateCapitalMarketsDealIndex($state, $dt);
     }
 }

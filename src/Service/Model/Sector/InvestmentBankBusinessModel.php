@@ -46,6 +46,8 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     public const DCM_CREDIT_SPREAD_ELASTICITY = 10.0;
     /** Sensitivity of DCM bond issuance to yield curve steepness. */
     public const DCM_CURVE_SLOPE_ELASTICITY  = 2.50;
+    /** Sensitivity of advisory/underwriting deal flow to aggregate capital markets deal activity index (Jovanovic-Rousseau 2002). */
+    public const DEAL_ACTIVITY_INDEX_ELASTICITY = 0.40;
 
     // --- S&T Volatility Arbitrage & Basel FRTB VaR Limits ---
     /** Baseline VIX floor (~18%) above which volatility arbitrage opportunities expand. */
@@ -169,7 +171,8 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         $curveSlope = $macroState->yield5yEma - $macroState->policyRateEma;
         $dcmStimulus = ($creditSpreadGap * self::DCM_CREDIT_SPREAD_ELASTICITY) + ($curveSlope * self::DCM_CURVE_SLOPE_ELASTICITY);
 
-        $advisoryMacroFactor = $mnaStimulus + $dcmStimulus;
+        $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
+        $advisoryMacroFactor = $mnaStimulus + $dcmStimulus + ($dealActivityShift * self::DEAL_ACTIVITY_INDEX_ELASTICITY);
 
         // --- S&T Volatility Arbitrage & Basel FRTB VaR Limits ---
         $vixEma = $macroState->marketVolatilityEma;

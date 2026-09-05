@@ -282,10 +282,93 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $this->assertGreaterThan(0.0, $result->actualVariableCosts);
         $this->assertLessThan(1.0, $result->clampedMargin);
 
-        // Operating margin under stress must remain realistic (bounded, not collapsing to severe math singularities)
         $operatingMargin = $result->ebit / $result->actualRevenue;
         $this->assertGreaterThan(-0.25, $operatingMargin);
         $this->assertLessThan(0.35, $operatingMargin);
+    }
+
+    public function testSupplyChainPressureIncreasesManufacturingCost(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('OEM');
+        $stock->setBeta('1.2');
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $macroNormal = new MacroStateDTO(
+            outputGapEma: 0.0,
+            supplyChainPressureIndexEma: 0.0
+        );
+
+        $resultNormal = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 10_000_000_000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 2_000_000_000.0,
+            baselineVol: 0.0,
+            macroState: $macroNormal,
+            mathUtility: $mathMock
+        );
+
+        $macroBottleneck = new MacroStateDTO(
+            outputGapEma: 0.0,
+            supplyChainPressureIndexEma: 2.50 // Severe supply chain bottleneck
+        );
+
+        $resultBottleneck = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 10_000_000_000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 2_000_000_000.0,
+            baselineVol: 0.0,
+            macroState: $macroBottleneck,
+            mathUtility: $mathMock
+        );
+
+        $this->assertGreaterThan($resultNormal->clampedMargin, $resultBottleneck->clampedMargin, 'Global supply chain bottleneck must increase variable manufacturing costs.');
+    }
+
+    public function testCapacityUtilizationDrivesAssemblyThroughput(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('OEM_PLANT');
+        $stock->setBeta('1.0');
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $macroNormal = new MacroStateDTO(
+            outputGapEma: 0.0,
+            capacityUtilizationRateEma: 0.785
+        );
+
+        $resultNormal = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 10_000_000_000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 2_000_000_000.0,
+            baselineVol: 0.0,
+            macroState: $macroNormal,
+            mathUtility: $mathMock
+        );
+
+        $macroBoom = new MacroStateDTO(
+            outputGapEma: 0.0,
+            capacityUtilizationRateEma: 0.835 // High factory utilization
+        );
+
+        $resultBoom = $this->model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 10_000_000_000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 2_000_000_000.0,
+            baselineVol: 0.0,
+            macroState: $macroBoom,
+            mathUtility: $mathMock
+        );
+
+        $this->assertGreaterThan($resultNormal->streamRevenue['mass_market_sales'], $resultBoom->streamRevenue['mass_market_sales'], 'High industrial capacity utilization must increase vehicle assembly revenue.');
     }
 }
 

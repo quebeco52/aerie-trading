@@ -927,6 +927,199 @@ class MathUtilityTest extends TestCase
         );
         $this->assertGreaterThan(149.0, $updatedConfidentSignal);
     }
+
+    public function testCalculateEstrellaMishkinProbability(): void
+    {
+        // Normal upward-sloping yield curve (+150bps slope), normal term premium (+30bps), neutral FCI (0.0)
+        $normalProb = $this->mathUtility->calculateEstrellaMishkinProbability(
+            slope: 0.015,
+            termPremium: 0.003,
+            fci: 0.0
+        );
+        $this->assertLessThan(0.20, $normalProb, 'Normal steep yield curve must indicate low recession risk.');
+        $this->assertGreaterThan(0.001, $normalProb);
+
+        // Inverted yield curve (-150bps slope), negative term premium (-50bps), tightened FCI (+1.50)
+        $invertedProb = $this->mathUtility->calculateEstrellaMishkinProbability(
+            slope: -0.015,
+            termPremium: -0.005,
+            fci: 1.50
+        );
+        $this->assertGreaterThan(0.70, $invertedProb, 'Deeply inverted yield curve with tight financial conditions must predict high recession probability.');
+        $this->assertLessThanOrEqual(0.999, $invertedProb);
+    }
+
+    public function testCalculateCapacityUtilization(): void
+    {
+        // Neutral conditions (0 output gap, 0 overhang)
+        $baselineCu = $this->mathUtility->calculateCapacityUtilization(
+            outputGap: 0.0,
+            capitalStockOverhang: 0.0
+        );
+        $this->assertEqualsWithDelta(0.785, $baselineCu, 0.0001, 'Neutral conditions must match Fed G.17 baseline utilization.');
+
+        // Economic boom (+3% output gap, 0 overhang)
+        $boomCu = $this->mathUtility->calculateCapacityUtilization(
+            outputGap: 0.03,
+            capitalStockOverhang: 0.0
+        );
+        $this->assertGreaterThan($baselineCu, $boomCu, 'Positive output gap must increase capacity utilization.');
+
+        // Heavy capital overhang (+10% overhang, 0 output gap)
+        $slackCu = $this->mathUtility->calculateCapacityUtilization(
+            outputGap: 0.0,
+            capitalStockOverhang: 0.10
+        );
+        $this->assertLessThan($baselineCu, $slackCu, 'Excess capital stock overhang must depress capacity utilization.');
+
+        // Extreme bounds check
+        $extremeBoom = $this->mathUtility->calculateCapacityUtilization(0.50, 0.0);
+        $this->assertLessThanOrEqual(0.92, $extremeBoom);
+
+        $extremeBust = $this->mathUtility->calculateCapacityUtilization(-0.50, 0.50);
+        $this->assertGreaterThanOrEqual(0.60, $extremeBust);
+    }
+
+    public function testCalculateCorporateDefaultRate(): void
+    {
+        // Neutral macroeconomic conditions (0 macro Z: median conditional default is ~0.95% due to Vasicek skewness)
+        $baselineDefault = $this->mathUtility->calculateCorporateDefaultRate(
+            macroZ: 0.0
+        );
+        $this->assertEqualsWithDelta(0.0095, $baselineDefault, 0.001);
+
+        // Crisis conditions (deep recession macro Z = -2.5)
+        $crisisDefault = $this->mathUtility->calculateCorporateDefaultRate(
+            macroZ: -2.5
+        );
+        $this->assertGreaterThan(0.06, $crisisDefault, 'Severe recession credit shock must sharply elevate corporate defaults.');
+        $this->assertLessThanOrEqual(0.18, $crisisDefault);
+    }
+
+    public function testCalculateSloosCreditStandards(): void
+    {
+        // Reversion toward target without diffusion (dW = 0)
+        $tightened = $this->mathUtility->calculateSloosCreditStandards(
+            currentSloos: 0.0,
+            outputGap: -0.03,             // Recession
+            excessCreditSpread: 0.040,   // Wide credit spread (+400bps above baseline 0.02)
+            dt: 0.25,
+            dW: 0.0
+        );
+        $this->assertGreaterThan(0.10, $tightened, 'Recession and wide credit spreads must drive bank lending standards to tighten.');
+        $this->assertLessThanOrEqual(0.85, $tightened);
+
+        // Easing regime (negative excess credit spread -0.005, positive output gap +0.02)
+        $eased = $this->mathUtility->calculateSloosCreditStandards(
+            currentSloos: 0.20,
+            outputGap: 0.02,
+            excessCreditSpread: -0.005,
+            dt: 0.50,
+            dW: 0.0
+        );
+        $this->assertLessThan(0.20, $eased, 'Benign conditions must cause bank lending standards to ease.');
+    }
+
+    public function testCalculateRefiningCrackSpreadStep(): void
+    {
+        // Neutral equilibrium (dW = 0)
+        $nextSpread = $this->mathUtility->calculateRefiningCrackSpreadStep(
+            currentCrack: 15.0,
+            outputGap: 0.0,
+            energyInventoryIndex: 100.0,
+            dt: 0.25,
+            dW: 0.0,
+            baselineCrack: 22.0
+        );
+        $this->assertGreaterThan(15.0, $nextSpread, 'Crack spread below equilibrium must revert upwards.');
+        $this->assertLessThanOrEqual(22.0, $nextSpread);
+
+        // Positive demand shock (+3% output gap, tight inventory at 70)
+        $boomSpread = $this->mathUtility->calculateRefiningCrackSpreadStep(
+            currentCrack: 22.0,
+            outputGap: 0.03,
+            energyInventoryIndex: 70.0,
+            dt: 0.25,
+            dW: 0.0,
+            baselineCrack: 22.0
+        );
+        $this->assertGreaterThan(22.0, $boomSpread, 'Strong distillate demand with tight energy inventory expands crack spread.');
+
+        // Floor constraint
+        $floored = $this->mathUtility->calculateRefiningCrackSpreadStep(
+            currentCrack: 2.0,
+            outputGap: -0.10,
+            energyInventoryIndex: 150.0,
+            dt: 0.25,
+            dW: -5.0,
+            baselineCrack: 22.0
+        );
+        $this->assertGreaterThanOrEqual(4.0, $floored, 'Refining crack spread must not fall below $4.00/bbl floor.');
+    }
+
+    public function testCalculateGscpiComposite(): void
+    {
+        // Baseline shipping conditions
+        $neutralGscpi = $this->mathUtility->calculateGscpiComposite(
+            freightRateIndex: 100.0,
+            inventoryStockGap: 0.0,
+            industrialMetalsIndex: 100.0
+        );
+        $this->assertEqualsWithDelta(0.0, $neutralGscpi, 0.0001, 'Baseline freight and logistics must yield 0 GSCPI.');
+
+        // Global supply chain bottleneck crisis (freight +150, inventory stock shortage -0.05, metals +50)
+        $bottleneckGscpi = $this->mathUtility->calculateGscpiComposite(
+            freightRateIndex: 250.0,
+            inventoryStockGap: -0.05,
+            industrialMetalsIndex: 150.0
+        );
+        $this->assertGreaterThan(2.0, $bottleneckGscpi, 'Severe supply chain congestion must yield high positive GSCPI index.');
+
+        // Slack logistics capacity (freight 70, inventory glut +0.05, metals 80)
+        $slackGscpi = $this->mathUtility->calculateGscpiComposite(
+            freightRateIndex: 70.0,
+            inventoryStockGap: 0.05,
+            industrialMetalsIndex: 80.0
+        );
+        $this->assertLessThan(0.0, $slackGscpi, 'Excess shipping capacity and loose inventories must yield negative GSCPI index.');
+    }
+
+    public function testCalculateCapitalMarketsDealIndexStep(): void
+    {
+        // Mean reversion toward baseline (dW = 0)
+        $revertingIndex = $this->mathUtility->calculateCapitalMarketsDealIndexStep(
+            currentDealIndex: 80.0,
+            equityRiskPremium: 0.045,
+            hyCreditSpread: 0.048,
+            marketVolatility: 0.15,
+            dt: 0.25,
+            dW: 0.0
+        );
+        $this->assertGreaterThan(80.0, $revertingIndex, 'Index below baseline must mean-revert upwards.');
+
+        // Golden era: Low ERP (3.0%), tight credit spreads (2.5%), low VIX (10%)
+        $goldenEra = $this->mathUtility->calculateCapitalMarketsDealIndexStep(
+            currentDealIndex: 100.0,
+            equityRiskPremium: 0.030,
+            hyCreditSpread: 0.025,
+            marketVolatility: 0.10,
+            dt: 0.25,
+            dW: 0.0
+        );
+        $this->assertGreaterThan(100.0, $goldenEra, 'High equity multiples, tight spreads, and low VIX must stimulate M&A deal activity.');
+
+        // Credit freeze & market panic: Elevated ERP (7.0%), wide credit spread (9.0%), VIX spike (40%)
+        $panicIndex = $this->mathUtility->calculateCapitalMarketsDealIndexStep(
+            currentDealIndex: 100.0,
+            equityRiskPremium: 0.070,
+            hyCreditSpread: 0.090,
+            marketVolatility: 0.40,
+            dt: 0.25,
+            dW: 0.0
+        );
+        $this->assertLessThan(100.0, $panicIndex, 'Market panic and credit freeze must collapse deal activity index.');
+        $this->assertGreaterThanOrEqual(20.0, $panicIndex);
+    }
 }
 
 

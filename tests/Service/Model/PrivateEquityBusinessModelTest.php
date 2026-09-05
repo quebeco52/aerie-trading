@@ -9,6 +9,7 @@ use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\PrivateEquityBusinessModel;
 use PHPUnit\Framework\TestCase;
@@ -267,5 +268,57 @@ class PrivateEquityBusinessModelTest extends TestCase
         // Wholesale leverage limit is 2.5. 85% of 2.5 is 2.125.
         $this->assertTrue($this->model->isUnderLeveraged(2.0, 2.5, 5.0, 1.05, 0.12, 0.05));
         $this->assertFalse($this->model->isUnderLeveraged(2.2, 2.5, 5.0, 1.05, 0.12, 0.05));
+    }
+
+    public function testDealActivityIndexStimulatesPeCarriedInterest(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('PE_CORP');
+        $stock->setTotalEquity('100.0');
+        $stock->setWholesaleDebt('50.0');
+        $stock->setEarningsMomentumZ(['carried_interest' => 0.0, 'management_fees' => 0.0]);
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $baselineMacro = MacroStateDTO::fromArray([
+            'output_gap_ema' => 0.0,
+            'policy_rate_ema' => 0.03,
+            'macro_credit_spread_ema' => 0.015,
+            'deal_activity_index_ema' => MacroEngine::DEAL_ACTIVITY_BASELINE,
+        ]);
+
+        $hotDealMacro = MacroStateDTO::fromArray([
+            'output_gap_ema' => 0.0,
+            'policy_rate_ema' => 0.03,
+            'macro_credit_spread_ema' => 0.015,
+            'deal_activity_index_ema' => MacroEngine::DEAL_ACTIVITY_BASELINE * 1.5,
+        ]);
+
+        $baselineResult = $this->model->computeActualFinancials(
+            $stock,
+            100.0,
+            0.35,
+            10.0,
+            0.10,
+            $baselineMacro,
+            $mathMock
+        );
+
+        $hotDealResult = $this->model->computeActualFinancials(
+            $stock,
+            100.0,
+            0.35,
+            10.0,
+            0.10,
+            $hotDealMacro,
+            $mathMock
+        );
+
+        $this->assertGreaterThan(0.0, $baselineResult->streamRevenue['carried_interest']);
+        $this->assertGreaterThan(
+            $baselineResult->streamRevenue['carried_interest'],
+            $hotDealResult->streamRevenue['carried_interest']
+        );
     }
 }

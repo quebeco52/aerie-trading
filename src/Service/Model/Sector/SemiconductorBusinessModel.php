@@ -66,6 +66,12 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     public const GLUT_Z_SCORE_THRESHOLD    = -1.50;
     /** Output gap multiplier scaling revenue drag during industry inventory bullwhip corrections. */
     public const GLUT_UTILIZATION_MULT     = 2.50;
+    /** Sensitivity of fab operational leverage to aggregate industrial capacity utilization (Fed G.17). */
+    public const CAPACITY_UTILIZATION_SENSITIVITY = 1.20;
+    /** Capacity utilization deviation threshold above baseline triggering fab shortages (~81.5% vs 78.5% baseline). */
+    public const BOOM_CAPACITY_UTILIZATION_THRESHOLD = 0.030;
+    /** Capacity utilization deviation threshold below baseline triggering fab underutilization (~75.5% vs 78.5% baseline). */
+    public const GLUT_CAPACITY_UTILIZATION_THRESHOLD = -0.030;
 
     // --- CapEx Hurdle & Wafer Yield Rails ---
     /** Minimum CapEx-to-depreciation ratio required to maintain cleanroom purity and lithography calibration. */
@@ -158,14 +164,15 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         // Crucially, capacity utilization leverage applies to physical fab manufacturing ($foundryWeight),
         // while fabless IP licensing scales independently with tech demand.
         $outputGap = $macroState->outputGapEma;
-        $utilizationMultiplier = 0.0;
+        $cuDeviation = $macroState->capacityUtilizationRateEma - MacroEngine::CU_BASELINE;
+        $utilizationMultiplier = $cuDeviation * self::CAPACITY_UTILIZATION_SENSITIVITY;
         $eventType = null;
 
-        if ($outputGap > self::BOOM_GAP_THRESHOLD && $cycleZ > self::BOOM_Z_SCORE_THRESHOLD) {
-            $utilizationMultiplier = $outputGap * self::BOOM_UTILIZATION_MULT;
+        if (($outputGap > self::BOOM_GAP_THRESHOLD || $cuDeviation > self::BOOM_CAPACITY_UTILIZATION_THRESHOLD) && $cycleZ > self::BOOM_Z_SCORE_THRESHOLD) {
+            $utilizationMultiplier += $outputGap * self::BOOM_UTILIZATION_MULT;
             $eventType = ShockEvent::SEMICONDUCTOR_FAB_SHORTAGE;
-        } elseif ($outputGap < self::GLUT_GAP_THRESHOLD && $cycleZ < self::GLUT_Z_SCORE_THRESHOLD) {
-            $utilizationMultiplier = $outputGap * self::GLUT_UTILIZATION_MULT;
+        } elseif (($outputGap < self::GLUT_GAP_THRESHOLD || $cuDeviation < self::GLUT_CAPACITY_UTILIZATION_THRESHOLD) && $cycleZ < self::GLUT_Z_SCORE_THRESHOLD) {
+            $utilizationMultiplier += $outputGap * self::GLUT_UTILIZATION_MULT;
             $eventType = ShockEvent::SEMICONDUCTOR_INVENTORY_CORRECTION;
         }
 

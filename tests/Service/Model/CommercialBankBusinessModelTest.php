@@ -412,4 +412,130 @@ class CommercialBankBusinessModelTest extends TestCase
 
         $this->assertSame(ShockEvent::BANK_SEIZURE, $result->eventType);
     }
+
+    public function testCorporateDefaultRateSpikeIncreasesLossProvisions(): void
+    {
+        $bank = new Stock();
+        $bank->setTicker('COMM_BANK');
+        $bank->setTotalEquity('5000000000');
+        $bank->setCustomerDeposits('40000000000');
+        $bank->setWholesaleDebt('5000000000');
+        $bank->setCorporateTreasury('2000000000');
+
+        $mathMock = $this->createMathUtilityMock([0.0, 0.0, 0.0]);
+        $macroNormal = new MacroStateDTO(
+            outputGapEma: 0.0,
+            corporateDefaultRateEma: 0.018
+        );
+
+        $resultNormal = $this->model->computeActualFinancials(
+            $bank,
+            expectedRevenue: 1_000_000_000.0,
+            realizedVariableMargin: 0.50,
+            fixedCosts: 200_000_000.0,
+            baselineVol: 0.0,
+            macroState: $macroNormal,
+            mathUtility: $mathMock
+        );
+
+        $macroSpike = new MacroStateDTO(
+            outputGapEma: 0.0,
+            corporateDefaultRateEma: 0.060 // Speculative corporate default spike
+        );
+
+        $resultSpike = $this->model->computeActualFinancials(
+            $bank,
+            expectedRevenue: 1_000_000_000.0,
+            realizedVariableMargin: 0.50,
+            fixedCosts: 200_000_000.0,
+            baselineVol: 0.0,
+            macroState: $macroSpike,
+            mathUtility: $mathMock
+        );
+
+        $this->assertGreaterThan($resultNormal->clampedMargin, $resultSpike->clampedMargin, 'Corporate default spike must increase loan provision cost ratio.');
+        $this->assertLessThan($resultNormal->ebit, $resultSpike->ebit);
+    }
+
+    public function testSloosCreditTighteningDampensLoanOrigination(): void
+    {
+        $bank = new Stock();
+        $bank->setTicker('LEND_BANK');
+        $bank->setTotalEquity('5000000000');
+        $bank->setCustomerDeposits('40000000000');
+
+        $mathMock = $this->createMathUtilityMock([0.0, 0.0, 0.0]);
+        $macroEasy = new MacroStateDTO(
+            outputGapEma: 0.0,
+            sloosTighteningIndexEma: 0.0
+        );
+
+        $resultEasy = $this->model->computeActualFinancials(
+            $bank,
+            expectedRevenue: 1_000_000_000.0,
+            realizedVariableMargin: 0.50,
+            fixedCosts: 200_000_000.0,
+            baselineVol: 0.0,
+            macroState: $macroEasy,
+            mathUtility: $mathMock
+        );
+
+        $macroTight = new MacroStateDTO(
+            outputGapEma: 0.0,
+            sloosTighteningIndexEma: 0.40 // 40% net banks tightening standards
+        );
+
+        $resultTight = $this->model->computeActualFinancials(
+            $bank,
+            expectedRevenue: 1_000_000_000.0,
+            realizedVariableMargin: 0.50,
+            fixedCosts: 200_000_000.0,
+            baselineVol: 0.0,
+            macroState: $macroTight,
+            mathUtility: $mathMock
+        );
+
+        $this->assertLessThan($resultEasy->streamRevenue['net_interest_income'], $resultTight->streamRevenue['net_interest_income'], 'SLOOS tightening must dampen NII loan origination revenue.');
+    }
+
+    public function testRecessionProbabilitySpikeIncreasesCeclProvisioning(): void
+    {
+        $bank = new Stock();
+        $bank->setTicker('CECL_BANK');
+        $bank->setTotalEquity('5000000000');
+        $bank->setCustomerDeposits('40000000000');
+
+        $mathMock = $this->createMathUtilityMock([0.0, 0.0, 0.0]);
+        $macroLowRisk = new MacroStateDTO(
+            outputGapEma: 0.0,
+            recessionProbabilityEma: 0.10
+        );
+
+        $resultLowRisk = $this->model->computeActualFinancials(
+            $bank,
+            expectedRevenue: 1_000_000_000.0,
+            realizedVariableMargin: 0.50,
+            fixedCosts: 200_000_000.0,
+            baselineVol: 0.0,
+            macroState: $macroLowRisk,
+            mathUtility: $mathMock
+        );
+
+        $macroHighRisk = new MacroStateDTO(
+            outputGapEma: 0.0,
+            recessionProbabilityEma: 0.70 // High forward recession probability
+        );
+
+        $resultHighRisk = $this->model->computeActualFinancials(
+            $bank,
+            expectedRevenue: 1_000_000_000.0,
+            realizedVariableMargin: 0.50,
+            fixedCosts: 200_000_000.0,
+            baselineVol: 0.0,
+            macroState: $macroHighRisk,
+            mathUtility: $mathMock
+        );
+
+        $this->assertGreaterThan($resultLowRisk->clampedMargin, $resultHighRisk->clampedMargin, 'High 12M forward recession probability must build forward CECL reserves.');
+    }
 }

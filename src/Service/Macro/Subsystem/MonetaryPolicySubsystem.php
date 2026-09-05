@@ -343,4 +343,27 @@ class MonetaryPolicySubsystem
 
         return max(MacroEngine::EFFECTIVE_LOWER_BOUND, $yield + $preferredHabitatShift);
     }
+
+    /**
+     * Estrella & Mishkin (1998) / Wright (2006) 12-Month Forward Recession Probit Model.
+     *
+     * Evaluates market-implied probability of recession over the next 12 months using the sovereign
+     * yield curve slope (10Y minus policy rate), term premium, and Financial Conditions Index:
+     *   P(Recession) = NormalCDF(beta0 + betaSlope * slope + betaTp * termPremium + betaFci * FCI)
+     *
+     * @param MacroState $state Current macroeconomic state.
+     */
+    public function calculateRecessionProbability(MacroState $state): void
+    {
+        $slope = $state->yield10y - $state->policyRate;
+        $state->recessionProbability = $this->mathUtility->calculateEstrellaMishkinProbability(
+            slope: $slope,
+            termPremium: $state->termPremium10y,
+            fci: $state->financialConditionsIndexEma,
+            beta0: MacroEngine::RECESSION_PROBIT_BETA_0,
+            betaSlope: MacroEngine::RECESSION_PROBIT_BETA_SLOPE,
+            betaTp: MacroEngine::RECESSION_PROBIT_BETA_TP,
+            betaFci: MacroEngine::RECESSION_PROBIT_BETA_FCI
+        );
+    }
 }
