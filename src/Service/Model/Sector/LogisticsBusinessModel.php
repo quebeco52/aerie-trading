@@ -79,14 +79,24 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     /** Weight of variable margin drag attributed to energy/diesel fuel lag in observable shock Z. */
     public const OBSERVABLE_FUEL_DRAG_WEIGHT = 0.50;
 
+    // --- Manufacturing PMI, Trade & Supply Chain Transmission ---
+    /** Sensitivity of contract freight and 3PL warehousing volumes to manufacturing PMI shifts. */
+    public const PMI_FREIGHT_SENSITIVITY = 0.45;
+    /** Sensitivity of overland and intermodal freight to merchandise trade balance shifts. */
+    public const TRADE_BALANCE_SENSITIVITY = 1.00;
+    /** Sensitivity of spot freight brokerage surge demand to global supply chain pressure. */
+    public const GSCPI_SPOT_SURGE_SENSITIVITY = 0.08;
+
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $outputGap = $macroState->outputGapEma;
         $inflation = $macroState->tipsBreakevenEma;
+        $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, sensitivity: self::PMI_FREIGHT_SENSITIVITY);
+        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY);
         $beta = (float) $stock->getBeta();
 
         return [
-            'macro_demand_shift' => ($outputGap * $beta * self::MACRO_DEMAND_SCALAR),
+            'macro_demand_shift' => ($outputGap * $beta * self::MACRO_DEMAND_SCALAR) + $pmiShift + $tradeShift,
             'pricing_power_multiplier' => 1.0 + ($inflation * max(self::MIN_PRICING_BETA_FLOOR, $beta)),
         ];
     }
@@ -117,9 +127,10 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
         $spotWeight  = $activeWeights['spot_freight_brokerage'];
         $whWeight    = $activeWeights['value_added_warehousing'];
 
-        // Spot Freight Rate pricing power (applied strictly to market-clearing spot brokerage)
+        // Spot Freight Rate pricing power & supply chain pressure (applied strictly to market-clearing spot brokerage)
         $freightShift = ($macroState->freightRateIndexEma - 100.0) / 100.0;
-        $spotFreightBoost = $freightShift * self::SPOT_FREIGHT_SENSITIVITY;
+        $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma - MacroEngine::GSCPI_BASELINE);
+        $spotFreightBoost = ($freightShift * self::SPOT_FREIGHT_SENSITIVITY) + ($gscpiShift * self::GSCPI_SPOT_SURGE_SENSITIVITY);
 
         $fleetZ = $streams->generateZ('dedicated_fleet_contracts', 0.40);
         $spotZ  = $streams->generateZ('spot_freight_brokerage', 0.15);

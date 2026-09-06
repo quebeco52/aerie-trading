@@ -98,6 +98,10 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const FORWARD_HEDGE_RATIO = 0.33;
     /** Overall scaling factor for input inflation penalties on variable operating margins. */
     public const INFLATION_PENALTY_SCALAR = 0.50;
+    /** Sensitivity of contract textile export and domestic mill volumes to trade balance shifts. */
+    public const TRADE_BALANCE_SENSITIVITY = 1.00;
+    /** Sensitivity of processed fiber, yarn, and dyestuff input costs to wholesale PPI inflation. */
+    public const PPI_TEXTILE_COST_SENSITIVITY = 0.30;
 
     // --- Tail Risk & Shock Thresholds ---
     /** Negative z-score threshold triggering severe agricultural/raw fiber supply chain disruption. */
@@ -264,9 +268,10 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::APPAREL_VIRAL_PRODUCT;
         }
 
-        // Currency FX Export Competitiveness: A weaker currency makes contract textile exports more competitive.
+        // Currency FX Export Competitiveness & Global Trade: A weaker currency and positive trade balance boost textile exports.
         $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         $contractFxBonus = $fxShift * self::CONTRACT_FX_EXPORT_SCALAR;
+        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY);
 
         // Output gap drives non-linear supply chain ordering contractions and inventory markdown pressures
         $outputGap = $macroState->outputGapEma;
@@ -277,7 +282,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
 
         $dtcShock       = $dtcZ * ($baselineVol * self::DTC_RETAIL_VARIANCE);
         $wholesaleShock = ($wholesaleZ * ($baselineVol * self::WHOLESALE_CHANNEL_VARIANCE)) - $bullwhipPenalty;
-        $contractShock  = ($contractZ * ($baselineVol * self::CONTRACT_TEXTILE_VARIANCE)) + $contractFxBonus;
+        $contractShock  = ($contractZ * ($baselineVol * self::CONTRACT_TEXTILE_VARIANCE)) + $contractFxBonus + $tradeShift;
 
         $dtcRevenue       = max(0.0, $expectedRevenue * $dtcWeight * (1.0 + $dtcShock) * $revenueMultiplier * $brandSurgeMultiplier);
         $wholesaleRevenue = max(0.0, $expectedRevenue * $wholesaleWeight * (1.0 + $wholesaleShock) * $revenueMultiplier * $brandSurgeMultiplier);
@@ -316,7 +321,8 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $spotInputDrag = ($agriShift * self::AGRI_COMMODITY_SCALAR) + ($freightShift * self::FREIGHT_RATE_SCALAR) + ($energyShift * self::ENERGY_INPUT_SCALAR);
         $hedgedInputDrag = $spotInputDrag * self::FORWARD_HEDGE_RATIO;
         $baseInflationPenalty = $hedgedInputDrag * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR;
-        $totalInflationPenalty = $baseInflationPenalty * $inflationMultiplier;
+        $ppiCostDrag = MathUtility::calculatePpiCostDrag($macroState->producerPriceInflation, MacroEngine::TARGET_INFLATION, $pricingPower, self::PPI_TEXTILE_COST_SENSITIVITY);
+        $totalInflationPenalty = ($baseInflationPenalty * $inflationMultiplier) + $ppiCostDrag;
 
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
         $clampedMargin = $this->clampMargin($effectiveMargin + $totalInflationPenalty);

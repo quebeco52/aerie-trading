@@ -64,6 +64,12 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     /** Structural maximum operating margin ceiling for advanced silicon monopolies. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.30;
 
+    // --- Trade Balance & PPI Transmission ---
+    /** Sensitivity of global IT hardware trade flows to merchandise trade balance shifts. */
+    public const TRADE_BALANCE_SENSITIVITY = 1.20;
+    /** Sensitivity of electronic hardware BOM (Bill of Materials) cost drag to wholesale PPI. */
+    public const PPI_HARDWARE_COST_SENSITIVITY = 0.35;
+
         public function getReversionSpeed(): float { return 0.25; }
     public function getMoatSpread(): float { return 0.02; }
 
@@ -117,8 +123,9 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
 
         $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
-        $enterpriseMacroVolumeShock = ($macroState->outputGapEma * $macroSensitivityMultiplier * abs((float) $stock->getBeta())) - ($fxShift * 0.10);
-        $consumerMacroVolumeShock = ($sentimentShift * $macroSensitivityMultiplier * abs((float) $stock->getBeta())) - ($fxShift * 0.15);
+        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY);
+        $enterpriseMacroVolumeShock = ($macroState->outputGapEma * $macroSensitivityMultiplier * abs((float) $stock->getBeta())) - ($fxShift * 0.10) + ($tradeShift * 0.50);
+        $consumerMacroVolumeShock = ($sentimentShift * $macroSensitivityMultiplier * abs((float) $stock->getBeta())) - ($fxShift * 0.15) + ($tradeShift * 0.50);
 
         // Tail Risk Events
         $enterpriseMultiplier = 1.0;
@@ -165,14 +172,15 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         // Apply derived distinct margins to actual shocked revenues
         $actualVariableCosts = ($enterpriseRevenue * self::ENTERPRISE_VARIABLE_COST_RATIO) + ($consumerRevenue * $consumerVariableMargin);
 
-        // Re-implementing Inflation Penalty (dropped from Standard Corporate model)
+        // Re-implementing Inflation Penalty & PPI Transmission
         $inflation = $macroState->inflationEma;
         $inflationMultiplier = 2.0 - ($pricingPower * 2.0);
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
         $metalsCostDrag = $metalsShift > 0 ? $metalsShift * 0.05 : 0.0; // Modest drag on COGS
+        $ppiCostDrag = MathUtility::calculatePpiCostDrag($macroState->producerPriceInflation, MacroEngine::TARGET_INFLATION, $pricingPower, self::PPI_HARDWARE_COST_SENSITIVITY);
 
         $baseInflationPenalty = $inflation > MacroEngine::TARGET_INFLATION ? ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0;
-        $inflationPenalty = ($baseInflationPenalty * $inflationMultiplier) + $metalsCostDrag;
+        $inflationPenalty = ($baseInflationPenalty * $inflationMultiplier) + $metalsCostDrag + $ppiCostDrag;
 
         // Continuous Elasticity
         $elasticityShift = -self::ENTERPRISE_SOFTWARE_ATTACH_ELASTICITY * $enterpriseZ * $enterpriseWeight;

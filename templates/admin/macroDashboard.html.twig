@@ -178,6 +178,55 @@
         </div>
     </div>
 
+    <h4 class="mb-3">Trading Economics Leading Indicators</h4>
+    <div class="row mb-5">
+        <div class="col-md-2">
+            <div class="card text-white {{ macro_state.manufacturing_pmi|default(50.0) >= 50.0 ? 'bg-success' : 'bg-danger' }} mb-3">
+                <div class="card-header">Manufacturing PMI</div>
+                <div class="card-body">
+                    <h2 class="card-title">{{ (macro_state.manufacturing_pmi|default(50.0))|number_format(1) }}</h2>
+                    <p class="card-text small">{{ macro_state.manufacturing_pmi|default(50.0) >= 50.0 ? 'Expansion (>50)' : 'Contraction (<50)' }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-white bg-warning text-dark mb-3">
+                <div class="card-header">PPI Wholesale</div>
+                <div class="card-body">
+                    <h2 class="card-title">{{ (macro_state.producer_price_inflation|default(0.02) * 100)|number_format(2) }}%</h2>
+                    <p class="card-text small">Stage-of-Processing</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white {{ macro_state.trade_balance_to_gdp|default(-0.025) >= 0 ? 'bg-success' : 'bg-info' }} mb-3">
+                <div class="card-header">Trade Balance / GDP</div>
+                <div class="card-body">
+                    <h2 class="card-title">{{ (macro_state.trade_balance_to_gdp|default(-0.025) * 100)|number_format(2) }}%</h2>
+                    <p class="card-text small">{{ macro_state.trade_balance_to_gdp|default(-0.025) >= 0 ? 'Trade Surplus' : 'Trade Deficit' }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-white bg-primary mb-3">
+                <div class="card-header">Housing Starts</div>
+                <div class="card-body">
+                    <h2 class="card-title">{{ (macro_state.housing_starts_index|default(100.0))|number_format(1) }}</h2>
+                    <p class="card-text small">Tobin's Q Construction</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-dark mb-3">
+                <div class="card-header">M2 Money Supply Growth</div>
+                <div class="card-body">
+                    <h2 class="card-title">{{ (macro_state.money_supply_growth|default(0.045) * 100)|number_format(2) }}%</h2>
+                    <p class="card-text small">Monetarist Broad Money YoY</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <h4 class="mb-3">Live Sector Multiples (P/E)</h4>
     <div class="card">
         <div class="card-body p-0">

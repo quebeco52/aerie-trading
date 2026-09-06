@@ -70,6 +70,8 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     // --- Supply Chain & Labor Physics ---
     public const INFLATION_PENALTY_SCALAR = 1.20; // 1P Retail eats the cost of physical goods inflation
     public const WAGE_INFLATION_SCALAR    = 0.80; // Massive warehouse workforce makes them vulnerable to labor shortages
+    /** Sensitivity of 1P physical merchandise procurement costs to Producer Price Inflation (PPI). */
+    public const PPI_PROCUREMENT_SENSITIVITY = 0.30;
 
     // --- Tail Risk Events ---
     public const WAREHOUSE_STRIKE_Z_SCORE = -2.20;
@@ -202,7 +204,15 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $freightShift = max(0.0, ($macroState->freightRateIndexEma - 100.0) / 100.0);
         $freightCostDrag = $freightShift * 0.05 * ($fpWeight + $tpWeight);
 
-        $totalMacroCostDrag = ($goodsInflationDrag * $fpWeight) + ($wageInflationDrag * ($fpWeight + $tpWeight)) + $freightCostDrag;
+        // Wholesale PPI merchandise cost drag on 1P inventory
+        $ppiCostDrag = MathUtility::calculatePpiCostDrag(
+            $macroState->producerPriceInflationEma,
+            MacroEngine::TARGET_INFLATION,
+            0.10,
+            self::PPI_PROCUREMENT_SENSITIVITY
+        ) * $fpWeight;
+
+        $totalMacroCostDrag = ($goodsInflationDrag * $fpWeight) + ($wageInflationDrag * ($fpWeight + $tpWeight)) + $freightCostDrag + $ppiCostDrag;
 
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
 

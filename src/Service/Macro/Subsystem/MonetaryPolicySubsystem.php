@@ -366,4 +366,44 @@ class MonetaryPolicySubsystem
             betaFci: MacroEngine::RECESSION_PROBIT_BETA_FCI
         );
     }
+
+    /**
+     * Friedman-Schwartz / Brunner-Meltzer M2 Broad Money Supply Growth.
+     *
+     * Models annual growth rate of broad M2 money stock based on potential nominal GDP expansion,
+     * central bank balance sheet liquidity creation (QE/QT), commercial bank underwriting stance (SLOOS),
+     * and cyclical credit demand (output gap):
+     *   Target = BaseGrowth + beta_QE * BalanceSheet - beta_SLOOS * SLOOS + beta_Y * OutputGap
+     *
+     * @param MacroState $state         Current macroeconomic state.
+     * @param float      $dt            Time step in years.
+     * @param float      $tfpGrowthRate Realized annual trend TFP growth rate.
+     */
+    public function calculateMoneySupplyGrowth(MacroState $state, float $dt, float $tfpGrowthRate): void
+    {
+        $baseGrowth = MacroEngine::TARGET_INFLATION + $tfpGrowthRate + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE;
+
+        $dW = $this->mathUtility->generateStandardNormal();
+
+        $params = [
+            'qeSens' => MacroEngine::M2_QE_SENSITIVITY,
+            'sloosSens' => MacroEngine::M2_SLOOS_SENSITIVITY,
+            'gapSens' => MacroEngine::M2_GAP_SENSITIVITY,
+            'kappa' => MacroEngine::M2_KAPPA,
+            'sigma' => MacroEngine::M2_SIGMA,
+            'min' => MacroEngine::MIN_M2_GROWTH,
+            'max' => MacroEngine::MAX_M2_GROWTH,
+        ];
+
+        $state->moneySupplyGrowth = $this->mathUtility->calculateBroadMoneyGrowth(
+            currentM2Growth: $state->moneySupplyGrowth,
+            baseGrowth: $baseGrowth,
+            balanceSheetIntensity: $state->balanceSheetIntensity,
+            sloosTightening: $state->sloosTighteningIndexEma,
+            outputGap: $state->outputGap,
+            dt: $dt,
+            dW: $dW,
+            params: $params
+        );
+    }
 }

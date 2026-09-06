@@ -54,6 +54,12 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     /** Variable margin cost drag scalar from diesel fuel price spikes before fuel surcharges take effect. */
     public const FUEL_SURCHARGE_LAG_PENALTY = 0.06;
 
+    // --- Manufacturing PMI & Trade Transmission ---
+    /** Sensitivity of industrial carload volumes to manufacturing PMI shifts. */
+    public const PMI_CARLOAD_SENSITIVITY = 0.50;
+    /** Sensitivity of intermodal container rail traffic to international merchandise trade balance. */
+    public const TRADE_BALANCE_SENSITIVITY = 1.20;
+
     // --- Rolling Stock & Track Infrastructure Reinvestment Physics ---
     /** Quarterly margin decay rate per unit of underinvestment below track and locomotive replacement CapEx. */
     public const TRACK_AGING_DECAY_RATE = 0.015;
@@ -111,9 +117,11 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
         // Macro cyclicality
         $freightShift = ($macroState->freightRateIndexEma - 100.0) / 100.0;
         $agriShift = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
+        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY);
+        $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, sensitivity: self::PMI_CARLOAD_SENSITIVITY);
 
-        $intermodalMacroShift = ($macroState->outputGapEma * 1.6 * $beta) + ($freightShift * 0.20);
-        $industrialMacroShift = $macroState->outputGapEma * 1.2 * $beta;
+        $intermodalMacroShift = ($macroState->outputGapEma * 1.6 * $beta) + ($freightShift * 0.20) + $tradeShift;
+        $industrialMacroShift = ($macroState->outputGapEma * 1.2 * $beta) + $pmiShift;
         $bulkMacroShift = $agriShift * 0.30;
 
         $intermodalRevenue = max(0.0, $expectedRevenue * $intermodalWeight * (1.0 + ($intermodalZ * ($baselineVol * self::INTERMODAL_VARIANCE_SCALAR)) + $intermodalMacroShift));

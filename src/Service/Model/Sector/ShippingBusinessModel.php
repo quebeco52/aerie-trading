@@ -64,6 +64,12 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     /** Continuous global trade elasticity scalar scaling spot freight rates smoothly with output gap. */
     public const CONTINUOUS_SPOT_RATE_SCALAR = 3.50;
 
+    // --- Global Trade & Supply Chain Pressure Transmission ---
+    /** Sensitivity of maritime container and bulk freight demand to trade balance shifts. */
+    public const TRADE_BALANCE_SENSITIVITY = 1.50;
+    /** Spot freight rate surge multiplier per unit of NY Fed global supply chain pressure. */
+    public const GSCPI_FREIGHT_BOOST_SCALAR = 0.10;
+
     // --- Fuel & Bunker Inflation Rails ---
     /** Variable cost penalty multiplier scaling bunker fuel inflation with stock beta. */
     public const BUNKER_INFLATION_SCALAR   = 0.80;
@@ -100,11 +106,12 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         $outputGap = $macroState->outputGapEma;
         $inflation = $macroState->tipsBreakevenEma;
         $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
+        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY);
         $beta = (float) $stock->getBeta();
 
         // Extreme sensitivity to global economic momentum and trade volume
         return [
-            'macro_demand_shift' => ($outputGap * $beta * self::MACRO_DEMAND_SCALAR) - ($fxShift * 0.10),
+            'macro_demand_shift' => ($outputGap * $beta * self::MACRO_DEMAND_SCALAR) - ($fxShift * 0.10) + $tradeShift,
             'pricing_power_multiplier' => 1.0 + ($inflation * max(self::MIN_PRICING_BETA_FLOOR, $beta)),
         ];
     }
@@ -141,10 +148,12 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         $freightShift = ($macroState->freightRateIndexEma - 100.0) / 100.0;
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
         $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
-        $spotRateMultiplier = ($outputGap * self::CONTINUOUS_SPOT_RATE_SCALAR) + ($freightShift * 0.50) + ($metalsShift * 0.15);
+        $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY);
+        $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma - MacroEngine::GSCPI_BASELINE);
+        $spotRateMultiplier = ($outputGap * self::CONTINUOUS_SPOT_RATE_SCALAR) + ($freightShift * 0.50) + ($metalsShift * 0.15) + $tradeShift + ($gscpiShift * self::GSCPI_FREIGHT_BOOST_SCALAR);
         $eventType = null;
 
-        if ($outputGap > self::SPOT_BOOM_GAP_THRESHOLD && $spotZ > self::LORE_CONGESTION_Z_SCORE) {
+        if (($outputGap > self::SPOT_BOOM_GAP_THRESHOLD || $gscpiShift > 1.0) && $spotZ > self::LORE_CONGESTION_Z_SCORE) {
             $eventType = ShockEvent::SHIPPING_PORT_CONGESTION;
         } elseif ($outputGap < self::SPOT_GLUT_GAP_THRESHOLD && $spotZ < self::LORE_GLUT_Z_SCORE) {
             $eventType = ShockEvent::SHIPPING_CAPACITY_GLUT;

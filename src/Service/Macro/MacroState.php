@@ -163,6 +163,21 @@ class MacroState
     public float $dealActivityIndex = MacroEngine::DEAL_ACTIVITY_BASELINE;
     public float $dealActivityIndexEma = MacroEngine::DEAL_ACTIVITY_BASELINE;
 
+    public float $manufacturingPmi = MacroEngine::PMI_BASELINE;
+    public float $manufacturingPmiEma = MacroEngine::PMI_BASELINE;
+
+    public float $producerPriceInflation = MacroEngine::TARGET_INFLATION;
+    public float $producerPriceInflationEma = MacroEngine::TARGET_INFLATION;
+
+    public float $tradeBalanceToGdp = MacroEngine::TRADE_BALANCE_BASELINE;
+    public float $tradeBalanceToGdpEma = MacroEngine::TRADE_BALANCE_BASELINE;
+
+    public float $housingStartsIndex = MacroEngine::HOUSING_STARTS_BASELINE;
+    public float $housingStartsIndexEma = MacroEngine::HOUSING_STARTS_BASELINE;
+
+    public float $moneySupplyGrowth = MacroEngine::M2_BASE_GROWTH;
+    public float $moneySupplyGrowthEma = MacroEngine::M2_BASE_GROWTH;
+
     /**
      * Initializes the MacroState from a decoded JSON array payload.
      */
@@ -329,6 +344,21 @@ class MacroState
         $state->dealActivityIndex = (float) ($data['deal_activity_index'] ?? MacroEngine::DEAL_ACTIVITY_BASELINE);
         $state->dealActivityIndexEma = (float) ($data['deal_activity_index_ema'] ?? $state->dealActivityIndex);
 
+        $state->manufacturingPmi = (float) ($data['manufacturing_pmi'] ?? MacroEngine::PMI_BASELINE);
+        $state->manufacturingPmiEma = (float) ($data['manufacturing_pmi_ema'] ?? $state->manufacturingPmi);
+
+        $state->producerPriceInflation = (float) ($data['producer_price_inflation'] ?? MacroEngine::TARGET_INFLATION);
+        $state->producerPriceInflationEma = (float) ($data['producer_price_inflation_ema'] ?? $state->producerPriceInflation);
+
+        $state->tradeBalanceToGdp = (float) ($data['trade_balance_to_gdp'] ?? MacroEngine::TRADE_BALANCE_BASELINE);
+        $state->tradeBalanceToGdpEma = (float) ($data['trade_balance_to_gdp_ema'] ?? $state->tradeBalanceToGdp);
+
+        $state->housingStartsIndex = (float) ($data['housing_starts_index'] ?? MacroEngine::HOUSING_STARTS_BASELINE);
+        $state->housingStartsIndexEma = (float) ($data['housing_starts_index_ema'] ?? $state->housingStartsIndex);
+
+        $state->moneySupplyGrowth = (float) ($data['money_supply_growth'] ?? MacroEngine::M2_BASE_GROWTH);
+        $state->moneySupplyGrowthEma = (float) ($data['money_supply_growth_ema'] ?? $state->moneySupplyGrowth);
+
         return $state;
     }
 
@@ -462,6 +492,16 @@ class MacroState
             'refining_crack_spread_ema' => $this->refiningCrackSpreadEma,
             'deal_activity_index' => $this->dealActivityIndex,
             'deal_activity_index_ema' => $this->dealActivityIndexEma,
+            'manufacturing_pmi' => $this->manufacturingPmi,
+            'manufacturing_pmi_ema' => $this->manufacturingPmiEma,
+            'producer_price_inflation' => $this->producerPriceInflation,
+            'producer_price_inflation_ema' => $this->producerPriceInflationEma,
+            'trade_balance_to_gdp' => $this->tradeBalanceToGdp,
+            'trade_balance_to_gdp_ema' => $this->tradeBalanceToGdpEma,
+            'housing_starts_index' => $this->housingStartsIndex,
+            'housing_starts_index_ema' => $this->housingStartsIndexEma,
+            'money_supply_growth' => $this->moneySupplyGrowth,
+            'money_supply_growth_ema' => $this->moneySupplyGrowthEma,
         ];
     }
 }

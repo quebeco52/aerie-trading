@@ -367,6 +367,12 @@ class MacroAggregateSubsystem
         $state->supplyChainPressureIndexEma += $emaWeight * ($state->supplyChainPressureIndex - $state->supplyChainPressureIndexEma);
         $state->refiningCrackSpreadEma += $emaWeight * ($state->refiningCrackSpread - $state->refiningCrackSpreadEma);
         $state->dealActivityIndexEma += $emaWeight * ($state->dealActivityIndex - $state->dealActivityIndexEma);
+
+        $state->manufacturingPmiEma += $emaWeight * ($state->manufacturingPmi - $state->manufacturingPmiEma);
+        $state->producerPriceInflationEma += $emaWeight * ($state->producerPriceInflation - $state->producerPriceInflationEma);
+        $state->tradeBalanceToGdpEma += $emaWeight * ($state->tradeBalanceToGdp - $state->tradeBalanceToGdpEma);
+        $state->housingStartsIndexEma += $emaWeight * ($state->housingStartsIndex - $state->housingStartsIndexEma);
+        $state->moneySupplyGrowthEma += $emaWeight * ($state->moneySupplyGrowth - $state->moneySupplyGrowthEma);
     }
 
     /**
@@ -386,5 +392,89 @@ class MacroAggregateSubsystem
             gapSensitivity: MacroEngine::CU_GAP_SENSITIVITY,
             overhangSensitivity: MacroEngine::CU_OVERHANG_SENSITIVITY
         );
+    }
+
+    /**
+     * ISM / S&P Global Manufacturing Purchasing Managers' Index (PMI).
+     *
+     * Evaluates the headline diffusion index centered at 50.0 based on real industrial capacity utilization,
+     * macroeconomic output gap momentum, Metzler inventory restocking demand, and SLOOS bank credit standards:
+     *   Target = 50 + beta_CU * (CU - CU*) + beta_gap * OutputGap + beta_inv * (-InventoryGap) - beta_sloos * SLOOS
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time step in years.
+     */
+    public function calculateManufacturingPmi(MacroState $state, float $dt): void
+    {
+        $cuDeviation = $state->capacityUtilizationRate - MacroEngine::CU_BASELINE;
+        $gapMomentum = $state->outputGap - $state->outputGapEma;
+        $inventoryDemand = - $state->inventoryStockGap; // Shortfall stimulates orders
+        $sloosStress = max(0.0, $state->sloosTighteningIndexEma);
+
+        $drivers = [
+            ['deviation' => $cuDeviation, 'sensitivity' => MacroEngine::PMI_CU_SENSITIVITY],
+            ['deviation' => $gapMomentum + ($state->outputGap * 0.25), 'sensitivity' => MacroEngine::PMI_MOMENTUM_SENSITIVITY],
+            ['deviation' => $inventoryDemand, 'sensitivity' => MacroEngine::PMI_INVENTORY_SENSITIVITY],
+            ['deviation' => -$sloosStress, 'sensitivity' => MacroEngine::PMI_SLOOS_SENSITIVITY],
+        ];
+
+        $targetPmi = $this->mathUtility->calculateDiffusionIndex(
+            baseline: MacroEngine::PMI_BASELINE,
+            drivers: $drivers,
+            min: MacroEngine::MIN_PMI,
+            max: MacroEngine::MAX_PMI
+        );
+
+        $dW = $this->mathUtility->generateStandardNormal();
+        $drift = MacroEngine::PMI_KAPPA * ($targetPmi - $state->manufacturingPmi) * $dt;
+        $diffusion = MacroEngine::PMI_SIGMA * sqrt($dt) * $dW;
+        $newPmi = $state->manufacturingPmi + $drift + $diffusion;
+
+        $state->manufacturingPmi = max(MacroEngine::MIN_PMI, min(MacroEngine::MAX_PMI, $newPmi));
+    }
+
+    /**
+     * Stage-of-Processing Producer Price Index (PPI) Wholesale Inflation Pipeline (Clark 1995).
+     *
+     * Computes wholesale factory-gate price inflation driven by primary commodity input price shocks
+     * (metals, energy, agriculture), ocean freight/logistics bottlenecks (GSCPI), Unit Labor Costs (ULC),
+     * and cyclical output gap demand pressure.
+     *
+     * @param MacroState $state         Current macroeconomic state.
+     * @param float      $tfpGrowthRate Realized annual trend TFP growth rate.
+     * @param float      $dt            Time step in years.
+     */
+    public function calculateProducerPriceInflation(MacroState $state, float $tfpGrowthRate, float $dt): void
+    {
+        $metalsShift = ($state->industrialMetalsIndex - MacroEngine::METALS_BASELINE) / MacroEngine::METALS_BASELINE;
+        $energyShift = ($state->energyPriceIndex - MacroEngine::ENERGY_BASELINE) / MacroEngine::ENERGY_BASELINE;
+        $agriShift = ($state->agriculturalCommodityIndex - MacroEngine::AGRI_BASELINE) / MacroEngine::AGRI_BASELINE;
+
+        $unitLaborCost = $state->wageGrowth - $tfpGrowthRate;
+
+        $weights = [
+            'metals' => MacroEngine::PPI_METALS_WEIGHT,
+            'energy' => MacroEngine::PPI_ENERGY_WEIGHT,
+            'agri' => MacroEngine::PPI_AGRI_WEIGHT,
+            'gscpi' => MacroEngine::PPI_GSCPI_SENSITIVITY,
+            'ulc' => MacroEngine::PPI_ULC_WEIGHT,
+            'demand' => MacroEngine::PPI_DEMAND_SENSITIVITY,
+        ];
+
+        $targetPpi = $this->mathUtility->calculateStageOfProcessingPpi(
+            metalsInflation: ($metalsShift * 0.50) + MacroEngine::TARGET_INFLATION,
+            energyInflation: ($energyShift * 0.40) + MacroEngine::TARGET_INFLATION,
+            agriInflation: ($agriShift * 0.30) + MacroEngine::TARGET_INFLATION,
+            gscpiZ: $state->supplyChainPressureIndex,
+            unitLaborCost: $unitLaborCost,
+            outputGap: $state->outputGap,
+            weights: $weights,
+            min: MacroEngine::MIN_PPI_INFLATION,
+            max: MacroEngine::MAX_PPI_INFLATION
+        );
+
+        $dW = $this->mathUtility->generateStandardNormal();
+        $diffusion = 0.003 * sqrt($dt) * $dW;
+        $state->producerPriceInflation = max(MacroEngine::MIN_PPI_INFLATION, min(MacroEngine::MAX_PPI_INFLATION, $targetPpi + $diffusion));
     }
 }

@@ -90,6 +90,14 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     public const AGRI_PASS_THROUGH_SCALAR = 0.60;
     /** Volatility scalar for unhedged spot feedstock crack spread shocks on variable margins. */
     public const FEEDSTOCK_DRAG_SCALAR = 0.30;
+    /** Sensitivity of chemical feedstock and energy processing cost drag to PPI inflation. */
+    public const PPI_FEEDSTOCK_SENSITIVITY = 0.40;
+    /** Sensitivity of petrochemical and specialty margins to downstream refining crack spreads. */
+    public const CRACK_SPREAD_MARGIN_SENSITIVITY = 0.30;
+
+    // --- Manufacturing PMI Transmission ---
+    /** Sensitivity of industrial chemical and base petrochemical demand to manufacturing PMI shifts. */
+    public const PMI_DEMAND_SENSITIVITY = 0.50;
 
     // --- Weather Jump Diffusion ---
     /** Annualized Poisson jump intensity for extreme weather shocks impacting agrochemicals. */
@@ -196,9 +204,10 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
         $inflation = $macroState->tipsBreakevenEma;
         $beta = (float) $stock->getBeta();
 
-        // Macro demand shift: Driven by industrial demand (output gap + metals) for base chemicals,
+        // Macro demand shift: Driven by industrial demand (output gap + metals + manufacturing PMI) for base chemicals,
         // and agricultural commodities for agrochemicals.
-        $industrialDemand = ($outputGap * self::BASE_PETRO_OUTPUT_GAP_SCALAR) + ($metalsShift * self::BASE_PETRO_METALS_SCALAR);
+        $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmi, sensitivity: self::PMI_DEMAND_SENSITIVITY);
+        $industrialDemand = ($outputGap * self::BASE_PETRO_OUTPUT_GAP_SCALAR) + ($metalsShift * self::BASE_PETRO_METALS_SCALAR) + $pmiShift;
         $blendedDemandShift = ($industrialDemand * $beta * self::INDUSTRIAL_DEMAND_WEIGHT) + ($agriShift * self::AGRI_DEMAND_WEIGHT);
 
         return [
@@ -295,9 +304,13 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
 
         $effectiveMargin = $actualRevenue > 0.0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
 
-        // Feedstock crack volatility shock
+        // Feedstock crack volatility shock & macro transmission
         $feedstockDrag = max(0.0, -$feedstockZ * (self::FEEDSTOCK_DRAG_SCALAR / 10.0) * $baselineVol);
-        $clampedMargin = $this->clampMargin($effectiveMargin + $feedstockDrag);
+        $ppiCostDrag = MathUtility::calculatePpiCostDrag($macroState->producerPriceInflation, MacroEngine::TARGET_INFLATION, $pricingPower, self::PPI_FEEDSTOCK_SENSITIVITY);
+        $crackSpreadShift = ($macroState->refiningCrackSpread - MacroEngine::CRACK_SPREAD_BASELINE) / MacroEngine::CRACK_SPREAD_BASELINE;
+        $crackSpreadPenalty = max(-0.03, min(0.03, -$crackSpreadShift * self::CRACK_SPREAD_MARGIN_SENSITIVITY * 0.02));
+
+        $clampedMargin = $this->clampMargin($effectiveMargin + $feedstockDrag + $ppiCostDrag + $crackSpreadPenalty);
 
         // Shock events
         $eventType = null;

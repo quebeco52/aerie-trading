@@ -53,6 +53,8 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     public const REVENUE_VARIANCE_SCALAR = 0.15;
     /** Sensitivity scalar for supply chain inflation cost penalties during high CPI/PPI regimes. */
     public const INFLATION_PENALTY_SCALAR = 0.50;
+    /** Sensitivity of corporate variable costs to Producer Price Inflation (PPI). */
+    public const PPI_COST_SENSITIVITY = 0.25;
     /** Upper clamp for realized variable margin under severe supply chain inflation. */
     public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
     /** Lower clamp for realized variable margin. */
@@ -150,7 +152,15 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
 
         $inflationPenalty = $baseInflationPenalty * $inflationMultiplier;
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $inflationPenalty);
+        // Producer Price Inflation: Wholesale input and intermediate goods cost drag
+        $ppiCostDrag = MathUtility::calculatePpiCostDrag(
+            $macroState->producerPriceInflationEma,
+            \App\Service\Macro\MacroEngine::TARGET_INFLATION,
+            $pricingPower,
+            self::PPI_COST_SENSITIVITY
+        );
+
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $inflationPenalty + $ppiCostDrag);
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

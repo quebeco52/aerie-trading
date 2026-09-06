@@ -161,7 +161,8 @@ class CreditFiscalSubsystemTest extends TestCase
     {
         $state = new MacroState();
         $state->sloosTighteningIndex = 0.0;
-        $state->macroCreditSpreadEma = 0.050; // +300bps widening above baseline
+        $state->macroCreditSpread = 0.050;    // +300bps widening above baseline
+        $state->macroCreditSpreadEma = 0.050;
         $state->outputGapEma = -0.03;         // Recession
 
         $this->subsystem->calculateSloosCreditStandards($state, 0.25);

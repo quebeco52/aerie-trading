@@ -75,6 +75,10 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Sensitivity of mass-market manufacturing throughput to aggregate industrial capacity utilization (Fed G.17). */
     public const CAPACITY_UTILIZATION_THROUGHPUT_SCALAR = 0.40;
 
+    // --- Manufacturing PPI Transmission ---
+    /** Sensitivity of mass-market OEM input component and raw material costs to wholesale PPI inflation. */
+    public const PPI_COST_SENSITIVITY = 0.35;
+
     // --- Stream Volatility Scalars ---
     /** Volatility multiplier for mass-market fleet volume. */
     public const SALES_VARIANCE_SCALAR = 0.30;
@@ -248,7 +252,8 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $freightShift = max(0.0, ($macroState->freightRateIndexEma - 100.0) / 100.0);
         $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma - MacroEngine::GSCPI_BASELINE);
         $baseInflationPenalty = max(0.0, $inflation - MacroEngine::TARGET_INFLATION) * $beta * self::INFLATION_PENALTY_SCALAR;
-        $inflationCostPenalty = ($baseInflationPenalty + ($energyShift * 0.05) + ($metalsShift * 0.15) + ($freightShift * self::FREIGHT_COST_DRAG_SCALAR) + ($gscpiShift * self::SUPPLY_CHAIN_PRESSURE_COST_SCALAR)) * (1.0 - ($pricingPower * 0.50));
+        $ppiCostDrag = MathUtility::calculatePpiCostDrag($macroState->producerPriceInflation, MacroEngine::TARGET_INFLATION, $pricingPower, self::PPI_COST_SENSITIVITY);
+        $inflationCostPenalty = ($baseInflationPenalty + ($energyShift * 0.05) + ($metalsShift * 0.15) + ($freightShift * self::FREIGHT_COST_DRAG_SCALAR) + ($gscpiShift * self::SUPPLY_CHAIN_PRESSURE_COST_SCALAR) + $ppiCostDrag) * (1.0 - ($pricingPower * 0.50));
 
         // Captive Finance NIM Squeeze & Subprime Provisioning
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
@@ -277,9 +282,9 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $apexShock     = $apexZ     * ($baselineVol * self::APEX_VARIANCE_SCALAR);
         $softwareShock = $softwareZ * ($baselineVol * self::SOFTWARE_VARIANCE_SCALAR);
         $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
-        $cuShift = ($macroState->capacityUtilizationRateEma - MacroEngine::CU_BASELINE);
+        $cuShift = MathUtility::calculateCapacityUtilizationShift($macroState->capacityUtilizationRateEma, MacroEngine::CU_BASELINE, self::CAPACITY_UTILIZATION_THROUGHPUT_SCALAR);
 
-        $salesRevenue    = max(0.0, $expectedRevenue * $salesWeight    * (1.0 + $salesShock - ($fxShift * 0.5) + ($cuShift * self::CAPACITY_UTILIZATION_THROUGHPUT_SCALAR)) * $salesMultiplier);
+        $salesRevenue    = max(0.0, $expectedRevenue * $salesWeight    * (1.0 + $salesShock - ($fxShift * 0.5) + $cuShift) * $salesMultiplier);
         $apexRevenue     = max(0.0, $expectedRevenue * $apexWeight     * (1.0 + $apexShock + $apexMacroBoost));
         $softwareRevenue = max(0.0, $expectedRevenue * $softwareWeight * (1.0 + $softwareShock));
 

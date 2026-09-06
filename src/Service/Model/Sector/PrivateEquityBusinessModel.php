@@ -48,6 +48,8 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     public const HURDLE_CREDIT_SPREAD_SCALAR = 10.0;
     /** Multiplier for variable costs (rescue capital) when policy rates choke portfolio companies. */
     public const RESCUE_CAPITAL_COST_SCALAR = 1.00;
+    /** Gating penalty on LBO debt syndication when banks tighten credit standards (SLOOS). */
+    public const SLOOS_LBO_GATING_SCALAR = 0.25;
 
     // --- Macro & Stream Physics ---
     /** Deal flow volume multiplier during macroeconomic output gap expansions. */
@@ -240,8 +242,9 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $lboCostOfDebt = $macroState->policyRateEma + $macroState->macroCreditSpreadEma;
         $baselineCostOfDebt = self::LBO_RATE_FREEZE_THRESHOLD + self::LBO_CREDIT_SPREAD_BASELINE;
         $debtCostDelta = max(0.0, $lboCostOfDebt - $baselineCostOfDebt);
+        $sloosLboDrag = max(0.0, $macroState->sloosTighteningIndexEma) * self::SLOOS_LBO_GATING_SCALAR;
 
-        $multipleCompression = max(0.0, 1.0 - ($debtCostDelta * self::LBO_COST_OF_DEBT_ELASTICITY));
+        $multipleCompression = max(0.0, 1.0 - ($debtCostDelta * self::LBO_COST_OF_DEBT_ELASTICITY) - $sloosLboDrag);
         $blendedMultiplier = ($params[ModelParam::ManagementFeeWeight] * 1.0) + ($params[ModelParam::CarriedInterestWeight] * $multipleCompression);
 
         return [
@@ -295,12 +298,14 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $lboCostOfDebt = $policyRate + $creditSpread;
         $baselineCostOfDebt = self::LBO_RATE_FREEZE_THRESHOLD + self::LBO_CREDIT_SPREAD_BASELINE;
         $debtCostDelta = max(0.0, $lboCostOfDebt - $baselineCostOfDebt);
+        $sloosLboDrag = max(0.0, $macroState->sloosTighteningIndexEma) * self::SLOOS_LBO_GATING_SCALAR;
 
-        $multipleCompression = max(0.0, 1.0 - ($debtCostDelta * self::LBO_COST_OF_DEBT_ELASTICITY));
+        $multipleCompression = max(0.0, 1.0 - ($debtCostDelta * self::LBO_COST_OF_DEBT_ELASTICITY) - $sloosLboDrag);
         $lboFinancingDrag = 1.0 - $multipleCompression; // % frozen
 
         // 4. Credit-Condition Hurdle Cliff
-        $spreadFreezeDrag = max(0.0, ($creditSpread - self::LBO_CREDIT_SPREAD_BASELINE) * self::HURDLE_CREDIT_SPREAD_SCALAR);
+        $spreadFreezeDrag = max(0.0, ($creditSpread - self::LBO_CREDIT_SPREAD_BASELINE) * self::HURDLE_CREDIT_SPREAD_SCALAR)
+            + ($sloosLboDrag * 0.50);
         $hurdleRateZCliff = self::HURDLE_RATE_Z_CLIFF + $spreadFreezeDrag;
         $economicCondition = $carryZ + $dealFlowMultiplier;
 

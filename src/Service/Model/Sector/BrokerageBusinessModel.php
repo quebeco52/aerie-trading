@@ -38,6 +38,8 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     public const MACRO_DEMAND_SCALAR = 0.50;
     /** Sensitivity of brokerage capital markets advisory revenue to aggregate deal activity. */
     public const DEAL_ACTIVITY_ADVISORY_SCALAR = 0.25;
+    /** Sensitivity of retail brokerage trading activity and margin borrowing to M2 money supply growth. */
+    public const M2_RETAIL_TRADING_SENSITIVITY = 0.40;
 
         public function getWholesaleLeverageLimit(): float { return 8.0; }
     public function getMoatSpread(): float { return 0.005; }
@@ -100,10 +102,11 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $outputGap = $macroState->outputGapEma;
+        $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_RETAIL_TRADING_SENSITIVITY);
         $beta = (float) $stock->getBeta();
 
         return [
-            'macro_demand_shift' => $outputGap * $beta * self::MACRO_DEMAND_SCALAR,
+            'macro_demand_shift' => ($outputGap * $beta * self::MACRO_DEMAND_SCALAR) + $m2Shift,
             'pricing_power_multiplier' => 1.0,
         ];
     }
@@ -138,17 +141,18 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         $tradingZ  = $streams->generateZ('trading', 0.20); // Trading volume, flow capture, prop desk P&L
         $advisoryZ = $streams->generateZ('advisory', 0.35); // Advisory mandates, prime brokerage balances
 
-        // The Volatility Bonus (Trading Volume):
-        // Brokerage trading revenues are hyper-sensitive to the VIX (Systemic Market Volatility).
+        // The Volatility Bonus (Trading Volume) & M2 Broad Money Liquidity:
+        // Brokerage trading revenues are hyper-sensitive to the VIX (Systemic Market Volatility) and retail liquidity (M2 growth).
         // High Volatility = Massive trading volume (panic selling or euphoria buying) which generates massive fees.
-        // Crucially, this VIX bonus applies ONLY to the trading revenue stream ($tradingWeight).
+        // Crucially, this VIX bonus and M2 retail volume apply to the trading revenue stream ($tradingWeight).
         $vixEma = $macroState->marketVolatilityEma;
         $volatilityBonus = max(0.0, ($vixEma - self::VIX_BASELINE_THRESHOLD) * self::VIX_REVENUE_SCALAR);
+        $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_RETAIL_TRADING_SENSITIVITY);
 
         $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
         $advisoryDealBonus = $dealActivityShift * self::DEAL_ACTIVITY_ADVISORY_SCALAR;
 
-        $tradingRevenue  = max(0.0, $expectedRevenue * $tradingWeight * (1.0 + ($tradingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $volatilityBonus));
+        $tradingRevenue  = max(0.0, $expectedRevenue * $tradingWeight * (1.0 + ($tradingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $volatilityBonus + $m2Shift));
         $advisoryRevenue = max(0.0, $expectedRevenue * $advisoryWeight * (1.0 + ($advisoryZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $advisoryDealBonus));
         
         $streamRevenues = [

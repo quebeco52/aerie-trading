@@ -53,6 +53,10 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     // --- Capacity Utilization & Supply Chain Physics ---
     /** Sensitivity of precision equipment sales expansion to industrial capacity utilization deviations. */
     public const CU_EQUIPMENT_EXPANSION_SENSITIVITY = 0.50;
+    /** Sensitivity of precision equipment sales expansion to manufacturing PMI diffusion shifts. */
+    public const PMI_EQUIPMENT_SENSITIVITY          = 0.40;
+    /** Sensitivity of precision machinery variable margins to wholesale producer price index (PPI) inflation. */
+    public const PPI_COST_DRAG_SENSITIVITY          = 0.35;
     /** Variable margin penalty per standard deviation of global supply chain friction (GSCPI). */
     public const GSCPI_MARGIN_PENALTY_SCALAR        = 0.015;
 
@@ -142,9 +146,9 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         // Equipment is highly exposed to GDP, but cushioned by the backlog
         // High industrial capacity utilization triggers capex expansion for factory automation
         $overhangDrag = ($macroState->capitalStockOverhangEma * self::CAPITAL_OVERHANG_SCALAR) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
-        $cuShift = ($macroState->capacityUtilizationRateEma - MacroEngine::CU_BASELINE) / 10.0;
-        $cuEquipmentBoost = ($cuShift * self::CU_EQUIPMENT_EXPANSION_SENSITIVITY) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
-        $macroEquipmentBoost = (($macroState->outputGapEma * self::MACRO_GDP_SENSITIVITY * $beta) * (1.0 - self::BACKLOG_DAMPING_FACTOR)) - $overhangDrag + $cuEquipmentBoost;
+        $cuEquipmentBoost = MathUtility::calculateCapacityUtilizationShift($macroState->capacityUtilizationRateEma, MacroEngine::CU_BASELINE, self::CU_EQUIPMENT_EXPANSION_SENSITIVITY) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
+        $pmiEquipmentBoost = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroEngine::PMI_BASELINE, self::PMI_EQUIPMENT_SENSITIVITY) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
+        $macroEquipmentBoost = (($macroState->outputGapEma * self::MACRO_GDP_SENSITIVITY * $beta) * (1.0 - self::BACKLOG_DAMPING_FACTOR)) - $overhangDrag + $cuEquipmentBoost + $pmiEquipmentBoost;
 
         // --- Tail Risk Events ---
         $dealMultiplier = 1.0;
@@ -198,9 +202,17 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma);
         $gscpiCostDrag = $gscpiShift * self::GSCPI_MARGIN_PENALTY_SCALAR;
 
+        // Wholesale Producer Price Inflation (PPI) Cost Drag:
+        $ppiCostDrag = MathUtility::calculatePpiCostDrag(
+            $macroState->producerPriceInflationEma,
+            MacroEngine::TARGET_INFLATION,
+            $pricingPower,
+            self::PPI_COST_DRAG_SENSITIVITY
+        );
+
         // Effective blended variable cost ratio
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
-        $rawMargin = $effectiveMargin + $supplyChainPenalty + $inflationPenalty + $gscpiCostDrag;
+        $rawMargin = $effectiveMargin + $supplyChainPenalty + $inflationPenalty + $gscpiCostDrag + $ppiCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock is whichever stream deviated the most, overridden by tail events

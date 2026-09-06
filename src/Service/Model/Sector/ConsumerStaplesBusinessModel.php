@@ -70,6 +70,8 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     // --- Cost-Push Inflation & COGS Squeeze ---
     /** Variable margin cost penalty scalar for agricultural inflation (Producer Price Index proxy). */
     public const AGRI_INFLATION_COST_SCALAR = 0.015;
+    /** Sensitivity of wholesale input costs to Producer Price Inflation (PPI). */
+    public const PPI_COST_SENSITIVITY = 0.30;
     /** Idiosyncratic agricultural harvest shock sensitivity scalar on variable costs. */
     public const AGRI_HARVEST_SHOCK_SCALAR = 0.010;
     /** Variable margin cost penalty scalar for energy-driven logistics, freight, and packaging costs. */
@@ -176,7 +178,9 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
             ModelParam::VolumeCommodityWeight->value  => self::VOLUME_COMMODITY_WEIGHT,
             ModelParam::CommodityTradingWeight->value => 0.00,
             ModelParam::LandSpeculationWeight->value  => 0.00,
+            ModelParam::PricingPowerIndex->value      => 0.50,
         ]);
+        $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
 
         $rawCommodityWeight = $params[ModelParam::CommodityTradingWeight];
         $rawLandWeight      = $params[ModelParam::LandSpeculationWeight];
@@ -252,10 +256,17 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // --- Cost-Push Inflation & COGS Squeeze ---
+        $ppiCostDrag = MathUtility::calculatePpiCostDrag(
+            $macroState->producerPriceInflationEma,
+            MacroEngine::TARGET_INFLATION,
+            $pricingPower,
+            self::PPI_COST_SENSITIVITY
+        );
         $inflationExcess = max(0.0, $macroState->inflationEma - MacroEngine::TARGET_INFLATION);
         $agriShift = max(0.0, ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0);
         $agriculturalCostSqueeze = ($inflationExcess * self::AGRI_INFLATION_COST_SCALAR * $volumeWeight)
             + ($agriShift * 0.15 * $volumeWeight)
+            + ($ppiCostDrag * $volumeWeight)
             - ($volumeZ * self::AGRI_HARVEST_SHOCK_SCALAR * $volumeWeight);
 
         // Supply Chain, Freight & Packaging Penalty (Energy & Freight Price Indices)

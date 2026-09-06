@@ -44,6 +44,16 @@ class MacroStateBuilder
         $this->state->energyInventoryIndexEma = MacroEngine::COMMODITY_INVENTORY_BASELINE;
         $this->state->cumulativeInflationGap = 0.0;
         $this->state->cumulativeInflationGapEma = 0.0;
+        $this->state->manufacturingPmi = MacroEngine::PMI_BASELINE;
+        $this->state->manufacturingPmiEma = MacroEngine::PMI_BASELINE;
+        $this->state->producerPriceInflation = MacroEngine::TARGET_INFLATION;
+        $this->state->producerPriceInflationEma = MacroEngine::TARGET_INFLATION;
+        $this->state->tradeBalanceToGdp = MacroEngine::TRADE_BALANCE_BASELINE;
+        $this->state->tradeBalanceToGdpEma = MacroEngine::TRADE_BALANCE_BASELINE;
+        $this->state->housingStartsIndex = MacroEngine::HOUSING_STARTS_BASELINE;
+        $this->state->housingStartsIndexEma = MacroEngine::HOUSING_STARTS_BASELINE;
+        $this->state->moneySupplyGrowth = MacroEngine::M2_BASE_GROWTH;
+        $this->state->moneySupplyGrowthEma = MacroEngine::M2_BASE_GROWTH;
     }
 
     public static function create(): self
@@ -66,6 +76,16 @@ class MacroStateBuilder
         $this->state->highYieldCreditSpreadEma = 0.030;
         $this->state->marketVolatility = 0.12;
         $this->state->marketVolatilityEma = 0.13;
+        $this->state->manufacturingPmi = 56.5;
+        $this->state->manufacturingPmiEma = 55.0;
+        $this->state->producerPriceInflation = 0.035;
+        $this->state->producerPriceInflationEma = 0.032;
+        $this->state->tradeBalanceToGdp = -0.035;
+        $this->state->tradeBalanceToGdpEma = -0.032;
+        $this->state->housingStartsIndex = 125.0;
+        $this->state->housingStartsIndexEma = 120.0;
+        $this->state->moneySupplyGrowth = 0.075;
+        $this->state->moneySupplyGrowthEma = 0.070;
         return $this;
     }
 
@@ -84,6 +104,16 @@ class MacroStateBuilder
         $this->state->highYieldCreditSpreadEma = 0.095;
         $this->state->marketVolatility = 0.32;
         $this->state->marketVolatilityEma = 0.30;
+        $this->state->manufacturingPmi = 42.0;
+        $this->state->manufacturingPmiEma = 44.0;
+        $this->state->producerPriceInflation = -0.010;
+        $this->state->producerPriceInflationEma = 0.005;
+        $this->state->tradeBalanceToGdp = -0.015;
+        $this->state->tradeBalanceToGdpEma = -0.018;
+        $this->state->housingStartsIndex = 65.0;
+        $this->state->housingStartsIndexEma = 70.0;
+        $this->state->moneySupplyGrowth = 0.015;
+        $this->state->moneySupplyGrowthEma = 0.020;
         return $this;
     }
 
@@ -104,6 +134,16 @@ class MacroStateBuilder
         $this->state->marketVolatilityEma = 0.33;
         $this->state->energyPriceIndex = 140.0;
         $this->state->energyPriceIndexEma = 135.0;
+        $this->state->manufacturingPmi = 45.0;
+        $this->state->manufacturingPmiEma = 46.0;
+        $this->state->producerPriceInflation = 0.095;
+        $this->state->producerPriceInflationEma = 0.090;
+        $this->state->tradeBalanceToGdp = -0.040;
+        $this->state->tradeBalanceToGdpEma = -0.038;
+        $this->state->housingStartsIndex = 75.0;
+        $this->state->housingStartsIndexEma = 80.0;
+        $this->state->moneySupplyGrowth = 0.030;
+        $this->state->moneySupplyGrowthEma = 0.035;
         return $this;
     }
 

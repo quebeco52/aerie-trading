@@ -158,7 +158,9 @@ class DistressedDebtBusinessModelTest extends TestCase
             corporateDefaultRateEma: 0.060   // Surging to 6.0% (+200% shift)
         );
 
-        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock = $this->getMockBuilder(MathUtility::class)
+            ->onlyMethods(['generatePersistentZ'])
+            ->getMock();
         $mathMock->method('generatePersistentZ')->willReturn(0.0);
 
         $calmResult = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.40, 10_000_000.0, 0.0, $calmMacro, $mathMock);
@@ -169,5 +171,38 @@ class DistressedDebtBusinessModelTest extends TestCase
             $spikeResult->streamRevenue['turnaround_recovery'],
             'Surging high-yield credit spreads and corporate default rates must explode distressed debt recovery revenue.'
         );
+    }
+
+    public function testExtremeCrisisSurgeIsStrictlyBoundedBySaturationCeiling(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('VULT');
+        $stock->setBeta('-1.3');
+
+        // Apocalyptic crisis: 25% default rate, 1500 bps HY spreads, 800 bps credit spreads, -5% GDP gap
+        $apocalypseMacro = new MacroStateDTO(
+            outputGapEma: -0.05,
+            macroCreditSpread: 0.08,
+            macroCreditSpreadEma: 0.08,
+            highYieldCreditSpreadEma: 0.150,
+            corporateDefaultRateEma: 0.250
+        );
+
+        $mathMock = $this->getMockBuilder(MathUtility::class)
+            ->onlyMethods(['generatePersistentZ'])
+            ->getMock();
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $expectedRevenue = 100_000_000.0;
+        $result = $this->model->computeActualFinancials($stock, $expectedRevenue, 0.40, 10_000_000.0, 0.0, $apocalypseMacro, $mathMock);
+
+        // Total actual revenue is strictly bounded:
+        // actualRevenue = expectedRevenue * (w_advisory + w_recovery * (1 + distressMultiplier))
+        // Since w_advisory + w_recovery = 1.0 and distressMultiplier <= MAX_DISTRESS_REVENUE_EXPANSION (1.25),
+        // actual revenue cannot exceed expectedRevenue * (1 + 1.25) = 225M under any crisis condition.
+        $absoluteMaxAllowed = $expectedRevenue * (1.0 + DistressedDebtBusinessModel::MAX_DISTRESS_REVENUE_EXPANSION);
+        $this->assertLessThanOrEqual($absoluteMaxAllowed, $result->actualRevenue);
+        $this->assertLessThanOrEqual($absoluteMaxAllowed, $result->streamRevenue['turnaround_recovery']);
+        $this->assertGreaterThan($expectedRevenue, $result->actualRevenue);
     }
 }

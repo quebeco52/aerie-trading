@@ -294,6 +294,36 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $dealActivityIndexEma = null;
 
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $manufacturingPmi = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $manufacturingPmiEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $producerPriceInflation = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $producerPriceInflationEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $tradeBalanceToGdp = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $tradeBalanceToGdpEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $housingStartsIndex = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $housingStartsIndexEma = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $moneySupplyGrowth = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $moneySupplyGrowthEma = null;
+
     // --- Standard Getters & Setters ---
 
     public function getId(): ?int { return $this->id; }
@@ -578,4 +608,34 @@ class MacroReport
 
     public function getDealActivityIndexEma(): ?string { return $this->dealActivityIndexEma; }
     public function setDealActivityIndexEma(?string $dealActivityIndexEma): self { $this->dealActivityIndexEma = $dealActivityIndexEma; return $this; }
+
+    public function getManufacturingPmi(): ?string { return $this->manufacturingPmi; }
+    public function setManufacturingPmi(?string $manufacturingPmi): self { $this->manufacturingPmi = $manufacturingPmi; return $this; }
+
+    public function getManufacturingPmiEma(): ?string { return $this->manufacturingPmiEma; }
+    public function setManufacturingPmiEma(?string $manufacturingPmiEma): self { $this->manufacturingPmiEma = $manufacturingPmiEma; return $this; }
+
+    public function getProducerPriceInflation(): ?string { return $this->producerPriceInflation; }
+    public function setProducerPriceInflation(?string $producerPriceInflation): self { $this->producerPriceInflation = $producerPriceInflation; return $this; }
+
+    public function getProducerPriceInflationEma(): ?string { return $this->producerPriceInflationEma; }
+    public function setProducerPriceInflationEma(?string $producerPriceInflationEma): self { $this->producerPriceInflationEma = $producerPriceInflationEma; return $this; }
+
+    public function getTradeBalanceToGdp(): ?string { return $this->tradeBalanceToGdp; }
+    public function setTradeBalanceToGdp(?string $tradeBalanceToGdp): self { $this->tradeBalanceToGdp = $tradeBalanceToGdp; return $this; }
+
+    public function getTradeBalanceToGdpEma(): ?string { return $this->tradeBalanceToGdpEma; }
+    public function setTradeBalanceToGdpEma(?string $tradeBalanceToGdpEma): self { $this->tradeBalanceToGdpEma = $tradeBalanceToGdpEma; return $this; }
+
+    public function getHousingStartsIndex(): ?string { return $this->housingStartsIndex; }
+    public function setHousingStartsIndex(?string $housingStartsIndex): self { $this->housingStartsIndex = $housingStartsIndex; return $this; }
+
+    public function getHousingStartsIndexEma(): ?string { return $this->housingStartsIndexEma; }
+    public function setHousingStartsIndexEma(?string $housingStartsIndexEma): self { $this->housingStartsIndexEma = $housingStartsIndexEma; return $this; }
+
+    public function getMoneySupplyGrowth(): ?string { return $this->moneySupplyGrowth; }
+    public function setMoneySupplyGrowth(?string $moneySupplyGrowth): self { $this->moneySupplyGrowth = $moneySupplyGrowth; return $this; }
+
+    public function getMoneySupplyGrowthEma(): ?string { return $this->moneySupplyGrowthEma; }
+    public function setMoneySupplyGrowthEma(?string $moneySupplyGrowthEma): self { $this->moneySupplyGrowthEma = $moneySupplyGrowthEma; return $this; }
 }

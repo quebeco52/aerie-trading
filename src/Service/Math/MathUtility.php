@@ -1572,5 +1572,309 @@ class MathUtility
 
         return max(20.0, min(250.0, $newIndex));
     }
+
+    /**
+     * Calculates a standard diffusion index (e.g. ISM Purchasing Managers' Index) centered around a neutral baseline.
+     *
+     * In standard macroeconomic surveys (ISM, S&P Global), values above 50 indicate expansion while below 50 indicate contraction.
+     *
+     * @param float $baseline Neutral survey baseline (canonical 50.0).
+     * @param array<int, array{deviation: float, sensitivity: float}> $drivers Component factors with their respective sensitivities.
+     * @param float $min      Asymptotic floor.
+     * @param float $max      Asymptotic ceiling.
+     * @return float Calculated diffusion index score.
+     */
+    public function calculateDiffusionIndex(
+        float $baseline,
+        array $drivers,
+        float $min = 30.0,
+        float $max = 70.0
+    ): float {
+        $netAdjustment = 0.0;
+        foreach ($drivers as $driver) {
+            $netAdjustment += $driver['deviation'] * $driver['sensitivity'];
+        }
+
+        return max($min, min($max, $baseline + $netAdjustment));
+    }
+
+    /**
+     * Stage-of-Processing Producer Price Index (PPI) wholesale pipeline inflation (Clark 1995).
+     *
+     * Evaluates intermediate wholesale inflation as a cost-push transmission of raw commodity inputs
+     * (energy, metals, agriculture), freight/logistics bottlenecks (GSCPI), Unit Labor Costs (ULC),
+     * and aggregate cyclical output gap demand pressure.
+     *
+     * @param float $metalsInflation   Annualized industrial metals price inflation.
+     * @param float $energyInflation   Annualized energy price inflation.
+     * @param float $agriInflation     Annualized agricultural commodity price inflation.
+     * @param float $gscpiZ            Global supply chain pressure index (Z-score).
+     * @param float $unitLaborCost     Unit labor cost growth (Wage Growth - TFP Trend Growth).
+     * @param float $outputGap         Macroeconomic cyclical output gap.
+     * @param array{metals: float, energy: float, agri: float, gscpi: float, ulc: float, demand: float} $weights Parameter weights.
+     * @param float $min               Minimum annual PPI rate.
+     * @param float $max               Maximum annual PPI rate.
+     * @return float Producer price index inflation rate.
+     */
+    public function calculateStageOfProcessingPpi(
+        float $metalsInflation,
+        float $energyInflation,
+        float $agriInflation,
+        float $gscpiZ,
+        float $unitLaborCost,
+        float $outputGap,
+        array $weights,
+        float $min = -0.06,
+        float $max = 0.25
+    ): float {
+        $commodityComponent = ($weights['metals'] * $metalsInflation)
+            + ($weights['energy'] * $energyInflation)
+            + ($weights['agri'] * $agriInflation);
+
+        $supplyChainComponent = $weights['gscpi'] * $gscpiZ;
+        $laborComponent = $weights['ulc'] * $unitLaborCost;
+        $demandComponent = $weights['demand'] * $outputGap;
+
+        $ppi = $commodityComponent + $supplyChainComponent + $laborComponent + $demandComponent;
+        return max($min, min($max, $ppi));
+    }
+
+    /**
+     * Poterba (1984) / Topel & Rosen (1988) Tobin's Q Housing Investment Dynamics.
+     *
+     * Models residential construction volume (Housing Starts) driven by the ratio of asset market home prices
+     * to physical replacement costs, discounted by mortgage user costs and bank lending standards:
+     *   q = P_residential / Cost_replacement
+     *
+     * @param float $currentStarts        Current housing starts index.
+     * @param float $residentialPriceRatio Current home price relative to neutral baseline.
+     * @param float $replacementCostRatio Current construction replacement cost relative to baseline.
+     * @param float $userCost             User cost of residential capital (mortgage rate + taxes - inflation).
+     * @param float $neutralUserCost      Structural equilibrium user cost of housing.
+     * @param float $sloosTightening      SLOOS bank mortgage credit tightening percentage.
+     * @param float $dt                   Time step in years.
+     * @param float $dW                   Standard normal random shock.
+     * @param array{baseline: float, qSens: float, costSens: float, sloosSens: float, kappa: float, sigma: float, min: float, max: float} $params Calibration parameters.
+     * @return float Updated housing starts index.
+     */
+    public function calculateTobinsQHousingStarts(
+        float $currentStarts,
+        float $residentialPriceRatio,
+        float $replacementCostRatio,
+        float $userCost,
+        float $neutralUserCost,
+        float $sloosTightening,
+        float $dt,
+        float $dW,
+        array $params
+    ): float {
+        $effectiveCost = max(0.20, $replacementCostRatio);
+        $tobinsQ = $residentialPriceRatio / $effectiveCost;
+        $qExcess = $tobinsQ - 1.0;
+
+        $userCostExcess = $userCost - $neutralUserCost;
+        $creditDrag = max(0.0, $sloosTightening);
+
+        $targetStarts = $params['baseline']
+            + ($params['qSens'] * $qExcess)
+            - ($params['costSens'] * $userCostExcess)
+            - ($params['sloosSens'] * $creditDrag);
+
+        $clampedTarget = max($params['min'], min($params['max'], $targetStarts));
+
+        $drift = $params['kappa'] * ($clampedTarget - $currentStarts) * $dt;
+        $diffusion = $params['sigma'] * $currentStarts * sqrt($dt) * $dW;
+        $newStarts = $currentStarts + $drift + $diffusion;
+
+        return max($params['min'], min($params['max'], $newStarts));
+    }
+
+    /**
+     * Brunner-Meltzer / Friedman-Schwartz M2 Broad Money Supply & Credit Channel Dynamics.
+     *
+     * Derives annual M2 broad money supply growth from central bank balance sheet liquidity creation (QE/QT),
+     * commercial banking credit multipliers (SLOOS underwriting standards), and output gap credit demand:
+     *   Target = BaseGrowth + betaQE * BalanceSheet - betaSLOOS * SLOOS + betaY * OutputGap
+     *
+     * @param float $currentM2Growth  Current annual M2 money supply growth rate.
+     * @param float $baseGrowth       Long-run neutral M2 growth matching potential output and inflation target.
+     * @param float $balanceSheetIntensity Central bank balance sheet intensity (+ for QE, - for QT).
+     * @param float $sloosTightening  Net percentage of banks tightening credit standards.
+     * @param float $outputGap        Cyclical GDP output gap.
+     * @param float $dt               Time step in years.
+     * @param float $dW               Standard normal random shock.
+     * @param array{qeSens: float, sloosSens: float, gapSens: float, kappa: float, sigma: float, min: float, max: float} $params Calibration parameters.
+     * @return float Updated annual M2 money supply growth rate.
+     */
+    public function calculateBroadMoneyGrowth(
+        float $currentM2Growth,
+        float $baseGrowth,
+        float $balanceSheetIntensity,
+        float $sloosTightening,
+        float $outputGap,
+        float $dt,
+        float $dW,
+        array $params
+    ): float {
+        $targetM2Growth = $baseGrowth
+            + ($params['qeSens'] * $balanceSheetIntensity)
+            - ($params['sloosSens'] * max(0.0, $sloosTightening))
+            + ($params['gapSens'] * $outputGap);
+
+        $clampedTarget = max($params['min'], min($params['max'], $targetM2Growth));
+
+        $drift = $params['kappa'] * ($clampedTarget - $currentM2Growth) * $dt;
+        $diffusion = $params['sigma'] * sqrt($dt) * $dW;
+        $newGrowth = $currentM2Growth + $drift + $diffusion;
+
+        return max($params['min'], min($params['max'], $newGrowth));
+    }
+
+    /**
+     * Calculates a capacity-constrained counter-cyclical revenue expansion multiplier for distressed debt funds.
+     *
+     * In empirical corporate finance and distressed debt workouts (Acharya, Shin, & Yorulmazer 2011; Oaktree Capital),
+     * asset recovery opportunities surge during credit crises but are bounded by total market inventory and
+     * market impact friction. This is modeled via a Michaelis-Menten / Hill capacity saturation function:
+     * ΔM = M_max * (S / (S + K_s)).
+     *
+     * @param float $rawDistressSignal Aggregate credit spread, default rate, and output gap distress intensity signal.
+     * @param float $maxMultiplier     Maximum asymptotic revenue expansion multiplier (e.g. 1.25 = +125%).
+     * @param float $halfSaturation    Distress intensity signal at which half of the maximum surge is realized.
+     * @return float Diminishing counter-cyclical revenue expansion multiplier in [0, maxMultiplier].
+     */
+    public function calculateDiminishingDistressMultiplier(
+        float $rawDistressSignal,
+        float $maxMultiplier = 1.25,
+        float $halfSaturation = 1.0
+    ): float {
+        if ($rawDistressSignal <= 0.0) {
+            return 0.0;
+        }
+
+        $ks = max(0.001, $halfSaturation);
+        return $maxMultiplier * ($rawDistressSignal / ($rawDistressSignal + $ks));
+    }
+
+    /**
+     * Calculates cyclical demand shift from manufacturing diffusion survey indices (ISM / S&P PMI).
+     *
+     * In empirical macroeconomics, a diffusion index above 50 indicates expansion while below 50 indicates contraction.
+     * Normalized as percentage deviation from neutral baseline (50.0).
+     *
+     * @param float $pmi         Manufacturing purchasing managers' index.
+     * @param float $baseline    Neutral survey baseline (canonical 50.0).
+     * @param float $sensitivity Sector demand sensitivity multiplier.
+     * @return float Cyclical demand shift bounded in [-0.30, 0.30].
+     */
+    public static function calculatePmiDemandShift(
+        float $pmi,
+        float $baseline = MacroEngine::PMI_BASELINE,
+        float $sensitivity = 0.50
+    ): float {
+        $base = max(1.0, $baseline);
+        $deviation = ($pmi - $base) / $base;
+        return max(-0.30, min(0.30, $deviation * $sensitivity));
+    }
+
+    /**
+     * Stage-of-Processing Producer Price Index (PPI) variable cost drag (Clark 1995).
+     *
+     * Evaluates wholesale input material cost pressure on gross variable margins,
+     * mitigated by the firm's structural pricing power.
+     *
+     * @param float $ppi             Producer price wholesale inflation rate.
+     * @param float $targetInflation Central bank target inflation benchmark (~2%).
+     * @param float $pricingPower    Firm pricing power index [0.0, 1.0].
+     * @param float $sensitivity     Sector gross cost sensitivity multiplier.
+     * @return float Margin cost penalty bounded in [0.0, 0.25].
+     */
+    public static function calculatePpiCostDrag(
+        float $ppi,
+        float $targetInflation = MacroEngine::TARGET_INFLATION,
+        float $pricingPower = 0.50,
+        float $sensitivity = 0.50
+    ): float {
+        $excessPpi = max(0.0, $ppi - $targetInflation);
+        $effectivePassThrough = 1.0 - min(1.0, max(0.0, $pricingPower));
+        return min(0.25, $excessPpi * $effectivePassThrough * $sensitivity);
+    }
+
+    /**
+     * Calculates construction and building material volume shifts from residential housing starts (Tobin's q).
+     *
+     * Normalized as percentage deviation from neutral housing starts baseline (100.0).
+     *
+     * @param float $starts      Residential housing starts index.
+     * @param float $baseline    Neutral activity baseline (canonical 100.0).
+     * @param float $sensitivity Sector volume sensitivity multiplier.
+     * @return float Volume shift bounded in [-0.25, 0.25].
+     */
+    public static function calculateHousingStartsShift(
+        float $starts,
+        float $baseline = MacroEngine::HOUSING_STARTS_BASELINE,
+        float $sensitivity = 0.30
+    ): float {
+        $base = max(1.0, $baseline);
+        $deviation = ($starts - $base) / $base;
+        return max(-0.25, min(0.25, $deviation * $sensitivity));
+    }
+
+    /**
+     * Calculates international merchandise trade flow volume shifts (Mundell-Fleming).
+     *
+     * Evaluates net exports as a fraction of GDP relative to baseline structural trade balance (-2.8%).
+     *
+     * @param float $tradeBalance Current trade balance to GDP ratio.
+     * @param float $baseline     Neutral structural trade balance baseline (-0.028).
+     * @param float $sensitivity  Trade volume elasticity multiplier.
+     * @return float Trade volume shift bounded in [-0.20, 0.20].
+     */
+    public static function calculateTradeBalanceShift(
+        float $tradeBalance,
+        float $baseline = MacroEngine::TRADE_BALANCE_BASELINE,
+        float $sensitivity = 2.0
+    ): float {
+        $deviation = $tradeBalance - $baseline;
+        return max(-0.20, min(0.20, $deviation * $sensitivity));
+    }
+
+    /**
+     * Calculates broad liquidity expansion/contraction shifts from M2 money supply growth (Friedman-Schwartz).
+     *
+     * Evaluates systemic financial liquidity driving deposit growth, AUM fund inflows, and retail market participation.
+     *
+     * @param float $m2Growth    Annual broad money supply M2 growth rate.
+     * @param float $baseline    Neutral equilibrium M2 growth rate (~5.5%).
+     * @param float $sensitivity Liquidity sensitivity multiplier.
+     * @return float Liquidity shift bounded in [-0.15, 0.15].
+     */
+    public static function calculateBroadMoneyLiquidityShift(
+        float $m2Growth,
+        float $baseline = MacroEngine::M2_BASE_GROWTH,
+        float $sensitivity = 0.50
+    ): float {
+        $deviation = $m2Growth - $baseline;
+        return max(-0.15, min(0.15, $deviation * $sensitivity));
+    }
+
+    /**
+     * Calculates factory and industrial throughput shifts from Federal Reserve G.17 capacity utilization.
+     *
+     * Normalized using percentage point deviations divided by 100 to prevent runaway scaling.
+     *
+     * @param float $cuRate      Industrial capacity utilization rate in percentage (e.g. 78.5).
+     * @param float $baseline    Neutral capacity utilization baseline (~78.5%).
+     * @param float $sensitivity Sector throughput sensitivity multiplier.
+     * @return float Throughput shift bounded in [-0.15, 0.15].
+     */
+    public static function calculateCapacityUtilizationShift(
+        float $cuRate,
+        float $baseline = MacroEngine::CU_BASELINE,
+        float $sensitivity = 0.40
+    ): float {
+        $deviation = ($cuRate - $baseline) / 100.0;
+        return max(-0.15, min(0.15, $deviation * $sensitivity));
+    }
 }
 

@@ -374,5 +374,21 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->subsystem->calculateRecessionProbability($stateInverted);
         $this->assertGreaterThan(0.70, $stateInverted->recessionProbability, 'Inverted yield curve and tight FCI must yield high recession probability.');
     }
+
+    public function testCalculateMoneySupplyGrowth(): void
+    {
+        $dt = 0.25;
+        $tfp = MacroEngine::TFP_DRIFT;
+        $neutralGrowth = MacroEngine::TARGET_INFLATION + $tfp + MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE;
+
+        $stateQe = new MacroState();
+        $stateQe->balanceSheetIntensity = 0.50; // Active QE
+        $stateQe->sloosTighteningIndexEma = -0.10;
+        $stateQe->outputGap = 0.02;
+        $stateQe->moneySupplyGrowth = $neutralGrowth;
+
+        $this->subsystem->calculateMoneySupplyGrowth($stateQe, $dt, $tfp);
+        $this->assertGreaterThan($neutralGrowth, $stateQe->moneySupplyGrowth, 'QE and bank lending expansion must accelerate broad money growth');
+    }
 }
 

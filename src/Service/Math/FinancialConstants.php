@@ -268,6 +268,8 @@ class FinancialConstants
     public const MAX_EMERGENCY_EQUITY_RAISE_RATIO = 0.25;
     /** Maximum structural capacity and revenue multiplier relative to dynamic Sector TAM (150%). */
     public const MAX_SECTOR_TAM_CAPACITY_RATIO = 1.50;
+    /** Maximum structural capacity and revenue multiplier for financial intermediaries relative to dynamic TAM (250%). */
+    public const MAX_FINANCIAL_SECTOR_TAM_CAPACITY_RATIO = 2.50;
 }
 
 

@@ -73,6 +73,10 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
     /** Margin penalty applied when energy prices spike faster than fuel surcharges can adjust. */
     public const FUEL_SURCHARGE_LAG_PENALTY = 0.08;
 
+    // --- Housing & Construction Waste Transmission ---
+    /** Sensitivity of commercial roll-off construction and demolition (C&D) waste volume to housing starts. */
+    public const HOUSING_STARTS_WASTE_SENSITIVITY = 0.30;
+
     // --- Tail Risk Events ---
     /** Z-score threshold indicating a severe landfill leachate leak or EPA regulatory shutdown. */
     public const ENVIRONMENTAL_DISASTER_Z_SCORE = -2.50;
@@ -133,7 +137,8 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         $eventZ       = $streams->generateZ('event', 0.05);
 
         // --- Macro Demand & Pricing Sensitivities ---
-        $macroBoost = $macroState->outputGapEma * 1.5 * $beta; // Affects Commercial/Construction
+        $housingWasteShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_WASTE_SENSITIVITY);
+        $macroBoost = ($macroState->outputGapEma * 1.5 * $beta) + $housingWasteShift; // Affects Commercial/Construction
         $excessInflation = max(0.0, $macroState->inflationEma - MacroEngine::TARGET_INFLATION);
         $cpiEscalatorBoost = $excessInflation * self::CPI_ESCALATOR_CAPTURE; // Passive revenue boost
 

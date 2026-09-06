@@ -687,6 +687,92 @@ class MacroEngine
     /** Stochastic volatility of deal activity volume. */
     public const DEAL_ACTIVITY_SIGMA = 0.15;
 
+    // --- ISM Manufacturing Purchasing Managers' Index (PMI) ---
+    /** Neutral diffusion baseline for ISM manufacturing PMI (50.0 = neutral growth). */
+    public const PMI_BASELINE = 50.0;
+    /** Sensitivity of manufacturing PMI to Federal Reserve industrial capacity utilization deviations. */
+    public const PMI_CU_SENSITIVITY = 45.0;
+    /** Sensitivity of manufacturing PMI to macroeconomic output gap momentum. */
+    public const PMI_MOMENTUM_SENSITIVITY = 120.0;
+    /** Sensitivity of manufacturing PMI to Metzler inventory restocking demand (shortfall stimulates new orders). */
+    public const PMI_INVENTORY_SENSITIVITY = 20.0;
+    /** Sensitivity of manufacturing PMI to commercial banking credit standards tightening (SLOOS). */
+    public const PMI_SLOOS_SENSITIVITY = 12.0;
+    /** Mean-reversion speed (kappa) of manufacturing PMI toward fundamental business conditions. */
+    public const PMI_KAPPA = 2.0;
+    /** Stochastic diffusion volatility of manufacturing PMI survey sentiment. */
+    public const PMI_SIGMA = 1.2;
+    /** Asymptotic lower bound floor for manufacturing PMI during severe industrial depressions. */
+    public const MIN_PMI = 30.0;
+    /** Asymptotic upper bound ceiling for manufacturing PMI during hyper-expansionary booms. */
+    public const MAX_PMI = 70.0;
+
+    // --- Producer Price Index (PPI) Stage-of-Processing ---
+    /** Weight of industrial metals price inflation in intermediate producer prices. */
+    public const PPI_METALS_WEIGHT = 0.20;
+    /** Weight of primary energy and petroleum price inflation in intermediate producer prices. */
+    public const PPI_ENERGY_WEIGHT = 0.25;
+    /** Weight of agricultural raw food commodities in intermediate producer prices. */
+    public const PPI_AGRI_WEIGHT = 0.15;
+    /** Pass-through elasticity of global supply chain pressure (GSCPI Z-score) into wholesale PPI. */
+    public const PPI_GSCPI_SENSITIVITY = 0.006;
+    /** Weight of Unit Labor Cost (ULC = Wage Growth - TFP Growth) in wholesale producer processing costs. */
+    public const PPI_ULC_WEIGHT = 0.25;
+    /** Sensitivity of wholesale producer price margins to cyclical GDP output gap demand. */
+    public const PPI_DEMAND_SENSITIVITY = 0.35;
+    /** Lower bound floor on annual producer price deflation. */
+    public const MIN_PPI_INFLATION = -0.06;
+    /** Upper bound ceiling on runaway wholesale producer price inflation. */
+    public const MAX_PPI_INFLATION = 0.25;
+
+    // --- Mundell-Fleming Trade Balance & Net Exports ---
+    /** Baseline structural trade balance as a percentage of GDP (-2.5% neutral deficit). */
+    public const TRADE_BALANCE_BASELINE = -0.025;
+    /** Marshall-Lerner elasticity of trade balance to currency exchange rate index deviations from neutral. */
+    public const TRADE_BALANCE_FX_ELASTICITY = 0.040;
+    /** Absorption elasticity of trade balance to cyclical domestic GDP output gap demand. */
+    public const TRADE_BALANCE_GAP_ELASTICITY = 0.080;
+    /** Lower bound floor for trade balance deficit as a percentage of GDP (-8.0%). */
+    public const MIN_TRADE_BALANCE = -0.080;
+    /** Upper bound ceiling for trade balance surplus as a percentage of GDP (+3.0%). */
+    public const MAX_TRADE_BALANCE = 0.030;
+
+    // --- Tobin's Q Housing Investment Dynamics (Poterba 1984, Topel-Rosen 1988) ---
+    /** Baseline housing starts activity index (100.0 = neutral construction equilibrium). */
+    public const HOUSING_STARTS_BASELINE = 100.0;
+    /** Sensitivity of housing starts to Tobin's q ratio (home price valuation vs replacement cost). */
+    public const HOUSING_STARTS_Q_SENSITIVITY = 50.0;
+    /** Sensitivity of residential housing starts to user cost of housing capital and mortgage rates. */
+    public const HOUSING_STARTS_USER_COST_SENSITIVITY = 300.0;
+    /** Sensitivity of housing construction orders to bank mortgage lending standards tightening (SLOOS). */
+    public const HOUSING_STARTS_SLOOS_SENSITIVITY = 25.0;
+    /** Mean-reversion speed (kappa) of housing construction volume toward equilibrium capacity. */
+    public const HOUSING_STARTS_KAPPA = 1.5;
+    /** Stochastic diffusion volatility of new housing starts. */
+    public const HOUSING_STARTS_SIGMA = 0.08;
+    /** Structural lower floor for the housing starts index. */
+    public const MIN_HOUSING_STARTS = 40.0;
+    /** Structural upper ceiling for the housing starts index. */
+    public const MAX_HOUSING_STARTS = 220.0;
+
+    // --- Monetarist M2 Broad Money Supply Dynamics (Friedman-Schwartz, Brunner-Meltzer) ---
+    /** Baseline structural annual growth rate of M2 money supply matching nominal potential GDP trend. */
+    public const M2_BASE_GROWTH = 0.045;
+    /** Sensitivity of broad M2 money growth to central bank QE/QT balance sheet operations. */
+    public const M2_QE_SENSITIVITY = 1.20;
+    /** Sensitivity of commercial bank money creation multiplier to lending standards tightening (SLOOS). */
+    public const M2_SLOOS_SENSITIVITY = 0.06;
+    /** Cyclical credit demand sensitivity scaling M2 money growth with the output gap. */
+    public const M2_GAP_SENSITIVITY = 0.25;
+    /** Mean-reversion speed (kappa) of broad money supply growth toward fundamental trajectory. */
+    public const M2_KAPPA = 1.80;
+    /** Stochastic diffusion volatility of annual M2 money supply growth. */
+    public const M2_SIGMA = 0.005;
+    /** Lower bound floor for annual M2 money supply growth (-2.0% broad contraction). */
+    public const MIN_M2_GROWTH = -0.020;
+    /** Upper bound ceiling for annual M2 money supply expansion (+25.0% wartime/crisis expansion). */
+    public const MAX_M2_GROWTH = 0.250;
+
     // --- Continuous EMA Indicator Smoothing Horizons ---
     /** Standard quarterly macro indicator EMA smoothing horizon. */
     public const STANDARD_EMA_HORIZON_YEARS = 0.25;
@@ -851,6 +937,7 @@ class MacroEngine
         $this->calculateEnergyShock($state, $dt);
         $this->calculateRefiningCrackSpread($state, $dt);
         $this->calculateExchangeRate($state, $dt);
+        $this->calculateTradeBalance($state, $dt);
         $this->calculateIndustrialMetalsIndex($state, $dt);
         $this->calculateGovernmentSpending($state, $dt);
         $this->calculateCommercialPropertyIndex($state, $dt);
@@ -859,11 +946,17 @@ class MacroEngine
         $this->calculateFreightRateIndex($state, $dt);
         $this->calculateSupplyChainPressureIndex($state);
         $this->calculateResidentialPropertyIndex($state, $dt);
+        $this->calculateHousingStarts($state, $dt);
 
         $state->inflation = $this->calculateInflation($state, self::TARGET_INFLATION, $stressMultiplier, $dt);
+        $this->calculateProducerPriceInflation($state, $tfpTrendGrowthRate, $dt);
         $state->marketVolatility = $this->calculateMarketVolatility($state, $dt);
 
+        $this->calculateManufacturingPmi($state, $dt);
+        $this->calculateMoneySupplyGrowth($state, $dt, $tfpTrendGrowthRate);
+
         $this->updateExponentialMovingAverages($state, $dt);
+
         $this->calculateMacroCreditSpread($state);
         $this->calculateInterbankLiquiditySpread($state, $dt);
         $this->calculateSloosCreditStandards($state, $dt);
@@ -1091,5 +1184,30 @@ class MacroEngine
     private function calculateCapitalMarketsDealIndex(MacroState $state, float $dt): void
     {
         $this->getAssetSubsystem()->calculateCapitalMarketsDealIndex($state, $dt);
+    }
+
+    private function calculateManufacturingPmi(MacroState $state, float $dt): void
+    {
+        $this->getAggregateSubsystem()->calculateManufacturingPmi($state, $dt);
+    }
+
+    private function calculateProducerPriceInflation(MacroState $state, float $tfpGrowthRate, float $dt): void
+    {
+        $this->getAggregateSubsystem()->calculateProducerPriceInflation($state, $tfpGrowthRate, $dt);
+    }
+
+    private function calculateTradeBalance(MacroState $state, float $dt): void
+    {
+        $this->getAssetSubsystem()->calculateTradeBalance($state, $dt);
+    }
+
+    private function calculateHousingStarts(MacroState $state, float $dt): void
+    {
+        $this->getAssetSubsystem()->calculateHousingStarts($state, $dt);
+    }
+
+    private function calculateMoneySupplyGrowth(MacroState $state, float $dt, float $tfpGrowthRate): void
+    {
+        $this->getMonetarySubsystem()->calculateMoneySupplyGrowth($state, $dt, $tfpGrowthRate);
     }
 }

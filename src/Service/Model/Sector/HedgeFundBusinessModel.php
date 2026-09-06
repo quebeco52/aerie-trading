@@ -90,6 +90,8 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     public const MACRO_DEMAND_SCALAR = 1.0;
     /** Sensitivity of AUM management fee base to macroeconomic output gap. */
     public const AUM_MARKET_BETA_SCALAR = 1.0;
+    /** Sensitivity of hedge fund AUM allocations and prime brokerage liquidity to M2 money supply growth. */
+    public const M2_HEDGE_FUND_LIQUIDITY_SENSITIVITY = 0.35;
 
     // --- Redemption & Capital Flight Physics ---
     /** Z-score threshold for composite alpha below which institutional investors trigger redemptions. */
@@ -257,8 +259,10 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
             + ($params[ModelParam::HfDirectionalBetsWeight] * $directionalPricingPower)
             + ($params[ModelParam::HfQuantAlphaWeight] * $quantPricingPower);
 
+        $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_HEDGE_FUND_LIQUIDITY_SENSITIVITY);
+
         return [
-            'macro_demand_shift'       => $outputGap * $beta * self::MACRO_DEMAND_SCALAR,
+            'macro_demand_shift'       => ($outputGap * $beta * self::MACRO_DEMAND_SCALAR) + $m2Shift,
             'pricing_power_multiplier' => max(0.10, $blendedMultiplier),
         ];
     }
@@ -279,8 +283,9 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         ]);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new StreamContext($momentum, $mathUtility);
+        $streams  = new StreamContext($momentum, $mathUtility);
 
+        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
             'management_fees'  => $params[ModelParam::HfManagementFeeWeight],
             'directional_bets' => $params[ModelParam::HfDirectionalBetsWeight],
@@ -312,10 +317,11 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         }
 
         $aumMarketBeta = $outputGap * abs($beta) * self::AUM_MARKET_BETA_SCALAR;
+        $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_HEDGE_FUND_LIQUIDITY_SENSITIVITY);
         $mgmtExpectedRevenue = $expectedRevenue * $mgmtWeight * (1.0 - $redemptionDrag);
 
         $mgmtRevenue = max(0.0, $mgmtExpectedRevenue
-            * (1.0 + ($mgmtZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::MGMT_BASE_VOLATILITY_SCALAR)) + $aumMarketBeta));
+            * (1.0 + ($mgmtZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::MGMT_BASE_VOLATILITY_SCALAR)) + $aumMarketBeta + $m2Shift));
 
         // --- 2. Leveraged Directional Bets & Performance Fees (Asymmetric Alpha Call Option) ---
         $leverageMultiplier = 1.0 + ($actualLeverage * self::LEVERAGE_AMPLIFIER_SCALAR);

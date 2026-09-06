@@ -1120,6 +1120,269 @@ class MathUtilityTest extends TestCase
         $this->assertLessThan(100.0, $panicIndex, 'Market panic and credit freeze must collapse deal activity index.');
         $this->assertGreaterThanOrEqual(20.0, $panicIndex);
     }
+
+    public function testCalculateDiffusionIndex(): void
+    {
+        // 1. Neutral baseline (no deviations)
+        $neutral = $this->mathUtility->calculateDiffusionIndex(
+            baseline: 50.0,
+            drivers: [
+                ['deviation' => 0.0, 'sensitivity' => 120.0],
+                ['deviation' => 0.0, 'sensitivity' => 80.0],
+            ]
+        );
+        $this->assertEqualsWithDelta(50.0, $neutral, 0.001);
+
+        // 2. Expansionary drivers (positive deviations)
+        $expansion = $this->mathUtility->calculateDiffusionIndex(
+            baseline: 50.0,
+            drivers: [
+                ['deviation' => 0.03, 'sensitivity' => 150.0], // +4.5
+                ['deviation' => 0.02, 'sensitivity' => 50.0],  // +1.0
+            ]
+        );
+        $this->assertEqualsWithDelta(55.5, $expansion, 0.001);
+        $this->assertGreaterThan(50.0, $expansion);
+
+        // 3. Contractionary drivers (negative deviations)
+        $contraction = $this->mathUtility->calculateDiffusionIndex(
+            baseline: 50.0,
+            drivers: [
+                ['deviation' => -0.04, 'sensitivity' => 150.0], // -6.0
+                ['deviation' => -0.02, 'sensitivity' => 50.0],  // -1.0
+            ]
+        );
+        $this->assertEqualsWithDelta(43.0, $contraction, 0.001);
+        $this->assertLessThan(50.0, $contraction);
+
+        // 4. Clamping bounds
+        $clampedHigh = $this->mathUtility->calculateDiffusionIndex(
+            baseline: 50.0,
+            drivers: [['deviation' => 1.0, 'sensitivity' => 100.0]],
+            min: 30.0,
+            max: 70.0
+        );
+        $this->assertEqualsWithDelta(70.0, $clampedHigh, 0.001);
+
+        $clampedLow = $this->mathUtility->calculateDiffusionIndex(
+            baseline: 50.0,
+            drivers: [['deviation' => -1.0, 'sensitivity' => 100.0]],
+            min: 30.0,
+            max: 70.0
+        );
+        $this->assertEqualsWithDelta(30.0, $clampedLow, 0.001);
+    }
+
+    public function testCalculateStageOfProcessingPpi(): void
+    {
+        $weights = [
+            'metals' => 0.15,
+            'energy' => 0.20,
+            'agri' => 0.15,
+            'gscpi' => 0.005,
+            'ulc' => 0.35,
+            'demand' => 0.15,
+        ];
+
+        // Neutral wholesale pricing
+        $neutralPpi = $this->mathUtility->calculateStageOfProcessingPpi(
+            metalsInflation: 0.02,
+            energyInflation: 0.02,
+            agriInflation: 0.02,
+            gscpiZ: 0.0,
+            unitLaborCost: 0.02,
+            outputGap: 0.0,
+            weights: $weights
+        );
+        // (0.15*0.02) + (0.20*0.02) + (0.15*0.02) + 0 + (0.35*0.02) + 0 = 0.003 + 0.004 + 0.003 + 0.007 = 0.017
+        $this->assertEqualsWithDelta(0.017, $neutralPpi, 0.0001);
+
+        // Commodity & supply chain shock
+        $shockPpi = $this->mathUtility->calculateStageOfProcessingPpi(
+            metalsInflation: 0.20, // +20%
+            energyInflation: 0.40, // +40%
+            agriInflation: 0.10,   // +10%
+            gscpiZ: 2.5,           // Supply bottleneck
+            unitLaborCost: 0.05,   // Elevated ULC
+            outputGap: 0.02,
+            weights: $weights
+        );
+        $this->assertGreaterThan($neutralPpi, $shockPpi);
+        $this->assertGreaterThan(0.10, $shockPpi);
+
+        // Clamping to bounds
+        $clampedMax = $this->mathUtility->calculateStageOfProcessingPpi(
+            metalsInflation: 2.0,
+            energyInflation: 2.0,
+            agriInflation: 2.0,
+            gscpiZ: 10.0,
+            unitLaborCost: 1.0,
+            outputGap: 1.0,
+            weights: $weights,
+            min: -0.06,
+            max: 0.25
+        );
+        $this->assertEqualsWithDelta(0.25, $clampedMax, 0.0001);
+    }
+
+    public function testCalculateTobinsQHousingStarts(): void
+    {
+        $params = [
+            'baseline' => 100.0,
+            'qSens' => 45.0,
+            'costSens' => 550.0,
+            'sloosSens' => 30.0,
+            'kappa' => 1.20,
+            'sigma' => 0.03,
+            'min' => 40.0,
+            'max' => 180.0,
+        ];
+
+        // Boom scenario: high house prices (Q > 1), low mortgage user cost
+        $boomStarts = $this->mathUtility->calculateTobinsQHousingStarts(
+            currentStarts: 100.0,
+            residentialPriceRatio: 1.20,
+            replacementCostRatio: 1.00,
+            userCost: 0.035,
+            neutralUserCost: 0.050,
+            sloosTightening: 0.0,
+            dt: 0.25,
+            dW: 0.0,
+            params: $params
+        );
+        $this->assertGreaterThan(100.0, $boomStarts, 'High Tobin Q and cheap mortgage financing must stimulate housing starts.');
+
+        // Housing slump: high user cost, bank tightening, falling price/cost ratio
+        $slumpStarts = $this->mathUtility->calculateTobinsQHousingStarts(
+            currentStarts: 100.0,
+            residentialPriceRatio: 0.85,
+            replacementCostRatio: 1.10,
+            userCost: 0.075,
+            neutralUserCost: 0.050,
+            sloosTightening: 0.35,
+            dt: 0.25,
+            dW: 0.0,
+            params: $params
+        );
+        $this->assertLessThan(100.0, $slumpStarts, 'High mortgage rates and tight bank lending must depress housing starts.');
+        $this->assertGreaterThanOrEqual(40.0, $slumpStarts);
+    }
+
+    public function testCalculateBroadMoneyGrowth(): void
+    {
+        $params = [
+            'qeSens' => 0.08,
+            'sloosSens' => 0.06,
+            'gapSens' => 0.30,
+            'kappa' => 1.00,
+            'sigma' => 0.004,
+            'min' => -0.04,
+            'max' => 0.25,
+        ];
+
+        // Expansionary QE and loose credit
+        $qeGrowth = $this->mathUtility->calculateBroadMoneyGrowth(
+            currentM2Growth: 0.055,
+            baseGrowth: 0.055,
+            balanceSheetIntensity: 0.50, // Active QE
+            sloosTightening: -0.10,      // Easing standards
+            outputGap: 0.02,
+            dt: 0.25,
+            dW: 0.0,
+            params: $params
+        );
+        $this->assertGreaterThan(0.055, $qeGrowth, 'Central bank balance sheet expansion must accelerate M2 broad money growth.');
+
+        // Quantitative tightening & banking credit crunch
+        $qtGrowth = $this->mathUtility->calculateBroadMoneyGrowth(
+            currentM2Growth: 0.055,
+            baseGrowth: 0.055,
+            balanceSheetIntensity: -0.50, // Active QT runoff
+            sloosTightening: 0.40,        // 40% net banks tightening
+            outputGap: -0.03,
+            dt: 0.25,
+            dW: 0.0,
+            params: $params
+        );
+        $this->assertLessThan(0.055, $qtGrowth, 'QT runoff and commercial bank lending standards tightening must decelerate M2 growth.');
+        $this->assertGreaterThanOrEqual(-0.04, $qtGrowth);
+    }
+
+    public function testCalculateDiminishingDistressMultiplier(): void
+    {
+        // Zero or negative distress signal yields 0.0
+        $this->assertSame(0.0, $this->mathUtility->calculateDiminishingDistressMultiplier(0.0));
+        $this->assertSame(0.0, $this->mathUtility->calculateDiminishingDistressMultiplier(-0.5));
+
+        // At half-saturation S = K_s = 1.0, multiplier is exactly half of M_max (1.25 / 2 = 0.625)
+        $half = $this->mathUtility->calculateDiminishingDistressMultiplier(1.0, 1.25, 1.0);
+        $this->assertEqualsWithDelta(0.625, $half, 0.0001);
+
+        // Under an extreme shock S = 100.0, multiplier approaches M_max without exceeding it
+        $extreme = $this->mathUtility->calculateDiminishingDistressMultiplier(100.0, 1.25, 1.0);
+        $this->assertLessThanOrEqual(1.25, $extreme);
+        $this->assertGreaterThan(1.20, $extreme);
+
+        // Infinite shock remains strictly bounded by M_max
+        $infinite = $this->mathUtility->calculateDiminishingDistressMultiplier(1_000_000.0, 1.25, 1.0);
+        $this->assertLessThanOrEqual(1.25, $infinite);
+    }
+
+    public function testMacroTransmissionHelpers(): void
+    {
+        // 1. calculatePmiDemandShift
+        // Neutral 50.0 -> 0.0 shift
+        $neutralPmi = $this->mathUtility->calculatePmiDemandShift(50.0);
+        $this->assertEqualsWithDelta(0.0, $neutralPmi, 0.0001);
+
+        // Expansion 55.0 -> (55-50)/50 * 0.50 = +0.05
+        $expansionPmi = $this->mathUtility->calculatePmiDemandShift(55.0, 50.0, 0.50);
+        $this->assertEqualsWithDelta(0.05, $expansionPmi, 0.0001);
+
+        // Contraction 45.0 -> (45-50)/50 * 0.50 = -0.05
+        $contractionPmi = $this->mathUtility->calculatePmiDemandShift(45.0, 50.0, 0.50);
+        $this->assertEqualsWithDelta(-0.05, $contractionPmi, 0.0001);
+
+        // Clamping bounds [-0.30, 0.30]
+        $extremePmi = $this->mathUtility->calculatePmiDemandShift(90.0, 50.0, 1.0);
+        $this->assertLessThanOrEqual(0.30, $extremePmi);
+
+        // 2. calculatePpiCostDrag
+        // PPI <= target yields 0.0 drag
+        $this->assertEqualsWithDelta(0.0, $this->mathUtility->calculatePpiCostDrag(0.02, 0.02), 0.0001);
+        $this->assertEqualsWithDelta(0.0, $this->mathUtility->calculatePpiCostDrag(0.01, 0.02), 0.0001);
+
+        // High PPI (0.06 vs 0.02 target), pricing power 0.50, sensitivity 0.50 -> (0.06-0.02) * (1 - 0.5) * 0.5 = 0.01
+        $ppiDrag = $this->mathUtility->calculatePpiCostDrag(0.06, 0.02, 0.50, 0.50);
+        $this->assertEqualsWithDelta(0.01, $ppiDrag, 0.0001);
+
+        // Perfect pricing power (1.0) eliminates PPI cost drag
+        $this->assertEqualsWithDelta(0.0, $this->mathUtility->calculatePpiCostDrag(0.08, 0.02, 1.0), 0.0001);
+
+        // 3. calculateHousingStartsShift
+        // Neutral 100.0 -> 0.0 shift
+        $this->assertEqualsWithDelta(0.0, $this->mathUtility->calculateHousingStartsShift(100.0), 0.0001);
+        // Boom 120.0 -> (120-100)/100 * 0.30 = +0.06
+        $this->assertEqualsWithDelta(0.06, $this->mathUtility->calculateHousingStartsShift(120.0, 100.0, 0.30), 0.0001);
+
+        // 4. calculateTradeBalanceShift
+        // Baseline -0.028 -> 0.0
+        $this->assertEqualsWithDelta(0.0, $this->mathUtility->calculateTradeBalanceShift(-0.028, -0.028), 0.0001);
+        // Improvement to -0.018 (+0.01) * 2.0 = +0.02
+        $this->assertEqualsWithDelta(0.02, $this->mathUtility->calculateTradeBalanceShift(-0.018, -0.028, 2.0), 0.0001);
+
+        // 5. calculateBroadMoneyLiquidityShift
+        // Neutral 0.055 -> 0.0
+        $this->assertEqualsWithDelta(0.0, $this->mathUtility->calculateBroadMoneyLiquidityShift(0.055, 0.055), 0.0001);
+        // Expansion 0.085 (+0.03) * 0.50 = +0.015
+        $this->assertEqualsWithDelta(0.015, $this->mathUtility->calculateBroadMoneyLiquidityShift(0.085, 0.055, 0.50), 0.0001);
+
+        // 6. calculateCapacityUtilizationShift
+        // Neutral 78.5 -> 0.0
+        $this->assertEqualsWithDelta(0.0, $this->mathUtility->calculateCapacityUtilizationShift(78.5, 78.5), 0.0001);
+        // Shift to 80.5 (+2.0 points) -> (2.0 / 100) * 0.40 = 0.008 (+0.8%)
+        $this->assertEqualsWithDelta(0.008, $this->mathUtility->calculateCapacityUtilizationShift(80.5, 78.5, 0.40), 0.0001);
+    }
 }
 
 

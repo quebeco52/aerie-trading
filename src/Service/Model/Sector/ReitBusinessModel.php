@@ -102,6 +102,14 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     /** Lower clamp for realized variable margin. */
     public const MIN_VARIABLE_MARGIN_CLAMP      = 0.01;
 
+    // --- Housing Supply & Tenant Default Transmission ---
+    /** Sensitivity of new building supply competition to residential housing starts. */
+    public const HOUSING_SUPPLY_COMPETITION_SENSITIVITY = 0.25;
+    /** Vacancy and rent loss drag from excess corporate default rate spikes. */
+    public const CORP_DEFAULT_VACANCY_SCALAR = 0.04;
+    /** Vacancy and rent loss drag from excess retail default rate spikes. */
+    public const RETAIL_DEFAULT_VACANCY_SCALAR = 0.03;
+
     // --- Event Lore Thresholds ---
     /** Severe tenant default Z-score triggering catastrophic commercial bankruptcy lore. */
     public const LORE_ANCHOR_BANKRUPTCY_Z   = -2.00;
@@ -240,7 +248,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $creShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;
         $resShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
         $blendedPropertyShift = ($creShift * self::CRE_INDEX_WEIGHT) + ($resShift * self::RES_INDEX_WEIGHT);
-        $marketLeaseReversion = $blendedPropertyShift * self::PORTFOLIO_TURNOVER_RATE;
+        $housingSupplyShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_SUPPLY_COMPETITION_SENSITIVITY);
+        $marketLeaseReversion = ($blendedPropertyShift * self::PORTFOLIO_TURNOVER_RATE) - ($housingSupplyShift * 0.03);
 
         // --- Clamped Revenue Streams ---
         $leaseRevenue       = max(0.0, $expectedRevenue * $leaseWeight * (1.0 + $leaseShock + $rentEscalator + $marketLeaseReversion));
@@ -282,11 +291,15 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
                 ? - ($tenantDefaultZ - self::BENIGN_LEASING_Z_FLOOR) * self::LEASING_BONUS_SCALE
                 : 0.0);
 
+        $corpDefaultShift = max(0.0, ($macroState->corporateDefaultRateEma - MacroEngine::CORPORATE_DEFAULT_BASELINE) / MacroEngine::CORPORATE_DEFAULT_BASELINE);
+        $retailDefaultShift = max(0.0, ($macroState->retailDefaultRateEma - MacroEngine::RETAIL_DEFAULT_BASELINE) / MacroEngine::RETAIL_DEFAULT_BASELINE);
+        $macroTenantDefaultDrag = ($corpDefaultShift * self::CORP_DEFAULT_VACANCY_SCALAR) + ($retailDefaultShift * self::RETAIL_DEFAULT_VACANCY_SCALAR);
+
         $yield10y = $macroState->yield10yEma;
         $refinancingDrag = max(0.0, ($yield10y - self::DEFAULT_10Y_YIELD_FALLBACK) * self::REFINANCING_WALL_DRAG);
 
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $vacancyShock + $refinancingDrag, $minVariableMargin);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $vacancyShock + $macroTenantDefaultDrag + $refinancingDrag, $minVariableMargin);
 
         $eventType = null;
         if ($tenantDefaultZ < self::LORE_ANCHOR_BANKRUPTCY_Z) {

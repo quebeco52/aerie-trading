@@ -39,6 +39,8 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     public const MIN_BETA_PRICING_POWER_FLOOR = 0.40;
     /** Variable margin cost drag from labor tightness and kitchen wage pressure when unemployment is below natural rate. */
     public const LABOR_TIGHTNESS_WAGE_SCALAR = 0.50;
+    /** Sensitivity of company-operated kitchen food & paper wholesale costs to Producer Price Inflation (PPI). */
+    public const PPI_COST_SENSITIVITY = 0.35;
 
     // --- Revenue & Shock Physics ---
     public const REVENUE_VARIANCE_SCALAR = 0.40;
@@ -179,10 +181,18 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         $laborTightness = max(0.0, MacroEngine::NATURAL_UNEMPLOYMENT - $macroState->unemploymentRateEma);
         $laborTightnessDrag = $laborTightness * self::LABOR_TIGHTNESS_WAGE_SCALAR * $corporateWeight;
 
+        // Producer Price Inflation: Wholesale food and packaging input costs
+        $ppiCostDrag = MathUtility::calculatePpiCostDrag(
+            $macroState->producerPriceInflationEma,
+            MacroEngine::TARGET_INFLATION,
+            $pricingPower,
+            self::PPI_COST_SENSITIVITY
+        ) * $corporateWeight;
+
         // Continuous Elasticity
         $elasticityShift = -self::FRANCHISE_SCALE_ELASTICITY * $franchiseZ * $franchiseWeight;
 
-        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $foodSafetyPenalty + $inflationPenalty + $energyDrag + $foodCommodityDrag + $laborTightnessDrag + $elasticityShift;
+        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $foodSafetyPenalty + $inflationPenalty + $ppiCostDrag + $energyDrag + $foodCommodityDrag + $laborTightnessDrag + $elasticityShift;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         $primaryShockZ = $streams->resolveDominantShockZ([

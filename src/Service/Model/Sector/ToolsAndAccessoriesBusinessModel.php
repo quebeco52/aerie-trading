@@ -63,6 +63,14 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
     /** Structural maximum operating margin ceiling for automated precision monopolies. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.34;
 
+    // --- Manufacturing PMI, Housing & PPI Transmission ---
+    /** Sensitivity of commercial B2B precision tooling demand to manufacturing PMI shifts. */
+    public const PMI_COMMERCIAL_SENSITIVITY = 0.40;
+    /** Sensitivity of retail and prosumer tool sales to residential housing starts. */
+    public const HOUSING_STARTS_SENSITIVITY = 0.35;
+    /** Sensitivity of precision tooling alloy and carbide cost drag to PPI inflation. */
+    public const PPI_TOOLING_COST_SENSITIVITY = 0.30;
+
         public function getReversionSpeed(): float { return 0.08; }
     public function getMoatSpread(): float { return 0.03; }
 
@@ -75,11 +83,13 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
 
-        // Extremely insulated from typical manufacturing boom/bust
+        // Extremely insulated from typical manufacturing boom/bust, but tied to industrial tooling & construction
         $outputGap = $macroState->outputGapEma;
         $beta = (float) $stock->getBeta();
+        $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, sensitivity: self::PMI_COMMERCIAL_SENSITIVITY);
+        $housingShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_SENSITIVITY);
 
-        $physics['macro_demand_shift'] = $outputGap * $beta * 0.50;
+        $physics['macro_demand_shift'] = ($outputGap * $beta * 0.50) + ($pmiShift * 0.60) + ($housingShift * 0.40);
 
         return $physics;
     }
@@ -117,9 +127,11 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
 
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
         $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
+        $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, sensitivity: self::PMI_COMMERCIAL_SENSITIVITY);
+        $housingShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_SENSITIVITY);
 
-        $commercialMacroVolumeShock = ($macroState->outputGapEma * $macroSensitivityMultiplier * abs((float) $stock->getBeta())) - ($fxShift * 0.10);
-        $consumerMacroVolumeShock = ($sentimentShift * $macroSensitivityMultiplier * abs((float) $stock->getBeta())) - ($fxShift * 0.10);
+        $commercialMacroVolumeShock = ($macroState->outputGapEma * $macroSensitivityMultiplier * abs((float) $stock->getBeta())) - ($fxShift * 0.10) + $pmiShift;
+        $consumerMacroVolumeShock = ($sentimentShift * $macroSensitivityMultiplier * abs((float) $stock->getBeta())) - ($fxShift * 0.10) + $housingShift;
 
         // Tail Risk Events
         $cycleMultiplier = 1.0;
@@ -162,14 +174,15 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         // Apply derived distinct margins to actual shocked revenues
         $actualVariableCosts = ($commercialRevenue * self::COMMERCIAL_VARIABLE_COST_RATIO) + ($consumerRevenue * $consumerVariableMargin);
 
-        // Re-implementing Inflation Penalty (dropped from Standard Corporate model)
+        // Re-implementing Inflation Penalty & PPI Transmission
         $inflation = $macroState->inflationEma;
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
         $metalsCostDrag = max(0.0, $metalsShift) * 0.05;
+        $ppiCostDrag = MathUtility::calculatePpiCostDrag($macroState->producerPriceInflation, MacroEngine::TARGET_INFLATION, $pricingPower, self::PPI_TOOLING_COST_SENSITIVITY);
 
         $inflationMultiplier = 2.0 - ($pricingPower * 2.0);
         $baseInflationPenalty = ($inflation > MacroEngine::TARGET_INFLATION ? ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0) + $metalsCostDrag;
-        $inflationPenalty = $baseInflationPenalty * $inflationMultiplier;
+        $inflationPenalty = ($baseInflationPenalty * $inflationMultiplier) + $ppiCostDrag;
 
         // Continuous Elasticity
         $elasticityShift = -self::PRECISION_SCALE_ELASTICITY * $commercialZ * $commercialWeight;

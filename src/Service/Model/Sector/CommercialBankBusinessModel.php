@@ -105,6 +105,12 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /** Sensitivity of NII loan origination volume to net percentage of domestic banks tightening standards (SLOOS). */
     public const SLOOS_NII_ORIGINATION_SENSITIVITY = 0.20;
 
+    // --- Housing Mortgage & M2 Money Supply Transmission ---
+    /** Sensitivity of residential purchase and construction mortgage origination volume to housing starts. */
+    public const HOUSING_MORTGAGE_ORIGINATION_SENSITIVITY = 0.25;
+    /** Sensitivity of commercial bank core deposit expansion and lending capacity to M2 broad money growth. */
+    public const M2_DEPOSIT_GROWTH_SENSITIVITY = 0.40;
+
     // --- Macaulay Duration Gap & IRRBB NIM Physics ---
     /** Weighted average Macaulay duration of bank loan and mortgage assets in years. */
     public const ASSET_DURATION_YEARS          = 4.5;
@@ -459,10 +465,15 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $outputGap = $macroState->outputGapEma;
 
         // Blended dual-stream revenue (NII vs. Non-Interest Fee Income)
-        // Fed SLOOS channel: Credit standards tightening (SLOOS > 0) dampens loan origination volume; easing (SLOOS < 0) expands it.
+        // Fed SLOOS, Housing Starts, and M2 channels:
+        // Credit standards tightening (SLOOS > 0) dampens loan origination volume; easing (SLOOS < 0) expands it.
+        // Residential housing starts drive mortgage purchase origination, and broad money (M2) growth expands deposit lending capacity.
         $sloosOriginationDrag = $macroState->sloosTighteningIndexEma * self::SLOOS_NII_ORIGINATION_SENSITIVITY;
+        $housingMortgageBoost = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_MORTGAGE_ORIGINATION_SENSITIVITY);
+        $m2LiquidityBoost = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_DEPOSIT_GROWTH_SENSITIVITY);
+
         $niiRevenue = max(0.0, $expectedRevenue * $niiWeight
-            * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) - $sloosOriginationDrag));
+            * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) - $sloosOriginationDrag + $housingMortgageBoost + $m2LiquidityBoost));
         $feeRevenue = max(0.0, $expectedRevenue * $feeWeight
             * (1.0 + ($feeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + ($outputGap * self::SECTOR_SHOCK_FEE_OUTPUT_GAP_MULT)));
 

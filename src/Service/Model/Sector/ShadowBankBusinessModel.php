@@ -77,6 +77,12 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     /** Sensitivity of shadow bank CECL forward credit reserves to elevated 12-month recession risk. */
     public const CECL_RECESSION_SENSITIVITY     = 0.25;
 
+    // --- Housing Starts & M2 Liquidity Transmission ---
+    /** Sensitivity of non-bank purchase mortgage originations to residential housing starts. */
+    public const HOUSING_STARTS_ORIGINATION_SENSITIVITY = 0.35;
+    /** Sensitivity of private credit deployment and wholesale repo funding to M2 money supply growth. */
+    public const M2_SHADOW_LIQUIDITY_SENSITIVITY = 0.30;
+
     // --- NIM Squeeze & Repo Market Freeze ---
     /** Default 30Y Treasury yield fallback when macroeconomic yield curve data is missing. */
     public const DEFAULT_30Y_YIELD_FALLBACK = 0.045;
@@ -177,21 +183,23 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
 
         // 1. Mortgage Origination Volume Channel:
         // Spiking 30Y mortgage rates destroy refinancing demand and freeze home purchases.
-        // Strong residential property values stimulate cash-out refinancings and equity extraction.
+        // Strong residential property values and housing starts stimulate new mortgage purchase originations.
         $yield30y = $macroState->yield30yEma;
         $mortgageRateDrag = max(0.0, ($yield30y - self::DEFAULT_30Y_YIELD_FALLBACK) * 4.0);
         $residentialShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
         $propertyOriginationBoost = $residentialShift * 0.20;
+        $housingStartsShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_ORIGINATION_SENSITIVITY);
 
         // 2. Direct Lending Floating-Rate Channel:
         // Private debt / direct lending loans float on base policy rates (SOFR + spread), expanding yield during high-rate regimes.
-        // Bank credit retreat (SLOOS tightening) stimulates private credit borrower migration.
+        // Bank credit retreat (SLOOS tightening) and M2 systemic liquidity stimulate private credit borrower migration.
         $policyRate = $macroState->policyRateEma;
         $directLendingRateBonus = max(0.0, ($policyRate - 0.03) * 1.5);
         $sloosDirectLendingBoost = max(0.0, $macroState->sloosTighteningIndexEma) * self::SLOOS_PRIVATE_CREDIT_EXPANSION;
+        $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_SHADOW_LIQUIDITY_SENSITIVITY);
 
-        $mortgageRevenue = max(0.0, $expectedRevenue * $mortgageWeight * (1.0 + ($originationZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5)) - $mortgageRateDrag + $propertyOriginationBoost));
-        $lendingRevenue  = max(0.0, $expectedRevenue * $lendingWeight * (1.0 + ($lendingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.8)) + $directLendingRateBonus + $sloosDirectLendingBoost));
+        $mortgageRevenue = max(0.0, $expectedRevenue * $mortgageWeight * (1.0 + ($originationZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5)) - $mortgageRateDrag + $propertyOriginationBoost + $housingStartsShift));
+        $lendingRevenue  = max(0.0, $expectedRevenue * $lendingWeight * (1.0 + ($lendingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.8)) + $directLendingRateBonus + $sloosDirectLendingBoost + $m2Shift));
         
         $streamRevenues = [
             'origination_fees' => $mortgageRevenue,

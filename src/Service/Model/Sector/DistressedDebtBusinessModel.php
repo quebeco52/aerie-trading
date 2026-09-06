@@ -56,6 +56,10 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     public const HY_SPREAD_SURGE_SCALAR         = 10.00;
     /** Sensitivity multiplier translating corporate default rate surges into turnaround acquisition opportunities. */
     public const DEFAULT_RATE_SURGE_SCALAR      = 1.50;
+    /** Maximum capacity-constrained revenue expansion multiplier during severe credit distress (+125%). */
+    public const MAX_DISTRESS_REVENUE_EXPANSION = 1.25;
+    /** Sensitivity half-saturation intensity signal where 50% of the max distress expansion is realized. */
+    public const DISTRESS_HALF_SATURATION_POINT = 1.00;
 
     // --- Stream Weights & Variances ---
     public const RESTRUCTURING_ADVISORY_WEIGHT = 0.40;
@@ -92,10 +96,15 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
 
         // When credit spreads exceed 2.5%, high-yield spreads blow out, default rates surge, or output gap is negative, distressed debt opportunities explode
         if ($creditSpread > self::SPREAD_BLOWOUT_THRESHOLD || $outputGap < self::RECESSION_GAP_THRESHOLD || $hySpreadSurge > 0.0 || $defaultRateSurge > 0.0) {
-            $distressMultiplier = ($creditSpread - self::DEFAULT_CREDIT_SPREAD_FALLBACK) * self::SPREAD_SURGE_SCALAR
+            $rawDistressSurge = ($creditSpread - self::DEFAULT_CREDIT_SPREAD_FALLBACK) * self::SPREAD_SURGE_SCALAR
                 + abs(min(0.0, $outputGap)) * self::RECESSION_SURGE_SCALAR
                 + $hySpreadSurge
                 + $defaultRateSurge;
+            $distressMultiplier = $mathUtility->calculateDiminishingDistressMultiplier(
+                $rawDistressSurge,
+                self::MAX_DISTRESS_REVENUE_EXPANSION,
+                self::DISTRESS_HALF_SATURATION_POINT
+            );
         } elseif ($outputGap > self::BULL_MARKET_GAP_THRESHOLD && $creditSpread < self::DEFAULT_CREDIT_SPREAD_FALLBACK) {
             $distressMultiplier = self::BULL_MARKET_REVENUE_DRAG;
         }

@@ -88,6 +88,14 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     /** Variable cost penalty applied during multi-subsidiary restructuring or supply chain write-offs. */
     public const RESTRUCTURING_DRAG_PENALTY = 0.04;
 
+    // --- Industrial & Deal Activity Sensitivities ---
+    /** Sensitivity of industrial conglomerate subsidiary demand to manufacturing PMI. */
+    public const PMI_INDUSTRIAL_SENSITIVITY = 0.40;
+    /** Sensitivity of conglomerate wholesale production costs to Producer Price Inflation (PPI). */
+    public const PPI_COST_SENSITIVITY = 0.25;
+    /** Sensitivity of subsidiary divestiture proceeds and advisory alpha to capital markets deal activity. */
+    public const DEAL_ACTIVITY_DIVESTITURE_SCALAR = 0.15;
+
         public function getMinIcr(): float { return 2.5; }
     public function getWholesaleLeverageLimit(): float { return 2.0; }
     public function getDividendCrisisIcr(): float { return 1.75; }
@@ -168,14 +176,24 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         $outputGap = $macroState->outputGapEma;
         $creditSpread = $macroState->macroCreditSpread;
 
-        // Industrial manufacturing is pro-cyclical with GDP output gap
-        $industrialMacroBoost = $outputGap * self::INDUSTRIAL_MACRO_SCALAR * $beta;
+        // Industrial manufacturing is pro-cyclical with GDP output gap and manufacturing PMI
+        $pmiShift = MathUtility::calculatePmiDemandShift(
+            $macroState->manufacturingPmiEma,
+            MacroEngine::PMI_BASELINE,
+            self::PMI_INDUSTRIAL_SENSITIVITY
+        );
+        $industrialMacroBoost = ($outputGap * self::INDUSTRIAL_MACRO_SCALAR * $beta) + ($pmiShift * $beta);
+
+        // Capital markets deal activity expands strategic acquisition & divestiture opportunities
+        $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
+        $divestitureAlpha = max(0.0, $dealActivityShift) * self::DEAL_ACTIVITY_DIVESTITURE_SCALAR;
 
         // Contrarian Float: Surges counter-cyclically during economic distress & credit spread blowouts
         $recessionDepth = max(0.0, -$outputGap);
         $excessSpread   = max(0.0, $creditSpread - self::DEFAULT_CREDIT_SPREAD_BASELINE);
         $contrarianSurge = ($recessionDepth * self::FLOAT_RECESSION_ALPHA_SCALAR * $beta)
-            + ($excessSpread * self::FLOAT_SPREAD_BLOWOUT_SCALAR);
+            + ($excessSpread * self::FLOAT_SPREAD_BLOWOUT_SCALAR)
+            + $divestitureAlpha;
 
         // --- Tail Risk & Event Physics ---
         $acquisitionMult = 1.0;
@@ -208,8 +226,16 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         $actualRevenue = array_sum($streamRevenues);
         $streams->recordStreamShares($streamRevenues);
 
+        // Wholesale cost inflation (PPI) on industrial manufacturing operations
+        $ppiCostDrag = MathUtility::calculatePpiCostDrag(
+            $macroState->producerPriceInflationEma,
+            MacroEngine::TARGET_INFLATION,
+            $pricingPower,
+            self::PPI_COST_SENSITIVITY
+        ) * $industrialWeight;
+
         // Realized variable margin scaling
-        $rawMargin = $realizedVariableMargin + $restructuringPenalty;
+        $rawMargin = $realizedVariableMargin + $restructuringPenalty + $ppiCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         $primaryShockZ = $streams->resolveDominantShockZ([$industrialZ, $defensiveZ, $floatZ], $eventZ);

@@ -136,6 +136,16 @@ readonly class MacroStateDTO
         public float $refiningCrackSpreadEma = MacroEngine::CRACK_SPREAD_BASELINE,
         public float $dealActivityIndex = MacroEngine::DEAL_ACTIVITY_BASELINE,
         public float $dealActivityIndexEma = MacroEngine::DEAL_ACTIVITY_BASELINE,
+        public float $manufacturingPmi = MacroEngine::PMI_BASELINE,
+        public float $manufacturingPmiEma = MacroEngine::PMI_BASELINE,
+        public float $producerPriceInflation = MacroEngine::TARGET_INFLATION,
+        public float $producerPriceInflationEma = MacroEngine::TARGET_INFLATION,
+        public float $tradeBalanceToGdp = MacroEngine::TRADE_BALANCE_BASELINE,
+        public float $tradeBalanceToGdpEma = MacroEngine::TRADE_BALANCE_BASELINE,
+        public float $housingStartsIndex = MacroEngine::HOUSING_STARTS_BASELINE,
+        public float $housingStartsIndexEma = MacroEngine::HOUSING_STARTS_BASELINE,
+        public float $moneySupplyGrowth = MacroEngine::M2_BASE_GROWTH,
+        public float $moneySupplyGrowthEma = MacroEngine::M2_BASE_GROWTH,
     ) {}
 
     /**
@@ -375,6 +385,16 @@ readonly class MacroStateDTO
             refiningCrackSpreadEma: (float) ($data['refining_crack_spread_ema'] ?? ($data['refining_crack_spread'] ?? MacroEngine::CRACK_SPREAD_BASELINE)),
             dealActivityIndex: (float) ($data['deal_activity_index'] ?? MacroEngine::DEAL_ACTIVITY_BASELINE),
             dealActivityIndexEma: (float) ($data['deal_activity_index_ema'] ?? ($data['deal_activity_index'] ?? MacroEngine::DEAL_ACTIVITY_BASELINE)),
+            manufacturingPmi: (float) ($data['manufacturing_pmi'] ?? MacroEngine::PMI_BASELINE),
+            manufacturingPmiEma: (float) ($data['manufacturing_pmi_ema'] ?? ($data['manufacturing_pmi'] ?? MacroEngine::PMI_BASELINE)),
+            producerPriceInflation: (float) ($data['producer_price_inflation'] ?? MacroEngine::TARGET_INFLATION),
+            producerPriceInflationEma: (float) ($data['producer_price_inflation_ema'] ?? ($data['producer_price_inflation'] ?? MacroEngine::TARGET_INFLATION)),
+            tradeBalanceToGdp: (float) ($data['trade_balance_to_gdp'] ?? MacroEngine::TRADE_BALANCE_BASELINE),
+            tradeBalanceToGdpEma: (float) ($data['trade_balance_to_gdp_ema'] ?? ($data['trade_balance_to_gdp'] ?? MacroEngine::TRADE_BALANCE_BASELINE)),
+            housingStartsIndex: (float) ($data['housing_starts_index'] ?? MacroEngine::HOUSING_STARTS_BASELINE),
+            housingStartsIndexEma: (float) ($data['housing_starts_index_ema'] ?? ($data['housing_starts_index'] ?? MacroEngine::HOUSING_STARTS_BASELINE)),
+            moneySupplyGrowth: (float) ($data['money_supply_growth'] ?? MacroEngine::M2_BASE_GROWTH),
+            moneySupplyGrowthEma: (float) ($data['money_supply_growth_ema'] ?? ($data['money_supply_growth'] ?? MacroEngine::M2_BASE_GROWTH)),
         );
     }
 
@@ -506,6 +526,16 @@ readonly class MacroStateDTO
             refiningCrackSpreadEma: $state->refiningCrackSpreadEma,
             dealActivityIndex: $state->dealActivityIndex,
             dealActivityIndexEma: $state->dealActivityIndexEma,
+            manufacturingPmi: $state->manufacturingPmi,
+            manufacturingPmiEma: $state->manufacturingPmiEma,
+            producerPriceInflation: $state->producerPriceInflation,
+            producerPriceInflationEma: $state->producerPriceInflationEma,
+            tradeBalanceToGdp: $state->tradeBalanceToGdp,
+            tradeBalanceToGdpEma: $state->tradeBalanceToGdpEma,
+            housingStartsIndex: $state->housingStartsIndex,
+            housingStartsIndexEma: $state->housingStartsIndexEma,
+            moneySupplyGrowth: $state->moneySupplyGrowth,
+            moneySupplyGrowthEma: $state->moneySupplyGrowthEma,
         );
     }
 
@@ -637,6 +667,16 @@ readonly class MacroStateDTO
             'refining_crack_spread_ema' => $this->refiningCrackSpreadEma,
             'deal_activity_index' => $this->dealActivityIndex,
             'deal_activity_index_ema' => $this->dealActivityIndexEma,
+            'manufacturing_pmi' => $this->manufacturingPmi,
+            'manufacturing_pmi_ema' => $this->manufacturingPmiEma,
+            'producer_price_inflation' => $this->producerPriceInflation,
+            'producer_price_inflation_ema' => $this->producerPriceInflationEma,
+            'trade_balance_to_gdp' => $this->tradeBalanceToGdp,
+            'trade_balance_to_gdp_ema' => $this->tradeBalanceToGdpEma,
+            'housing_starts_index' => $this->housingStartsIndex,
+            'housing_starts_index_ema' => $this->housingStartsIndexEma,
+            'money_supply_growth' => $this->moneySupplyGrowth,
+            'money_supply_growth_ema' => $this->moneySupplyGrowthEma,
         ];
     }
 }

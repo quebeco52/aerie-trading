@@ -27,6 +27,16 @@ class MacroStateDTOTest extends TestCase
         $this->assertEquals(MacroEngine::INTERBANK_BASELINE_SPREAD, $dto->interbankLiquiditySpreadEma);
         $this->assertEquals(MacroEngine::TFP_BASELINE, $dto->totalFactorProductivityIndex);
         $this->assertEquals(MacroEngine::TFP_BASELINE, $dto->totalFactorProductivityIndexEma);
+        $this->assertEquals(MacroEngine::PMI_BASELINE, $dto->manufacturingPmi);
+        $this->assertEquals(MacroEngine::PMI_BASELINE, $dto->manufacturingPmiEma);
+        $this->assertEquals(MacroEngine::TARGET_INFLATION, $dto->producerPriceInflation);
+        $this->assertEquals(MacroEngine::TARGET_INFLATION, $dto->producerPriceInflationEma);
+        $this->assertEquals(MacroEngine::TRADE_BALANCE_BASELINE, $dto->tradeBalanceToGdp);
+        $this->assertEquals(MacroEngine::TRADE_BALANCE_BASELINE, $dto->tradeBalanceToGdpEma);
+        $this->assertEquals(MacroEngine::HOUSING_STARTS_BASELINE, $dto->housingStartsIndex);
+        $this->assertEquals(MacroEngine::HOUSING_STARTS_BASELINE, $dto->housingStartsIndexEma);
+        $this->assertEquals(MacroEngine::M2_BASE_GROWTH, $dto->moneySupplyGrowth);
+        $this->assertEquals(MacroEngine::M2_BASE_GROWTH, $dto->moneySupplyGrowthEma);
         $this->assertFalse($dto->qeActive);
         $this->assertNull($dto->eventType);
     }
@@ -75,6 +85,16 @@ class MacroStateDTOTest extends TestCase
             'interbank_liquidity_spread_ema' => 0.0030,
             'total_factor_productivity_index' => 105.0,
             'total_factor_productivity_index_ema' => 104.0,
+            'manufacturing_pmi' => 54.2,
+            'manufacturing_pmi_ema' => 53.8,
+            'producer_price_inflation' => 0.028,
+            'producer_price_inflation_ema' => 0.026,
+            'trade_balance_to_gdp' => -0.030,
+            'trade_balance_to_gdp_ema' => -0.028,
+            'housing_starts_index' => 115.0,
+            'housing_starts_index_ema' => 112.0,
+            'money_supply_growth' => 0.065,
+            'money_supply_growth_ema' => 0.062,
             'event_type' => 'TIGHTENING',
         ];
 
@@ -89,6 +109,16 @@ class MacroStateDTOTest extends TestCase
         $this->assertEquals(0.0030, $dto->interbankLiquiditySpreadEma);
         $this->assertEquals(105.0, $dto->totalFactorProductivityIndex);
         $this->assertEquals(104.0, $dto->totalFactorProductivityIndexEma);
+        $this->assertEquals(54.2, $dto->manufacturingPmi);
+        $this->assertEquals(53.8, $dto->manufacturingPmiEma);
+        $this->assertEquals(0.028, $dto->producerPriceInflation);
+        $this->assertEquals(0.026, $dto->producerPriceInflationEma);
+        $this->assertEquals(-0.030, $dto->tradeBalanceToGdp);
+        $this->assertEquals(-0.028, $dto->tradeBalanceToGdpEma);
+        $this->assertEquals(115.0, $dto->housingStartsIndex);
+        $this->assertEquals(112.0, $dto->housingStartsIndexEma);
+        $this->assertEquals(0.065, $dto->moneySupplyGrowth);
+        $this->assertEquals(0.062, $dto->moneySupplyGrowthEma);
         $this->assertTrue($dto->qeActive);
         $this->assertEquals('TIGHTENING', $dto->eventType);
 
@@ -102,6 +132,16 @@ class MacroStateDTOTest extends TestCase
         $this->assertEquals($payload['interbank_liquidity_spread_ema'], $exported['interbank_liquidity_spread_ema']);
         $this->assertEquals($payload['total_factor_productivity_index'], $exported['total_factor_productivity_index']);
         $this->assertEquals($payload['total_factor_productivity_index_ema'], $exported['total_factor_productivity_index_ema']);
+        $this->assertEquals($payload['manufacturing_pmi'], $exported['manufacturing_pmi']);
+        $this->assertEquals($payload['manufacturing_pmi_ema'], $exported['manufacturing_pmi_ema']);
+        $this->assertEquals($payload['producer_price_inflation'], $exported['producer_price_inflation']);
+        $this->assertEquals($payload['producer_price_inflation_ema'], $exported['producer_price_inflation_ema']);
+        $this->assertEquals($payload['trade_balance_to_gdp'], $exported['trade_balance_to_gdp']);
+        $this->assertEquals($payload['trade_balance_to_gdp_ema'], $exported['trade_balance_to_gdp_ema']);
+        $this->assertEquals($payload['housing_starts_index'], $exported['housing_starts_index']);
+        $this->assertEquals($payload['housing_starts_index_ema'], $exported['housing_starts_index_ema']);
+        $this->assertEquals($payload['money_supply_growth'], $exported['money_supply_growth']);
+        $this->assertEquals($payload['money_supply_growth_ema'], $exported['money_supply_growth_ema']);
         $this->assertEquals($payload['qe_active'], $exported['qe_active']);
         $this->assertEquals($payload['event_type'], $exported['event_type']);
     }
@@ -119,6 +159,16 @@ class MacroStateDTOTest extends TestCase
         $state->interbankLiquiditySpreadEma = 0.0038;
         $state->totalFactorProductivityIndex = 110.0;
         $state->totalFactorProductivityIndexEma = 108.5;
+        $state->manufacturingPmi = 58.0;
+        $state->manufacturingPmiEma = 57.0;
+        $state->producerPriceInflation = 0.035;
+        $state->producerPriceInflationEma = 0.033;
+        $state->tradeBalanceToGdp = -0.032;
+        $state->tradeBalanceToGdpEma = -0.030;
+        $state->housingStartsIndex = 130.0;
+        $state->housingStartsIndexEma = 125.0;
+        $state->moneySupplyGrowth = 0.080;
+        $state->moneySupplyGrowthEma = 0.075;
         $state->qeActive = true;
         $state->eventType = 'STIMULUS';
 
@@ -134,6 +184,16 @@ class MacroStateDTOTest extends TestCase
         $this->assertEquals(0.0038, $dto->interbankLiquiditySpreadEma);
         $this->assertEquals(110.0, $dto->totalFactorProductivityIndex);
         $this->assertEquals(108.5, $dto->totalFactorProductivityIndexEma);
+        $this->assertEquals(58.0, $dto->manufacturingPmi);
+        $this->assertEquals(57.0, $dto->manufacturingPmiEma);
+        $this->assertEquals(0.035, $dto->producerPriceInflation);
+        $this->assertEquals(0.033, $dto->producerPriceInflationEma);
+        $this->assertEquals(-0.032, $dto->tradeBalanceToGdp);
+        $this->assertEquals(-0.030, $dto->tradeBalanceToGdpEma);
+        $this->assertEquals(130.0, $dto->housingStartsIndex);
+        $this->assertEquals(125.0, $dto->housingStartsIndexEma);
+        $this->assertEquals(0.080, $dto->moneySupplyGrowth);
+        $this->assertEquals(0.075, $dto->moneySupplyGrowthEma);
         $this->assertTrue($dto->qeActive);
         $this->assertEquals('STIMULUS', $dto->eventType);
     }

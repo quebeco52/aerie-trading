@@ -60,6 +60,10 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const MIN_BETA_PRICING_POWER_FLOOR = 0.80; // Highly sensitive to macro shifts
     /** Sensitivity of OEM capital equipment orders to aggregate industrial capital capacity overhang. */
     public const CAPITAL_OVERHANG_SCALAR = 0.15;
+    /** Sensitivity of OEM heavy equipment orders to manufacturing PMI survey shifts. */
+    public const PMI_DEMAND_SENSITIVITY = 0.50;
+    /** Sensitivity of heavy industrial variable margins to wholesale producer price index (PPI) inflation. */
+    public const PPI_COST_DRAG_SENSITIVITY = 0.40;
 
     // --- Revenue & Shock Physics ---
     public const REVENUE_VARIANCE_SCALAR = 0.35; // Volatile sales
@@ -75,12 +79,13 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
 
-        // Heavy manufacturing is extremely sensitive to the output gap (pro-cyclical)
+        // Heavy manufacturing is extremely sensitive to the output gap and manufacturing PMI
         $outputGap = $macroState->outputGapEma;
         $beta = (float) $stock->getBeta();
+        $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroEngine::PMI_BASELINE, self::PMI_DEMAND_SENSITIVITY);
 
-        // Amplify the output gap impact significantly
-        $physics['macro_demand_shift'] = $outputGap * $beta * 1.75;
+        // Amplify the output gap impact with leading ISM manufacturing PMI activity
+        $physics['macro_demand_shift'] = ($outputGap * $beta * 1.50) + ($pmiShift * $beta);
 
         return $physics;
     }
@@ -158,8 +163,16 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         $cuDeviation = ($macroState->capacityUtilizationRateEma - MacroEngine::CU_BASELINE) / 100.0;
         $cuMarginAdjustment = - ($cuDeviation * self::CU_MARGIN_ABSORPTION_SENSITIVITY);
 
+        // Wholesale Producer Price Inflation (PPI) Cost Drag:
+        $ppiCostDrag = MathUtility::calculatePpiCostDrag(
+            $macroState->producerPriceInflationEma,
+            MacroEngine::TARGET_INFLATION,
+            $pricingPower,
+            self::PPI_COST_DRAG_SENSITIVITY
+        );
+
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
-        $clampedMargin = $this->clampMargin($effectiveMargin + $inflationPenalty + $cuMarginAdjustment);
+        $clampedMargin = $this->clampMargin($effectiveMargin + $inflationPenalty + $cuMarginAdjustment + $ppiCostDrag);
 
         $primaryShockZ = $streams->resolveDominantShockZ([$oemZ, $mroZ]);
         $observableShockZ = ($oemZ * $oemWeight * self::OEM_VARIANCE_SCALAR * (1.0 - self::BACKLOG_DAMPING_FACTOR)) +

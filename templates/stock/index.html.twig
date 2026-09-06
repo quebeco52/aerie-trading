@@ -587,11 +587,11 @@
 					</div>
 
 					{# Category Filter Bar & Quick Search Filter #}
-					<div class="flex flex-col sm:flex-row justify-between items-stretch sm:items-center bg-surface-container-low border border-outline-variant/15 rounded-2xl p-3 gap-3 shadow-lg">
+					<div class="flex flex-col xl:flex-row justify-between items-stretch xl:items-center bg-surface-container-low border border-outline-variant/15 rounded-2xl p-3 gap-3 shadow-lg">
 						{# Filter Pills #}
-						<div class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1 sm:pb-0" id="macroCategoryPills">
+						<div class="flex items-center flex-wrap gap-1.5" id="macroCategoryPills">
 							<button class="macro-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap bg-primary text-[#001a42] shadow-md shadow-primary/20 cursor-pointer" data-category="all">
-								ALL <span class="ml-1 opacity-75 font-mono text-[10px]">(20)</span>
+								ALL <span class="ml-1 opacity-75 font-mono text-[10px]">(21)</span>
 							</button>
 							<button class="macro-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface cursor-pointer" data-category="monetary">
 								MONETARY & YIELDS <span class="ml-1 opacity-75 font-mono text-[10px]">(5)</span>
@@ -600,7 +600,7 @@
 								INFLATION & OUTPUT <span class="ml-1 opacity-75 font-mono text-[10px]">(4)</span>
 							</button>
 							<button class="macro-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface cursor-pointer" data-category="growth">
-								GROWTH & LABOR <span class="ml-1 opacity-75 font-mono text-[10px]">(3)</span>
+								GROWTH & LABOR <span class="ml-1 opacity-75 font-mono text-[10px]">(4)</span>
 							</button>
 							<button class="macro-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface cursor-pointer" data-category="credit">
 								CREDIT & LIQUIDITY <span class="ml-1 opacity-75 font-mono text-[10px]">(4)</span>
@@ -628,7 +628,7 @@
 									</div>
 									<div class="min-w-0">
 										<div class="flex items-center gap-2 flex-wrap">
-											<h4 class="text-xs font-bold text-on-surface truncate">Inflation, Output Gap & Capital Overhang</h4>
+											<h4 class="text-xs font-bold text-on-surface">Inflation, Output Gap & Capital Overhang</h4>
 											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">BLS: CPI / TIPS</span>
 										</div>
 										<p class="text-[10px] text-on-surface-variant truncate">Consumer price inflation & TIPS breakeven vs cyclical output gap & capital overhang</p>
@@ -659,7 +659,7 @@
 									</div>
 									<div class="min-w-0">
 										<div class="flex items-center gap-2 flex-wrap">
-											<h4 class="text-xs font-bold text-on-surface truncate">Yield Curve & Policy Rates</h4>
+											<h4 class="text-xs font-bold text-on-surface">Yield Curve & Policy Rates</h4>
 											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">FED: EFFR / H.15</span>
 										</div>
 										<p class="text-[10px] text-on-surface-variant truncate">Central bank policy rates, treasury yields & term structure spreads</p>
@@ -690,7 +690,7 @@
 									</div>
 									<div class="min-w-0">
 										<div class="flex items-center gap-2 flex-wrap">
-											<h4 class="text-xs font-bold text-on-surface truncate">Mortgage Rates & Spread Dynamics (30Y)</h4>
+											<h4 class="text-xs font-bold text-on-surface">Mortgage Rates & Spread Dynamics (30Y)</h4>
 											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">FRED: MORTGAGE30US</span>
 										</div>
 										<p class="text-[10px] text-on-surface-variant truncate">30-Year fixed mortgage rates vs policy rate lending spreads</p>
@@ -721,7 +721,7 @@
 									</div>
 									<div class="min-w-0">
 										<div class="flex items-center gap-2 flex-wrap">
-											<h4 class="text-xs font-bold text-on-surface truncate">Risk Premia, Volatility & Corporate Rates</h4>
+											<h4 class="text-xs font-bold text-on-surface">Risk Premia, Volatility & Corporate Rates</h4>
 											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">CBOE: VIX / ICE BofA</span>
 										</div>
 										<p class="text-[10px] text-on-surface-variant truncate">Equity risk premium (ERP), implied market volatility & borrowing yields</p>
@@ -752,7 +752,7 @@
 									</div>
 									<div class="min-w-0">
 										<div class="flex items-center gap-2 flex-wrap">
-											<h4 class="text-xs font-bold text-on-surface truncate">Labor Market & Wage Dynamics</h4>
+											<h4 class="text-xs font-bold text-on-surface">Labor Market & Wage Dynamics</h4>
 											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">BLS: UNRATE / JOLTS</span>
 										</div>
 										<p class="text-[10px] text-on-surface-variant truncate">Unemployment rate vs structural NAIRU, job vacancies and annual wage growth</p>
@@ -783,7 +783,7 @@
 									</div>
 									<div class="min-w-0">
 										<div class="flex items-center gap-2 flex-wrap">
-											<h4 class="text-xs font-bold text-on-surface truncate">TED Interbank Spread & Credit Liquidity</h4>
+											<h4 class="text-xs font-bold text-on-surface">TED Interbank Spread & Credit Liquidity</h4>
 											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">FRED: TEDRATE / ICE</span>
 										</div>
 										<p class="text-[10px] text-on-surface-variant truncate">Interbank liquidity stress (bps) vs corporate credit risk premium</p>
@@ -814,10 +814,10 @@
 									</div>
 									<div class="min-w-0">
 										<div class="flex items-center gap-2 flex-wrap">
-											<h4 class="text-xs font-bold text-on-surface truncate">Commercial & Residential Real Estate</h4>
-											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">MSCI / S&P CoreLogic</span>
+											<h4 class="text-xs font-bold text-on-surface">Real Estate & Housing Starts</h4>
+											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">MSCI / S&P / TE Starts</span>
 										</div>
-										<p class="text-[10px] text-on-surface-variant truncate">CRE price valuation index vs residential housing indices</p>
+										<p class="text-[10px] text-on-surface-variant truncate">CRE valuation & residential property indices vs Trading Economics Housing Starts index</p>
 									</div>
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
@@ -845,7 +845,7 @@
 									</div>
 									<div class="min-w-0">
 										<div class="flex items-center gap-2 flex-wrap">
-											<h4 class="text-xs font-bold text-on-surface truncate">Sentiment, Deal Flow & Credit Defaults</h4>
+											<h4 class="text-xs font-bold text-on-surface">Sentiment, Deal Flow & Credit Defaults</h4>
 											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">UMich / Refinitiv</span>
 										</div>
 										<p class="text-[10px] text-on-surface-variant truncate">Consumer sentiment & M&A deal flow index vs household & corporate speculative default rates</p>
@@ -876,7 +876,7 @@
 									</div>
 									<div class="min-w-0">
 										<div class="flex items-center gap-2 flex-wrap">
-											<h4 class="text-xs font-bold text-on-surface truncate">Commodity Indices & 3:2:1 Refining Crack Spread</h4>
+											<h4 class="text-xs font-bold text-on-surface">Commodity Indices & 3:2:1 Refining Crack Spread</h4>
 											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">CME: WTI / LME Metals</span>
 										</div>
 										<p class="text-[10px] text-on-surface-variant truncate">Energy, metals & agriculture spot prices vs petroleum refining crack spread ($/bbl)</p>
@@ -907,7 +907,7 @@
 									</div>
 									<div class="min-w-0">
 										<div class="flex items-center gap-2 flex-wrap">
-											<h4 class="text-xs font-bold text-on-surface truncate">Global Trade, Freight & Supply Chain Pressure</h4>
+											<h4 class="text-xs font-bold text-on-surface">Global Trade, Freight & Supply Chain Pressure</h4>
 											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">NY FED: GSCPI / FX</span>
 										</div>
 										<p class="text-[10px] text-on-surface-variant truncate">Exchange rate currency index, container freight rates & NY Fed GSCPI (σ)</p>
@@ -938,7 +938,7 @@
 									</div>
 									<div class="min-w-0">
 										<div class="flex items-center gap-2 flex-wrap">
-											<h4 class="text-xs font-bold text-on-surface truncate">Fiscal Policy & Sovereign Debt Dynamics</h4>
+											<h4 class="text-xs font-bold text-on-surface">Fiscal Policy & Sovereign Debt Dynamics</h4>
 											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">US TREASURY / CBO</span>
 										</div>
 										<p class="text-[10px] text-on-surface-variant truncate">Public expenditure index vs cumulative sovereign debt-to-GDP accumulation</p>
@@ -969,7 +969,7 @@
 									</div>
 									<div class="min-w-0">
 										<div class="flex items-center gap-2 flex-wrap">
-											<h4 class="text-xs font-bold text-on-surface truncate">10-Year Yield Decomposition</h4>
+											<h4 class="text-xs font-bold text-on-surface">10-Year Yield Decomposition</h4>
 											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">ACM: NY FED / DGS10</span>
 										</div>
 										<p class="text-[10px] text-on-surface-variant truncate">10Y yield split into expected policy rate path vs duration term premium and natural rate</p>
@@ -1000,7 +1000,7 @@
 									</div>
 									<div class="min-w-0">
 										<div class="flex items-center gap-2 flex-wrap">
-											<h4 class="text-xs font-bold text-on-surface truncate">Economic Growth, TFP & Recession Risk</h4>
+											<h4 class="text-xs font-bold text-on-surface">Economic Growth, TFP & Recession Risk</h4>
 											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">BEA: NIPA / NYFED</span>
 										</div>
 										<p class="text-[10px] text-on-surface-variant truncate">Annualized real & nominal GDP growth momentum, potential capacity, TFP & 12M forward recession probability</p>
@@ -1031,7 +1031,7 @@
 									</div>
 									<div class="min-w-0">
 										<div class="flex items-center gap-2 flex-wrap">
-											<h4 class="text-xs font-bold text-on-surface truncate">Central Bank Balance Sheet & Quantitative Operations</h4>
+											<h4 class="text-xs font-bold text-on-surface">Central Bank Balance Sheet & Operations (QE / QT)</h4>
 											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">FED: H.4.1 / SOMA</span>
 										</div>
 										<p class="text-[10px] text-on-surface-variant truncate">Asset holdings index vs quantitative easing (QE) & tightening (QT) intensity</p>
@@ -1062,7 +1062,7 @@
 									</div>
 									<div class="min-w-0">
 										<div class="flex items-center gap-2 flex-wrap">
-											<h4 class="text-xs font-bold text-on-surface truncate">Financial Conditions & Bank Lending Standards</h4>
+											<h4 class="text-xs font-bold text-on-surface">Financial Conditions & Bank Lending Standards</h4>
 											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">CHI FED: NFCI / SLOOS</span>
 										</div>
 										<p class="text-[10px] text-on-surface-variant truncate">Composite FCI index (credit, equity, dollar, rates) vs Fed SLOOS net credit tightening</p>
@@ -1093,7 +1093,7 @@
 									</div>
 									<div class="min-w-0">
 										<div class="flex items-center gap-2 flex-wrap">
-											<h4 class="text-xs font-bold text-on-surface truncate">Supply-Side Cost Pressures & Food CPI</h4>
+											<h4 class="text-xs font-bold text-on-surface">Supply-Side Cost Pressures & Food CPI</h4>
 											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">USDA / BLS Cost-Push</span>
 										</div>
 										<p class="text-[10px] text-on-surface-variant truncate">Agricultural food CPI pass-through lag vs energy & freight logistics supply drags</p>
@@ -1124,10 +1124,10 @@
 									</div>
 									<div class="min-w-0">
 										<div class="flex items-center gap-2 flex-wrap">
-											<h4 class="text-xs font-bold text-on-surface truncate">Sectoral Inflation Breakdown (Shapiro 2022)</h4>
-											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">SF FED: Shapiro 2022</span>
+											<h4 class="text-xs font-bold text-on-surface">Sectoral Inflation & Producer Prices (PPI)</h4>
+											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">SF FED / BLS: PPI & CPI</span>
 										</div>
-										<p class="text-[10px] text-on-surface-variant truncate">Headline CPI decomposed into supercore services, core goods & commodity cost-push</p>
+										<p class="text-[10px] text-on-surface-variant truncate">Headline CPI & PPI wholesale inflation decomposed into supercore services, goods & food lag</p>
 									</div>
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
@@ -1155,7 +1155,7 @@
 									</div>
 									<div class="min-w-0">
 										<div class="flex items-center gap-2 flex-wrap">
-											<h4 class="text-xs font-bold text-on-surface truncate">Corporate Credit Spreads, Default Risk & Rating Cliff</h4>
+											<h4 class="text-xs font-bold text-on-surface">Corporate Credit Spreads, Default Risk & Rating Cliff</h4>
 											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">ICE BofA / JLT 1997</span>
 										</div>
 										<p class="text-[10px] text-on-surface-variant truncate">Investment Grade (IG) vs High Yield (HY) credit spreads, corporate default rate & cliff</p>
@@ -1186,7 +1186,7 @@
 									</div>
 									<div class="min-w-0">
 										<div class="flex items-center gap-2 flex-wrap">
-											<h4 class="text-xs font-bold text-on-surface truncate">Inventory Cycle, Capacity Utilization & Strategic Buffers</h4>
+											<h4 class="text-xs font-bold text-on-surface">Inventory Investment Cycle & Capacity Buffers</h4>
 											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">CENSUS: M3 / FED: G.17</span>
 										</div>
 										<p class="text-[10px] text-on-surface-variant truncate">Metzler inventory overhang gap vs G.17 factory capacity utilization and strategic reserve buffer</p>
@@ -1217,7 +1217,7 @@
 									</div>
 									<div class="min-w-0">
 										<div class="flex items-center gap-2 flex-wrap">
-											<h4 class="text-xs font-bold text-on-surface truncate">Average Inflation Targeting (FAIT)</h4>
+											<h4 class="text-xs font-bold text-on-surface">Average Inflation Targeting (FAIT)</h4>
 											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">FOMC: FAIT Framework</span>
 										</div>
 										<p class="text-[10px] text-on-surface-variant truncate">Cumulative inflation shortfall/overshoot gap vs policy rate target make-up offset</p>
@@ -1236,6 +1236,37 @@
 							</div>
 							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
 								<canvas id="macroFaitChart"></canvas>
+							</div>
+						</div>
+
+						{# Chart 21: Trading Economics Leading Indicators #}
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="growth">
+							<div class="flex items-start justify-between mb-3 gap-2">
+								<div class="flex items-center gap-2.5 min-w-0">
+									<div class="p-2 rounded-xl bg-sky-500/10 text-sky-400 shrink-0">
+										<span class="material-symbols-outlined text-lg leading-none">ssid_chart</span>
+									</div>
+									<div class="min-w-0">
+										<div class="flex items-center gap-2 flex-wrap">
+											<h4 class="text-xs font-bold text-on-surface">Leading Indicators & Macro Activity</h4>
+											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">TE: Leading Index</span>
+										</div>
+										<p class="text-[10px] text-on-surface-variant truncate">Manufacturing PMI, Housing Starts, M2 Money Supply, Trade Balance & Producer Prices</p>
+									</div>
+								</div>
+								<div class="flex items-center gap-2 shrink-0">
+									<div class="hidden sm:flex flex-col items-end text-right">
+										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroLeadingIndicatorsChart">-</span>
+									</div>
+									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Leading</span>
+									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
+										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
+									</button>
+								</div>
+							</div>
+							<div class="chart-canvas-container h-80 md:h-85 w-full relative">
+								<canvas id="macroLeadingIndicatorsChart"></canvas>
 							</div>
 						</div>
 					</div>

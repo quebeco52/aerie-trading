@@ -51,6 +51,8 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     public const VEBLEN_INFLATION_SCALAR   = 1.50;
     /** Variable margin improvement scalar capturing aggressive Veblen price hikes during inflation. */
     public const VEBLEN_MARGIN_BENEFIT     = 0.30;
+    /** Sensitivity of high-net-worth luxury demand to broad money supply (M2) growth liquidity. */
+    public const M2_LIQUIDITY_SENSITIVITY  = 0.40;
 
     // --- Brand Lore & Shock Thresholds ---
     /** Volatility multiplier for top-line revenue shocks in resilient luxury conglomerates. */
@@ -98,7 +100,9 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
 
         $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         $resShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0; // Wealth effect from property
-        $blendedMacroShift = ($outputGap * 0.4) + ($sentimentShift * 0.6) + ($resShift * 0.20) - ($fxShift * 0.15);
+        $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, MacroEngine::M2_BASE_GROWTH, self::M2_LIQUIDITY_SENSITIVITY);
+
+        $blendedMacroShift = ($outputGap * 0.35) + ($sentimentShift * 0.45) + ($resShift * 0.20) + $m2Shift - ($fxShift * 0.15);
 
         // Luxury goods benefit from Veblen pricing power during inflation
         $inflationBonus = $inflation > MacroEngine::TARGET_INFLATION ? ($inflation - MacroEngine::TARGET_INFLATION) * self::VEBLEN_INFLATION_SCALAR : 0.0;

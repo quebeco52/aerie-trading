@@ -15,7 +15,12 @@ class AssetMarketSubsystemTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->mathUtility = new MathUtility();
+        $this->mathUtility = new class extends MathUtility {
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
+        };
         $this->subsystem = new AssetMarketSubsystem($this->mathUtility);
     }
 
@@ -82,6 +87,37 @@ class AssetMarketSubsystemTest extends TestCase
         $this->subsystem->calculateCapitalMarketsDealIndex($state, 0.25);
         $this->assertGreaterThan(50.0, $state->dealActivityIndex);
         $this->assertLessThan(250.0, $state->dealActivityIndex);
+    }
+
+    public function testCalculateTradeBalance(): void
+    {
+        $dt = 0.25;
+
+        $stateAppreciated = new MacroState();
+        $stateAppreciated->exchangeRateIndex = 115.0;
+        $stateAppreciated->outputGap = 0.03;
+        $stateAppreciated->tradeBalanceToGdp = MacroEngine::TRADE_BALANCE_BASELINE;
+
+        $this->subsystem->calculateTradeBalance($stateAppreciated, $dt);
+        $this->assertLessThan(MacroEngine::TRADE_BALANCE_BASELINE, $stateAppreciated->tradeBalanceToGdp, 'Currency appreciation and domestic demand absorption must worsen trade deficit');
+    }
+
+    public function testCalculateHousingStarts(): void
+    {
+        $dt = 0.25;
+
+        $stateBoom = new MacroState();
+        $stateBoom->residentialPropertyIndex = 130.0;
+        $stateBoom->industrialMetalsIndex = 100.0;
+        $stateBoom->wageGrowth = 0.03;
+        $stateBoom->yield30yEma = 0.035;
+        $stateBoom->macroCreditSpread = 0.015;
+        $stateBoom->inflationEma = 0.025;
+        $stateBoom->sloosTighteningIndexEma = 0.0;
+        $stateBoom->housingStartsIndex = 100.0;
+
+        $this->subsystem->calculateHousingStarts($stateBoom, $dt);
+        $this->assertGreaterThan(100.0, $stateBoom->housingStartsIndex, 'High Tobin Q and affordable mortgage finance must stimulate housing starts');
     }
 }
 

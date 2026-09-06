@@ -121,6 +121,10 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     /** Minimum cost-to-revenue ratio: high operating leverage ensures variable margin does not collapse below structural platform overhead. */
     public const MIN_EFFICIENCY_RATIO      = 0.35;
 
+    // --- Broad Money Supply & AUM Inflows ---
+    /** Sensitivity of institutional and retail AUM fund inflows to broad money supply (M2) expansion. */
+    public const M2_AUM_INFLOW_SENSITIVITY = 0.35;
+
     // --- Seed Capital & Co-Investment Volatility ---
     /** Quarterly volatility of the 40% equity seed capital tranche in the treasury co-investment portfolio. */
     public const SEED_EQUITY_VOL           = 0.10;
@@ -318,10 +322,11 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         $baseFeeZ = $streams->generateZ('base_fee', 0.45); // Sticky recurring AUM management fees
         $alphaZ   = $streams->generateZ('alpha', 0.15); // Fund alpha / activist execution
 
-        // 1. AUM Mark-to-Market Beta (Base Management Fee Stream):
-        // When equity/credit markets rise or fall, base AUM fee revenue expands or contracts.
+        // 1. AUM Mark-to-Market Beta & M2 Liquidity Inflows (Base Management Fee Stream):
+        // When equity/credit markets rise or fall, or systemic broad money (M2) expands, base AUM fee revenue expands or contracts.
         $outputGap = $macroState->outputGapEma;
         $aumMarketBeta = $outputGap * abs((float) $stock->getBeta()) * $aumBetaScalar;
+        $m2InflowBoost = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_AUM_INFLOW_SENSITIVITY);
 
         // 2. Asymmetric Performance Fees & Institutional Redemptions (Incentive Fee Stream):
         // Strong alpha quarters crystallize outsized performance fees / carried interest.
@@ -338,7 +343,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
 
         // Blended dual-stream revenue
         $baseRevenue = max(0.0, $expectedRevenue * $baseWeight
-            * (1.0 + ($baseFeeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $aumMarketBeta - $baseRedemptionAttrition));
+            * (1.0 + ($baseFeeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $aumMarketBeta - $baseRedemptionAttrition + $m2InflowBoost));
         $perfRevenue = max(0.0, $expectedRevenue * $perfWeight
             * (1.0 + ($alphaZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $alphaFeeBonus));
         

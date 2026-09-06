@@ -171,19 +171,15 @@ class EarningsEngine
         $dynamicSam = FinancialConstants::BASELINE_SECTOR_TAM * $macroState->nominalGdpIndex * (float) ($stock->getSamRatio() ?? 1.0);
         $maxSectorCapacity = $dynamicSam * FinancialConstants::MAX_SECTOR_TAM_CAPACITY_RATIO;
         
-        if (!$strategy->isFinancial()) {
-            // revenueGeneratingCapital should not be capped by maxSectorCapacity (which is in dollars of revenue)
-            // It will naturally be bottlenecked when structuralRevenue is capped below.
-        }
-        
         $structuralRevenue = max(1.0, $revenueGeneratingCapital * $assetTurnover * $pricingPowerMultiplier);
         
         if (!$strategy->isFinancial()) {
             $ctx->structuralRevenue = min($maxSectorCapacity, $structuralRevenue);
             $ctx->expectedRevenue = min($maxSectorCapacity * 1.25, $ctx->structuralRevenue * $ctx->capacityUtilization);
         } else {
-            $ctx->structuralRevenue = $structuralRevenue;
-            $ctx->expectedRevenue = $ctx->structuralRevenue * $ctx->capacityUtilization;
+            $maxFinancialCapacity = $dynamicSam * FinancialConstants::MAX_FINANCIAL_SECTOR_TAM_CAPACITY_RATIO;
+            $ctx->structuralRevenue = min($maxFinancialCapacity, $structuralRevenue);
+            $ctx->expectedRevenue = min($maxFinancialCapacity * 1.25, $ctx->structuralRevenue * $ctx->capacityUtilization);
         }
 
         $fixedCostRatio = (float) $stock->getFixedCostRatio();

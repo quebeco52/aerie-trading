@@ -68,6 +68,10 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     /** Variable margin sensitivity to incremental debt rating & API transaction feed volume. */
     public const TRANSACTION_LEVERAGE_SENSITIVITY = 0.020;
 
+    // --- Capital Markets Deal Activity Transmission ---
+    /** Sensitivity of credit rating issuance fees and market data feed volume to aggregate deal activity. */
+    public const DEAL_ACTIVITY_RATING_SENSITIVITY = 0.25;
+
     // --- Data Platform Reinvestment & Monopoly Moat Physics ---
     /** Quarterly margin decay rate per unit of software/platform underinvestment below replacement. */
     public const PLATFORM_DECAY_RATE          = 0.015;
@@ -118,7 +122,9 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         $creditSpreadGap = MacroEngine::BASE_CREDIT_SPREAD - $macroState->macroCreditSpreadEma;
         $dcmIssuanceBoost = ($creditSpreadGap * 2.0) + ($macroState->outputGapEma * 1.5 * abs((float) $stock->getBeta()));
         $vixVolBoost = max(0.0, ($macroState->marketVolatilityEma - 0.20) * 0.50);
-        $transactionMacroBonus = $dcmIssuanceBoost + $vixVolBoost;
+        $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
+        $dealActivityRatingBoost = $dealActivityShift * self::DEAL_ACTIVITY_RATING_SENSITIVITY;
+        $transactionMacroBonus = $dcmIssuanceBoost + $vixVolBoost + $dealActivityRatingBoost;
 
         $subscriptionRevenue = max(0.0, $expectedRevenue * $subscriptionWeight * (1.0 + ($subscriptionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
         $transactionRevenue  = max(0.0, $expectedRevenue * $transactionWeight * (1.0 + ($transactionZ * ($baselineVol * (self::REVENUE_VARIANCE_SCALAR * 5.0))) + $transactionMacroBonus));

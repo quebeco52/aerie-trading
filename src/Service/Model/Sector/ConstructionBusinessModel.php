@@ -75,6 +75,16 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
     /** Maximum mitigation percentage of material cost drag achieved via perfect pricing power. */
     public const MAX_PRICING_POWER_MITIGATION = 0.60;
 
+    // --- Housing Starts, SLOOS & PPI Transmission ---
+    /** Sensitivity of commercial and residential construction activity to housing starts shifts. */
+    public const HOUSING_STARTS_SENSITIVITY = 0.40;
+
+    /** Drag on construction financing per unit of SLOOS bank lending standard tightening. */
+    public const SLOOS_CREDIT_TIGHTENING_SCALAR = 0.30;
+
+    /** Sensitivity of building materials (cement, lumber, structural steel) to wholesale PPI inflation. */
+    public const PPI_CONSTRUCTION_SENSITIVITY = 0.45;
+
     // --- Tail Risk & Shock Events ---
     /** Z-score threshold for catastrophic project delays and liquidated damages. */
     public const COST_OVERRUN_Z_SCORE = -2.00;
@@ -167,9 +177,11 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $policyRate = $macroState->policyRateEma;
         $residentialShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
         $commercialPropertyShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;
+        $housingStartsShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_SENSITIVITY);
+        $sloosDrag = max(0.0, $macroState->sloosTighteningIndexEma) * self::SLOOS_CREDIT_TIGHTENING_SCALAR;
 
-        $commercialMacroBoost = (($outputGap * 1.5 * $beta) + ($commercialPropertyShift * 0.30) + ($residentialShift * 0.20)) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
-        $commercialCreditDrag = max(0.0, ($policyRate - $macroState->naturalRateEma) * 2.0 * $beta) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
+        $commercialMacroBoost = (($outputGap * 1.5 * $beta) + ($commercialPropertyShift * 0.30) + ($residentialShift * 0.20) + $housingStartsShift) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
+        $commercialCreditDrag = (max(0.0, ($policyRate - $macroState->naturalRateEma) * 2.0 * $beta) + $sloosDrag) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
         $maintenanceMacroBoost = ($outputGap * 0.3 * $beta);
         $govSpendShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
 
@@ -213,7 +225,8 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
             : 0.0;
 
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
-        $rawMaterialCostDrag = $baseInflationPenalty + ($energyShift * self::ENERGY_COST_SCALAR) + ($metalsShift * self::ENERGY_COST_SCALAR * 1.5);
+        $ppiCostDrag = MathUtility::calculatePpiCostDrag($macroState->producerPriceInflation, MacroEngine::TARGET_INFLATION, $pricingPower, self::PPI_CONSTRUCTION_SENSITIVITY);
+        $rawMaterialCostDrag = $baseInflationPenalty + ($energyShift * self::ENERGY_COST_SCALAR) + ($metalsShift * self::ENERGY_COST_SCALAR * 1.5) + $ppiCostDrag;
 
         // Pricing power enables contractual cost-plus escalation clauses, mitigating the fixed-price margin squeeze
         $effectiveMaterialCostDrag = $rawMaterialCostDrag * (1.0 - ($pricingPower * self::MAX_PRICING_POWER_MITIGATION));

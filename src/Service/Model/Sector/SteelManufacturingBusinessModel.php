@@ -45,6 +45,12 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const SPOT_VARIANCE_SCALAR     = 0.60;
     /** Energy and metallurgical coal input cost drag scalar for blast furnaces and EAFs. */
     public const ENERGY_INPUT_DRAG_SCALAR = 0.80;
+    /** Sensitivity of steel mill order demand to manufacturing PMI survey shifts. */
+    public const PMI_DEMAND_SENSITIVITY   = 0.50;
+    /** Sensitivity of blast furnace fixed cost absorption to industrial capacity utilization. */
+    public const CU_MARGIN_ABSORPTION_SENSITIVITY = 0.12;
+    /** Sensitivity of steel production margins to wholesale producer price index (PPI) inflation. */
+    public const PPI_COST_DRAG_SENSITIVITY = 0.40;
 
     // --- Blast Furnace Aging & EAF Reinvestment Physics ---
     /** Quarterly margin decay rate per unit of underinvestment below blast furnace relining replacement CapEx. */
@@ -77,15 +83,28 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         return ['eps_weight' => 0.40, 'revenue_weight' => 0.60];
     }
 
+    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    {
+        $physics = parent::getMacroPhysics($stock, $macroState);
+        $outputGap = $macroState->outputGapEma;
+        $beta = (float) $stock->getBeta();
+        $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroEngine::PMI_BASELINE, self::PMI_DEMAND_SENSITIVITY);
+
+        $physics['macro_demand_shift'] = ($outputGap * $beta * 1.50) + ($pmiShift * $beta);
+        return $physics;
+    }
+
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
             ModelParam::ContractOemWeight->value => self::CONTRACTED_OEM_WEIGHT,
             ModelParam::SpotHrcWeight->value     => self::SPOT_HRC_WEIGHT,
+            ModelParam::PricingPowerIndex->value => 0.40,
         ]);
 
         $contractWeight = $params[ModelParam::ContractOemWeight];
         $spotWeight     = $params[ModelParam::SpotHrcWeight];
+        $pricingPower   = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
@@ -100,8 +119,9 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $contractWeight = $activeWeights['contracted_oem_steel'];
         $spotWeight     = $activeWeights['spot_hrc_market'];
 
-        // Strongly tied to macro output gap and energy prices
-        $macroBoost = $macroState->outputGapEma * 1.5 * $beta;
+        // Strongly tied to macro output gap, manufacturing PMI, and energy prices
+        $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroEngine::PMI_BASELINE, self::PMI_DEMAND_SENSITIVITY);
+        $macroBoost = ($macroState->outputGapEma * 1.2 * $beta) + ($pmiShift * $beta);
         $energyDrag = max(0.0, $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION) * self::ENERGY_INPUT_DRAG_SCALAR;
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
 
@@ -122,7 +142,20 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         // Cyclical Metal Spread, Energy & Freight Logistics Compression
         $freightShift = max(0.0, ($macroState->freightRateIndexEma - 100.0) / 100.0);
         $freightDrag = $freightShift * 0.05;
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + ($energyDrag * 0.40) + $freightDrag);
+
+        // Blast furnace fixed overhead absorption via capacity utilization
+        $cuShift = MathUtility::calculateCapacityUtilizationShift($macroState->capacityUtilizationRateEma, MacroEngine::CU_BASELINE, self::CU_MARGIN_ABSORPTION_SENSITIVITY);
+        $cuMarginAdjustment = -$cuShift; // Higher CU improves margin
+
+        // Wholesale raw input inflation (PPI)
+        $ppiCostDrag = MathUtility::calculatePpiCostDrag(
+            $macroState->producerPriceInflationEma,
+            MacroEngine::TARGET_INFLATION,
+            $pricingPower,
+            self::PPI_COST_DRAG_SENSITIVITY
+        );
+
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + ($energyDrag * 0.40) + $freightDrag + $cuMarginAdjustment + $ppiCostDrag);
 
         $primaryShockZ = $streams->resolveDominantShockZ([$spotZ, $contractZ]);
         $observableShockZ = ($contractZ * $contractWeight * self::CONTRACT_VARIANCE_SCALAR * $baselineVol)

@@ -68,6 +68,10 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     public const GLUT_UTILIZATION_MULT     = 2.50;
     /** Sensitivity of fab operational leverage to aggregate industrial capacity utilization (Fed G.17). */
     public const CAPACITY_UTILIZATION_SENSITIVITY = 1.20;
+    /** Sensitivity of industrial & automotive semiconductor demand to manufacturing PMI. */
+    public const PMI_CHIP_DEMAND_SENSITIVITY = 0.40;
+    /** Sensitivity of cleanroom wafer & chemical input costs to Producer Price Inflation (PPI). */
+    public const PPI_FAB_INPUT_SENSITIVITY = 0.30;
     /** Capacity utilization deviation threshold above baseline triggering fab shortages (~81.5% vs 78.5% baseline). */
     public const BOOM_CAPACITY_UTILIZATION_THRESHOLD = 0.030;
     /** Capacity utilization deviation threshold below baseline triggering fab underutilization (~75.5% vs 78.5% baseline). */
@@ -161,11 +165,22 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         $cycleZ   = $streams->generateZ('cycle', 0.10);
 
         // Fab Utilization Leverage & Tech Super-Cycles
+        // Fab Utilization Leverage & Tech Super-Cycles
         // Crucially, capacity utilization leverage applies to physical fab manufacturing ($foundryWeight),
         // while fabless IP licensing scales independently with tech demand.
         $outputGap = $macroState->outputGapEma;
-        $cuDeviation = $macroState->capacityUtilizationRateEma - MacroEngine::CU_BASELINE;
-        $utilizationMultiplier = $cuDeviation * self::CAPACITY_UTILIZATION_SENSITIVITY;
+        $cuDeviation = ($macroState->capacityUtilizationRateEma - MacroEngine::CU_BASELINE) / 100.0;
+        $cuShift = MathUtility::calculateCapacityUtilizationShift(
+            $macroState->capacityUtilizationRateEma,
+            MacroEngine::CU_BASELINE,
+            self::CAPACITY_UTILIZATION_SENSITIVITY
+        );
+        $pmiShift = MathUtility::calculatePmiDemandShift(
+            $macroState->manufacturingPmiEma,
+            MacroEngine::PMI_BASELINE,
+            self::PMI_CHIP_DEMAND_SENSITIVITY
+        );
+        $utilizationMultiplier = $cuShift + $pmiShift;
         $eventType = null;
 
         if (($outputGap > self::BOOM_GAP_THRESHOLD || $cuDeviation > self::BOOM_CAPACITY_UTILIZATION_THRESHOLD) && $cycleZ > self::BOOM_Z_SCORE_THRESHOLD) {
@@ -207,7 +222,15 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         $metalsShift = max(0.0, ($macroState->industrialMetalsIndexEma - 100.0) / 100.0);
         $energyDrag = (($energyShift * self::CLEANROOM_ENERGY_DRAG_SCALAR) + ($metalsShift * 0.10)) * $foundryWeight;
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $yieldModifier + $energyDrag);
+        // Wholesale silicon wafer and chemical input costs (PPI)
+        $ppiDrag = MathUtility::calculatePpiCostDrag(
+            $macroState->producerPriceInflationEma,
+            MacroEngine::TARGET_INFLATION,
+            0.60,
+            self::PPI_FAB_INPUT_SENSITIVITY
+        ) * $foundryWeight;
+
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $yieldModifier + $energyDrag + $ppiDrag);
 
         $primaryShockZ = $streams->resolveDominantShockZ([$cycleZ, $foundryZ, $designZ]);
         // observableShockZ: foundry and design demand visible via shipment lead times and supply chain checks

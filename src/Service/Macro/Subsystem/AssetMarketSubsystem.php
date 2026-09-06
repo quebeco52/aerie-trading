@@ -275,4 +275,74 @@ class AssetMarketSubsystem
             sigma: MacroEngine::DEAL_ACTIVITY_SIGMA
         );
     }
+
+    /**
+     * Mundell-Fleming Open Economy Trade Balance & Net Exports to GDP.
+     *
+     * Models net export balance as a share of GDP (NX/Y) based on Marshall-Lerner real exchange rate
+     * deviations and domestic cyclical demand absorption:
+     *   NX/Y = Baseline - beta_FX * (FX/100 - 1) - beta_Y * OutputGap
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateTradeBalance(MacroState $state, float $dt): void
+    {
+        $fxDeviation = ($state->exchangeRateIndex / MacroEngine::EXCHANGE_RATE_BASELINE) - 1.0;
+        $cyclicalAbsorption = $state->outputGap;
+
+        $targetTradeBalance = MacroEngine::TRADE_BALANCE_BASELINE
+            - (MacroEngine::TRADE_BALANCE_FX_ELASTICITY * $fxDeviation)
+            - (MacroEngine::TRADE_BALANCE_GAP_ELASTICITY * $cyclicalAbsorption);
+
+        $targetTradeBalance = max(MacroEngine::MIN_TRADE_BALANCE, min(MacroEngine::MAX_TRADE_BALANCE, $targetTradeBalance));
+
+        $state->tradeBalanceToGdp += 2.0 * ($targetTradeBalance - $state->tradeBalanceToGdp) * $dt;
+        $state->tradeBalanceToGdp = max(MacroEngine::MIN_TRADE_BALANCE, min(MacroEngine::MAX_TRADE_BALANCE, $state->tradeBalanceToGdp));
+    }
+
+    /**
+     * Poterba (1984) / Topel-Rosen (1988) Tobin's Q Housing Investment Dynamics.
+     *
+     * Computes residential construction volume (Housing Starts) driven by the ratio of asset market home prices
+     * to physical replacement costs, discounted by mortgage user costs and bank lending standards.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function calculateHousingStarts(MacroState $state, float $dt): void
+    {
+        $residentialPriceRatio = $state->residentialPropertyIndex / MacroEngine::RESIDENTIAL_BASELINE;
+        $metalsCostRatio = $state->industrialMetalsIndex / MacroEngine::METALS_BASELINE;
+        $laborCostRatio = 1.0 + $state->wageGrowth;
+        $replacementCostRatio = (0.50 * $metalsCostRatio) + (0.50 * $laborCostRatio);
+
+        $mortgageRate = $state->yield30yEma + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD;
+        $userCost = max(0.015, $mortgageRate + MacroEngine::RESIDENTIAL_DEPRECIATION_TAX_RATE - $state->inflationEma);
+
+        $dW = $this->mathUtility->generateStandardNormal();
+
+        $params = [
+            'baseline' => MacroEngine::HOUSING_STARTS_BASELINE,
+            'qSens' => MacroEngine::HOUSING_STARTS_Q_SENSITIVITY,
+            'costSens' => MacroEngine::HOUSING_STARTS_USER_COST_SENSITIVITY,
+            'sloosSens' => MacroEngine::HOUSING_STARTS_SLOOS_SENSITIVITY,
+            'kappa' => MacroEngine::HOUSING_STARTS_KAPPA,
+            'sigma' => MacroEngine::HOUSING_STARTS_SIGMA,
+            'min' => MacroEngine::MIN_HOUSING_STARTS,
+            'max' => MacroEngine::MAX_HOUSING_STARTS,
+        ];
+
+        $state->housingStartsIndex = $this->mathUtility->calculateTobinsQHousingStarts(
+            currentStarts: $state->housingStartsIndex,
+            residentialPriceRatio: $residentialPriceRatio,
+            replacementCostRatio: $replacementCostRatio,
+            userCost: $userCost,
+            neutralUserCost: MacroEngine::RESIDENTIAL_NEUTRAL_USER_COST,
+            sloosTightening: $state->sloosTighteningIndexEma,
+            dt: $dt,
+            dW: $dW,
+            params: $params
+        );
+    }
 }

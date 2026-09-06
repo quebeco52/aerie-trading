@@ -177,5 +177,51 @@ class MacroAggregateSubsystemTest extends TestCase
         $expectedLift = MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
         $this->assertEqualsWithDelta($expectedLift, $infEnergy - $infNormal, 0.0001, 'Energy shock must transmit to headline inflation without being diluted by basket weight.');
     }
+
+    public function testCalculateManufacturingPmi(): void
+    {
+        $dt = 0.25;
+
+        // Expansion: high capacity, positive gap momentum, inventory deficit
+        $stateBoom = new MacroState();
+        $stateBoom->capacityUtilizationRate = 0.82;
+        $stateBoom->outputGap = 0.03;
+        $stateBoom->outputGapEma = 0.01;
+        $stateBoom->inventoryStockGap = -0.02;
+        $stateBoom->sloosTighteningIndexEma = 0.0;
+        $stateBoom->manufacturingPmi = 50.0;
+
+        $this->subsystem->calculateManufacturingPmi($stateBoom, $dt);
+        $this->assertGreaterThan(50.0, $stateBoom->manufacturingPmi, 'Expansionary signals must push PMI above neutral 50');
+
+        // Contraction: low capacity, deceleration, inventory overhang, bank credit tightening
+        $stateBust = new MacroState();
+        $stateBust->capacityUtilizationRate = 0.74;
+        $stateBust->outputGap = -0.02;
+        $stateBust->outputGapEma = 0.01;
+        $stateBust->inventoryStockGap = 0.03;
+        $stateBust->sloosTighteningIndexEma = 0.25;
+        $stateBust->manufacturingPmi = 50.0;
+
+        $this->subsystem->calculateManufacturingPmi($stateBust, $dt);
+        $this->assertLessThan(50.0, $stateBust->manufacturingPmi, 'Contractionary signals must depress PMI below neutral 50');
+    }
+
+    public function testCalculateProducerPriceInflation(): void
+    {
+        $dt = 0.25;
+        $tfp = MacroEngine::TFP_DRIFT;
+
+        $state = new MacroState();
+        $state->industrialMetalsIndex = 140.0;
+        $state->energyPriceIndex = 160.0;
+        $state->agriculturalCommodityIndex = 120.0;
+        $state->supplyChainPressureIndex = 2.0;
+        $state->wageGrowth = 0.055;
+        $state->outputGap = 0.02;
+
+        $this->subsystem->calculateProducerPriceInflation($state, $tfp, $dt);
+        $this->assertGreaterThan(MacroEngine::TARGET_INFLATION, $state->producerPriceInflation, 'Upstream commodity surges and supply frictions must drive PPI above CPI target');
+    }
 }
 
