@@ -371,6 +371,44 @@ class DebtEngineTest extends TestCase
         $this->assertTrue($resultBankInsolvent['is_bankrupt']);
     }
 
+    public function testCalculateAltmanZScoreInsuranceAlternativeModel(): void
+    {
+        $realMath = new MathUtility();
+        $realMetrics = new CorporateMetrics();
+        $engine = new DebtEngine($realMath, $realMetrics, $this->creditRatingAgency, $this->marketEventPublisherMock);
+
+        // Insurer with depleted surplus after catastrophe ($373M equity / $70.373B assets = 0.53% capital ratio)
+        // Sitting on massive float reserves and liquid cash: in Distress, but NOT bankrupt
+        $reinsurerDistressed = new Stock();
+        $reinsurerDistressed->setTicker('SAFE');
+        $reinsurerDistressed->setIndustry('Insurance - Reinsurance');
+        $reinsurerDistressed->setTotalEquity('373000000');
+        $reinsurerDistressed->setCustomerDeposits('59000000000');
+        $reinsurerDistressed->setWholesaleDebt('11000000000');
+        $reinsurerDistressed->setCorporateTreasury('46000000000');
+        $reinsurerDistressed->setSharesOutstanding('1000000000');
+
+        $resultDistressed = $engine->calculateAltmanZScore($reinsurerDistressed, -26000000000.0, 63000000000.0, 10.0);
+        $this->assertSame('Distress', $resultDistressed['zone']);
+        $this->assertFalse($resultDistressed['is_bankrupt'], 'Insurer with positive equity and cash must not be marked bankrupt.');
+        $this->assertGreaterThan(0.0, $resultDistressed['z_score']);
+        $this->assertLessThan(2.0, $resultDistressed['z_score']);
+
+        // Insurer with negative equity (Balance Sheet Insolvency)
+        $reinsurerInsolvent = new Stock();
+        $reinsurerInsolvent->setTicker('SAFE_DEAD');
+        $reinsurerInsolvent->setIndustry('Insurance - Reinsurance');
+        $reinsurerInsolvent->setTotalEquity('-10000000');
+        $reinsurerInsolvent->setCustomerDeposits('1000000000');
+        $reinsurerInsolvent->setWholesaleDebt('100000000');
+        $reinsurerInsolvent->setCorporateTreasury('5000000');
+        $reinsurerInsolvent->setSharesOutstanding('10000000');
+
+        $resultInsolvent = $engine->calculateAltmanZScore($reinsurerInsolvent, -50000000.0, 100000000.0, 0.01);
+        $this->assertSame('Distress', $resultInsolvent['zone']);
+        $this->assertTrue($resultInsolvent['is_bankrupt'], 'Insurer with negative equity is insolvent and bankrupt.');
+    }
+
     public function testIssueDebtUpdatesWholesaleBalanceAndWeightedHistoricalRate(): void
     {
         $realMath = new MathUtility();

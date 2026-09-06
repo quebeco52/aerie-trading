@@ -68,6 +68,8 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     public const INCENTIVE_FEE_RATE = 0.20;
     /** Alpha Z-score hurdle threshold above which incentive fees crystallize. */
     public const PERFORMANCE_FEE_HURDLE_Z = 1.25;
+    /** Fraction of excess performance fee / carry revenue paid out into portfolio manager and quant bonus pools. */
+    public const PERF_BONUS_POOL_PAYOUT = 0.45;
 
     // --- Quantitative Alpha & VIX Physics ---
     /** Baseline VIX threshold (~18%) above which market fragmentation expands quantitative alpha spreads. */
@@ -118,12 +120,16 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     public const DEBT_GATE_DRAG_THRESHOLD = 0.30;
     /** Capacity reduction scalar applied when debt markets are gated during credit freezes. */
     public const DEBT_GATE_FREEZE_SCALAR = 0.25;
+    /** Critical credit spread blowout drag threshold triggering total prime leverage freeze. */
+    public const DEBT_GATE_CRITICAL_FREEZE_THRESHOLD = 1.00;
 
     // --- Structural Efficiency & Revenue Variance ---
     /** Multiplier applied to baseline stock volatility for top-line hedge fund revenue variance. */
     public const REVENUE_VARIANCE_SCALAR = 0.18;
     /** Minimum structural operating cost-to-revenue ratio reflecting quant compute, feeds, and talent. */
     public const MIN_EFFICIENCY_RATIO = 0.35;
+    /** Upper clamp for realized variable margin during forced liquidation slippage. */
+    public const MAX_VARIABLE_MARGIN_CLAMP = 0.85;
 
     // --- Corporate Treasury & Cash Yield ---
     /** Allocation percentage of hedge fund excess cash deployed into safe sovereign debt tranches. */
@@ -240,30 +246,11 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::HfManagementFeeWeight->value   => self::DEFAULT_MGMT_FEE_WEIGHT,
-            ModelParam::HfDirectionalBetsWeight->value => self::DEFAULT_DIRECTIONAL_BETS_WEIGHT,
-            ModelParam::HfQuantAlphaWeight->value      => self::DEFAULT_QUANT_ALPHA_WEIGHT,
-        ]);
-
-        $outputGap = $macroState->outputGapEma;
-        $vixEma = $macroState->marketVolatilityEma;
-        $beta = (float) $stock->getBeta();
-
-        $mgmtPricingPower = 1.0;
-        $directionalPricingPower = max(0.20, 1.0 + ($outputGap * $beta * self::DIRECTIONAL_MACRO_SCALAR));
-        $vixAlphaBoost = max(0.0, ($vixEma - self::VIX_ALPHA_BASELINE) * self::VIX_ALPHA_SCALAR);
-        $quantPricingPower = 1.0 + $vixAlphaBoost;
-
-        $blendedMultiplier = ($params[ModelParam::HfManagementFeeWeight] * $mgmtPricingPower)
-            + ($params[ModelParam::HfDirectionalBetsWeight] * $directionalPricingPower)
-            + ($params[ModelParam::HfQuantAlphaWeight] * $quantPricingPower);
-
-        $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_HEDGE_FUND_LIQUIDITY_SENSITIVITY);
-
+        // Nullify generic demand shift to handle multi-stream AUM market beta, VIX alpha expansion,
+        // and macro directional shifts discretely per stream in calculateSectorPhysics.
         return [
-            'macro_demand_shift'       => ($outputGap * $beta * self::MACRO_DEMAND_SCALAR) + $m2Shift,
-            'pricing_power_multiplier' => max(0.10, $blendedMultiplier),
+            'macro_demand_shift'       => 0.0,
+            'pricing_power_multiplier' => 1.0,
         ];
     }
 
@@ -356,7 +343,16 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // --- 4. Quadratic Liquidation Friction ---
+        // --- 4. Compensation Pool Flex & Variable Cost Scaling ---
+        // Performance fee crystallization expands portfolio manager & quant incentive bonus pools.
+        $dirBaseline = $expectedRevenue * $dirWeight;
+        $quantBaseline = $expectedRevenue * $quantWeight;
+        $perfExcess = max(0.0, $dirRevenue - $dirBaseline) + max(0.0, $quantRevenue - $quantBaseline);
+        $bonusPoolExpense = $perfExcess * self::PERF_BONUS_POOL_PAYOUT;
+        $effectiveVariableCosts = ($actualRevenue * $realizedVariableMargin) + $bonusPoolExpense;
+        $effectiveVariableMargin = $actualRevenue > 0 ? ($effectiveVariableCosts / $actualRevenue) : $realizedVariableMargin;
+
+        // --- 5. Quadratic Liquidation Friction ---
         $marginCallPenalty = 0.0;
         if ($creditSpread > self::MARGIN_CALL_SPREAD_THRESHOLD) {
             $spreadDelta = $creditSpread - self::MARGIN_CALL_SPREAD_THRESHOLD;
@@ -366,8 +362,9 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
             $marginCallPenalty = 0.5 * self::LIQUIDITY_FRICTION_LAMBDA * ($liquidationFraction ** 2);
         }
 
+        $rawMargin = $effectiveVariableMargin + $marginCallPenalty;
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $marginCallPenalty, $minVariableMargin);
+        $clampedMargin = $this->clampMargin($rawMargin, $minVariableMargin, self::MAX_VARIABLE_MARGIN_CLAMP);
 
         // --- 6. Shock Event Detection ---
         $eventType = null;
@@ -443,6 +440,10 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         $firmCreditSpread = $health->rawMetrics->dynamicSpread ?? self::BASELINE_PRIME_CREDIT_SPREAD;
         $spreadFreezeDrag = max(0.0, ($firmCreditSpread - self::BASELINE_PRIME_CREDIT_SPREAD) * self::DEBT_GATE_SPREAD_SCALAR);
 
+        if ($spreadFreezeDrag >= self::DEBT_GATE_CRITICAL_FREEZE_THRESHOLD) {
+            return 0.0;
+        }
+
         if ($spreadFreezeDrag > self::DEBT_GATE_DRAG_THRESHOLD) {
             $baseCapacity *= self::DEBT_GATE_FREEZE_SCALAR;
         }
@@ -471,13 +472,13 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         float $costOfEquity,
         float $effectiveCostOfDebt
     ): bool {
-        $limit = $this->getWholesaleLeverageLimit();
-        return $currentDebtRatio < ($limit * 0.85);
+        $limit = $targetDebtTolerance > 0.0 ? $targetDebtTolerance : $this->getWholesaleLeverageLimit();
+        return $currentDebtRatio < ($limit * 0.50);
     }
 
     public function supportsUnderleveragedDebtExpansion(): bool
     {
-        return true;
+        return false;
     }
 
     public function getAcquisitionType(string $defaultType): string

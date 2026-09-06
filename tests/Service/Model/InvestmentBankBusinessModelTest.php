@@ -199,6 +199,29 @@ class InvestmentBankBusinessModelTest extends TestCase
         $this->assertSame(8.0, $this->model->getWholesaleLeverageLimit());
     }
 
+    public function testPrimeFinancingRatesPassThroughFirmFundingCreditSpread(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('KING');
+        $stock->setCreditSpread('0.0150'); // 150 bps structural spread
+        $stock->setWholesaleDebt('100000000000.0'); // $100B debt
+        $stock->setCorporateTreasury('10000000000.0'); // $10B treasury (equal to min cash)
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $macroState = \App\DTO\MacroStateDTO::fromArray([
+            'policy_rate_ema' => 0.04,
+        ]);
+
+        $income = $this->model->calculateInterestIncome($stock, $macroState, $mathMock);
+
+        // Funding benchmark = max(0.04, 0.04 + 0.0150) = 0.0550
+        // Prime financing = $70B * (0.0550 + 0.0150) = $70B * 0.0700 = $4.90B
+        // Repo inventory = $30B * max(0, 0.0550 - 0.0025) = $30B * 0.0525 = $1.575B
+        // Excess cash = 0 (minCash = 100B * 0.10 = 10B)
+        // Total interest income = 4.90B + 1.575B = 6.475B ($6,475,000,000.0)
+        $this->assertEqualsWithDelta(6_475_000_000.0, $income, 1_000.0);
+    }
+
     public function testPereOptionWritingPurePlayWithZeroAdvisoryMaintainsZeroAdvisoryAcrossQuarters(): void
     {
         $stock = new Stock();
@@ -484,6 +507,7 @@ class InvestmentBankBusinessModelTest extends TestCase
     {
         $stock = new Stock();
         $stock->setTicker('GS');
+        $stock->setCreditSpread('0.0000'); // Baseline zero-spread test
         $stock->setWholesaleDebt('100000000000.0'); // $100B wholesale debt
         $stock->setCorporateTreasury('25000000000.0'); // $25B treasury
         $stock->setTotalEquity('50000000000.0');

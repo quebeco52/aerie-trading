@@ -44,6 +44,14 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     /** Minimum fraction of prior revenue retained during hard market pricing (post-catastrophe capacity support). */
     public const HARD_MARKET_REVENUE_FLOOR = 0.85;
 
+    // --- Solvency & Regulatory Capital Thresholds ---
+    /** Minimum capital ratio (Equity / Assets) before regulatory balance sheet insolvency (Equity <= 0). */
+    public const BANKRUPT_EQUITY_THRESHOLD = 0.0;
+    /** Statutory capital ratio threshold below which insurer enters regulatory capital distress. */
+    public const DISTRESS_EQUITY_THRESHOLD = 2.0;
+    /** Statutory capital ratio threshold for regulatory grey/early warning watch. */
+    public const WARNING_EQUITY_THRESHOLD  = 4.0;
+
     // --- ROIC & ROE Target Architecture ---
     /** Weight given to historical baseline ROIC when blending with TTM ROE. */
     public const BASELINE_ROIC_WEIGHT     = 0.50;
@@ -465,6 +473,13 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         $shares = max(1.0, (float) $stock->getSharesOutstanding());
         $structuralEps = $equity > 0 ? (($equity * max(0.0, $roeTtm)) / 4.0) / $shares : 0.0;
 
+        // If quarterly EPS is negative and capital surplus is impaired (equity below Kenney target surplus),
+        // or if quarterly losses exceed structural float earnings, halt distributions to preserve solvency.
+        $targetSurplus = (float) $stock->getTotalRevenue() / self::KENNEY_CAPACITY_RATIO;
+        if ($quarterlyEps < 0.0 && ($equity < $targetSurplus || abs($quarterlyEps) > $structuralEps)) {
+            return 0.0;
+        }
+
         // Use the higher of actual EPS and structural through-cycle EPS,
         // but NEVER exceed actual EPS when actual is positive (don't overpay)
         return $quarterlyEps > 0 ? $quarterlyEps : max($quarterlyEps, $structuralEps * 0.50);
@@ -675,5 +690,27 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         // structure financing. An insurer should never trigger forced "underleveraged" share buyback spirals
         // simply because its float-to-equity ratio fluctuates.
         return false;
+    }
+
+    public function getBankruptEquityThreshold(): float { return self::BANKRUPT_EQUITY_THRESHOLD; }
+    public function getDistressEquityThreshold(): float { return self::DISTRESS_EQUITY_THRESHOLD; }
+    public function getWarningEquityThreshold(): float { return self::WARNING_EQUITY_THRESHOLD; }
+
+    public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury): ?float
+    {
+        $equity = (float) $stock->getTotalEquity();
+        $totalDebt = (float) $stock->getTotalDebt();
+        $totalAssets = max(1.0, $equity + $totalDebt);
+        $capitalRatio = ($equity / $totalAssets) * 100.0;
+
+        // Statutory NAIC / Solvency II capital distress lockout:
+        // When capital ratio falls into regulatory distress (< 2.0%) or surplus is below 50% of Kenney target,
+        // regulators mandate an immediate halt on all dividend distributions.
+        $targetSurplus = (float) $stock->getTotalRevenue() / self::KENNEY_CAPACITY_RATIO;
+        if ($capitalRatio < self::DISTRESS_EQUITY_THRESHOLD || $equity < ($targetSurplus * 0.50)) {
+            return 0.0;
+        }
+
+        return parent::getRegulatoryDividendCap($stock, $currentTreasury);
     }
 }

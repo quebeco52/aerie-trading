@@ -66,6 +66,27 @@ class ShadowBankBusinessModelTest extends TestCase
         $this->assertSame(8.0, $this->model->getWholesaleLeverageLimit());
     }
 
+    public function testCalculateInterestIncomeYieldsFromMortgageAndDirectLendingPortfolios(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('POOL');
+        $stock->setWholesaleDebt('400000000000.0'); // $400B debt
+        $stock->setCorporateTreasury('40000000000.0'); // $40B cash
+
+        $macro = new MacroStateDTO(
+            policyRateEma: 0.04, // 4%
+            yield30yEma: 0.055   // 5.5%
+        );
+
+        $income = $this->model->calculateInterestIncome($stock, $macro, $this->mathUtility);
+
+        // Mortgage: 400B * 60% = 240B. Yield: 0.055 + 0.0225 = 0.0775 -> 240B * 0.0775 = 18.6B
+        // Direct Lending: 400B * 40% = 160B. Yield: 0.04 + 0.0450 = 0.0850 -> 160B * 0.0850 = 13.6B
+        // Cash: excess cash = 40B - operatingBuffer (0.05 * 0 = 0) = 40B. Cash yield = max(0, 0.04 - 0.0025) = 0.0375 -> 40B * 0.0375 = 1.5B
+        // Total = 18.6B + 13.6B + 1.5B = 33.7B ($33,700,000,000.0)
+        $this->assertEqualsWithDelta(33_700_000_000.0, $income, 1_000_000.0);
+    }
+
     public function testRetailDefaultAndCommercialPropertyDistressIncreasesProvisionDrag(): void
     {
         $stock = new Stock();

@@ -54,28 +54,27 @@ class HedgeFundBusinessModelTest extends TestCase
         $this->assertLessThan(0.60, $metrics['baseline_roic']);
     }
 
-    public function testMacroPhysicsVixIncreasesQuantPricingPower(): void
+    public function testMacroPhysicsDecoupledToPreventDoubleCounting(): void
     {
         $stock = new Stock();
         $stock->setTicker('SWAN');
 
-        // Low VIX (15% <= 18% baseline) -> no VIX alpha boost
         $calmMacro = MacroStateDTO::fromArray([
             'output_gap_ema'        => 0.0,
             'market_volatility_ema' => 0.15,
         ]);
         $calmPhysics = $this->model->getMacroPhysics($stock, $calmMacro);
 
-        // High VIX (30% > 18% baseline -> 12% excess * 1.50 = 18% quant boost -> 1.18 quant pricing power)
-        // Blended for SWAN (50% mgmt*1.0 + 30% dir*1.0 + 20% quant*1.18) = 0.50 + 0.30 + 0.236 = 1.036
         $panicMacro = MacroStateDTO::fromArray([
-            'output_gap_ema'        => 0.0,
-            'market_volatility_ema' => 0.30,
+            'output_gap_ema'        => -0.05,
+            'market_volatility_ema' => 0.35,
         ]);
         $panicPhysics = $this->model->getMacroPhysics($stock, $panicMacro);
 
-        $this->assertGreaterThan($calmPhysics['pricing_power_multiplier'], $panicPhysics['pricing_power_multiplier']);
-        $this->assertEqualsWithDelta(1.036, $panicPhysics['pricing_power_multiplier'], 0.001);
+        $this->assertSame(0.0, $calmPhysics['macro_demand_shift']);
+        $this->assertSame(1.0, $calmPhysics['pricing_power_multiplier']);
+        $this->assertSame(0.0, $panicPhysics['macro_demand_shift']);
+        $this->assertSame(1.0, $panicPhysics['pricing_power_multiplier']);
     }
 
     public function testSectorPhysicsQuantAlphaSurgeUnderHighVix(): void
@@ -407,15 +406,47 @@ class HedgeFundBusinessModelTest extends TestCase
 
         $this->assertGreaterThan(0.0, $normalCapacity);
         $this->assertEqualsWithDelta($normalCapacity * HedgeFundBusinessModel::DEBT_GATE_FREEZE_SCALAR, $frozenCapacity, 0.01);
+
+        $criticalHealth = new DebtHealthDTO(
+            grossCost: 0.18,
+            effectiveCost: 0.18,
+            cashYield: 0.03,
+            isNegativeCarry: true,
+            isSevereNegativeCarry: true,
+            interestCoverage: 0.5,
+            wantsToPaydownDebt: true,
+            canIssueDebt: false,
+            debtTolerance: 3.0,
+            wacc: 0.08,
+            costOfEquity: 0.12,
+            leveredBeta: 1.5,
+            rawMetrics: new DebtMetricsDTO(
+                interestExpense: 10.0,
+                blendedRate: 0.18,
+                historicalFixedRate: 0.05,
+                dynamicSpread: 0.130, // 1300bps - exceeds 1000bps critical drag
+                currentMarketRate: 0.18,
+                wholesaleRate: 0.18,
+                ebit: 5.0,
+                revenue: 100.0,
+                depreciation: 2.0,
+                ebitda: 7.0
+            ),
+            isLiquidityCrisis: true,
+            isLiquidityWarning: true,
+            isUnderLeveraged: false
+        );
+        $criticalCapacity = $this->model->calculateDebtExpansionCapacity(100.0, 50.0, 50.0, $criticalHealth, 0.18, 5.0, 2.0);
+        $this->assertSame(0.0, $criticalCapacity);
     }
 
     public function testUnderLeveragedThresholdAndSupport(): void
     {
-        $this->assertTrue($this->model->supportsUnderleveragedDebtExpansion());
+        $this->assertFalse($this->model->supportsUnderleveragedDebtExpansion());
 
-        // Wholesale leverage limit is 3.0. 85% of 3.0 is 2.55.
-        $this->assertTrue($this->model->isUnderLeveraged(2.4, 3.0, 5.0, 1.05, 0.12, 0.05));
-        $this->assertFalse($this->model->isUnderLeveraged(2.7, 3.0, 5.0, 1.05, 0.12, 0.05));
+        // Wholesale leverage limit is 3.0. 50% of 3.0 is 1.50.
+        $this->assertTrue($this->model->isUnderLeveraged(1.4, 3.0, 5.0, 1.05, 0.12, 0.05));
+        $this->assertFalse($this->model->isUnderLeveraged(1.6, 3.0, 5.0, 1.05, 0.12, 0.05));
     }
 
     public function testAcquisitionTypeIsHostileTakeover(): void
@@ -569,6 +600,63 @@ class HedgeFundBusinessModelTest extends TestCase
         $this->assertSame(1.05, $this->model->getMinIcr());
         $this->assertSame(0.20, $this->model->getReversionSpeed());
         $this->assertSame(0.008, $this->model->getMoatSpread());
+    }
+
+    public function testBonusPoolExpenseFlexesWithPerformanceFees(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('SWAN');
+        $stock->setTotalEquity('100.0');
+        $stock->setWholesaleDebt('0.0');
+
+        $macro = MacroStateDTO::fromArray([
+            'output_gap_ema'          => 0.0,
+            'market_volatility_ema'   => 0.18,
+            'macro_credit_spread_ema' => 0.02,
+        ]);
+
+        // Neutral Alpha -> No excess performance fees -> Normal variable margin
+        $mathNeutral = $this->createStub(MathUtility::class);
+        $mathNeutral->method('generatePersistentZ')->willReturn(0.0);
+        $stock->setEarningsMomentumZ([
+            'directional_bets' => 0.0,
+            'quant_alpha'      => 0.0,
+            'management_fees'  => 0.0,
+        ]);
+        $neutralResult = $this->model->computeActualFinancials($stock, 100.0, 0.40, 10.0, 0.10, $macro, $mathNeutral);
+
+        // Huge Alpha -> Performance fee bonus crystallizes -> Bonus pool expense flexes variable margin upwards
+        $mathBoom = $this->createStub(MathUtility::class);
+        $mathBoom->method('generatePersistentZ')->willReturn(3.0);
+        $stock->setEarningsMomentumZ([
+            'directional_bets' => 3.0,
+            'quant_alpha'      => 3.0,
+            'management_fees'  => 0.0,
+        ]);
+        $boomResult = $this->model->computeActualFinancials($stock, 100.0, 0.40, 10.0, 0.10, $macro, $mathBoom);
+
+        $this->assertGreaterThan(100.0, $boomResult->actualRevenue);
+        $this->assertGreaterThan($neutralResult->clampedMargin, $boomResult->clampedMargin);
+    }
+
+    public function testVariableMarginClampedDuringSevereMarginCall(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('SWAN');
+        $stock->setTotalEquity('100.0');
+        $stock->setWholesaleDebt('300.0'); // 3.0x leverage
+
+        // Severe credit blowout: 1500bps > 400bps margin call threshold
+        $crisisMacro = MacroStateDTO::fromArray([
+            'output_gap_ema'          => -0.05,
+            'market_volatility_ema'   => 0.40,
+            'macro_credit_spread_ema' => 0.15,
+        ]);
+
+        $result = $this->model->computeActualFinancials($stock, 100.0, 0.70, 10.0, 0.10, $crisisMacro, $this->mathUtility);
+
+        // Clamped margin must not exceed MAX_VARIABLE_MARGIN_CLAMP (0.85)
+        $this->assertLessThanOrEqual(HedgeFundBusinessModel::MAX_VARIABLE_MARGIN_CLAMP, $result->clampedMargin);
     }
 }
 

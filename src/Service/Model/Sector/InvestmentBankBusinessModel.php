@@ -25,8 +25,6 @@ use App\Service\Event\ShockEvent;
  */
 class InvestmentBankBusinessModel extends BrokerageBusinessModel
 {
-    
-
     // --- Dual-Desk Revenue Architecture ---
     /** Baseline revenue share allocated to advisory, M&A mandates, and capital markets underwriting. */
     public const ADVISORY_REVENUE_WEIGHT    = 0.40;
@@ -165,15 +163,19 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         $policyRate = $macroState->policyRateEma;
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
 
+        // Effective funding benchmark: prime brokers pass their wholesale borrowing spread through to institutional clients
+        $creditSpread = (float) $stock->getCreditSpread();
+        $fundingBenchmark = max($policyRate, $policyRate + $creditSpread);
+
         // 1. Institutional Prime Brokerage & Secured Financing (Securities Lending & Margin Debits):
         // Investment banks lend wholesale funding to institutional hedge fund clients against liquid collateral.
-        $primeFinancingRate = $policyRate + self::PRIME_FINANCING_SPREAD;
+        $primeFinancingRate = $fundingBenchmark + self::PRIME_FINANCING_SPREAD;
         $primeFinancingAssets = $wholesaleDebt * self::PRIME_BROKERAGE_ALLOCATION;
         $primeInterest = $primeFinancingAssets * $primeFinancingRate;
 
         // 2. Institutional Matched-Book Repo & Trading Inventory Financing:
         // The remainder of wholesale debt finances market-making inventory and reverse repo operations.
-        $inventoryFinancingYield = max(0.0, $policyRate - self::MATCHED_REPO_SPREAD_HAIRCUT);
+        $inventoryFinancingYield = max(0.0, $fundingBenchmark - self::MATCHED_REPO_SPREAD_HAIRCUT);
         $inventoryInterest = ($wholesaleDebt * (1.0 - self::PRIME_BROKERAGE_ALLOCATION)) * $inventoryFinancingYield;
 
         // 3. Excess Corporate Treasury Yield
@@ -224,8 +226,9 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         $optimalInterestExpense = $optimalDebt * $blendedWholesaleRate;
 
         // Investment banks deploy wholesale debt into institutional prime financing and trading inventories
-        $primeFinancingRate = $policyRate + self::PRIME_FINANCING_SPREAD;
-        $inventoryFinancingYield = max(0.0, $policyRate - self::MATCHED_REPO_SPREAD_HAIRCUT);
+        $fundingBenchmark = max($policyRate, $blendedWholesaleRate);
+        $primeFinancingRate = $fundingBenchmark + self::PRIME_FINANCING_SPREAD;
+        $inventoryFinancingYield = max(0.0, $fundingBenchmark - self::MATCHED_REPO_SPREAD_HAIRCUT);
         $blendedAssetYield = (self::PRIME_BROKERAGE_ALLOCATION * $primeFinancingRate) + ((1.0 - self::PRIME_BROKERAGE_ALLOCATION) * $inventoryFinancingYield);
         $optimalInterestIncome = $optimalDebt * $blendedAssetYield;
 

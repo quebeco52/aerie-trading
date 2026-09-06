@@ -43,10 +43,12 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
     public const CAT_BOND_VARIANCE_SCALAR = 0.10;
     /** Haircut applied to cat bond collateral spread revenues when major attachment points breach. */
     public const CAT_BOND_DEFAULT_HAIRCUT = 0.50;
+    /** Fraction of tail severity above attachment absorbed by Cat Bond ILS alternative capital collateral. */
+    public const CAT_BOND_ATTACHMENT_SHIELD_SHARE = 0.40;
 
     // --- Margin Clamps ---
-    /** Maximum variable margin clamp for reinsurers to allow extreme tail-risk claim payouts to materialize. */
-    public const MAX_REINSURANCE_MARGIN_CLAMP = 5.00;
+    /** Maximum variable margin clamp for reinsurers to allow extreme tail-risk claim payouts within 1-in-250 year PML limits. */
+    public const MAX_REINSURANCE_MARGIN_CLAMP = 1.65;
 
     public function clampMargin(float $rawMargin, float $minMargin = 0.01, float $maxMargin = self::MAX_REINSURANCE_MARGIN_CLAMP): float
     {
@@ -90,9 +92,10 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         $catRiskBeta   = $frequencyBeta * $severityBeta;
         $benignBonus   = self::BENIGN_CLAIM_BONUS * $catRiskBeta;
 
+        // Underwriting claim shock applies to the Treaty Reinsurance book
         $underwritingShock = $claimZ < $catThreshold
-            ? abs($claimZ) * $catScalar
-            : ($claimZ > self::BENIGN_CLAIM_Z_FLOOR ? $benignBonus : 0.0);
+            ? abs($claimZ) * $catScalar * $treatyWeight
+            : ($claimZ > self::BENIGN_CLAIM_Z_FLOOR ? $benignBonus * $treatyWeight : 0.0);
 
         // Kenney Rule Hard-Market Capital Recovery:
         // Post-catastrophe capital depletion triggers massive rate increases on treaty reinsurance renewals.
@@ -101,11 +104,14 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         $surplusDeficitRatio = $targetSurplus > 0.0 ? max(0.0, ($targetSurplus - $equity) / $targetSurplus) : 0.0;
         $hardMarketPricingBonus = min(0.35, $surplusDeficitRatio * 0.40 * $catRiskBeta);
 
-        // Cat Bond Principal / Yield Haircut during extreme catastrophe attachment
-        // When attachment points breach, Cat Bond principal shields the ILS tranche, but the treaty line absorbs tail severity
+        // Cat Bond Principal / Yield Haircut during extreme catastrophe attachment:
+        // When attachment points breach, Cat Bond collateral shields the ILS tranche by absorbing tail severity,
+        // while ILS management and coupon fee revenue suffers the default haircut.
         $catBondMultiplier = 1.0;
         if ($claimZ < self::REINSURANCE_ATTACHMENT_Z) {
             $catBondMultiplier = (1.0 - self::CAT_BOND_DEFAULT_HAIRCUT);
+            $excessTailShock = (abs($claimZ) - abs(self::REINSURANCE_ATTACHMENT_Z)) * $catScalar * $treatyWeight;
+            $underwritingShock -= ($excessTailShock * self::CAT_BOND_ATTACHMENT_SHIELD_SHARE);
         }
 
         $treatyRevenue  = max(0.0, $expectedRevenue * $treatyWeight * (1.0 + ($treatyZ * ($baselineVol * self::TREATY_VARIANCE_SCALAR)) + $hardMarketPricingBonus));

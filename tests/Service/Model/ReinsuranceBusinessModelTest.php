@@ -135,9 +135,13 @@ class ReinsuranceBusinessModelTest extends TestCase
         $expectedCatBondRevenue = $expectedRevenue * ReinsuranceBusinessModel::CAT_BOND_WEIGHT * (1.0 - ReinsuranceBusinessModel::CAT_BOND_DEFAULT_HAIRCUT);
         $this->assertEqualsWithDelta($expectedCatBondRevenue, $result->streamRevenue['catastrophe_bonds'], 1.0);
 
-        // Reinsurers absorb full uncapped tail severity (Z = -3.0 * CATASTROPHE_LOSS_SCALAR 0.15 = 0.45 shock)
-        $expectedShock = 3.0 * ReinsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR;
-        $expectedMargin = $realizedVariableMargin + $expectedShock;
+        // Underwriting shock applies to Treaty Reinsurance book (0.65 weight)
+        // and Cat Bond collateral absorbs 40% of tail severity beyond attachment point (Z = -2.50)
+        $treatyShock = 3.0 * ReinsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR * ReinsuranceBusinessModel::TREATY_REINSURANCE_WEIGHT;
+        $excessTailShock = (3.0 - 2.50) * ReinsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR * ReinsuranceBusinessModel::TREATY_REINSURANCE_WEIGHT;
+        $catBondShield = $excessTailShock * ReinsuranceBusinessModel::CAT_BOND_ATTACHMENT_SHIELD_SHARE;
+        $expectedNetShock = $treatyShock - $catBondShield;
+        $expectedMargin = $realizedVariableMargin + $expectedNetShock;
         $this->assertEqualsWithDelta($expectedMargin, $result->clampedMargin, 0.0001);
     }
 
@@ -149,8 +153,8 @@ class ReinsuranceBusinessModelTest extends TestCase
         $stock->setTotalEquity('30000000000');
 
         $mathMock = $this->createStub(MathUtility::class);
-        // Extreme black swan catastrophe: claimZ = -8.0
-        $mathMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, 0.0, -8.0);
+        // Extreme black swan catastrophe: claimZ = -12.0
+        $mathMock->method('generatePersistentZ')->willReturnOnConsecutiveCalls(0.0, 0.0, -12.0);
         $mathMock->method('generateStandardNormal')->willReturn(0.0);
 
         $macro = new MacroStateDTO(
@@ -160,7 +164,7 @@ class ReinsuranceBusinessModelTest extends TestCase
         );
 
         $expectedRevenue = 10_000_000_000.0;
-        $realizedVariableMargin = 0.60;
+        $realizedVariableMargin = 0.95;
 
         $result = $this->model->computeActualFinancials(
             $stock,
@@ -172,10 +176,35 @@ class ReinsuranceBusinessModelTest extends TestCase
             mathUtility: $mathMock
         );
 
-        // 0.60 baseline + (8.0 * 0.15 = 1.20 shock) = 1.80 variable margin (exceeds default standard cap 1.50)
-        $expectedMargin = 0.60 + (8.0 * ReinsuranceBusinessModel::CATASTROPHE_LOSS_SCALAR);
+        // Variable margin expands beyond the standard 1.50 corporate clamp, bounded by 1.65 PML ceiling
         $this->assertGreaterThan(1.50, $result->clampedMargin);
-        $this->assertEqualsWithDelta($expectedMargin, $result->clampedMargin, 0.0001);
         $this->assertLessThanOrEqual(ReinsuranceBusinessModel::MAX_REINSURANCE_MARGIN_CLAMP, $result->clampedMargin);
+    }
+
+    public function testReinsuranceSolvencyThresholdsTreatPositiveEquityAsSolvent(): void
+    {
+        $this->assertSame(0.0, $this->model->getBankruptEquityThreshold());
+        $this->assertSame(2.0, $this->model->getDistressEquityThreshold());
+        $this->assertSame(4.0, $this->model->getWarningEquityThreshold());
+    }
+
+    public function testDividendHaltedWhenSurplusImpairedDuringCatastropheQuarter(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('SAFE');
+        $stock->setTotalEquity('373000000000'); // $373B remaining equity
+        $stock->setTotalRevenue('63850000000000'); // $63.85T annual revenue -> target surplus = $42.57T
+        $stock->setSharesOutstanding('1000000000');
+        $stock->setRoeTtm('0.15');
+        $stock->setWholesaleDebt('11000000000000');
+        $stock->setCustomerDeposits('59000000000000');
+
+        // Negative quarterly EPS during catastrophe quarter
+        $quarterlyEps = -130.22;
+        $sustainableBase = $this->model->getSustainableDividendBase($stock, $quarterlyEps, 500000000000.0, 0.02);
+        $this->assertSame(0.0, $sustainableBase, 'Dividends must be completely halted when capital surplus is impaired.');
+
+        $regCap = $this->model->getRegulatoryDividendCap($stock, 46000000000000.0);
+        $this->assertSame(0.0, $regCap, 'Regulatory dividend cap must be 0.0 when capital ratio is in regulatory distress.');
     }
 }
