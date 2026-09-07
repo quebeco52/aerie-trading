@@ -1096,6 +1096,7 @@ class MacroEngine
 
             // Deep value with the cycle already turning: capital steps in as the gap closes from below.
             $state->equityRiskPremium >= self::SYSTEMIC_DEPLOYMENT_ERP_THRESHOLD
+                && $state->outputGapEma < 0.0
                 && $state->outputGap > $state->outputGapEma
                 => ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT,
 

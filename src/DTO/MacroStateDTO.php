@@ -82,6 +82,7 @@ readonly class MacroStateDTO
         public float $marketVolatility = 0.15,
         public float $marketVolatilityEma = 0.15,
         public float $marketZ = 0.0,
+        public float $marketZLatent = 0.0,
         public float $marketJumpMultiplier = 1.0,
         /** @var array<string, float> Per-macro-sector shock, keyed by Sectors::MACRO_SECTORS. */
         public array $sectorZ = [],
@@ -107,12 +108,14 @@ readonly class MacroStateDTO
         public float $nsLevel = 0.0,
         public float $nsSlope = 0.0,
         public float $nsSlopeEma = 0.0,
+        public float $structuralSlope = 0.0,
         public float $nsCurvature = 0.0,
         public float $nsCurvature2 = 0.0,
         public float $potentialGdpIndex = 1.0,
         public float $nominalGdpIndex = 1.0,
         public float $gdpDeflator = 1.0,
         public ?string $eventType = null,
+        public float $eventCooldownTimer = 0.0,
         public float $supercoreInflation = MacroEngine::TARGET_INFLATION,
         public float $supercoreInflationEma = MacroEngine::TARGET_INFLATION,
         public float $coreGoodsInflation = MacroEngine::TARGET_INFLATION,
@@ -232,6 +235,7 @@ readonly class MacroStateDTO
         $marketVolatility = (float) ($data['market_volatility'] ?? 0.15);
         $marketVolatilityEma = (float) ($data['market_volatility_ema'] ?? $marketVolatility);
         $marketZ = (float) ($data['market_z'] ?? 0.0);
+        $marketZLatent = (float) ($data['market_z_latent'] ?? 0.0);
         $marketJumpMultiplier = (float) ($data['market_jump_multiplier'] ?? 1.0);
         $sectorZ = is_array($data['sector_z'] ?? null) ? array_map('floatval', $data['sector_z']) : [];
 
@@ -259,6 +263,7 @@ readonly class MacroStateDTO
         $nsLevel = (float) ($data['ns_level'] ?? 0.0);
         $nsSlope = (float) ($data['ns_slope'] ?? 0.0);
         $nsSlopeEma = (float) ($data['ns_slope_ema'] ?? $nsSlope);
+        $structuralSlope = (float) ($data['structural_slope'] ?? $nsSlope);
         $nsCurvature = (float) ($data['ns_curvature'] ?? 0.0);
         $nsCurvature2 = (float) ($data['ns_curvature2'] ?? 0.0);
 
@@ -266,6 +271,7 @@ readonly class MacroStateDTO
         $potentialGdpIndex = (float) ($data['potential_gdp_index'] ?? ($nominalGdpIndex / (1.0 + $outputGap)));
         $gdpDeflator = (float) ($data['gdp_deflator'] ?? 1.0);
         $eventType = isset($data['event_type']) ? (string) $data['event_type'] : null;
+        $eventCooldownTimer = (float) ($data['event_cooldown_timer'] ?? 0.0);
 
         return new self(
             totalTime: $totalTime,
@@ -336,6 +342,7 @@ readonly class MacroStateDTO
             marketVolatility: $marketVolatility,
             marketVolatilityEma: $marketVolatilityEma,
             marketZ: $marketZ,
+            marketZLatent: $marketZLatent,
             marketJumpMultiplier: $marketJumpMultiplier,
             sectorZ: $sectorZ,
             corporateTaxRate: $corporateTaxRate,
@@ -360,12 +367,14 @@ readonly class MacroStateDTO
             nsLevel: $nsLevel,
             nsSlope: $nsSlope,
             nsSlopeEma: $nsSlopeEma,
+            structuralSlope: $structuralSlope,
             nsCurvature: $nsCurvature,
             nsCurvature2: $nsCurvature2,
             potentialGdpIndex: $potentialGdpIndex,
             nominalGdpIndex: $nominalGdpIndex,
             gdpDeflator: $gdpDeflator,
             eventType: $eventType,
+            eventCooldownTimer: $eventCooldownTimer,
             supercoreInflation: (float) ($data['supercore_inflation'] ?? $inflation),
             supercoreInflationEma: (float) ($data['supercore_inflation_ema'] ?? ($data['supercore_inflation'] ?? $inflation)),
             coreGoodsInflation: (float) ($data['core_goods_inflation'] ?? $inflation),
@@ -479,6 +488,7 @@ readonly class MacroStateDTO
             marketVolatility: $state->marketVolatility,
             marketVolatilityEma: $state->marketVolatilityEma,
             marketZ: $state->marketZ,
+            marketZLatent: $state->marketZLatent,
             marketJumpMultiplier: $state->marketJumpMultiplier,
             sectorZ: $state->sectorZ,
             corporateTaxRate: $state->corporateTaxRate,
@@ -503,12 +513,14 @@ readonly class MacroStateDTO
             nsLevel: $state->nsLevel,
             nsSlope: $state->nsSlope,
             nsSlopeEma: $state->nsSlopeEma,
+            structuralSlope: $state->structuralSlope,
             nsCurvature: $state->nsCurvature,
             nsCurvature2: $state->nsCurvature2,
             potentialGdpIndex: $state->potentialGdpIndex,
             nominalGdpIndex: $state->nominalGdpIndex,
             gdpDeflator: $state->gdpDeflator,
             eventType: $state->eventType,
+            eventCooldownTimer: $state->eventCooldownTimer,
             supercoreInflation: $state->supercoreInflation,
             supercoreInflationEma: $state->supercoreInflationEma,
             coreGoodsInflation: $state->coreGoodsInflation,
@@ -622,6 +634,7 @@ readonly class MacroStateDTO
             'market_volatility' => $this->marketVolatility,
             'market_volatility_ema' => $this->marketVolatilityEma,
             'market_z' => $this->marketZ,
+            'market_z_latent' => $this->marketZLatent,
             'market_jump_multiplier' => $this->marketJumpMultiplier,
             'sector_z' => $this->sectorZ,
             'corporate_tax_rate' => $this->corporateTaxRate,
@@ -646,12 +659,14 @@ readonly class MacroStateDTO
             'ns_level' => $this->nsLevel,
             'ns_slope' => $this->nsSlope,
             'ns_slope_ema' => $this->nsSlopeEma,
+            'structural_slope' => $this->structuralSlope,
             'ns_curvature' => $this->nsCurvature,
             'ns_curvature2' => $this->nsCurvature2,
             'potential_gdp_index' => $this->potentialGdpIndex,
             'nominal_gdp_index' => $this->nominalGdpIndex,
             'gdp_deflator' => $this->gdpDeflator,
             'event_type' => $this->eventType,
+            'event_cooldown_timer' => $this->eventCooldownTimer,
             'supercore_inflation' => $this->supercoreInflation,
             'supercore_inflation_ema' => $this->supercoreInflationEma,
             'core_goods_inflation' => $this->coreGoodsInflation,

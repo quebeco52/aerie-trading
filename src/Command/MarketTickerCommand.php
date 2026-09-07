@@ -137,7 +137,16 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                 if ($macroState->eventType !== null) {
                     if ($lbiEtf) {
-                        $desc = $this->narrativeEngine->generateLore($macroState->eventType);
+                        $macroContext = [
+                            'interbank_spread_bps' => number_format($macroState->interbankLiquiditySpread * 10000.0, 0),
+                            'hy_spread_pct' => number_format($macroState->highYieldCreditSpread * 100.0, 2),
+                            'recession_prob_pct' => number_format($macroState->recessionProbability * 100.0, 1),
+                            'output_gap_pct' => number_format($macroState->outputGap * 100.0, 2),
+                            'inversion_months' => number_format($macroState->inversionDuration * 12.0, 1),
+                            'erp_pct' => number_format($macroState->equityRiskPremium * 100.0, 2),
+                            'qe_intensity_pct' => number_format($macroState->qeIntensity * 100.0, 2),
+                        ];
+                        $desc = $this->narrativeEngine->generateLore($macroState->eventType, $macroContext);
                         $shockPct = in_array($macroState->eventType, [\App\Service\Event\ShockEvent::TITAN_INTERVENTION, \App\Service\Event\ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT]) ? 5.0 : -5.0;
                         $events[] = $this->marketEvent->publish($lbiEtf, 'SHOCK', $desc, $shockPct);
                     }
@@ -229,7 +238,6 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                 $this->redis->set('stocks_live_data', json_encode($stockUpdates));
                 $this->redis->set('etf_live_data', json_encode([$etfUpdate]));
-                $this->redis->set(\App\Service\Macro\MacroEngine::REDIS_MACRO_STATE, json_encode($macroState->toArray()));
                 $this->redis->set('simulation_tick_count', $tickCount);
 
                 // Save Portfolio Snapshots once a "Simulation Week"

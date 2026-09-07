@@ -164,4 +164,32 @@ class SystemicEventTest extends TestCase
             )
         );
     }
+
+    public function testCooldownSurvivesSerializationRoundTrip(): void
+    {
+        $state = new MacroState();
+        $state->highYieldCreditSpread = MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD + 0.02;
+
+        // Tick 1: event fires and sets cooldown
+        $this->assertSame(ShockEvent::CREDIT_MARKET_SEIZURE, $this->fire($state));
+        $this->assertGreaterThan(0.0, $state->eventCooldownTimer);
+
+        // Simulate Redis / DTO round-trip across tick boundary
+        $dto = \App\DTO\MacroStateDTO::fromMacroState($state);
+        $restoredState = MacroState::fromArray($dto->toArray());
+
+        $this->assertEqualsWithDelta(
+            $state->eventCooldownTimer,
+            $restoredState->eventCooldownTimer,
+            1e-9,
+            'eventCooldownTimer must survive MacroStateDTO serialization without being dropped.'
+        );
+
+        // Tick 2: must NOT fire because cooldown is active
+        $this->assertNull(
+            $this->fire($restoredState),
+            'Restored state must maintain cooldown and not fire on consecutive ticks.'
+        );
+    }
 }
+

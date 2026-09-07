@@ -19,13 +19,24 @@ class ShockEvent
     public const PERFORMANCE_FEE_SURGE = 'performance_fee_surge';
     public const FUND_OUTFLOWS = 'fund_outflows';
     
+    // --- Systemic Macroeconomic Events (Published against the LBI index) ---
+    /** Central bank emergency Quantitative Easing and asset purchases during contraction near zero lower bound. */
     public const TITAN_INTERVENTION = 'titan_intervention';
-    public const SOVEREIGN_WEALTH_DEPLOYMENT = 'sovereign_wealth_deployment';
+    /** Descriptive alias for central bank quantitative easing expansion. */
+    public const QUANTITATIVE_EASING_EXPANSION = self::TITAN_INTERVENTION;
 
-    // District-Wide Systemic Events (macro-level, published against the LBI index)
+    /** Cyclical valuation bottom and counter-cyclical institutional equity buying driven by deep-value ERP. */
+    public const SOVEREIGN_WEALTH_DEPLOYMENT = 'sovereign_wealth_deployment';
+    /** Descriptive alias for cyclical deep-value equity valuation inflection. */
+    public const CYCLICAL_VALUATION_INFLECTION = self::SOVEREIGN_WEALTH_DEPLOYMENT;
+
+    /** Wholesale interbank lending freeze driven by severe counterparty liquidity spread blowout. */
     public const SYSTEMIC_LIQUIDITY_FREEZE = 'systemic_liquidity_freeze';
+    /** Speculative-grade corporate debt market freeze triggered by high-yield spread widening. */
     public const CREDIT_MARKET_SEIZURE = 'credit_market_seizure';
+    /** Formal technical recession declaration based on negative GDP output gap and elevated recession probability. */
     public const RECESSION_DECLARED = 'recession_declared';
+    /** Sustained sovereign yield curve inversion alarm exceeding historical warning duration. */
     public const YIELD_CURVE_INVERSION_ALARM = 'yield_curve_inversion_alarm';
 
     // Sector-Specific Shocks
