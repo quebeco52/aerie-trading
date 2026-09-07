@@ -355,14 +355,11 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         ];
     }
 
-    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): float
+    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
     {
-        // Credit services generate their interest income from their unsecured loan book.
-        $earningAssets = max(1.0, (float) $stock->getTotalEquity() + (float) $stock->getTotalDebt() - (float) $stock->getCorporateTreasury());
-
-        $policyRate = $macroState->policyRateEma;
-        // However, this is largely captured in Revenue (Gross Yield). 
-        // We only return the supplemental interest from excess treasury cash to avoid double-counting.
+        // Credit services generate their interest income from their unsecured loan book, but that is largely
+        // captured in Revenue (Gross Yield). We only return the supplemental interest from excess treasury
+        // cash to avoid double-counting.
         $operatingBase = $this->getOperatingBase($stock);
         // Credit services act like banks and use standard cash buffering
         $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - ($operatingBase * self::TARGET_CASH_OPERATING_MULT));

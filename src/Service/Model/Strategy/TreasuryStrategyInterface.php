@@ -14,6 +14,16 @@ interface TreasuryStrategyInterface
     public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float;
     public function evaluateHoardingStatus(float $treasury, float $targetCashReserves, float $operatingBase, float $totalDebt): array;
     public function calculateDepositBeta(float $totalDebt, float $equity, float $equityLimit, float $customerDeposits): float;
-    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): float;
+    /**
+     * @param float|null $realizedWholesaleRate The blended wholesale funding rate actually realized on the debt
+     *                                           side this tick (DebtMetricsDTO::$wholesaleRate), already carrying
+     *                                           the dynamic Merton/BGG credit-spread widening. Strategies whose
+     *                                           earning assets reprice directly off their own funding cost (e.g.
+     *                                           prime brokerage margin loans) MUST use this instead of recomputing
+     *                                           a static approximation, or the income and expense rails silently
+     *                                           diverge under spread stress. Null when no live debt calc exists
+     *                                           yet (e.g. market seed/reset bootstrapping).
+     */
+    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float;
     public function calculateCashYield(MacroStateDTO $macroState): float;
 }

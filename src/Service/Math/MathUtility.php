@@ -129,6 +129,27 @@ class MathUtility
     }
 
     /**
+     * Converts a per-step persistence coefficient into the scale factor that preserves integrated variance.
+     *
+     * A sequence of N i.i.d. unit-variance shocks sums to variance N. Making those shocks autocorrelated with
+     * coefficient phi inflates the sum's variance to approximately N * (1 + phi) / (1 - phi), so simply
+     * swapping an i.i.d. driver for a persistent one silently multiplies realized volatility -- by more than
+     * twenty times at the persistence levels used for a market factor on a fine time step. Scaling each shock
+     * by this factor restores the original integrated variance while keeping the autocorrelation structure,
+     * so persistence changes the SHAPE of the path (trends and regimes) without changing its magnitude.
+     *
+     * @param float $phi The autoregressive persistence coefficient in [0, 1).
+     * @return float The multiplicative scale preserving the integrated variance of the shock sequence.
+     */
+    public function calculatePersistenceVarianceScale(float $phi): float
+    {
+        $boundedPhi = max(0.0, min(0.999999, $phi));
+
+        return sqrt((1.0 - $boundedPhi) / (1.0 + $boundedPhi));
+    }
+
+
+    /**
      * Calculates a log-normal random draw, used for right-skewed distributions like M&A synergy.
      *
      * @param float $mu The mean of the underlying normal distribution.
@@ -154,6 +175,11 @@ class MathUtility
             $z = $this->generateStandardNormal();
             $chiSquare += $z * $z;
         }
+
+        // Guard the chi-square denominator. A draw of exactly zero has probability zero in continuous theory,
+        // but is reachable in practice whenever the underlying normal generator is stubbed or seeded to a
+        // constant, and the resulting division by zero would abort the whole simulation tick.
+        $chiSquare = max($chiSquare, 1e-12);
 
         $rawT = $this->generateStandardNormal() / sqrt($chiSquare / $df);
         return $rawT * sqrt(($df - 2) / $df);
@@ -212,6 +238,8 @@ class MathUtility
      * @param float $marketVol         The volatility of the broader market.
      * @param float $marketZ           The systemic market shock Z-score.
      * @param float $w1                The idiosyncratic shock Z-score.
+     * @param float $sectorZ           The shock Z-score common to this stock's macro sector.
+     * @param float $sectorVarianceShare Fraction of NON-market variance loaded onto the sector factor.
      * @return float The new price calculated via GBM.
      */
     public function calculateCorrelatedGBM(
@@ -223,17 +251,32 @@ class MathUtility
         float $beta,
         float $marketVol,
         float $marketZ,
-        float $w1
+        float $w1,
+        float $sectorZ = 0.0,
+        float $sectorVarianceShare = 0.0
     ): float {
         $impliedRho = $beta * ($marketVol / max($currentVolatility, 0.01));
         $marketCorrelation = max(-0.99, min(0.99, $impliedRho));
 
+        // Orthogonal three-way variance decomposition: market, sector, idiosyncratic.
+        // A single common factor makes two banks correlated only through their betas, so a sector rotation is
+        // invisible in prices between earnings dates. Carving a share of the NON-market residual out for a
+        // sector factor gives same-sector names a second shared driver: their correlation becomes
+        // rho_market^2 + rho_sector^2 against rho_market^2 for a cross-sector pair. Loadings are square roots
+        // of variance shares that sum to one, so total step variance stays exactly sigma^2 either way.
+        $residualVariance = max(0.0, 1.0 - ($marketCorrelation * $marketCorrelation));
+        $boundedShare = max(0.0, min(1.0, $sectorVarianceShare));
+        $sectorLoading = sqrt($residualVariance * $boundedShare);
+        $idiosyncraticLoading = sqrt($residualVariance * (1.0 - $boundedShare));
+
         $sqrtDt = sqrt($dt);
         $systematicDrift = $currentVolatility * $marketCorrelation * $marketZ * $sqrtDt;
-        $idiosyncraticDrift = $currentVolatility * sqrt(1 - ($marketCorrelation * $marketCorrelation)) * $w1 * $sqrtDt;
+        $sectorDrift = $currentVolatility * $sectorLoading * $sectorZ * $sqrtDt;
+        $idiosyncraticDrift = $currentVolatility * $idiosyncraticLoading * $w1 * $sqrtDt;
         $currentVariance = $currentVolatility * $currentVolatility;
 
-        $gbmExponent = ($drift + $gravityDrift - 0.5 * $currentVariance) * $dt + $systematicDrift + $idiosyncraticDrift;
+        $gbmExponent = ($drift + $gravityDrift - 0.5 * $currentVariance) * $dt
+            + $systematicDrift + $sectorDrift + $idiosyncraticDrift;
 
         return $currentPrice * exp($gbmExponent);
     }
@@ -510,7 +553,7 @@ class MathUtility
         // Prevent Division by Zero. The denominator must be at least 50 bps (0.005)
         $denominator = max(0.005, $effectiveDiscountRate - $effectiveGrowthRate);
         $multiplier = 1.0 / $denominator;
-        
+
         $clampedMultiplier = min(FinancialConstants::MAX_DCF_MULTIPLIER, $multiplier);
 
         return $annualDividend * $clampedMultiplier;
@@ -1127,7 +1170,7 @@ class MathUtility
         // Delta ln(Cost) = beta1 * Delta ln(Rev) + beta2 * I(Delta ln(Rev) < 0) * Delta ln(Rev)
         $isContraction = $revenueLogChange < 0.0 ? 1.0 : 0.0;
         $costElasticity = $betaExpansion + ($betaContractionPenalty * $isContraction);
-        
+
         // Margin shift: ln(Cost_t / Rev_t) - ln(Cost_{t-1} / Rev_{t-1}) = (costElasticity - 1.0) * Delta ln(Rev)
         $logMarginMultiplier = ($costElasticity - 1.0) * $revenueLogChange;
         $adjustedMargin = $currentVariableMargin * exp($logMarginMultiplier);
@@ -1159,7 +1202,7 @@ class MathUtility
         $dsoShiftDays = ($creditSpread - MacroEngine::BASE_CREDIT_SPREAD) * FinancialConstants::CCC_DSO_CREDIT_SPREAD_SENSITIVITY;
         $dioShiftDays = (1.0 - $capacityUtilization) * FinancialConstants::CCC_DIO_CAPACITY_SENSITIVITY;
         // Under interbank liquidity stress, vendors demand faster payment (DPO contracts)
-        $dpoShiftDays = -($interbankLiquiditySpread - MacroEngine::INTERBANK_BASELINE_SPREAD) * FinancialConstants::CCC_DPO_LIQUIDITY_SENSITIVITY;
+        $dpoShiftDays = - ($interbankLiquiditySpread - MacroEngine::INTERBANK_BASELINE_SPREAD) * FinancialConstants::CCC_DPO_LIQUIDITY_SENSITIVITY;
 
         // Total CCC expansion / contraction days translated to annual intensity units (Days / 365)
         // Standard formula: CCC = DSO + DIO - DPO
@@ -1915,4 +1958,3 @@ class MathUtility
         return ($periodValue / max(0.01, $seasonalFactor)) * $periodsPerYear;
     }
 }
-

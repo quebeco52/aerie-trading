@@ -104,6 +104,7 @@ class MacroState
     public float $sovereignDebtToGdp = MacroEngine::INITIAL_DEBT_TO_GDP;
     public float $sovereignDebtToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP;
     public ?string $eventType = null;
+    public float $eventCooldownTimer = 0.0;
     public float $equityRiskPremium = MacroEngine::BASE_EQUITY_RISK_PREMIUM;
 
     public float $potentialGdpIndex = 1.0;
@@ -113,6 +114,10 @@ class MacroState
     public float $marketVolatility = 0.13;
     public float $marketVolatilityEma = 0.13;
     public float $marketZ = 0.0;
+    public float $marketZLatent = 0.0;
+    public float $marketJumpMultiplier = 1.0;
+    /** @var array<string, float> Per-macro-sector shock, keyed by Sectors::MACRO_SECTORS. */
+    public array $sectorZ = [];
     public float $financialConditionsIndex = 0.0;
     public float $financialConditionsIndexEma = 0.0;
 
@@ -285,6 +290,7 @@ class MacroState
         $state->sovereignDebtToGdp = (float) ($data['sovereign_debt_to_gdp'] ?? MacroEngine::INITIAL_DEBT_TO_GDP);
         $state->sovereignDebtToGdpEma = (float) ($data['sovereign_debt_to_gdp_ema'] ?? $state->sovereignDebtToGdp);
         $state->eventType = $data['event_type'] ?? null;
+        $state->eventCooldownTimer = (float) ($data['event_cooldown_timer'] ?? 0.0);
         $state->equityRiskPremium = $data['equity_risk_premium'] ?? MacroEngine::BASE_EQUITY_RISK_PREMIUM;
 
         $state->nominalGdpIndex = $data['nominal_gdp_index'] ?? 1.0;
@@ -294,6 +300,9 @@ class MacroState
         $state->marketVolatility = $data['market_volatility'] ?? 0.13;
         $state->marketVolatilityEma = $data['market_volatility_ema'] ?? $state->marketVolatility;
         $state->marketZ = $data['market_z'] ?? 0.0;
+        $state->marketZLatent = (float) ($data['market_z_latent'] ?? 0.0);
+        $state->marketJumpMultiplier = (float) ($data['market_jump_multiplier'] ?? 1.0);
+        $state->sectorZ = is_array($data['sector_z'] ?? null) ? array_map('floatval', $data['sector_z']) : [];
         $state->financialConditionsIndex = (float) ($data['financial_conditions_index'] ?? 0.0);
         $state->financialConditionsIndexEma = (float) ($data['financial_conditions_index_ema'] ?? $state->financialConditionsIndex);
 
@@ -451,6 +460,7 @@ class MacroState
             'sovereign_debt_to_gdp' => $this->sovereignDebtToGdp,
             'sovereign_debt_to_gdp_ema' => $this->sovereignDebtToGdpEma,
             'event_type' => $this->eventType,
+            'event_cooldown_timer' => $this->eventCooldownTimer,
             'equity_risk_premium' => $this->equityRiskPremium,
             'potential_gdp_index' => $this->potentialGdpIndex,
             'nominal_gdp_index' => $this->nominalGdpIndex,
@@ -458,6 +468,9 @@ class MacroState
             'market_volatility' => $this->marketVolatility,
             'market_volatility_ema' => $this->marketVolatilityEma,
             'market_z' => $this->marketZ,
+            'market_z_latent' => $this->marketZLatent,
+            'market_jump_multiplier' => $this->marketJumpMultiplier,
+            'sector_z' => $this->sectorZ,
             'financial_conditions_index' => $this->financialConditionsIndex,
             'financial_conditions_index_ema' => $this->financialConditionsIndexEma,
             'macro_credit_spread' => $this->macroCreditSpread,

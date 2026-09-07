@@ -713,6 +713,43 @@ class InvestmentBankBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(347_500_000.0, $income, 100.0);
     }
 
+    public function testRealizedWholesaleRateOverridesStaticApproximationUnderDistress(): void
+    {
+        // Regression test for the PERE/KING negative-carry bankruptcy bug: prime brokerage margin loans and
+        // matched-book repo assets MUST reprice off the firm's own realized (dynamic Merton/BGG-widened)
+        // wholesale funding cost, not a static approximation built off the seed credit_spread. Otherwise a
+        // distressed firm keeps earning calm-market NII while paying the live blown-out rate on its
+        // liabilities -- an unhedgeable, self-amplifying negative carry on a multi-hundred-billion book.
+        $stock = new Stock();
+        $stock->setTicker('PERE');
+        $stock->setCreditSpread('0.0200'); // Calm-market static spread (200 bps)
+        $stock->setWholesaleDebt('100000000000.0'); // $100B wholesale debt
+        $stock->setCorporateTreasury('10000000000.0'); // $10B treasury (equal to min cash -> excess cash = 0)
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $macroState = \App\DTO\MacroStateDTO::fromArray([
+            'policy_rate'                    => 0.04,
+            'policy_rate_ema'                => 0.04, // Static blended rate would be ~0.04 + 0.0200 = 0.0600
+            'yield_5y_ema'                   => 0.04,
+            'interbank_liquidity_spread_ema' => 0.0,
+        ]);
+
+        // Without a realized rate, the strategy falls back to the static ~6.0% approximation.
+        $calmIncome = $this->model->calculateInterestIncome($stock, $macroState, $mathMock);
+
+        // DebtEngine measured a live, distressed wholesale rate of 15.0% this tick (dynamic Merton/BGG spread
+        // widening on top of the static credit_spread) -- the exact scenario where the two rails used to diverge.
+        $distressedIncome = $this->model->calculateInterestIncome($stock, $macroState, $mathMock, 0.15);
+
+        // Prime: $70B * (0.15 + 0.0150) = $70B * 0.1650 = $11.55B
+        // Repo:  $30B * (0.15 - 0.0025) = $30B * 0.1475 = $4.425B
+        // Total = $15.975B ($15,975,000,000.0)
+        $this->assertEqualsWithDelta(15_975_000_000.0, $distressedIncome, 1_000.0);
+
+        // The realized rate must dominate the static approximation, not be silently ignored.
+        $this->assertGreaterThan($calmIncome, $distressedIncome, 'Realized wholesale rate must override the static credit_spread approximation once a live debt calc exists.');
+    }
+
     public function testObservableShockZIncludesPublicMacroDrivers(): void
     {
         $stock = new Stock();

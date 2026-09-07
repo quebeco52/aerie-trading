@@ -204,16 +204,12 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         $baselineRoe = max($waccBase, $baselineRoe - $saturationPenalty);
 
         $policyRate = $macroState->policyRateEma;
-        $yield5y = $macroState->yield5yEma;
-        $structuralSpread = (float) $stock->getCreditSpread();
-        $floatingRatio = (float) $stock->getFloatingDebtRatio();
-
         $taxRate = $macroState->corporateTaxRate;
 
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
         $treasury = (float) $stock->getCorporateTreasury();
 
-        $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
+        $blendedWholesaleRate = $this->calculateBlendedWholesaleRate($stock, $macroState);
 
         $industry = $stock->getIndustry() ?: 'General';
         $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? self::DEFAULT_EQUITY_LIMIT;
@@ -227,7 +223,18 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
 
         $optimalInterestExpense = $optimalDebt * $blendedWholesaleRate;
 
-        // Margin loans yield a spread over the policy rate.
+        // NOTE: deliberately priced over the policy rate, NOT over $blendedWholesaleRate, even though the
+        // expense leg two lines up uses the blended rate and the realized rail in calculateInterestIncome
+        // now correctly prices over the firm's own funding cost.
+        //
+        // Aligning this leg too is the consistent thing to do, but it cannot be done at the current
+        // calibration: MARGIN_LOAN_SPREAD is 300 bps and brokerages run up to 8x equity, so a full spread
+        // earned over funding on the entire wholesale book yields ~19% ROE from net interest alone against a
+        // 15% target. Required operating EBIT then goes negative and target revenue collapses to the floor.
+        // The 300 bps figure is a retail margin-lending spread and was implicitly calibrated against this
+        // formula, which nets the credit and term spreads back out. Fixing it properly means either
+        // recalibrating the constant or modelling a margin-lending allocation the way InvestmentBank does
+        // with PRIME_BROKERAGE_ALLOCATION, which is a sector rebalance rather than a defect fix.
         $marginLoanYield = $policyRate + FinancialConstants::MARGIN_LOAN_SPREAD;
         $optimalInterestIncome = $optimalDebt * $marginLoanYield;
 
@@ -259,13 +266,44 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         ];
     }
 
-    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): float
+    /**
+     * Fallback blended wholesale funding rate: floating/fixed debt mix priced off the policy rate and 5-year
+     * yield curve, plus the firm's static structural credit spread. Used only when no realized wholesale rate
+     * from DebtEngine is available (e.g. market seed/reset bootstrapping, before any live debt calc has run).
+     *
+     * IMPORTANT: this deliberately omits the dynamic Merton/BGG spread widening that
+     * DebtEngine::calculateInterestExpenseAndWholesaleRate layers on, because that widening depends on the
+     * firm's live market cap and distance-to-default. Do not use this as the benchmark once a realized rate
+     * exists — pricing client margin assets off this static approximation while the expense side pays the
+     * live distressed rate is exactly the negative-carry bug this indirection guards against; see
+     * calculateInterestIncome().
+     */
+    protected function calculateBlendedWholesaleRate(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
+    {
+        $policyRate = $macroState->policyRateEma;
+        $yield5y = $macroState->yield5yEma;
+        $structuralSpread = (float) $stock->getCreditSpread();
+        $floatingRatio = (float) $stock->getFloatingDebtRatio();
+
+        $floatingRate = $policyRate + $macroState->interbankLiquiditySpreadEma;
+
+        return ($floatingRatio * $floatingRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
+    }
+
+    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
     {
         $policyRate = $macroState->policyRateEma;
 
+        // Client margin loans are funded one-for-one out of the firm's own wholesale book, so the asset yield
+        // must be built on the same realized rate DebtEngine charges on the liability side
+        // (DebtMetricsDTO::$wholesaleRate), dynamic credit-spread widening included. Pricing the asset leg off
+        // the bare policy rate while the liability leg paid the live distressed rate left the brokerage booking
+        // a matched-book carry that evaporated -- and then inverted -- exactly when spreads blew out.
+        $fundingBenchmark = max(0.0, $realizedWholesaleRate ?? $this->calculateBlendedWholesaleRate($stock, $macroState));
+
         // 1. Margin Loan Yield
-        // Brokerages lend their wholesale debt to clients as margin loans.
-        $marginLoanYield = $policyRate + FinancialConstants::MARGIN_LOAN_SPREAD;
+        // Brokerages lend their wholesale debt to clients as margin loans at a spread over their funding cost.
+        $marginLoanYield = $fundingBenchmark + FinancialConstants::MARGIN_LOAN_SPREAD;
         $marginLoans = (float) $stock->getWholesaleDebt();
         $marginInterest = $marginLoans * $marginLoanYield;
 

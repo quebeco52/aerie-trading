@@ -395,7 +395,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
      * Asset Managers invest excess corporate treasury in seed capital co-investment portfolios (60/40).
      * The 40% equity seed tranche experiences quarterly stochastic mark-to-market volatility and VIX tail risk.
      */
-    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): float
+    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
     {
         $operatingBase = $this->getOperatingBase($stock);
         $minCash = $this->calculateMinOperatingCash($operatingBase, 0.0, (float) $stock->getWholesaleDebt());

@@ -22,6 +22,12 @@ class ShockEvent
     public const TITAN_INTERVENTION = 'titan_intervention';
     public const SOVEREIGN_WEALTH_DEPLOYMENT = 'sovereign_wealth_deployment';
 
+    // District-Wide Systemic Events (macro-level, published against the LBI index)
+    public const SYSTEMIC_LIQUIDITY_FREEZE = 'systemic_liquidity_freeze';
+    public const CREDIT_MARKET_SEIZURE = 'credit_market_seizure';
+    public const RECESSION_DECLARED = 'recession_declared';
+    public const YIELD_CURVE_INVERSION_ALARM = 'yield_curve_inversion_alarm';
+
     // Sector-Specific Shocks
     public const VOLATILITY_SURGE = 'volatility_surge';
     public const ADVISORY_CRASH = 'advisory_crash';

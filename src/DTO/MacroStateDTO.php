@@ -82,6 +82,9 @@ readonly class MacroStateDTO
         public float $marketVolatility = 0.15,
         public float $marketVolatilityEma = 0.15,
         public float $marketZ = 0.0,
+        public float $marketJumpMultiplier = 1.0,
+        /** @var array<string, float> Per-macro-sector shock, keyed by Sectors::MACRO_SECTORS. */
+        public array $sectorZ = [],
         public float $corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE,
         public float $sovereignDebtToGdp = MacroEngine::INITIAL_DEBT_TO_GDP,
         public float $sovereignDebtToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP,
@@ -229,6 +232,8 @@ readonly class MacroStateDTO
         $marketVolatility = (float) ($data['market_volatility'] ?? 0.15);
         $marketVolatilityEma = (float) ($data['market_volatility_ema'] ?? $marketVolatility);
         $marketZ = (float) ($data['market_z'] ?? 0.0);
+        $marketJumpMultiplier = (float) ($data['market_jump_multiplier'] ?? 1.0);
+        $sectorZ = is_array($data['sector_z'] ?? null) ? array_map('floatval', $data['sector_z']) : [];
 
         $corporateTaxRate = (float) ($data['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE);
         $sovereignDebtToGdp = (float) ($data['sovereign_debt_to_gdp'] ?? MacroEngine::INITIAL_DEBT_TO_GDP);
@@ -331,6 +336,8 @@ readonly class MacroStateDTO
             marketVolatility: $marketVolatility,
             marketVolatilityEma: $marketVolatilityEma,
             marketZ: $marketZ,
+            marketJumpMultiplier: $marketJumpMultiplier,
+            sectorZ: $sectorZ,
             corporateTaxRate: $corporateTaxRate,
             sovereignDebtToGdp: $sovereignDebtToGdp,
             sovereignDebtToGdpEma: $sovereignDebtToGdpEma,
@@ -472,6 +479,8 @@ readonly class MacroStateDTO
             marketVolatility: $state->marketVolatility,
             marketVolatilityEma: $state->marketVolatilityEma,
             marketZ: $state->marketZ,
+            marketJumpMultiplier: $state->marketJumpMultiplier,
+            sectorZ: $state->sectorZ,
             corporateTaxRate: $state->corporateTaxRate,
             sovereignDebtToGdp: $state->sovereignDebtToGdp,
             sovereignDebtToGdpEma: $state->sovereignDebtToGdpEma,
@@ -613,6 +622,8 @@ readonly class MacroStateDTO
             'market_volatility' => $this->marketVolatility,
             'market_volatility_ema' => $this->marketVolatilityEma,
             'market_z' => $this->marketZ,
+            'market_jump_multiplier' => $this->marketJumpMultiplier,
+            'sector_z' => $this->sectorZ,
             'corporate_tax_rate' => $this->corporateTaxRate,
             'sovereign_debt_to_gdp' => $this->sovereignDebtToGdp,
             'sovereign_debt_to_gdp_ema' => $this->sovereignDebtToGdpEma,

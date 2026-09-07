@@ -289,7 +289,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         ];
     }
 
-    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): float
+    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
     {
         // Non-operating interest income is earned ONLY on surplus corporate cash ($ownCash).
         // Margin pool custody spread is an operating revenue stream included in calculateSectorPhysics.

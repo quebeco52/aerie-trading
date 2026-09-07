@@ -285,6 +285,26 @@ class NarrativeEngine
                 "Asset management AUM contracted following market volatility and client rebalancing.",
                 "Net redemption outflows reduced recurring management fee revenues."
             ]),
+            ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE => $this->getRandomPhrase([
+                "Interbank funding markets seized as lenders hoarded liquidity and overnight spreads blew out.",
+                "Wholesale funding froze across the district; institutions refused to lend to one another at any price.",
+                "A collapse in interbank confidence drove short-term funding spreads to crisis levels."
+            ]),
+            ShockEvent::CREDIT_MARKET_SEIZURE => $this->getRandomPhrase([
+                "High-yield credit markets seized as investors fled risk, shutting the primary issuance window.",
+                "Speculative-grade spreads gapped violently wider, stranding leveraged borrowers ahead of refinancing.",
+                "Corporate credit repriced brutally as the market abandoned the lowest-quality tranches."
+            ]),
+            ShockEvent::RECESSION_DECLARED => $this->getRandomPhrase([
+                "The District Statistical Office confirmed the economy has entered recession.",
+                "Contracting output and deteriorating labour conditions met the formal definition of recession.",
+                "Economists declared the downturn official as activity fell for consecutive quarters."
+            ]),
+            ShockEvent::YIELD_CURVE_INVERSION_ALARM => $this->getRandomPhrase([
+                "The sovereign yield curve has now been inverted for a sustained period, historically a reliable recession signal.",
+                "Persistent curve inversion set off recession alarms across trading desks.",
+                "Long sovereign yields remained stubbornly below short rates, a configuration that has preceded every past downturn."
+            ]),
             ShockEvent::TITAN_INTERVENTION => $this->getRandomPhrase([
                 "Emergency liquidity support and capital injections from District Titans restored market confidence.",
                 "Coordinated institutional backstop facility averted systemic credit contagion.",
