@@ -57,10 +57,10 @@ class MarketConsensusEngineTest extends TestCase
 
         $this->assertInstanceOf(ConsensusDTO::class, $consensus);
         $this->assertSame(0.50, $consensus->dynamicVisibility);
-        // Bayesian update blends structural prior ($1000) with fresh signal ($1050) -> ~1048.94
-        $this->assertEqualsWithDelta(1048.94, $consensus->analystExpectedRevenue, 0.05);
-        // analystExpectedVariableCosts = analystExpectedRevenue * clampedMargin = 1048.94 * 0.40 = 419.57
-        $this->assertEqualsWithDelta(419.57, $consensus->analystExpectedVariableCosts, 0.05);
+        // Bayesian update blends structural prior ($1000) with fresh signal ($1050) -> ~1036.26, minus 1.5% walkdown -> ~1020.72
+        $this->assertEqualsWithDelta(1020.72, $consensus->analystExpectedRevenue, 0.05);
+        // analystExpectedVariableCosts = analystExpectedRevenue * clampedMargin = 1020.72 * 0.40 = 408.29
+        $this->assertEqualsWithDelta(408.29, $consensus->analystExpectedVariableCosts, 0.05);
     }
 
     public function testGenerateConsensusClampingToMinVisibility(): void
@@ -88,7 +88,7 @@ class MarketConsensusEngineTest extends TestCase
 
         // baseVisibility (0.50) - 0.50 = 0.0, clamped to minVisibility (0.25)
         $this->assertSame(0.25, $consensus->dynamicVisibility);
-        $this->assertEqualsWithDelta(1048.94, $consensus->analystExpectedRevenue, 0.05);
+        $this->assertEqualsWithDelta(1020.72, $consensus->analystExpectedRevenue, 0.05);
     }
 
     public function testGenerateConsensusClampingToMaxVisibility(): void
@@ -116,7 +116,7 @@ class MarketConsensusEngineTest extends TestCase
 
         // baseVisibility (0.80) + 0.50 = 1.30, clamped to 1.0
         $this->assertSame(1.0, $consensus->dynamicVisibility);
-        $this->assertEqualsWithDelta(1097.87, $consensus->analystExpectedRevenue, 0.05);
+        $this->assertEqualsWithDelta(1056.44, $consensus->analystExpectedRevenue, 0.05);
     }
 
     public function testGenerateConsensusEventConditionalForkWhenPublicEventIsTrue(): void
@@ -147,8 +147,8 @@ class MarketConsensusEngineTest extends TestCase
         $consensus = $this->engine->generateConsensus($actuals, $coverage, 1000.0, $this->mathUtilityMock, new Stock());
 
         $this->assertSame(0.90, $consensus->dynamicVisibility);
-        // 1000 * (1 + 1.0 * 0.90) = 1900.0 fresh signal -> posterior ~1880.85
-        $this->assertEqualsWithDelta(1880.85, $consensus->analystExpectedRevenue, 0.05);
+        // 1000 * (1 + 1.0 * 0.90) = 1900.0 fresh signal -> posterior ~1652.75, minus 1.5% walkdown -> ~1627.96
+        $this->assertEqualsWithDelta(1627.96, $consensus->analystExpectedRevenue, 0.05);
     }
 
     public function testGenerateConsensusUsesRoutineVisibilityWhenPublicEventIsFalse(): void
@@ -178,7 +178,7 @@ class MarketConsensusEngineTest extends TestCase
         $consensus = $this->engine->generateConsensus($actuals, $coverage, 1000.0, $this->mathUtilityMock, new Stock());
 
         $this->assertSame(0.10, $consensus->dynamicVisibility);
-        // 1000 * (1 + 0.1 * 0.10) = 1010.0 fresh signal -> posterior ~1009.79
-        $this->assertEqualsWithDelta(1009.79, $consensus->analystExpectedRevenue, 0.05);
+        // 1000 * (1 + 0.1 * 0.10) = 1010.0 fresh signal -> posterior ~1007.25, minus 1.5% walkdown -> ~992.14
+        $this->assertEqualsWithDelta(992.14, $consensus->analystExpectedRevenue, 0.05);
     }
 }

@@ -290,6 +290,11 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         return 0.18; // High wafer fabrication lead time & finished goods inventory holding
     }
 
+    public function getSeasonalityFactors(): array
+    {
+        return [0.90, 0.95, 1.05, 1.10]; // H2 consumer electronics ramps and Q4 corporate budget flush
+    }
+
     public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
     {
         $timeScale = $dt / 0.25;

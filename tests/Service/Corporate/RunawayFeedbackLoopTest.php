@@ -11,6 +11,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CapExEngine;
 use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Math\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
@@ -224,13 +225,14 @@ class RunawayFeedbackLoopTest extends TestCase
             dt: 0.25
         );
 
-        $report = $engine->calculate($stock, $macro, 23, 252);
+        $tick = EarningsEngine::resolveReportingTick($stock->getTicker(), 252);
+        $report = $engine->calculate($stock, $macro, $tick, 252);
 
         // Dynamic SAM for 0.5 SAM ratio = $1T * 1.0 * 0.50 = $500B
         // Structural revenue is capped at $500B * 1.50 = $750B
-        // Annualized totalRevenue = actualRevenue * 4
+        // Annualized totalRevenue = actualRevenue * 4 bounded by EXPECTED_REVENUE_TAM_HEADROOM (1.50)
         $annualRevenue = (float) $stock->getTotalRevenue();
-        $this->assertLessThanOrEqual(750_000_000_000.0 * 4.0 * 1.30, $annualRevenue);
+        $this->assertLessThanOrEqual(750_000_000_000.0 * 4.0 * EarningsEngine::EXPECTED_REVENUE_TAM_HEADROOM, $annualRevenue);
     }
 
     public function testEarningsEngineDoesNotBoundFinancialsToSectorTam(): void
@@ -326,7 +328,8 @@ class RunawayFeedbackLoopTest extends TestCase
             dt: 0.25
         );
 
-        $report = $engine->calculate($stock, $macro, 34, 252);
+        $tick = EarningsEngine::resolveReportingTick($stock->getTicker(), 252);
+        $report = $engine->calculate($stock, $macro, $tick, 252);
 
         // Bank should not be bounded by the TAM ratio of $1.5T
         $annualRevenue = (float) $stock->getTotalRevenue();

@@ -31,6 +31,11 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_MIN_VISIBILITY = 0.50;
         public function getReversionSpeed(): float { return 0.3; }
     public function getCapExCompletionRate(Stock $stock): float { return 0.125; }
+
+    public function getSeasonalityFactors(): array
+    {
+        return [0.85, 0.95, 1.10, 1.10]; // Pre-holiday maritime trade peak in Q3-Q4
+    }
     public function getCapexCyclicality(): float
     {
         return 3.0;

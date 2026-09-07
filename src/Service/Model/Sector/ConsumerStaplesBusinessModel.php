@@ -125,6 +125,11 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         return ['eps_weight' => self::SURPRISE_EPS_WEIGHT, 'revenue_weight' => self::SURPRISE_REVENUE_WEIGHT];
     }
 
+    public function getSeasonalityFactors(): array
+    {
+        return [0.95, 1.00, 1.00, 1.05]; // Slight Q4 holiday pantry load
+    }
+
     public function getMarginReversionSpeed(): float
     {
         return self::STAPLES_REVERSION_SPEED;

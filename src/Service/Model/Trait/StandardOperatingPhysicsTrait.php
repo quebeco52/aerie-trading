@@ -30,6 +30,16 @@ trait StandardOperatingPhysicsTrait
         return ['eps_weight' => 0.50, 'revenue_weight' => 0.50];
     }
 
+    /**
+     * Returns quarterly revenue seasonality multipliers [Q1, Q2, Q3, Q4] summing strictly to 4.0.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [1.0, 1.0, 1.0, 1.0];
+    }
+
     public function getEffectiveTaxRate(float $macroTaxRate): float
     {
         return $macroTaxRate;

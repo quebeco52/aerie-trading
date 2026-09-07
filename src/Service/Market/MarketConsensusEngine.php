@@ -20,10 +20,13 @@ use App\Service\Math\MathUtility;
  */
 class MarketConsensusEngine
 {
+    // --- Analyst Bias & Noise ---
     /** Default analyst error noise σ used when no profile is provided. */
     public const DEFAULT_ERROR_STD_DEV = 0.06;
     /** Default base visibility fraction when no profile is provided. */
     public const DEFAULT_BASE_VISIBILITY = 0.20;
+    /** Walk-down bias fraction applied to consensus so beat rate aligns with empirical ~70% (Richardson et al. 2004). */
+    public const ANALYST_WALKDOWN_BIAS = 0.015;
 
     /**
      * Generates the analyst consensus estimate for a given quarter.
@@ -31,16 +34,17 @@ class MarketConsensusEngine
      * Formula:
      *   analystError        = N(0,1) * coverage.errorStdDev
      *   dynamicVisibility   = clamp(baseVisibility + analystError, minVisibility, 1.0)
-     *   analystExpectedRev  = expectedRevenue * (1 + observableShockZ * dynamicVisibility)
-     *   analystExpectedVarC = analystExpectedRev * clampedMargin
+     *   analystExpectedRev  = BayesianUpdate(priorAnchor, freshEstimate) * (1 - walkdownBias)
+     *   analystExpectedVarC = analystExpectedRev * expectedVariableMargin
      *
-     * For event-conditional models (Biotech): when isPublicEvent is true, the higher
-     * eventBaseVisibility / eventMinVisibility pair is used instead of the routine values.
-     *
-     * @param ActualFinancialsDTO  $actuals         What the company actually produced this quarter.
-     * @param SectorCoverageProfile $coverage        Analyst coverage parameters for this sector.
-     * @param float                $expectedRevenue Structural expected revenue before shocks.
-     * @param MathUtility          $mathUtility     PRNG for analyst estimation noise.
+     * @param ActualFinancialsDTO    $actuals                What the company actually produced this quarter.
+     * @param SectorCoverageProfile  $coverage               Analyst coverage parameters for this sector.
+     * @param float                  $expectedRevenue        Structural expected revenue before shocks.
+     * @param MathUtility            $mathUtility            PRNG for analyst estimation noise.
+     * @param \App\Entity\Stock      $stock                  The stock entity for anchor history.
+     * @param float                  $marketVolatility       Prevailing market volatility (VIX proxy).
+     * @param float|null             $expectedVariableMargin Ex-ante variable margin before physical shocks.
+     * @param float                  $seasonalRatio          Seasonality adjustment ratio (Factor_t / Factor_{t-1}).
      */
     public function generateConsensus(
         ActualFinancialsDTO $actuals,
@@ -48,7 +52,9 @@ class MarketConsensusEngine
         float $expectedRevenue,
         MathUtility $mathUtility,
         \App\Entity\Stock $stock,
-        float $marketVolatility = 0.15
+        float $marketVolatility = 0.15,
+        ?float $expectedVariableMargin = null,
+        float $seasonalRatio = 1.0
     ): ConsensusDTO {
         $analystError = $mathUtility->generateStandardNormal() * $coverage->errorStdDev;
 
@@ -69,27 +75,36 @@ class MarketConsensusEngine
 
         $freshEstimate = $discountedExpectedRevenue * (1.0 + $actuals->observableShockZ * $dynamicVisibility);
 
-        // Bayesian Updating: Analysts blend structural baseline capacity (prior) with noisy channel signals (fresh estimate)
+        // Bayesian Updating: Analysts blend structural baseline capacity / anchored prior with noisy channel signals (fresh estimate)
         $priorVariance = \App\Service\Math\FinancialConstants::BAYESIAN_BASE_PRIOR_VARIANCE 
             + ($marketVolatility * \App\Service\Math\FinancialConstants::BAYESIAN_VIX_SCALING_FACTOR);
             
         $signalVariance = max(0.0001, pow($coverage->errorStdDev, 2));
+
+        $anchor = (float) $stock->getLastAnalystRevenue();
+        $priorEstimate = $anchor > 0.0
+            ? $anchor * $seasonalRatio
+            : $discountedExpectedRevenue;
         
         $analystExpectedRevenue = $mathUtility->calculateBayesianAnalystUpdate(
-            $discountedExpectedRevenue,
+            $priorEstimate,
             $priorVariance,
             $freshEstimate,
             $signalVariance
         );
 
+        $analystExpectedRevenue *= (1.0 - self::ANALYST_WALKDOWN_BIAS);
+
         $stock->setLastAnalystRevenue((string) $analystExpectedRevenue);
 
-        $analystExpectedVariableCosts = $analystExpectedRevenue * $actuals->clampedMargin;
+        $marginForCosts = $expectedVariableMargin !== null ? $expectedVariableMargin : $actuals->clampedMargin;
+        $analystExpectedVariableCosts = $analystExpectedRevenue * $marginForCosts;
 
         return new ConsensusDTO(
             analystExpectedRevenue: $analystExpectedRevenue,
             analystExpectedVariableCosts: $analystExpectedVariableCosts,
             dynamicVisibility: $dynamicVisibility,
+            estimateDispersion: $coverage->errorStdDev,
         );
     }
 }

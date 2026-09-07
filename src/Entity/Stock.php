@@ -91,6 +91,12 @@ class Stock
     private string $previousRevenue = '0.0000';
 
     /**
+     * @var string|null Balance sheet net working capital (NWC) stock for calculating cash flow change in NWC (ΔNWC).
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $netWorkingCapital = null;
+
+    /**
      * @var string|null Absolute total free cash flow (FCF). Used to mathematically derive FCF per share.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
@@ -891,6 +897,17 @@ class Stock
         return $this;
     }
 
+    public function getNetWorkingCapital(): ?string
+    {
+        return $this->netWorkingCapital;
+    }
+
+    public function setNetWorkingCapital(?string $netWorkingCapital): static
+    {
+        $this->netWorkingCapital = $netWorkingCapital !== null ? self::cleanBcStr($netWorkingCapital, 4) : null;
+        return $this;
+    }
+
     /**
      * Calculates Revenue Per Share based on computed Total Revenue.
      * 
@@ -912,9 +929,7 @@ class Stock
         $debt = (float) $this->getTotalDebt();
         $cash = (float) $this->corporateTreasury;
 
-        // 10% to prevent penalizing cash-rich "lean" tech companies,
-        // while still maintaining a minimum physical asset base (desks, servers) to avoid Division by Zero.
-        return max($equity * 0.10, ($equity + $debt - $cash));
+        return max(1.0, max($equity * 0.50, ($equity + $debt - $cash)));
     }
 
     /**

@@ -104,6 +104,11 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     public function getWorkingCapitalIntensity(Stock $stock): float { return 0.02; }
     public function getCapExCompletionRate(Stock $stock): float { return 0.15; }
 
+    public function getSeasonalityFactors(): array
+    {
+        return [0.85, 1.15, 1.25, 0.75]; // Q2-Q3 summer vacation & holiday travel peaks
+    }
+
     public function getSecularGrowthRate(Stock $stock): float
     {
         return 0.03;

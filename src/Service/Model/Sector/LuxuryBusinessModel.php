@@ -204,6 +204,11 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         return 0.14; // Haute couture finished leather goods & boutique inventory holding
     }
 
+    public function getSeasonalityFactors(): array
+    {
+        return [0.85, 0.90, 0.95, 1.30]; // Q4 holiday gift & festive collection surge
+    }
+
     public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
     {
         $timeScale = $dt / 0.25;

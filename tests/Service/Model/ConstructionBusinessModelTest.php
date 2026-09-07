@@ -69,7 +69,7 @@ class ConstructionBusinessModelTest extends TestCase
 
         $macro = new MacroStateDTO(
             outputGapEma: 0.0,
-            policyRateEma: \App\Service\Macro\MacroEngine::NATURAL_RATE,
+            policyRateEma: \App\Service\Macro\MacroEngine::BASE_NATURAL_RATE,
             inflationEma: 0.02,
             energyPriceIndexEma: 100.0
         );
@@ -152,4 +152,26 @@ class ConstructionBusinessModelTest extends TestCase
         $this->assertGreaterThan($baseResult->streamRevenue['civil_infrastructure'], $boostResult->streamRevenue['civil_infrastructure']);
         $this->assertGreaterThan($baseResult->streamRevenue['commercial_epc'], $boostResult->streamRevenue['commercial_epc']);
     }
+
+    public function testSeasonalityFactorsAndBreakEvenClearance(): void
+    {
+        $factors = $this->model->getSeasonalityFactors();
+        $this->assertCount(4, $factors);
+        $this->assertEqualsWithDelta(4.0, array_sum($factors), 1e-4, 'Seasonality factors must sum to 4.0.');
+
+        // IBHI financial parameters: fcr = 0.60, operating margin = 0.09
+        $fcr = 0.60;
+        $m = 0.09;
+        $vm = (1.0 - $m) * (1.0 - $fcr);
+        $breakEvenFactor = ($fcr * (1.0 - $m)) / (1.0 - $vm); // ~0.8585
+
+        foreach ($factors as $quarterIndex => $factor) {
+            $this->assertGreaterThan(
+                $breakEvenFactor,
+                $factor,
+                sprintf('Quarter %d factor (%.2f) must clear break-even factor (%.4f) for diversified EPC.', $quarterIndex + 1, $factor, $breakEvenFactor)
+            );
+        }
+    }
 }
+

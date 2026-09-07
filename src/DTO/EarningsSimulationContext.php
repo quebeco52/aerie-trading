@@ -27,6 +27,15 @@ class EarningsSimulationContext
     public float $sharesOutstanding = 0.0;
     public float $stableMargin = 0.0;
     public bool $isFinancial = false;
+    public float $estimateDispersion = 0.06;
+    public float $seasonalFactor = 1.0;
+    public float $priorSeasonalFactor = 1.0;
+    public float $seasonallyAdjustedRevenue = 0.0;
+    public float $seasonallyAdjustedEbit = 0.0;
+    public float $structuralOperatingMargin = 0.0;
+    public int $fiscalQuarter = 0;
+    public int $tickCount = 0;
+    public int $ticksPerYear = 252;
     
     // Capacity & Revenue
     public float $capacityUtilization = 0.0;

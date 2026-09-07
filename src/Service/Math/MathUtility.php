@@ -1801,6 +1801,24 @@ class MathUtility
     }
 
     /**
+     * Calculates the mark-to-market revaluation of a credit portfolio under a spread move (first-order duration approximation).
+     *
+     * Standard fixed income sensitivity: \Delta P / P \approx -D_s * \Delta s, where D_s is the spread duration
+     * of the book. Spreads gapping wider reprice held bonds and preferreds downward in the current period,
+     * while spread compression books an unrealized gain. This is distinct from carry: the loss lands immediately,
+     * the higher yield is only earned over subsequent periods.
+     *
+     * @param float $spreadChange   Change in credit spread over the period (positive = widening).
+     * @param float $spreadDuration Spread duration of the credit book in years.
+     * @return float Portfolio revaluation as a fraction of book value, bounded in [-0.40, 0.40].
+     */
+    public static function calculateCreditSpreadMarkToMarket(float $spreadChange, float $spreadDuration): float
+    {
+        $duration = max(0.0, $spreadDuration);
+        return max(-0.40, min(0.40, -$spreadChange * $duration));
+    }
+
+    /**
      * Calculates construction and building material volume shifts from residential housing starts (Tobin's q).
      *
      * Normalized as percentage deviation from neutral housing starts baseline (100.0).
@@ -1875,6 +1893,26 @@ class MathUtility
     ): float {
         $deviation = ($cuRate - $baseline) / 100.0;
         return max(-0.15, min(0.15, $deviation * $sensitivity));
+    }
+
+    /**
+     * Converts a single reporting period into a seasonally adjusted annual rate (SAAR).
+     *
+     * Standard BEA/BLS seasonal adjustment: the period value is divided by its seasonal
+     * factor to recover the underlying run-rate, then scaled to an annual basis. Exact
+     * when the seasonal factors are known a priori rather than estimated.
+     *
+     * @param float $periodValue    The single-period value (e.g., quarterly revenue).
+     * @param float $seasonalFactor The period's empirical seasonal factor (e.g., 0.85).
+     * @param int   $periodsPerYear The number of reporting periods per year (default 4 for quarterly).
+     * @return float The seasonally adjusted annual rate (SAAR).
+     */
+    public static function calculateSeasonallyAdjustedAnnualRate(
+        float $periodValue,
+        float $seasonalFactor,
+        int $periodsPerYear = 4
+    ): float {
+        return ($periodValue / max(0.01, $seasonalFactor)) * $periodsPerYear;
     }
 }
 

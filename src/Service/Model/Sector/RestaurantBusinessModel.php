@@ -71,6 +71,11 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         public function getMoatSpread(): float { return 0.015; }
     public function getWorkingCapitalIntensity(Stock $stock): float { return -0.05; }
 
+    public function getSeasonalityFactors(): array
+    {
+        return [0.85, 1.10, 1.20, 0.85]; // Spring/summer patio dining and vacation demand
+    }
+
     public function getSecularGrowthRate(Stock $stock): float
     {
         return 0.035;

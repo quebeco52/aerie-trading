@@ -36,6 +36,8 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     // --- Deal Flow Cost of Capital & Macro Elasticity ---
     /** Baseline macro credit spread (~200bps). Spreads below this stimulate DCM debt syndication. */
     public const DEAL_BASELINE_CREDIT_SPREAD = 0.020;
+    /** Neutral 5Y-over-policy term structure slope (~250bps). DCM stimulus is measured as deviation from this. */
+    public const DCM_NEUTRAL_CURVE_SLOPE     = 0.025;
     /** Sensitivity of M&A deal flow to corporate expansion (output gap). */
     public const MNA_OUTPUT_GAP_ELASTICITY   = 3.00;
     /** Sensitivity of M&A deal flow to Equity Risk Premium (ERP) cost of capital changes. */
@@ -50,6 +52,8 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     public const M2_SYNDICATION_LIQUIDITY_SENSITIVITY = 0.30;
 
     // --- Equity Capital Markets (ECM) & IPO Window Physics ---
+    /** Baseline share of advisory deal flow attributed to ECM underwriting versus M&A advisory. */
+    public const ADVISORY_ECM_SHARE             = 0.35;
     /** Sensitivity of ECM equity underwriting deal volume to Equity Risk Premium (ERP) cost of capital. */
     public const ECM_ERP_ELASTICITY             = 4.00;
     /** Sensitivity of ECM equity underwriting deal volume to macroeconomic output gap. */
@@ -70,6 +74,12 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     public const FICC_RATE_VOLATILITY_SCALAR    = 3.50;
     /** Sensitivity of FICC trading desk revenue to yield curve steepening/inversion dynamics. */
     public const FICC_CURVE_VOLATILITY_SCALAR   = 1.50;
+    /** Maximum revenue capture cap for FICC desk macro rates and yield curve arbitrage. */
+    public const FICC_ARBITRAGE_CAP             = 0.15;
+    /** Policy rate shock threshold (~200bps) above which fixed-income inventory marks down. */
+    public const FICC_RATES_INVENTORY_SHOCK_THRESHOLD = 0.02;
+    /** Variable inventory markdown scalar penalizing trading revenue for violent policy rate dislocations. */
+    public const FICC_INVENTORY_MARKDOWN_SCALAR = 2.00;
 
     // --- Institutional Prime Financing & Matched-Book Repo ---
     /** Net financing spread (~150bps) earned by prime brokers on institutional hedge fund margin debits. */
@@ -78,6 +88,12 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     public const PRIME_BROKERAGE_ALLOCATION     = 0.70;
     /** Haircut spread deduction on matched-book repo and trading inventory cash financing. */
     public const MATCHED_REPO_SPREAD_HAIRCUT    = 0.0025;
+    /** Sensitivity of prime brokerage counterparty credit loss provisions to corporate default rate widening. */
+    public const PRIME_BROKERAGE_DEFAULT_SCALAR = 0.50;
+    /** Tail event z-score threshold triggering an Archegos-style single-counterparty prime brokerage collapse. */
+    public const ARCHEGOS_LOSS_Z_SCORE          = -3.00;
+    /** Variable cost margin penalty imposed during a catastrophic prime brokerage counterparty default. */
+    public const ARCHEGOS_LOSS_PENALTY          = 0.12;
 
     // --- S&T Volatility Arbitrage & Basel FRTB VaR Limits ---
     /** Baseline VIX floor (~18%) above which volatility arbitrage opportunities expand. */
@@ -86,8 +102,8 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     public const VIX_ARBITRAGE_SCALAR       = 1.20;
     /** Maximum regulatory VIX threshold before FRTB VaR capital limits force aggressive balance sheet deleveraging. */
     public const BASEL_VAR_VOL_TARGET       = 0.30;
-    /** Fallback VIX level when macro volatility data is unavailable. */
-    public const DEFAULT_VIX_FALLBACK       = 0.20;
+    /** Variable cost margin penalty scalar from forced inventory markdowns during crisis VaR deleveraging. */
+    public const TRADING_INVENTORY_MARKDOWN_SCALAR = 0.20;
 
     // --- Options Desk Vega & Gamma Friction ---
     /** Top-line Vega premium capture scalar during elevated volatility. */
@@ -158,14 +174,33 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         return $physics;
     }
 
-    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): float
+    /**
+     * Blended wholesale funding rate: floating/fixed debt mix priced off the policy rate and 5-year yield
+     * curve, plus the firm's structural credit spread. Single source of truth shared by realized interest
+     * income and target metrics so the two rails cannot silently diverge (see
+     * DebtEngine::calculateInterestExpenseAndWholesaleRate for the analogous actual expense-side rate,
+     * which additionally layers on the dynamic Merton/BGG spread).
+     */
+    private function calculateBlendedWholesaleRate(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
     {
         $policyRate = $macroState->policyRateEma;
+        $yield5y = $macroState->yield5yEma;
+        $structuralSpread = (float) $stock->getCreditSpread();
+        $floatingRatio = (float) $stock->getFloatingDebtRatio();
+
+        $floatingRate = $policyRate + $macroState->interbankLiquiditySpreadEma;
+
+        return ($floatingRatio * $floatingRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
+    }
+
+    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): float
+    {
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
 
-        // Effective funding benchmark: prime brokers pass their wholesale borrowing spread through to institutional clients
-        $creditSpread = (float) $stock->getCreditSpread();
-        $fundingBenchmark = max($policyRate, $policyRate + $creditSpread);
+        // Effective funding benchmark: prime brokers pass their blended wholesale borrowing rate through to
+        // institutional clients. Must match the benchmark used in getTargetMetrics() so realized NII cannot
+        // structurally diverge from the ROIC target the firm is graded against.
+        $fundingBenchmark = max(0.0, $this->calculateBlendedWholesaleRate($stock, $macroState));
 
         // 1. Institutional Prime Brokerage & Secured Financing (Securities Lending & Margin Debits):
         // Investment banks lend wholesale funding to institutional hedge fund clients against liquid collateral.
@@ -202,17 +237,12 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         $waccBase = $macroState->policyRate + $macroState->equityRiskPremium;
         $baselineRoe = max($waccBase, $baselineRoe - $saturationPenalty);
 
-        $policyRate = $macroState->policyRateEma;
-        $yield5y = $macroState->yield5yEma;
-        $structuralSpread = (float) $stock->getCreditSpread();
-        $floatingRatio = (float) $stock->getFloatingDebtRatio();
-
         $taxRate = $macroState->corporateTaxRate;
 
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
         $treasury = (float) $stock->getCorporateTreasury();
 
-        $blendedWholesaleRate = ($floatingRatio * $policyRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
+        $blendedWholesaleRate = $this->calculateBlendedWholesaleRate($stock, $macroState);
 
         $industry = $stock->getIndustry() ?: 'General';
         $equityLimit = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['equity_limit'] ?? self::DEFAULT_EQUITY_LIMIT;
@@ -226,7 +256,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         $optimalInterestExpense = $optimalDebt * $blendedWholesaleRate;
 
         // Investment banks deploy wholesale debt into institutional prime financing and trading inventories
-        $fundingBenchmark = max($policyRate, $blendedWholesaleRate);
+        $fundingBenchmark = max(0.0, $blendedWholesaleRate);
         $primeFinancingRate = $fundingBenchmark + self::PRIME_FINANCING_SPREAD;
         $inventoryFinancingYield = max(0.0, $fundingBenchmark - self::MATCHED_REPO_SPREAD_HAIRCUT);
         $blendedAssetYield = (self::PRIME_BROKERAGE_ALLOCATION * $primeFinancingRate) + ((1.0 - self::PRIME_BROKERAGE_ALLOCATION) * $inventoryFinancingYield);
@@ -296,27 +326,33 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         $eventZ    = $streams->generateZ('event', 0.05);
 
         // --- M&A, DCM, and ECM Elasticity (Cost of Capital & Macro Channel) ---
-        // 1. M&A Deal Flow: Scales with corporate expansion (output gap) and cheap equity cost of capital (ERP).
         $erpGap = MacroEngine::BASE_EQUITY_RISK_PREMIUM - $macroState->equityRiskPremium;
-        $mnaStimulus = ($macroState->outputGapEma * self::MNA_OUTPUT_GAP_ELASTICITY) + ($erpGap * self::MNA_ERP_ELASTICITY);
 
-        // 2. DCM Issuance: Governed by credit spread tightness and yield curve slope.
+        // 1. M&A Deal Flow: Scales with corporate expansion (output gap) and cheap equity cost of capital (ERP) on M&A share.
+        $mnaStimulus = (($macroState->outputGapEma * self::MNA_OUTPUT_GAP_ELASTICITY) + ($erpGap * self::MNA_ERP_ELASTICITY)) * (1.0 - self::ADVISORY_ECM_SHARE);
+
+        // 2. ECM Underwriting: Scales with output gap and ERP on ECM share.
+        $ecmStimulus = (($macroState->outputGapEma * self::ECM_OUTPUT_GAP_ELASTICITY) + ($erpGap * self::ECM_ERP_ELASTICITY)) * self::ADVISORY_ECM_SHARE;
+
+        // 3. DCM Issuance: Governed by credit spread tightness and yield curve slope relative to neutral slope.
         $creditSpreadGap = self::DEAL_BASELINE_CREDIT_SPREAD - $macroState->macroCreditSpreadEma;
         $curveSlope = $macroState->yield5yEma - $macroState->policyRateEma;
-        $dcmStimulus = ($creditSpreadGap * self::DCM_CREDIT_SPREAD_ELASTICITY) + ($curveSlope * self::DCM_CURVE_SLOPE_ELASTICITY);
+        $curveSlopeGap = $curveSlope - self::DCM_NEUTRAL_CURVE_SLOPE;
+        $dcmStimulus = ($creditSpreadGap * self::DCM_CREDIT_SPREAD_ELASTICITY) + ($curveSlopeGap * self::DCM_CURVE_SLOPE_ELASTICITY);
 
-        // 3. ECM Deal Activity & IPO Window Freeze:
+        // 4. ECM Deal Activity & IPO Window Freeze:
         // Aggregate deal activity stimulates advisory fees, but acute market volatility (VIX > 35%) freezes the institutional IPO window.
         $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
         $ecmDealActivity = $dealActivityShift * self::DEAL_ACTIVITY_INDEX_ELASTICITY;
         $vixEma = $macroState->marketVolatilityEma;
-        if ($vixEma > self::IPO_WINDOW_FREEZE_VIX && $dealActivityShift > 0.0) {
-            $freezeDiscount = ($vixEma - self::IPO_WINDOW_FREEZE_VIX) * self::IPO_FREEZE_PENALTY;
-            $ecmDealActivity = max(-0.30, $ecmDealActivity - $freezeDiscount);
+        $freezeDiscount = 0.0;
+        if ($vixEma > self::IPO_WINDOW_FREEZE_VIX) {
+            $freezeDiscount = min(0.30, ($vixEma - self::IPO_WINDOW_FREEZE_VIX) * self::IPO_FREEZE_PENALTY);
         }
+        $ecmNetActivity = ($ecmDealActivity - $freezeDiscount) * self::ADVISORY_ECM_SHARE;
 
         $m2SyndicationBoost = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_SYNDICATION_LIQUIDITY_SENSITIVITY);
-        $advisoryMacroFactor = $mnaStimulus + $dcmStimulus + $ecmDealActivity + $m2SyndicationBoost;
+        $advisoryMacroFactor = $mnaStimulus + $ecmStimulus + $dcmStimulus + $ecmNetActivity + $m2SyndicationBoost;
 
         // --- S&T Volatility Arbitrage & Basel FRTB VaR Limits ---
         $vixGap = $vixEma - self::VIX_ARBITRAGE_FLOOR;
@@ -330,22 +366,28 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             ? ($vixGap * $vixScalar) * $varDeleverageFactor
             : max(-0.15, $vixGap * ($vixScalar * 0.50));
 
-        // --- FICC Macro Rates & Policy Shift Trading ---
-        // S&T FICC desks capture client hedging volume and bid-ask spreads during un-trended rate volatility.
-        $rateShock = ($macroState->policyRate !== 0.02 && $macroState->policyRate !== $macroState->policyRateEma)
-            ? abs($macroState->policyRate - $macroState->policyRateEma)
+        // Forced deleveraging into a falling market creates inventory liquidation markdowns and execution slippage.
+        $tradingInventoryMarkdownCost = $vixEma > self::BASEL_VAR_VOL_TARGET
+            ? ((1.0 - $varDeleverageFactor) * self::TRADING_INVENTORY_MARKDOWN_SCALAR) * $tradingWeight
             : 0.0;
-        $ficcArbitrage = $rateShock * self::FICC_RATE_VOLATILITY_SCALAR;
+
+        // --- FICC Macro Rates & Yield Curve Trading ---
+        // S&T FICC desks capture client hedging volume and bid-ask spreads during un-trended rate volatility:
+        // any dislocation between the instantaneous policy rate and its smoothed EMA is a live rate shock,
+        // and curve dislocations (nsSlope vs nsSlopeEma) drive curve trading flow.
+        $rateShock = abs($macroState->policyRate - $macroState->policyRateEma);
+        $curveShock = abs($macroState->nsSlope - $macroState->nsSlopeEma);
+        $grossFicc = ($rateShock * self::FICC_RATE_VOLATILITY_SCALAR) + ($curveShock * self::FICC_CURVE_VOLATILITY_SCALAR);
+
+        // Inventory markdown on violent rate dislocations: violent shocks (> 200bps) mark down fixed-income inventory.
+        $ratesInventoryMarkdown = max(0.0, $rateShock - self::FICC_RATES_INVENTORY_SHOCK_THRESHOLD) * self::FICC_INVENTORY_MARKDOWN_SCALAR;
+        $ficcArbitrage = max(-0.10, min(self::FICC_ARBITRAGE_CAP, $grossFicc) - $ratesInventoryMarkdown);
 
         // --- Event Modifiers & Penalties ---
         $eventType = null;
         $advisoryEventMultiplier = 1.0;
         $regulatoryPenalty = 0.0;
-
-        if ($mathUtility->generateUniform() <= self::REGULATORY_FINE_PROBABILITY) {
-            $eventType = ShockEvent::IB_REGULATORY_SETTLEMENT;
-            $regulatoryPenalty = self::REGULATORY_FINE_SCALAR;
-        }
+        $counterpartyDefaultPenalty = 0.0;
 
         if ($eventZ > self::MEGA_DEAL_WIN_Z_SCORE) {
             $advisoryEventMultiplier = self::MEGA_DEAL_WIN_MULT;
@@ -353,6 +395,16 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         } elseif ($eventZ < self::MEGA_DEAL_LOSS_Z_SCORE) {
             $advisoryEventMultiplier = self::MEGA_DEAL_LOSS_MULT;
             $eventType = ShockEvent::IB_MNA_MANDATE_LOSS;
+        }
+
+        if ($eventZ < self::ARCHEGOS_LOSS_Z_SCORE) {
+            $counterpartyDefaultPenalty = self::ARCHEGOS_LOSS_PENALTY;
+            $eventType = ShockEvent::IB_COUNTERPARTY_DEFAULT;
+        }
+
+        if ($mathUtility->generateUniform() <= self::REGULATORY_FINE_PROBABILITY) {
+            $eventType = ShockEvent::IB_REGULATORY_SETTLEMENT;
+            $regulatoryPenalty = self::REGULATORY_FINE_SCALAR;
         }
 
         // --- Stream Revenue Calculation ---
@@ -373,6 +425,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
 
         // --- Black-Scholes Options Physics ---
         $gammaHedgingCost = 0.0;
+        $optionsVegaBonus = 0.0;
         if ($optionsWeight > 0.0) {
             $optionsZ = $streams->generateZ('options_premium_income', 0.20);
 
@@ -395,8 +448,19 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         $hySpreadStress = max(0.0, $macroState->highYieldCreditSpreadEma - self::HY_BRIDGE_SPREAD_BASELINE);
         $hungDebtCost = ($hySpreadStress * self::HUNG_DEBT_WRITEDOWN_SCALAR) * $advisoryWeight;
 
+        // --- Prime Brokerage Counterparty Credit Risk ---
+        // Systematic credit provision: Prime brokerage margin debt faces client default risk when corporate defaults rise.
+        $corpDefaultExcess = max(0.0, ($macroState->corporateDefaultRateEma - MacroEngine::CORPORATE_DEFAULT_BASELINE) / MacroEngine::CORPORATE_DEFAULT_BASELINE);
+        $primeCreditProvisionCost = ($corpDefaultExcess * self::PRIME_BROKERAGE_DEFAULT_SCALAR) * self::PRIME_BROKERAGE_ALLOCATION;
+
         // --- Compensation Ratio Physics & Operating Leverage ---
-        $rawMargin = $realizedVariableMargin + $regulatoryPenalty + $gammaHedgingCost + $hungDebtCost;
+        $rawMargin = $realizedVariableMargin
+            + $regulatoryPenalty
+            + $gammaHedgingCost
+            + $hungDebtCost
+            + $tradingInventoryMarkdownCost
+            + $primeCreditProvisionCost
+            + $counterpartyDefaultPenalty;
 
         $revenueSurplusRatio = ($actualRevenue - $expectedRevenue) / max(1.0, $expectedRevenue);
         $minCompRatio = max(0.01, self::MIN_COMPENSATION_RATIO - ($revenueSurplusRatio * self::COMP_OPERATING_LEVERAGE_SCALAR) - ($fixedCosts / max(1.0, $actualRevenue)));
@@ -417,9 +481,12 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
 
         $primaryShockZ = $streams->resolveDominantShockZ([$advisoryWeight > 0.0 ? $advisoryZ : 0.0, $tradingZ], $eventZ);
 
-        $observableShockZ = ($advisoryZ * $advisoryWeight * self::ADVISORY_ANALYST_VISIBILITY
-            + $tradingZ * $tradingWeight * self::TRADING_ANALYST_VISIBILITY)
-            * $baselineVol * self::REVENUE_VARIANCE_SCALAR;
+        $observableShockZ = ($advisoryMacroFactor * $advisoryWeight)
+            + (($volatilityArbitrage + $ficcArbitrage) * $tradingWeight)
+            + ($optionsVegaBonus * $optionsWeight)
+            + ($advisoryZ * $advisoryWeight * self::ADVISORY_ANALYST_VISIBILITY
+                + $tradingZ * $tradingWeight * self::TRADING_ANALYST_VISIBILITY)
+                * $baselineVol * self::REVENUE_VARIANCE_SCALAR;
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,

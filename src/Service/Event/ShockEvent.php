@@ -58,6 +58,7 @@ class ShockEvent
     public const IB_MNA_SYNDICATION_BOOM = 'ib_mna_syndication_boom';
     public const IB_DCM_UNDERWRITING_BOOM = 'ib_dcm_underwriting_boom';
     public const IB_PROP_TRADING_SURGE = 'ib_prop_trading_surge';
+    public const IB_COUNTERPARTY_DEFAULT = 'ib_counterparty_default';
     public const DISTRESSED_DEBT_RESTRUCTURING = 'distressed_debt_restructuring';
     public const GEOPOLITICAL_EXPORT_BAN = 'geopolitical_export_ban';
     public const GEOPOLITICAL_SANCTIONS = 'geopolitical_sanctions';
@@ -96,6 +97,9 @@ class ShockEvent
     public const CHEMICAL_CRACK_SPREAD_SQUEEZE = 'chemical_crack_spread_squeeze';
     public const CHEMICAL_PLANT_TURNAROUND = 'chemical_plant_turnaround';
     public const CHEMICAL_AGRI_BOOM = 'chemical_agri_boom';
+
+    public const CONGLOMERATE_PORTFOLIO_REALIGNMENT = 'conglomerate_portfolio_realignment';
+    public const CONGLOMERATE_SUBSIDIARY_WRITEDOWN = 'conglomerate_subsidiary_writedown';
 }
 
 

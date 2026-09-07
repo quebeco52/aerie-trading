@@ -139,7 +139,7 @@ class MultiQuarterCorporateSimulationTest extends TestCase
         );
 
         $ticksPerQuarter = (int) (252 / 4);
-        $reportingTick = abs(crc32($stock->getTicker())) % $ticksPerQuarter;
+        $reportingTick = EarningsEngine::resolveReportingTick($stock->getTicker(), 252);
         $initialRevenue = null;
         $quarterlyRevenues = [];
 
@@ -246,7 +246,7 @@ class MultiQuarterCorporateSimulationTest extends TestCase
         );
 
         $ticksPerQuarter = (int) (252 / 4);
-        $reportingTick = abs(crc32($stock->getTicker())) % $ticksPerQuarter;
+        $reportingTick = EarningsEngine::resolveReportingTick($stock->getTicker(), 252);
 
         // Simulate 12 quarters (3 years) of recession
         for ($quarter = 1; $quarter <= 12; $quarter++) {
@@ -294,7 +294,7 @@ class MultiQuarterCorporateSimulationTest extends TestCase
         );
 
         $ticksPerQuarter = (int) (252 / 4);
-        $reportingTick = abs(crc32($stock->getTicker())) % $ticksPerQuarter;
+        $reportingTick = EarningsEngine::resolveReportingTick($stock->getTicker(), 252);
 
         // Simulate 12 quarters (3 years) of stagflation
         for ($quarter = 1; $quarter <= 12; $quarter++) {
@@ -318,4 +318,49 @@ class MultiQuarterCorporateSimulationTest extends TestCase
             $this->assertGreaterThan(0, $currentShares, "Shares dropped to 0 or below during stagflation in Q{$quarter} for {$industry}");
         }
     }
+
+    /**
+     * Test 4: 8-Quarter (2-Year) IBHI Engineering & Construction Seasonality Simulation.
+     * Asserts that cyclical winter ground freezes (Q1 seasonal factor) do not trigger
+     * a debt issuance lockout, false liquidity crisis, or dilutive equity death spiral.
+     */
+    public function testIbhiEngineeringConstructionEightQuarterSimulationNoDeathSpiral(): void
+    {
+        $metrics = Sectors::INDUSTRY_METRICS['Engineering & Construction'];
+        $stock = $this->createInitializedStock('Engineering & Construction', $metrics);
+        $stock->setTicker('IBHI');
+        $stock->setName('Iron Beak Heavy Industries');
+        $stock->setFixedCostRatio(0.60);
+        $stock->setOperatingMargin('0.09');
+        $stock->setBaselineRoic('0.09');
+        $stock->setTotalEquity('4000000000.00');
+        $stock->setWholesaleDebt('1000000000.00');
+        $stock->setCorporateTreasury('500000000.00');
+        $stock->setCustomerDeposits('0.00');
+        $initialShares = (int) $stock->getSharesOutstanding();
+
+        $macro = new MacroStateDTO();
+        $ticksPerQuarter = (int) (252 / 4);
+        $reportingTick = EarningsEngine::resolveReportingTick('IBHI', 252);
+
+        for ($quarter = 1; $quarter <= 8; $quarter++) {
+            $quarterTick = (($quarter - 1) * $ticksPerQuarter) + $reportingTick;
+            $result = $this->earningsEngine->calculate($stock, $macro, $quarterTick, 252);
+
+            $this->assertNotNull($result, "IBHI must successfully report earnings in Q{$quarter}");
+            $this->assertFalse($stock->isBankrupt(), "IBHI must not be bankrupt in Q{$quarter}");
+
+            $currentRevenue = (float) $stock->getTotalRevenue();
+            $this->assertGreaterThan(0.0, $currentRevenue, "IBHI revenue must remain positive in Q{$quarter}");
+
+            $currentShares = (int) $stock->getSharesOutstanding();
+            // In a death spiral, shares jump dramatically due to dilutive equity issuance
+            $this->assertLessThanOrEqual(
+                $initialShares,
+                $currentShares,
+                "IBHI must not undergo dilutive equity issuance in Q{$quarter} due to seasonal oscillation"
+            );
+        }
+    }
 }
+

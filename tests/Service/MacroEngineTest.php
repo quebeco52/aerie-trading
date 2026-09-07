@@ -6,6 +6,13 @@ use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use App\Service\Macro\MacroEngine;
+use App\Service\Macro\Recorder\MacroSnapshotRecorder;
+use App\Service\Macro\Subsystem\AssetMarketSubsystem;
+use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
+use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
+use App\Service\Macro\Subsystem\LaborMarketSubsystem;
+use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
+use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\MathUtility;
 use App\Data\SectorPE;
 use App\Data\EconomicCycle;
@@ -15,6 +22,13 @@ class MacroEngineTest extends TestCase
 {
     private MathUtility&MockObject $mathUtilityMock;
     private \Redis&MockObject $redisMock;
+    private MacroSnapshotRecorder $snapshotRecorder;
+    private MonetaryPolicySubsystem $monetarySubsystem;
+    private LaborMarketSubsystem $laborSubsystem;
+    private MacroAggregateSubsystem $aggregateSubsystem;
+    private CommodityLogisticsSubsystem $commoditySubsystem;
+    private AssetMarketSubsystem $assetSubsystem;
+    private CreditFiscalSubsystem $creditFiscalSubsystem;
     private MacroEngine $engine;
 
     protected function setUp(): void
@@ -25,16 +39,25 @@ class MacroEngineTest extends TestCase
             ->getMock();
         $this->redisMock = $this->createMock(\Redis::class);
 
-        // Bypass the constructor to avoid making an actual Redis connection
-        $reflection = new \ReflectionClass(MacroEngine::class);
-        $this->engine = $reflection->newInstanceWithoutConstructor();
+        $this->snapshotRecorder = new MacroSnapshotRecorder();
+        $this->monetarySubsystem = new MonetaryPolicySubsystem($this->mathUtilityMock);
+        $this->laborSubsystem = new LaborMarketSubsystem();
+        $this->aggregateSubsystem = new MacroAggregateSubsystem($this->mathUtilityMock);
+        $this->commoditySubsystem = new CommodityLogisticsSubsystem($this->mathUtilityMock);
+        $this->assetSubsystem = new AssetMarketSubsystem($this->mathUtilityMock);
+        $this->creditFiscalSubsystem = new CreditFiscalSubsystem($this->mathUtilityMock);
 
-        // Inject our mocked Redis and MathUtility via reflection
-        $redisProperty = $reflection->getProperty('redis');
-        $redisProperty->setValue($this->engine, $this->redisMock);
-
-        $mathProperty = $reflection->getProperty('mathUtility');
-        $mathProperty->setValue($this->engine, $this->mathUtilityMock);
+        $this->engine = new MacroEngine(
+            $this->mathUtilityMock,
+            $this->redisMock,
+            $this->snapshotRecorder,
+            $this->monetarySubsystem,
+            $this->laborSubsystem,
+            $this->aggregateSubsystem,
+            $this->commoditySubsystem,
+            $this->assetSubsystem,
+            $this->creditFiscalSubsystem,
+        );
     }
 
     public function testMacroEngineCanBeInstantiated(): void
@@ -830,10 +853,7 @@ class MacroEngineTest extends TestCase
         $mathUtility = $this->createMock(MathUtility::class);
         $mathUtility->method('generateStandardNormal')->willReturn(0.0);
 
-        $logger = $this->createMock(\Psr\Log\LoggerInterface::class);
-        $redis = $this->createMock(\Redis::class);
-
-        $macroEngine = new MacroEngine($mathUtility, $logger, $redis);
+        $aggregateSubsystem = new MacroAggregateSubsystem($mathUtility);
 
         // Create a perfectly neutral baseline state
         $stateNeutral = new \App\Service\Macro\MacroState();
@@ -856,18 +876,16 @@ class MacroEngineTest extends TestCase
         $stateBoom = clone $stateNeutral;
         $stateBoom->residentialPropertyIndexEma = 120.0;
 
-        // 2. Act: Calculate Output Gap manually using Reflection (or simply call public update Macro if testing full cycle)
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateOutputGap');
-
+        // 2. Act: Calculate Output Gap using Aggregate Subsystem
         // Assume 5Y Yield is neutral (naturalRate + targetInflation + NS_BASE_TERM_PREMIUM * durationScale)
         $neutral5yDurationScale = (1.0 - exp(-5.0 / 10.0)) / (1.0 - exp(-1.0));
-        $neutral5yYield = MacroEngine::NATURAL_RATE + MacroEngine::TARGET_INFLATION + (MacroEngine::NS_BASE_TERM_PREMIUM * $neutral5yDurationScale);
+        $neutral5yYield = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + (MacroEngine::NS_BASE_TERM_PREMIUM * $neutral5yDurationScale);
         $dt = 0.25;
         $stressMultiplier = 1.0;
 
-        $gapNeutral = $reflectionMethod->invoke($macroEngine, $stateNeutral, $neutral5yYield, MacroEngine::NATURAL_RATE, $dt, $stressMultiplier);
-        $gapCrash   = $reflectionMethod->invoke($macroEngine, $stateCrash, $neutral5yYield, MacroEngine::NATURAL_RATE, $dt, $stressMultiplier);
-        $gapBoom    = $reflectionMethod->invoke($macroEngine, $stateBoom, $neutral5yYield, MacroEngine::NATURAL_RATE, $dt, $stressMultiplier);
+        $gapNeutral = $aggregateSubsystem->calculateOutputGap($stateNeutral, $neutral5yYield, MacroEngine::BASE_NATURAL_RATE, $dt, $stressMultiplier);
+        $gapCrash   = $aggregateSubsystem->calculateOutputGap($stateCrash, $neutral5yYield, MacroEngine::BASE_NATURAL_RATE, $dt, $stressMultiplier);
+        $gapBoom    = $aggregateSubsystem->calculateOutputGap($stateBoom, $neutral5yYield, MacroEngine::BASE_NATURAL_RATE, $dt, $stressMultiplier);
 
         // 3. Assert: 
         // Neutral economy: output gap is 0, so neutral drift is 0.0:
@@ -885,8 +903,6 @@ class MacroEngineTest extends TestCase
     public function testInterbankLiquiditySpreadMeanRevertsViaCIR(): void
     {
         $mathUtility = $this->createMock(MathUtility::class);
-        $logger = $this->createMock(\Psr\Log\LoggerInterface::class);
-        $redis = $this->createMock(\Redis::class);
 
         // Suppress jump diffusion and noise to test pure structural drift
         $mathUtility->method('generateStandardNormal')->willReturn(0.0);
@@ -909,14 +925,13 @@ class MacroEngineTest extends TestCase
             )
             ->willReturn(0.035); // Mock a reversion down to 350 bps
 
-        $macroEngine = new MacroEngine($mathUtility, $logger, $redis);
+        $creditFiscalSubsystem = new CreditFiscalSubsystem($mathUtility);
 
         $state = new \App\Service\Macro\MacroState();
         $state->interbankLiquiditySpread = 0.05;
         $state->marketVolatilityEma = 0.15; // Neutral VIX
 
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateInterbankLiquiditySpread');
-        $reflectionMethod->invoke($macroEngine, $state, 0.25);
+        $creditFiscalSubsystem->calculateInterbankLiquiditySpread($state, 0.25);
 
         $this->assertEquals(0.035, $state->interbankLiquiditySpread, 'Interbank spread must mean-revert using CIR.');
     }
@@ -924,8 +939,6 @@ class MacroEngineTest extends TestCase
     public function testInterbankLiquiditySpreadBlowsOutDuringMarketPanicJump(): void
     {
         $mathUtility = $this->createMock(MathUtility::class);
-        $logger = $this->createMock(\Psr\Log\LoggerInterface::class);
-        $redis = $this->createMock(\Redis::class);
 
         $mathUtility->method('generateStandardNormal')->willReturn(0.0);
         // Mock CIR base process staying at 15 bps baseline
@@ -937,14 +950,13 @@ class MacroEngineTest extends TestCase
             'exponent' => 1.60,
         ]);
 
-        $macroEngine = new MacroEngine($mathUtility, $logger, $redis);
+        $creditFiscalSubsystem = new CreditFiscalSubsystem($mathUtility);
 
         $state = new \App\Service\Macro\MacroState();
         $state->interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD;
         $state->marketVolatilityEma = 0.35; // Panicked VIX
 
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateInterbankLiquiditySpread');
-        $reflectionMethod->invoke($macroEngine, $state, 0.25);
+        $creditFiscalSubsystem->calculateInterbankLiquiditySpread($state, 0.25);
 
         // Expected: 0.0015 + (0.0015 * (5.0 - 1.0)) = 0.0015 * 5.0 = 0.0075 (75 bps)
         $this->assertEqualsWithDelta(0.0075, $state->interbankLiquiditySpread, 0.0001, 'Interbank spread must blow out on Poisson jump.');
@@ -987,12 +999,9 @@ class MacroEngineTest extends TestCase
     public function testSolowSwanSmoothPotentialGdpGrowth(): void
     {
         $mathUtility = $this->createMock(MathUtility::class);
-        $logger = $this->createMock(\Psr\Log\LoggerInterface::class);
-        $redis = $this->createMock(\Redis::class);
-
         $mathUtility->method('generateStandardNormal')->willReturn(0.0);
 
-        $macroEngine = new MacroEngine($mathUtility, $logger, $redis);
+        $aggregateSubsystem = new MacroAggregateSubsystem($mathUtility);
 
         $state = new \App\Service\Macro\MacroState();
         $state->totalFactorProductivityIndex = 100.0;
@@ -1003,8 +1012,7 @@ class MacroEngineTest extends TestCase
         $state->inflation = 0.02;
         $state->inflationEma = 0.02;
 
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculatePotentialAndNominalGdp');
-        $reflectionMethod->invoke($macroEngine, $state, 0.25);
+        $aggregateSubsystem->calculatePotentialAndNominalGdp($state, 0.25);
 
         // Expected TFP: 100 * exp(0.015 * 0.25) ~= 100.3757
         $expectedTfp = 100.0 * exp(MacroEngine::TFP_DRIFT * 0.25);
@@ -1022,12 +1030,9 @@ class MacroEngineTest extends TestCase
     public function testSolowSwanOutputGapImpactsNominalGdp(): void
     {
         $mathUtility = $this->createMock(MathUtility::class);
-        $logger = $this->createMock(\Psr\Log\LoggerInterface::class);
-        $redis = $this->createMock(\Redis::class);
-
         $mathUtility->method('generateStandardNormal')->willReturn(0.0);
 
-        $macroEngine = new MacroEngine($mathUtility, $logger, $redis);
+        $aggregateSubsystem = new MacroAggregateSubsystem($mathUtility);
 
         $state = new \App\Service\Macro\MacroState();
         $state->totalFactorProductivityIndex = 100.0;
@@ -1038,8 +1043,7 @@ class MacroEngineTest extends TestCase
         $state->inflation = 0.02;
         $state->inflationEma = 0.02;
 
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculatePotentialAndNominalGdp');
-        $reflectionMethod->invoke($macroEngine, $state, 0.25);
+        $aggregateSubsystem->calculatePotentialAndNominalGdp($state, 0.25);
 
         $expectedPotential = 1.0 * exp((MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT) * 0.25);
         $expectedNominal = 1.0 * exp((MacroEngine::STRUCTURAL_LABOR_GROWTH_RATE + MacroEngine::TFP_DRIFT + 0.02) * 0.25) * 1.05;
@@ -1051,20 +1055,17 @@ class MacroEngineTest extends TestCase
     public function testSolowSwanTfpCanContractDuringSevereRecession(): void
     {
         $mathUtility = $this->createMock(MathUtility::class);
-        $logger = $this->createMock(\Psr\Log\LoggerInterface::class);
-        $redis = $this->createMock(\Redis::class);
 
         // Severe negative productivity shock (e.g. supply chain disruption)
         $mathUtility->method('generateStandardNormal')->willReturn(-3.0);
 
-        $macroEngine = new MacroEngine($mathUtility, $logger, $redis);
+        $aggregateSubsystem = new MacroAggregateSubsystem($mathUtility);
 
         $state = new \App\Service\Macro\MacroState();
         $state->totalFactorProductivityIndex = 120.0;
         $state->outputGapEma = -0.06; // Deep 6% economic recession
 
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateTotalFactorProductivity');
-        $reflectionMethod->invoke($macroEngine, $state, 0.25);
+        $aggregateSubsystem->calculateTotalFactorProductivity($state, 0.25);
 
         $this->assertLessThan(120.0, $state->totalFactorProductivityIndex, 'TFP index can and should contract during deep recessions with negative innovation shocks.');
         $minAllowedTfp = 120.0 * exp(MacroEngine::MIN_TFP_GROWTH_RATE * 0.25);
@@ -1079,11 +1080,10 @@ class MacroEngineTest extends TestCase
         $stateNeutralFx = new \App\Service\Macro\MacroState();
         $stateNeutralFx->exchangeRateIndexEma = 100.0; // Neutral
 
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateOutputGap');
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
-        $gapStrongFx = $reflectionMethod->invoke($this->engine, $stateStrongFx, 0.05, 0.02, 0.25, 1.0);
-        $gapNeutralFx = $reflectionMethod->invoke($this->engine, $stateNeutralFx, 0.05, 0.02, 0.25, 1.0);
+        $gapStrongFx = $this->aggregateSubsystem->calculateOutputGap($stateStrongFx, 0.05, 0.02, 0.25, 1.0);
+        $gapNeutralFx = $this->aggregateSubsystem->calculateOutputGap($stateNeutralFx, 0.05, 0.02, 0.25, 1.0);
 
         $this->assertLessThan($gapNeutralFx, $gapStrongFx, 'Marshall-Lerner condition: Strong FX must drag down output gap.');
     }
@@ -1100,10 +1100,8 @@ class MacroEngineTest extends TestCase
         $stateNeutral->marketVolatilityEma = 0.15;
         $stateNeutral->interbankLiquiditySpreadEma = 0.0025; // Normal
 
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateMacroCreditSpread');
-
-        $reflectionMethod->invoke($this->engine, $stateStressed);
-        $reflectionMethod->invoke($this->engine, $stateNeutral);
+        $this->creditFiscalSubsystem->calculateMacroCreditSpread($stateStressed);
+        $this->creditFiscalSubsystem->calculateMacroCreditSpread($stateNeutral);
 
         $this->assertGreaterThan($stateNeutral->macroCreditSpread, $stateStressed->macroCreditSpread, 'Interbank stress must contagion into corporate credit spreads.');
         $this->assertEqualsWithDelta(
@@ -1125,11 +1123,10 @@ class MacroEngineTest extends TestCase
         $stateAnchored->inflationEma = 0.02; // Firmly anchored
         $stateAnchored->outputGap = 0.0;
 
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateInflation');
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
-        $infHigh = $reflectionMethod->invoke($this->engine, $stateHighEma, 0.02, 1.0, 0.25);
-        $infAnchored = $reflectionMethod->invoke($this->engine, $stateAnchored, 0.02, 1.0, 0.25);
+        $infHigh = $this->aggregateSubsystem->calculateInflation($stateHighEma, 0.02, 1.0, 0.25);
+        $infAnchored = $this->aggregateSubsystem->calculateInflation($stateAnchored, 0.02, 1.0, 0.25);
 
         $this->assertGreaterThan($infAnchored, $infHigh, 'Un-anchored expectations must result in higher inflation drift.');
     }
@@ -1146,10 +1143,8 @@ class MacroEngineTest extends TestCase
         $stateNeutral->inflationEma = 0.02;
         $stateNeutral->marketVolatilityEma = 0.15;
 
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateTipsBreakeven');
-
-        $breakevenOverheated = $reflectionMethod->invoke($this->engine, $stateOverheated, MacroEngine::TARGET_INFLATION, 0.25);
-        $breakevenNeutral = $reflectionMethod->invoke($this->engine, $stateNeutral, MacroEngine::TARGET_INFLATION, 0.25);
+        $breakevenOverheated = $this->aggregateSubsystem->calculateTipsBreakeven($stateOverheated, MacroEngine::TARGET_INFLATION, 0.25);
+        $breakevenNeutral = $this->aggregateSubsystem->calculateTipsBreakeven($stateNeutral, MacroEngine::TARGET_INFLATION, 0.25);
 
         $this->assertEqualsWithDelta(MacroEngine::TARGET_INFLATION, $breakevenNeutral, 0.0001, 'Neutral state must produce 2.0% TIPS breakeven expectation.');
         $this->assertGreaterThan($breakevenNeutral, $breakevenOverheated, 'Overheated economy and elevated volatility must drive forward TIPS breakeven inflation above neutral.');
@@ -1169,10 +1164,8 @@ class MacroEngineTest extends TestCase
         $stateNeutralFiscal->governmentSpendingIndexEma = 100.0; // Neutral baseline
         $stateNeutralFiscal->outputGap = 0.0;
 
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateYieldCurveAndQE');
-
-        $yieldDataHighDeficit = $reflectionMethod->invoke($this->engine, $stateHighDeficit, MacroEngine::TARGET_INFLATION, MacroEngine::NATURAL_RATE, 0.25);
-        $yieldDataNeutral = $reflectionMethod->invoke($this->engine, $stateNeutralFiscal, MacroEngine::TARGET_INFLATION, MacroEngine::NATURAL_RATE, 0.25);
+        $yieldDataHighDeficit = $this->monetarySubsystem->calculateYieldCurveAndQE($stateHighDeficit, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $yieldDataNeutral = $this->monetarySubsystem->calculateYieldCurveAndQE($stateNeutralFiscal, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
         $this->assertGreaterThan($yieldDataNeutral['curvature2'], $yieldDataHighDeficit['curvature2'], 'Secondary Svensson curvature beta3 must increase with fiscal debt issuance.');
         $this->assertGreaterThan($yieldDataNeutral['yield_30y'], $yieldDataHighDeficit['yield_30y'], 'Long-end 30Y Treasury yield should steepen under fiscal supply expansion.');
@@ -1189,10 +1182,8 @@ class MacroEngineTest extends TestCase
 
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateInflation');
-
         // Quarter 1 step
-        $infQ1 = $reflectionMethod->invoke($this->engine, $state, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+        $infQ1 = $this->aggregateSubsystem->calculateInflation($state, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
         $lagQ1 = $state->energyCostPushLag;
 
         // The energy lag should have partially transmitted, but not fully reached raw transmission
@@ -1201,7 +1192,7 @@ class MacroEngineTest extends TestCase
         $this->assertLessThan($rawTransmission, $lagQ1, 'Energy shock should be sticky and not instantly transmit at 100% in first quarter.');
 
         // Advance to Quarter 2 with persistent shock
-        $infQ2 = $reflectionMethod->invoke($this->engine, $state, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+        $infQ2 = $this->aggregateSubsystem->calculateInflation($state, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
         $lagQ2 = $state->energyCostPushLag;
 
         $this->assertGreaterThan($lagQ1, $lagQ2, 'Sticky cost lag should accumulate and rise across successive quarters of elevated energy.');
@@ -1209,8 +1200,6 @@ class MacroEngineTest extends TestCase
 
     public function testAsymmetricInterestRateSmoothingPacing(): void
     {
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'updatePolicyRate');
-
         // 1. Hiking scenario (target 5.0%, current 2.0%, inflation benign at 2.0%)
         $hikingState = new \App\Service\Macro\MacroState();
         $hikingState->policyRate = 0.02;
@@ -1220,7 +1209,7 @@ class MacroEngineTest extends TestCase
         $targetRateHike = 0.05; // +300 bps gap
         $dt = 0.25; // 1 quarter
 
-        $newHikedRate = $reflectionMethod->invoke($this->engine, $hikingState, $targetRateHike, $dt);
+        $newHikedRate = $this->monetarySubsystem->updatePolicyRate($hikingState, $targetRateHike, $dt);
         $quarterlyHike = $newHikedRate - $hikingState->policyRate;
 
         // 2. Cutting scenario (target 1.0%, current 4.0%, recession gap -3%)
@@ -1231,7 +1220,7 @@ class MacroEngineTest extends TestCase
 
         $targetRateCut = 0.01; // -300 bps gap
 
-        $newCutRate = $reflectionMethod->invoke($this->engine, $cuttingState, $targetRateCut, $dt);
+        $newCutRate = $this->monetarySubsystem->updatePolicyRate($cuttingState, $targetRateCut, $dt);
         $quarterlyCut = $cuttingState->policyRate - $newCutRate;
 
         // Rate cut should be significantly swifter than rate hike for an identical 300 bps gap
@@ -1240,8 +1229,6 @@ class MacroEngineTest extends TestCase
 
     public function testRateHikesDuringNormalExpansionDoNotExceedNormalVelocity(): void
     {
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'updatePolicyRate');
-
         $expansionState = new \App\Service\Macro\MacroState();
         $expansionState->policyRate = 0.01;
         $expansionState->inflation = 0.025; // Mild healthy expansion inflation (below 3.5% panic threshold)
@@ -1250,7 +1237,7 @@ class MacroEngineTest extends TestCase
         $highTargetRate = 0.08; // High target
         $dt = 1.0; // 1 full year
 
-        $newRate = $reflectionMethod->invoke($this->engine, $expansionState, $highTargetRate, $dt);
+        $newRate = $this->monetarySubsystem->updatePolicyRate($expansionState, $highTargetRate, $dt);
         $annualHike = $newRate - $expansionState->policyRate;
 
         // Annual hike during normal expansion must be bounded by CB_MAX_NORMAL_HIKE_VELOCITY (200 bps/year)
@@ -1259,8 +1246,6 @@ class MacroEngineTest extends TestCase
 
     public function testInflationPanicAcceleratesHikesAboveEmergencyThreshold(): void
     {
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'updatePolicyRate');
-
         // Severe stagflation / runaway inflation shock (8.0% inflation)
         $panicState = new \App\Service\Macro\MacroState();
         $panicState->policyRate = 0.02;
@@ -1270,7 +1255,7 @@ class MacroEngineTest extends TestCase
         $highTargetRate = 0.12;
         $dt = 1.0; // 1 full year
 
-        $newPanicRate = $reflectionMethod->invoke($this->engine, $panicState, $highTargetRate, $dt);
+        $newPanicRate = $this->monetarySubsystem->updatePolicyRate($panicState, $highTargetRate, $dt);
         $annualPanicHike = $newPanicRate - $panicState->policyRate;
 
         // In panic mode, rate hike velocity should exceed normal 200 bps cap up to panic cap (400 bps/year)
@@ -1280,15 +1265,13 @@ class MacroEngineTest extends TestCase
 
     public function testDynamicNaturalRateDriftsWithTfpGrowth(): void
     {
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateNaturalRate');
-
         $state = new \App\Service\Macro\MacroState();
         $state->naturalRate = MacroEngine::BASE_NATURAL_RATE; // 1.5%
 
         // 1. Accelerating TFP growth (3.5% vs baseline 1.5%) -> r* should drift upward
         $acceleratingTfp = 0.035;
         $dt = 1.0;
-        $reflectionMethod->invoke($this->engine, $state, $acceleratingTfp, $dt);
+        $this->aggregateSubsystem->calculateNaturalRate($state, $acceleratingTfp, $dt);
 
         $this->assertGreaterThan(MacroEngine::BASE_NATURAL_RATE, $state->naturalRate, 'Natural real rate r* must drift upward when TFP productivity growth accelerates.');
         $this->assertLessThanOrEqual(MacroEngine::MAX_NATURAL_RATE, $state->naturalRate, 'Natural real rate must respect statutory upper bound.');
@@ -1296,7 +1279,7 @@ class MacroEngineTest extends TestCase
         // 2. Depressed TFP growth (0.0% secular stagnation) -> r* should drift downward
         $stagnationState = new \App\Service\Macro\MacroState();
         $stagnationState->naturalRate = MacroEngine::BASE_NATURAL_RATE;
-        $reflectionMethod->invoke($this->engine, $stagnationState, 0.00, $dt);
+        $this->aggregateSubsystem->calculateNaturalRate($stagnationState, 0.00, $dt);
 
         $this->assertLessThan(MacroEngine::BASE_NATURAL_RATE, $stagnationState->naturalRate, 'Natural real rate r* must drift downward during secular productivity stagnation.');
         $this->assertGreaterThanOrEqual(MacroEngine::MIN_NATURAL_RATE, $stagnationState->naturalRate, 'Natural real rate must respect statutory floor.');
@@ -1304,8 +1287,6 @@ class MacroEngineTest extends TestCase
 
     public function testQuantitativeTighteningActivatesDuringOverheating(): void
     {
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateYieldCurveAndQE');
-
         // Overheating expansion: output gap +2.5% (> 1.0%), inflation 3.5% (> 2.5%)
         $overheatingState = new \App\Service\Macro\MacroState();
         $overheatingState->outputGap = 0.025;
@@ -1314,7 +1295,7 @@ class MacroEngineTest extends TestCase
         $overheatingState->tipsBreakeven = 0.030;
         $overheatingState->balanceSheetIntensity = 0.0;
 
-        $yieldData = $reflectionMethod->invoke($this->engine, $overheatingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 1.0);
+        $yieldData = $this->monetarySubsystem->calculateYieldCurveAndQE($overheatingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 1.0);
 
         // Balance sheet intensity should be negative (QT active)
         $this->assertLessThan(0.0, $yieldData['new_balance_sheet_intensity'], 'Central bank balance sheet intensity must turn negative (QT) during economic overheating.');
@@ -1324,15 +1305,13 @@ class MacroEngineTest extends TestCase
 
     public function testACMTermPremiumDecompositionIntegrity(): void
     {
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateYieldCurveAndQE');
-
         $state = new \App\Service\Macro\MacroState();
         $state->outputGap = 0.01;
         $state->inflation = 0.02;
         $state->policyRate = 0.025;
         $state->tipsBreakeven = 0.02;
 
-        $yieldData = $reflectionMethod->invoke($this->engine, $state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $yieldData = $this->monetarySubsystem->calculateYieldCurveAndQE($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
         $yield10y = $yieldData['yield_10y'];
         $riskNeutral10y = $yieldData['risk_neutral_10y'];
@@ -1344,8 +1323,6 @@ class MacroEngineTest extends TestCase
 
     public function testForwardLookingBetaCurvatureLeadsPolicyRate(): void
     {
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateYieldCurveAndQE');
-
         // 1. Hiking cycle expectation: policyRate = 2.5%, but Taylor targetRate = 5.0%
         $hikingState = new \App\Service\Macro\MacroState();
         $hikingState->policyRate = 0.025;
@@ -1367,9 +1344,9 @@ class MacroEngineTest extends TestCase
         $easingState->outputGap = 0.0;
         $easingState->tipsBreakeven = 0.02;
 
-        $yieldDataHiking = $reflectionMethod->invoke($this->engine, $hikingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
-        $yieldDataNeutral = $reflectionMethod->invoke($this->engine, $neutralState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
-        $yieldDataEasing = $reflectionMethod->invoke($this->engine, $easingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $yieldDataHiking = $this->monetarySubsystem->calculateYieldCurveAndQE($hikingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $yieldDataNeutral = $this->monetarySubsystem->calculateYieldCurveAndQE($neutralState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $yieldDataEasing = $this->monetarySubsystem->calculateYieldCurveAndQE($easingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
         // β₂ (curvature) must hump upward during a hiking cycle and dip during an easing cycle
         $this->assertGreaterThan($yieldDataNeutral['curvature'], $yieldDataHiking['curvature'], 'Curvature beta2 must rise during a central bank rate hike cycle.');
@@ -1381,8 +1358,6 @@ class MacroEngineTest extends TestCase
 
     public function testInflationRiskPremiumExpandsTermPremiumWhenBreakevenElevated(): void
     {
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateYieldCurveAndQE');
-
         // Anchored neutral state: TIPS breakeven = 2.0% (target), macro vol = 15%
         $stateAnchored = new \App\Service\Macro\MacroState();
         $stateAnchored->policyRate = 0.03;
@@ -1399,8 +1374,8 @@ class MacroEngineTest extends TestCase
         $stateUnanchored->marketVolatilityEma = 0.28;
         $stateUnanchored->outputGap = 0.0;
 
-        $yieldDataAnchored = $reflectionMethod->invoke($this->engine, $stateAnchored, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
-        $yieldDataUnanchored = $reflectionMethod->invoke($this->engine, $stateUnanchored, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $yieldDataAnchored = $this->monetarySubsystem->calculateYieldCurveAndQE($stateAnchored, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $yieldDataUnanchored = $this->monetarySubsystem->calculateYieldCurveAndQE($stateUnanchored, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
         // Term premium must expand when inflation expectations un-anchor and volatility spikes (Wright 2011 IRP)
         $this->assertGreaterThan(
@@ -1412,8 +1387,6 @@ class MacroEngineTest extends TestCase
 
     public function testFlightToSafetyCompressesTermPremiumDuringRecession(): void
     {
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateYieldCurveAndQE');
-
         // Neutral state: outputGap = 0.0
         $stateNeutral = new \App\Service\Macro\MacroState();
         $stateNeutral->policyRate = 0.03;
@@ -1430,8 +1403,8 @@ class MacroEngineTest extends TestCase
         $stateRecession->marketVolatilityEma = 0.15;
         $stateRecession->outputGap = -0.05;
 
-        $yieldDataNeutral = $reflectionMethod->invoke($this->engine, $stateNeutral, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
-        $yieldDataRecession = $reflectionMethod->invoke($this->engine, $stateRecession, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $yieldDataNeutral = $this->monetarySubsystem->calculateYieldCurveAndQE($stateNeutral, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $yieldDataRecession = $this->monetarySubsystem->calculateYieldCurveAndQE($stateRecession, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
         // Flight-to-safety: recessions compress sovereign term premium as investors seek safe duration
         $this->assertLessThan(
@@ -1443,15 +1416,12 @@ class MacroEngineTest extends TestCase
 
     public function testBeveridgeCurveWagePhillipsTransmission(): void
     {
-        $reflectionLabor = new \ReflectionMethod(MacroEngine::class, 'calculateLaborMarketAndWages');
-        $reflectionInflation = new \ReflectionMethod(MacroEngine::class, 'calculateInflation');
-
         // Tight labor market scenario: unemployment 2.5% (< 4.0% NAIRU)
         $tightState = new \App\Service\Macro\MacroState();
         $tightState->unemploymentRate = 0.025;
         $tightState->wageGrowth = 0.035;
 
-        $reflectionLabor->invoke($this->engine, $tightState, MacroEngine::TFP_DRIFT, 0.5);
+        $this->laborSubsystem->calculateLaborMarketAndWages($tightState, MacroEngine::TFP_DRIFT, 0.5);
 
         // Job vacancies must rise via Beveridge curve (k / U) and labor tightness must exceed 1.125
         $this->assertGreaterThan(MacroEngine::NATURAL_JOB_VACANCIES, $tightState->jobVacanciesRate, 'Job vacancies rate must rise when unemployment drops below NAIRU.');
@@ -1460,21 +1430,19 @@ class MacroEngineTest extends TestCase
 
         // Inflation pass-through check
         $tightState->outputGap = 0.01;
-        $newInflation = $reflectionInflation->invoke($this->engine, $tightState, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+        $newInflation = $this->aggregateSubsystem->calculateInflation($tightState, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
         $this->assertGreaterThan(0.020, $newInflation, 'Excess wage growth must pass through into headline services inflation.');
     }
 
     public function testStochasticTfpDiffusionAndEndogenousSpillover(): void
     {
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateTotalFactorProductivity');
-
         // 1. Positive innovation shock + economic boom -> accelerated TFP growth
         $boomState = new \App\Service\Macro\MacroState();
         $boomState->totalFactorProductivityIndex = 100.0;
         $boomState->outputGapEma = 0.03; // 3% boom
 
         $this->mathUtilityMock->method('generateStandardNormal')->willReturnOnConsecutiveCalls(1.5, -3.0);
-        $reflectionMethod->invoke($this->engine, $boomState, 0.25);
+        $this->aggregateSubsystem->calculateTotalFactorProductivity($boomState, 0.25);
 
         $baselineDeterministicTfp = 100.0 * exp(MacroEngine::TFP_DRIFT * 0.25);
         $this->assertGreaterThan($baselineDeterministicTfp, $boomState->totalFactorProductivityIndex, 'Positive innovation shock and expansion must accelerate TFP accumulation.');
@@ -1484,7 +1452,7 @@ class MacroEngineTest extends TestCase
         $slumpState->totalFactorProductivityIndex = 100.0;
         $slumpState->outputGapEma = -0.05; // 5% recession
 
-        $reflectionMethod->invoke($this->engine, $slumpState, 0.25);
+        $this->aggregateSubsystem->calculateTotalFactorProductivity($slumpState, 0.25);
 
         $this->assertLessThan(100.0, $slumpState->totalFactorProductivityIndex, 'TFP can and should contract during severe recessions with negative shocks.');
         $minAllowedTfp = 100.0 * exp(MacroEngine::MIN_TFP_GROWTH_RATE * 0.25);
@@ -1516,8 +1484,6 @@ class MacroEngineTest extends TestCase
 
     public function testSymmetricWagePushAndWageDragInflationTransmission(): void
     {
-        $reflectionInflation = new \ReflectionMethod(MacroEngine::class, 'calculateInflation');
-
         // Zero standard normal shocks to isolate deterministic wage transmission
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
@@ -1530,7 +1496,7 @@ class MacroEngineTest extends TestCase
         $hotWageState->energyPriceShock = 0.0;
         $hotWageState->energyCostPushLag = 0.0;
 
-        $hotInflation = $reflectionInflation->invoke($this->engine, $hotWageState, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+        $hotInflation = $this->aggregateSubsystem->calculateInflation($hotWageState, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
         $this->assertGreaterThan(0.02, $hotInflation, 'Excess wage growth above 3.5% must exert positive cost-push inflation pressure.');
 
         // 2. Slack wage scenario (w = 2.5% < 3.5% trend)
@@ -1542,7 +1508,7 @@ class MacroEngineTest extends TestCase
         $slackWageState->energyPriceShock = 0.0;
         $slackWageState->energyCostPushLag = 0.0;
 
-        $slackInflation = $reflectionInflation->invoke($this->engine, $slackWageState, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+        $slackInflation = $this->aggregateSubsystem->calculateInflation($slackWageState, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
         $this->assertLessThan(0.02, $slackInflation, 'Slack wage growth below 3.5% must exert symmetric disinflationary wage-drag.');
 
         // 3. Check symmetry of transmission magnitude around 2.0%
@@ -1553,8 +1519,6 @@ class MacroEngineTest extends TestCase
 
     public function testTfpTrendGrowthRatePassesCleanlyWithoutDiffusionNoise(): void
     {
-        $reflectionTfp = new \ReflectionMethod(MacroEngine::class, 'calculateTotalFactorProductivity');
-
         // Neutral state: output gap = 0, no R&D acceleration
         $neutralState = new \App\Service\Macro\MacroState();
         $neutralState->totalFactorProductivityIndex = 100.0;
@@ -1565,7 +1529,7 @@ class MacroEngineTest extends TestCase
 
         // Calculate TFP with dt = 1/3600 (tick-level)
         $dt = 1.0 / 3600.0;
-        $trendRate = $reflectionTfp->invoke($this->engine, $neutralState, $dt);
+        $trendRate = $this->aggregateSubsystem->calculateTotalFactorProductivity($neutralState, $dt);
 
         // The trend growth rate returned for economic models must be the true structural drift (1.5%), unaffected by tick diffusion
         $this->assertEqualsWithDelta(MacroEngine::TFP_DRIFT, $trendRate, 0.0001, 'TFP trend growth rate must equal structural secular drift at neutral output gap.');
@@ -1573,8 +1537,6 @@ class MacroEngineTest extends TestCase
 
     public function testYieldCurveInvertsAtPeakOfTighteningCycleAndSteepensDuringEasing(): void
     {
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateYieldCurveAndQE');
-
         // 1. Peak tightening cycle: policyRate = 5.25%, targetRate = 5.25%, outputGap = +2.5%, elevated inflation
         $peakState = new \App\Service\Macro\MacroState();
         $peakState->policyRate = 0.0525;
@@ -1585,7 +1547,7 @@ class MacroEngineTest extends TestCase
         $peakState->tipsBreakeven = 0.026;
         $peakState->marketVolatilityEma = 0.16;
 
-        $curvePeak = $reflectionMethod->invoke($this->engine, $peakState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $curvePeak = $this->monetarySubsystem->calculateYieldCurveAndQE($peakState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
         // 2s10s spread must invert at the peak of monetary policy tightening
         $spreadPeak = $curvePeak['yield_10y'] - $curvePeak['yield_2y'];
@@ -1605,7 +1567,7 @@ class MacroEngineTest extends TestCase
         $easingState->tipsBreakeven = 0.018;
         $easingState->marketVolatilityEma = 0.22;
 
-        $curveEasing = $reflectionMethod->invoke($this->engine, $easingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
+        $curveEasing = $this->monetarySubsystem->calculateYieldCurveAndQE($easingState, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE, 0.25);
 
         // 2s10s spread must exhibit strong bull steepening (> +100 bps) during emergency rate cutting
         $spreadEasing = $curveEasing['yield_10y'] - $curveEasing['yield_2y'];
@@ -1618,7 +1580,6 @@ class MacroEngineTest extends TestCase
 
     public function testBggFinancialAcceleratorAmplifiesCreditCrunch(): void
     {
-        $reflectionMethod = new \ReflectionMethod(MacroEngine::class, 'calculateOutputGap');
         $dt = 0.25;
         $stressMultiplier = 1.0;
         $naturalRate = MacroEngine::BASE_NATURAL_RATE;
@@ -1635,8 +1596,8 @@ class MacroEngineTest extends TestCase
         $stateCrisis->macroCreditSpreadEma = 0.06;
         $stateCrisis->interbankLiquiditySpreadEma = 0.015;
 
-        $gapBaseline = $reflectionMethod->invoke($this->engine, $stateBaseline, $yield5y, $naturalRate, $dt, $stressMultiplier);
-        $gapCrisis   = $reflectionMethod->invoke($this->engine, $stateCrisis, $yield5y, $naturalRate, $dt, $stressMultiplier);
+        $gapBaseline = $this->aggregateSubsystem->calculateOutputGap($stateBaseline, $yield5y, $naturalRate, $dt, $stressMultiplier);
+        $gapCrisis   = $this->aggregateSubsystem->calculateOutputGap($stateCrisis, $yield5y, $naturalRate, $dt, $stressMultiplier);
 
         $this->assertLessThan(
             $gapBaseline,
@@ -1647,8 +1608,6 @@ class MacroEngineTest extends TestCase
 
     public function testStagflationFromEnergyShock(): void
     {
-        $reflectionOutputGap = new \ReflectionMethod(MacroEngine::class, 'calculateOutputGap');
-        $reflectionInflation = new \ReflectionMethod(MacroEngine::class, 'calculateInflation');
         $dt = 0.25;
         $stressMultiplier = 1.0;
         $yield5y = 0.04;
@@ -1659,20 +1618,19 @@ class MacroEngineTest extends TestCase
         $stateShock = clone $stateNormal;
         $stateShock->energyPriceShock = 100.0; // 100% price surge
 
-        $gapNormal = $reflectionOutputGap->invoke($this->engine, $stateNormal, $yield5y, MacroEngine::BASE_NATURAL_RATE, $dt, $stressMultiplier);
-        $gapShock  = $reflectionOutputGap->invoke($this->engine, $stateShock, $yield5y, MacroEngine::BASE_NATURAL_RATE, $dt, $stressMultiplier);
+        $gapNormal = $this->aggregateSubsystem->calculateOutputGap($stateNormal, $yield5y, MacroEngine::BASE_NATURAL_RATE, $dt, $stressMultiplier);
+        $gapShock  = $this->aggregateSubsystem->calculateOutputGap($stateShock, $yield5y, MacroEngine::BASE_NATURAL_RATE, $dt, $stressMultiplier);
 
         $this->assertLessThan($gapNormal, $gapShock, 'Supply-side stagflation: energy price spike must drag down output gap.');
 
-        $infNormal = $reflectionInflation->invoke($this->engine, $stateNormal, MacroEngine::TARGET_INFLATION, $stressMultiplier, $dt);
-        $infShock  = $reflectionInflation->invoke($this->engine, $stateShock, MacroEngine::TARGET_INFLATION, $stressMultiplier, $dt);
+        $infNormal = $this->aggregateSubsystem->calculateInflation($stateNormal, MacroEngine::TARGET_INFLATION, $stressMultiplier, $dt);
+        $infShock  = $this->aggregateSubsystem->calculateInflation($stateShock, MacroEngine::TARGET_INFLATION, $stressMultiplier, $dt);
 
         $this->assertGreaterThan($infNormal, $infShock, 'Cost-push channel: energy price spike must raise headline inflation.');
     }
 
     public function testFoodCpiChannelFromAgriculturalSpike(): void
     {
-        $reflectionInflation = new \ReflectionMethod(MacroEngine::class, 'calculateInflation');
         $dt = 0.25;
         $stressMultiplier = 1.0;
 
@@ -1682,8 +1640,8 @@ class MacroEngineTest extends TestCase
         $stateSpike = clone $stateNormal;
         $stateSpike->agriculturalCommodityIndex = 200.0; // 100% agri commodity surge
 
-        $infNormal = $reflectionInflation->invoke($this->engine, $stateNormal, MacroEngine::TARGET_INFLATION, $stressMultiplier, $dt);
-        $infSpike  = $reflectionInflation->invoke($this->engine, $stateSpike, MacroEngine::TARGET_INFLATION, $stressMultiplier, $dt);
+        $infNormal = $this->aggregateSubsystem->calculateInflation($stateNormal, MacroEngine::TARGET_INFLATION, $stressMultiplier, $dt);
+        $infSpike  = $this->aggregateSubsystem->calculateInflation($stateSpike, MacroEngine::TARGET_INFLATION, $stressMultiplier, $dt);
 
         $this->assertGreaterThan($infNormal, $infSpike, 'Food CPI channel: agricultural commodity spike must increase headline inflation.');
         $this->assertGreaterThan(0.0, $stateSpike->agriCostPushLag, 'Distributed lag accumulator for food CPI must be positive.');
@@ -2032,5 +1990,94 @@ class MacroEngineTest extends TestCase
             'Consumer sentiment must reflect meaningful distress (< 90 pts) during a stagflation contraction.'
         );
     }
+
+    public function testTaylorRuleTargetRateIncorporatesDynamicNaturalRate(): void
+    {
+        // Setup a state with higher dynamic natural rate (3.0% vs baseline 1.5%)
+        $stateHighRstar = [
+            'inflation' => 0.02,
+            'inflation_ema' => 0.02,
+            'output_gap' => 0.0,
+            'output_gap_ema' => 0.0,
+            'natural_rate' => 0.030, // Elevated dynamic r*
+            'natural_rate_ema' => 0.030,
+            'policy_rate' => 0.035,
+            'policy_rate_ema' => 0.035,
+            'total_factor_productivity_index' => 100.0,
+        ];
+
+        // State with neutral baseline natural rate (1.5%)
+        $stateBaseRstar = [
+            'inflation' => 0.02,
+            'inflation_ema' => 0.02,
+            'output_gap' => 0.0,
+            'output_gap_ema' => 0.0,
+            'natural_rate' => MacroEngine::BASE_NATURAL_RATE,
+            'natural_rate_ema' => MacroEngine::BASE_NATURAL_RATE,
+            'policy_rate' => 0.035,
+            'policy_rate_ema' => 0.035,
+            'total_factor_productivity_index' => 100.0,
+        ];
+
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $this->redisMock->method('get')->willReturnOnConsecutiveCalls(
+            json_encode($stateHighRstar),
+            json_encode($stateBaseRstar)
+        );
+
+        $dtoHigh = $this->engine->updateMacroState(0.25);
+        $dtoBase = $this->engine->updateMacroState(0.25);
+
+        // Target rate with higher dynamic r* must be systematically higher than with baseline r*
+        $this->assertGreaterThan(
+            $dtoBase->targetRate,
+            $dtoHigh->targetRate,
+            'Taylor rule target rate must incorporate dynamic natural rate (r*) rather than discarding it.'
+        );
+        // Specifically, the ~150 bps r* spread should reflect in targetRate
+        $this->assertEqualsWithDelta(
+            $dtoBase->targetRate + (0.030 - MacroEngine::BASE_NATURAL_RATE),
+            $dtoHigh->targetRate,
+            0.005,
+            'Taylor rule intercept must shift 1:1 with dynamic r*.'
+        );
+    }
+
+    public function testRedisPersistenceRecoversFromCorruptOrInvalidState(): void
+    {
+        // 1. Corrupt JSON string
+        $this->redisMock->method('get')->willReturnOnConsecutiveCalls(
+            '{invalid json payload!!}',
+            'null',
+            '"not an array"',
+            ''
+        );
+
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        // Each call should gracefully return a valid MacroStateDTO without fatal TypeError
+        $dto1 = $this->engine->updateMacroState(0.25);
+        $this->assertInstanceOf(\App\DTO\MacroStateDTO::class, $dto1);
+
+        $dto2 = $this->engine->updateMacroState(0.25);
+        $this->assertInstanceOf(\App\DTO\MacroStateDTO::class, $dto2);
+
+        $dto3 = $this->engine->updateMacroState(0.25);
+        $this->assertInstanceOf(\App\DTO\MacroStateDTO::class, $dto3);
+
+        $dto4 = $this->engine->updateMacroState(0.25);
+        $this->assertInstanceOf(\App\DTO\MacroStateDTO::class, $dto4);
+    }
+
+    public function testPolicyRateCeilingAndOverhangBoundsConstants(): void
+    {
+        $this->assertEquals(0.20, MacroEngine::POLICY_RATE_CEILING);
+        $this->assertEquals(0.0005, MacroEngine::BALANCE_SHEET_ACTIVE_THRESHOLD);
+        $this->assertEquals(-0.15, MacroEngine::CAPITAL_OVERHANG_MIN);
+        $this->assertEquals(0.15, MacroEngine::CAPITAL_OVERHANG_MAX);
+        $this->assertEquals(10.0, MacroEngine::STRESS_MULTIPLIER_GAP_SENSITIVITY);
+    }
 }
+
 

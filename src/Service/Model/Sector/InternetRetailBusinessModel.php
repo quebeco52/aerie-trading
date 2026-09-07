@@ -40,6 +40,11 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     public function getWorkingCapitalIntensity(Stock $stock): float { return -0.05; }
     public function getCapExCompletionRate(Stock $stock): float { return 0.5; }
 
+    public function getSeasonalityFactors(): array
+    {
+        return [0.85, 0.90, 0.90, 1.35]; // Q4 holiday shopping surge
+    }
+
     public function getSecularGrowthRate(Stock $stock): float
     {
         return 0.04;

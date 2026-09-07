@@ -22,8 +22,6 @@ class MacroEngine
     public const TARGET_INFLATION = 0.02;
     /** The baseline natural real rate of interest (r*) representing neutral monetary policy. */
     public const BASE_NATURAL_RATE = 0.015;
-    /** Backward compatibility alias for the baseline natural rate. */
-    public const NATURAL_RATE = self::BASE_NATURAL_RATE;
     /** Sensitivity of natural rate r* to annual secular TFP productivity growth deviations from drift. */
     public const NATURAL_RATE_TFP_SENSITIVITY = 0.50;
     /** Laubach-Williams sensitivity of natural rate r* to cyclical output gap investment demand. */
@@ -70,8 +68,14 @@ class MacroEngine
     public const CAPITAL_ACCUMULATION_RATE = 0.25;
     /** The rate at which physical capital depreciates, organically clearing overhangs and creating pent-up demand. */
     public const CAPITAL_DECAY_RATE = 0.30;
+    /** Asymptotic lower bound floor on physical capital stock contraction / overhang. */
+    public const CAPITAL_OVERHANG_MIN = -0.15;
+    /** Asymptotic upper bound ceiling on physical capital stock excess capacity / overhang. */
+    public const CAPITAL_OVERHANG_MAX = 0.15;
     /** Stochastic diffusion volatility of the macroeconomic output gap. */
     public const OUTPUT_GAP_DIFFUSION_SIGMA = 0.010;
+    /** Sensitivity scaling diffusion volatility of output gap and inflation during severe cyclical stress. */
+    public const STRESS_MULTIPLIER_GAP_SENSITIVITY = 10.0;
 
     // --- Metzler-Blinder Inventory Investment Cycle (Metzler 1941, Blinder 1982) ---
     /** Sensitivity of output gap drift to involuntary inventory liquidation and restocking. */
@@ -228,6 +232,8 @@ class MacroEngine
     // --- Central Bank Effective Lower Bound & Shadow Rates ---
     /** Wu-Xia (2016) Effective Lower Bound on nominal policy rates (ECB deposit facility floor). */
     public const EFFECTIVE_LOWER_BOUND = -0.005;
+    /** Structural upper bound ceiling for nominal monetary policy target rate. */
+    public const POLICY_RATE_CEILING = 0.20;
     /** Sensitivity of shadow policy rate accommodation to central bank QE balance sheet expansion. */
     public const WU_XIA_QE_SHADOW_SENSITIVITY = 1.50;
 
@@ -384,8 +390,8 @@ class MacroEngine
     public const BALANCE_SHEET_RAMP_SPEED = 1.0;
     /** Minimum reinvestment hold period (years) after QE ends before QT runoff can begin (Bernanke 2020). */
     public const BALANCE_SHEET_REINVESTMENT_HOLD_YEARS = 1.5;
-    /** Backward compatibility alias for QE ramp speed. */
-    public const QE_RAMP_SPEED = self::BALANCE_SHEET_RAMP_SPEED;
+    /** Minimum threshold for balance sheet intervention intensity to be considered active. */
+    public const BALANCE_SHEET_ACTIVE_THRESHOLD = 0.0005;
     /** Positive output gap threshold above which central bank initiates Quantitative Tightening. */
     public const QT_ACTIVATION_GAP_THRESHOLD = 0.010;
     /** Inflation threshold above which central bank initiates Quantitative Tightening */
@@ -777,88 +783,54 @@ class MacroEngine
     /** Standard quarterly macro indicator EMA smoothing horizon. */
     public const STANDARD_EMA_HORIZON_YEARS = 0.25;
 
-    private ?MacroSnapshotRecorder $snapshotRecorder = null;
-    private ?MonetaryPolicySubsystem $monetarySubsystem = null;
-    private ?LaborMarketSubsystem $laborSubsystem = null;
-    private ?MacroAggregateSubsystem $aggregateSubsystem = null;
-    private ?CommodityLogisticsSubsystem $commoditySubsystem = null;
-    private ?AssetMarketSubsystem $assetSubsystem = null;
-    private ?CreditFiscalSubsystem $creditFiscalSubsystem = null;
-
     public function __construct(
-        private MathUtility $mathUtility,
-        private LoggerInterface $logger,
-        private \Redis $redis,
-        ?MacroSnapshotRecorder $snapshotRecorder = null,
-        ?MonetaryPolicySubsystem $monetarySubsystem = null,
-        ?LaborMarketSubsystem $laborSubsystem = null,
-        ?MacroAggregateSubsystem $aggregateSubsystem = null,
-        ?CommodityLogisticsSubsystem $commoditySubsystem = null,
-        ?AssetMarketSubsystem $assetSubsystem = null,
-        ?CreditFiscalSubsystem $creditFiscalSubsystem = null,
+        private readonly MathUtility $mathUtility,
+        private readonly \Redis $redis,
+        private readonly MacroSnapshotRecorder $snapshotRecorder,
+        private readonly MonetaryPolicySubsystem $monetarySubsystem,
+        private readonly LaborMarketSubsystem $laborSubsystem,
+        private readonly MacroAggregateSubsystem $aggregateSubsystem,
+        private readonly CommodityLogisticsSubsystem $commoditySubsystem,
+        private readonly AssetMarketSubsystem $assetSubsystem,
+        private readonly CreditFiscalSubsystem $creditFiscalSubsystem,
+        private readonly ?LoggerInterface $logger = null,
     ) {
-        if ($snapshotRecorder !== null) {
-            $this->snapshotRecorder = $snapshotRecorder;
+    }
+
+    private function loadState(): MacroState
+    {
+        $rawState = $this->redis->get(self::REDIS_MACRO_STATE);
+        if (!is_string($rawState) || trim($rawState) === '') {
+            return new MacroState();
         }
-        if ($monetarySubsystem !== null) {
-            $this->monetarySubsystem = $monetarySubsystem;
-        }
-        if ($laborSubsystem !== null) {
-            $this->laborSubsystem = $laborSubsystem;
-        }
-        if ($aggregateSubsystem !== null) {
-            $this->aggregateSubsystem = $aggregateSubsystem;
-        }
-        if ($commoditySubsystem !== null) {
-            $this->commoditySubsystem = $commoditySubsystem;
-        }
-        if ($assetSubsystem !== null) {
-            $this->assetSubsystem = $assetSubsystem;
-        }
-        if ($creditFiscalSubsystem !== null) {
-            $this->creditFiscalSubsystem = $creditFiscalSubsystem;
+
+        try {
+            $decoded = json_decode($rawState, true, 512, JSON_THROW_ON_ERROR);
+            if (!is_array($decoded)) {
+                $this->logger?->warning('Corrupt macroeconomic state in Redis: expected array, got ' . gettype($decoded));
+                return new MacroState();
+            }
+            return MacroState::fromArray($decoded);
+        } catch (\Throwable $e) {
+            $this->logger?->error('Failed to decode macroeconomic state from Redis: ' . $e->getMessage());
+            return new MacroState();
         }
     }
 
-    private function getSnapshotRecorder(): MacroSnapshotRecorder
+    private function saveState(MacroState $state): void
     {
-        return $this->snapshotRecorder ??= new MacroSnapshotRecorder();
-    }
-
-    private function getMonetarySubsystem(): MonetaryPolicySubsystem
-    {
-        return $this->monetarySubsystem ??= new MonetaryPolicySubsystem($this->mathUtility);
-    }
-
-    private function getLaborSubsystem(): LaborMarketSubsystem
-    {
-        return $this->laborSubsystem ??= new LaborMarketSubsystem();
-    }
-
-    private function getAggregateSubsystem(): MacroAggregateSubsystem
-    {
-        return $this->aggregateSubsystem ??= new MacroAggregateSubsystem($this->mathUtility);
-    }
-
-    private function getCommoditySubsystem(): CommodityLogisticsSubsystem
-    {
-        return $this->commoditySubsystem ??= new CommodityLogisticsSubsystem($this->mathUtility);
-    }
-
-    private function getAssetSubsystem(): AssetMarketSubsystem
-    {
-        return $this->assetSubsystem ??= new AssetMarketSubsystem($this->mathUtility);
-    }
-
-    private function getCreditFiscalSubsystem(): CreditFiscalSubsystem
-    {
-        return $this->creditFiscalSubsystem ??= new CreditFiscalSubsystem($this->mathUtility);
+        try {
+            $payload = $state->toArray();
+            $encoded = json_encode($payload, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
+            $this->redis->set(self::REDIS_MACRO_STATE, $encoded);
+        } catch (\Throwable $e) {
+            $this->logger?->critical('Failed to persist macroeconomic state to Redis: ' . $e->getMessage());
+        }
     }
 
     public function getLiveState(): MacroState
     {
-        $rawState = $this->redis->get(self::REDIS_MACRO_STATE);
-        return $rawState ? MacroState::fromArray(json_decode($rawState, true)) : new MacroState();
+        return $this->loadState();
     }
 
     /**
@@ -867,41 +839,40 @@ class MacroEngine
      */
     public function updateMacroState(float $dt): \App\DTO\MacroStateDTO
     {
-        $rawState = $this->redis->get(self::REDIS_MACRO_STATE);
-        $state = $rawState ? MacroState::fromArray(json_decode($rawState, true)) : new MacroState();
+        $state = $this->loadState();
 
         // Advance physical simulation time in years
         $state->totalTime += $dt;
 
         // 1. Evaluate Total Factor Productivity (TFP) & Secular Drift
-        $tfpTrendGrowthRate = $this->calculateTotalFactorProductivity($state, $dt);
+        $tfpTrendGrowthRate = $this->aggregateSubsystem->calculateTotalFactorProductivity($state, $dt);
 
         // 2. Laubach-Williams (2003) Dynamic Natural Rate of Interest (r*)
-        $this->calculateNaturalRate($state, $tfpTrendGrowthRate, $dt);
+        $this->aggregateSubsystem->calculateNaturalRate($state, $tfpTrendGrowthRate, $dt);
 
         // 3. Labor Market: Okun's Law & Diamond-Mortensen-Pissarides Beveridge Curve
-        $this->calculateUnemployment($state, $dt);
-        $this->calculateLaborMarketAndWages($state, $tfpTrendGrowthRate, $dt);
+        $this->laborSubsystem->calculateUnemployment($state, $dt);
+        $this->laborSubsystem->calculateLaborMarketAndWages($state, $tfpTrendGrowthRate, $dt);
 
         // 4. Inflation Expectations (TIPS Breakeven)
-        $state->tipsBreakeven = $this->calculateTipsBreakeven($state, self::TARGET_INFLATION, $dt);
+        $state->tipsBreakeven = $this->aggregateSubsystem->calculateTipsBreakeven($state, self::TARGET_INFLATION, $dt);
 
         // 5. Central Bank Monetary Policy Target & Rate Setting
-        $state->targetRate = $this->calculateTargetRate($state, self::TARGET_INFLATION, self::BASE_NATURAL_RATE, $dt);
-        $clampedTarget = max(self::EFFECTIVE_LOWER_BOUND, min(0.20, $state->targetRate));
-        $state->policyRate = $this->updatePolicyRate($state, $clampedTarget, $dt);
+        $state->targetRate = $this->monetarySubsystem->calculateTargetRate($state, self::TARGET_INFLATION, $state->naturalRate, $dt);
+        $clampedTarget = max(self::EFFECTIVE_LOWER_BOUND, min(self::POLICY_RATE_CEILING, $state->targetRate));
+        $state->policyRate = $this->monetarySubsystem->updatePolicyRate($state, $clampedTarget, $dt);
 
         // 6. Central Bank Balance Sheet Operations (QE / QT)
-        $balanceSheetData = $this->calculateBalanceSheetOperations($state, $dt);
+        $balanceSheetData = $this->monetarySubsystem->calculateBalanceSheetOperations($state, $dt);
         $state->balanceSheetIntensity = $balanceSheetData['new_balance_sheet_intensity'];
         $state->balanceSheetHoldTimer = $balanceSheetData['new_hold_timer'];
         $state->qeIntensity = $balanceSheetData['new_qe_intensity'];
-        $state->qeActive = $state->qeIntensity > 0.0005;
+        $state->qeActive = $state->qeIntensity > self::BALANCE_SHEET_ACTIVE_THRESHOLD;
         $state->qtIntensity = $balanceSheetData['new_qt_intensity'];
-        $state->qtActive = $state->qtIntensity > 0.0005;
+        $state->qtActive = $state->qtIntensity > self::BALANCE_SHEET_ACTIVE_THRESHOLD;
 
         // 7. Sovereign Yield Curve & Term Structure Decomposition
-        $yieldData = $this->calculateYieldCurve($state, self::TARGET_INFLATION, $state->naturalRate);
+        $yieldData = $this->monetarySubsystem->calculateYieldCurve($state, self::TARGET_INFLATION, $state->naturalRate);
 
         $state->yield2y = $yieldData['yield_2y'];
         $state->yield5y = $yieldData['yield_5y'];
@@ -928,51 +899,51 @@ class MacroEngine
         // 2D Kaldor Phase Space: Capital Stock tracking
         // Booms build excess capacity (+k); Recessions cause physical depreciation and pent-up demand (-k).
         $state->capitalStockOverhang += (($state->outputGap * self::CAPITAL_ACCUMULATION_RATE) - (self::CAPITAL_DECAY_RATE * $state->capitalStockOverhang)) * $dt;
-        $state->capitalStockOverhang = max(-0.15, min(0.15, $state->capitalStockOverhang));
+        $state->capitalStockOverhang = max(self::CAPITAL_OVERHANG_MIN, min(self::CAPITAL_OVERHANG_MAX, $state->capitalStockOverhang));
 
-        $stressMultiplier = 1.0 + (abs($state->outputGap) * 10.0);
-        $state->outputGap = $this->calculateOutputGap($state, $state->yield5y, $state->naturalRate, $dt, $stressMultiplier);
+        $stressMultiplier = 1.0 + (abs($state->outputGap) * self::STRESS_MULTIPLIER_GAP_SENSITIVITY);
+        $state->outputGap = $this->aggregateSubsystem->calculateOutputGap($state, $state->yield5y, $state->naturalRate, $dt, $stressMultiplier);
 
-        $this->calculateCapacityUtilization($state);
-        $this->calculateEnergyShock($state, $dt);
-        $this->calculateRefiningCrackSpread($state, $dt);
-        $this->calculateExchangeRate($state, $dt);
-        $this->calculateTradeBalance($state, $dt);
-        $this->calculateIndustrialMetalsIndex($state, $dt);
-        $this->calculateGovernmentSpending($state, $dt);
-        $this->calculateCommercialPropertyIndex($state, $dt);
-        $this->calculateRetailDefaultRate($state, $dt);
-        $this->calculateAgriculturalCommodityIndex($state, $dt);
-        $this->calculateFreightRateIndex($state, $dt);
-        $this->calculateSupplyChainPressureIndex($state);
-        $this->calculateResidentialPropertyIndex($state, $dt);
-        $this->calculateHousingStarts($state, $dt);
+        $this->aggregateSubsystem->calculateCapacityUtilization($state);
+        $this->commoditySubsystem->calculateEnergyShock($state, $dt);
+        $this->commoditySubsystem->calculateRefiningCrackSpread($state, $dt);
+        $this->assetSubsystem->calculateExchangeRate($state, $dt);
+        $this->assetSubsystem->calculateTradeBalance($state, $dt);
+        $this->commoditySubsystem->calculateIndustrialMetalsIndex($state, $dt);
+        $this->creditFiscalSubsystem->calculateGovernmentSpending($state, $dt);
+        $this->assetSubsystem->calculateCommercialPropertyIndex($state, $dt);
+        $this->creditFiscalSubsystem->calculateRetailDefaultRate($state, $dt);
+        $this->commoditySubsystem->calculateAgriculturalCommodityIndex($state, $dt);
+        $this->commoditySubsystem->calculateFreightRateIndex($state, $dt);
+        $this->commoditySubsystem->calculateSupplyChainPressureIndex($state);
+        $this->assetSubsystem->calculateResidentialPropertyIndex($state, $dt);
+        $this->assetSubsystem->calculateHousingStarts($state, $dt);
 
-        $state->inflation = $this->calculateInflation($state, self::TARGET_INFLATION, $stressMultiplier, $dt);
-        $this->calculateProducerPriceInflation($state, $tfpTrendGrowthRate, $dt);
-        $state->marketVolatility = $this->calculateMarketVolatility($state, $dt);
+        $stressMultiplier = 1.0 + (abs($state->outputGap) * self::STRESS_MULTIPLIER_GAP_SENSITIVITY);
+        $state->inflation = $this->aggregateSubsystem->calculateInflation($state, self::TARGET_INFLATION, $stressMultiplier, $dt);
+        $this->aggregateSubsystem->calculateProducerPriceInflation($state, $tfpTrendGrowthRate, $dt);
+        $state->marketVolatility = $this->assetSubsystem->calculateMarketVolatility($state, $dt);
 
-        $this->calculateManufacturingPmi($state, $dt);
-        $this->calculateMoneySupplyGrowth($state, $dt, $tfpTrendGrowthRate);
+        $this->aggregateSubsystem->calculateManufacturingPmi($state, $dt);
+        $this->monetarySubsystem->calculateMoneySupplyGrowth($state, $dt, $tfpTrendGrowthRate);
 
-        $this->updateExponentialMovingAverages($state, $dt);
+        $this->aggregateSubsystem->updateExponentialMovingAverages($state, $dt);
 
-        $this->calculateMacroCreditSpread($state);
-        $this->calculateInterbankLiquiditySpread($state, $dt);
-        $this->calculateSloosCreditStandards($state, $dt);
-        $this->calculateCorporateDefaultRate($state, $dt);
+        $this->creditFiscalSubsystem->calculateMacroCreditSpread($state);
+        $this->creditFiscalSubsystem->calculateInterbankLiquiditySpread($state, $dt);
+        $this->creditFiscalSubsystem->calculateSloosCreditStandards($state, $dt);
+        $this->creditFiscalSubsystem->calculateCorporateDefaultRate($state, $dt);
 
-        $this->calculatePotentialAndNominalGdp($state, $dt, $tfpTrendGrowthRate);
-        $this->calculateDynamicFiscalPolicy($state, $dt);
-        $this->calculateSovereignDebt($state, $dt);
-        $this->calculateEquityRiskPremium($state);
-        $this->calculateFinancialConditionsIndex($state, $dt);
-        $this->calculateConsumerSentiment($state, $dt);
-        $this->calculateRecessionProbability($state);
-        $this->calculateCapitalMarketsDealIndex($state, $dt);
+        $this->aggregateSubsystem->calculatePotentialAndNominalGdp($state, $dt, $tfpTrendGrowthRate);
+        $this->creditFiscalSubsystem->calculateDynamicFiscalPolicy($state, $dt);
+        $this->creditFiscalSubsystem->calculateSovereignDebt($state, $dt);
+        $this->assetSubsystem->calculateEquityRiskPremium($state);
+        $this->assetSubsystem->calculateFinancialConditionsIndex($state, $dt);
+        $this->assetSubsystem->calculateConsumerSentiment($state, $dt);
+        $this->monetarySubsystem->calculateRecessionProbability($state);
+        $this->assetSubsystem->calculateCapitalMarketsDealIndex($state, $dt);
 
-        $payload = $state->toArray();
-        $this->redis->set(self::REDIS_MACRO_STATE, json_encode($payload));
+        $this->saveState($state);
         return \App\DTO\MacroStateDTO::fromMacroState($state);
     }
 
@@ -988,226 +959,7 @@ class MacroEngine
      */
     public function recordMacroSnapshot(\App\DTO\MacroStateDTO $macroState, \Doctrine\DBAL\Connection $conn): void
     {
-        $this->getSnapshotRecorder()->recordSnapshot($macroState, $conn);
-    }
-
-    private function calculateTargetRate(MacroState $state, float $targetInflation, float $naturalRate, float $dt = 0.25): float
-    {
-        return $this->getMonetarySubsystem()->calculateTargetRate($state, $targetInflation, $naturalRate, $dt);
-    }
-
-    private function updatePolicyRate(MacroState $state, float $targetRate, float $dt): float
-    {
-        return $this->getMonetarySubsystem()->updatePolicyRate($state, $targetRate, $dt);
-    }
-
-    private function calculateBalanceSheetOperations(MacroState $state, float $dt): array
-    {
-        return $this->getMonetarySubsystem()->calculateBalanceSheetOperations($state, $dt);
-    }
-
-    private function calculateYieldCurve(MacroState $state, float $targetInflation, float $naturalRate): array
-    {
-        return $this->getMonetarySubsystem()->calculateYieldCurve($state, $targetInflation, $naturalRate);
-    }
-
-    private function calculateYieldCurveAndQE(MacroState $state, float $targetInflation, float $naturalRate, float $dt): array
-    {
-        return $this->getMonetarySubsystem()->calculateYieldCurveAndQE($state, $targetInflation, $naturalRate, $dt);
-    }
-
-    private function calculateSvenssonTenor(float $t, float $level, float $nsBeta1, float $nsBeta2, float $nsBeta3, MacroState $state): float
-    {
-        return $this->getMonetarySubsystem()->calculateSvenssonTenor($t, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state);
-    }
-
-    private function calculateOutputGap(MacroState $state, float $yield5y, float $naturalRate, float $dt, float $stressMultiplier): float
-    {
-        return $this->getAggregateSubsystem()->calculateOutputGap($state, $yield5y, $naturalRate, $dt, $stressMultiplier);
-    }
-
-    private function calculateNaturalRate(MacroState $state, float $tfpGrowthRate, float $dt): void
-    {
-        $this->getAggregateSubsystem()->calculateNaturalRate($state, $tfpGrowthRate, $dt);
-    }
-
-    private function calculateLaborMarketAndWages(MacroState $state, float $tfpGrowthRate, float $dt): void
-    {
-        $this->getLaborSubsystem()->calculateLaborMarketAndWages($state, $tfpGrowthRate, $dt);
-    }
-
-    private function calculateInflation(MacroState $state, float $targetInflation, float $stressMultiplier, float $dt): float
-    {
-        return $this->getAggregateSubsystem()->calculateInflation($state, $targetInflation, $stressMultiplier, $dt);
-    }
-
-    private function calculateMarketVolatility(MacroState $state, float $dt): float
-    {
-        return $this->getAssetSubsystem()->calculateMarketVolatility($state, $dt);
-    }
-
-    private function calculateTotalFactorProductivity(MacroState $state, float $dt): float
-    {
-        return $this->getAggregateSubsystem()->calculateTotalFactorProductivity($state, $dt);
-    }
-
-    private function calculatePotentialAndNominalGdp(MacroState $state, float $dt, ?float $tfpGrowthRate = null): void
-    {
-        $this->getAggregateSubsystem()->calculatePotentialAndNominalGdp($state, $dt, $tfpGrowthRate);
-    }
-
-    private function calculateTipsBreakeven(MacroState $state, float $targetInflation, float $dt): float
-    {
-        return $this->getAggregateSubsystem()->calculateTipsBreakeven($state, $targetInflation, $dt);
-    }
-
-    private function updateExponentialMovingAverages(MacroState $state, float $dt): void
-    {
-        $this->getAggregateSubsystem()->updateExponentialMovingAverages($state, $dt);
-    }
-
-    private function calculateDynamicFiscalPolicy(MacroState $state, float $dt): void
-    {
-        $this->getCreditFiscalSubsystem()->calculateDynamicFiscalPolicy($state, $dt);
-    }
-
-    private function calculateEquityRiskPremium(MacroState $state): void
-    {
-        $this->getAssetSubsystem()->calculateEquityRiskPremium($state);
-    }
-
-    private function calculateMacroCreditSpread(MacroState $state): void
-    {
-        $this->getCreditFiscalSubsystem()->calculateMacroCreditSpread($state);
-    }
-
-    private function calculateInterbankLiquiditySpread(MacroState $state, float $dt): void
-    {
-        $this->getCreditFiscalSubsystem()->calculateInterbankLiquiditySpread($state, $dt);
-    }
-
-    private function calculateUnemployment(MacroState $state, float $dt): void
-    {
-        $this->getLaborSubsystem()->calculateUnemployment($state, $dt);
-    }
-
-    private function calculateEnergyShock(MacroState $state, float $dt): void
-    {
-        $this->getCommoditySubsystem()->calculateEnergyShock($state, $dt);
-    }
-
-    private function calculateConsumerSentiment(MacroState $state, float $dt): void
-    {
-        $this->getAssetSubsystem()->calculateConsumerSentiment($state, $dt);
-    }
-
-    private function calculateExchangeRate(MacroState $state, float $dt): void
-    {
-        $this->getAssetSubsystem()->calculateExchangeRate($state, $dt);
-    }
-
-    private function calculateIndustrialMetalsIndex(MacroState $state, float $dt): void
-    {
-        $this->getCommoditySubsystem()->calculateIndustrialMetalsIndex($state, $dt);
-    }
-
-    private function calculateGovernmentSpending(MacroState $state, float $dt): void
-    {
-        $this->getCreditFiscalSubsystem()->calculateGovernmentSpending($state, $dt);
-    }
-
-    private function calculateCommercialPropertyIndex(MacroState $state, float $dt): void
-    {
-        $this->getAssetSubsystem()->calculateCommercialPropertyIndex($state, $dt);
-    }
-
-    private function calculateRetailDefaultRate(MacroState $state, float $dt): void
-    {
-        $this->getCreditFiscalSubsystem()->calculateRetailDefaultRate($state, $dt);
-    }
-
-    private function calculateAgriculturalCommodityIndex(MacroState $state, float $dt): void
-    {
-        $this->getCommoditySubsystem()->calculateAgriculturalCommodityIndex($state, $dt);
-    }
-
-    private function calculateFreightRateIndex(MacroState $state, float $dt): void
-    {
-        $this->getCommoditySubsystem()->calculateFreightRateIndex($state, $dt);
-    }
-
-    private function calculateResidentialPropertyIndex(MacroState $state, float $dt): void
-    {
-        $this->getAssetSubsystem()->calculateResidentialPropertyIndex($state, $dt);
-    }
-
-    private function calculateSovereignDebt(MacroState $state, float $dt): void
-    {
-        $this->getCreditFiscalSubsystem()->calculateSovereignDebt($state, $dt);
-    }
-
-    private function calculateFinancialConditionsIndex(MacroState $state, float $dt): void
-    {
-        $this->getAssetSubsystem()->calculateFinancialConditionsIndex($state, $dt);
-    }
-
-    private function calculateCapacityUtilization(MacroState $state): void
-    {
-        $this->getAggregateSubsystem()->calculateCapacityUtilization($state);
-    }
-
-    private function calculateRecessionProbability(MacroState $state): void
-    {
-        $this->getMonetarySubsystem()->calculateRecessionProbability($state);
-    }
-
-    private function calculateSloosCreditStandards(MacroState $state, float $dt): void
-    {
-        $this->getCreditFiscalSubsystem()->calculateSloosCreditStandards($state, $dt);
-    }
-
-    private function calculateCorporateDefaultRate(MacroState $state, float $dt): void
-    {
-        $this->getCreditFiscalSubsystem()->calculateCorporateDefaultRate($state, $dt);
-    }
-
-    private function calculateRefiningCrackSpread(MacroState $state, float $dt): void
-    {
-        $this->getCommoditySubsystem()->calculateRefiningCrackSpread($state, $dt);
-    }
-
-    private function calculateSupplyChainPressureIndex(MacroState $state): void
-    {
-        $this->getCommoditySubsystem()->calculateSupplyChainPressureIndex($state);
-    }
-
-    private function calculateCapitalMarketsDealIndex(MacroState $state, float $dt): void
-    {
-        $this->getAssetSubsystem()->calculateCapitalMarketsDealIndex($state, $dt);
-    }
-
-    private function calculateManufacturingPmi(MacroState $state, float $dt): void
-    {
-        $this->getAggregateSubsystem()->calculateManufacturingPmi($state, $dt);
-    }
-
-    private function calculateProducerPriceInflation(MacroState $state, float $tfpGrowthRate, float $dt): void
-    {
-        $this->getAggregateSubsystem()->calculateProducerPriceInflation($state, $tfpGrowthRate, $dt);
-    }
-
-    private function calculateTradeBalance(MacroState $state, float $dt): void
-    {
-        $this->getAssetSubsystem()->calculateTradeBalance($state, $dt);
-    }
-
-    private function calculateHousingStarts(MacroState $state, float $dt): void
-    {
-        $this->getAssetSubsystem()->calculateHousingStarts($state, $dt);
-    }
-
-    private function calculateMoneySupplyGrowth(MacroState $state, float $dt, float $tfpGrowthRate): void
-    {
-        $this->getMonetarySubsystem()->calculateMoneySupplyGrowth($state, $dt, $tfpGrowthRate);
+        $this->snapshotRecorder->recordSnapshot($macroState, $conn);
     }
 }
+

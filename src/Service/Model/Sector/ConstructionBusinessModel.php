@@ -104,6 +104,11 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
     public function getWorkingCapitalIntensity(Stock $stock): float { return 0.25; }
     public function getCapExCompletionRate(Stock $stock): float { return 0.4; }
 
+    public function getSeasonalityFactors(): array
+    {
+        return [0.88, 1.06, 1.10, 0.96]; // Q1 winter ground freeze, peak warm weather Q2-Q3; backlog-damped
+    }
+
     public function getSecularGrowthRate(Stock $stock): float
     {
         return 0.015;

@@ -31,10 +31,10 @@ class FinancialConstants
     public const ERC_GROWTH_SENSITIVITY = 0.25;
 
     // --- Bayesian Analyst Consensus ---
-    /** Baseline prior uncertainty variance in market analyst earnings consensus formation. */
-    public const BAYESIAN_BASE_PRIOR_VARIANCE = 0.04;
+    /** Baseline prior uncertainty variance in market analyst earnings consensus formation (~0.06^2). */
+    public const BAYESIAN_BASE_PRIOR_VARIANCE = 0.0036;
     /** Multiplier scaling analyst consensus prior uncertainty as VIX rises. */
-    public const BAYESIAN_VIX_SCALING_FACTOR = 0.50;
+    public const BAYESIAN_VIX_SCALING_FACTOR = 0.02;
 
     // --- Leverage Effect (Black, 1976) ---
     /** Asymmetric leverage effect scalar magnifying volatility on negative earnings surprises. */

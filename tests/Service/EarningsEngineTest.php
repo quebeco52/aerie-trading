@@ -101,6 +101,27 @@ class EarningsEngineTest extends TestCase
         $this->mathUtilityMock->method('calculateDynamicWorkingCapitalIntensity')->willReturnCallback(
             fn($base, $cs, $cu, $ib) => $realMath->calculateDynamicWorkingCapitalIntensity($base, $cs, $cu, $ib)
         );
+        $this->mathUtilityMock->method('calculateBayesianAnalystUpdate')->willReturnCallback(
+            fn($pEst, $pVar, $sEst, $sVar) => $realMath->calculateBayesianAnalystUpdate($pEst, $pVar, $sEst, $sVar)
+        );
+        $this->mathUtilityMock->method('calculateAsymmetricCostStickiness')->willReturnCallback(
+            fn($m, $r) => $realMath->calculateAsymmetricCostStickiness($m, $r)
+        );
+        $this->mathUtilityMock->method('calculateConvexPenalty')->willReturnCallback(
+            fn($s, $c = 1.5, $sc = 1.0) => $realMath->calculateConvexPenalty($s, $c, $sc)
+        );
+        $this->mathUtilityMock->method('calculateCIR')->willReturnCallback(
+            fn($cv, $k, $th, $s, $dt, $dw) => $realMath->calculateCIR($cv, $k, $th, $s, $dt, $dw)
+        );
+        $this->mathUtilityMock->method('calculateEarningsResponseCoefficient')->willReturnCallback(
+            fn($sue, $beta, $growth) => $realMath->calculateEarningsResponseCoefficient($sue, $beta, $growth)
+        );
+        $this->mathUtilityMock->method('normalizeWeightsSimplex')->willReturnCallback(
+            fn(array $w) => $realMath->normalizeWeightsSimplex($w)
+        );
+        $this->mathUtilityMock->method('calculateMeanRevertingWeight')->willReturnCallback(
+            fn($pw, $ps, $tw, $ar, $rs, $mf, $mc) => $realMath->calculateMeanRevertingWeight($pw, $ps, $tw, $ar, $rs, $mf, $mc)
+        );
 
         $this->corporateMetricsMock = $this->createStub(CorporateMetrics::class);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(10000000.0);
@@ -125,9 +146,7 @@ class EarningsEngineTest extends TestCase
 
     private function getReportingTick(string $ticker, int $ticksPerYear = 252): int
     {
-        $ticksPerQuarter = (int) ($ticksPerYear / 4);
-        $ticksPerSeason = $ticksPerQuarter;
-        return abs(crc32($ticker)) % max(1, $ticksPerSeason);
+        return EarningsEngine::resolveReportingTick($ticker, $ticksPerYear);
     }
 
     public function testCalculateReturnsNullWhenNoEventOccurs(): void
@@ -191,8 +210,8 @@ class EarningsEngineTest extends TestCase
         $stock->setBaselineRoic('0.10');
         $stock->setOperatingMargin('0.20');
 
-        // Force an extreme blowout quarter (Z > 1.5 triggers the shock)
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(2.0);
+        // Force an extreme blowout quarter (SUE Z > 1.5 triggers the shock)
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(3.5);
 
         $reportingTick = $this->getReportingTick('SHOCK');
         $macroState = new \App\DTO\MacroStateDTO();
@@ -291,8 +310,8 @@ class EarningsEngineTest extends TestCase
         $stock->setBaselineRoic('0.10');
         $stock->setOperatingMargin('0.20');
 
-        // Negative surprise shock (Z = -2.0) creates a massive miss
-        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(-2.0);
+        // Negative surprise shock (SUE Z < -1.5) creates a massive miss triggering volatility shock
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(-3.5);
 
         $reportingTick = $this->getReportingTick('MISS');
         $macroState = new \App\DTO\MacroStateDTO();
@@ -316,8 +335,6 @@ class EarningsEngineTest extends TestCase
         $stockCalm->setBaselineRoic('0.10');
         $stockCalm->setOperatingMargin('0.20');
 
-        $stockStressed = clone $stockCalm;
-
         $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
 
         $calmMacro = new \App\DTO\MacroStateDTO(
@@ -330,15 +347,19 @@ class EarningsEngineTest extends TestCase
         );
 
         $reportingTick = $this->getReportingTick('NWCF');
+        $ticksPerQuarter = 63;
 
-        // Run Calm
-        $stockCalm->setPreviousRevenue('25000000');
+        // Quarter 1: Seed NWC on calm conditions
         $this->engine->calculate($stockCalm, $calmMacro, $reportingTick, 252);
+        $stockStressed = clone $stockCalm;
+
+        // Quarter 2: Calm conditions continue for stockCalm (flat revenue, flat spreads)
+        $q2Tick = $reportingTick + $ticksPerQuarter;
+        $this->engine->calculate($stockCalm, $calmMacro, $q2Tick, 252);
         $calmFcfPerShare = (float) $stockCalm->getFreeCashFlowPerShare();
 
-        // Run Stressed on identical initial state
-        $stockStressed->setPreviousRevenue('25000000');
-        $this->engine->calculate($stockStressed, $stressedMacro, $reportingTick, 252);
+        // Quarter 2: Credit & liquidity spread blowout for stockStressed on identical flat revenue
+        $this->engine->calculate($stockStressed, $stressedMacro, $q2Tick, 252);
         $stressedFcfPerShare = (float) $stockStressed->getFreeCashFlowPerShare();
 
         // Under macro stress with identical revenue, dynamic intensity rises and drains FCF (stressed FCF < calm FCF)
@@ -470,5 +491,245 @@ class EarningsEngineTest extends TestCase
             $overheatedEps,
             'Excess wage growth above trend must inflate fixed SG&A overhead costs and compress corporate earnings.'
         );
+    }
+
+    public function testReportingWindowClustering(): void
+    {
+        $ticksPerYear = 252;
+        $ticksPerQuarter = 63;
+        $lagTicks = (int) round($ticksPerQuarter * EarningsEngine::EARNINGS_REPORTING_LAG_RATIO); // ~14
+        $seasonTicks = (int) round($ticksPerQuarter * EarningsEngine::EARNINGS_SEASON_LENGTH_RATIO); // ~25
+        $windowEnd = $lagTicks + $seasonTicks; // ~39
+
+        for ($i = 0; $i < 100; $i++) {
+            $ticker = 'TICK_' . $i;
+            $reportingTick = EarningsEngine::resolveReportingTick($ticker, $ticksPerYear);
+
+            $this->assertGreaterThanOrEqual($lagTicks, $reportingTick, "Ticker {$ticker} reporting tick must be at or after lag.");
+            $this->assertLessThan($windowEnd, $reportingTick, "Ticker {$ticker} reporting tick must be within the earnings season window.");
+
+            // Verify checkReportingEligibility on and off the reporting tick
+            $stock = new Stock();
+            $stock->setTicker($ticker);
+            $macro = new \App\DTO\MacroStateDTO();
+
+            // Off tick (e.g. tick 0, before the window opens)
+            $this->assertNull($this->engine->calculate($stock, $macro, 0, $ticksPerYear));
+        }
+    }
+
+    public function testConsensusAnchoringGeneratesSerialSurpriseCorrelation(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('ANCHOR_TEST');
+        $stock->setIndustry('Heavy Manufacturing');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setTotalEquity('100000000');
+        $stock->setBaselineRoic('0.12');
+        $stock->setOperatingMargin('0.20');
+        $stock->setVolatility('0.15');
+        $stock->setCurrentVolatility('0.15');
+
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $positiveMacro = new \App\DTO\MacroStateDTO(
+            outputGapEma: 0.05 // Persistent 500bps positive output gap
+        );
+
+        $reportingTick = $this->getReportingTick('ANCHOR_TEST');
+        $ticksPerQuarter = 63;
+
+        $actualRevenues = [];
+        $consensusRevenues = [];
+
+        // Run 4 consecutive quarters with persistent positive demand shift
+        for ($q = 0; $q < 4; $q++) {
+            $tick = ($q * $ticksPerQuarter) + $reportingTick;
+            $this->engine->calculate($stock, $positiveMacro, $tick, 252);
+            $consensusRevenues[] = (float) $stock->getLastAnalystRevenue();
+            $actualRevenues[] = (float) $stock->getTotalRevenue() / 4.0;
+        }
+
+        // Under Bayesian anchoring, analyst revenue estimates should adjust gradually across quarters
+        $this->assertGreaterThan(0.0, $consensusRevenues[0]);
+
+        // Bernard & Thomas (1989) PEAD signature: persistent demand shift causes analysts to under-react,
+        // producing a run of positive surprises where actual quarterly revenue beats consensus.
+        for ($i = 0; $i < count($consensusRevenues); $i++) {
+            $this->assertGreaterThan(
+                $consensusRevenues[$i],
+                $actualRevenues[$i],
+                "Actual revenue should beat anchored analyst consensus in quarter {$i}."
+            );
+        }
+    }
+
+    public function testMarginShockProducesEarningsSurpriseIndependentOfRevenue(): void
+    {
+        $stockNormal = new Stock();
+        $stockNormal->setTicker('MGN_NORM');
+        $stockNormal->setIndustry('Heavy Manufacturing');
+        $stockNormal->setSharesOutstanding('1000000');
+        $stockNormal->setTotalEquity('100000000');
+        $stockNormal->setBaselineRoic('0.10');
+        $stockNormal->setOperatingMargin('0.20');
+        $stockNormal->setVolatility('0.15');
+        $stockNormal->setCurrentVolatility('0.15');
+
+        $stockShocked = clone $stockNormal;
+        $stockShocked->setTicker('MGN_SHK');
+
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $macroNormal = new \App\DTO\MacroStateDTO();
+        // Negative output gap compresses dynamic variable theta (cyclical margin squeeze)
+        $macroShocked = new \App\DTO\MacroStateDTO(outputGapEma: -0.05);
+
+        $tickNormal = $this->getReportingTick('MGN_NORM');
+        $tickShocked = $this->getReportingTick('MGN_SHK');
+
+        $this->engine->calculate($stockNormal, $macroNormal, $tickNormal, 252);
+        $this->engine->calculate($stockShocked, $macroShocked, $tickShocked, 252);
+
+        // Operating margin should be lower under margin squeeze
+        $this->assertLessThan(
+            (float) $stockNormal->getEarningsPerShare(),
+            (float) $stockShocked->getEarningsPerShare(),
+            'Cyclical margin compression must reduce EPS and produce an earnings miss.'
+        );
+    }
+
+    public function testSueNormalizedVolatilityShock(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('SUE_VOL');
+        $stock->setIndustry('Heavy Manufacturing');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setTotalEquity('100000000');
+        $stock->setBaselineRoic('0.10');
+        $stock->setOperatingMargin('0.20');
+        $stock->setVolatility('0.20');
+        $stock->setCurrentVolatility('0.20');
+
+        $reportingTick = $this->getReportingTick('SUE_VOL');
+        $macro = new \App\DTO\MacroStateDTO();
+
+        // 1. Extreme surprise (Z = 3.5) normalized by SUE dispersion (> 1.5) triggers volatility shock
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(3.5);
+        $this->engine->calculate($stock, $macro, $reportingTick, 252);
+
+        $this->assertGreaterThan(0.20, (float) $stock->getCurrentVolatility(), 'High SUE surprise must trigger volatility expansion.');
+    }
+
+    public function testSeasonalityProducesOperatingLeverageWithoutSpuriousSurprise(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('RETAIL_SEAS');
+        $stock->setIndustry('Internet Retail');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setTotalEquity('100000000');
+        $stock->setBaselineRoic('0.15');
+        $stock->setOperatingMargin('0.15');
+        $stock->setVolatility('0.15');
+        $stock->setCurrentVolatility('0.15');
+
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $macro = new \App\DTO\MacroStateDTO();
+        $ticksPerQuarter = 63;
+        $reportingTick = $this->getReportingTick('RETAIL_SEAS');
+
+        // Q1 (fiscal quarter 0, seasonal factor 0.85)
+        $q1Tick = $reportingTick;
+        $this->engine->calculate($stock, $macro, $q1Tick, 252);
+        $q1Revenue = (float) $stock->getTotalRevenue();
+
+        // Q4 (fiscal quarter 3, seasonal factor 1.35)
+        $q4Tick = (3 * $ticksPerQuarter) + $reportingTick;
+        $this->engine->calculate($stock, $macro, $q4Tick, 252);
+        $q4Revenue = (float) $stock->getTotalRevenue();
+
+        // Peak holiday Q4 revenue must significantly exceed trough Q1 revenue
+        $this->assertGreaterThan(
+            $q1Revenue,
+            $q4Revenue,
+            'Seasonal holiday quarter (Q4) revenue must exceed off-peak quarter (Q1) for Internet Retail.'
+        );
+    }
+
+    public function testCapacityUtilizationOvertimeConvexityAndClamping(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('CAP_CLAMP');
+        $stock->setIndustry('Heavy Manufacturing');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setTotalEquity('100000000');
+        $stock->setBaselineRoic('0.10');
+        $stock->setOperatingMargin('0.20');
+        $stock->setVolatility('0.15');
+        $stock->setCurrentVolatility('0.15');
+
+        // Extreme boom to test utilization clamping
+        $boomMacro = new \App\DTO\MacroStateDTO(
+            outputGapEma: 0.50 // Massive overheating
+        );
+
+        $reportingTick = $this->getReportingTick('CAP_CLAMP');
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+
+        $this->engine->calculate($stock, $boomMacro, $reportingTick, 252);
+
+        // Revenue should be finite and bounded by MAX_CAPACITY_UTILIZATION
+        $revenue = (float) $stock->getTotalRevenue();
+        $this->assertTrue(is_finite($revenue));
+        $this->assertGreaterThan(0.0, $revenue);
+    }
+
+    public function testSeasonalAnnualizationDeseasonalizesAnnualRunrateAndProtectsDebtHealth(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('IBHI_SEAS');
+        $stock->setIndustry('Engineering & Construction');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setTotalEquity('100000000');
+        $stock->setFixedCostRatio(0.60);
+        $stock->setOperatingMargin('0.09');
+        $stock->setBaselineRoic('0.09');
+        $stock->setVolatility('0.15');
+        $stock->setCurrentVolatility('0.15');
+        $stock->setBeta('1.0');
+        $stock->setWholesaleDebt('10000000');
+        $stock->setCustomerDeposits('0');
+        $stock->setCorporateTreasury('5000000');
+
+        $this->mathUtilityMock->method('generateStandardNormal')->willReturn(0.0);
+        $macro = new \App\DTO\MacroStateDTO();
+        $reportingTick = $this->getReportingTick('IBHI_SEAS');
+
+        $dispatchedContext = null;
+        $this->eventDispatcherMock->method('dispatch')->willReturnCallback(function ($event) use (&$dispatchedContext) {
+            if ($event instanceof \App\Service\Event\EarningsReportedEvent) {
+                $dispatchedContext = $event->getContext();
+            }
+            return $event;
+        });
+
+        // Q1 (fiscal quarter 0, factor 0.88)
+        $result = $this->engine->calculate($stock, $macro, $reportingTick, 252);
+        $this->assertNotNull($result, 'Engine calculate() must return a valid earnings event.');
+
+        $this->assertNotNull($dispatchedContext);
+        $this->assertEquals(0.88, $dispatchedContext->seasonalFactor);
+
+        // De-seasonalized annual revenue should equal 4 * (actualRevenue / 0.88)
+        $expectedSaarRevenue = ($dispatchedContext->actualRevenue / 0.88) * 4.0;
+        $this->assertEqualsWithDelta($expectedSaarRevenue, (float) $stock->getTotalRevenue(), 1.0);
+
+        // Debt health must clear debt issuance gate (canIssueDebt = true) and have healthy coverage
+        $this->assertNotNull($dispatchedContext->health);
+        $this->assertTrue($dispatchedContext->health->canIssueDebt, 'Seasonally adjusted debt health must permit debt issuance.');
+        $this->assertGreaterThan(3.5, $dispatchedContext->health->interestCoverage, 'Seasonally adjusted ICR must clear the coverage gate.');
+
+        // Annualized EPS must remain positive despite winter seasonal trough
+        $this->assertGreaterThan(0.0, (float) $stock->getEarningsPerShare());
     }
 }

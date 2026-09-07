@@ -245,9 +245,14 @@ class MarketResetCommand extends Command
                     sam_ratio = :sam_ratio,
                     industry = :industry,
                     earnings_momentum_z = NULL,
-                    is_bankrupt = 0
+                    is_bankrupt = 0,
+                    net_working_capital = NULL,
+                    accruals_ratio = 0.0,
+                    net_operating_loss = 0.0000,
+                    credit_rating = :credit_rating
                 WHERE ticker = :ticker',
                 [
+                    'credit_rating' => 'BBB',
                     'price' => $neutralPrice,
                     'shares' => $stockData['shares_outstanding'],
                     'vol' => $stockData['volatility'],

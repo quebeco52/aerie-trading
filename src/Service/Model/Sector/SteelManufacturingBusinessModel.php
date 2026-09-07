@@ -68,6 +68,11 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public function getWorkingCapitalIntensity(Stock $stock): float { return 0.2; }
     public function getCapExCompletionRate(Stock $stock): float { return 0.35; }
 
+    public function getSeasonalityFactors(): array
+    {
+        return [0.85, 1.15, 1.15, 0.85]; // Construction & industrial manufacturing weather alignment
+    }
+
     public function getSecularGrowthRate(Stock $stock): float
     {
         return 0.01;

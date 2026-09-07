@@ -218,6 +218,11 @@ class NarrativeEngine
                 "Fixed income, currency, and commodities (FICC) trading desks captured record bid-ask spreads.",
                 "Macro trading desks capitalized on currency and interest rate volatility."
             ]),
+            ShockEvent::IB_COUNTERPARTY_DEFAULT => $this->getRandomPhrase([
+                "Suffered catastrophic prime brokerage losses following the sudden liquidation and default of a highly leveraged family office.",
+                "Emergency liquidation of concentrated counterparty swap positions resulted in severe prime brokerage write-downs.",
+                "Incurred massive counterparty credit losses as a multi-billion dollar hedge fund client failed to meet margin calls."
+            ]),
             ShockEvent::DISTRESSED_DEBT_RESTRUCTURING => $this->getRandomPhrase([
                 "Executed massive restructuring deals on defaulted corporate debt, unlocking extraordinary turnaround gains.",
                 "Capitalized on corporate credit spread blowouts by acquiring senior debt at steep discounts.",
@@ -252,6 +257,17 @@ class NarrativeEngine
                 "Unanticipated engineering defects and schedule overruns triggered ASC 606 reach-forward project losses.",
                 "Complex developmental milestone delays and supply chain logjams led to programmatic forward loss charges.",
                 "Project delays on fixed-price development contracts resulted in significant cost overrun provisions."
+            ]),
+
+            ShockEvent::CONGLOMERATE_PORTFOLIO_REALIGNMENT => $this->getRandomPhrase([
+                "Completed a landmark bolt-on acquisition, consolidating a new industrial subsidiary into the group.",
+                "Portfolio realignment unlocked substantial gains on the divestiture of a non-core operating segment.",
+                "Opportunistic acquisition of a distressed competitor materially expanded the industrial subsidiary base."
+            ]),
+            ShockEvent::CONGLOMERATE_SUBSIDIARY_WRITEDOWN => $this->getRandomPhrase([
+                "Multi-subsidiary restructuring charges and goodwill impairments weighed on group operating costs.",
+                "Operational bottlenecks across the industrial segment triggered inventory write-offs and severance provisions.",
+                "Consolidation of overlapping subsidiary operations incurred significant one-time restructuring costs."
             ]),
 
             ShockEvent::RESERVE_RELEASE => $this->getRandomPhrase([

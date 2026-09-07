@@ -35,6 +35,11 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     public function getWorkingCapitalIntensity(Stock $stock): float { return 0.12; }
     public function getCapExCompletionRate(Stock $stock): float { return 0.125; }
 
+    public function getSeasonalityFactors(): array
+    {
+        return [1.15, 0.85, 1.15, 0.85]; // Twin peaks: Q1 winter heating and Q3 summer air conditioning
+    }
+
     public function getSecularGrowthRate(Stock $stock): float
     {
         return 0.01;

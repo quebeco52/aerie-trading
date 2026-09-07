@@ -39,6 +39,11 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     public function getWorkingCapitalIntensity(Stock $stock): float { return 0.15; }
     public function getCapExCompletionRate(Stock $stock): float { return 0.25; }
 
+    public function getSeasonalityFactors(): array
+    {
+        return [0.85, 0.95, 1.10, 1.10]; // Q3-Q4 peak freight shipping & holiday logistics surge
+    }
+
     public function getSecularGrowthRate(Stock $stock): float { return 0.025; }
     
     public function getCapexCyclicality(): float { return 0.60; } // Fleets, sorting hubs, and automated fulfillment centers

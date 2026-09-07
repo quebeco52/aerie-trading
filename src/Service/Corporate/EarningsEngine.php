@@ -55,6 +55,30 @@ class EarningsEngine
     /** Multiplier applied to baseline volatility to derive base idiosyncratic revenue volatility. */
     public const IDIOSYNCRATIC_REV_VOL_RATIO = 0.25;
 
+    // --- Capacity & Seasonality Limits ---
+    /** Hard ceiling on capacity utilization to bound physical operations and depreciation. */
+    public const MAX_CAPACITY_UTILIZATION = 1.50;
+    /** TAM headroom multiplier allowing seasonal/cyclical volume surges above structural capacity. */
+    public const EXPECTED_REVENUE_TAM_HEADROOM = 1.50;
+
+    // --- Cost Convexity & Overtime ---
+    /** Capacity utilization threshold above which convex overtime cost penalties begin. */
+    public const CAPACITY_OVERTIME_THRESHOLD = 1.00;
+    /** Degree of power-law convexity for operating costs when capacity exceeds 100%. */
+    public const CAPACITY_OVERTIME_CONVEXITY = 1.50;
+    /** Scalar scaling the convex overtime penalty applied to variable cost ratio. */
+    public const CAPACITY_OVERTIME_SCALAR = 0.60;
+
+    // --- Earnings Reporting Season ---
+    /** Fraction of quarter that passes before the earnings reporting season opens (~14 ticks). */
+    public const EARNINGS_REPORTING_LAG_RATIO = 0.22;
+    /** Duration of the clustered earnings reporting window as a fraction of the quarter (~25 ticks). */
+    public const EARNINGS_SEASON_LENGTH_RATIO = 0.40;
+
+    // --- SUE Dispersion ---
+    /** Minimum analyst estimate dispersion floor to avoid division by near-zero in SUE. */
+    public const MIN_ESTIMATE_DISPERSION = 0.02;
+
     /**
      * Constructor.
      *
@@ -90,6 +114,8 @@ class EarningsEngine
             $businessModel,
             self::QUARTERLY_TIME_STEP
         );
+        $ctx->tickCount = $tickCount;
+        $ctx->ticksPerYear = $ticksPerYear;
 
         $this->initializeContext($ctx);
         $this->capExEngine->processCipQueue($ctx->stock);
@@ -105,17 +131,25 @@ class EarningsEngine
         return $this->publishEventAndReport($ctx);
     }
 
+    /**
+     * Resolves the deterministic quarter tick on which a ticker reports earnings.
+     * Clustered inside the post-quarter reporting season window: [lag, lag + season).
+     */
+    public static function resolveReportingTick(string $ticker, int $ticksPerYear): int
+    {
+        $ticksPerQuarter = max(1, (int) ($ticksPerYear / 4));
+        $lagTicks    = (int) round($ticksPerQuarter * self::EARNINGS_REPORTING_LAG_RATIO);
+        $seasonTicks = max(1, (int) round($ticksPerQuarter * self::EARNINGS_SEASON_LENGTH_RATIO));
+
+        return $lagTicks + (abs(crc32($ticker)) % $seasonTicks);
+    }
+
     private function checkReportingEligibility(Stock $stock, int $tickCount, int $ticksPerYear): bool
     {
-        $ticksPerQuarter = (int) ($ticksPerYear / 4);
-        $ticksPerSeason = $ticksPerQuarter;
+        $ticksPerQuarter = max(1, (int) ($ticksPerYear / 4));
         $currentQuarterTick = $tickCount % $ticksPerQuarter;
+        $reportingTick = self::resolveReportingTick($stock->getTicker(), $ticksPerYear);
 
-        if ($currentQuarterTick > $ticksPerSeason) {
-            return false;
-        }
-
-        $reportingTick = abs(crc32($stock->getTicker())) % max(1, $ticksPerSeason);
         return $currentQuarterTick === $reportingTick;
     }
 
@@ -125,6 +159,7 @@ class EarningsEngine
         $ctx->baselineVol = (float) $stock->getVolatility();
         $ctx->sharesOutstanding = (float) $stock->getSharesOutstanding();
         $ctx->stableMargin = max(0.01, (float) $stock->getOperatingMargin());
+        $ctx->previousQuarterlyRevenue = (float) $stock->getPreviousRevenue() / 4.0;
 
         $targetMetrics = $ctx->strategy->getTargetMetrics($stock, $ctx->macroState, $this->mathUtility);
         $ctx->investedCapital = $targetMetrics['invested_capital'];
@@ -150,20 +185,28 @@ class EarningsEngine
         $revenueVol = $ctx->baselineVol * self::IDIOSYNCRATIC_REV_VOL_RATIO;
         $z1 = $this->mathUtility->generateStandardNormal();
 
+        $ticksPerQuarter = max(1, (int) ($ctx->ticksPerYear / 4));
+        $ctx->fiscalQuarter = intdiv($ctx->tickCount, $ticksPerQuarter) % 4;
+        $factors = $strategy->getSeasonalityFactors();
+        $ctx->seasonalFactor = $factors[$ctx->fiscalQuarter] ?? 1.0;
+        $ctx->priorSeasonalFactor = $factors[($ctx->fiscalQuarter + 3) % 4] ?? 1.0;
+
         $priceJumpIntensity = (float) ($stock->getJumpIntensity() ?? 2.00);
         $priceJumpVol = (float) ($stock->getJumpVol() ?? 0.10);
 
         $jumpIntensity = $priceJumpIntensity * FinancialConstants::FUNDAMENTAL_JUMP_INTENSITY_SCALE;
         $jumpVol = $priceJumpVol * FinancialConstants::FUNDAMENTAL_JUMP_VOL_SCALE;
+        $jumpMean = -$priceJumpVol * FinancialConstants::FUNDAMENTAL_JUMP_MEAN_SCALE;
 
-        $jumpData = $this->mathUtility->calculateJumpDiffusion($jumpIntensity, 0.0, $jumpVol, $ctx->dt);
+        $jumpData = $this->mathUtility->calculateJumpDiffusion($jumpIntensity, $jumpMean, $jumpVol, $ctx->dt);
         $jumpMagnitude = $jumpData['exponent'] ?? 0.0;
 
         $idiosyncraticDemandShock = $revenueVol * sqrt($ctx->dt) * $z1;
         $secularGrowthRate = $strategy->getSecularGrowthRate($stock);
         $secularDrift = $secularGrowthRate * $ctx->dt;
 
-        $ctx->capacityUtilization = max(self::MIN_CAPACITY_UTILIZATION, 1.0 + $secularDrift + $macroDemandShift + $idiosyncraticDemandShock + $jumpMagnitude);
+        $rawUtilization = $ctx->seasonalFactor * (1.0 + $secularDrift + $macroDemandShift + $idiosyncraticDemandShock + $jumpMagnitude);
+        $ctx->capacityUtilization = max(self::MIN_CAPACITY_UTILIZATION, min(self::MAX_CAPACITY_UTILIZATION, $rawUtilization));
         $maxCipDeduction = abs($ctx->investedCapital) * FinancialConstants::MAX_CIP_CAPITAL_DEDUCTION_RATIO;
         $effectiveCip = min($maxCipDeduction, $stock->getTotalCipAmount());
         $revenueGeneratingCapital = max(abs($ctx->investedCapital) * (1.0 - FinancialConstants::MAX_CIP_CAPITAL_DEDUCTION_RATIO), abs($ctx->investedCapital) - $effectiveCip);
@@ -175,11 +218,11 @@ class EarningsEngine
         
         if (!$strategy->isFinancial()) {
             $ctx->structuralRevenue = min($maxSectorCapacity, $structuralRevenue);
-            $ctx->expectedRevenue = min($maxSectorCapacity * 1.25, $ctx->structuralRevenue * $ctx->capacityUtilization);
+            $ctx->expectedRevenue = min($maxSectorCapacity * self::EXPECTED_REVENUE_TAM_HEADROOM, $ctx->structuralRevenue * $ctx->capacityUtilization);
         } else {
             $maxFinancialCapacity = $dynamicSam * FinancialConstants::MAX_FINANCIAL_SECTOR_TAM_CAPACITY_RATIO;
             $ctx->structuralRevenue = min($maxFinancialCapacity, $structuralRevenue);
-            $ctx->expectedRevenue = min($maxFinancialCapacity * 1.25, $ctx->structuralRevenue * $ctx->capacityUtilization);
+            $ctx->expectedRevenue = min($maxFinancialCapacity * self::EXPECTED_REVENUE_TAM_HEADROOM, $ctx->structuralRevenue * $ctx->capacityUtilization);
         }
 
         $fixedCostRatio = (float) $stock->getFixedCostRatio();
@@ -224,11 +267,19 @@ class EarningsEngine
 
         // Asymmetric Cost Stickiness (Anderson, Banker, & Janakiraman 2003):
         // Operating costs contract sluggishly when revenue drops, squeezing variable margins during contractions.
-        $revRatio = max(0.01, $ctx->expectedRevenue / max(1.0, $ctx->structuralRevenue));
-        $revenueLogChange = log($revRatio);
+        $priorRevenue = $ctx->previousQuarterlyRevenue > 0.0 ? $ctx->previousQuarterlyRevenue : $ctx->expectedRevenue;
+        $currentDeseasonalized = $ctx->expectedRevenue / max(0.01, $ctx->seasonalFactor);
+        $priorDeseasonalized   = $priorRevenue        / max(0.01, $ctx->priorSeasonalFactor);
+        $revenueLogChange = max(-0.50, min(0.50, log(max(0.01, $currentDeseasonalized / max(1.0, $priorDeseasonalized)))));
         $stickyVariableMargin = $this->mathUtility->calculateAsymmetricCostStickiness($realizedVariableMargin, $revenueLogChange);
 
-        $ctx->realizedVariableMargin = min(0.99, max(0.01, $stickyVariableMargin));
+        $overtimePremium = $this->mathUtility->calculateConvexPenalty(
+            $ctx->capacityUtilization - self::CAPACITY_OVERTIME_THRESHOLD,
+            self::CAPACITY_OVERTIME_CONVEXITY,
+            self::CAPACITY_OVERTIME_SCALAR
+        );
+
+        $ctx->realizedVariableMargin = min(0.99, max(0.01, $stickyVariableMargin + $overtimePremium));
     }
 
     private function calculateExpectedVsActualFinancials(EarningsSimulationContext $ctx): void
@@ -246,9 +297,20 @@ class EarningsEngine
         $ctx->actualVariableCosts = $actuals->actualVariableCosts;
 
         $coverage = $ctx->strategy->getCoverageProfile($ctx->stock);
-        $consensus = $this->marketConsensusEngine->generateConsensus($actuals, $coverage, $ctx->expectedRevenue, $this->mathUtility, $ctx->stock, $ctx->macroState->marketVolatilityEma);
+        $seasonalRatio = $ctx->seasonalFactor / max(0.01, $ctx->priorSeasonalFactor);
+        $consensus = $this->marketConsensusEngine->generateConsensus(
+            $actuals,
+            $coverage,
+            $ctx->expectedRevenue,
+            $this->mathUtility,
+            $ctx->stock,
+            $ctx->macroState->marketVolatilityEma,
+            $ctx->realizedVariableMargin,
+            $seasonalRatio
+        );
         $ctx->analystExpectedRevenue = $consensus->analystExpectedRevenue;
         $ctx->analystExpectedVariableCosts = $consensus->analystExpectedVariableCosts;
+        $ctx->estimateDispersion = $consensus->estimateDispersion;
 
         $expectedEbit = $ctx->analystExpectedRevenue - $ctx->fixedCosts - $ctx->analystExpectedVariableCosts;
         $ctx->expectedEbit = max(-$ctx->structuralRevenue * self::MAX_EBIT_LOSS_RATIO, $expectedEbit);
@@ -267,8 +329,20 @@ class EarningsEngine
     {
         $stock = $ctx->stock;
 
-        $ctx->previousQuarterlyRevenue = (float) $stock->getPreviousRevenue() / 4.0;
-        $stock->setTotalRevenue((string) ($ctx->actualRevenue * 4.0));
+        // Seasonally Adjusted Annual Rate (SAAR) Metrics:
+        // Reported quarterly revenue and EBIT oscillate with operational seasonality.
+        // Annual-basis metrics (total revenue run-rate, borrowing rate, ICR, debt health)
+        // must read the seasonally adjusted run-rate rather than interpreting a seasonal
+        // trough/peak as a permanent structural shift.
+        $ctx->seasonallyAdjustedRevenue = $ctx->actualRevenue / max(0.01, $ctx->seasonalFactor);
+        $realizedCostRatio = $ctx->actualRevenue > 0.0
+            ? ($ctx->actualVariableCosts / $ctx->actualRevenue)
+            : $ctx->realizedVariableMargin;
+        $ctx->seasonallyAdjustedEbit = ($ctx->seasonallyAdjustedRevenue * (1.0 - $realizedCostRatio)) - $ctx->fixedCosts;
+        $ctx->structuralOperatingMargin = $ctx->seasonallyAdjustedEbit / max(1.0, $ctx->seasonallyAdjustedRevenue);
+
+        $annualSaarRevenue = MathUtility::calculateSeasonallyAdjustedAnnualRate($ctx->actualRevenue, $ctx->seasonalFactor, 4);
+        $stock->setTotalRevenue((string) $annualSaarRevenue);
 
         $industry = $stock->getIndustry() ?: 'General';
         $customDepreciation = (float) $stock->getDepreciationRate();
@@ -288,12 +362,14 @@ class EarningsEngine
         // Reconstruct EBITDA (EBITDA = GAAP EBIT + Depreciation) for FCF, FFO, and reporting
         $ctx->ebitda = $ctx->ebit + $ctx->quarterlyDepreciation;
 
-        $expectedOperatingMargin = $ctx->expectedEbit / max(1.0, $ctx->expectedRevenue);
-        $expectedDebtMetrics = $this->debtEngine->calculateInterestExpense($stock, $ctx->macroState, false, $ctx->expectedRevenue * 4.0, $expectedOperatingMargin);
+        $saExpectedRevenue = $ctx->expectedRevenue / max(0.01, $ctx->seasonalFactor);
+        $saExpectedEbit = ($saExpectedRevenue * (1.0 - $ctx->baselineVariableMargin)) - $ctx->fixedCosts;
+        $saExpectedMargin = $saExpectedEbit / max(1.0, $saExpectedRevenue);
+        $expectedDebtMetrics = $this->debtEngine->calculateInterestExpense($stock, $ctx->macroState, false, $saExpectedRevenue * 4.0, $saExpectedMargin);
         $ctx->expectedInterestExpense = $expectedDebtMetrics->interestExpense / 4.0;
 
         $ctx->trueOperatingMargin = $ctx->ebit / max(1.0, $ctx->actualRevenue);
-        $ctx->debtMetrics = $this->debtEngine->calculateInterestExpense($stock, $ctx->macroState, true, $ctx->actualRevenue * 4.0, $ctx->trueOperatingMargin);
+        $ctx->debtMetrics = $this->debtEngine->calculateInterestExpense($stock, $ctx->macroState, true, $annualSaarRevenue, $ctx->structuralOperatingMargin);
 
         $annualInterestExpense = $ctx->debtMetrics->interestExpense;
         $ctx->quarterlyInterestExpense = $annualInterestExpense / 4.0;
@@ -348,12 +424,13 @@ class EarningsEngine
             $ctx->reportedActualNetIncome += $ctx->quarterlyDepreciation;
         }
 
-        $ctx->health = $this->debtEngine->analyzeDebtHealth($stock, $ctx->macroState, $ctx->actualRevenue * 4.0, $ctx->trueOperatingMargin);
+        $annualSaarRevenue = MathUtility::calculateSeasonallyAdjustedAnnualRate($ctx->actualRevenue, $ctx->seasonalFactor, 4);
+        $ctx->health = $this->debtEngine->analyzeDebtHealth($stock, $ctx->macroState, $annualSaarRevenue, $ctx->structuralOperatingMargin);
         $ctx->truePostTaxReturn = $ctx->strategy->updateDynamicRoic(
             $stock,
             $ctx->actualQuarterlyNetIncome,
             $ctx->investedCapital,
-            $ctx->ebit,
+            $ctx->seasonallyAdjustedEbit,
             $ctx->corporateTaxRate,
             $ctx->health->wacc ?? 0.08,
             $ctx->health->costOfEquity ?? 0.10,
@@ -366,8 +443,19 @@ class EarningsEngine
         $stock = $ctx->stock;
         $shares = max(1.0, $ctx->sharesOutstanding);
 
-        $expectedAnnualEps = ($ctx->reportedExpectedNetIncome * 4.0) / $shares;
-        $ctx->actualAnnualEpsRaw = ($ctx->reportedActualNetIncome * 4.0) / $shares;
+        // Quarterly reported EPS for analyst surprise calculation (matches analyst consensus which already anticipates seasonality)
+        $ctx->actualQuarterlyEps = $ctx->reportedActualNetIncome / $shares;
+        $ctx->expectedQuarterlyEps = $ctx->reportedExpectedNetIncome / $shares;
+        $ctx->surpriseAmountQuarterly = $ctx->actualQuarterlyEps - $ctx->expectedQuarterlyEps;
+
+        // Seasonally Adjusted Annual EPS for balance sheet and valuation (Kalman TTM EPS)
+        $saEbt = $ctx->seasonallyAdjustedEbit - $ctx->quarterlyInterestExpense + $ctx->quarterlyInterestIncome;
+        $saQuarterlyNetIncome = $saEbt > 0.0 ? $saEbt * (1.0 - $ctx->corporateTaxRate) : $saEbt;
+        if ($ctx->businessModel === 'reit') {
+            $saQuarterlyNetIncome += $ctx->quarterlyDepreciation;
+        }
+        $saAnnualEpsRaw = ($saQuarterlyNetIncome * 4.0) / $shares;
+        $ctx->actualAnnualEpsRaw = $saAnnualEpsRaw;
 
         $oldEps = (float) $stock->getEarningsPerShare();
         $structuralEps = $oldEps == 0.0 ? $ctx->actualAnnualEpsRaw : $oldEps;
@@ -379,12 +467,6 @@ class EarningsEngine
         );
 
         $stock->setEarningsPerShare((string) $ttmEps);
-
-        $expectedAnnualEpsDrifted = $expectedAnnualEps;
-
-        $ctx->actualQuarterlyEps = $ctx->actualAnnualEpsRaw / 4.0;
-        $ctx->expectedQuarterlyEps = $expectedAnnualEpsDrifted / 4.0;
-        $ctx->surpriseAmountQuarterly = $ctx->actualQuarterlyEps - $ctx->expectedQuarterlyEps;
 
         $rawEpsSurprise = abs($ctx->expectedQuarterlyEps) > 0.01
             ? $ctx->surpriseAmountQuarterly / abs($ctx->expectedQuarterlyEps)
@@ -413,24 +495,40 @@ class EarningsEngine
             $capexCyclicality = $ctx->strategy->getCapexCyclicality();
             $cycleCapExModifier = max(0.50, min(1.50, 1.00 + ($outputGap * $capexCyclicality)));
 
-            $physicalCapital = $ctx->strategy->getPhysicalCapital($stock);
-            $baselineIncomeForCapEx = max($physicalCapital * 0.02, max(0.0, $ctx->actualQuarterlyNetIncome));
-            $actualCapEx = $baselineIncomeForCapEx * ($capExRatio * $cycleCapExModifier);
+            // Operational CapEx:
+            // 1. Maintenance CapEx: replaces depreciating physical capital in ongoing operations.
+            //    Scales with macro cyclicality and drops during severe financial distress.
+            $solvencyFactor = $ctx->actualQuarterlyNetIncome > 0
+                ? 1.0
+                : max(0.20, 1.0 + ($ctx->actualQuarterlyNetIncome / max(1.0, abs($ctx->investedCapital))));
+            $maintenanceCapEx = $ctx->quarterlyDepreciation * $cycleCapExModifier * $solvencyFactor;
+
+            // 2. Growth CapEx: funded from operational profits scaled by capexRatio.
+            $growthCapEx = max(0.0, $ctx->actualQuarterlyNetIncome) * ($capExRatio * $cycleCapExModifier);
+
+            $actualCapEx = $maintenanceCapEx + $growthCapEx;
 
             $baseWorkingCapitalIntensity = $ctx->strategy->getWorkingCapitalIntensity($stock);
+            $deseasonalizedUtilization = $ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor);
             $dynamicWorkingCapitalIntensity = $this->mathUtility->calculateDynamicWorkingCapitalIntensity(
                 baselineIntensity: $baseWorkingCapitalIntensity,
                 creditSpread: $ctx->macroState->macroCreditSpreadEma,
-                capacityUtilization: $ctx->capacityUtilization,
+                capacityUtilization: $deseasonalizedUtilization,
                 interbankLiquiditySpread: $ctx->macroState->interbankLiquiditySpreadEma
             );
-            $prevRevenue = $ctx->previousQuarterlyRevenue > 0.0 ? $ctx->previousQuarterlyRevenue : $ctx->actualRevenue;
-            $previousAnnualizedRevenue = $prevRevenue / max(0.001, $ctx->dt);
             $currentAnnualizedRevenue = $ctx->actualRevenue / max(0.001, $ctx->dt);
 
-            $previousNwc = $dynamicWorkingCapitalIntensity * $previousAnnualizedRevenue;
             $currentNwc = $dynamicWorkingCapitalIntensity * $currentAnnualizedRevenue;
-            $deltaNwc = $currentNwc - $previousNwc;
+            $priorNwcStr = $stock->getNetWorkingCapital();
+            if ($priorNwcStr === null) {
+                $priorNwc = $currentNwc; // Seed on first report; no spurious one-time swing
+            } else {
+                $priorNwc = (float) $priorNwcStr;
+            }
+            $rawDeltaNwc = $currentNwc - $priorNwc;
+            $maxNwcSwing = $currentAnnualizedRevenue * 0.25; // Clamp single-quarter NWC swing to at most 1 quarter of revenue
+            $deltaNwc = max(-$maxNwcSwing, min($maxNwcSwing, $rawDeltaNwc));
+            $stock->setNetWorkingCapital((string) $currentNwc);
 
             $fcff = $ctx->actualQuarterlyNetIncome + $ctx->quarterlyDepreciation - $deltaNwc - $actualCapEx;
 
@@ -482,10 +580,9 @@ class EarningsEngine
         $stock = $ctx->stock;
 
         // Derive a composite earnings Z-score from the blended surprise percentage.
-        // Scale by baseline volatility to normalize: a 10% surprise on a 20% vol stock ≈ 0.5σ event.
-        $earningsSurpriseZ = $ctx->baselineVol > 0.01
-            ? $ctx->surprisePct / $ctx->baselineVol
-            : $ctx->primaryShockZ;
+        // Standardized by analyst estimate dispersion (SUE): a 6% surprise with σ=0.06 is a 1.0σ event.
+        $dispersion = max(self::MIN_ESTIMATE_DISPERSION, $ctx->estimateDispersion);
+        $earningsSurpriseZ = $ctx->surprisePct / $dispersion;
         $this->applyVolatilityShock($stock, $earningsSurpriseZ, $ctx->baselineVol);
 
         $currentPrice = (float) $stock->getPrice();
@@ -493,7 +590,8 @@ class EarningsEngine
         if ($ctx->actualAnnualEpsRaw > 0) {
             $currentPE = $currentPrice / $ctx->actualAnnualEpsRaw;
         } else {
-            $salesPerShare = $ctx->sharesOutstanding > 0 ? ($ctx->actualRevenue * 4.0) / $ctx->sharesOutstanding : 1.0;
+            $annualSaarRevenue = MathUtility::calculateSeasonallyAdjustedAnnualRate($ctx->actualRevenue, $ctx->seasonalFactor, 4);
+            $salesPerShare = $ctx->sharesOutstanding > 0 ? $annualSaarRevenue / $ctx->sharesOutstanding : 1.0;
             $priceToSales = $salesPerShare > 0 ? $currentPrice / $salesPerShare : 1.0;
             $structuralAfterTaxMargin = max(0.01, (float) $stock->getOperatingMargin() * (1.0 - $ctx->corporateTaxRate));
             $currentPE = $priceToSales * (1.0 / $structuralAfterTaxMargin);
@@ -505,7 +603,8 @@ class EarningsEngine
         // Growth premium proxy: valuationPremium - 1.0 (so 1.0 -> 0 growth premium, 2.0 -> +1.0 growth premium)
         $growthPremium = max(0.0, $valuationPremium - 1.0);
 
-        // Calculate ERC-driven price gap with empirical market dampening
+        // Calculate ERC-driven price gap with empirical market dampening.
+        // Note: Raw surprisePct is intentionally passed to preserve calibrated PRICE_GAP_DAMPENING.
         $priceGapPct = $this->mathUtility->calculateEarningsResponseCoefficient(
             $ctx->surprisePct,
             $beta,
