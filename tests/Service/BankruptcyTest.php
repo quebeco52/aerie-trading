@@ -157,6 +157,145 @@ class BankruptcyTest extends TestCase
         $this->assertEmpty($events);
     }
 
+    public function testSolvencyTestUsesTheMarginTheFirmActuallyReported(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('ROTS');
+        $stock->setName('Rotting Industries');
+        $stock->setPrice('10.00');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setTotalRevenue('1000000000');
+
+        // The structural margin is the slow parameter only asset reinvestment moves; the firm's realized
+        // margin has collapsed to a loss. Solvency must be judged on the loss, not on the plant.
+        $stock->setOperatingMargin('0.15');
+        $stock->setReportedOperatingMargin(-0.08);
+
+        $capturedEbit = null;
+        $this->debtEngineMock->method('calculateAltmanZScore')
+            ->willReturnCallback(function (Stock $s, float $ebit) use (&$capturedEbit): array {
+                $capturedEbit = $ebit;
+
+                return ['z_score' => 5.0, 'zone' => 'Safe', 'is_bankrupt' => false];
+            });
+
+        $operator = new MarketOperator(
+            $this->entityManagerMock,
+            $this->loggerMock,
+            $this->marketEventMock,
+            $this->debtEngineMock,
+            $this->mathUtilityMock
+        );
+
+        $operator->enforceMarketStability([$stock], new MacroStateDTO());
+
+        // Reading the structural margin would have handed the Altman test a healthy +$150M profit on a firm
+        // that is losing $80M, keeping a failing company solvent on paper for as long as its plant held up.
+        $this->assertNotNull($capturedEbit);
+        $this->assertEqualsWithDelta(-80000000.0, $capturedEbit, 1.0);
+    }
+
+    /**
+     * A payment default liquidates the firm even though the Altman test says it is solvent. These are two
+     * genuinely different ways to fail, and the second is the more common one in reality: the assets were
+     * fine, the refinancing simply was not there on the day the principal came due.
+     */
+    public function testPaymentDefaultLiquidatesAnOtherwiseSolventCompany(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('DFLT');
+        $stock->setName('Defaulted Holdings');
+        $stock->setPrice('25.00');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setTotalRevenue('1000000000');
+        $stock->setOperatingMargin('0.15');
+        $stock->setPaymentDefault(true);
+
+        // Comfortably solvent on the balance sheet: only the missed payment can kill it.
+        $this->debtEngineMock->method('calculateAltmanZScore')
+            ->willReturn(['z_score' => 8.0, 'zone' => 'Safe', 'is_bankrupt' => false]);
+
+        $this->entityManagerMock->method('getRepository')->willReturn($this->createConfiguredStub(
+            \Doctrine\ORM\EntityRepository::class,
+            ['findBy' => []]
+        ));
+
+        $operator = new MarketOperator(
+            $this->entityManagerMock,
+            $this->loggerMock,
+            $this->marketEventMock,
+            $this->debtEngineMock,
+            $this->mathUtilityMock
+        );
+
+        $operator->enforceMarketStability([$stock], new MacroStateDTO());
+
+        $this->assertTrue($stock->isBankrupt(), 'a missed principal payment must end the company');
+        $this->assertEquals('0.00000000', $stock->getPrice());
+    }
+
+    /**
+     * The flag is what kills, not the mere existence of debt: a firm that met its obligations survives.
+     */
+    public function testSolventCompanyThatMetItsObligationsSurvives(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('PAID');
+        $stock->setName('Paid Up Industries');
+        $stock->setPrice('25.00');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setTotalRevenue('1000000000');
+        $stock->setOperatingMargin('0.15');
+
+        $this->debtEngineMock->method('calculateAltmanZScore')
+            ->willReturn(['z_score' => 8.0, 'zone' => 'Safe', 'is_bankrupt' => false]);
+
+        $operator = new MarketOperator(
+            $this->entityManagerMock,
+            $this->loggerMock,
+            $this->marketEventMock,
+            $this->debtEngineMock,
+            $this->mathUtilityMock
+        );
+
+        $operator->enforceMarketStability([$stock], new MacroStateDTO());
+
+        $this->assertFalse($stock->isBankrupt());
+    }
+
+    public function testSolvencyTestFallsBackToTheStructuralMarginBeforeTheFirstReport(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('NEWC');
+        $stock->setName('Newly Listed Corp');
+        $stock->setPrice('10.00');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setTotalRevenue('1000000000');
+        $stock->setOperatingMargin('0.15');
+
+        $this->assertNull($stock->getReportedOperatingMargin());
+
+        $capturedEbit = null;
+        $this->debtEngineMock->method('calculateAltmanZScore')
+            ->willReturnCallback(function (Stock $s, float $ebit) use (&$capturedEbit): array {
+                $capturedEbit = $ebit;
+
+                return ['z_score' => 5.0, 'zone' => 'Safe', 'is_bankrupt' => false];
+            });
+
+        $operator = new MarketOperator(
+            $this->entityManagerMock,
+            $this->loggerMock,
+            $this->marketEventMock,
+            $this->debtEngineMock,
+            $this->mathUtilityMock
+        );
+
+        $operator->enforceMarketStability([$stock], new MacroStateDTO());
+
+        $this->assertEqualsWithDelta(150000000.0, $capturedEbit, 1.0);
+    }
+
     public function testTradeExecutionServiceBlocksTradingOnBankruptStock(): void
     {
         $user = new User();

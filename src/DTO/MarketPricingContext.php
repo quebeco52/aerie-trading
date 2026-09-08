@@ -19,6 +19,8 @@ class MarketPricingContext
         public float $jumpVol = 0.05,
         public float $beta = 1.0,
         public float $marketZ = 0.0,
+        public float $sectorZ = 0.0,
+        public float $marketJumpMultiplier = 1.0,
         public float $marketVol = 0.15,
         public float $drift = 0.08,
         public float $reversionSpeed = 0.25,

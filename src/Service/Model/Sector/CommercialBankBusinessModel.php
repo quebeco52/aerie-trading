@@ -604,7 +604,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /**
      * Financial companies are evaluated strictly on Return on Equity (ROE), not ROIC.
      */
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null, float $depreciation = 0.0): float
     {
         $kappa = $this->getReversionSpeed();
         $moatSpread = $this->getMoatSpread();

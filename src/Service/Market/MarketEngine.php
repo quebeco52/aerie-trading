@@ -32,6 +32,20 @@ class MarketEngine
     // Analyst Multipliers
     private const VALUE_ANALYST_BOOK_MULT = 0.80;
 
+    // --- Momentum (Hong & Stein 1999) ---
+    /** Divisor applied to the reversion rate per unit of accumulated price trend; at the 0.50 trend cap a name reverts at two thirds speed. */
+    private const MOMENTUM_REVERSION_RESISTANCE = 1.00;
+
+    // --- Market-Wide Jump Variance Budget ---
+    /** Second moment E[J^2] of one market-wide Kou jump, the return variance a single arrival contributes at unit beta. */
+    private const SYSTEMIC_JUMP_SECOND_MOMENT =
+        (MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP * 2.0
+            / (MacroEngine::SYSTEMIC_JUMP_ETA_UP * MacroEngine::SYSTEMIC_JUMP_ETA_UP))
+        + ((1.0 - MacroEngine::SYSTEMIC_JUMP_PROBABILITY_UP) * 2.0
+            / (MacroEngine::SYSTEMIC_JUMP_ETA_DOWN * MacroEngine::SYSTEMIC_JUMP_ETA_DOWN));
+    /** Ceiling on the share of long-run variance the jump budget may reclaim, so a quiet or high-beta name keeps a diffusion that still reads as its configured volatility. */
+    private const MAX_SYSTEMIC_VARIANCE_DRAG_SHARE = 0.25;
+
     public function __construct(
         private MathUtility $mathUtility
     ) {}
@@ -78,6 +92,8 @@ class MarketEngine
         $jump_vol = $ctx->jumpVol;
         $beta = $ctx->beta;
         $marketZ = $ctx->marketZ;
+        $sectorZ = $ctx->sectorZ;
+        $marketJumpMultiplier = $ctx->marketJumpMultiplier;
         $marketVol = $ctx->marketVol;
         $drift = $ctx->drift;
         $reversionSpeed = $ctx->reversionSpeed;
@@ -140,7 +156,20 @@ class MarketEngine
         // Dynamically scale variance reversion speed (kappa) during jump diffusion regimes
         // instead of linearly clamping theta, preventing artificial volatility suppression
         $dynamicKappa = $kappa * (1.0 + ($lambda * 0.15));
-        $adjustedTheta = max(0.0001, $longTermVar * $cycleVolModifier);
+
+        // Market-Wide Jump Variance Budget:
+        // The district jump supplies part of a stock's total return variance, so the diffusion has to give up
+        // the same amount. Without this, connecting the systemic jump simply stacked a second source of risk
+        // on an already calibrated baseline and every name in the district got roughly four points more
+        // volatile. The jump changes the SHAPE of returns, adding the crash days a diffusion cannot produce,
+        // never the magnitude. This mirrors the jump variance drag the macro engine applies to its own
+        // volatility process. Exposure is beta squared because the jump reaches the stock through its beta.
+        $systemicJumpVariance = min(
+            self::SYSTEMIC_JUMP_SECOND_MOMENT * MacroEngine::SYSTEMIC_JUMP_INTENSITY * ($beta * $beta),
+            $longTermVar * self::MAX_SYSTEMIC_VARIANCE_DRAG_SHARE
+        );
+
+        $adjustedTheta = max(0.0001, ($longTermVar * $cycleVolModifier) - $systemicJumpVariance);
 
         // Variance Process via Quadratic-Exponential (QE) Scheme
         $nextVar = $this->mathUtility->calculateQEVarianceStep(
@@ -191,15 +220,32 @@ class MarketEngine
 
         // Exact Ornstein-Uhlenbeck Mean Reversion in Log-Space
         // Using exp(-kappa * dt) mathematically guarantees the price never overshoots the fair value.
-        // Concept: If recent price action > 0, generate an opposing momentum drift that fights reversion
-        $momentumFactor = 0.10;
-        $momentumDrift = $recentPriceTrend * $momentumFactor;
-        $reversionWeight = max(0.0, min(1.0, exp(-$dynamicReversion * $dt) - $momentumDrift));
+        //
+        // Momentum resists that reversion (Hong & Stein 1999): while information is still diffusing through
+        // the market a strongly trending stock keeps moving with the trend instead of snapping back to its
+        // fundamental anchor. This weight multiplies the DIFFUSED price, so resistance has to be added to it,
+        // not subtracted: the previous signed subtraction made a rallying stock revert faster than a flat one,
+        // which is the opposite of the documented intent. It never fired in production because the trend was
+        // hard-coded to zero at the call site.
+        //
+        // Only the magnitude of the trend matters. A name selling off hard resists being dragged UP to fair
+        // value exactly as a rallying name resists being dragged down, and using the signed trend would let a
+        // falling stock snap to fair value faster the harder it falls.
+        //
+        // Resistance divides the reversion RATE rather than shifting the weight. At the district's tick rate
+        // the weight is already 0.9999, so any constant offset saturates the clamp below and switches
+        // fundamental reversion off entirely for a stock with even a faint trend, cutting the price loose
+        // from its fair value. Dividing the rate is invariant to the tick rate and can only slow reversion.
+        $momentumResistance = 1.0 + (abs($recentPriceTrend) * self::MOMENTUM_REVERSION_RESISTANCE);
+        $reversionWeight = max(0.0, min(1.0, exp(-($dynamicReversion / $momentumResistance) * $dt)));
 
         // Pure Geometric Brownian Motion (GBM) Step
         $idiosyncraticShock = $this->mathUtility->generateStandardNormal();
 
         // Calculate pure continuous price diffusion WITHOUT the linear gravity drift
+        // The sector factor is the second common driver: without it two banks co-move only through their
+        // betas, so a sector rotation is invisible in prices between reporting dates. The loading is a
+        // share of the NON-market residual, so total step variance is unchanged either way.
         $gbmPrice = $this->mathUtility->calculateCorrelatedGBM(
             currentPrice: $currentPrice,
             currentVolatility: $currentVolatility,
@@ -209,7 +255,9 @@ class MarketEngine
             beta: $beta,
             marketVol: $marketVol,
             marketZ: $marketZ,
-            w1: $idiosyncraticShock
+            w1: $idiosyncraticShock,
+            sectorZ: $sectorZ,
+            sectorVarianceShare: MacroEngine::SECTOR_FACTOR_VARIANCE_SHARE
         );
 
 
@@ -231,8 +279,24 @@ class MarketEngine
         $maxPriceCeiling = $currentPrice * (1.0 + $maxMovePct);
         $boundedPrice = max($minPriceFloor, min($maxPriceCeiling, $diffusedPrice));
 
-        // Apply Simultaneous Price Jumps AND M&A Shocks outside the GBM exponent
-        $totalShockMultiplier = $jumpData['price_multiplier'] * (1.0 + $maShock);
+        // Market-Wide Jump Exposure:
+        // The district-wide Kou jump arrives as a common log return, so a stock's share of it is its beta
+        // (the CAPM exposure), applied in log space. An inverse-beta hedge therefore gains on a crash
+        // rather than merely falling less. The result is clamped to the same per-jump bounds every other
+        // jump in the system obeys, so a high-beta name gaps hardest but never without limit.
+        $systemicJumpMultiplier = 1.0;
+        if ($marketJumpMultiplier > 0.0 && $marketJumpMultiplier !== 1.0) {
+            $systemicJumpLogReturn = max(
+                FinancialConstants::MIN_JUMP_LOG_RETURN,
+                min(FinancialConstants::MAX_JUMP_LOG_RETURN, log($marketJumpMultiplier) * $beta)
+            );
+            $systemicJumpMultiplier = exp($systemicJumpLogReturn);
+        }
+
+        // Apply Simultaneous Price Jumps AND M&A Shocks outside the GBM exponent.
+        // The systemic jump is deliberately absent from the returned 'shock' field: it hits every stock at
+        // once, so publishing it per ticker would bury the feed. The district reports it as one macro event.
+        $totalShockMultiplier = $jumpData['price_multiplier'] * $systemicJumpMultiplier * (1.0 + $maShock);
         $finalPrice = $boundedPrice * $totalShockMultiplier;
 
 

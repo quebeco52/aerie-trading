@@ -151,6 +151,19 @@ class MarketSeedCommand extends Command
                 $stock->setCreditSpread((string) ($stockData['credit_spread'] ?? 0.0100));
                 $stock->setHistoricalFixedRate((string) ($stockData['historical_fixed_rate'] ?? 0.04));
 
+                // Open the fixed-asset ledger so the very first earnings report depreciates a real plant
+                // rather than falling back to the capital proxy. Financial balance sheets keep no plant.
+                if (!$isFinancial) {
+                    \App\Service\Math\CorporateMetrics::getInstance()->seedFixedAssetLedger(
+                        $stock,
+                        $investedCapital,
+                        $strategy->getWorkingCapitalIntensity($stock) * $revenue,
+                        (float) $stock->getGoodwill(),
+                        $stock->getTotalCipAmount(),
+                        (float) ($stockData['asset_age_ratio'] ?? \App\Service\Math\FinancialConstants::SEED_ASSET_AGE_RATIO)
+                    );
+                }
+
                 $impliedPricingRoic = $isFinancial 
                     ? max(0.01, (float) $stock->getBaselineRoe())
                     : $impliedRoic;

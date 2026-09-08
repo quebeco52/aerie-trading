@@ -39,7 +39,8 @@ trait FinancialPhysicsTrait
         float $corporateTaxRate,
         float $wacc = 0.08,
         float $costOfEquity = 0.10,
-        ?\App\DTO\MacroStateDTO $macroState = null
+        ?\App\DTO\MacroStateDTO $macroState = null,
+        float $depreciation = 0.0
     ): float {
         $kappa = $this->getReversionSpeed();
         $moatSpread = $this->getMoatSpread();
@@ -183,6 +184,19 @@ trait FinancialPhysicsTrait
     public function getWorkingCapitalIntensity(Stock $stock): float { return 0.0; }
     public function getCapExCompletionRate(Stock $stock): float { return 1.0; }
     public function getPhysicalCapital(Stock $stock): float { return (float) $stock->getTotalEquity(); }
+
+    /**
+     * A balance sheet business has no trade cycle: it holds loans and securities, not receivables and stock.
+     *
+     * @return array{dso: float, dio: float, dpo: float}
+     */
+    public function getWorkingCapitalDays(Stock $stock): array { return ['dso' => 0.0, 'dio' => 0.0, 'dpo' => 0.0]; }
+
+    /**
+     * A bank's branches and core systems are immaterial next to its balance sheet, so financial models keep
+     * depreciating the equity proxy rather than maintaining a plant ledger they would never use.
+     */
+    public function getDepreciableBase(Stock $stock): float { return $this->getPhysicalCapital($stock); }
     public function allowsPhysicalOrganicCapex(): bool { return false; }
     public function getReturnBasisIncome(Stock $stock, float $quarterlyNopat, float $actualTotalNetIncome): float { return $actualTotalNetIncome; }
     public function appliesDistressPremiumToCostOfEquity(): bool { return true; }

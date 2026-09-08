@@ -101,6 +101,9 @@ class EarningsEngineTest extends TestCase
         $this->mathUtilityMock->method('calculateDynamicWorkingCapitalIntensity')->willReturnCallback(
             fn($base, $cs, $cu, $ib) => $realMath->calculateDynamicWorkingCapitalIntensity($base, $cs, $cu, $ib)
         );
+        $this->mathUtilityMock->method('calculateWorkingCapitalDayShifts')->willReturnCallback(
+            fn($cs, $cu, $ib) => $realMath->calculateWorkingCapitalDayShifts($cs, $cu, $ib)
+        );
         $this->mathUtilityMock->method('calculateBayesianAnalystUpdate')->willReturnCallback(
             fn($pEst, $pVar, $sEst, $sVar) => $realMath->calculateBayesianAnalystUpdate($pEst, $pVar, $sEst, $sVar)
         );
@@ -246,6 +249,12 @@ class EarningsEngineTest extends TestCase
         $this->assertNotEquals(-10.00, (float) $stock->getEarningsPerShare(), 'A company with negative EPS should still see EPS changes.');
     }
 
+    /**
+     * The income statement bridge: cash operating costs give EBITDA, and depreciation is a real expense
+     * line struck below it to give EBIT. Depreciation used to be added back on top of EBIT instead, so a
+     * heavier charge moved EBITDA and left EBIT — the line every coverage and solvency test reads —
+     * completely untouched.
+     */
     public function testEbitAndEbitdaAccountingBridge(): void
     {
         $stock = new Stock();
@@ -283,15 +292,20 @@ class EarningsEngineTest extends TestCase
         $this->assertGreaterThan(0.0, $capturedContext->quarterlyDepreciation, 'Quarterly depreciation must be positive.');
         $this->assertEqualsWithDelta(
             $capturedContext->actualRevenue - $capturedContext->operatingCosts,
-            $capturedContext->ebit,
-            0.0001,
-            'EBIT must equal revenue minus operating costs (no double-deduction).'
-        );
-        $this->assertEqualsWithDelta(
-            $capturedContext->ebit + $capturedContext->quarterlyDepreciation,
             $capturedContext->ebitda,
             0.0001,
-            'EBITDA must equal EBIT plus quarterly depreciation.'
+            'EBITDA must equal revenue minus the cash operating cost base.'
+        );
+        $this->assertEqualsWithDelta(
+            $capturedContext->ebitda - $capturedContext->quarterlyDepreciation,
+            $capturedContext->ebit,
+            0.0001,
+            'EBIT must be struck after depreciation (no double-deduction).'
+        );
+        $this->assertLessThan(
+            $capturedContext->ebitda,
+            $capturedContext->ebit,
+            'A firm that charges depreciation must report EBIT below EBITDA.'
         );
     }
 

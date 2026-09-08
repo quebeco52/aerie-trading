@@ -393,6 +393,17 @@ class MergerAndAcquisitionEngine
         $netAssetsAcquired = $ctx->purchasePrice * min(1.0, max(0.01, $ctx->hurdleRate) / max(0.01, $effectiveTargetRoic));
         $ctx->goodwillRecorded = max(0.0, $ctx->purchasePrice - $netAssetsAcquired);
         $stock->setGoodwill((string) ((float) $stock->getGoodwill() + $ctx->goodwillRecorded));
+
+        // ASC 805 step-up: the identifiable assets acquired come on at fair value, so their gross cost and
+        // book value are the same on day one and they enter the ledger with no accumulated depreciation.
+        // Only the fixed-asset share joins PP&E; the rest of the net assets is the target's working capital,
+        // which is not depreciated. Without this the acquirer's own plant would be all it ever depreciates
+        // while the acquired revenue was booked in full.
+        if ($stock->getGrossPpe() !== null && $netAssetsAcquired > 0.0) {
+            $workingCapitalShare = max(0.0, min(0.90, $ctx->strategy->getWorkingCapitalIntensity($stock)));
+            $acquiredPpe = $netAssetsAcquired * (1.0 - $workingCapitalShare);
+            $stock->setGrossPpe((string) ((float) $stock->getGrossPpe() + $acquiredPpe));
+        }
         
         $blendedMargin = (($oldCapitalBase * $oldOperatingMargin) + ($ctx->purchasePrice * $targetMargin)) / $totalNewCapital;
         $stock->setOperatingMargin((string) max(0.01, $blendedMargin * (1.0 - self::MA_INDIGESTION_PENALTY)));
@@ -601,6 +612,15 @@ class MergerAndAcquisitionEngine
         
         $currentRevenue = (float) $stock->getTotalRevenue();
         $stock->setTotalRevenue((string) max(1.0, $currentRevenue * (1.0 - $ctx->divestedFraction)));
+
+        // The buyer takes the division's plant with it. Gross cost and accumulated depreciation are both
+        // retired pro rata, which leaves the remaining asset base at the same average age as before: selling
+        // a division tells you nothing about how worn the plant you kept is.
+        if ($stock->getGrossPpe() !== null) {
+            $retained = max(0.0, 1.0 - $ctx->divestedFraction);
+            $stock->setGrossPpe((string) ((float) $stock->getGrossPpe() * $retained));
+            $stock->setAccumulatedDepreciation((string) ((float) $stock->getAccumulatedDepreciation() * $retained));
+        }
 
         $newEquity = $ctx->currentEquity - $ctx->lostEquity + $ctx->salePrice;
         $stock->setTotalEquity((string) max(10.0, $newEquity));

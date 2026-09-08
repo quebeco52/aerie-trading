@@ -321,16 +321,18 @@ class MacroEngine
     public const INFLATION_DIFFUSION_SIGMA = 0.002;
 
     // --- Merton Structural Corporate Credit Spreads (Merton 1974) ---
-    /** Sensitivity of corporate credit spreads to wholesale interbank funding stress. */
-    public const INTERBANK_CREDIT_CONTAGION_SENSITIVITY = 2.0;
+    /** IG spread widening per unit of interbank stress. In 2008 a +430 bps TED move coincided with +450 bps of IG OAS, so ~1.0 is the empirical ceiling. */
+    public const INTERBANK_CREDIT_CONTAGION_SENSITIVITY = 1.0;
     /** Baseline investment-grade corporate credit spread over risk-free rate. */
     public const BASE_CREDIT_SPREAD = 0.020;
     /** Sensitivity of corporate credit spreads to GDP contraction (leverage & distance-to-default channel). */
     public const MERTON_LEVERAGE_SENSITIVITY = 2.5;
     /** Sensitivity of corporate credit spreads to excess macroeconomic equity volatility. */
     public const MERTON_VOL_SENSITIVITY = 0.15;
-    /** Statutory ceiling cap for aggregate corporate credit spread during systemic credit crunches. */
-    public const MAX_CREDIT_SPREAD = 0.10;
+    /** Floor on the investment-grade spread (80 bps), the tightest IG OAS of the 2000s cycle. */
+    public const MIN_CREDIT_SPREAD = 0.008;
+    /** Cap on the investment-grade spread (650 bps): ICE BofA US Corporate OAS peaked near 620 bps in Dec 2008. */
+    public const MAX_CREDIT_SPREAD = 0.065;
     /** Macroeconomic volatility threshold above which excess volatility widens corporate credit spreads. */
     public const CREDIT_SPREAD_EXCESS_VOL_THRESHOLD = 0.20;
 
@@ -339,6 +341,8 @@ class MacroEngine
     public const HY_BASE_SPREAD_MULTIPLIER = 2.4;
     /** Non-linear sensitivity of high-yield spread to fallen angel downgrade cliff during contractions. */
     public const FALLEN_ANGEL_CLIFF_SENSITIVITY = 8.0;
+    /** Floor multiple of HY over IG spread; HY never trades inside 1.5x IG even at the tightest point of the cycle. */
+    public const HY_MIN_SPREAD_MULTIPLIER = 1.5;
     /** Statutory ceiling cap for aggregate high-yield corporate credit spread. */
     public const MAX_HY_CREDIT_SPREAD = 0.25;
 
@@ -553,13 +557,17 @@ class MacroEngine
     public const INTERBANK_SPREAD_KAPPA = 2.50;
     /** Volatility (sigma) of the continuous interbank liquidity spread diffusion. */
     public const INTERBANK_SPREAD_SIGMA = 0.02;
+    /** Floor on the interbank spread (1 bp) keeping the CIR process strictly positive. */
+    public const INTERBANK_MIN_SPREAD = 0.0001;
+    /** Cap on the interbank spread (500 bps): the TED spread's all-time high was 457 bps on 10 Oct 2008. */
+    public const INTERBANK_MAX_SPREAD = 0.05;
     /** Sensitivity coupling wholesale interbank lending spread to corporate credit stress. */
     public const INTERBANK_CREDIT_COUPLING = 0.20;
     /** Poisson intensity of severe interbank credit freeze/panic events. */
     public const INTERBANK_JUMP_PROBABILITY = 0.05;
-    /** Mean log-return magnitude of an interbank liquidity panic jump. */
-    public const INTERBANK_JUMP_MEAN = 1.60;
-    /** Volatility of the interbank panic jump magnitude. */
+    /** Mean log-size of a panic jump: median 2.7x (1.65x to 4.5x at one sigma), so a 2008-scale 5x freeze is the tail, not the norm. */
+    public const INTERBANK_JUMP_MEAN = 1.00;
+    /** Sigma of the jump log-size; at 0.50 the two-sigma low is exactly 1.0x, so a panic jump never shrinks the spread. */
     public const INTERBANK_JUMP_VOL = 0.50;
 
     // --- SOLOW-SWAN TOTAL FACTOR PRODUCTIVITY (TFP) ---

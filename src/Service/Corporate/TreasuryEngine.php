@@ -76,18 +76,34 @@ class TreasuryEngine
         $stock->setRetainedEarnings($newRetainedStr);
 
         // TOTAL EQUITY (Clean Surplus Accounting)
-        // physicalAssetAppreciation represents organic macro inflation scaling of physical fixed capital
+        // Equity moves only through earnings, paid-in capital and distributions. It is deliberately NOT
+        // revalued with inflation: US GAAP carries plant at historical cost and never writes it up, so the
+        // old revaluation created book value out of nothing, with no income and no cash behind it. Inflation
+        // now reaches the balance sheet the way it really does, through replacement-cost maintenance CapEx:
+        // the firm spends more cash to replace the same asset, and the plant ledger grows by what it spent.
+        //
+        // Stock-based compensation (ASC 718) is an expense inside net income whose credit side is additional
+        // paid-in capital, not cash: without adding it back here equity fell by a charge that never left the
+        // company, understating book value and invested capital a little more every quarter. It is added to
+        // paid-in capital, not to retained earnings, which is why the retained-earnings roll-forward above
+        // deliberately does not carry it.
         $currentEquityStr = $this->formatBc($stock->getTotalEquity());
-        $reApprecStr = $this->formatBc($ctx->physicalAssetAppreciation);
+        $stockCompStr = $this->formatBc($ctx->stockCompensation);
         $totalCashSpentStr = $this->formatBc($totalCashSpent);
-        $newEquityStr = \bcsub(\bcadd(\bcadd($currentEquityStr, $netIncomeStr, 4), $reApprecStr, 4), $totalCashSpentStr, 4);
+        $newEquityStr = \bcsub(\bcadd(\bcadd($currentEquityStr, $netIncomeStr, 4), $stockCompStr, 4), $totalCashSpentStr, 4);
         $stock->setTotalEquity($newEquityStr);
+
+        // THE MATURITY WALL (principal actually comes due)
+        $this->processDebtMaturities($ctx);
 
         // THE DEBT TRAP (Liquidity Crisis)
         $this->processEmergencyBorrowing($ctx);
 
         // EQUITY ISSUANCE (Secondary Offerings / Death Spirals)
         $this->processEquityIssuance($ctx);
+
+        // EVENT OF DEFAULT (a maturity nobody would fund)
+        $this->processPaymentDefault($ctx);
 
         // ARBITRAGE PAYDOWN (Escape negative carry)
         $this->processArbitragePaydown($ctx);
@@ -104,7 +120,7 @@ class TreasuryEngine
         $stock = $ctx->stock;
 
         $currentEquity = (float) $stock->getTotalEquity();
-        $preBuybackEquity = $currentEquity + $ctx->quarterlyNetIncome + $ctx->physicalAssetAppreciation - $ctx->totalPaid;
+        $preBuybackEquity = $currentEquity + $ctx->quarterlyNetIncome + $ctx->stockCompensation - $ctx->totalPaid;
 
         $totalDebt = $ctx->wholesaleDebt + $ctx->customerDeposits;
         $liveInvestedCapital = $this->corporateMetrics->calculateLiveInvestedCapital($preBuybackEquity, $totalDebt, $ctx->newTreasury);
@@ -196,7 +212,7 @@ class TreasuryEngine
     {
         $stock = $ctx->stock;
         $currentEquity = (float) $stock->getTotalEquity();
-        $preBuybackEquity = $currentEquity + $ctx->quarterlyNetIncome + $ctx->physicalAssetAppreciation - $ctx->totalPaid;
+        $preBuybackEquity = $currentEquity + $ctx->quarterlyNetIncome + $ctx->stockCompensation - $ctx->totalPaid;
 
         $totalDebt = $ctx->wholesaleDebt + $ctx->customerDeposits;
         $liveInvestedCapital = $this->corporateMetrics->calculateLiveInvestedCapital($preBuybackEquity, $totalDebt, $ctx->newTreasury);
@@ -284,6 +300,43 @@ class TreasuryEngine
         }
     }
 
+    /**
+     * Repays or refinances the principal that matured this quarter.
+     *
+     * Runs before emergency borrowing on purpose: a maturity the firm cannot refinance drains cash first,
+     * and only then does the treasury reach for penalty-rate financing to plug the hole it left. That
+     * ordering is what lets a solvent-but-illiquid firm fail the way real ones do.
+     */
+    private function processDebtMaturities(CapitalAllocationContext $ctx): void
+    {
+        if ($ctx->health === null) {
+            return;
+        }
+
+        $roll = $this->debtEngine->rollMaturities($ctx->stock, $ctx->health, $ctx->newTreasury);
+        if ($roll->maturingPrincipal <= 0.0) {
+            return;
+        }
+
+        $ctx->refinancingRefused = !$roll->refinanced;
+        if ($roll->refinanced) {
+            return;
+        }
+
+        $ctx->newTreasury -= $roll->principalRepaid;
+        $ctx->principalRepaid = $roll->principalRepaid;
+        $ctx->unfundedMaturity = $roll->unfundedShortfall;
+        $ctx->wholesaleDebt = (float) $ctx->stock->getWholesaleDebt();
+
+        if ($roll->principalRepaid > 500_000_000.0) {
+            $amtB = number_format($roll->principalRepaid / 1_000_000_000, 2);
+            $ctx->events[] = [
+                'description' => "Shut out of the bond market and forced to repay \${$amtB}B of maturing notes in cash.",
+                'shock' => -4.0
+            ];
+        }
+    }
+
     private function processEmergencyBorrowing(CapitalAllocationContext $ctx): void
     {
         $stock = $ctx->stock;
@@ -292,7 +345,9 @@ class TreasuryEngine
         if ($ctx->newTreasury < $minOperatingCash) {
             $cashShortfall = $minOperatingCash - $ctx->newTreasury;
 
-            if ($ctx->health->canIssueDebt) {
+            // A firm the primary market just refused cannot turn around and issue emergency paper into the
+            // same closed market, however willing its own coverage ratios look.
+            if ($ctx->health->canIssueDebt && !$ctx->refinancingRefused) {
                 $currentMarketRate = $ctx->health->rawMetrics->currentMarketRate ?? ($ctx->macroState->yield5yEma + (float) $stock->getCreditSpread());
                 $costOfEmergencyDebt = $currentMarketRate + FinancialConstants::EMERGENCY_DEBT_SPREAD_PENALTY;
 
@@ -387,6 +442,38 @@ class TreasuryEngine
                 $ctx->failedEmergencyBorrow = false;
             }
         }
+    }
+
+    /**
+     * Records an event of default when principal came due that the firm could neither refinance, repay from
+     * cash, nor cover with an emergency raise. This is a payment default, which is a separate failure mode
+     * from balance-sheet insolvency: a firm can be worth more than it owes on paper and still fail because
+     * the money was not there on the day. MarketOperator liquidates on either.
+     */
+    private function processPaymentDefault(CapitalAllocationContext $ctx): void
+    {
+        if ($ctx->unfundedMaturity <= 0.0) {
+            return;
+        }
+
+        // The emergency equity raise, if it landed, may have covered the gap after all.
+        $stillUnfunded = $ctx->newTreasury < $ctx->unfundedMaturity;
+        if (!$stillUnfunded) {
+            $ctx->newTreasury -= $ctx->unfundedMaturity;
+            $ctx->wholesaleDebt = max(0.0, $ctx->wholesaleDebt - $ctx->unfundedMaturity);
+            $ctx->stock->setWholesaleDebt((string) $ctx->wholesaleDebt);
+            $ctx->principalRepaid += $ctx->unfundedMaturity;
+            $ctx->unfundedMaturity = 0.0;
+
+            return;
+        }
+
+        $ctx->stock->setPaymentDefault(true);
+        $amtB = number_format($ctx->unfundedMaturity / 1_000_000_000, 2);
+        $ctx->events[] = [
+            'description' => "Failed to repay \${$amtB}B of maturing debt, triggering an event of default.",
+            'shock' => -25.0
+        ];
     }
 
     private function processArbitragePaydown(CapitalAllocationContext $ctx): void

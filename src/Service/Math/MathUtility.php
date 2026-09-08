@@ -21,6 +21,10 @@ class MathUtility
      */
     private ?float $spareNormal = null;
 
+    // --- Robust Scale Estimation ---
+    /** Ratio of a zero-mean normal variable's mean absolute deviation to its sigma, sqrt(2 / pi). */
+    public const MEAN_ABSOLUTE_DEVIATION_TO_SIGMA = 0.7978845608028654;
+
     private float $randMaxInverse;
     private float $twoPi;
 
@@ -175,6 +179,33 @@ class MathUtility
         return sqrt((1.0 - $boundedPhi) / (1.0 + $boundedPhi));
     }
 
+
+    /**
+     * Estimates the normal-equivalent scale (sigma) of a zero-centred sample from its mean absolute value.
+     *
+     * For a zero-mean normal variable E|X| = sigma * sqrt(2 / pi), so dividing the realized mean absolute
+     * value by that constant recovers sigma. This is preferred to the sample standard deviation when the
+     * sample is fat tailed, as earnings surprises are: a single outlier quarter dominates a sum of squares
+     * and pushes the estimate far above the scale of a typical quarter, whereas the mean absolute value
+     * degrades gracefully.
+     *
+     * @param list<float> $samples Observations centred on zero (an unbiased forecast error has zero mean).
+     * @return float The estimated scale, or 0.0 when there is nothing to estimate from.
+     */
+    public function calculateMeanAbsoluteScale(array $samples): float
+    {
+        $count = count($samples);
+        if ($count === 0) {
+            return 0.0;
+        }
+
+        $total = 0.0;
+        foreach ($samples as $sample) {
+            $total += abs((float) $sample);
+        }
+
+        return ($total / $count) / self::MEAN_ABSOLUTE_DEVIATION_TO_SIGMA;
+    }
 
     /**
      * Calculates a log-normal random draw, used for right-skewed distributions like M&A synergy.
@@ -1299,11 +1330,10 @@ class MathUtility
         float $capacityUtilization,
         float $interbankLiquiditySpread
     ): float {
-        // Dynamic shifts in Days Sales Outstanding (DSO), Days Inventory Outstanding (DIO), and Days Payable Outstanding (DPO)
-        $dsoShiftDays = ($creditSpread - MacroEngine::BASE_CREDIT_SPREAD) * FinancialConstants::CCC_DSO_CREDIT_SPREAD_SENSITIVITY;
-        $dioShiftDays = (1.0 - $capacityUtilization) * FinancialConstants::CCC_DIO_CAPACITY_SENSITIVITY;
-        // Under interbank liquidity stress, vendors demand faster payment (DPO contracts)
-        $dpoShiftDays = - ($interbankLiquiditySpread - MacroEngine::INTERBANK_BASELINE_SPREAD) * FinancialConstants::CCC_DPO_LIQUIDITY_SENSITIVITY;
+        $shifts = $this->calculateWorkingCapitalDayShifts($creditSpread, $capacityUtilization, $interbankLiquiditySpread);
+        $dsoShiftDays = $shifts['dso'];
+        $dioShiftDays = $shifts['dio'];
+        $dpoShiftDays = $shifts['dpo'];
 
         // Total CCC expansion / contraction days translated to annual intensity units (Days / 365)
         // Standard formula: CCC = DSO + DIO - DPO
@@ -1320,6 +1350,30 @@ class MathUtility
         }
 
         return max(FinancialConstants::MIN_POSITIVE_NWC_INTENSITY, min(FinancialConstants::MAX_POSITIVE_NWC_INTENSITY, $dynamicIntensity));
+    }
+
+    /**
+     * The three separate day-count movements behind a cash conversion cycle shift.
+     *
+     * Kept as its own method because the components are not interchangeable once working capital is carried
+     * as real balances: a receivable that ages is exposed to customer default, while inventory that piles up
+     * is exposed to writedown. Only the aggregate is a single number; the risks attach to the parts.
+     *
+     * @return array{dso: float, dio: float, dpo: float} Day-count shifts, signed as movements in each component.
+     */
+    public function calculateWorkingCapitalDayShifts(
+        float $creditSpread,
+        float $capacityUtilization,
+        float $interbankLiquiditySpread
+    ): array {
+        return [
+            // Customers stretch payment when credit is dear.
+            'dso' => ($creditSpread - MacroEngine::BASE_CREDIT_SPREAD) * FinancialConstants::CCC_DSO_CREDIT_SPREAD_SENSITIVITY,
+            // Unsold goods pile up when the plant runs below capacity.
+            'dio' => (1.0 - $capacityUtilization) * FinancialConstants::CCC_DIO_CAPACITY_SENSITIVITY,
+            // Under interbank liquidity stress, vendors demand faster payment (DPO contracts).
+            'dpo' => - ($interbankLiquiditySpread - MacroEngine::INTERBANK_BASELINE_SPREAD) * FinancialConstants::CCC_DPO_LIQUIDITY_SENSITIVITY,
+        ];
     }
 
     /**
@@ -1391,6 +1445,14 @@ class MathUtility
      * @param float $interbankStress  Wholesale interbank liquidity stress above baseline.
      * @param float $hyBaseMultiplier Baseline multiple of HY spread over IG spread (e.g. 2.4x).
      * @param float $fallenAngelSens  Sensitivity coefficient for non-linear HY spread blowout on contractions.
+     * @param float $leverageSens     Merton distance-to-default sensitivity of the IG spread to the output gap.
+     * @param float $volSens          IG spread widening per unit of equity volatility above the threshold.
+     * @param float $volThreshold     Equity volatility below which no volatility premium is charged.
+     * @param float $contagionSens    IG spread widening per unit of interbank stress.
+     * @param float $minIgSpread      Floor on the IG spread.
+     * @param float $maxIgSpread      Cap on the IG spread.
+     * @param float $hyMinMultiplier  Floor multiple of HY over IG.
+     * @param float $maxHySpread      Cap on the HY spread.
      * @return array{ig: float, hy: float} Calculated IG and HY credit spreads.
      */
     public function calculateDualTrancheCreditSpreads(
@@ -1398,20 +1460,28 @@ class MathUtility
         float $outputGapEma,
         float $marketVolEma,
         float $interbankStress,
-        float $hyBaseMultiplier = 2.4,
-        float $fallenAngelSens = 8.0
+        float $hyBaseMultiplier = MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
+        float $fallenAngelSens = MacroEngine::FALLEN_ANGEL_CLIFF_SENSITIVITY,
+        float $leverageSens = MacroEngine::MERTON_LEVERAGE_SENSITIVITY,
+        float $volSens = MacroEngine::MERTON_VOL_SENSITIVITY,
+        float $volThreshold = MacroEngine::CREDIT_SPREAD_EXCESS_VOL_THRESHOLD,
+        float $contagionSens = MacroEngine::INTERBANK_CREDIT_CONTAGION_SENSITIVITY,
+        float $minIgSpread = MacroEngine::MIN_CREDIT_SPREAD,
+        float $maxIgSpread = MacroEngine::MAX_CREDIT_SPREAD,
+        float $hyMinMultiplier = MacroEngine::HY_MIN_SPREAD_MULTIPLIER,
+        float $maxHySpread = MacroEngine::MAX_HY_CREDIT_SPREAD
     ): array {
-        $cycleSpread = $baseIgSpread * exp(-2.5 * $outputGapEma);
-        $excessVol = max(0.0, $marketVolEma - 0.20);
-        $volSpread = 0.15 * $excessVol;
-        $contagionSpread = $interbankStress * 2.0;
+        $cycleSpread = $baseIgSpread * exp(-$leverageSens * $outputGapEma);
+        $excessVol = max(0.0, $marketVolEma - $volThreshold);
+        $volSpread = $volSens * $excessVol;
+        $contagionSpread = $interbankStress * $contagionSens;
 
-        $igSpread = max(0.008, min(0.10, $cycleSpread + $volSpread + $contagionSpread));
+        $igSpread = max($minIgSpread, min($maxIgSpread, $cycleSpread + $volSpread + $contagionSpread));
 
         // Jarrow-Lando-Turnbull (1997): Speculative-grade default intensity surges exponentially during recessions
         $contractionDepth = max(0.0, -$outputGapEma);
         $fallenAngelMultiplier = exp($fallenAngelSens * $contractionDepth);
-        $hySpread = max($igSpread * 1.5, min(0.25, $igSpread * $hyBaseMultiplier * $fallenAngelMultiplier));
+        $hySpread = max($igSpread * $hyMinMultiplier, min($maxHySpread, $igSpread * $hyBaseMultiplier * $fallenAngelMultiplier));
 
         return [
             'ig' => $igSpread,

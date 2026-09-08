@@ -246,10 +246,28 @@ class MarketResetCommand extends Command
                     industry = :industry,
                     earnings_momentum_z = NULL,
                     is_bankrupt = 0,
-                    net_working_capital = NULL,
+                    payment_default = 0,
                     accruals_ratio = 0.0,
                     net_operating_loss = 0.0000,
-                    credit_rating = :credit_rating
+                    credit_rating = :credit_rating,
+                    -- Every ledger and learned parameter goes back to its unseeded state. Each of these is
+                    -- nullable (or defaulted) precisely so the engine can re-seed it on the first earnings
+                    -- report; leaving stale values behind would carry the old market into the new one.
+                    receivables = NULL,
+                    inventory = NULL,
+                    payables = NULL,
+                    receivables_allowance = 0.0000,
+                    gross_ppe = NULL,
+                    accumulated_depreciation = 0.0000,
+                    ppe_vintage_deflator = NULL,
+                    ppe_tax_basis = NULL,
+                    deferred_tax_liability = 0.0000,
+                    asset_turnover = NULL,
+                    lifecycle_stage = NULL,
+                    inflation_pass_through = NULL,
+                    reported_operating_margin = NULL,
+                    quarterly_net_income_history = NULL,
+                    earnings_surprise_history = NULL
                 WHERE ticker = :ticker',
                 [
                     'credit_rating' => 'BBB',

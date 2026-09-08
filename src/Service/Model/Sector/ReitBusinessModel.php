@@ -340,15 +340,16 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null, float $depreciation = 0.0): float
     {
         $kappa = $this->getReversionSpeed();
         $moatSpread = $this->getMoatSpread();
 
-        // In EarningsEngine, $ebit is calculated as actualRevenue - (variableCosts + fixedCosts) without deducting depreciation.
-        // Therefore, $ebit already represents Net Operating Income (NOI).
+        // Net Operating Income is property income before depreciation, and it is the numerator of the cap
+        // rate this return reverts toward below. EBIT is now struck after depreciation like every other
+        // model, so the charge is added back here to recover NOI.
         $effectiveCapital = max(1.0, abs($investedCapital));
-        $truePostTaxReturn = ($ebit / $effectiveCapital) * self::ROIC_ANNUALIZATION_MULT;
+        $truePostTaxReturn = (($ebit + $depreciation) / $effectiveCapital) * self::ROIC_ANNUALIZATION_MULT;
 
         $stock->setCurrentRoic((string) max(self::MIN_ROIC_CLAMP, min(self::MAX_ROIC_CLAMP, $truePostTaxReturn)));
 
@@ -385,9 +386,10 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
     public function getInterestCoverage(float $ebit, float $interestExpense, float $depreciation = 0.0, float $interestIncome = 0.0): float
     {
-        // In EarningsEngine, $ebit already represents Net Operating Income (NOI) without depreciation deducted.
-        // Therefore, we do not add depreciation back to prevent double-counting.
-        $ffo = $ebit + $interestIncome;
+        // Funds From Operations (NAREIT): EBIT now sits below the depreciation line like every other model,
+        // so real estate depreciation is added back here. A building's book depreciation is famously
+        // disconnected from its economic wear, which is exactly why the industry covenants on FFO.
+        $ffo = $ebit + $depreciation + $interestIncome;
         return $interestExpense > 0 ? ($ffo / $interestExpense) : ($ffo > 0 ? self::INFINITE_ICR_POS_FALLBACK : self::INFINITE_ICR_NEG_FALLBACK);
     }
 

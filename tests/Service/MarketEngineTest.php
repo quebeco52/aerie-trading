@@ -46,7 +46,10 @@ class MarketEngineTest extends TestCase
         $this->assertIsArray($result);
         $this->assertNull($result['shock'], 'Shock should be null when no jump occurs.');
 
-        $this->assertEqualsWithDelta(0.1951, $result['next_volatility'], 0.001);
+        // The variance anchor sits below the 20% long-run input because the market-wide jump budget reclaims
+        // part of it: at unit beta the district jump delivers more variance than the 25% ceiling allows, so
+        // the drag binds at a quarter of long-run variance and the diffusion settles at sqrt(0.03).
+        $this->assertEqualsWithDelta(0.1723, $result['next_volatility'], 0.001);
 
         $this->assertIsFloat($result['price']);
         $this->assertGreaterThan(0, $result['price']);

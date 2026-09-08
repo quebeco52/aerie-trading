@@ -8,6 +8,7 @@ use App\DTO\CapitalAllocationContext;
 use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
+use App\DTO\MaturityRollDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CapExEngine;
 use App\Service\Corporate\DebtEngine;
@@ -37,6 +38,9 @@ class TreasuryEngineTest extends TestCase
         $this->debtEngine = $this->createMock(DebtEngine::class);
         $this->capExEngine = $this->createStub(CapExEngine::class);
         $this->mathUtility = new MathUtility();
+
+        // These tests are not about the maturity wall, so no principal comes due in them.
+        $this->debtEngine->method('rollMaturities')->willReturn(new MaturityRollDTO());
 
         $this->treasuryEngine = new TreasuryEngine(
             $this->corporateMetrics,
@@ -439,5 +443,205 @@ class TreasuryEngineTest extends TestCase
         $this->assertTrue($ctx->debtActionTaken);
         $this->assertTrue($ctx->recapActionTaken);
         $this->assertGreaterThan(0.0, $ctx->debtIssued);
+    }
+
+    /**
+     * ASC 718: stock-based compensation is an expense inside net income whose credit side is additional
+     * paid-in capital. Equity must roll forward net of it, otherwise book value falls every quarter by a
+     * charge that never left the company.
+     */
+    public function testStockCompensationIsCreditedBackToEquityAsPaidInCapital(): void
+    {
+        $stock = $this->createSolventCorporate();
+        $ctx = $this->createAllocationContext($stock, stockCompensation: 40_000_000.0);
+
+        $this->treasuryEngine->finalizeLiquidity($ctx);
+
+        // Opening 1B + net income 100M + SBC 40M - dividends 0 - buybacks 0
+        $this->assertEqualsWithDelta(1_140_000_000.0, (float) $stock->getTotalEquity(), 1.0);
+    }
+
+    /**
+     * The credit is paid-in capital, not retained earnings: only income less distributions reaches RE.
+     */
+    public function testStockCompensationDoesNotInflateRetainedEarnings(): void
+    {
+        $stock = $this->createSolventCorporate();
+        $ctx = $this->createAllocationContext($stock, stockCompensation: 40_000_000.0);
+
+        $this->treasuryEngine->finalizeLiquidity($ctx);
+
+        // Opening 500M + net income 100M, with no dividends paid
+        $this->assertEqualsWithDelta(600_000_000.0, (float) $stock->getRetainedEarnings(), 1.0);
+    }
+
+    /**
+     * A firm that grants no equity compensation must roll forward exactly as before this rule existed.
+     */
+    public function testEquityRollForwardUnchangedWhenThereIsNoStockCompensation(): void
+    {
+        $stock = $this->createSolventCorporate();
+        $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0);
+
+        $this->treasuryEngine->finalizeLiquidity($ctx);
+
+        $this->assertEqualsWithDelta(1_100_000_000.0, (float) $stock->getTotalEquity(), 1.0);
+    }
+
+    /**
+     * A firm shut out of the bond market repays maturing principal out of cash. The principal genuinely
+     * leaves the balance sheet, which is the whole difference between a maturity ladder and a coupon reset.
+     */
+    public function testRefusedRefinancingRepaysPrincipalFromCash(): void
+    {
+        $stock = $this->createSolventCorporate();
+        $stock->setWholesaleDebt('2000000000.00');
+
+        $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0);
+        $ctx->wholesaleDebt = 2_000_000_000.0;
+        $ctx->newTreasury = 1_000_000_000.0;
+
+        $this->debtEngine = $this->createMock(DebtEngine::class);
+        $this->debtEngine->method('rollMaturities')->willReturn(
+            new MaturityRollDTO(maturingPrincipal: 300_000_000.0, refinanced: false, principalRepaid: 300_000_000.0, unfundedShortfall: 0.0)
+        );
+        $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
+
+        $engine->finalizeLiquidity($ctx);
+
+        $this->assertTrue($ctx->refinancingRefused);
+        $this->assertEqualsWithDelta(300_000_000.0, $ctx->principalRepaid, 1.0);
+        $this->assertFalse($stock->isPaymentDefault(), 'a firm that pays in full has not defaulted');
+    }
+
+    /**
+     * Principal the firm can neither refinance nor fund is an event of default. This is a distinct failure
+     * mode from insolvency: the balance sheet here is perfectly solvent, the money simply was not there.
+     */
+    public function testUnfundableMaturityTriggersAPaymentDefault(): void
+    {
+        $stock = $this->createSolventCorporate();
+        $stock->setWholesaleDebt('2000000000.00');
+
+        // Price zero: there is no equity market to rescue it either.
+        $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0, currentPrice: 0.0);
+        $ctx->wholesaleDebt = 2_000_000_000.0;
+        $ctx->newTreasury = 10_000_000.0;
+
+        $this->debtEngine = $this->createMock(DebtEngine::class);
+        $this->debtEngine->method('rollMaturities')->willReturn(
+            new MaturityRollDTO(maturingPrincipal: 300_000_000.0, refinanced: false, principalRepaid: 10_000_000.0, unfundedShortfall: 290_000_000.0)
+        );
+        $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
+
+        $engine->finalizeLiquidity($ctx);
+
+        $this->assertTrue($stock->isPaymentDefault(), 'an unfundable maturity must be an event of default');
+        $this->assertGreaterThan($stock->getTotalEquity() * 0, (float) $stock->getTotalEquity(), 'the firm is still notionally solvent');
+    }
+
+    /**
+     * A firm the primary market just refused cannot turn around and issue emergency paper into the same
+     * closed market. Without this the maturity wall would be toothless: every refusal would be papered over
+     * by penalty-rate borrowing from lenders who had just said no.
+     */
+    public function testAFirmRefusedRefinancingCannotIssueEmergencyDebt(): void
+    {
+        $stock = $this->createSolventCorporate();
+        $stock->setWholesaleDebt('2000000000.00');
+
+        $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0, currentPrice: 0.0);
+        $ctx->wholesaleDebt = 2_000_000_000.0;
+        $ctx->newTreasury = 5_000_000.0;
+
+        $this->debtEngine = $this->createMock(DebtEngine::class);
+        $this->debtEngine->method('rollMaturities')->willReturn(
+            new MaturityRollDTO(maturingPrincipal: 100_000_000.0, refinanced: false, principalRepaid: 5_000_000.0, unfundedShortfall: 95_000_000.0)
+        );
+        $this->debtEngine->expects($this->never())->method('issueDebt');
+        $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
+
+        $engine->finalizeLiquidity($ctx);
+
+        $this->assertTrue($ctx->failedEmergencyBorrow);
+    }
+
+    private function createSolventCorporate(): Stock
+    {
+        $stock = new Stock();
+        $stock->setTicker('SBCC');
+        $stock->setIndustry('Information Technology Services');
+        $stock->setTotalEquity('1000000000.00');
+        $stock->setRetainedEarnings('500000000.00');
+        $stock->setWholesaleDebt('200000000.00');
+        $stock->setCorporateTreasury('300000000.00');
+        $stock->setCreditSpread('0.02');
+
+        return $stock;
+    }
+
+    private function createAllocationContext(Stock $stock, float $stockCompensation, float $currentPrice = 50.0): CapitalAllocationContext
+    {
+        $macro = MacroStateDTO::fromArray([
+            'policy_rate_ema' => 0.04,
+            'yield_5y_ema' => 0.045,
+        ]);
+
+        $ctx = new CapitalAllocationContext(
+            stock: $stock,
+            macroState: $macro,
+            actualAnnualEps: 4.0,
+            quarterlyFcfPerShare: 1.0,
+            currentPrice: $currentPrice,
+            sharesOutstanding: 100_000_000,
+            actualTotalNetIncome: 100_000_000,
+            stockCompensation: $stockCompensation
+        );
+
+        $ctx->strategy = new StandardCorporateBusinessModel();
+        $ctx->businessModel = 'tech';
+        $ctx->quarterlyNetIncome = 100_000_000.0;
+        $ctx->newTreasury = 300_000_000.0;
+        $ctx->operatingBase = 1_000_000_000.0;
+        $ctx->wholesaleDebt = 200_000_000.0;
+        $ctx->customerDeposits = 0.0;
+        // No distributions this quarter, so equity moves only through income and the SBC credit.
+        $ctx->totalPaid = 0.0;
+        $ctx->totalCashSpent = 0.0;
+        $ctx->debtActionTaken = true; // suppress the deleveraging sweep; this test isolates the equity roll-forward
+
+        $debtMetrics = new DebtMetricsDTO(
+            interestExpense: 10_000_000.0,
+            blendedRate: 0.05,
+            historicalFixedRate: 0.05,
+            dynamicSpread: 0.02,
+            currentMarketRate: 0.05,
+            wholesaleRate: 0.05,
+            ebit: 150_000_000.0,
+            revenue: 800_000_000.0,
+            depreciation: 20_000_000.0,
+            ebitda: 170_000_000.0
+        );
+
+        $ctx->health = new DebtHealthDTO(
+            grossCost: 0.05,
+            effectiveCost: 0.05,
+            cashYield: 0.04,
+            isNegativeCarry: false,
+            isSevereNegativeCarry: false,
+            interestCoverage: 15.0,
+            wantsToPaydownDebt: false,
+            canIssueDebt: true,
+            debtTolerance: 1.0,
+            wacc: 0.08,
+            costOfEquity: 0.10,
+            leveredBeta: 1.0,
+            rawMetrics: $debtMetrics,
+            isLiquidityCrisis: false,
+            isLiquidityWarning: false,
+            isUnderLeveraged: false
+        );
+
+        return $ctx;
     }
 }

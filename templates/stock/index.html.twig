@@ -1441,6 +1441,41 @@
 							</div>
 						</div>
 
+						{# 2b. Balance Sheet & Cash Flow Statement #}
+						<div id="financial-statements-panel" class="chart-card hidden bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col" data-financial-category="balance">
+							<div class="flex items-start justify-between mb-3 gap-2">
+								<div class="flex items-center gap-2.5 min-w-0">
+									<div class="p-2 rounded bg-teal-500/10 text-teal-400 shrink-0">
+										<span class="material-symbols-outlined text-lg leading-none">account_balance</span>
+									</div>
+									<div class="min-w-0">
+										<div class="flex items-center gap-2 flex-wrap">
+											<h4 class="text-xs font-bold text-on-surface truncate">Balance Sheet & Cash Flow</h4>
+											<span class="text-[9px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20 shrink-0">FASB: ASC 210 / 230</span>
+										</div>
+										<p class="text-[10px] text-on-surface-variant truncate">Assets, claims against them, and the cash the quarter actually produced</p>
+									</div>
+								</div>
+								<div class="flex items-center gap-2 shrink-0">
+									<div class="hidden sm:flex flex-col items-end text-right">
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Life cycle</span>
+										<span class="text-xs font-mono font-bold text-on-surface capitalize" id="lifecycle-stage-badge">-</span>
+									</div>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Latest</span>
+								</div>
+							</div>
+							<div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+								<div>
+									<h5 class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/70 mb-2">Balance Sheet</h5>
+									<div id="balance-sheet-rows"></div>
+								</div>
+								<div>
+									<h5 class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/70 mb-2">Cash Flow</h5>
+									<div id="cash-flow-rows"></div>
+								</div>
+							</div>
+						</div>
+
 						{# 3. Debt vs Equity #}
 						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="balance">
 							<div class="flex items-start justify-between mb-3 gap-2">

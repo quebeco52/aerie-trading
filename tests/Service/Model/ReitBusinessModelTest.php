@@ -94,17 +94,21 @@ class ReitBusinessModelTest extends TestCase
     {
         $model = new ReitBusinessModel();
 
-        // Standard FFO ICR: (EBIT + Interest Income) / Interest Expense
-        // (EBIT already represents NOI without depreciation deducted in this system)
-        // ebit = 100, interest income = 10, interest expense = 80 => (100 + 10) / 80 = 1.375
+        // FFO ICR (NAREIT): (EBIT + Depreciation + Interest Income) / Interest Expense. EBIT is struck
+        // after depreciation like every other model, so property depreciation is added back to recover FFO.
+        // ebit = 100, depreciation = 50, interest income = 10, interest expense = 80 => 160 / 80 = 2.0
         $icr = $model->getInterestCoverage(ebit: 100.0, interestExpense: 80.0, depreciation: 50.0, interestIncome: 10.0);
-        $this->assertEqualsWithDelta(1.375, $icr, 0.0001);
+        $this->assertEqualsWithDelta(2.0, $icr, 0.0001);
+
+        // The add-back is what distinguishes FFO coverage from ordinary EBIT coverage.
+        $withoutAddBack = $model->getInterestCoverage(ebit: 100.0, interestExpense: 80.0, depreciation: 0.0, interestIncome: 10.0);
+        $this->assertEqualsWithDelta(1.375, $withoutAddBack, 0.0001);
 
         // Zero interest expense with positive FFO -> Infinite positive fallback
         $posIcr = $model->getInterestCoverage(ebit: 100.0, interestExpense: 0.0, depreciation: 50.0);
         $this->assertEquals(ReitBusinessModel::INFINITE_ICR_POS_FALLBACK, $posIcr);
 
-        // Zero interest expense with negative FFO -> Infinite negative fallback
+        // Zero interest expense with negative FFO -> Infinite negative fallback (the add-back cannot save it)
         $negIcr = $model->getInterestCoverage(ebit: -200.0, interestExpense: 0.0, depreciation: 50.0);
         $this->assertEquals(ReitBusinessModel::INFINITE_ICR_NEG_FALLBACK, $negIcr);
     }

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Service;
 
+use App\DTO\DebtHealthDTO;
+use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\DebtEngine;
@@ -454,6 +456,154 @@ class DebtEngineTest extends TestCase
         $resultInsolvent = $engine->calculateAltmanZScore($reinsurerInsolvent, -50000000.0, 100000000.0, 0.01);
         $this->assertSame('Distress', $resultInsolvent['zone']);
         $this->assertTrue($resultInsolvent['is_bankrupt'], 'Insurer with negative equity is insolvent and bankrupt.');
+    }
+
+    /**
+     * With the primary market open, a maturity is refinanced: the principal survives and only its coupon
+     * reprices. This is the ordinary case and must stay the ordinary case, or investment-grade issuers
+     * would be forced to liquidate assets every quarter.
+     */
+    public function testOpenPrimaryMarketRefinancesMaturingPrincipal(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+
+        $stock = $this->buildMaturityIssuer('BBB', 0.02);
+        $health = $this->buildHealthForMaturity(interestCoverage: 6.0, dynamicSpread: 0.02);
+
+        $roll = $engine->rollMaturities($stock, $health, 50_000_000_000.0);
+
+        $this->assertTrue($roll->refinanced);
+        $this->assertGreaterThan(0.0, $roll->maturingPrincipal);
+        $this->assertEquals(0.0, $roll->principalRepaid);
+        $this->assertEquals(0.0, $roll->unfundedShortfall);
+        $this->assertEqualsWithDelta(10_000_000_000.0, (float) $stock->getWholesaleDebt(), 1.0, 'refinanced principal must not be repaid');
+    }
+
+    /**
+     * When spreads blow out to crisis levels the primary market shuts and the principal must be repaid in
+     * cash. Before this existed no firm could ever be refused a refinancing, so the most common real-world
+     * failure — a maturity landing in a quarter when nobody will lend — could not happen at all.
+     */
+    public function testClosedPrimaryMarketForcesCashRepaymentOfPrincipal(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+
+        $stock = $this->buildMaturityIssuer('B', 0.02);
+        $health = $this->buildHealthForMaturity(interestCoverage: 6.0, dynamicSpread: 0.18);
+
+        $roll = $engine->rollMaturities($stock, $health, 50_000_000_000.0);
+
+        $this->assertFalse($roll->refinanced);
+        $this->assertGreaterThan(0.0, $roll->principalRepaid);
+        $this->assertEquals(0.0, $roll->unfundedShortfall, 'a cash-rich firm repays in full');
+        $this->assertEqualsWithDelta(
+            10_000_000_000.0 - $roll->maturingPrincipal,
+            (float) $stock->getWholesaleDebt(),
+            1.0,
+            'repaid principal must leave the balance sheet'
+        );
+    }
+
+    /**
+     * A firm that can neither refinance nor pay carries the gap forward as an unfunded shortfall, which is
+     * what the treasury then has to cover with emergency financing or default on.
+     */
+    public function testUnfundableMaturityIsReportedAsAShortfall(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+
+        $stock = $this->buildMaturityIssuer('CCC', 0.02);
+        $health = $this->buildHealthForMaturity(interestCoverage: 0.4, dynamicSpread: 0.02);
+
+        $roll = $engine->rollMaturities($stock, $health, 100_000_000.0);
+
+        $this->assertFalse($roll->refinanced, 'a firm that cannot cover its interest cannot roll its principal');
+        $this->assertEqualsWithDelta(100_000_000.0, $roll->principalRepaid, 1.0);
+        $this->assertGreaterThan(0.0, $roll->unfundedShortfall);
+        $this->assertEqualsWithDelta(
+            $roll->maturingPrincipal - $roll->principalRepaid,
+            $roll->unfundedShortfall,
+            1.0
+        );
+    }
+
+    /**
+     * Market access is looser than the test for taking on NEW leverage: an investment-grade issuer with
+     * ample coverage rolls its debt straight through a recession, which is what actually happens.
+     */
+    public function testInvestmentGradeIssuerRefinancesThroughAWidenedButFunctioningMarket(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+
+        $stock = $this->buildMaturityIssuer('A', 0.02);
+        $health = $this->buildHealthForMaturity(interestCoverage: 3.0, dynamicSpread: 0.06);
+
+        $this->assertTrue($engine->rollMaturities($stock, $health, 0.0)->refinanced);
+    }
+
+    /**
+     * A debt-free firm has no maturity ladder at all.
+     */
+    public function testDebtFreeFirmHasNothingToRoll(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+
+        $stock = $this->buildMaturityIssuer('AAA', 0.01);
+        $stock->setWholesaleDebt('0.00');
+
+        $roll = $engine->rollMaturities($stock, $this->buildHealthForMaturity(6.0, 0.01), 0.0);
+
+        $this->assertEquals(0.0, $roll->maturingPrincipal);
+        $this->assertTrue($roll->refinanced);
+    }
+
+    private function buildMaturityIssuer(string $rating, float $creditSpread): Stock
+    {
+        $stock = new Stock();
+        $stock->setTicker('MATR');
+        $stock->setIndustry('Auto Manufacturers');
+        $stock->setWholesaleDebt('10000000000.00');
+        $stock->setTotalEquity('20000000000.00');
+        $stock->setCorporateTreasury('5000000000.00');
+        $stock->setCreditRating($rating);
+        $stock->setCreditSpread((string) $creditSpread);
+
+        return $stock;
+    }
+
+    private function buildHealthForMaturity(float $interestCoverage, float $dynamicSpread): DebtHealthDTO
+    {
+        $metrics = new DebtMetricsDTO(
+            interestExpense: 500_000_000.0,
+            blendedRate: 0.05,
+            historicalFixedRate: 0.05,
+            dynamicSpread: $dynamicSpread,
+            currentMarketRate: 0.05 + $dynamicSpread,
+            wholesaleRate: 0.05,
+            ebit: 3_000_000_000.0,
+            revenue: 20_000_000_000.0,
+            depreciation: 500_000_000.0,
+            ebitda: 3_500_000_000.0
+        );
+
+        return new DebtHealthDTO(
+            grossCost: 0.05,
+            effectiveCost: 0.05,
+            cashYield: 0.03,
+            isNegativeCarry: false,
+            isSevereNegativeCarry: false,
+            interestCoverage: $interestCoverage,
+            wantsToPaydownDebt: false,
+            canIssueDebt: $interestCoverage > 3.5,
+            debtTolerance: 2.0,
+            wacc: 0.08,
+            costOfEquity: 0.10,
+            leveredBeta: 1.0,
+            rawMetrics: $metrics,
+            isLiquidityCrisis: $interestCoverage < 0.0,
+            isLiquidityWarning: $interestCoverage < 2.0,
+            isUnderLeveraged: false
+        );
     }
 
     public function testIssueDebtUpdatesWholesaleBalanceAndWeightedHistoricalRate(): void

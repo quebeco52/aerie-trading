@@ -39,8 +39,9 @@ class CreditFiscalSubsystem
             fallenAngelSens: MacroEngine::FALLEN_ANGEL_CLIFF_SENSITIVITY
         );
 
-        $state->macroCreditSpread = min(MacroEngine::MAX_CREDIT_SPREAD, $trancheSpreads['ig']);
-        $state->highYieldCreditSpread = min(MacroEngine::MAX_HY_CREDIT_SPREAD, $trancheSpreads['hy']);
+        // Both tranches are already floored and capped inside the formula (MIN/MAX_CREDIT_SPREAD, MAX_HY_CREDIT_SPREAD).
+        $state->macroCreditSpread = $trancheSpreads['ig'];
+        $state->highYieldCreditSpread = $trancheSpreads['hy'];
     }
 
     /**
@@ -87,7 +88,10 @@ class CreditFiscalSubsystem
             $jumpAmount = $baseProcess * ($jumpData['multiplier'] - 1.0);
         }
 
-        $state->interbankLiquiditySpread = max(0.0001, min(0.10, $baseProcess + $jumpAmount));
+        $state->interbankLiquiditySpread = max(
+            MacroEngine::INTERBANK_MIN_SPREAD,
+            min(MacroEngine::INTERBANK_MAX_SPREAD, $baseProcess + $jumpAmount)
+        );
     }
 
     /**

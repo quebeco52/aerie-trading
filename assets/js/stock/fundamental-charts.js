@@ -51,6 +51,7 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
     }
 
     const latest = rawReports[rawReports.length - 1];
+    renderFinancialStatements(latest);
     const spreadEl = document.getElementById('stat-bank-spread');
     if (spreadEl && latest) {
         const bRate = parseFloat(latest.blended_rate || 0) * 100;
@@ -1747,6 +1748,106 @@ export function resizeFundamentalCharts() {
             try { c.resize(); } catch (e) {}
         }
     });
+}
+
+/**
+ * Formats a signed dollar amount compactly, keeping the sign visible: on a cash flow statement the sign
+ * is the whole point, since it is what separates a firm investing from one liquidating.
+ */
+function formatStatementAmount(value) {
+    const n = parseFloat(value || 0);
+    if (!isFinite(n)) return '-';
+
+    const abs = Math.abs(n);
+    const sign = n < 0 ? '-' : '';
+    if (abs >= 1e12) return `${sign}$${(abs / 1e12).toFixed(2)}T`;
+    if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
+    if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(2)}M`;
+    if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(2)}K`;
+    return `${sign}$${abs.toFixed(0)}`;
+}
+
+function renderStatementRows(containerId, rows) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    container.innerHTML = rows.map(row => {
+        if (row.divider) {
+            return '<div class="border-t border-outline-variant/20 my-1"></div>';
+        }
+
+        const emphasis = row.total
+            ? 'font-bold text-on-surface'
+            : (row.indent ? 'text-on-surface-variant pl-3' : 'text-on-surface-variant');
+        const valueColor = row.signed && parseFloat(row.value || 0) < 0 ? 'text-negative' : 'text-on-surface';
+
+        return `<div class="flex justify-between items-baseline py-0.5 text-xs">
+            <span class="${emphasis}">${row.label}</span>
+            <span class="font-mono tabular-nums ${row.total ? 'font-bold' : ''} ${valueColor}">${formatStatementAmount(row.value)}</span>
+        </div>`;
+    }).join('');
+}
+
+/**
+ * Renders the balance sheet and cash flow statement from the most recent quarterly report.
+ *
+ * These are the two statements the page never had: everything on screen was an income statement line or a
+ * ratio derived from one. With the asset, working capital and deferred tax ledgers now real, the filing
+ * can be shown as a filing.
+ */
+function renderFinancialStatements(latest) {
+    if (!latest) return;
+
+    const num = (k) => parseFloat(latest[k] || 0);
+    const totalAssets = num('total_assets');
+
+    // A report written before these columns existed has nothing to show; leave the panel hidden.
+    const panel = document.getElementById('financial-statements-panel');
+    if (panel) panel.classList.toggle('hidden', !(totalAssets > 0));
+    if (!(totalAssets > 0)) return;
+
+    renderStatementRows('balance-sheet-rows', [
+        { label: 'Cash & equivalents', value: num('treasury'), indent: true },
+        { label: 'Receivables, net', value: num('receivables'), indent: true },
+        { label: 'Inventory', value: num('inventory'), indent: true },
+        { label: 'Net PP&E', value: num('net_ppe'), indent: true },
+        { label: 'Construction in progress', value: num('cip'), indent: true },
+        { label: 'Goodwill', value: num('goodwill'), indent: true },
+        { label: 'Right-of-use asset', value: num('lease_liability'), indent: true },
+        { divider: true },
+        { label: 'Total assets', value: totalAssets, total: true },
+        { divider: true },
+        { label: 'Debt & deposits', value: num('total_debt'), indent: true },
+        { label: 'Payables', value: num('payables'), indent: true },
+        { label: 'Deferred tax liability', value: num('deferred_tax_liability'), indent: true },
+        { label: 'Lease liability', value: num('lease_liability'), indent: true },
+        { divider: true },
+        { label: 'Total liabilities', value: num('total_liabilities'), total: true },
+        { label: 'Shareholders equity', value: num('equity'), total: true },
+    ]);
+
+    renderStatementRows('cash-flow-rows', [
+        { label: 'Net income', value: num('net_income'), signed: true, indent: true },
+        { label: 'Depreciation', value: num('depreciation'), indent: true },
+        { label: 'Equity compensation', value: num('stock_compensation'), indent: true },
+        { label: 'Deferred tax', value: num('deferred_tax_expense'), signed: true, indent: true },
+        { label: 'Inventory writedown', value: num('inventory_write_down'), indent: true },
+        { label: 'Credit loss provision', value: num('receivables_provision'), signed: true, indent: true },
+        { label: 'Goodwill impairment', value: num('goodwill_impairment'), indent: true },
+        { divider: true },
+        { label: 'Operating cash flow', value: num('operating_cash_flow'), signed: true, total: true },
+        { label: 'Investing cash flow', value: num('investing_cash_flow'), signed: true, total: true },
+        { label: 'Financing cash flow', value: num('financing_cash_flow'), signed: true, total: true },
+        { divider: true },
+        { label: 'Free cash flow', value: num('free_cash_flow'), signed: true, total: true },
+        { label: 'Cash taxes paid', value: num('cash_tax_paid'), indent: true },
+    ]);
+
+    const stageEl = document.getElementById('lifecycle-stage-badge');
+    if (stageEl) {
+        const stage = latest.lifecycle_stage;
+        stageEl.innerText = stage ? stage.replace(/_/g, ' ') : '-';
+    }
 }
 
 export function destroyFundamentalCharts() {

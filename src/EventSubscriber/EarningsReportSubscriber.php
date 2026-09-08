@@ -61,6 +61,38 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $report->setDynamicSpread(\App\Service\Math\MathUtility::formatDecimal($ctx->debtMetrics->dynamicSpread, 4));
 
         $report->setCapitalExpenditures(\App\Service\Math\MathUtility::formatDecimal($ctx->totalReportedCapex, 4));
+        $report->setDepreciation(\App\Service\Math\MathUtility::formatDecimal($ctx->quarterlyDepreciation, 4));
+        $report->setEbitda(\App\Service\Math\MathUtility::formatDecimal($ctx->ebitda, 4));
+        $report->setGrossPpe($stock->getGrossPpe());
+        $report->setNetPpe(\App\Service\Math\MathUtility::formatDecimal($stock->getNetPpe(), 4));
+        $report->setReceivables(\App\Service\Math\MathUtility::formatDecimal($stock->getNetReceivables(), 4));
+        $report->setInventory($stock->getInventory());
+        $report->setPayables($stock->getPayables());
+        $report->setInventoryWriteDown(\App\Service\Math\MathUtility::formatDecimal($ctx->inventoryWriteDown, 4));
+        $report->setReceivablesProvision(\App\Service\Math\MathUtility::formatDecimal($ctx->receivablesProvision, 4));
+        $report->setDeferredTaxExpense(\App\Service\Math\MathUtility::formatDecimal($ctx->deferredTaxExpense, 4));
+        $report->setDeferredTaxLiability($stock->getDeferredTaxLiability());
+        $report->setCashTaxPaid(\App\Service\Math\MathUtility::formatDecimal($ctx->cashTaxPaid, 4));
+
+        // Balance sheet. The lease is computed the same way the leverage and solvency tests compute it, so
+        // the statement agrees with the ratios rather than quietly using a second definition.
+        $leaseLiability = \App\Service\Math\CorporateMetrics::getInstance()->calculateLeaseLiability(
+            (float) $stock->getTotalRevenue(),
+            $ctx->strategy->getLeaseIntensity()
+        );
+        $report->setCip($stock->getCipBalance());
+        $report->setGoodwill($stock->getGoodwill());
+        $report->setLeaseLiability(\App\Service\Math\MathUtility::formatDecimal($leaseLiability, 4));
+        $report->setTotalAssets(\App\Service\Math\MathUtility::formatDecimal($stock->getTotalAssets($leaseLiability), 4));
+        $report->setTotalLiabilities(\App\Service\Math\MathUtility::formatDecimal($stock->getTotalLiabilities($leaseLiability), 4));
+
+        // Cash flow statement, in the three sections whose signs classify the life-cycle stage.
+        $report->setOperatingCashFlow(\App\Service\Math\MathUtility::formatDecimal($ctx->operatingCashFlow, 4));
+        $report->setInvestingCashFlow(\App\Service\Math\MathUtility::formatDecimal($ctx->investingCashFlow, 4));
+        $report->setFinancingCashFlow(\App\Service\Math\MathUtility::formatDecimal($ctx->financingCashFlow, 4));
+        $report->setStockCompensation(\App\Service\Math\MathUtility::formatDecimal($ctx->stockCompensation, 4));
+        $report->setGoodwillImpairment(\App\Service\Math\MathUtility::formatDecimal($ctx->goodwillImpairment, 4));
+        $report->setLifecycleStage($ctx->lifecycleStage?->value);
         $report->setFreeCashFlow(\App\Service\Math\MathUtility::formatDecimal($ctx->trueQuarterlyFcf, 4));
         $report->setEquity($stock->getTotalEquity());
         $report->setTotalDebt($stock->getTotalDebt());

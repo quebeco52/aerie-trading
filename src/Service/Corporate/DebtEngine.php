@@ -40,6 +40,14 @@ class DebtEngine
     /** 15% of debt retired per quarter if early refinancing is triggered. */
     private const ACCELERATED_DEBT_TURNOVER = 0.15;
 
+    // --- Maturity Wall & Primary Market Access ---
+    /** Dynamic credit spread above which the primary market is shut to the issuer; high-yield spreads reached this in 2008 and 2020. */
+    private const PRIMARY_MARKET_CLOSURE_SPREAD = 0.10;
+    /** Lowest credit rating that can still refinance a maturity at any price. */
+    private const REFINANCING_RATING_FLOOR = 'CCC';
+    /** Interest coverage below which lenders will not roll a maturity: the firm cannot service what it already owes. */
+    private const REFINANCING_MIN_COVERAGE = 1.0;
+
     public function __construct(
         private MathUtility $mathUtility,
         private CorporateMetrics $corporateMetrics,
@@ -115,8 +123,10 @@ class DebtEngine
         $customDepreciation = (float) $stock->getDepreciationRate();
         $depreciationRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($industry);
 
-        $physicalCapital = $strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital());
-        $depreciation = $physicalCapital * $depreciationRate;
+        // Depreciation runs on the same base the earnings engine charges it against (net PP&E for physical
+        // businesses, the capital proxy for financial ones), so coverage and EBITDA here agree with the
+        // income statement instead of depreciating goodwill and working capital.
+        $depreciation = max(0.0, $strategy->getDepreciableBase($stock)) * $depreciationRate;
         $ebitda = $ebit + $depreciation;
 
         if ($debt <= 0.0) {
@@ -528,6 +538,71 @@ class DebtEngine
             // A negative Z'' score is a near-mathematical certainty of insolvency
             'is_bankrupt' => $zScore < 0.00,
         ];
+    }
+
+    /**
+     * Rolls the quarter's maturing principal down the maturity ladder.
+     *
+     * The rollover rate a business model declares already implies an average tenor of 1 / (4 x rate) years,
+     * so the same fraction of the debt stock comes due each quarter. Until now that only ever repriced the
+     * coupon: principal was immortal and no firm could ever be refused a refinancing. That removed the most
+     * common way real companies actually fail — not a slow slide into insolvency, but a maturity landing in
+     * a quarter when nobody will lend (commercial paper in 2008, high yield in March 2020).
+     *
+     * Market access is deliberately looser than the test for taking on NEW leverage: an investment-grade
+     * issuer refinances straight through a recession. It closes only when spreads have blown out to crisis
+     * levels, the rating is below the market's floor, or the firm cannot cover the interest it already owes.
+     * When it closes the principal must be repaid in cash, and whatever cash cannot cover is a shortfall the
+     * treasury has to fund with emergency financing or default on.
+     */
+    public function rollMaturities(Stock $stock, \App\DTO\DebtHealthDTO $health, float $availableCash): \App\DTO\MaturityRollDTO
+    {
+        $wholesaleDebt = (float) $stock->getWholesaleDebt();
+        if ($wholesaleDebt <= 0.0) {
+            return new \App\DTO\MaturityRollDTO(0.0, true, 0.0, 0.0);
+        }
+
+        $industry = $stock->getIndustry() ?: 'General';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+
+        $maturing = $wholesaleDebt * max(0.0, $strategy->getDebtMaturityRolloverRate());
+        if ($maturing <= 0.0) {
+            return new \App\DTO\MaturityRollDTO(0.0, true, 0.0, 0.0);
+        }
+
+        if ($this->hasPrimaryMarketAccess($stock, $health)) {
+            // Refinanced in the primary market: the principal survives and only its coupon reprices, which
+            // calculateInterestExpense() has already done through the blended fixed rate.
+            return new \App\DTO\MaturityRollDTO($maturing, true, 0.0, 0.0);
+        }
+
+        $repaid = min($maturing, max(0.0, $availableCash));
+        $shortfall = $maturing - $repaid;
+
+        $stock->setWholesaleDebt((string) max(0.0, $wholesaleDebt - $repaid));
+
+        return new \App\DTO\MaturityRollDTO($maturing, false, $repaid, $shortfall);
+    }
+
+    /**
+     * Whether the primary market will roll this issuer's maturity at any price.
+     */
+    private function hasPrimaryMarketAccess(Stock $stock, \App\DTO\DebtHealthDTO $health): bool
+    {
+        $dynamicSpread = $health->rawMetrics->dynamicSpread ?? (float) $stock->getCreditSpread();
+        if ($dynamicSpread >= self::PRIMARY_MARKET_CLOSURE_SPREAD) {
+            return false;
+        }
+
+        if ($health->interestCoverage < self::REFINANCING_MIN_COVERAGE) {
+            return false;
+        }
+
+        $ranks = \App\Service\Market\CreditRatingAgency::RATING_RANKS;
+
+        return ($ranks[$stock->getCreditRating()] ?? $ranks['BBB'])
+            >= ($ranks[self::REFINANCING_RATING_FLOOR] ?? 1);
     }
 
     /**

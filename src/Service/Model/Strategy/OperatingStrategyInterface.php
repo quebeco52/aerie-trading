@@ -33,7 +33,11 @@ interface OperatingStrategyInterface
     public function getOperatingMacroFields(): array;
     public function getEffectiveTaxRate(float $macroTaxRate): float;
     public function calculateEconomicReturn(Stock $stock, float $nopat, float $investedCapital): float;
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float;
+    /**
+     * @param float $depreciation Quarterly depreciation already deducted from $ebit, for models whose return
+     *                             is defined before it (a REIT's cap rate is struck on net operating income).
+     */
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null, float $depreciation = 0.0): float;
     public function getSecularGrowthRate(Stock $stock): float;
     public function getCapexCyclicality(): float;
     public function getSurpriseBlendWeights(): array;
@@ -41,6 +45,15 @@ interface OperatingStrategyInterface
     public function getTrueReturn(Stock $stock): float;
     public function getEvaluationCapital(float $equity, float $investedCapital): float;
     public function getWorkingCapitalIntensity(Stock $stock): float;
+    /**
+     * The cash conversion cycle split into its three day counts. Working capital is carried as real
+     * balances, and the risks attach to the parts rather than the total: a receivable can go bad, and
+     * inventory can be worth less than it cost. Defaulted from getWorkingCapitalIntensity() so a sector
+     * model only overrides this when its cycle is shaped unusually.
+     *
+     * @return array{dso: float, dio: float, dpo: float}
+     */
+    public function getWorkingCapitalDays(Stock $stock): array;
     /**
      * Labor's share of the fixed cost base (salaried staff, SG&A payroll). Scales how much of an excess
      * wage-growth impulse reaches fixed costs: a law firm or software house feels nearly all of it, a
@@ -71,6 +84,13 @@ interface OperatingStrategyInterface
     public function getReversionSpeed(): float;
     public function getMoatSpread(): float;
     public function getPhysicalCapital(Stock $stock): float;
+    /**
+     * The asset account depreciation is charged against. Physical businesses depreciate net PP&E only:
+     * goodwill is not depreciated (it is impairment-tested) and working capital does not wear out, so
+     * charging depreciation on invested capital overstated it for every acquisitive or inventory-heavy
+     * firm. Financial balance sheets have no meaningful plant, so they keep their capital proxy.
+     */
+    public function getDepreciableBase(Stock $stock): float;
     public function allowsPhysicalOrganicCapex(): bool;
     public function getReturnBasisIncome(Stock $stock, float $quarterlyNopat, float $actualTotalNetIncome): float;
     /**

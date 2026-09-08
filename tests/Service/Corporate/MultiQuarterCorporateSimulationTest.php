@@ -37,6 +37,12 @@ class MultiQuarterCorporateSimulationTest extends TestCase
 
     protected function setUp(): void
     {
+        // These are stochastic multi-year simulations checked against hard collapse thresholds. Left unseeded
+        // they inherit whatever global mt_rand state ran before them, so adding a test anywhere earlier in the
+        // suite silently reshuffles every path here and can trip a threshold that has nothing to do with the
+        // change. Seeding makes each case reproducible and independent of test ordering.
+        mt_srand(20260908);
+
         $this->mathUtility = new MathUtility();
         $corporateMetrics = new CorporateMetrics();
         $debtEngine = new DebtEngine($this->mathUtility, $corporateMetrics);
@@ -223,6 +229,68 @@ class MultiQuarterCorporateSimulationTest extends TestCase
     }
 
     /**
+     * The fixed-asset ledger must stay a coherent subset of the capital it is carved out of. Net PP&E plus
+     * the other things invested capital is made of should track invested capital across a long run: if the
+     * plant ledger drifted free of it, depreciation would be charged against an asset base the firm does
+     * not have, and every coverage ratio built on EBIT would drift with it.
+     */
+    #[DataProvider('allIndustriesProvider')]
+    public function testFixedAssetLedgerStaysCoherentWithInvestedCapital(string $industry, array $metrics): void
+    {
+        $stock = $this->createInitializedStock($industry, $metrics);
+        $businessModel = Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+
+        $neutralMacro = new MacroStateDTO(
+            outputGapEma: 0.0,
+            inflationEma: 0.02,
+            policyRate: 0.04,
+            policyRateEma: 0.04,
+            yield2yEma: 0.04,
+            yield5yEma: 0.042,
+            yield10yEma: 0.045,
+            nominalGdpIndex: 1.0,
+            marketVolatilityEma: 0.15,
+            macroCreditSpreadEma: 0.015,
+            interbankLiquiditySpreadEma: 0.0010
+        );
+
+        $ticksPerQuarter = (int) (252 / 4);
+        $reportingTick = EarningsEngine::resolveReportingTick($stock->getTicker(), 252);
+
+        for ($quarter = 1; $quarter <= 12; $quarter++) {
+            $this->earningsEngine->calculate($stock, $neutralMacro, (($quarter - 1) * $ticksPerQuarter) + $reportingTick, 252);
+
+            if (Sectors::isFinancial($businessModel)) {
+                // Financial balance sheets keep no plant ledger at all.
+                $this->assertNull($stock->getGrossPpe(), "{$industry} opened a plant ledger it should not have");
+                continue;
+            }
+
+            $gross = (float) $stock->getGrossPpe();
+            $accumulated = (float) $stock->getAccumulatedDepreciation();
+            $netPpe = $stock->getNetPpe();
+
+            $this->assertTrue(is_finite($gross), "Gross PP&E became non-finite in Q{$quarter} for {$industry}");
+            $this->assertGreaterThan(0.0, $gross, "Gross PP&E collapsed in Q{$quarter} for {$industry}");
+            $this->assertLessThanOrEqual($gross, $accumulated, "Accumulated depreciation exceeded gross cost in Q{$quarter} for {$industry}");
+            $this->assertGreaterThanOrEqual(0.0, $accumulated, "Accumulated depreciation went negative in Q{$quarter} for {$industry}");
+
+            // Net book value is carved out of invested capital, so it can never exceed it.
+            $investedCapital = abs($stock->getInvestedCapital());
+            $this->assertLessThanOrEqual(
+                $investedCapital * 1.05,
+                $netPpe,
+                "Net PP&E outgrew invested capital in Q{$quarter} for {$industry}"
+            );
+            $this->assertGreaterThan(
+                0.0,
+                $netPpe,
+                "Net PP&E fully depreciated away in Q{$quarter} for {$industry}"
+            );
+        }
+    }
+
+    /**
      * Test 2: 12-Quarter (3-Year) Severe Recession & Liquidity Crisis Stress Test.
      * Asserts that during severe macroeconomic distress, entities absorb the shocks without mathematical errors.
      */
@@ -267,6 +335,45 @@ class MultiQuarterCorporateSimulationTest extends TestCase
             $this->assertTrue(is_finite($fcfPerShare), "FCF per share in {$industry} must be finite in Q{$quarter}");
             $this->assertTrue(is_finite($currentDebt), "Wholesale debt in {$industry} must be finite in Q{$quarter}");
             $this->assertGreaterThan(0, $currentShares, "Shares dropped to 0 or below during recession in Q{$quarter} for {$industry}");
+        }
+    }
+
+    /**
+     * A severe but functioning credit market (700bps spreads) must not push solvent firms into payment
+     * default. Market access to refinance an existing maturity is deliberately a looser test than the one
+     * for taking on new leverage, because investment-grade issuers really do roll their debt straight
+     * through recessions. If an ordinary downturn defaulted the whole market the mechanism would be wrong.
+     */
+    #[DataProvider('allIndustriesProvider')]
+    public function testOrdinaryRecessionDoesNotDefaultSolventIssuers(string $industry, array $metrics): void
+    {
+        $stock = $this->createInitializedStock($industry, $metrics);
+        $stock->setCreditRating('BBB');
+
+        $recessionMacro = new MacroStateDTO(
+            outputGapEma: -0.06,
+            inflationEma: -0.01,
+            policyRate: 0.01,
+            policyRateEma: 0.01,
+            yield2yEma: 0.04,
+            yield5yEma: 0.02,
+            yield10yEma: 0.01,
+            nominalGdpIndex: 0.90,
+            marketVolatilityEma: 0.45,
+            macroCreditSpreadEma: 0.07,
+            interbankLiquiditySpreadEma: 0.0200
+        );
+
+        $ticksPerQuarter = (int) (252 / 4);
+        $reportingTick = EarningsEngine::resolveReportingTick($stock->getTicker(), 252);
+
+        for ($quarter = 1; $quarter <= 12; $quarter++) {
+            $this->earningsEngine->calculate($stock, $recessionMacro, (($quarter - 1) * $ticksPerQuarter) + $reportingTick, 252);
+
+            $this->assertFalse(
+                $stock->isPaymentDefault(),
+                "{$industry} defaulted on a maturity in Q{$quarter} of an ordinary recession"
+            );
         }
     }
 

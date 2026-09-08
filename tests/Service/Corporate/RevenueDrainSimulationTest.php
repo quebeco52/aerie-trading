@@ -170,6 +170,70 @@ class RevenueDrainSimulationTest extends TestCase
         $this->assertLessThan(0.10, (float) $stock->getRoicTtm(), 'the squeeze itself still shows up in trailing ROIC');
     }
 
+    /**
+     * Removing the inflation revaluation of equity must not leave firms shrinking in nominal terms.
+     *
+     * The revaluation used to be the only thing keeping invested capital growing with prices, so deleting
+     * it without a replacement channel would have quietly reintroduced a capacity death spiral: nominal
+     * revenue capacity is anchored to invested capital, so capital that stood still while prices rose
+     * would mean real capacity falling every quarter. Replacement-cost maintenance CapEx is that channel —
+     * the firm spends more cash to replace the same plant, and the plant ledger grows by what it spent.
+     */
+    public function testInvestedCapitalKeepsPaceWithInflationWithoutTheEquityRevaluation(): void
+    {
+        mt_srand(1234);
+        $earningsEngine = $this->createEngine();
+        $stock = $this->createStockFromInitialMarket('IBHI', 'Engineering & Construction');
+
+        $ticksPerYear = 252;
+        $ticksPerQuarter = (int) ($ticksPerYear / 4);
+        $reportingTick = EarningsEngine::resolveReportingTick('IBHI', $ticksPerYear);
+
+        $openingCapital = null;
+        $openingRevenue = null;
+        $deflator = 1.0;
+        $quarters = 24;
+
+        for ($q = 1; $q <= $quarters; $q++) {
+            // Sustained 3% inflation: the price level compounds, quarter by quarter.
+            $deflator *= (1.0 + 0.03 / 4.0);
+            $macro = new MacroStateDTO(
+                outputGapEma: 0.0,
+                policyRate: 0.04,
+                policyRateEma: 0.04,
+                yield2yEma: 0.045,
+                yield5yEma: 0.048,
+                yield10yEma: 0.050,
+                inflationEma: 0.03,
+                gdpDeflator: $deflator,
+            );
+
+            $earningsEngine->calculate($stock, $macro, (($q - 1) * $ticksPerQuarter) + $reportingTick, $ticksPerYear);
+
+            $openingCapital ??= $stock->getInvestedCapital();
+            $openingRevenue ??= (float) $stock->getTotalRevenue();
+        }
+
+        $capitalGrowth = $stock->getInvestedCapital() / $openingCapital;
+        $revenueGrowth = (float) $stock->getTotalRevenue() / $openingRevenue;
+        $priceGrowth = $deflator;
+
+        // Nominal capital and revenue must at least hold their real value against the price level.
+        $this->assertGreaterThanOrEqual(
+            $priceGrowth,
+            $capitalGrowth,
+            'invested capital fell behind the price level, so real capacity is shrinking'
+        );
+        $this->assertGreaterThanOrEqual(
+            $priceGrowth,
+            $revenueGrowth,
+            'nominal revenue capacity fell behind the price level'
+        );
+
+        // The plant is being replaced at current prices, so its vintage tracks the price level up.
+        $this->assertGreaterThan(1.0, (float) $stock->getPpeVintageDeflator());
+    }
+
     private function createEngine(): EarningsEngine
     {
         $mathUtility = new MathUtility();

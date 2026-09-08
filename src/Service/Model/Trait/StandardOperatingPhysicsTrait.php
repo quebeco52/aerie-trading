@@ -79,6 +79,34 @@ trait StandardOperatingPhysicsTrait
         return 0.10;
     }
 
+    /**
+     * Derives the cycle's day counts from the intensity a sector model already declares, so none of the
+     * existing overrides have to change. A positive cycle splits into receivables and inventory with a
+     * trade-credit offset; a negative one (subscriptions, marketplaces collecting before they pay
+     * suppliers) is a payables float with almost nothing tied up on the asset side.
+     *
+     * @return array{dso: float, dio: float, dpo: float}
+     */
+    public function getWorkingCapitalDays(Stock $stock): array
+    {
+        $intensity = $this->getWorkingCapitalIntensity($stock);
+        $cycleDays = $intensity * FinancialConstants::DAYS_PER_YEAR;
+
+        if ($intensity < 0.0) {
+            // Negative working capital: the firm is funded by its suppliers and customers.
+            return ['dso' => 0.0, 'dio' => 0.0, 'dpo' => abs($cycleDays)];
+        }
+
+        // CCC = DSO + DIO - DPO, so the gross cycle has to be grossed up for the payables offset it nets against.
+        $grossDays = $cycleDays / max(0.01, 1.0 - FinancialConstants::WORKING_CAPITAL_PAYABLE_SHARE);
+
+        return [
+            'dso' => $grossDays * FinancialConstants::WORKING_CAPITAL_RECEIVABLE_SHARE,
+            'dio' => $grossDays * (1.0 - FinancialConstants::WORKING_CAPITAL_RECEIVABLE_SHARE),
+            'dpo' => $grossDays * FinancialConstants::WORKING_CAPITAL_PAYABLE_SHARE,
+        ];
+    }
+
     public function getLeaseIntensity(): float
     {
         return defined('static::LEASE_LIABILITY_INTENSITY')
@@ -214,7 +242,7 @@ trait StandardOperatingPhysicsTrait
         return $investedCapital > 0 ? ($quarterlyNopatOrIncome / $investedCapital) * 4.0 : 0.0;
     }
 
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null, float $depreciation = 0.0): float
     {
         $kappa = $this->getReversionSpeed();
         $moatSpread = $this->getMoatSpread();
@@ -269,6 +297,17 @@ trait StandardOperatingPhysicsTrait
     public function getPhysicalCapital(Stock $stock): float
     {
         return $stock->getInvestedCapital();
+    }
+
+    /**
+     * Depreciation runs on net PP&E. Before the ledger is seeded the engine falls back to the capital
+     * proxy so a firm that has never reported still books a depreciation charge on its first quarter.
+     */
+    public function getDepreciableBase(Stock $stock): float
+    {
+        $netPpe = $stock->getNetPpe();
+
+        return $netPpe > 0.0 ? $netPpe : $this->getPhysicalCapital($stock);
     }
 
     public function allowsPhysicalOrganicCapex(): bool

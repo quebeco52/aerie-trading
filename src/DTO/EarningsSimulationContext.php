@@ -46,6 +46,22 @@ class EarningsSimulationContext
     public float $expectedRevenue = 0.0;
     public float $fixedCosts = 0.0;
     public float $baselineVariableMargin = 0.0;
+    /** Depreciation the firm would charge running its plant at exactly structural capacity, carved out of the cost base. */
+    public float $structuralDepreciation = 0.0;
+    /** Construction in progress placed in service this quarter; leaves CIP and enters gross PP&E. */
+    public float $completedCip = 0.0;
+    /** Current capital-goods price level over the vintage the plant was bought at; 1.0 when prices have not moved. */
+    public float $replacementCostRatio = 1.0;
+    /** Lower-of-cost-or-NRV writedown on unsold inventory this quarter (ASC 330), non-cash. */
+    public float $inventoryWriteDown = 0.0;
+    /** Expected credit loss provision against trade receivables this quarter (ASC 326), non-cash; negative when released. */
+    public float $receivablesProvision = 0.0;
+    /** Change in net working capital this quarter; a build consumes cash, a release frees it. */
+    public float $deltaWorkingCapital = 0.0;
+    /** Portion of the quarter's tax expense postponed by accelerated tax depreciation (ASC 740), non-cash. */
+    public float $deferredTaxExpense = 0.0;
+    /** Tax that actually left the company this quarter; total expense less the deferred portion. */
+    public float $cashTaxPaid = 0.0;
     
     // Variables
     public float $realizedVariableMargin = 0.0;

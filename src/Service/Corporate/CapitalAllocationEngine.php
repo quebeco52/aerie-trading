@@ -71,7 +71,8 @@ class CapitalAllocationEngine
         float $currentPrice,
         float $sharesOutstanding,
         MacroStateDTO $macroState,
-        float $actualTotalNetIncome = 0.0
+        float $actualTotalNetIncome = 0.0,
+        float $stockCompensation = 0.0
     ): array {
         $ctx = new CapitalAllocationContext(
             $stock,
@@ -80,7 +81,8 @@ class CapitalAllocationEngine
             $quarterlyFcfPerShare,
             $currentPrice,
             $sharesOutstanding,
-            $actualTotalNetIncome
+            $actualTotalNetIncome,
+            $stockCompensation
         );
 
         $this->initializeContext($ctx);
@@ -118,9 +120,6 @@ class CapitalAllocationEngine
         $ctx->businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$ctx->industry]['business_model'] ?? 'none';
         $ctx->isFinancial = \App\Data\Sectors::isFinancial($ctx->businessModel);
         $ctx->strategy = \App\Data\Sectors::getBusinessModelStrategy($ctx->businessModel);
-        
-        $dt = 0.25;
-        $ctx->physicalAssetAppreciation = $ctx->investedCapital * ($ctx->macroState->inflationEma * $dt);
         
         $ctx->health = $this->debtEngine->analyzeDebtHealth($stock, $ctx->macroState);
         

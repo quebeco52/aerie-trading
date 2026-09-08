@@ -30,8 +30,10 @@ abstract class BaseFinancialBusinessModel implements BusinessModelInterface
         FinancialPhysicsTrait::getReversionSpeed insteadof StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::getMoatSpread insteadof StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::getWorkingCapitalIntensity insteadof StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::getWorkingCapitalDays insteadof StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::getCapExCompletionRate insteadof StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::getPhysicalCapital insteadof StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::getDepreciableBase insteadof StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::allowsPhysicalOrganicCapex insteadof StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::getReturnBasisIncome insteadof StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::getEffectiveReturn insteadof StandardOperatingPhysicsTrait;

@@ -22,6 +22,12 @@ use App\Service\Math\MathUtility;
  */
 class StockTracker
 {
+    // --- Price Momentum (Jegadeesh & Titman 1993) ---
+    /** Formation horizon in years of the exponentially weighted price trend, matching the 6-month window where momentum is strongest. */
+    private const MOMENTUM_FORMATION_YEARS = 0.50;
+    /** Absolute cap on the accumulated trend, bounding how far momentum can delay fundamental mean reversion. */
+    private const MAX_MOMENTUM_TREND = 0.50;
+
     /**
      * Constructor.
      *
@@ -148,6 +154,18 @@ class StockTracker
 
             $secularGrowth = $strategy->getSecularGrowthRate($stock);
 
+            // Leverage re-levers the magnitude of a firm's systematic exposure, never its sign. DebtEngine
+            // computes the Hamada beta from max(0.5, |beta|), which would turn an inverse hedge into a
+            // market-following name and inflate a 0.10-beta defensive to 0.50, so only the leverage
+            // multiplier is recovered and applied to the firm's own beta.
+            $rawBeta = (float) $stock->getBeta();
+            $hamadaBaseBeta = max(0.5, abs($rawBeta));
+            $leverageMultiplier = max(1.0, ($health->leveredBeta ?? $hamadaBaseBeta) / $hamadaBaseBeta);
+            $leveredBeta = $rawBeta * $leverageMultiplier;
+
+            $priceAtTickStart = (float) $stock->getPrice();
+            $sectorZ = (float) ($macroDTO->sectorZ[$sectorName] ?? 0.0);
+
             $pricingCtx = new \App\DTO\MarketPricingContext(
                 currentPrice: (float) $stock->getPrice(),
                 currentVolatility: $currentVol,
@@ -156,8 +174,10 @@ class StockTracker
                 dt: $dt,
                 lambda: (float) $stock->getJumpIntensity(),
                 jumpVol: (float) $stock->getJumpVol(),
-                beta: (float) $stock->getBeta(),
+                beta: $leveredBeta,
                 marketZ: $marketZ,
+                sectorZ: $sectorZ,
+                marketJumpMultiplier: $macroDTO->marketJumpMultiplier,
                 marketVol: $marketVol,
                 macroState: $macroDTO,
                 fcfPerShare: $stock->getFreeCashFlowPerShare() !== null ? (float) $stock->getFreeCashFlowPerShare() : null,
@@ -172,7 +192,7 @@ class StockTracker
                 businessModel: $businessModel,
                 liveCostOfEquity: $health->costOfEquity ?? 0.10,
                 netDebtPerShare: $netDebtPerShare,
-                recentPriceTrend: 0.0,
+                recentPriceTrend: (float) ($stock->getPriceMomentumTrend() ?? 0.0),
                 secularGrowth: $secularGrowth,
                 baselineRoic: (float) ($stock->getBaselineRoic() ?? 0.10),
                 baselineMargin: (float) ($stock->getOperatingMargin() ?? 0.20),
@@ -198,6 +218,20 @@ class StockTracker
             }
 
             $currentPriceAfterEarnings = (float) $stock->getPrice();
+
+            // PRICE MOMENTUM (Jegadeesh & Titman 1993)
+            // An exponentially weighted sum of log returns: trend_t = phi * trend_{t-1} + r_t, where phi is a
+            // decay set by a horizon in YEARS, so the formation window stays a half-year of simulated time at
+            // any tick rate. Measured before splits, since a 4-for-1 split quarters the price without any
+            // economic return and would otherwise register as a violent crash.
+            if ($priceAtTickStart > 0.0 && $currentPriceAfterEarnings > 0.0) {
+                $momentumPhi = exp(-$dt / self::MOMENTUM_FORMATION_YEARS);
+                $tickLogReturn = log($currentPriceAfterEarnings / $priceAtTickStart);
+                $updatedTrend = (($stock->getPriceMomentumTrend() ?? 0.0) * $momentumPhi) + $tickLogReturn;
+                $stock->setPriceMomentumTrend(
+                    max(-self::MAX_MOMENTUM_TREND, min(self::MAX_MOMENTUM_TREND, $updatedTrend))
+                );
+            }
 
             // CORPORATE ACTIONS (SPLITS)
             $splitResult = $this->corporateActionEngine->processSplits(

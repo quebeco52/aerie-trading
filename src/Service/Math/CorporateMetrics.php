@@ -103,6 +103,38 @@ class CorporateMetrics
         return max(0.0, $annualRevenue) * max(0.0, $leaseIntensity);
     }
 
+    /**
+     * Seeds the fixed-asset ledger for a firm that has never reported, so depreciation has a real asset
+     * account to run against from the first quarter.
+     *
+     * Net PP&E is invested capital less the other things invested capital is made of (working capital,
+     * goodwill and construction in progress), which is the accounting identity read backwards; the floor
+     * keeps an asset-light firm from seeding a zero base. Gross cost is then grossed up by the assumed
+     * age of the plant, because a firm mid-life carries assets whose historical cost exceeds their book
+     * value. Seeding gross and accumulated separately (rather than starting a brand-new plant) matters:
+     * a zero-age base would under-depreciate for years and overstate early free cash flow.
+     */
+    public function seedFixedAssetLedger(
+        Stock $stock,
+        float $investedCapital,
+        float $netWorkingCapital,
+        float $goodwill,
+        float $constructionInProgress,
+        float $assetAgeRatio = FinancialConstants::SEED_ASSET_AGE_RATIO
+    ): void {
+        $capital = abs($investedCapital);
+        $netPpe = max(
+            $capital * FinancialConstants::MIN_PPE_SHARE_OF_CAPITAL,
+            $capital - max(0.0, $netWorkingCapital) - max(0.0, $goodwill) - max(0.0, $constructionInProgress)
+        );
+
+        $age = min(0.90, max(0.0, $assetAgeRatio));
+        $grossPpe = $netPpe / (1.0 - $age);
+
+        $stock->setGrossPpe((string) $grossPpe);
+        $stock->setAccumulatedDepreciation((string) ($grossPpe - $netPpe));
+    }
+
     public function calculateInterestCoverageRatio(float $ebit, float $interestExpense): float
     {
         if ($interestExpense <= 0.0) {

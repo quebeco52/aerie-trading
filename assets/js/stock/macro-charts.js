@@ -47,7 +47,8 @@ function updateMacroHud(d) {
     setHud('hud-macroMortgageChart', `30Y: ${last(d.mortgageYieldData).toFixed(2)}% | Spr: ${last(d.spread30yData).toFixed(2)}%`);
     setHud('hud-macroRiskChart', `VIX: ${last(d.volData).toFixed(1)}% | ERP: ${last(d.erpData).toFixed(1)}%`);
     setHud('hud-macroLaborCreditChart', `Unemp: ${last(d.unemploymentData).toFixed(1)}% | Wage: ${last(d.wageGrowthData).toFixed(1)}%`);
-    setHud('hud-macroInterbankLiquidityChart', `TED: ${last(d.interbankSpreadBpsData).toFixed(0)} bps`);
+    const lastTed = [...d.interbankSpreadBpsData].reverse().find(v => v !== null);
+    setHud('hud-macroInterbankLiquidityChart', lastTed !== undefined ? `TED: ${lastTed.toFixed(0)} bps` : 'TED: -');
     setHud('hud-macroPropertyChart', `CRE: ${last(d.creEmaData).toFixed(1)} | Resi: ${last(d.residentialEmaData).toFixed(1)} | Starts: ${last(d.housingStartsData).toFixed(1)}`);
     setHud('hud-macroSentimentChart', `Sent: ${last(d.sentimentData).toFixed(0)} | M&A: ${last(d.dealActivityData).toFixed(0)}`);
     setHud('hud-macroCommoditiesChart', `Energy: ${last(d.energyPriceData).toFixed(1)} | Crack: $${last(d.crackSpreadData).toFixed(1)}`);
@@ -188,8 +189,11 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         freightEmaData.push(parseFloat(report.freight_rate_index_ema || report.freight_rate_index || 100.0));
         residentialEmaData.push(parseFloat(report.residential_property_index_ema || report.residential_property_index || 100.0));
 
-        let rawInterbank = report.interbank_liquidity_spread_ema ?? report.interbank_liquidity_spread ?? report.interbankLiquiditySpreadEma ?? report.interbankLiquiditySpread ?? 0.0015;
-        interbankSpreadBpsData.push(parseFloat(rawInterbank) * 10000);
+        // The interbank columns were added to macro_report in Aug 2026 as NOT NULL, so every report written
+        // before that reads 0.0000. The CIR process never drops below INTERBANK_MIN_SPREAD (1 bp), so a
+        // non-positive value is "not recorded", not a reading: plot a gap rather than a fake zero.
+        const rawInterbank = parseFloat(report.interbank_liquidity_spread_ema ?? report.interbank_liquidity_spread ?? report.interbankLiquiditySpreadEma ?? report.interbankLiquiditySpread ?? NaN);
+        interbankSpreadBpsData.push(rawInterbank > 0 ? rawInterbank * 10000 : null);
 
         let rawCreditSpread = report.macro_credit_spread_ema ?? report.macro_credit_spread ?? report.macroCreditSpreadEma ?? report.macroCreditSpread ?? 0.020;
         creditSpreadBpsData.push(parseFloat(rawCreditSpread) * 10000);

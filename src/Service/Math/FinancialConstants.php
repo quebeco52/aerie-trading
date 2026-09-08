@@ -291,6 +291,36 @@ class FinancialConstants
     /** Maximum CIP balance relative to invested capital allowed before new growth CapEx deployment is paused (25%). */
     public const MAX_CIP_EXPANSION_THRESHOLD_RATIO = 0.25;
 
+    // --- Deferred Taxes (ASC 740) ---
+    /** Declining-balance rate multiple for tax depreciation: the 200% method of the MACRS general depreciation system. */
+    public const TAX_DEPRECIATION_ACCELERATION = 2.0;
+
+    // --- Working Capital Ledger ---
+    /** Share of a positive working capital cycle carried as receivables; the rest is inventory (Compustat medians). */
+    public const WORKING_CAPITAL_RECEIVABLE_SHARE = 0.55;
+    /** Payables carried as a fraction of the gross receivable-plus-inventory cycle, the standard trade-credit offset. */
+    public const WORKING_CAPITAL_PAYABLE_SHARE = 0.35;
+    /** Days in the accounting year used to convert day counts into balances. */
+    public const DAYS_PER_YEAR = 365.0;
+
+    // --- Inventory & Receivable Impairment ---
+    /** Capacity utilization below which unsold inventory starts failing the lower-of-cost-or-net-realizable-value test (ASC 330). Calibrated to this engine's utilization scale, which centres on 1.0 rather than the ~80% of the published manufacturing series. */
+    public const INVENTORY_NRV_UTILIZATION_TRIGGER = 0.95;
+    /** Fraction of inventory written off at total demand collapse; scaled by how far utilization has fallen. */
+    public const INVENTORY_NRV_LOSS_RATE = 0.25;
+    /** Loss given default on a trade receivable: unsecured, but with real recovery in liquidation. */
+    public const TRADE_RECEIVABLE_LGD = 0.60;
+    /** Maximum share of the existing allowance that can be released in one quarter, so a recovery cannot be booked as instant profit. */
+    public const MAX_ALLOWANCE_RELEASE_RATIO = 0.25;
+
+    // --- Fixed Asset Ledger (PP&E) ---
+    /** Accumulated depreciation as a share of gross PP&E at seed; the median US non-financial runs a half-aged plant. */
+    public const SEED_ASSET_AGE_RATIO = 0.50;
+    /** Floor on net PP&E as a share of invested capital, so asset-light firms still carry a depreciable base. */
+    public const MIN_PPE_SHARE_OF_CAPITAL = 0.15;
+    /** Floor on the cash share of the structural cost base once depreciation is carved out as its own expense line. */
+    public const MIN_CASH_COST_SHARE = 0.40;
+
     // --- Equity Issuance & TAM Scaling Limits ---
     /** Maximum fraction of market capitalization that can be raised in a distressed emergency equity offering (25%). */
     public const MAX_EMERGENCY_EQUITY_RAISE_RATIO = 0.25;

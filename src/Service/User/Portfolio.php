@@ -17,6 +17,36 @@ class Portfolio
     ) {}
 
     /**
+     * Accrues interest on every user's idle cash at the prevailing brokerage sweep rate.
+     *
+     * Uncommitted brokerage cash is swept into overnight money market instruments, so it earns the policy
+     * rate less the intermediary's spread. Without this, holding cash was free: an inverted curve paying 5%
+     * on the sidelines looked identical to a zero-rate boom, and the opportunity cost that drives real
+     * allocation decisions did not exist for the player.
+     *
+     * Compounded continuously to match the rest of the engine's time stepping.
+     *
+     * @param float $annualRate The annualized sweep rate (policy rate net of the cash yield spread).
+     * @param float $dt         Elapsed simulated time in years since the last accrual.
+     */
+    public function accrueCashInterest(float $annualRate, float $dt): void
+    {
+        if ($annualRate <= 0.0 || $dt <= 0.0) {
+            return;
+        }
+
+        $periodRate = exp($annualRate * $dt) - 1.0;
+        if ($periodRate <= 0.0) {
+            return;
+        }
+
+        $this->entityManager->getConnection()->executeStatement(
+            'UPDATE users SET cash_balance = ROUND(cash_balance * (1 + :rate), 2) WHERE cash_balance > 0',
+            ['rate' => $periodRate]
+        );
+    }
+
+    /**
      * Records a historical snapshot for EVERY user in the system simultaneously.
      * Uses optimized raw SQL to prevent memory leaks during the Engine loop.
      */

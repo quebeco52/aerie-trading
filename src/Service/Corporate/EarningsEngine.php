@@ -82,6 +82,16 @@ class EarningsEngine
     // --- SUE Dispersion ---
     /** Minimum analyst estimate dispersion floor to avoid division by near-zero in SUE. */
     public const MIN_ESTIMATE_DISPERSION = 0.02;
+    /** Quarters of past surprises retained as the sample the SUE denominator is estimated from (Foster, Olsen & Shevlin 1984). */
+    public const SUE_HISTORY_QUARTERS = 8;
+    /** Reports required before the firm's own surprise history replaces the sector's analyst dispersion in the SUE denominator. */
+    public const SUE_MIN_HISTORY_QUARTERS = 4;
+
+    // --- Trailing Twelve Month Earnings ---
+    /** Number of reported quarters summed into the trailing twelve month earnings figure. */
+    public const TTM_QUARTERS = 4;
+    /** Absolute clamp on stored trailing net income, matching the guard on the EPS bridge and the DECIMAL(20,4) column. */
+    public const MAX_ABSOLUTE_NET_INCOME = 999999999999999.0;
 
     /**
      * Constructor.
@@ -122,11 +132,15 @@ class EarningsEngine
         $ctx->ticksPerYear = $ticksPerYear;
 
         $this->initializeContext($ctx);
-        $this->capExEngine->processCipQueue($ctx->stock);
+        // Assets finished this quarter leave construction in progress; the ledger roll-forward below moves
+        // them into gross PP&E, where they start earning revenue and start depreciating.
+        $ctx->completedCip = $this->capExEngine->processCipQueue($ctx->stock);
         $this->generateCapacityAndRevenue($ctx);
         $this->processVariableMargins($ctx);
+        $this->calculateDepreciation($ctx);
         $this->calculateExpectedVsActualFinancials($ctx);
-        $this->calculateInterestAndDepreciation($ctx);
+        $this->applyWorkingCapitalCharges($ctx);
+        $this->calculateInterestAndRunRates($ctx);
         $this->reconcileTaxesAndNetIncome($ctx);
         $this->calculateEPSAndSurprise($ctx);
         $this->calculateFreeCashFlow($ctx);
@@ -171,6 +185,36 @@ class EarningsEngine
 
         $macroTaxRate = $ctx->macroState->corporateTaxRate;
         $ctx->corporateTaxRate = $ctx->strategy->getEffectiveTaxRate($macroTaxRate);
+
+        $this->seedFixedAssetLedgerIfNeeded($ctx);
+    }
+
+    /**
+     * Opens a fixed-asset ledger for a firm that has never reported. Existing databases therefore heal
+     * themselves on the next earnings report instead of needing a backfill, the same way the structural
+     * asset turnover seeds itself. Financial models keep depreciating their capital proxy and never open
+     * a plant ledger.
+     */
+    private function seedFixedAssetLedgerIfNeeded(EarningsSimulationContext $ctx): void
+    {
+        $stock = $ctx->stock;
+        if ($stock->getGrossPpe() !== null || $ctx->strategy->isFinancial()) {
+            return;
+        }
+
+        // Working capital is normally persisted by the first cash-flow pass; before that, estimate it the
+        // same way that pass will, so the seed is not thrown off by a missing balance.
+        $netWorkingCapital = $stock->getNetWorkingCapital() !== null
+            ? (float) $stock->getNetWorkingCapital()
+            : $ctx->strategy->getWorkingCapitalIntensity($stock) * (float) $stock->getTotalRevenue();
+
+        $this->corporateMetrics->seedFixedAssetLedger(
+            $stock,
+            $ctx->investedCapital,
+            $netWorkingCapital,
+            (float) $stock->getGoodwill(),
+            $stock->getTotalCipAmount()
+        );
     }
 
     private function generateCapacityAndRevenue(EarningsSimulationContext $ctx): void
@@ -234,6 +278,18 @@ class EarningsEngine
         $fixedCostRatio = (float) $stock->getFixedCostRatio();
         $structuralCosts = $ctx->structuralRevenue * (1.0 - $ctx->stableMargin);
 
+        // Depreciation becomes its own expense line below EBITDA, so it must be carved OUT of the cash cost
+        // base rather than added on top of it. The stock's operatingMargin is its EBIT margin — every seed,
+        // valuation and solvency test reads it that way — so at structural capacity the carve-out is exactly
+        // self-cancelling: revenue - cashCosts - structuralDepreciation == revenue x margin. What changes is
+        // that a utilization swing or a drifting asset base now moves EBIT, which is the whole point: units-of
+        // -production depreciation used to land on EBITDA, where no coverage or solvency test could see it.
+        $ctx->structuralDepreciation = $this->resolveStructuralDepreciation($ctx);
+        $cashStructuralCosts = max(
+            $structuralCosts * FinancialConstants::MIN_CASH_COST_SHARE,
+            $structuralCosts - $ctx->structuralDepreciation
+        );
+
         // Beveridge Wage-Price Spiral SG&A Squeeze:
         // When labor tightness causes wage growth above trend (3.5%), the LABOR share of corporate overhead
         // inflates, squeezing margins for firms that cannot pass costs through via pricing power. The share
@@ -241,10 +297,45 @@ class EarningsEngine
         // of it, a pipeline operator very little.
         $excessWageGrowth = max(0.0, $macroState->wageGrowth - (MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION));
         $wageInflationFactor = 1.0 + ($strategy->getLaborCostShare() * $excessWageGrowth / max(0.5, $pricingPowerMultiplier));
-        $ctx->fixedCosts = $structuralCosts * $fixedCostRatio * $wageInflationFactor;
+        $ctx->fixedCosts = $cashStructuralCosts * $fixedCostRatio * $wageInflationFactor;
 
-        $structuralVariableCosts = $structuralCosts - ($structuralCosts * $fixedCostRatio);
+        $structuralVariableCosts = $cashStructuralCosts - ($cashStructuralCosts * $fixedCostRatio);
         $ctx->baselineVariableMargin = $structuralVariableCosts / $ctx->structuralRevenue;
+    }
+
+    /**
+     * Depreciation the firm would charge at exactly structural capacity (utilization 1.0). This is the
+     * amount carved out of the cash cost base; the realized charge in calculateDepreciation() scales it
+     * by actual utilization, so the difference between the two is what moves reported EBIT.
+     */
+    private function resolveStructuralDepreciation(EarningsSimulationContext $ctx): float
+    {
+        return max(0.0, $ctx->strategy->getDepreciableBase($ctx->stock)) * $this->resolveDepreciationRate($ctx) / 4.0;
+    }
+
+    /** Annual declining-balance depreciation rate: the stock's own rate, else its industry's. */
+    private function resolveDepreciationRate(EarningsSimulationContext $ctx): float
+    {
+        $custom = (float) $ctx->stock->getDepreciationRate();
+
+        return $custom > 0.0
+            ? $custom
+            : $this->corporateMetrics->getIndustryDepreciationRate($ctx->stock->getIndustry() ?: 'General');
+    }
+
+    /**
+     * Units-of-production depreciation (ASC 360) on the net book value of PP&E: the charge scales with how
+     * hard the plant is actually run, so a firm sweating its assets wears them out faster.
+     *
+     * The base is net PP&E, not invested capital. Goodwill is never depreciated — it is impairment-tested
+     * annually, which the engine already does — and working capital does not wear out, so the old base
+     * overstated the charge for every acquisitive or inventory-heavy firm. Construction in progress is
+     * likewise excluded: an asset not yet placed in service earns nothing and depreciates nothing.
+     */
+    private function calculateDepreciation(EarningsSimulationContext $ctx): void
+    {
+        $productionRate = $this->resolveDepreciationRate($ctx) * $ctx->capacityUtilization;
+        $ctx->quarterlyDepreciation = max(0.0, $ctx->strategy->getDepreciableBase($ctx->stock)) * $productionRate / 4.0;
     }
 
     /**
@@ -298,8 +389,11 @@ class EarningsEngine
         if ($stock->getStructuralVariableMargin() !== null) {
             $currentVariableMargin = max(0.01, min(0.99, (float) $stock->getStructuralVariableMargin()));
         } else {
-            $fixedCostRatio = (float) $stock->getFixedCostRatio();
-            $currentVariableMargin = max(0.01, min(0.99, (1.0 - $ctx->stableMargin) * (1.0 - $fixedCostRatio)));
+            // With no prior state the process starts at its own long-run mean, which is the structural
+            // variable cost ratio computed above. Deriving it independently from margin and fixed-cost
+            // ratio instead would ignore the depreciation carve-out and open every first report with a
+            // cost base that no longer matches the one the firm is actually reverting toward.
+            $currentVariableMargin = max(0.01, min(0.99, $ctx->baselineVariableMargin));
         }
 
         $realizedVariableMargin = $this->mathUtility->calculateCIR($currentVariableMargin, $kappa, $dynamicVariableTheta, $marginVol, $ctx->dt, $z2);
@@ -353,11 +447,15 @@ class EarningsEngine
         $ctx->analystExpectedVariableCosts = $consensus->analystExpectedVariableCosts;
         $ctx->estimateDispersion = $consensus->estimateDispersion;
 
-        $expectedEbit = $ctx->analystExpectedRevenue - $ctx->fixedCosts - $ctx->analystExpectedVariableCosts;
+        // Depreciation is the most forecastable line on the income statement — it follows a schedule the
+        // firm has already disclosed — so analysts get it right and it is not a source of surprise.
+        $expectedEbit = $ctx->analystExpectedRevenue - $ctx->fixedCosts - $ctx->analystExpectedVariableCosts - $ctx->quarterlyDepreciation;
         $ctx->expectedEbit = max(-$ctx->structuralRevenue * self::MAX_EBIT_LOSS_RATIO, $expectedEbit);
 
+        // Operating costs are the cash cost base; EBITDA sits above the depreciation line and EBIT below it.
         $ctx->operatingCosts = $ctx->actualVariableCosts + $ctx->fixedCosts;
-        $ctx->ebit = $ctx->actualRevenue - $ctx->operatingCosts;
+        $ctx->ebitda = $ctx->actualRevenue - $ctx->operatingCosts;
+        $ctx->ebit = $ctx->ebitda - $ctx->quarterlyDepreciation;
 
         $ctx->primaryShockZ = $actuals->primaryShockZ;
         $ctx->eventType = $actuals->eventType;
@@ -373,7 +471,7 @@ class EarningsEngine
         $ctx->kpis['stock_compensation'] = $ctx->stockCompensation;
     }
 
-    private function calculateInterestAndDepreciation(EarningsSimulationContext $ctx): void
+    private function calculateInterestAndRunRates(EarningsSimulationContext $ctx): void
     {
         $stock = $ctx->stock;
 
@@ -386,32 +484,19 @@ class EarningsEngine
         $realizedCostRatio = $ctx->actualRevenue > 0.0
             ? ($ctx->actualVariableCosts / $ctx->actualRevenue)
             : $ctx->realizedVariableMargin;
-        $ctx->seasonallyAdjustedEbit = ($ctx->seasonallyAdjustedRevenue * (1.0 - $realizedCostRatio)) - $ctx->fixedCosts;
+        $ctx->seasonallyAdjustedEbit = ($ctx->seasonallyAdjustedRevenue * (1.0 - $realizedCostRatio)) - $ctx->fixedCosts - $ctx->quarterlyDepreciation;
         $ctx->structuralOperatingMargin = $ctx->seasonallyAdjustedEbit / max(1.0, $ctx->seasonallyAdjustedRevenue);
+
+        // Persist the margin the firm actually earned. The stock's operatingMargin is the slow structural
+        // parameter that only asset reinvestment moves, so solvency tests reading it price a collapse in
+        // realized profitability quarters late.
+        $stock->setReportedOperatingMargin($ctx->structuralOperatingMargin);
 
         $annualSaarRevenue = MathUtility::calculateSeasonallyAdjustedAnnualRate($ctx->actualRevenue, $ctx->seasonalFactor, 4);
         $stock->setTotalRevenue((string) $annualSaarRevenue);
 
-        $industry = $stock->getIndustry() ?: 'General';
-        $customDepreciation = (float) $stock->getDepreciationRate();
-        $baseDepreciationRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($industry);
-
-        // Units of Production Depreciation Method
-        // Depreciation scales directly with actual asset utilization. Extreme utilization naturally accelerates depreciation.
-        $productionDepreciationRate = $baseDepreciationRate * $ctx->capacityUtilization;
-
-        $physicalCapital = $ctx->strategy->getPhysicalCapital($stock);
-        $maxPhysicalCipDeduction = max(0.0, $physicalCapital) * FinancialConstants::MAX_CIP_CAPITAL_DEDUCTION_RATIO;
-        $effectivePhysicalCip = min($maxPhysicalCipDeduction, $stock->getTotalCipAmount());
-        $depreciableBase = max(max(0.0, $physicalCapital) * (1.0 - FinancialConstants::MAX_CIP_CAPITAL_DEDUCTION_RATIO), $physicalCapital - $effectivePhysicalCip);
-        $annualDepreciation = $depreciableBase * $productionDepreciationRate;
-        $ctx->quarterlyDepreciation = $annualDepreciation / 4.0;
-
-        // Reconstruct EBITDA (EBITDA = GAAP EBIT + Depreciation) for FCF, FFO, and reporting
-        $ctx->ebitda = $ctx->ebit + $ctx->quarterlyDepreciation;
-
         $saExpectedRevenue = $ctx->expectedRevenue / max(0.01, $ctx->seasonalFactor);
-        $saExpectedEbit = ($saExpectedRevenue * (1.0 - $ctx->baselineVariableMargin)) - $ctx->fixedCosts;
+        $saExpectedEbit = ($saExpectedRevenue * (1.0 - $ctx->baselineVariableMargin)) - $ctx->fixedCosts - $ctx->quarterlyDepreciation;
         $saExpectedMargin = $saExpectedEbit / max(1.0, $saExpectedRevenue);
         $expectedDebtMetrics = $this->debtEngine->calculateInterestExpense($stock, $ctx->macroState, false, $saExpectedRevenue * 4.0, $saExpectedMargin);
         $ctx->expectedInterestExpense = $expectedDebtMetrics->interestExpense / 4.0;
@@ -453,6 +538,8 @@ class EarningsEngine
             $ctx->actualQuarterlyNetIncome = $actualEbt * (1.0 - $ctx->corporateTaxRate);
         }
 
+        $this->splitTaxExpenseIntoCurrentAndDeferred($ctx, $actualEbt - $ctx->actualQuarterlyNetIncome);
+
         if ($expectedEbt > 0 && $nol > 0) {
             $expectedMaxShield = $expectedEbt * FinancialConstants::NOL_MAX_SHIELD_RATIO;
             $expectedShielded = min($expectedMaxShield, $nol);
@@ -465,6 +552,7 @@ class EarningsEngine
         }
 
         $ctx->preTaxIncome = $actualEbt;
+        // Reported tax expense is current plus deferred; the cash figure is on the context separately.
         $ctx->taxPaid = $actualEbt - $ctx->actualQuarterlyNetIncome;
 
         $ctx->reportedExpectedNetIncome = $ctx->expectedQuarterlyNetIncome;
@@ -485,7 +573,8 @@ class EarningsEngine
             $ctx->corporateTaxRate,
             $ctx->health->wacc ?? 0.08,
             $ctx->health->costOfEquity ?? 0.10,
-            $ctx->macroState
+            $ctx->macroState,
+            $ctx->quarterlyDepreciation
         );
 
         $this->testGoodwillForImpairment($ctx);
@@ -546,16 +635,31 @@ class EarningsEngine
         $saAnnualEpsRaw = ($saQuarterlyNetIncome * 4.0) / $shares;
         $ctx->actualAnnualEpsRaw = $saAnnualEpsRaw;
 
-        $oldEps = (float) $stock->getEarningsPerShare();
-        $structuralEps = $oldEps == 0.0 ? $ctx->actualAnnualEpsRaw : $oldEps;
-        $ttmEps = $this->mathUtility->calculateKalmanSmoothedEps(
-            $structuralEps,
-            $ctx->actualAnnualEpsRaw,
-            $ctx->baselineVol,
-            abs($ctx->macroState->outputGapEma)
-        );
+        // Trailing twelve month earnings are the SUM of the last four reported quarters, not a filter over
+        // them. Smoothing the headline figure here put a multi-year half-life on it, so the P/E a player read
+        // lagged the business by years and a genuine collapse in earnings was invisible on the screener.
+        // Valuation is unaffected: the market engine runs its own Kalman filter against the strategy's
+        // structural EPS and treats this figure as the noisy measurement it is meant to be.
+        //
+        // The history holds absolute net income rather than per-share amounts, because EPS on this entity is
+        // derived from net income over current shares. Buybacks therefore lift trailing EPS and splits divide
+        // it with no restatement of history, exactly as reported accounts behave.
+        $history = $stock->getQuarterlyNetIncomeHistory() ?? [];
+        if (count($history) < self::TTM_QUARTERS) {
+            // First report: seed from the deseasonalized run-rate so the opening trailing figure does not
+            // inherit the seasonality of whichever quarter happens to report first.
+            $history = array_fill(0, self::TTM_QUARTERS, $saQuarterlyNetIncome);
+        }
 
-        $stock->setEarningsPerShare((string) $ttmEps);
+        $history[] = $ctx->reportedActualNetIncome;
+        $history = array_map('floatval', array_slice($history, -self::TTM_QUARTERS));
+        $stock->setQuarterlyNetIncomeHistory(array_values($history));
+
+        $trailingNetIncome = max(
+            -self::MAX_ABSOLUTE_NET_INCOME,
+            min(self::MAX_ABSOLUTE_NET_INCOME, array_sum($history))
+        );
+        $stock->setTotalNetIncome((string) $trailingNetIncome);
 
         $rawEpsSurprise = abs($ctx->expectedQuarterlyEps) > 0.01
             ? $ctx->surpriseAmountQuarterly / abs($ctx->expectedQuarterlyEps)
@@ -577,7 +681,7 @@ class EarningsEngine
         $stock = $ctx->stock;
 
         if ($ctx->sharesOutstanding <= 0) {
-            $fcfData = ['fcf_per_share' => 0.0, 'capex' => 0.0];
+            $fcfData = ['fcf_per_share' => 0.0, 'capex' => 0.0, 'direct_capex' => 0.0];
         } else {
             $outputGap = $ctx->macroState->outputGapEma;
             $capexCyclicality = $ctx->strategy->getCapexCyclicality();
@@ -589,29 +693,26 @@ class EarningsEngine
             $solvencyFactor = $ctx->actualQuarterlyNetIncome > 0
                 ? 1.0
                 : max(0.20, 1.0 + ($ctx->actualQuarterlyNetIncome / max(1.0, abs($ctx->investedCapital))));
-            $maintenanceCapEx = $ctx->quarterlyDepreciation * $cycleCapExModifier * $solvencyFactor;
 
-            $baseWorkingCapitalIntensity = $ctx->strategy->getWorkingCapitalIntensity($stock);
-            $deseasonalizedUtilization = $ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor);
-            $dynamicWorkingCapitalIntensity = $this->mathUtility->calculateDynamicWorkingCapitalIntensity(
-                baselineIntensity: $baseWorkingCapitalIntensity,
-                creditSpread: $ctx->macroState->macroCreditSpreadEma,
-                capacityUtilization: $deseasonalizedUtilization,
-                interbankLiquiditySpread: $ctx->macroState->interbankLiquiditySpreadEma
-            );
+            // Replacement cost (BEA perpetual inventory method): depreciation is measured against what the
+            // plant originally cost, but replacing a worn machine costs today's price. The ratio of the
+            // current capital-goods price level to the vintage the plant was bought at is how far a
+            // maintenance dollar has to stretch. This is the channel through which inflation actually
+            // reaches the balance sheet — the firm spends more cash to stand still — replacing the old
+            // revaluation that simply wrote equity up with no cash and no income behind it.
+            $ctx->replacementCostRatio = $this->resolveReplacementCostRatio($ctx);
+            $maintenanceCapEx = $ctx->quarterlyDepreciation * $ctx->replacementCostRatio * $cycleCapExModifier * $solvencyFactor;
+
             $currentAnnualizedRevenue = $ctx->actualRevenue / max(0.001, $ctx->dt);
-
-            $currentNwc = $dynamicWorkingCapitalIntensity * $currentAnnualizedRevenue;
             $priorNwcStr = $stock->getNetWorkingCapital();
-            if ($priorNwcStr === null) {
-                $priorNwc = $currentNwc; // Seed on first report; no spurious one-time swing
-            } else {
-                $priorNwc = (float) $priorNwcStr;
-            }
+            $currentNwc = $this->rollForwardWorkingCapitalLedger($ctx, $currentAnnualizedRevenue);
+
+            // Seed on first report; no spurious one-time swing.
+            $priorNwc = $priorNwcStr === null ? $currentNwc : (float) $priorNwcStr;
             $rawDeltaNwc = $currentNwc - $priorNwc;
             $maxNwcSwing = $currentAnnualizedRevenue * 0.25; // Clamp single-quarter NWC swing to at most 1 quarter of revenue
             $deltaNwc = max(-$maxNwcSwing, min($maxNwcSwing, $rawDeltaNwc));
-            $stock->setNetWorkingCapital((string) $currentNwc);
+            $ctx->deltaWorkingCapital = $deltaNwc;
 
             // 2. Growth CapEx: fundamental reinvestment planned on normalized earnings power,
             //    gated by the NPV hurdle and bounded by internally available funding.
@@ -627,21 +728,35 @@ class EarningsEngine
             $actualCapEx = $maintenanceCapEx + $growthCapEx + $ctx->scheduledCapex;
 
             // Stock-based compensation is a non-cash expense: added back to operating cash flow (ASC 718).
-            $fcff = $ctx->actualQuarterlyNetIncome + $ctx->quarterlyDepreciation + $ctx->stockCompensation - $deltaNwc - $actualCapEx;
+            // Inventory writedowns and credit-loss provisions are non-cash, exactly like depreciation and
+            // equity compensation: they hit reported earnings but no money moves, so they come back here.
+            $fcff = $ctx->actualQuarterlyNetIncome + $ctx->quarterlyDepreciation + $ctx->stockCompensation
+                + $ctx->inventoryWriteDown + $ctx->receivablesProvision + $ctx->deferredTaxExpense
+                - $deltaNwc - $actualCapEx;
             $ctx->operatingCashFlow = $fcff + $actualCapEx;
             $ctx->investingCashFlow = -$actualCapEx;
 
             $fcfData = [
                 'fcf_per_share' => $fcff / $ctx->sharesOutstanding,
-                'capex' => $actualCapEx
+                'capex' => $actualCapEx,
+                // Only spend that buys an asset outright lands in PP&E this quarter. Scheduled CapEx is
+                // queued as construction in progress and reaches the ledger when it is placed in service,
+                // so counting it here as well would capitalize the same dollar twice.
+                'direct_capex' => $maintenanceCapEx + $growthCapEx,
             ];
         }
 
         $annualFcfPerShare = $fcfData['fcf_per_share'] / max(0.001, $ctx->dt);
         $actualAnnualCapEx = $fcfData['capex'] / max(0.001, $ctx->dt);
 
-        $reinvestmentRatio = $ctx->quarterlyDepreciation > 0 ? ($fcfData['capex'] / $ctx->quarterlyDepreciation) : 1.0;
+        // Replacement CapEx is the bar the firm has to clear to stand still, so the reinvestment ratio is
+        // measured against the depreciation charge restated at today's prices. Comparing spend to the
+        // historical-cost charge would read pure inflation as modernization and hand out margin for it.
+        $replacementDepreciation = $ctx->quarterlyDepreciation * $ctx->replacementCostRatio;
+        $reinvestmentRatio = $replacementDepreciation > 0 ? ($fcfData['capex'] / $replacementDepreciation) : 1.0;
         $ctx->strategy->applyAssetDepreciationDecay($stock, $reinvestmentRatio, $ctx->dt);
+
+        $this->rollForwardFixedAssetLedger($ctx, $fcfData['direct_capex']);
 
         $currentPrice = (float) $stock->getPrice();
         $debtBeforeAllocation = (float) $stock->getWholesaleDebt();
@@ -652,7 +767,8 @@ class EarningsEngine
             $currentPrice,
             $ctx->sharesOutstanding,
             $ctx->macroState,
-            $ctx->actualQuarterlyNetIncome
+            $ctx->actualQuarterlyNetIncome,
+            $ctx->stockCompensation
         );
 
         $stock->setSharesOutstanding((string) $ctx->allocation['new_shares']);
@@ -695,6 +811,271 @@ class EarningsEngine
     }
 
     /**
+     * Advances the separate tax basis of PP&E and returns this quarter's book-versus-tax timing difference.
+     *
+     * Tax depreciation uses the 200% declining balance method (the MACRS general depreciation system):
+     * the same asset is written off faster for the tax authority than for shareholders. Early in an
+     * asset's life tax depreciation exceeds book, so taxable income is lower than book income and the
+     * unpaid tax accumulates as a deferred liability. Later the two cross over and the liability unwinds.
+     *
+     * A firm investing steadily therefore carries a permanently growing deferred balance, which is why
+     * capital-hungry companies pay a cash tax rate well below the statutory one for decades at a time.
+     */
+    private function splitTaxExpenseIntoCurrentAndDeferred(EarningsSimulationContext $ctx, float $bookTaxExpense): void
+    {
+        $stock = $ctx->stock;
+        $timingDifference = $this->rollForwardTaxDepreciation($ctx);
+
+        // The tax footnote identity: total expense is unchanged, and is split into the part paid this
+        // quarter and the part postponed. Splitting rather than recomputing is what guarantees reported
+        // earnings and EPS are untouched by this rule, which is exactly right — a timing difference moves
+        // cash, never profit.
+        //
+        // The deferred half is bounded by the total expense so cash tax can never turn negative (the firm
+        // does not receive money from the tax authority for buying equipment) and the reversal can never
+        // charge more than double.
+        $rawDeferred = $timingDifference * $ctx->corporateTaxRate;
+        $deferredTax = max(-$bookTaxExpense, min($bookTaxExpense, $rawDeferred));
+
+        $ctx->deferredTaxExpense = $deferredTax;
+        $ctx->cashTaxPaid = $bookTaxExpense - $deferredTax;
+        $stock->setDeferredTaxLiability((string) max(0.0, (float) $stock->getDeferredTaxLiability() + $deferredTax));
+    }
+
+    /**
+     * Advances the separate tax basis of PP&E and returns this quarter's book-versus-tax timing difference.
+     *
+     * Tax depreciation uses the 200% declining balance method (the MACRS general depreciation system): the
+     * same asset is written off faster for the tax authority than for shareholders. Early in an asset's
+     * life tax depreciation exceeds book, so taxable income is lower than book income and the unpaid tax
+     * accumulates as a deferred liability. On an ageing asset the two cross over and the liability unwinds.
+     *
+     * A firm investing steadily therefore carries a permanently growing deferred balance, which is why
+     * capital-hungry companies pay a cash tax rate well below the statutory one for decades at a time.
+     */
+    private function rollForwardTaxDepreciation(EarningsSimulationContext $ctx): float
+    {
+        $stock = $ctx->stock;
+        if ($stock->getGrossPpe() === null) {
+            return 0.0; // Financial balance sheets keep no plant, so there is no timing difference to track.
+        }
+
+        // Opening basis equals book value: no deferred tax is inherited from before the firm existed.
+        $basis = (float) ($stock->getPpeTaxBasis() ?? (string) $stock->getNetPpe());
+
+        $taxRate = $this->resolveDepreciationRate($ctx) * FinancialConstants::TAX_DEPRECIATION_ACCELERATION;
+        $taxDepreciation = min($basis, max(0.0, $basis) * $taxRate / 4.0);
+
+        // Additions join the basis in the ledger roll-forward, alongside the book ledger they also enter.
+        $stock->setPpeTaxBasis((string) max(0.0, $basis - $taxDepreciation));
+
+        return $taxDepreciation - $ctx->quarterlyDepreciation;
+    }
+
+    /**
+     * Rebuilds the working capital balances from the cash conversion cycle and returns the new net figure.
+     *
+     * Working capital used to be a single scalar, which meant nothing inside it could ever go wrong. Carried
+     * as real balances, receivables and inventory become things that can be impaired: a customer stops
+     * paying, or goods sit unsold until they are worth less than they cost. Both are ordinary recession
+     * charges and neither is forecastable, which is why they show up as misses.
+     *
+     * Receivables scale with revenue (they are billed sales); inventory and payables scale with the cost
+     * base (they are carried at cost, not at what the firm hopes to sell them for).
+     */
+    private function rollForwardWorkingCapitalLedger(EarningsSimulationContext $ctx, float $annualizedRevenue): float
+    {
+        $stock = $ctx->stock;
+
+        $baseDays = $ctx->strategy->getWorkingCapitalDays($stock);
+        $deseasonalizedUtilization = $ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor);
+        $shifts = $this->mathUtility->calculateWorkingCapitalDayShifts(
+            creditSpread: $ctx->macroState->macroCreditSpreadEma,
+            capacityUtilization: $deseasonalizedUtilization,
+            interbankLiquiditySpread: $ctx->macroState->interbankLiquiditySpreadEma
+        );
+
+        // A macro shift stretches an existing cycle; it cannot conjure one. A firm that carries no inventory
+        // does not start accumulating it because demand fell, and a bank with no trade receivables does not
+        // acquire some because credit spreads widened. Only components the model actually declares move.
+        $shiftDays = static fn (float $base, float $shift): float => $base > 0.0 ? max(0.0, $base + $shift) : 0.0;
+
+        $dso = $shiftDays($baseDays['dso'] ?? 0.0, $shifts['dso'] ?? 0.0);
+        $dio = $shiftDays($baseDays['dio'] ?? 0.0, $shifts['dio'] ?? 0.0);
+        $dpo = $shiftDays($baseDays['dpo'] ?? 0.0, $shifts['dpo'] ?? 0.0);
+
+        $annualizedCosts = max(0.0, ($ctx->actualVariableCosts + $ctx->fixedCosts) / max(0.001, $ctx->dt));
+        $perDay = FinancialConstants::DAYS_PER_YEAR;
+
+        $stock->setReceivables((string) max(0.0, $annualizedRevenue * $dso / $perDay));
+        $stock->setInventory((string) max(0.0, $annualizedCosts * $dio / $perDay));
+        $stock->setPayables((string) max(0.0, $annualizedCosts * $dpo / $perDay));
+
+        return (float) $stock->getNetWorkingCapital();
+    }
+
+    /**
+     * Impairs the working capital balances that can go bad.
+     *
+     * Inventory (ASC 330, lower of cost and net realizable value): when the plant is running well below
+     * capacity the goods are not moving, and stock that has to be cleared goes out below cost. The charge
+     * scales with how far demand has fallen.
+     *
+     * Receivables (ASC 326, expected credit losses): the allowance is a level, not a flow, so a provision is
+     * booked when the expected loss rate RISES and released slowly when it falls. Modelling it as a flow
+     * would charge a firm every quarter of a downturn rather than at the point the outlook deteriorates.
+     *
+     * Both are non-cash and neither is in the analyst forecast, so they land as negative surprises. They
+     * are deducted after consensus is formed for exactly that reason.
+     */
+    private function applyWorkingCapitalCharges(EarningsSimulationContext $ctx): void
+    {
+        $stock = $ctx->stock;
+        if (!$stock->hasWorkingCapitalLedger()) {
+            return; // No ledger yet (first report, or a balance-sheet business that keeps no trade cycle).
+        }
+
+        $ctx->inventoryWriteDown = $this->resolveInventoryWriteDown($ctx);
+        $ctx->receivablesProvision = $this->resolveReceivablesProvision($ctx);
+
+        $totalCharge = $ctx->inventoryWriteDown + $ctx->receivablesProvision;
+        if ($totalCharge === 0.0) {
+            return;
+        }
+
+        // Both charges sit in operating expense, so they reduce EBITDA and EBIT alike. Analysts do not
+        // forecast them, so expectedEbit is deliberately left untouched.
+        $ctx->ebitda -= $totalCharge;
+        $ctx->ebit -= $totalCharge;
+    }
+
+    /** Lower-of-cost-or-net-realizable-value writedown on inventory the firm cannot move (ASC 330). */
+    private function resolveInventoryWriteDown(EarningsSimulationContext $ctx): float
+    {
+        $inventory = (float) ($ctx->stock->getInventory() ?? 0.0);
+        if ($inventory <= 0.0) {
+            return 0.0;
+        }
+
+        $trigger = FinancialConstants::INVENTORY_NRV_UTILIZATION_TRIGGER;
+        $utilization = $ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor);
+        if ($utilization >= $trigger) {
+            return 0.0;
+        }
+
+        $severity = min(1.0, ($trigger - $utilization) / $trigger);
+        $charge = $inventory * FinancialConstants::INVENTORY_NRV_LOSS_RATE * $severity;
+
+        $ctx->stock->setInventory((string) max(0.0, $inventory - $charge));
+
+        return $charge;
+    }
+
+    /** Expected credit loss allowance on trade receivables, provisioned to a level (ASC 326). */
+    private function resolveReceivablesProvision(EarningsSimulationContext $ctx): float
+    {
+        $receivables = (float) ($ctx->stock->getReceivables() ?? 0.0);
+        if ($receivables <= 0.0) {
+            return 0.0;
+        }
+
+        $defaultRate = max(0.0, min(1.0, $ctx->macroState->corporateDefaultRateEma));
+        $targetAllowance = $receivables * $defaultRate * FinancialConstants::TRADE_RECEIVABLE_LGD;
+        $currentAllowance = (float) $ctx->stock->getReceivablesAllowance();
+
+        $provision = $targetAllowance - $currentAllowance;
+        if ($provision < 0.0) {
+            // A recovery is released gradually: an improving outlook is not instant profit.
+            $provision = -min(abs($provision), $currentAllowance * FinancialConstants::MAX_ALLOWANCE_RELEASE_RATIO);
+        }
+
+        $ctx->stock->setReceivablesAllowance((string) max(0.0, $currentAllowance + $provision));
+
+        return $provision;
+    }
+
+    /**
+     * How far a maintenance dollar has to stretch: the current capital-goods price level over the price
+     * level the existing plant was bought at. One when prices have not moved since the plant was built.
+     *
+     * The vintage is seeded to the current level for a firm that has never reported, so nobody inherits a
+     * replacement bill for inflation that happened before they existed.
+     */
+    private function resolveReplacementCostRatio(EarningsSimulationContext $ctx): float
+    {
+        $stock = $ctx->stock;
+
+        // No plant, no replacement cost. Financial models never open a fixed-asset ledger, so their vintage
+        // would never roll forward and the ratio would climb with the price level forever, charging a bank
+        // an ever-growing cash premium to replace machinery it does not own.
+        if ($stock->getGrossPpe() === null) {
+            return 1.0;
+        }
+
+        $currentDeflator = max(0.01, $ctx->macroState->gdpDeflator);
+        $vintage = $stock->getPpeVintageDeflator();
+
+        if ($vintage === null || (float) $vintage <= 0.0) {
+            $stock->setPpeVintageDeflator((string) $currentDeflator);
+
+            return 1.0;
+        }
+
+        return max(0.0, $currentDeflator / (float) $vintage);
+    }
+
+    /**
+     * Perpetual-inventory roll-forward of the fixed-asset ledger.
+     *
+     * Gross cost rises by the capital actually placed in service this quarter: CapEx that buys an asset
+     * outright, plus construction finally completed. Accumulated depreciation rises by the quarter's charge.
+     *
+     * Fully depreciated cost is then retired from both sides at the useful-life rate. Without retirement the
+     * gross balance would grow forever while net book value plateaued, so the asset-age ratio would march to
+     * 1.0 and never come back — a firm that had replaced its entire plant would still look ancient. Retiring
+     * a cohort each quarter is what a real fixed-asset register does when equipment reaches the end of its
+     * life and leaves the books.
+     */
+    private function rollForwardFixedAssetLedger(EarningsSimulationContext $ctx, float $directCapex): void
+    {
+        $stock = $ctx->stock;
+        if ($stock->getGrossPpe() === null) {
+            return; // Financial balance sheets never open a plant ledger.
+        }
+
+        $openingNetPpe = $stock->getNetPpe();
+        $additions = max(0.0, $directCapex) + max(0.0, $ctx->completedCip);
+
+        $grossPpe = (float) $stock->getGrossPpe() + $additions;
+        $accumulated = (float) $stock->getAccumulatedDepreciation() + max(0.0, $ctx->quarterlyDepreciation);
+
+        // The plant's vintage is the CapEx-weighted price level it was bought at: this quarter's additions
+        // come in at today's prices and pull the average forward, while the assets still on the books keep
+        // theirs. A firm replacing its plant steadily converges on the current price level; one that has
+        // stopped investing keeps an old vintage, and its eventual replacement bill grows accordingly.
+        $currentDeflator = max(0.01, $ctx->macroState->gdpDeflator);
+        $vintage = (float) ($stock->getPpeVintageDeflator() ?? $currentDeflator);
+        $vintageBase = max(0.0, $openingNetPpe) + $additions;
+        if ($vintageBase > 0.0) {
+            $vintage = ((max(0.0, $openingNetPpe) * $vintage) + ($additions * $currentDeflator)) / $vintageBase;
+        }
+        $stock->setPpeVintageDeflator((string) max(0.01, $vintage));
+
+        $retired = min($accumulated, $grossPpe * $this->resolveDepreciationRate($ctx) / 4.0);
+        $grossPpe -= $retired;
+        $accumulated -= $retired;
+
+        $stock->setGrossPpe((string) max(0.0, $grossPpe));
+        $stock->setAccumulatedDepreciation((string) max(0.0, min($accumulated, $grossPpe)));
+
+        // New assets enter the tax basis at cost, exactly as they enter the book ledger, and then start
+        // depreciating on their own accelerated schedule from next quarter.
+        if ($additions > 0.0 && $stock->getPpeTaxBasis() !== null) {
+            $stock->setPpeTaxBasis((string) ((float) $stock->getPpeTaxBasis() + $additions));
+        }
+    }
+
+    /**
      * Growth CapEx follows the fundamental reinvestment identity (Damodaran): the capital budget is planned on
      * normalized earnings power (structural ROIC x invested capital), not on the current quarter's reported
      * profit. A loss-making growth firm therefore keeps investing from its cash pile while a boom quarter does
@@ -733,10 +1114,10 @@ class EarningsEngine
         $stock = $ctx->stock;
 
         // Derive a composite earnings Z-score from the blended surprise percentage.
-        // Standardized by analyst estimate dispersion (SUE): a 6% surprise with σ=0.06 is a 1.0σ event.
-        $dispersion = max(self::MIN_ESTIMATE_DISPERSION, $ctx->estimateDispersion);
+        $dispersion = $this->resolveSurpriseDispersion($ctx);
         $earningsSurpriseZ = $ctx->surprisePct / $dispersion;
         $this->applyVolatilityShock($stock, $earningsSurpriseZ, $ctx->baselineVol);
+        $this->recordSurprise($stock, $ctx->surprisePct);
 
         $currentPrice = (float) $stock->getPrice();
 
@@ -839,6 +1220,49 @@ class EarningsEngine
         $this->eventDispatcher->dispatch(new EarningsReportedEvent($ctx));
 
         return [$earningsEvent];
+    }
+
+    /**
+     * Resolves the denominator that turns an earnings surprise into a standardized one (SUE).
+     *
+     * Unexpected earnings are standardized by the dispersion of the firm's OWN past unexpected earnings
+     * (Foster, Olsen & Shevlin 1984), not by a static per-sector constant. The sector constants describe how
+     * well analysts cover an industry; they say nothing about how large the surprises this engine actually
+     * generates are, and the two had drifted apart badly. Measured over forty quarters the realized surprise
+     * scale ran from 1.5x the assumed dispersion for a bank to 5.8x for an industrial, so the "sigma event"
+     * threshold was tripped in 42% to 95% of quarters instead of the ~13% a true Z-score implies, and the
+     * volatility shock that rides on it kept half the district permanently elevated.
+     *
+     * The sector's analyst dispersion remains a floor: it carries the coverage quality signal and scales with
+     * market volatility, so forecasts still fan out in a panicked regime. Until the firm has enough reports
+     * to estimate its own scale, that floor is all there is.
+     */
+    private function resolveSurpriseDispersion(EarningsSimulationContext $ctx): float
+    {
+        $analystDispersion = max(self::MIN_ESTIMATE_DISPERSION, $ctx->estimateDispersion);
+
+        $history = $ctx->stock->getEarningsSurpriseHistory() ?? [];
+        if (count($history) < self::SUE_MIN_HISTORY_QUARTERS) {
+            return $analystDispersion;
+        }
+
+        $realizedScale = $this->mathUtility->calculateMeanAbsoluteScale(array_map('floatval', array_values($history)));
+
+        return max($analystDispersion, $realizedScale);
+    }
+
+    /**
+     * Appends this quarter's surprise to the rolling SUE sample, after it has been standardized against the
+     * prior quarters. Standardizing a surprise partly by itself would shrink every outlier toward the mean.
+     */
+    private function recordSurprise(Stock $stock, float $surprisePct): void
+    {
+        $history = $stock->getEarningsSurpriseHistory() ?? [];
+        $history[] = $surprisePct;
+
+        $stock->setEarningsSurpriseHistory(
+            array_values(array_map('floatval', array_slice($history, -self::SUE_HISTORY_QUARTERS)))
+        );
     }
 
     private function applyVolatilityShock(Stock $stock, float $earningsZ, float $baselineVol): void

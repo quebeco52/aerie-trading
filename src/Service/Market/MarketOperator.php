@@ -140,15 +140,26 @@ class MarketOperator
     private function applyRestructuringRule(Stock $stock, float $marketCap, string $name, MacroStateDTO $macroState): ?array
     {
         $revenue = (float) $stock->getTotalRevenue();
-        $margin = (float) $stock->getOperatingMargin();
+
+        // Solvency is tested on the margin the firm actually reported, not its structural operating margin.
+        // The structural figure only moves through asset reinvestment decay, so a firm whose realized margin
+        // had collapsed kept passing the Altman test on the strength of a plant it could no longer run
+        // profitably. Falls back to the structural margin only before the first earnings report.
+        $margin = $stock->getReportedOperatingMargin() ?? (float) $stock->getOperatingMargin();
         $ebit = $revenue * $margin;
 
+        // Two independent ways to fail. Insolvency is the balance sheet no longer covering the claims on it;
+        // a payment default is principal coming due that nobody would refinance and the firm could not pay.
+        // A firm can pass the solvency test on paper and still fail the second, which is how most real
+        // defaults happen: the assets were fine, the money just was not there on the day.
+        $isPaymentDefault = $stock->isPaymentDefault();
         $zScoreData = $this->debtEngine->calculateAltmanZScore($stock, $ebit, $revenue, (float) $stock->getPrice());
-        if (!$zScoreData['is_bankrupt']) {
+        if (!$zScoreData['is_bankrupt'] && !$isPaymentDefault) {
             return null; // The company is surviving; abort bankruptcy
         }
 
-        $this->logger->info("BANKRUPTCY DETECTED: {$stock->getName()} ({$stock->getTicker()}) collapsed into insolvency. Company permanently terminated.");
+        $failureMode = $isPaymentDefault ? 'defaulted on maturing debt' : 'collapsed into insolvency';
+        $this->logger->info("BANKRUPTCY DETECTED: {$stock->getName()} ({$stock->getTicker()}) {$failureMode}. Company permanently terminated.");
 
         $stock->setIsBankrupt(true);
         $stock->setPrice('0.00000000');
@@ -186,7 +197,9 @@ class MarketOperator
         // NOTE: We preserve stock_history, corporate_report, and stock_events.
         // Historical quarters, charts, and lore records remain frozen in place.
 
-        $eventDesc = "{$name} ({$stock->getTicker()}) has collapsed into insolvency and filed for Chapter 7 bankruptcy liquidation. Shareholder equity wiped to 0 and trading permanently halted.";
+        $eventDesc = $isPaymentDefault
+            ? "{$name} ({$stock->getTicker()}) missed a principal payment it could not refinance and filed for Chapter 7 bankruptcy liquidation. Shareholder equity wiped to 0 and trading permanently halted."
+            : "{$name} ({$stock->getTicker()}) has collapsed into insolvency and filed for Chapter 7 bankruptcy liquidation. Shareholder equity wiped to 0 and trading permanently halted.";
 
         return [
             $this->marketEvent->publish($stock, 'BANKRUPTCY', $eventDesc, -100.00)

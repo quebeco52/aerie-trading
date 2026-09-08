@@ -242,11 +242,20 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                 // Save Portfolio Snapshots once a "Simulation Week"
                 if ($tickCount % $snapshotInterval === 0) {
-                    // Force a flush to the DB if we haven't already, so the raw SQL query 
+                    // Force a flush to the DB if we haven't already, so the raw SQL query
                     // used by recordBulkSnapshots calculates against the latest live prices.
                     if (!$isHistoryTick) {
                         $this->entityManager->flush();
                     }
+
+                    // Idle brokerage cash is swept overnight and earns the policy rate net of the
+                    // intermediary's spread. Accrued before the snapshot so the recorded net asset
+                    // value includes the interest credited for the week just elapsed.
+                    $this->portfolio->accrueCashInterest(
+                        max(0.0, $macroState->policyRateEma - MacroEngine::CASH_YIELD_SPREAD),
+                        $snapshotInterval * $dt
+                    );
+
                     $this->portfolio->recordBulkSnapshots();
                 }
 

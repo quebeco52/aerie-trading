@@ -10,6 +10,7 @@ use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CapExEngine;
+use App\DTO\MaturityRollDTO;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\TreasuryEngine;
@@ -34,6 +35,8 @@ class RunawayFeedbackLoopTest extends TestCase
         mt_srand(42);
         $this->corporateMetrics = CorporateMetrics::getInstance();
         $this->debtEngine = $this->createMock(DebtEngine::class);
+        // These tests are not about the maturity wall, so no principal comes due in them.
+        $this->debtEngine->method('rollMaturities')->willReturn(new MaturityRollDTO());
         $this->capExEngine = $this->createStub(CapExEngine::class);
         $this->mathUtility = new MathUtility();
 
