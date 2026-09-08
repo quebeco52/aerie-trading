@@ -44,6 +44,7 @@ class ShockEvent
     public const ADVISORY_CRASH = 'advisory_crash';
     public const BIOTECH_DRUG_APPROVAL = 'biotech_drug_approval';
     public const BIOTECH_TRIAL_SETBACK = 'biotech_trial_setback';
+    public const BIOTECH_PATENT_CLIFF = 'biotech_patent_cliff';
     public const CLEARING_SYSTEMIC_DEFAULT = 'clearing_systemic_default';
     public const CLEARING_PANIC_FEES = 'clearing_panic_fees';
     public const LUXURY_BRAND_DILUTION = 'luxury_brand_dilution';

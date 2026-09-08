@@ -53,6 +53,32 @@ class StreamContext
     }
 
     /**
+     * Registers a persistent scalar state variable (not a Z-score) into the stream state map.
+     *
+     * Sector models use this to carry structural state across quarters (patent exclusivity clocks,
+     * franchise indices). State keys MUST be re-registered every quarter, because the engine
+     * replaces the entire momentum map with getStreamZ() on each earnings report.
+     *
+     * @param string $key   Namespaced state key (e.g. 'state:commercial_franchise').
+     * @param float  $value The scalar value to carry into the next quarter.
+     */
+    public function registerState(string $key, float $value): void
+    {
+        $this->nextZ[$key] = $value;
+    }
+
+    /**
+     * Reads a scalar state value carried forward from the previous quarter's stream map.
+     *
+     * @param string $key     Namespaced state key registered by a prior quarter.
+     * @param float  $default Value returned when the state has never been persisted.
+     */
+    public function getPersistedState(string $key, float $default = 0.0): float
+    {
+        return isset($this->previousMomentum[$key]) ? (float) $this->previousMomentum[$key] : $default;
+    }
+
+    /**
      * Evolve and resolve active mean-reverting revenue stream weights for this quarter.
      *
      * @param array<string, float> $targetWeights Map of stream keys to strategic target weights

@@ -436,10 +436,17 @@ class StockModelTuning
         // =====================================================================
 
         // --- Ibis Pharmaceuticals (IBIS) ---
-        // Global biopharma giant. Skewed toward established commercial blockbuster portfolio (85%).
+        // Global biopharma giant (big pharma archetype). Skewed toward the established commercial
+        // blockbuster portfolio (85%), with a biologic-heavy book facing a scheduled patent cliff on
+        // roughly a third of marketed revenue.
         'IBIS' => [
-            ModelParam::CommercialTherapeuticsWeight->value => 0.85,
-            ModelParam::PipelineMilestonesWeight->value     => 0.15,
+            ModelParam::EstablishedDrugWeight->value       => 0.85,
+            ModelParam::PipelineDrugWeight->value          => 0.15,
+            ModelParam::PatentProtectedRevenueShare->value => 0.88, // Marketed book still under exclusivity
+            ModelParam::LoeExposureShare->value            => 0.35, // Share of revenue exposed to the next cliff
+            ModelParam::ExclusivityQuarters->value         => 26.0, // ~6.5 years until lead franchise LOE
+            ModelParam::BiologicRevenueShare->value        => 0.55, // Biologics erode slowly under biosimilars
+            ModelParam::PatentedMarginCeiling->value       => 0.50,
         ],
 
         // --- Crane Medical Network (CRAN) ---

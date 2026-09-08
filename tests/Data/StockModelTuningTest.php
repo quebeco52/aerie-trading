@@ -66,6 +66,7 @@ class StockModelTuningTest extends TestCase
             'steel' => [ModelParam::ContractOemWeight, ModelParam::SpotHrcWeight],
             'heavy_mfg' => [ModelParam::OemEquipmentWeight, ModelParam::AftermarketMroWeight],
             'biotech' => [ModelParam::CommercialTherapeuticsWeight, ModelParam::PipelineMilestonesWeight],
+            'biotech_drug_mix' => [ModelParam::EstablishedDrugWeight, ModelParam::PipelineDrugWeight],
             'logistics' => [ModelParam::DedicatedFleetWeight, ModelParam::SpotBrokerageWeight, ModelParam::Warehousing3plWeight],
             'railroad' => [ModelParam::IntermodalFreightWeight, ModelParam::IndustrialCarloadsWeight, ModelParam::BulkCommoditiesWeight],
             'restaurant' => [ModelParam::CompanyStoresWeight, ModelParam::FranchiseRoyaltiesWeight, ModelParam::FranchiseLeaseWeight],

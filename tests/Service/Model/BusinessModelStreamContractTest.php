@@ -109,6 +109,16 @@ class BusinessModelStreamContractTest extends TestCase
             $currentZ = $result->streamZ;
 
             foreach ($currentZ as $key => $val) {
+                if (str_starts_with((string) $key, 'state:')) {
+                    // Structural state (exclusivity clocks, franchise indices) is carried in the same
+                    // map but is not a Z-score, so it is bounded by its own model rails, not by N(0,1).
+                    $this->assertTrue(
+                        is_finite($val),
+                        "Structural state {$key} in {$modelClass} diverged on quarter {$quarter}: {$val}"
+                    );
+                    continue;
+                }
+
                 $this->assertLessThan(
                     8.0,
                     abs($val),

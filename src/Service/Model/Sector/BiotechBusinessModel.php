@@ -4,25 +4,37 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
-use App\Service\Model\BusinessModelInterface;
-
 use App\Data\ModelParam;
 use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
+use App\DTO\StreamContext;
 use App\Entity\Stock;
-use App\Service\Math\MathUtility;
 use App\Service\Event\ShockEvent;
-use App\Service\Macro\MacroEngine;
+use App\Service\Math\MathUtility;
 
 /**
  * Earnings strategy for Biotechnology and Specialty Drug Manufacturers.
- * 
+ *
  * Financial Physics:
  * - CapEx represents high-risk R&D that creates intangible patent assets.
- * - Blockbuster Drug Super-Cycles: High R&D reinvestment generates massive pricing power and patent protection.
- * - Patent Cliff Amortization: If R&D intensity lags, patents expire and generic competition rapidly erodes margins.
- * - Inelastic Demand: Highly immune to macroeconomic output gap recessions.
- * - High Idiosyncratic Variance: Driven by binary clinical trial outcomes (FDA approvals vs. Phase III failures).
+ * - Clinical development is a phase-transition (Markov) process: pivotal readouts arrive as a
+ *   Bernoulli hazard scaled by pipeline breadth and R&D replacement intensity, and succeed at
+ *   published industry transition rates rather than as symmetric Gaussian tail draws.
+ * - Approvals are permanent: an approved asset steps up the commercial franchise base and
+ *   refreshes the portfolio's weighted-average remaining exclusivity. Only the upfront milestone
+ *   payment is a single-quarter event.
+ * - Loss of Exclusivity (LOE) is a discrete, scheduled REVENUE event, not a margin drift: an
+ *   exclusivity clock expires and the exposed franchise erodes exponentially at modality-specific
+ *   hazards (small molecule collapses within a year, biologics bleed over several years).
+ * - Reverse operating leverage at LOE is produced by the engine itself (fixed costs are carried
+ *   separately in the EBIT bridge), so this model only adds the price-defense discounting.
+ * - Inelastic demand: highly immune to macroeconomic output gap recessions.
+ *
+ * Archetypes are expressed through StockModelTuning overrides rather than subclasses:
+ * - Big pharma:      high EstablishedDrugWeight, high PatentProtectedRevenueShare, real LOE exposure.
+ * - Clinical-stage:  PipelineDrugWeight dominant, LoeExposureShare 0.0 (nothing marketed to lose).
+ * - Generic/specialty: PipelineDrugWeight ~0.0 and PatentProtectedRevenueShare 0.0, which collapses
+ *   both the readout hazard and the operating margin ceiling to commodity manufacturing levels.
  */
 class BiotechBusinessModel extends StandardCorporateBusinessModel
 {
@@ -38,65 +50,85 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     /** Minimum visibility floor during major clinical trial announcements. */
     public const EVENT_MIN_VISIBILITY = 0.70;
 
-    public function getReversionSpeed(): float
-    {
-        return 0.15;
-    }
-
-    public function getMoatSpread(): float
-    {
-        return 0.015;
-    }
-
-    public function getCapExCompletionRate(Stock $stock): float
-    {
-        return 0.125;
-    }
-
-    public function getSecularGrowthRate(Stock $stock): float
-    {
-        return 0.04;
-    }
-
-    public function getSurpriseBlendWeights(): array
-    {
-        return ['eps_weight' => 0.20, 'revenue_weight' => 0.80];
-    }
-
     // --- Dual-Stream Biotech Portfolio Architecture ---
     /** Baseline fraction of revenue derived from commercially marketed, patent-protected established pharmaceuticals. */
     public const ESTABLISHED_DRUG_WEIGHT = 0.70;
-    /** Baseline fraction of revenue derived from high-risk clinical trial pipeline and new indications. */
+    /** Baseline fraction of revenue derived from recently launched assets plus collaboration and milestone income. */
     public const PIPELINE_DRUG_WEIGHT    = 0.30;
     /** Volatility multiplier for recurring commercial prescription therapeutic volumes. */
     public const COMMERCIAL_VARIANCE_SCALAR = 0.15;
     /** Volatility multiplier for lumpy pre-commercial clinical milestone and licensing revenue. */
     public const PIPELINE_VARIANCE_SCALAR = 0.45;
-    /** Backward compatibility alias for general revenue variance. */
-    public const REVENUE_VARIANCE_SCALAR = 0.25;
+    /** AR(1) persistence of recurring commercial prescription volumes across quarters. */
+    public const COMMERCIAL_PERSISTENCE_PHI = 0.40;
+    /** AR(1) persistence of lumpy collaboration and milestone revenue across quarters. */
+    public const PIPELINE_PERSISTENCE_PHI = 0.10;
 
-    // --- Clinical Trial & Patent Cliff Physics ---
-    /** Positive z-score threshold required to trigger landmark FDA approval blockbuster lore. */
-    public const TRIAL_APPROVAL_Z_SCORE    = 2.20;
-    /** Top-line revenue multiplier applied when a blockbuster specialty drug pipeline is approved. */
-    public const TRIAL_APPROVAL_REV_MULT   = 1.20;
-    /** Variable margin improvement reflecting high-margin patent monopoly protection. */
-    public const TRIAL_APPROVAL_MARGIN_BONUS = -0.08;
-    /** Negative z-score threshold required to trigger Phase III clinical failure and patent cliff lore. */
-    public const TRIAL_FAILURE_Z_SCORE     = -2.20;
-    /** Top-line revenue multiplier applied during major clinical trial failures and generic erosion. */
-    public const TRIAL_FAILURE_REV_MULT    = 0.85;
-    /** Variable margin compression penalty from generic drug competition after patent expiration. */
+    // --- Persisted Structural State Keys ---
+    /** Cumulative commercial franchise index: permanent revenue base carried across quarters. */
+    public const STATE_FRANCHISE_INDEX = 'state:commercial_franchise';
+    /** Quarters of marketing exclusivity remaining on the portfolio before the next patent cliff. */
+    public const STATE_EXCLUSIVITY_QUARTERS = 'state:exclusivity_quarters';
+    /** Quarters elapsed inside an active loss-of-exclusivity erosion window (0.0 = no active cliff). */
+    public const STATE_LOE_ELAPSED_QUARTERS = 'state:loe_elapsed_quarters';
+    /** Live share of revenue still under patent or regulatory exclusivity protection. */
+    public const STATE_PROTECTED_SHARE = 'state:patent_protected_share';
+    /** Prior-quarter R&D reinvestment ratio relative to the patent replacement rate. */
+    public const STATE_RND_REPLACEMENT_RATIO = 'state:rnd_replacement_ratio';
+
+    // --- Clinical Development Hazard (industry phase-transition rates) ---
+    /** Expected pivotal readouts per quarter at full pipeline concentration, before R&D intensity scaling. */
+    public const PIVOTAL_READOUT_HAZARD = 0.40;
+    /** Probability a pivotal Phase III trial meets its primary endpoint (industry Phase III transition rate). */
+    public const PHASE_III_SUCCESS_RATE = 0.58;
+    /** Probability a filed NDA/BLA clears regulatory review after a successful pivotal readout. */
+    public const REGULATORY_APPROVAL_RATE = 0.91;
+    /** Elasticity of readout frequency to R&D reinvestment above or below the patent replacement rate. */
+    public const READOUT_HAZARD_RND_ELASTICITY = 0.60;
+    /** Lower clamp on the R&D intensity multiplier applied to the readout hazard. */
+    public const MIN_READOUT_HAZARD_MULTIPLIER = 0.25;
+    /** Upper clamp on the R&D intensity multiplier applied to the readout hazard. */
+    public const MAX_READOUT_HAZARD_MULTIPLIER = 2.00;
+    /** Ceiling on the quarterly probability that a portfolio produces a pivotal readout. */
+    public const MAX_QUARTERLY_READOUT_HAZARD = 0.50;
+
+    // --- Approval Persistence & Franchise Physics ---
+    /** Permanent step-up in the commercial revenue base contributed by a newly launched approved asset. */
+    public const APPROVAL_FRANCHISE_STEP = 0.12;
+    /** Upper bound on the cumulative commercial franchise index (portfolio launch capacity). */
+    public const MAX_FRANCHISE_INDEX = 3.00;
+    /** Lower bound on the commercial franchise index after repeated generic erosion cycles. */
+    public const MIN_FRANCHISE_INDEX = 0.15;
+    /** Marketing exclusivity granted to a newly approved asset, in quarters (~10 years of effective patent life). */
+    public const NEW_APPROVAL_EXCLUSIVITY_QUARTERS = 40.0;
+    /** Single-quarter upfront and milestone payment multiplier on collaboration revenue at approval. */
+    public const APPROVAL_MILESTONE_REV_MULT = 1.20;
+    /** Launch-quarter variable cost penalty from commercial build-out and payer access spending. */
+    public const APPROVAL_LAUNCH_COST_MARGIN_PENALTY = 0.03;
+    /** Collaboration and milestone revenue retained in the quarter a pivotal trial misses its endpoint. */
+    public const TRIAL_FAILURE_PIPELINE_RETENTION = 0.60;
+    /** Variable margin penalty from expensing a terminated late-stage development program. */
     public const TRIAL_FAILURE_MARGIN_PENALTY = 0.10;
     /** Continuous variable margin sensitivity to interim Phase II/III clinical trial readouts. */
     public const CONTINUOUS_PIPELINE_MARGIN_SENSITIVITY = 0.015;
-    /** Upper clamp for realized variable margin. */
-    public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
-    /** Lower clamp for realized variable margin. */
-    public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
-    // --- Analyst Visibility & Error ---
-    // Moved to getCoverageProfile() — see MarketConsensusEngine.
+    // --- Exclusivity Clock & Loss of Exclusivity (LOE) Erosion ---
+    /** Default remaining marketing exclusivity on the commercial portfolio, in quarters (~7 years). */
+    public const DEFAULT_EXCLUSIVITY_QUARTERS = 28.0;
+    /** Default share of commercial revenue exposed to the next loss of exclusivity. */
+    public const DEFAULT_LOE_EXPOSURE_SHARE = 0.35;
+    /** Default share of revenue still under patent or regulatory exclusivity protection. */
+    public const DEFAULT_PATENT_PROTECTED_SHARE = 0.85;
+    /** Default share of the commercial book made up of biologics rather than small molecules. */
+    public const DEFAULT_BIOLOGIC_REVENUE_SHARE = 0.50;
+    /** Quarterly erosion hazard for small-molecule brands at generic entry: -ln(0.15)/4, ~85% volume loss in one year. */
+    public const SMALL_MOLECULE_LOE_HAZARD = 0.4742;
+    /** Quarterly erosion hazard for biologics under biosimilar entry: -ln(0.60)/10, ~40% loss over two and a half years. */
+    public const BIOLOGIC_LOE_HAZARD = 0.0511;
+    /** Quarters an erosion window runs before the residual off-patent revenue is folded into the permanent base. */
+    public const LOE_EROSION_WINDOW_QUARTERS = 12.0;
+    /** Variable margin penalty from price concessions defending an off-patent brand against generic entrants. */
+    public const LOE_PRICE_DEFENSE_MARGIN_PENALTY = 0.04;
 
     // --- Patent Moat & Capital Structure Rails ---
     /** Operating margin mean reversion speed: slower speed reflects multi-year patent monopoly protection. */
@@ -115,12 +147,52 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public const BLOCKBUSTER_GAIN_RATE        = 0.012;
     /** Structural minimum operating margin floor under severe generic drug competition (off-patent). */
     public const MIN_OPERATING_MARGIN_FLOOR   = 0.08;
-    /** Structural maximum operating margin ceiling for proprietary patented biologic blockbusters. */
+    /** Structural maximum operating margin ceiling for a fully patent-protected biologic portfolio. */
     public const MAX_OPERATING_MARGIN_CEILING = 0.50;
+    /** Structural operating margin ceiling for unprotected commodity generic manufacturing. */
+    public const GENERIC_MARGIN_CEILING       = 0.20;
+
+    // --- Secular Growth Rails ---
+    /** Secular growth for a fully patent-protected branded portfolio (demographics plus branded pricing). */
+    public const PATENTED_SECULAR_GROWTH_RATE = 0.045;
+    /** Secular growth for unprotected generic manufacturing, where volume gains offset relentless price erosion. */
+    public const GENERIC_SECULAR_GROWTH_RATE  = 0.010;
 
     // --- R&D Pipeline Valuation Rails ---
     /** Valuation discount applied when FCF is negative due to heavy clinical trial funding. */
     public const BIOTECH_RESEARCH_BURN_DISCOUNT = 0.88;
+
+    public function getReversionSpeed(): float
+    {
+        return 0.15;
+    }
+
+    public function getMoatSpread(): float
+    {
+        return 0.015;
+    }
+
+    public function getCapExCompletionRate(Stock $stock): float
+    {
+        return 0.125;
+    }
+
+    /**
+     * Branded portfolios compound on demographics and branded pricing; unprotected generic
+     * manufacturing barely grows because volume gains are consumed by price erosion.
+     */
+    public function getSecularGrowthRate(Stock $stock): float
+    {
+        $protectedShare = $this->resolveProtectedShare($stock);
+
+        return self::GENERIC_SECULAR_GROWTH_RATE
+            + ((self::PATENTED_SECULAR_GROWTH_RATE - self::GENERIC_SECULAR_GROWTH_RATE) * $protectedShare);
+    }
+
+    public function getSurpriseBlendWeights(): array
+    {
+        return ['eps_weight' => 0.20, 'revenue_weight' => 0.80];
+    }
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
@@ -133,20 +205,22 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
-     * Biotech is driven by high-margin commercialized drugs and massive binary R&D pipeline outcomes.
+     * Biotech is driven by a persistent commercial franchise that approvals step up and patent
+     * cliffs erode, plus lumpy collaboration income exposed to binary pivotal trial readouts.
      */
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            ModelParam::EstablishedDrugWeight->value => self::ESTABLISHED_DRUG_WEIGHT,
-            ModelParam::PipelineDrugWeight->value    => self::PIPELINE_DRUG_WEIGHT,
+            ModelParam::EstablishedDrugWeight->value       => self::ESTABLISHED_DRUG_WEIGHT,
+            ModelParam::PipelineDrugWeight->value          => self::PIPELINE_DRUG_WEIGHT,
+            ModelParam::LoeExposureShare->value            => self::DEFAULT_LOE_EXPOSURE_SHARE,
+            ModelParam::ExclusivityQuarters->value         => self::DEFAULT_EXCLUSIVITY_QUARTERS,
+            ModelParam::BiologicRevenueShare->value        => self::DEFAULT_BIOLOGIC_REVENUE_SHARE,
+            ModelParam::PatentProtectedRevenueShare->value => self::DEFAULT_PATENT_PROTECTED_SHARE,
         ]);
 
-        $establishedWeight = $params[ModelParam::EstablishedDrugWeight];
-        $pipelineWeight    = $params[ModelParam::PipelineDrugWeight];
-
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = new StreamContext($momentum, $mathUtility);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -158,28 +232,80 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $pipelineWeight    = $activeWeights['pipeline_licensing_milestones'];
 
         // Independent stream Z-scores with AR(1) persistence
-        $establishedZ = $streams->generateZ('commercial_therapeutics', 0.40); // Commercial prescription volume variance
-        $pipelineZ    = $streams->generateZ('pipeline_licensing_milestones', 0.10); // Clinical trial milestone readouts
-        $trialZ       = $streams->generateZ('trial', 0.05);
+        $establishedZ = $streams->generateZ('commercial_therapeutics', self::COMMERCIAL_PERSISTENCE_PHI);
+        $pipelineZ    = $streams->generateZ('pipeline_licensing_milestones', self::PIPELINE_PERSISTENCE_PHI);
 
-        $establishedRevenue = max(0.0, $expectedRevenue * $establishedWeight * (1.0 + ($establishedZ * ($baselineVol * self::COMMERCIAL_VARIANCE_SCALAR))));
+        // --- Exclusivity Clock: schedule the next patent cliff and advance any active erosion ---
+        $exposureShare = max(0.0, min(1.0, $params[ModelParam::LoeExposureShare]));
+        $franchise = $streams->getPersistedState(self::STATE_FRANCHISE_INDEX, 1.0);
+        $clock     = $streams->getPersistedState(self::STATE_EXCLUSIVITY_QUARTERS, $params[ModelParam::ExclusivityQuarters]);
+        $elapsed   = $streams->getPersistedState(self::STATE_LOE_ELAPSED_QUARTERS, 0.0);
+
+        $eventType = null;
+        if ($elapsed > 0.0) {
+            $elapsed += 1.0;
+        } else {
+            $clock -= 1.0;
+            if ($clock <= 0.0 && $exposureShare > 0.0) {
+                $elapsed = 1.0;
+                $eventType = ShockEvent::BIOTECH_PATENT_CLIFF;
+            }
+        }
+
+        // Exponential LOE erosion of the exposed franchise at the portfolio's modality-weighted hazard.
+        $biologicShare = max(0.0, min(1.0, $params[ModelParam::BiologicRevenueShare]));
+        $loeHazard = ($biologicShare * self::BIOLOGIC_LOE_HAZARD)
+            + ((1.0 - $biologicShare) * self::SMALL_MOLECULE_LOE_HAZARD);
+        $erodedFraction = $elapsed > 0.0 ? $exposureShare * (1.0 - exp(-$loeHazard * $elapsed)) : 0.0;
+        $erosionFactor  = 1.0 - $erodedFraction;
+
+        $commercialMultiplier = $franchise * $erosionFactor;
+
+        $establishedRevenue = max(0.0, $expectedRevenue * $establishedWeight * $commercialMultiplier * (1.0 + ($establishedZ * ($baselineVol * self::COMMERCIAL_VARIANCE_SCALAR))));
         $pipelineRevenue    = max(0.0, $expectedRevenue * $pipelineWeight    * (1.0 + ($pipelineZ    * ($baselineVol * self::PIPELINE_VARIANCE_SCALAR))));
 
-        // Patent Cliff vs. Blockbuster R&D Super-Cycle
-        // Applies directly to the high-risk pipeline drug stream ($pipelineWeight).
-        // Continuous pipeline clinical progress ($pipelineZ) smoothly adjusts variable margin.
-        $continuousPipelineShift = -self::CONTINUOUS_PIPELINE_MARGIN_SENSITIVITY * $pipelineZ * $pipelineWeight;
-        $patentModifier = $continuousPipelineShift;
-        $eventType = null;
+        $preEventPipelineRevenue = $pipelineRevenue;
+        $preErosionEstablished   = $erosionFactor > 0.0 ? ($establishedRevenue / $erosionFactor) : $establishedRevenue;
 
-        if ($trialZ > self::TRIAL_APPROVAL_Z_SCORE) {
-            $pipelineRevenue *= self::TRIAL_APPROVAL_REV_MULT;
-            $patentModifier += self::TRIAL_APPROVAL_MARGIN_BONUS * $pipelineWeight;
-            $eventType = ShockEvent::BIOTECH_DRUG_APPROVAL;
-        } elseif ($trialZ < self::TRIAL_FAILURE_Z_SCORE) {
-            $pipelineRevenue *= self::TRIAL_FAILURE_REV_MULT;
-            $patentModifier += self::TRIAL_FAILURE_MARGIN_PENALTY * $pipelineWeight;
-            $eventType = ShockEvent::BIOTECH_TRIAL_SETBACK;
+        // Continuous pipeline clinical progress smoothly adjusts variable margin. Trial spend itself is
+        // capitalized as intangible R&D CapEx in this architecture, so progress reads through as
+        // higher-value royalty and collaboration mix rather than as near-term operating expense.
+        $patentModifier = -self::CONTINUOUS_PIPELINE_MARGIN_SENSITIVITY * $pipelineZ * $pipelineWeight;
+
+        // --- Pivotal Readout: Bernoulli hazard scaled by pipeline breadth and R&D replacement intensity ---
+        $rndRatio = $streams->getPersistedState(self::STATE_RND_REPLACEMENT_RATIO, 1.0);
+        $rndMultiplier = min(
+            self::MAX_READOUT_HAZARD_MULTIPLIER,
+            max(self::MIN_READOUT_HAZARD_MULTIPLIER, pow(max(0.01, $rndRatio), self::READOUT_HAZARD_RND_ELASTICITY))
+        );
+        $readoutHazard = min(self::MAX_QUARTERLY_READOUT_HAZARD, self::PIVOTAL_READOUT_HAZARD * $pipelineWeight * $rndMultiplier);
+
+        if ($readoutHazard > 0.0 && $mathUtility->checkProbability($readoutHazard)) {
+            if ($mathUtility->checkProbability(self::PHASE_III_SUCCESS_RATE * self::REGULATORY_APPROVAL_RATE)) {
+                // Upfront and milestone cash lands this quarter; the launched asset is permanent.
+                $pipelineRevenue *= self::APPROVAL_MILESTONE_REV_MULT;
+                $patentModifier  += self::APPROVAL_LAUNCH_COST_MARGIN_PENALTY * $pipelineWeight;
+
+                // Portfolio-weighted average remaining exclusivity, refreshed by the new asset's patent life.
+                $clock = (($franchise * $clock) + (self::APPROVAL_FRANCHISE_STEP * self::NEW_APPROVAL_EXCLUSIVITY_QUARTERS))
+                    / ($franchise + self::APPROVAL_FRANCHISE_STEP);
+                $franchise = min(self::MAX_FRANCHISE_INDEX, $franchise * (1.0 + self::APPROVAL_FRANCHISE_STEP));
+
+                // A patent cliff onset is the larger structural event, so it keeps the public narrative.
+                $eventType ??= ShockEvent::BIOTECH_DRUG_APPROVAL;
+            } else {
+                // A failed pivotal trial destroys future optionality and collaboration income.
+                // It does NOT touch marketed commercial revenue: the asset never had any.
+                $pipelineRevenue *= self::TRIAL_FAILURE_PIPELINE_RETENTION;
+                $patentModifier  += self::TRIAL_FAILURE_MARGIN_PENALTY * $pipelineWeight;
+                $eventType ??= ShockEvent::BIOTECH_TRIAL_SETBACK;
+            }
+        }
+
+        if ($elapsed > 0.0) {
+            // Price concessions defending the off-patent brand. Reverse operating leverage against
+            // the collapsing revenue base is produced by the engine's fixed cost bridge.
+            $patentModifier += self::LOE_PRICE_DEFENSE_MARGIN_PENALTY * $exposureShare * $establishedWeight;
         }
 
         $streamRevenues = [
@@ -192,16 +318,43 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $patentModifier);
 
-        $primaryShockZ = $streams->resolveDominantShockZ([$trialZ, $establishedZ]);
-        $establishedShock = $establishedZ * ($baselineVol * self::COMMERCIAL_VARIANCE_SCALAR);
-        $pipelineBase = max(1.0, $expectedRevenue * $pipelineWeight);
-        $pipelineShock = ($pipelineRevenue - $pipelineBase) / $pipelineBase;
+        // Once the erosion window closes, the residual off-patent level becomes the permanent base
+        // and the clock is reset to the next franchise's remaining patent life.
+        if ($elapsed >= self::LOE_EROSION_WINDOW_QUARTERS) {
+            $franchise = max(self::MIN_FRANCHISE_INDEX, $franchise * $erosionFactor);
+            $elapsed = 0.0;
+            $clock = max($clock, $params[ModelParam::ExclusivityQuarters]);
+        }
+
+        // Revenue that has gone off patent is permanently unprotected: it caps structural margins
+        // and secular growth from the following quarter onward.
+        $protectedShare = max(0.0, min(1.0, $params[ModelParam::PatentProtectedRevenueShare] - $erodedFraction));
+
+        $streams->registerState(self::STATE_FRANCHISE_INDEX, $franchise);
+        $streams->registerState(self::STATE_EXCLUSIVITY_QUARTERS, $clock);
+        $streams->registerState(self::STATE_LOE_ELAPSED_QUARTERS, $elapsed);
+        $streams->registerState(self::STATE_PROTECTED_SHARE, $protectedShare);
+        $streams->registerState(self::STATE_RND_REPLACEMENT_RATIO, $rndRatio);
+
+        $establishedBase = max(1.0, $expectedRevenue * $establishedWeight);
+        $pipelineBase    = max(1.0, $expectedRevenue * $pipelineWeight);
+        $establishedShock = ($establishedRevenue - $establishedBase) / $establishedBase;
+        $pipelineShock    = ($pipelineRevenue - $pipelineBase) / $pipelineBase;
         $observableShockZ = ($establishedShock * $establishedWeight) + ($pipelineShock * $pipelineWeight);
+
+        // Standardize the discrete event's revenue impact into Z units of pipeline dispersion.
+        $eventZ = null;
+        if ($eventType !== null) {
+            $eventRevenueDelta = ($pipelineRevenue - $preEventPipelineRevenue)
+                + ($establishedRevenue - $preErosionEstablished);
+            $eventSigma = max(1.0, $expectedRevenue * $baselineVol * self::PIPELINE_VARIANCE_SCALAR);
+            $eventZ = $eventRevenueDelta / $eventSigma;
+        }
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
             rawVariableMargin: $clampedMargin,
-            primaryShockZ: $primaryShockZ,
+            primaryShockZ: $streams->resolveDominantShockZ([$establishedZ, $pipelineZ], $eventZ),
             observableShockZ: $observableShockZ,
             eventType: $eventType,
             isPublicEvent: $eventType !== null ? true : null,
@@ -252,18 +405,24 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     {
         $timeScale = $dt / 0.25;
         $currentMargin = (float) $stock->getOperatingMargin();
+        $marginCeiling = $this->resolveMarginCeiling($stock);
+
+        // Carry R&D replacement intensity into the next quarter's pivotal readout hazard: a portfolio
+        // starved of research funding stops generating late-stage readouts.
+        $this->persistState($stock, self::STATE_RND_REPLACEMENT_RATIO, max(0.0, $reinvestmentRatio));
 
         if ($reinvestmentRatio < 1.0) {
             // Patent Cliff Amortization: underinvestment causes patents to expire without replacement
             $decayRate = self::PATENT_CLIFF_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
             $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
             $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            // Blockbuster Pipeline Expansion: R&D overinvestment creates proprietary biologic monopolies
+        } elseif ($reinvestmentRatio > 1.0 && $currentMargin < $marginCeiling) {
+            // Blockbuster Pipeline Expansion: R&D overinvestment creates proprietary biologic monopolies.
+            // A portfolio with no exclusivity left cannot earn monopoly margins no matter what it spends.
             $modGain = self::BLOCKBUSTER_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
             $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
+                $marginCeiling,
+                $currentMargin + (($marginCeiling - $currentMargin) * $modGain)
             );
             $stock->setOperatingMargin((string) $updatedMargin);
         }
@@ -285,6 +444,48 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     {
         // Clinical-stage biotechnology firms trade entirely on clinical pipeline rNPV and cash runway, not Book Value.
         return $earningsValue;
+    }
+
+    /**
+     * Structural operating margin ceiling, blended between a patent monopoly and commodity generic
+     * manufacturing by the share of revenue still under exclusivity.
+     */
+    private function resolveMarginCeiling(Stock $stock): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::PatentedMarginCeiling->value => self::MAX_OPERATING_MARGIN_CEILING,
+        ]);
+        $patentedCeiling = $params[ModelParam::PatentedMarginCeiling];
+        $protectedShare  = $this->resolveProtectedShare($stock);
+
+        return self::GENERIC_MARGIN_CEILING
+            + (($patentedCeiling - self::GENERIC_MARGIN_CEILING) * $protectedShare);
+    }
+
+    /**
+     * Live share of revenue under patent or regulatory exclusivity, tracked by the physics loop and
+     * falling as scheduled losses of exclusivity erode the marketed franchise.
+     */
+    private function resolveProtectedShare(Stock $stock): float
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::PatentProtectedRevenueShare->value => self::DEFAULT_PATENT_PROTECTED_SHARE,
+        ]);
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $share = (float) ($momentum[self::STATE_PROTECTED_SHARE] ?? $params[ModelParam::PatentProtectedRevenueShare]);
+
+        return max(0.0, min(1.0, $share));
+    }
+
+    /**
+     * Merges a single structural state value into the stock's persisted stream state map.
+     * Used outside the quarterly physics pass, where no StreamContext is in scope.
+     */
+    private function persistState(Stock $stock, string $key, float $value): void
+    {
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $momentum[$key] = $value;
+        $stock->setEarningsMomentumZ($momentum);
     }
 
     /**

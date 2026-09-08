@@ -73,6 +73,11 @@ class NarrativeEngine
                 "Lead pipeline therapeutic failed to meet efficacy endpoints, prompting asset write-downs.",
                 "Faced severe generic price competition following primary patent expiration."
             ]),
+            ShockEvent::BIOTECH_PATENT_CLIFF => $this->getRandomPhrase([
+                "Primary marketing exclusivity lapsed on a lead franchise, opening the door to generic entrants.",
+                "Loss of exclusivity began eroding branded prescription volumes as biosimilar filings cleared review.",
+                "Generic entry against an off-patent flagship therapy triggered rapid script erosion and price concessions."
+            ]),
             ShockEvent::CLEARING_SYSTEMIC_DEFAULT => $this->getRandomPhrase([
                 "A massive systemic default breached the initial margin pool, forcing the clearinghouse to cover billions in toxic settlements.",
                 "Emergency default fund drawdowns were triggered after a member firm insolvency.",
