@@ -7,6 +7,7 @@ namespace App\Tests\Service\District;
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Service\District\DistrictRevenueFeed;
+use App\Service\Math\MathUtility;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use Doctrine\ORM\Query;
@@ -49,7 +50,7 @@ class DistrictRevenueFeedTest extends TestCase
         $this->query = $this->createMock(Query::class);
         $this->queryBuilder->method('getQuery')->willReturn($this->query);
 
-        $this->feed = new DistrictRevenueFeed($this->entityManager);
+        $this->feed = new DistrictRevenueFeed($this->entityManager, new MathUtility());
     }
 
     private function makeStock(string $ticker): Stock
@@ -61,18 +62,23 @@ class DistrictRevenueFeedTest extends TestCase
         return $stock;
     }
 
+    /**
+     * $quartersAgo backdates the filing, so a history built here is ordered the way the query
+     * hands it over: newest first.
+     */
     private function makeReport(
         Stock $stock,
         float $revenue,
         array $revenueStreams,
         array $streamDetails,
+        int $quartersAgo = 0,
     ): CorporateReport {
         $report = new CorporateReport();
         $report->setStock($stock);
         $report->setRevenue((string) $revenue);
         $report->setRevenueStreams($revenueStreams);
         $report->setStreamDetails($streamDetails);
-        $report->setRecordedAt(new \DateTime());
+        $report->setRecordedAt(new \DateTime(sprintf('-%d months', $quartersAgo * 3)));
 
         return $report;
     }
@@ -196,10 +202,12 @@ class DistrictRevenueFeedTest extends TestCase
 
         $this->assertSame([$driver], $stream['drivers']);
         $this->assertSame('Hf Margin Call', $stream['event']);
-        $this->assertSame(0.22, $stream['qoqDelta']);
+        // Growth is computed from the reports on file, not read back off the stored attribution —
+        // with no prior quarter here there is no rate to quote.
+        $this->assertNull($stream['qoqDelta']);
     }
 
-    public function testMissingStreamDetailsFallBackToZeroedFields(): void
+    public function testMissingStreamDetailsStillYieldTheReportedShareAndNoAttribution(): void
     {
         $stock = $this->makeStock('VULT');
         $report = $this->makeReport($stock, 10.0, ['restructuring_advisory' => 10.0], []);
@@ -207,9 +215,136 @@ class DistrictRevenueFeedTest extends TestCase
 
         $stream = $this->feed->latestRevenueMixByTicker([$stock])['VULT']['streams'][0];
 
-        $this->assertSame(0.0, $stream['share']);
-        $this->assertSame(0.0, $stream['qoqDelta']);
+        // Share is the reported revenue over the reported total — it never depended on the
+        // stored attribution block, so a report filed without one still ranks correctly.
+        $this->assertSame(1.0, $stream['share']);
+        $this->assertNull($stream['qoqDelta']);
         $this->assertSame([], $stream['drivers']);
         $this->assertNull($stream['event']);
+    }
+
+    public function testKeepsAtMostFiveQuartersOfHistoryPerTenant(): void
+    {
+        $stock = $this->makeStock('LAKE');
+        $reports = [];
+        for ($quartersAgo = 0; $quartersAgo < 8; $quartersAgo++) {
+            $reports[] = $this->makeReport($stock, 100.0, ['fee_income' => 100.0], [], $quartersAgo);
+        }
+        $this->query->method('getResult')->willReturn($reports);
+
+        $mix = $this->feed->latestRevenueMixByTicker([$stock])['LAKE'];
+
+        $this->assertSame(DistrictRevenueFeed::HISTORY_QUARTERS, $mix['quartersOnFile']);
+        $this->assertCount(DistrictRevenueFeed::HISTORY_QUARTERS, $mix['streams'][0]['history']);
+    }
+
+    public function testQuotesSequentialAndYearOnYearGrowthAgainstTheRightQuarters(): void
+    {
+        $stock = $this->makeStock('LAKE');
+        // Newest first: 120 now, 100 last quarter, and 60 four quarters back.
+        $reports = [
+            $this->makeReport($stock, 120.0, ['fee_income' => 120.0], [], 0),
+            $this->makeReport($stock, 100.0, ['fee_income' => 100.0], [], 1),
+            $this->makeReport($stock, 90.0, ['fee_income' => 90.0], [], 2),
+            $this->makeReport($stock, 80.0, ['fee_income' => 80.0], [], 3),
+            $this->makeReport($stock, 60.0, ['fee_income' => 60.0], [], 4),
+        ];
+        $this->query->method('getResult')->willReturn($reports);
+
+        $mix = $this->feed->latestRevenueMixByTicker([$stock])['LAKE'];
+        $stream = $mix['streams'][0];
+
+        $this->assertSame(0.2, $stream['qoqDelta']);
+        $this->assertSame(1.0, $stream['yoyDelta']);
+        $this->assertSame(0.2, $mix['totalQoq']);
+        $this->assertSame(1.0, $mix['totalYoy']);
+    }
+
+    public function testGrowthIsNotMeaningfulForAStreamWithNoPriorQuarter(): void
+    {
+        $stock = $this->makeStock('LAKE');
+        $reports = [
+            $this->makeReport($stock, 150.0, ['fee_income' => 100.0, 'custody_float' => 50.0], [], 0),
+            $this->makeReport($stock, 100.0, ['fee_income' => 100.0], [], 1),
+        ];
+        $this->query->method('getResult')->willReturn($reports);
+
+        $streams = $this->feed->latestRevenueMixByTicker([$stock])['LAKE']['streams'];
+        $newStream = array_values(array_filter($streams, static fn (array $s): bool => $s['key'] === 'custody_float'))[0];
+
+        // A stream that did not exist last quarter has no growth rate — null, not a flat 0.0.
+        $this->assertNull($newStream['qoqDelta']);
+        $this->assertNull($newStream['shareShiftBps']);
+    }
+
+    public function testStreamContributionsSumToTheHeadlineSequentialGrowth(): void
+    {
+        $stock = $this->makeStock('LAKE');
+        $reports = [
+            $this->makeReport($stock, 130.0, ['fee_income' => 30.0, 'net_interest_income' => 100.0], [], 0),
+            $this->makeReport($stock, 100.0, ['fee_income' => 20.0, 'net_interest_income' => 80.0], [], 1),
+        ];
+        $this->query->method('getResult')->willReturn($reports);
+
+        $mix = $this->feed->latestRevenueMixByTicker([$stock])['LAKE'];
+        $contributions = array_sum(array_column($mix['streams'], 'contribution'));
+
+        // This identity is what makes the panel legible: the segment rows add up to the header.
+        $this->assertEqualsWithDelta($mix['totalQoq'], $contributions, 0.0001);
+    }
+
+    public function testQuotesMixShiftInBasisPointsOfShare(): void
+    {
+        $stock = $this->makeStock('LAKE');
+        $reports = [
+            // Fee income goes from 20% to 25% of the mix — a 500 bps shift.
+            $this->makeReport($stock, 200.0, ['fee_income' => 50.0, 'net_interest_income' => 150.0], [], 0),
+            $this->makeReport($stock, 100.0, ['fee_income' => 20.0, 'net_interest_income' => 80.0], [], 1),
+        ];
+        $this->query->method('getResult')->willReturn($reports);
+
+        $streams = $this->feed->latestRevenueMixByTicker([$stock])['LAKE']['streams'];
+        $fee = array_values(array_filter($streams, static fn (array $s): bool => $s['key'] === 'fee_income'))[0];
+
+        $this->assertSame(500.0, $fee['shareShiftBps']);
+    }
+
+    public function testReportsConcentrationAsHerfindahlAndEffectiveSegmentCount(): void
+    {
+        $stock = $this->makeStock('LAKE');
+        // An even two-way split: HHI 0.5, two effective segments.
+        $report = $this->makeReport($stock, 100.0, ['fee_income' => 50.0, 'net_interest_income' => 50.0], []);
+        $this->query->method('getResult')->willReturn([$report]);
+
+        $concentration = $this->feed->latestRevenueMixByTicker([$stock])['LAKE']['concentration'];
+
+        $this->assertSame(0.5, $concentration['hhi']);
+        $this->assertSame(2.0, $concentration['effectiveStreams']);
+    }
+
+    public function testTrailingTwelveMonthsIsWithheldUntilFourQuartersAreOnFile(): void
+    {
+        $stock = $this->makeStock('LAKE');
+        $three = [
+            $this->makeReport($stock, 100.0, ['fee_income' => 100.0], [], 0),
+            $this->makeReport($stock, 100.0, ['fee_income' => 100.0], [], 1),
+            $this->makeReport($stock, 100.0, ['fee_income' => 100.0], [], 2),
+        ];
+        $this->query->method('getResult')->willReturn($three);
+
+        $this->assertNull($this->feed->latestRevenueMixByTicker([$stock])['LAKE']['ttmRevenue']);
+    }
+
+    public function testStampsThePeriodAndFilingDateOnTheMix(): void
+    {
+        $stock = $this->makeStock('LAKE');
+        $report = $this->makeReport($stock, 100.0, ['fee_income' => 100.0], []);
+        $report->setRecordedAt(new \DateTime('2026-08-14 09:30:00'));
+        $this->query->method('getResult')->willReturn([$report]);
+
+        $mix = $this->feed->latestRevenueMixByTicker([$stock])['LAKE'];
+
+        $this->assertSame('Q3 2026', $mix['periodLabel']);
+        $this->assertStringStartsWith('2026-08-14', $mix['reportedAt']);
     }
 }

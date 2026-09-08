@@ -11,24 +11,45 @@
 			<div class="w-full">
 				<div class="flex items-center gap-2 mb-2">
 					<span class="w-2 h-2 rounded-full bg-secondary"></span>
-					<span class="text-xs font-bold tracking-wider text-secondary uppercase">Live Market Feed</span>
+					<span class="text-[11px] font-semibold tracking-wide text-secondary uppercase">Live Market Feed</span>
 				</div>
 				<h1 class="text-2xl md:text-3xl font-bold text-on-surface tracking-tight mb-1">The Aerie Exchange</h1>
-				<p class="text-on-surface-variant text-xs">The central financial hub. All markets are currently open.</p>
+				<p class="text-on-surface-variant text-xs">Live prices, valuations and macroeconomic conditions across the Aerie Autonomous District.</p>
 			</div>
 		</div>
 
 		{# Macroeconomic Indicators #}
 		{% if macro is defined %}
-		<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+		<div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
 			{# Economic Cycle #}
-			<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/25 flex flex-col justify-between">
-				<div>
-					<p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Economic Cycle</p>
-					<div class="flex items-end gap-2">
-						<p id="macro-cycle" class="text-2xl font-bold text-on-surface tracking-tight">{{ macro.output_gap > 0.01 ? 'Boom' : (macro.output_gap < -0.01 ? 'Bust' : 'Neutral') }}</p>
-					</div>
-				</div>
+			<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/25">
+				<p class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide mb-2">Economic cycle</p>
+				<p id="macro-cycle" class="text-2xl font-bold text-on-surface tracking-tight">{{ macro.output_gap > 0.01 ? 'Boom' : (macro.output_gap < -0.01 ? 'Bust' : 'Neutral') }}</p>
+				<p class="text-xs text-on-surface-variant mt-1 font-mono">Output gap {{ macro.output_gap >= 0 ? '+' : '' }}{{ (macro.output_gap * 100)|number_format(2) }}%</p>
+			</div>
+
+			{# Inflation #}
+			<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/25">
+				<p class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide mb-2">Inflation</p>
+				<p class="text-2xl font-bold text-on-surface tracking-tight font-mono">{{ (macro.inflation|default(0) * 100)|number_format(2) }}%</p>
+				<p class="text-xs text-on-surface-variant mt-1 font-mono">Target 2.00%</p>
+			</div>
+
+			{# Policy Rate #}
+			<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/25">
+				<p class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide mb-2">Policy rate</p>
+				<p class="text-2xl font-bold text-on-surface tracking-tight font-mono">{{ (macro.policy_rate|default(0) * 100)|number_format(2) }}%</p>
+				<p class="text-xs text-on-surface-variant mt-1 font-mono">Overnight target</p>
+			</div>
+
+			{# 10Y Yield #}
+			<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/25">
+				<p class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide mb-2">10Y yield</p>
+				<p class="text-2xl font-bold text-on-surface tracking-tight font-mono">{{ (macro.yield_10y|default(0) * 100)|number_format(2) }}%</p>
+				{% set spread = (macro.yield_10y|default(0) - macro.policy_rate|default(0)) * 10000 %}
+				<p class="text-xs mt-1 font-mono {{ spread < 0 ? 'text-tertiary' : 'text-on-surface-variant' }}">
+					Curve {{ spread >= 0 ? '+' : '' }}{{ spread|number_format(0) }} bps{{ spread < 0 ? ' (inverted)' : '' }}
+				</p>
 			</div>
 		</div>
 		{% endif %}
@@ -44,7 +65,7 @@
 						</span>
 					</div>
 					<div class="md:text-right">
-						<p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Live Valuation</p>
+						<p class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide mb-1">Live Valuation</p>
 						<p id="etf-price" class="text-3xl md:text-4xl font-bold text-on-surface tracking-tight font-mono tabular-nums">${{ etf.price|number_format(2) }}</p>
 					</div>
 				</div>
@@ -55,7 +76,7 @@
 		<div class="bg-surface-container-low rounded-lg border border-outline-variant/25 overflow-hidden">
 			<div class="px-5 py-4 border-b border-outline-variant/15 flex items-center justify-between">
 				<div>
-					<h3 class="text-base font-bold text-on-surface tracking-tight uppercase">Market Cap Leaderboard</h3>
+					<h3 class="text-base font-bold text-on-surface tracking-tight">Market Cap Leaderboard</h3>
 					<p class="text-xs text-on-surface-variant mt-0.5">Sorted by total network valuation.</p>
 				</div>
 			</div>
@@ -63,32 +84,42 @@
 			<div class="overflow-x-auto">
 				<table class="w-full text-left border-collapse">
 					<thead>
-						<tr class="bg-surface-container-highest/20 text-on-surface-variant text-xs font-bold uppercase tracking-wider border-b border-outline-variant/15">
+						<tr class="bg-surface-container-highest/20 text-on-surface-variant text-[11px] font-semibold uppercase tracking-wide border-b border-outline-variant/15">
 							<th scope="col" class="px-5 py-3">Asset</th>
 							<th scope="col" class="px-4 py-3 hidden sm:table-cell">Sector</th>
 							<th scope="col" class="px-4 py-3 text-right">Price</th>
-							<th scope="col" class="px-5 py-3 text-right">Market Cap</th>
+							<th scope="col" class="px-4 py-3 text-right" title="Change over the trailing one-month buffered window">1M</th>
+							<th scope="col" class="px-5 py-3 text-right">Market cap</th>
 						</tr>
 					</thead>
 					<tbody id="market-table-body" class="divide-y divide-outline-variant/10 text-sm relative">
 						{% for stock in stocks|default([]) %}
-							<tr id="row-{{ stock.ticker }}" data-mcap="{{ stock.isBankrupt ? 0 : stock.marketCap }}" data-bankrupt="{{ stock.isBankrupt ? 'true' : 'false' }}" class="{{ stock.isBankrupt ? 'opacity-50 hover:opacity-80 bg-red-950/10' : 'hover:bg-surface-container-high/30' }} transition-colors cursor-pointer group" onclick="window.location.href='/stock/{{ stock.ticker }}'">
-								<td class="px-5 py-3">
+							<tr id="row-{{ stock.ticker }}" data-mcap="{{ stock.isBankrupt ? 0 : stock.marketCap }}" data-bankrupt="{{ stock.isBankrupt ? 'true' : 'false' }}" class="{{ stock.isBankrupt ? 'opacity-50 hover:opacity-80 bg-tertiary/10' : 'hover:bg-surface-container-high/30' }} transition-colors group focus-within:bg-surface-container-high/30 relative">
+								<th scope="row" class="px-5 py-3 text-left font-normal">
 									<div class="flex flex-col">
 										<div class="flex items-center gap-2">
-											<span class="font-bold text-on-surface text-sm group-hover:text-primary transition-colors">{{ stock.name }}</span>
+											{# The row's single real link: reachable by keyboard, and stretched over the
+											   row so the whole band stays clickable without an onclick handler. #}
+											<a href="/stock/{{ stock.ticker }}" class="font-bold text-on-surface text-sm group-hover:text-primary transition-colors outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:decoration-primary focus-visible:underline-offset-4">{{ stock.name }}</a>
 											{% if stock.isBankrupt %}
-												<span class="inline-flex items-center rounded bg-red-500/10 px-1.5 py-0.5 text-[9px] font-bold text-red-400 border border-red-500/20 uppercase tracking-widest">BANKRUPT</span>
+												<span class="relative z-10 inline-flex items-center rounded bg-tertiary/10 px-1.5 py-0.5 text-[9px] font-bold text-tertiary border border-tertiary/25 uppercase tracking-widest">Bankrupt</span>
 											{% endif %}
 										</div>
-										<div class="text-on-surface-variant text-xs uppercase tracking-wider font-mono mt-0.5">{{ stock.ticker }}</div>
+										<div class="text-on-surface-variant text-xs tracking-wide font-mono mt-0.5">{{ stock.ticker }}</div>
 									</div>
-								</td>
+								</th>
 								<td class="px-4 py-3 hidden sm:table-cell text-on-surface-variant text-xs">
 									{{ stock.sector }}
 								</td>
 								<td id="price-{{ stock.ticker }}" class="px-4 py-3 text-right font-bold font-mono tabular-nums text-xs sm:text-sm {{ stock.isBankrupt ? 'text-tertiary line-through' : 'text-on-surface' }} transition-colors duration-300">
 									${{ (stock.isBankrupt ? 0.00 : stock.price)|number_format(2) }}
+								</td>
+								<td id="chg-{{ stock.ticker }}" class="px-4 py-3 text-right font-semibold font-mono tabular-nums text-xs sm:text-sm transition-colors duration-300 {{ stock.changePercent is null or stock.isBankrupt ? 'text-on-surface-variant/50' : (stock.changePercent >= 0 ? 'text-secondary' : 'text-tertiary') }}">
+									{%- if stock.isBankrupt or stock.changePercent is null -%}
+										&mdash;
+									{%- else -%}
+										{{ stock.changePercent >= 0 ? '+' : '' }}{{ (stock.changePercent * 100)|number_format(2) }}%
+									{%- endif -%}
 								</td>
 								<td id="mcap-{{ stock.ticker }}" class="px-5 py-3 text-right font-medium font-mono tabular-nums text-xs sm:text-sm text-on-surface-variant transition-colors duration-300">
 									${{ stock.isBankrupt ? '0.00' : ((stock.marketCap / 1000000000)|number_format(2) ~ 'B') }}

@@ -37,7 +37,8 @@ class StockController extends AbstractController
         \Redis $redis,
         \App\Service\Math\CorporateMetrics $corporateMetrics,
         \App\Service\Market\MarketEngine $marketEngine,
-        \App\Service\Corporate\DebtEngine $debtEngine
+        \App\Service\Corporate\DebtEngine $debtEngine,
+        \App\Service\Market\PriceChangeFeed $priceChangeFeed
     ): Response
     {
         $isEtf = false;
@@ -283,8 +284,16 @@ class StockController extends AbstractController
             usort($peers, fn($a, $b) => $b['marketCap'] <=> $a['marketCap']);
         }
 
+        // Null when the ticker has no usable buffered history; the header prints that as
+        // unknown rather than as a flat 0.00%.
+        // Etf carries no bankruptcy flag, so the delisted check only applies to a Stock.
+        $changePercent = (!$isEtf && $asset->isBankrupt())
+            ? null
+            : $priceChangeFeed->changeForTicker($ticker, (float) $asset->getPrice());
+
         return $this->render('stock/index.html.twig', [
             'asset' => $asset,
+            'changePercent' => $changePercent,
             'isEtf' => $isEtf,
             'isFinancial' => $isFinancial,
             'businessModel' => $businessModel,
@@ -540,7 +549,8 @@ class StockController extends AbstractController
                     $nodeData = ['name' => $formattedName, 'itemStyle' => ['color' => '#0284c7']]; // sky blue
                     if (is_array($streamDetails) && isset($streamDetails[$streamName])) {
                         $nodeData['streamKey'] = $streamName;
-                        $nodeData['qoq_delta'] = $streamDetails[$streamName]['qoq_delta'] ?? 0;
+                        // Null is "not meaningful" — a stream with no prior quarter has no growth rate to quote.
+                        $nodeData['qoq_delta'] = $streamDetails[$streamName]['qoq_delta'] ?? null;
                         $nodeData['drivers'] = $streamDetails[$streamName]['drivers'] ?? [];
                         if (!empty($streamDetails[$streamName]['event'])) {
                             $nodeData['event'] = $streamDetails[$streamName]['event'];

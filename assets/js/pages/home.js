@@ -40,6 +40,7 @@ function initHome() {
             payload.stocks.forEach(stock => {
                 const priceEl = document.getElementById(`price-${stock.ticker}`);
                 const mcapEl = document.getElementById(`mcap-${stock.ticker}`);
+                const chgEl = document.getElementById(`chg-${stock.ticker}`);
                 const rowEl = document.getElementById(`row-${stock.ticker}`);
 
                 if (priceEl && mcapEl && rowEl) {
@@ -49,7 +50,11 @@ function initHome() {
                         priceEl.innerText = '$0.00';
                         priceEl.classList.add('text-tertiary', 'line-through');
                         mcapEl.innerText = '$0.00';
-                        rowEl.classList.add('opacity-50', 'bg-red-950/10');
+                        if (chgEl) {
+                            chgEl.innerText = '\u2014';
+                            chgEl.style.color = THEME_COLORS.textMuted;
+                        }
+                        rowEl.classList.add('opacity-50', 'bg-tertiary/10');
                         return;
                     }
 
@@ -63,6 +68,19 @@ function initHome() {
 
                     mcapEl.innerText = '$' + formatLarge(newMcap);
                     rowEl.setAttribute('data-mcap', newMcap);
+
+                    // A ticker with nothing buffered yet reports no change at all, which is a
+                    // different fact from "flat" and has to keep printing as an em dash.
+                    if (chgEl) {
+                        const chg = stock.changePercent;
+                        if (chg === null || chg === undefined) {
+                            chgEl.innerText = '\u2014';
+                            chgEl.style.color = THEME_COLORS.textMuted;
+                        } else {
+                            chgEl.innerText = (chg >= 0 ? '+' : '') + (chg * 100).toFixed(2) + '%';
+                            chgEl.style.color = chg >= 0 ? THEME_COLORS.positive : THEME_COLORS.negative;
+                        }
+                    }
 
                     if (newPrice > oldPrice) {
                         priceEl.style.color = THEME_COLORS.secondary;

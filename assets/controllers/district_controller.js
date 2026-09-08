@@ -1,6 +1,49 @@
 import { Controller } from '@hotwired/stimulus';
 import { formatLarge, formatCurrency, formatPercent } from '../js/utils/formatters.js';
 
+/** SVG namespace — segment sparklines are built element by element, not parsed from markup. */
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** Segment sparkline box, in CSS pixels. Sized to sit inline in a 10px metric line. */
+const SPARKLINE_WIDTH = 34;
+const SPARKLINE_HEIGHT = 10;
+
+/** Drivers printed per segment. The feed ranks them strongest-first, so this keeps the head. */
+const MAX_DRIVERS_PER_STREAM = 3;
+
+/** Pips in a driver's strength meter — the bands EarningsReportSubscriber grades a driver into. */
+const DRIVER_STRENGTH_PIPS = 3;
+
+/**
+ * What kind of driver a row is, as a text tag. Emoji were unreadable here: the panel is set in
+ * Courier Prime, which has no colour-emoji fallback in this stack, so they rendered as tofu.
+ */
+const DRIVER_TYPE_TAGS = { macro: 'macro', momentum: 'ops', company: 'co' };
+
+/**
+ * Mix-bar palette. A segment's colour comes from its rank in the mix, so the swatch on its row
+ * and its band in the 100% bar always match. Ordered largest-share first, so the dominant segment
+ * is always the primary colour.
+ */
+const STREAM_COLORS = ['#7dd8e8', '#4edea3', '#f0b866', '#c39ae0', '#ff9f9a', '#8aa6d6', '#8f8f8f'];
+
+/** Formats a growth rate, or the "n/m" a filing prints where there is no comparison period. */
+function formatGrowth(value) {
+    return (value === null || value === undefined) ? 'n/m' : formatPercent(value, 1, false, true);
+}
+
+/**
+ * Formats one macro reading in the unit its catalogue entry declares. Mirrors the units in
+ * App\Data\MacroFieldCatalog — spreads in basis points, rates as percentages, indices as levels.
+ */
+function formatReading(reading) {
+    const value = Number(reading.value);
+    if (!Number.isFinite(value)) return '—';
+    if (reading.unit === 'bps') return `${Math.round(value * 10000)} bps`;
+    if (reading.unit === 'pct') return `${(value * 100).toFixed(2)}%`;
+    return value.toFixed(1);
+}
+
 const IMPORTANCE_LABELS = {
     titan: 'Titan — systemically irreplaceable',
     systemic: 'Systemically important',
@@ -146,7 +189,9 @@ export default class extends Controller {
         'empty', 'detail', 'detailTicker', 'detailPlot', 'detailName', 'detailIndustry',
         'detailPrice', 'detailChange', 'detailMcap', 'detailRating', 'detailRoc',
         'detailImportance', 'detailRank', 'detailBlurb', 'detailLink', 'detailEvents', 'noEvents',
-        'detailRevenueMix', 'detailRevenueTotal', 'noRevenueMix',
+        'detailRevenueMix', 'detailRevenueTotal', 'noRevenueMix', 'detailRevenuePeriod',
+        'detailRevenueHeadline', 'detailRevenueQoq', 'detailRevenueYoy', 'detailRevenueMeta',
+        'detailRevenueMixBar', 'detailRevenueFootnote',
         'institutionDetail', 'institutionName', 'institutionStatus', 'institutionReadings',
         'institutionFeeds', 'institutionFeedCount',
     ];
@@ -582,101 +627,314 @@ export default class extends Controller {
         return card;
     }
 
-    /** Rebuilds the "Revenue Mix" list for the given ticker from the latest quarter's report. */
+    /**
+     * Rebuilds the segment-revenue note for the given ticker from App\Service\District\DistrictRevenueFeed.
+     *
+     * Laid out the way a filing's segment note is: the period and the headline total first, with
+     * the sequential and year-on-year moves beside it, then the mix as a single 100% bar, then a
+     * row per segment. Every growth figure that has no comparison quarter prints "n/m" rather
+     * than a zero, which is what the feed's nulls mean.
+     */
     renderRevenueMix(ticker) {
         const mix = this.revenueMixByTicker.get(ticker);
         const streams = mix && Array.isArray(mix.streams) ? mix.streams : [];
 
         this.detailRevenueMixTarget.querySelectorAll('.district-stream-row').forEach(row => row.remove());
+        this.detailRevenueMixBarTarget.replaceChildren();
 
         if (streams.length === 0) {
             this.noRevenueMixTarget.hidden = false;
+            this.detailRevenueHeadlineTarget.classList.add('hidden');
+            this.detailRevenueFootnoteTarget.hidden = true;
+            this.detailRevenuePeriodTarget.textContent = '';
             this.detailRevenueTotalTarget.textContent = '';
             return;
         }
 
         this.noRevenueMixTarget.hidden = true;
-        this.detailRevenueTotalTarget.textContent = '$' + formatLarge(mix.totalRevenue);
-        streams.forEach(stream => this.detailRevenueMixTarget.appendChild(this.buildStreamRow(stream)));
+        this.detailRevenueHeadlineTarget.classList.remove('hidden');
+        this.detailRevenueFootnoteTarget.hidden = false;
+
+        this.detailRevenuePeriodTarget.textContent = mix.periodLabel || '';
+        this.detailRevenueTotalTarget.textContent = formatLarge(mix.totalRevenue, '$');
+        this.applyGrowth(this.detailRevenueQoqTarget, 'QoQ', mix.totalQoq);
+        this.applyGrowth(this.detailRevenueYoyTarget, 'YoY', mix.totalYoy);
+        this.detailRevenueMetaTarget.textContent = this.buildRevenueMeta(mix);
+
+        // One 100% bar for the whole mix — the segment-mix idiom, and the only place a segment's
+        // colour is assigned; the rows below read their swatch from the same index.
+        streams.forEach((stream, index) => {
+            const share = stream.share || 0;
+            if (share <= 0) return;
+            const segment = document.createElement('div');
+            segment.style.width = Math.min(100, share * 100) + '%';
+            segment.style.backgroundColor = STREAM_COLORS[index % STREAM_COLORS.length];
+            segment.title = `${stream.label} — ${formatPercent(share, 1)}`;
+            this.detailRevenueMixBarTarget.appendChild(segment);
+        });
+
+        streams.forEach((stream, index) => {
+            this.detailRevenueMixTarget.appendChild(this.buildStreamRow(stream, index));
+        });
+    }
+
+    /** Writes one signed growth figure into a node, greying it out where the period is "n/m". */
+    applyGrowth(node, label, value) {
+        const isMeaningful = value !== null && value !== undefined;
+        node.textContent = `${label} ${formatGrowth(value)}`;
+        node.className = 'text-[11px] font-mono tabular-nums ' + (
+            !isMeaningful ? 'text-on-surface-variant/40' : (value >= 0 ? 'text-secondary' : 'text-tertiary')
+        );
+    }
+
+    /** The secondary line under the headline: TTM revenue and how concentrated the mix is. */
+    buildRevenueMeta(mix) {
+        const parts = [];
+
+        if (mix.ttmRevenue !== null && mix.ttmRevenue !== undefined) {
+            parts.push('TTM ' + formatLarge(mix.ttmRevenue, '$'));
+        }
+
+        if (mix.concentration) {
+            // HHI is conventionally quoted on the 0–10,000 scale, not as a decimal fraction.
+            parts.push(`HHI ${Math.round(mix.concentration.hhi * 10000).toLocaleString()}`);
+            parts.push(`${mix.concentration.effectiveStreams.toFixed(1)} effective segments`);
+        }
+
+        parts.push(`${mix.quartersOnFile} qtr${mix.quartersOnFile === 1 ? '' : 's'} on file`);
+
+        return parts.join('  ·  ');
     }
 
     /**
-     * Builds one stream row — share bar, QoQ move, and named drivers. The driver icon/colour/
-     * value conventions (🏛 macro vs 📈 momentum, ±X.X% vs Z-score) are copied verbatim from
-     * assets/controllers/sankey_controller.js's own tooltip, which renders this exact same
-     * App\Service\Event\EarningsReportSubscriber::buildStreamDetails() data — one vocabulary for
-     * the same numbers everywhere they appear, not a second one invented for the district.
+     * Builds one segment row: the reported dollars and share, then the trend, both growth rates,
+     * what the segment contributed to the firm's own growth, and how its share of the mix moved.
+     *
+     * Contribution is the figure that makes the row honest — a segment holding 5% of revenue that
+     * grows 40% contributes 2 points, and printing only its own rate implied it carried the
+     * quarter. The contributions across these rows sum to the headline QoQ above them.
      */
-    buildStreamRow(stream) {
+    buildStreamRow(stream, index) {
         const row = document.createElement('div');
         row.className = 'district-stream-row';
 
         const header = document.createElement('div');
         header.className = 'flex items-baseline justify-between gap-2 text-[11px] mb-1';
+
+        const name = document.createElement('span');
+        name.className = 'flex items-center gap-1.5 min-w-0';
+        const swatch = document.createElement('span');
+        swatch.className = 'w-1.5 h-1.5 rounded-sm shrink-0';
+        swatch.style.backgroundColor = STREAM_COLORS[index % STREAM_COLORS.length];
         const label = document.createElement('span');
-        label.className = 'font-semibold text-on-surface';
+        label.className = 'font-semibold text-on-surface truncate';
         label.textContent = stream.label || stream.key || '';
-        const share = document.createElement('span');
-        share.className = 'font-mono text-on-surface-variant/70';
-        share.textContent = formatPercent(stream.share || 0, 1);
-        header.append(label, share);
+        name.append(swatch, label);
+
+        const figures = document.createElement('span');
+        figures.className = 'font-mono tabular-nums shrink-0 ' + ((stream.revenue || 0) < 0 ? 'text-tertiary' : 'text-on-surface');
+        const revenue = stream.revenue || 0;
+        // A negative segment — a trading loss — is bracketed, as it is in a filing, not clamped away.
+        figures.textContent = (revenue < 0 ? `(${formatLarge(Math.abs(revenue), '$')})` : formatLarge(revenue, '$'))
+            + '  ' + formatPercent(stream.share || 0, 1);
+
+        header.append(name, figures);
         row.appendChild(header);
 
-        const barTrack = document.createElement('div');
-        barTrack.className = 'h-1.5 rounded-full bg-surface-container-high overflow-hidden mb-1.5';
-        const barFill = document.createElement('div');
-        barFill.className = 'h-full rounded-full bg-primary/70';
-        barFill.style.width = Math.max(0, Math.min(100, (stream.share || 0) * 100)) + '%';
-        barTrack.appendChild(barFill);
-        row.appendChild(barTrack);
+        // Two fixed lines rather than one wrapping row: growth rates above, attribution below.
+        // Letting all five figures share a wrapping flex row orphaned whichever one ran out of
+        // width onto a line of its own, which read as though it belonged to the next segment.
+        const growth = document.createElement('div');
+        growth.className = 'flex items-center gap-2 text-[10px] font-mono mb-0.5 pl-3';
+        growth.appendChild(this.buildSparkline(stream.history));
+        growth.appendChild(this.buildMetric('QoQ', formatGrowth(stream.qoqDelta), stream.qoqDelta));
+        growth.appendChild(this.buildMetric('YoY', formatGrowth(stream.yoyDelta), stream.yoyDelta));
+        row.appendChild(growth);
 
-        const meta = document.createElement('div');
-        meta.className = 'flex items-center gap-2 flex-wrap mb-1';
+        const attribution = document.createElement('div');
+        attribution.className = 'flex items-center gap-2 text-[10px] font-mono mb-1.5 pl-3';
 
-        const delta = document.createElement('span');
-        const deltaValue = stream.qoqDelta || 0;
-        delta.className = 'text-[10px] font-mono font-semibold ' + (deltaValue >= 0 ? 'text-secondary' : 'text-tertiary');
-        delta.textContent = 'QoQ ' + formatPercent(deltaValue, 1, false, true);
-        meta.appendChild(delta);
+        if (stream.contribution !== null && stream.contribution !== undefined) {
+            const contribution = stream.contribution;
+            attribution.appendChild(this.buildMetric(
+                '',
+                `${contribution >= 0 ? '+' : '−'}${Math.abs(contribution * 100).toFixed(2)}pp of growth`,
+                contribution,
+            ));
+        }
+
+        if (stream.shareShiftBps !== null && stream.shareShiftBps !== undefined) {
+            const shift = stream.shareShiftBps;
+            attribution.appendChild(this.buildMetric(
+                '',
+                `${shift >= 0 ? '+' : '−'}${Math.abs(shift).toFixed(0)} bps mix`,
+                shift,
+            ));
+        }
+
+        if (attribution.childElementCount > 0) {
+            row.appendChild(attribution);
+        }
 
         if (stream.event) {
+            const eventLine = document.createElement('div');
+            eventLine.className = 'pl-3 mb-1';
             const eventBadge = document.createElement('span');
-            eventBadge.className = 'text-[10px] font-bold text-amber-400 bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-500/30';
-            eventBadge.textContent = '⚡ ' + stream.event;
-            meta.appendChild(eventBadge);
+            eventBadge.className = 'text-[10px] font-bold uppercase tracking-wider text-amber-400 bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-500/30';
+            eventBadge.textContent = stream.event;
+            eventLine.appendChild(eventBadge);
+            row.appendChild(eventLine);
         }
-        row.appendChild(meta);
 
         if (Array.isArray(stream.drivers) && stream.drivers.length > 0) {
-            const driverList = document.createElement('div');
-            driverList.className = 'space-y-0.5 mb-3';
-
-            stream.drivers.forEach(driver => {
-                const impact = driver.impact || 0;
-                const isPositive = impact >= 0;
-                const driverRow = document.createElement('div');
-                driverRow.className = 'flex items-center justify-between gap-2 text-[10px]';
-
-                const driverLabel = document.createElement('span');
-                driverLabel.className = 'text-on-surface-variant/70';
-                driverLabel.textContent = (driver.type === 'macro' ? '🏛 ' : '📈 ') + (driver.label || '');
-                driverRow.appendChild(driverLabel);
-
-                const driverValue = document.createElement('span');
-                driverValue.className = 'font-mono font-bold shrink-0 ' + (isPositive ? 'text-secondary' : 'text-tertiary');
-                driverValue.textContent = driver.type === 'momentum'
-                    ? `(Z=${driver.z !== undefined ? driver.z : 0})`
-                    : formatPercent(impact, 1, false, true);
-                driverRow.appendChild(driverValue);
-
-                driverList.appendChild(driverRow);
-            });
-            row.appendChild(driverList);
-        } else {
-            row.className += ' mb-3';
+            row.appendChild(this.buildDriverList(stream.drivers));
         }
 
         return row;
+    }
+
+    /**
+     * A driver's direction and strength, drawn rather than typed.
+     *
+     * The pips are elements with an explicit size, not box-drawing characters: the panel is set in
+     * Courier Prime, which carries no glyph for them, so a typed meter rendered as tofu boxes.
+     */
+    buildStrengthMeter(strength, isPositive) {
+        const meter = document.createElement('span');
+        meter.className = 'flex items-center gap-[2px] shrink-0 ' + (isPositive ? 'text-secondary' : 'text-tertiary');
+
+        const pips = Math.max(1, Math.min(DRIVER_STRENGTH_PIPS, strength || 1));
+        meter.title = (isPositive ? 'Tailwind' : 'Headwind') + ` (${pips}/${DRIVER_STRENGTH_PIPS})`;
+
+        const arrow = document.createElement('span');
+        arrow.className = 'text-[8px] leading-none mr-0.5';
+        arrow.textContent = isPositive ? '\u25B2' : '\u25BC';
+        meter.appendChild(arrow);
+
+        for (let index = 0; index < DRIVER_STRENGTH_PIPS; index++) {
+            const pip = document.createElement('span');
+            pip.style.width = '3px';
+            pip.style.height = '8px';
+            pip.style.borderRadius = '1px';
+            pip.style.backgroundColor = 'currentColor';
+            pip.style.opacity = index < pips ? '1' : '0.2';
+            meter.appendChild(pip);
+        }
+
+        return meter;
+    }
+
+    /** One labelled figure in a segment row's metric line, coloured by sign and greyed when "n/m". */
+    buildMetric(label, text, value) {
+        const node = document.createElement('span');
+        const isMeaningful = value !== null && value !== undefined;
+        node.className = 'tabular-nums ' + (
+            !isMeaningful ? 'text-on-surface-variant/40' : (value >= 0 ? 'text-secondary' : 'text-tertiary')
+        );
+        node.textContent = label ? `${label} ${text}` : text;
+        return node;
+    }
+
+    /**
+     * Five-quarter revenue trend for one segment, oldest-first. Quarters the segment did not exist
+     * in arrive as null and break the line rather than being drawn as a zero.
+     */
+    buildSparkline(history) {
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('width', String(SPARKLINE_WIDTH));
+        svg.setAttribute('height', String(SPARKLINE_HEIGHT));
+        svg.setAttribute('viewBox', `0 0 ${SPARKLINE_WIDTH} ${SPARKLINE_HEIGHT}`);
+        svg.classList.add('shrink-0', 'opacity-70');
+
+        const series = Array.isArray(history) ? history : [];
+        const points = series
+            .map((value, index) => ({ value, index }))
+            .filter(point => point.value !== null && point.value !== undefined);
+
+        if (points.length < 2) return svg;
+
+        const values = points.map(point => point.value);
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        // A flat series has no range to scale against — draw it down the middle rather than
+        // dividing by zero and sending it off the top of the box.
+        const range = max - min;
+        const stepX = SPARKLINE_WIDTH / Math.max(1, series.length - 1);
+
+        const path = points.map((point, i) => {
+            const x = point.index * stepX;
+            const y = range > 0
+                ? SPARKLINE_HEIGHT - ((point.value - min) / range) * SPARKLINE_HEIGHT
+                : SPARKLINE_HEIGHT / 2;
+            return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+        }).join(' ');
+
+        const line = document.createElementNS(SVG_NS, 'path');
+        line.setAttribute('d', path);
+        line.setAttribute('fill', 'none');
+        line.setAttribute('stroke', 'currentColor');
+        line.setAttribute('stroke-width', '1');
+        line.classList.add(values[values.length - 1] >= values[0] ? 'text-secondary' : 'text-tertiary');
+        svg.appendChild(line);
+
+        return svg;
+    }
+
+    /**
+     * The driver block: what moved the segment, and the macro level it was struck at.
+     *
+     * A driver's `impact` is a raw model coefficient with no unit — it is not a share of revenue
+     * and does not reconcile against the QoQ figure above it, so it is never printed as a number.
+     * What prints is its direction, a coarse strength, and the observed readings
+     * App\Data\MacroFieldCatalog resolved for it — the same macro variables the street's
+     * institutions publish, in the same units, so the two always agree.
+     */
+    buildDriverList(drivers) {
+        const list = document.createElement('div');
+        list.className = 'space-y-1 pl-3 mb-3 border-l border-outline-variant/25';
+
+        drivers.slice(0, MAX_DRIVERS_PER_STREAM).forEach(driver => {
+            const isPositive = (driver.direction ?? 0) >= 0;
+            const entry = document.createElement('div');
+            entry.className = 'pl-2';
+
+            const head = document.createElement('div');
+            head.className = 'flex items-baseline justify-between gap-2 text-[10px]';
+
+            const driverLabel = document.createElement('span');
+            driverLabel.className = 'min-w-0 flex items-baseline gap-1.5';
+            const typeTag = document.createElement('span');
+            typeTag.className = 'text-[9px] uppercase tracking-wider text-on-surface-variant/35 shrink-0';
+            typeTag.textContent = DRIVER_TYPE_TAGS[driver.type] || DRIVER_TYPE_TAGS.company;
+            const driverName = document.createElement('span');
+            driverName.className = 'text-on-surface-variant/70';
+            driverName.textContent = driver.label || '';
+            driverLabel.append(typeTag, driverName);
+            head.appendChild(driverLabel);
+
+            head.appendChild(this.buildStrengthMeter(driver.strength, isPositive));
+            entry.appendChild(head);
+
+            const readings = Array.isArray(driver.readings) ? driver.readings : [];
+            if (readings.length > 0) {
+                const readingLine = document.createElement('div');
+                readingLine.className = 'text-[10px] font-mono tabular-nums text-on-surface-variant/45';
+                readingLine.textContent = readings.map(r => `${r.label} ${formatReading(r)}`).join('  ·  ');
+                entry.appendChild(readingLine);
+            } else if (driver.type === 'momentum' && driver.z !== undefined) {
+                // Sigma is how a standardised deviation is quoted; a bare "Z=" is model notation.
+                const momentumLine = document.createElement('div');
+                momentumLine.className = 'text-[10px] font-mono tabular-nums text-on-surface-variant/45';
+                const z = Number(driver.z);
+                momentumLine.textContent = `Operating momentum ${z >= 0 ? '+' : '−'}${Math.abs(z).toFixed(1)}σ `
+                    + (z >= 0 ? 'above trend' : 'below trend');
+                entry.appendChild(momentumLine);
+            }
+
+            list.appendChild(entry);
+        });
+
+        return list;
     }
 
     onMarketUpdate(event) {

@@ -172,7 +172,7 @@
 		<div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
 			<div>
 				<div class="flex items-center gap-2 mb-2">
-					<span class="text-xs font-bold tracking-wider text-primary uppercase">Aerie Autonomous District</span>
+					<span class="text-[11px] font-semibold tracking-wide text-primary uppercase">Aerie Autonomous District</span>
 					<span class="text-xs text-on-surface-variant/60 font-mono">/ Top {{ rosterSize }} by market cap</span>
 				</div>
 				<h1 class="text-2xl md:text-3xl font-bold text-on-surface tracking-tight">{{ wardName }}</h1>
@@ -190,11 +190,11 @@
 		{# Street summary — every figure read off plots already built, no extra query #}
 		<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-5">
 			<div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between">
-				<span class="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Street Cap</span>
+				<span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Street Cap</span>
 				<span class="text-sm font-bold text-on-surface font-mono tabular-nums mt-1">${{ summary.totalMarketCap|format_large }}</span>
 			</div>
 			<div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between">
-				<span class="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Street 1M</span>
+				<span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Street 1M</span>
 				{% if summary.changePercent is not null %}
 					<span class="text-sm font-bold font-mono tabular-nums mt-1 {{ summary.changePercent >= 0 ? 'text-secondary' : 'text-tertiary' }}">
 						{{ summary.changePercent >= 0 ? '+' : '' }}{{ (summary.changePercent * 100)|number_format(2) }}%
@@ -204,7 +204,7 @@
 				{% endif %}
 			</div>
 			<div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between">
-				<span class="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Biggest Mover</span>
+				<span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Biggest Mover</span>
 				{% if summary.biggestMover %}
 					<span class="text-sm font-bold font-mono tabular-nums mt-1 {{ summary.biggestMover.changePercent >= 0 ? 'text-secondary' : 'text-tertiary' }}">
 						{{ summary.biggestMover.ticker }}
@@ -215,14 +215,14 @@
 				{% endif %}
 			</div>
 			<div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between">
-				<span class="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Institutions</span>
+				<span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Institutions</span>
 				<span class="text-sm font-bold font-mono tabular-nums mt-1 {{ summary.stressedInstitutions > 0 ? 'text-tertiary' : 'text-on-surface' }}"
 					data-district-target="summaryStress">
 					{{ summary.stressedInstitutions }}/{{ summary.totalInstitutions }} stressed
 				</span>
 			</div>
 			<div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between">
-				<span class="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Next In Line</span>
+				<span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Next In Line</span>
 				{% if summary.nextInLine %}
 					<span class="text-sm font-bold text-on-surface font-mono tabular-nums mt-1"
 						title="{{ summary.nextInLine.name }} — first company below the cut">
@@ -250,7 +250,7 @@
 		{# The Elevation #}
 		<div class="bg-surface-container-lowest border border-outline-variant/25 rounded-lg overflow-hidden">
 			<div class="flex items-center justify-between px-4 py-2 border-b border-outline-variant/15 bg-surface-container-high/20">
-				<span class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Street Elevation &mdash; facing north</span>
+				<span class="text-sm font-semibold text-on-surface-variant">Street Elevation &mdash; facing north</span>
 				<div class="flex items-center gap-3">
 					<span class="text-xs font-mono text-on-surface-variant/60 hidden sm:block">Height &prop; market capitalisation (log scale)</span>
 					<div class="flex items-center gap-1">
@@ -532,7 +532,7 @@
 		{# Info Panel #}
 		<div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-5 xl:sticky xl:top-20">
 			<div data-district-target="empty">
-				<h2 class="text-sm font-bold uppercase tracking-wider text-on-surface mb-2">Select a building or institution</h2>
+				<h2 class="text-sm font-semibold text-on-surface mb-2">Select a building or institution</h2>
 				<p class="text-xs text-on-surface-variant leading-relaxed">
 					{{ plots|length }} listed houses hold frontage on {{ wardName }}, ranked by market
 					capitalisation and reshuffled as it moves. Facade height tracks that capitalisation;
@@ -568,21 +568,46 @@
 						<dd class="text-on-surface" data-district-target="detailImportance"></dd></div>
 				</dl>
 
-				<div class="mb-4">
-					<div class="flex items-center justify-between mb-2">
-						<h3 class="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">Revenue Mix</h3>
-						<span class="text-[10px] font-mono text-on-surface-variant/50" data-district-target="detailRevenueTotal"></span>
+				{# Segment revenue — laid out as a filing's segment note: period header, headline with
+				   sequential and year-on-year moves, a 100% mix bar, then one row per stream. #}
+				<div class="mb-4 border-t border-outline-variant/25 pt-3">
+					<div class="flex items-center justify-between mb-1.5">
+						<h3 class="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Segment Revenue</h3>
+						<span class="text-[10px] font-mono uppercase tracking-wider text-on-surface-variant/50"
+							data-district-target="detailRevenuePeriod"></span>
 					</div>
-					<div class="space-y-2.5" data-district-target="detailRevenueMix">
+
+					<div data-district-target="detailRevenueHeadline" class="mb-2 hidden">
+						<div class="flex items-baseline gap-2 flex-wrap">
+							<span class="text-lg font-mono font-bold text-on-surface tabular-nums"
+								data-district-target="detailRevenueTotal"></span>
+							<span class="text-[11px] font-mono tabular-nums" data-district-target="detailRevenueQoq"></span>
+							<span class="text-[11px] font-mono tabular-nums" data-district-target="detailRevenueYoy"></span>
+						</div>
+						<p class="text-[10px] font-mono text-on-surface-variant/50 mt-0.5"
+							data-district-target="detailRevenueMeta"></p>
+					</div>
+
+					<div class="flex h-2 rounded-sm overflow-hidden bg-surface-container-high mb-3"
+						data-district-target="detailRevenueMixBar"></div>
+
+					<div class="space-y-3" data-district-target="detailRevenueMix">
 						<p class="text-xs text-on-surface-variant/50 italic" data-district-target="noRevenueMix">No quarterly report filed yet.</p>
 					</div>
+
+					<p class="text-[9px] text-on-surface-variant/40 mt-2.5 leading-relaxed"
+						data-district-target="detailRevenueFootnote" hidden>
+						Unaudited. Figures in USD as reported for the period shown. Growth quoted against the
+						prior quarter and the year-ago quarter; &ldquo;n/m&rdquo; where no comparison period is on
+						file. Contribution is the segment&rsquo;s share of the firm&rsquo;s sequential growth.
+					</p>
 				</div>
 
 				<p class="text-xs text-on-surface-variant leading-relaxed max-h-48 overflow-y-auto custom-scrollbar pr-2 mb-4"
 					data-district-target="detailBlurb"></p>
 
 				<div class="mb-4">
-					<h3 class="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60 mb-2">Recent Events</h3>
+					<h3 class="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant/70 mb-2">Recent Events</h3>
 					<div class="space-y-2 max-h-56 overflow-y-auto custom-scrollbar pr-1" data-district-target="detailEvents">
 						<p class="text-xs text-on-surface-variant/50 italic" data-district-target="noEvents">No recent events logged.</p>
 					</div>
@@ -604,10 +629,10 @@
 				</div>
 				<p class="text-xs text-on-surface-variant/70 mb-4">Macro publisher</p>
 
-				<h3 class="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60 mb-2">Published Readings</h3>
+				<h3 class="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant/70 mb-2">Published Readings</h3>
 				<dl class="grid grid-cols-2 gap-x-3 gap-y-2.5 text-xs font-mono mb-4" data-district-target="institutionReadings"></dl>
 
-				<h3 class="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60 mb-2">
+				<h3 class="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant/70 mb-2">
 					Feeds <span class="text-on-surface-variant/40" data-district-target="institutionFeedCount"></span>
 				</h3>
 				<div class="flex flex-wrap gap-1.5" data-district-target="institutionFeeds"></div>

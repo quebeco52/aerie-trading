@@ -8,125 +8,155 @@
 {% endblock %}
 
 {% block body %}
-	<div class="bg-slate-950 text-white min-h-screen font-sans selection:bg-blue-500 selection:text-white relative overflow-hidden">
+	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 w-full">
 
-		<div class="absolute inset-0 bg-linear-to-b from-blue-950/40 via-slate-950 to-slate-950"></div>
+		{# --- Masthead --- #}
+		<section class="py-14 md:py-20 border-b border-outline-variant/15">
+			<div class="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+				<div class="lg:col-span-7">
+					<div class="flex items-center gap-2 mb-4">
+						<span class="w-2 h-2 rounded-full bg-secondary"></span>
+						<span class="text-[11px] font-semibold tracking-wide text-secondary uppercase">Market open</span>
+					</div>
 
-		<div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center z-10">
-			<div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-blue-900 bg-blue-900/30 text-blue-400 text-xs font-mono uppercase tracking-widest mb-8">
-				<span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-				Market Status: Open
-			</div>
+					<h1 class="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-on-surface leading-tight">
+						The Aerie Exchange
+					</h1>
 
-			<h1 class="text-5xl font-extrabold tracking-tight text-white sm:text-7xl mb-6">
-				The Aerie
-				<span class="text-transparent bg-clip-text bg-linear-to-r from-blue-400 to-blue-600">Exchange</span>
-			</h1>
-
-			<p class="mt-6 text-xl text-slate-400 max-w-3xl mx-auto mb-10 font-light leading-relaxed">
-				Welcome to the financial nervous system of the
-				<span class="text-blue-400 font-medium">Aerie Autonomous District.</span>
-				<br>
-				Where capital dictates physics and only the ruthless survive.
-			</p>
-
-			<div class="mt-10 flex flex-col sm:flex-row justify-center gap-4">
-				<a href="{{ path('app_register') }}" class="px-8 py-3 border border-transparent text-base font-bold rounded-md text-slate-900 bg-blue-500 hover:bg-blue-400 uppercase tracking-wider transition-all shadow-[0_0_15px_rgba(59,130,246,0.5)]">
-					Register
-				</a>
-				<a href="{{ path('app_login') }}" class="px-8 py-3 border border-slate-700 text-base font-mono rounded-md text-slate-300 bg-slate-900/50 hover:bg-slate-800 hover:border-slate-500 transition-colors uppercase tracking-widest backdrop-blur-sm">
-					Login
-				</a>
-			</div>
-
-			<!-- Testimonials / Quotes -->
-			<div class="mt-16 grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto text-left">
-				<div class="p-6 bg-slate-900/40 border border-slate-800/60 hover:border-slate-700 transition-colors relative group">
-					<div class="absolute top-0 left-0 w-1 h-full bg-slate-800 group-hover:bg-blue-500 transition-colors"></div>
-					<p class="text-sm text-slate-400 font-light leading-relaxed italic">
-						"A bloated balance sheet isn't a legacy, it's prey."
+					<p class="mt-4 text-sm sm:text-base text-on-surface-variant max-w-2xl leading-relaxed">
+						A live simulated market for the Aerie Autonomous District. Trade equities and the
+						index against a full macroeconomic model &mdash; policy rates, the yield curve,
+						credit spreads and the business cycle all price into what you own.
 					</p>
-					<p class="mt-4 text-[10px] font-mono text-slate-500 uppercase tracking-widest">
-						<span class="text-blue-500 mr-2">>></span>CEO of Black Swan Capital
-					</p>
+
+					<div class="mt-8 flex flex-col sm:flex-row gap-3">
+						<a href="{{ path('app_register') }}" class="inline-flex justify-center items-center rounded bg-primary px-5 py-2.5 text-sm font-semibold text-[#001a42] transition-colors hover:bg-primary-container focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+							Open an account
+						</a>
+						<a href="{{ path('app_login') }}" class="inline-flex justify-center items-center rounded border border-outline-variant/30 bg-surface-container-low px-5 py-2.5 text-sm font-semibold text-on-surface transition-colors hover:bg-surface-container-high focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+							Sign in
+						</a>
+					</div>
 				</div>
 
-				<div class="p-6 bg-slate-900/40 border border-slate-800/60 hover:border-slate-700 transition-colors relative group">
-					<div class="absolute top-0 left-0 w-1 h-full bg-slate-800 group-hover:bg-blue-500 transition-colors"></div>
-					<p class="text-sm text-slate-400 font-light leading-relaxed italic">
-						"We don't compete for capital. We are the capital."
-					</p>
-					<p class="mt-4 text-[10px] font-mono text-slate-500 uppercase tracking-widest">
-						<span class="text-blue-500 mr-2">>></span>CEO of Lakebird Bank
-					</p>
-
-				</div>
-				<div class="p-6 bg-slate-900/40 border border-slate-800/60 hover:border-slate-700 transition-colors relative group">
-					<div class="absolute top-0 left-0 w-1 h-full bg-slate-800 group-hover:bg-blue-500 transition-colors"></div>
-					<p class="text-sm text-slate-400 font-light leading-relaxed italic">
-						"Bulls and bears bleed exactly the same. We simply own the slaughterhouse."
-					</p>
-					<p class="mt-4 text-[10px] font-mono text-slate-500 uppercase tracking-widest">
-						<span class="text-blue-500 mr-2">>></span>CEO of Peregrine Prime Securities
-					</p>
-				</div>
-				<div class="p-6 bg-slate-900/40 border border-slate-800/60 hover:border-slate-700 transition-colors relative group">
-					<div class="absolute top-0 left-0 w-1 h-full bg-slate-800 group-hover:bg-blue-500 transition-colors"></div>
-					<p class="text-sm text-slate-400 font-light leading-relaxed italic">
-						"A market bubble isn't a systemic risk. It's a fee structure."
-					</p>
-					<p class="mt-4 text-[10px] font-mono text-slate-500 uppercase tracking-widest">
-						<span class="text-blue-500 mr-2">>></span>CEO of Kingfisher Capital
-					</p>
-				</div>
-			</div>
-		</div>
-
-		<div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 z-10">
-			<div class="flex items-center justify-center gap-4 mb-10">
-				<div class="h-px bg-slate-800 flex-1"></div>
-				<h2 class="text-2xl font-mono font-bold text-center tracking-widest uppercase text-slate-300">District Titans</h2>
-				<div class="h-px bg-slate-800 flex-1"></div>
-			</div>
-
-			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-				{% for stock in top_stocks %}
-					<a href="{{ path('app_stock_view', { ticker: stock.ticker }) }}" class="group block bg-slate-900/80 backdrop-blur-md rounded-none border border-slate-800 hover:border-blue-500/50 transition-all duration-300 relative overflow-hidden">
-
-						<div class="absolute top-0 left-0 w-2 h-2 border-t border-l border-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-						<div class="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-
-						<div class="p-6 flex flex-col justify-between h-full">
-							<div class="flex justify-between items-start mb-6">
+				{# --- Live index tile: the market's actual state, in place of promotional copy --- #}
+				<div class="lg:col-span-5">
+					<div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-5 sm:p-6">
+						{% if etf %}
+							<div class="flex items-baseline justify-between gap-3">
 								<div>
-									<h3 class="text-2xl font-black text-white tracking-tight group-hover:text-blue-400 transition-colors">{{ stock.ticker }}</h3>
-									<p class="text-sm text-slate-500 font-medium">{{ stock.name }}</p>
+									<p class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">{{ etf.name }}</p>
+									<p class="text-xs text-on-surface-variant/70 font-mono mt-0.5">{{ etf.ticker }} &middot; Market index</p>
 								</div>
-								<span class="inline-flex items-center px-2.5 py-1 text-[10px] font-mono uppercase tracking-widest bg-slate-950 text-blue-400 border border-slate-800 group-hover:border-blue-900 transition-colors">
-									{{ stock.sector }}
+							</div>
+							<p class="mt-3 text-3xl sm:text-4xl font-bold font-mono tabular-nums text-on-surface tracking-tight">
+								${{ etf.price|number_format(2) }}
+							</p>
+						{% endif %}
+
+						{# Market breadth: how the roster actually moved over the trailing month. #}
+						<dl class="mt-5 pt-4 border-t border-outline-variant/15 grid grid-cols-3 gap-3 text-center">
+							<div>
+								<dt class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Advancing</dt>
+								<dd class="mt-1 text-lg font-bold font-mono tabular-nums text-secondary">{{ breadth.advancing }}</dd>
+							</div>
+							<div>
+								<dt class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Declining</dt>
+								<dd class="mt-1 text-lg font-bold font-mono tabular-nums text-tertiary">{{ breadth.declining }}</dd>
+							</div>
+							<div>
+								<dt class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Unchanged</dt>
+								<dd class="mt-1 text-lg font-bold font-mono tabular-nums text-on-surface-variant">{{ breadth.unchanged }}</dd>
+							</div>
+						</dl>
+
+						{% if breadth.topMover %}
+							<div class="mt-4 pt-4 border-t border-outline-variant/15 flex items-center justify-between">
+								<span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Largest move (1M)</span>
+								<span class="text-sm font-bold font-mono tabular-nums {{ breadth.topMover.changePercent >= 0 ? 'text-secondary' : 'text-tertiary' }}">
+									{{ breadth.topMover.ticker }}
+									{{ breadth.topMover.changePercent >= 0 ? '+' : '' }}{{ (breadth.topMover.changePercent * 100)|number_format(2) }}%
 								</span>
 							</div>
+						{% endif %}
+					</div>
+				</div>
+			</div>
+		</section>
 
-							<div class="mt-auto flex justify-between items-end border-t border-slate-800/50 pt-4">
-								<div>
-									<p class="text-[10px] text-slate-500 uppercase tracking-widest font-mono mb-1">Live Valuation</p>
-									<p class="text-2xl font-mono font-bold text-slate-100">${{ stock.price|number_format(2) }}</p>
-								</div>
-								<div class="text-right">
-									<p class="text-xs font-mono text-emerald-400">ACTIVE</p>
-								</div>
+		{# --- Macro conditions strip --- #}
+		{% if macro is defined %}
+			<section class="py-8 border-b border-outline-variant/15">
+				<h2 class="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant mb-4">Current conditions</h2>
+				<dl class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+					<div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-4">
+						<dt class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Cycle</dt>
+						<dd class="mt-1.5 text-xl font-bold text-on-surface tracking-tight">{{ macro.output_gap > 0.01 ? 'Boom' : (macro.output_gap < -0.01 ? 'Bust' : 'Neutral') }}</dd>
+					</div>
+					<div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-4">
+						<dt class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Inflation</dt>
+						<dd class="mt-1.5 text-xl font-bold font-mono tabular-nums text-on-surface">{{ (macro.inflation|default(0) * 100)|number_format(2) }}%</dd>
+					</div>
+					<div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-4">
+						<dt class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Policy rate</dt>
+						<dd class="mt-1.5 text-xl font-bold font-mono tabular-nums text-on-surface">{{ (macro.policy_rate|default(0) * 100)|number_format(2) }}%</dd>
+					</div>
+					<div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-4">
+						<dt class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">10Y yield</dt>
+						<dd class="mt-1.5 text-xl font-bold font-mono tabular-nums text-on-surface">{{ (macro.yield_10y|default(0) * 100)|number_format(2) }}%</dd>
+					</div>
+				</dl>
+			</section>
+		{% endif %}
+
+		{# --- Largest listings --- #}
+		<section class="py-10">
+			<div class="flex items-baseline justify-between mb-4">
+				<h2 class="text-base font-bold text-on-surface tracking-tight">Largest listings</h2>
+				<span class="text-xs text-on-surface-variant">By market capitalisation</span>
+			</div>
+
+			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+				{% for stock in top_stocks %}
+					<a href="{{ path('app_stock_view', { ticker: stock.ticker }) }}" class="group block bg-surface-container-low border border-outline-variant/25 rounded-lg p-5 transition-colors hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+						<div class="flex justify-between items-start gap-3">
+							<div class="min-w-0">
+								<h3 class="text-sm font-bold text-on-surface group-hover:text-primary transition-colors truncate">{{ stock.name }}</h3>
+								<p class="text-xs text-on-surface-variant font-mono mt-0.5">{{ stock.ticker }}</p>
+							</div>
+							<span class="shrink-0 inline-flex items-center rounded bg-surface-container px-2 py-0.5 text-[10px] text-on-surface-variant border border-outline-variant/20">
+								{{ stock.sector }}
+							</span>
+						</div>
+
+						<div class="mt-4 pt-3 border-t border-outline-variant/15 flex items-end justify-between gap-3">
+							<div>
+								<p class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Last</p>
+								<p class="text-xl font-bold font-mono tabular-nums text-on-surface mt-0.5">${{ stock.price|number_format(2) }}</p>
+							</div>
+							<div class="text-right">
+								<p class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">1M</p>
+								<p class="text-sm font-semibold font-mono tabular-nums mt-0.5 {{ stock.changePercent is null ? 'text-on-surface-variant/50' : (stock.changePercent >= 0 ? 'text-secondary' : 'text-tertiary') }}">
+									{%- if stock.changePercent is null -%}
+										&mdash;
+									{%- else -%}
+										{{ stock.changePercent >= 0 ? '+' : '' }}{{ (stock.changePercent * 100)|number_format(2) }}%
+									{%- endif -%}
+								</p>
 							</div>
 						</div>
 					</a>
 				{% endfor %}
 			</div>
-		</div>
+		</section>
 
-		<!-- Disclaimer -->
-		<div class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 text-center opacity-50 hover:opacity-100 transition-opacity">
-			<p class="text-[10px] font-mono text-slate-500 uppercase tracking-widest">
-				Disclaimer: This is a simulated environment. All markets, assets, and valuations are entirely fictional. No real money is involved.
+		{# --- Disclaimer --- #}
+		<section class="pb-12">
+			<p class="text-xs text-on-surface-variant/70 leading-relaxed max-w-3xl">
+				Aerie Exchange is a simulated environment. All markets, companies, prices and valuations
+				are fictional, no real money is involved, and nothing here is investment advice.
 			</p>
-		</div>
+		</section>
+
 	</div>
 {% endblock %}

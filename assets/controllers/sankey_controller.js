@@ -3,6 +3,45 @@ import { formatLarge } from '../js/utils/formatters.js';
 
 const formatSankeyValue = (num) => formatLarge(num, '$');
 
+/** Pips in a driver's strength meter — the bands EarningsReportSubscriber grades a driver into. */
+const DRIVER_STRENGTH_PIPS = 3;
+
+/**
+ * What kind of driver a row is, as a text tag. Emoji were unreadable in this tooltip: it is set in
+ * Courier Prime, which has no colour-emoji fallback in this stack, so they rendered as tofu.
+ */
+const DRIVER_TYPE_TAGS = { macro: 'macro', momentum: 'ops', company: 'co' };
+
+/**
+ * A driver's direction and strength, drawn rather than typed — box-drawing characters have no
+ * glyph in this tooltip's font either, so the pips are sized spans with inline styles.
+ */
+function strengthMeter(strength, isPositive) {
+    const filled = Math.max(1, Math.min(DRIVER_STRENGTH_PIPS, strength || 1));
+    const arrow = isPositive ? '▲' : '▼';
+
+    let pips = '';
+    for (let index = 0; index < DRIVER_STRENGTH_PIPS; index++) {
+        pips += `<span style="display:inline-block;width:3px;height:8px;border-radius:1px;`
+            + `background-color:currentColor;opacity:${index < filled ? 1 : 0.2};margin-left:2px;"></span>`;
+    }
+
+    return `<span style="font-size:8px;">${arrow}</span>${pips}`;
+}
+
+/**
+ * Formats one macro driver reading in the unit its catalogue entry declares. Mirrors the units in
+ * App\Data\MacroFieldCatalog — spreads in basis points, rates as percentages, indices as levels —
+ * so the same variable reads identically here and on the district street.
+ */
+function formatMacroReading(reading) {
+    const value = Number(reading.value);
+    if (!Number.isFinite(value)) return `${reading.label} —`;
+    if (reading.unit === 'bps') return `${reading.label} ${Math.round(value * 10000)} bps`;
+    if (reading.unit === 'pct') return `${reading.label} ${(value * 100).toFixed(2)}%`;
+    return `${reading.label} ${value.toFixed(1)}`;
+}
+
 export default class extends Controller {
     static targets = ['container'];
     static values = {
@@ -109,11 +148,14 @@ export default class extends Controller {
                                 let html = `<div class="font-bold text-slate-200 mb-1 tracking-wider uppercase text-xs">${params.name}</div>`;
                                 html += `<div class="font-mono text-lg font-bold text-white mb-1">${formatSankeyValue(params.value)}</div>`;
                                 
-                                if (params.data && params.data.qoq_delta !== undefined && params.data.streamKey) {
+                                if (params.data && params.data.streamKey) {
+                                    // Null is "not meaningful" — a stream with no prior quarter has
+                                    // no growth rate, and printing 0.0% there read as "flat".
                                     const delta = params.data.qoq_delta;
-                                    const deltaSign = delta >= 0 ? '+' : '';
-                                    const deltaColor = delta >= 0 ? '#4edea3' : '#ffb3ad';
-                                    html += `<div class="text-[11px] font-semibold mb-2" style="color: ${deltaColor};">QoQ: ${deltaSign}${(delta * 100).toFixed(1)}%</div>`;
+                                    const meaningful = delta !== null && delta !== undefined;
+                                    const deltaColor = !meaningful ? '#94a3b8' : (delta >= 0 ? '#4edea3' : '#ffb3ad');
+                                    const deltaStr = meaningful ? `${delta >= 0 ? '+' : ''}${(delta * 100).toFixed(1)}%` : 'n/m';
+                                    html += `<div class="text-[11px] font-semibold mb-2" style="color: ${deltaColor};">QoQ: ${deltaStr}</div>`;
                                 }
 
                                 if (params.data && params.data.event) {
@@ -123,18 +165,25 @@ export default class extends Controller {
                                 if (params.data && Array.isArray(params.data.drivers) && params.data.drivers.length > 0) {
                                     html += `<div class="mt-2 pt-2 border-t border-slate-700 space-y-1">`;
                                     html += `<div class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Key Drivers</div>`;
+                                    // A driver's `impact` is an unpriced model coefficient, not a
+                                    // share of revenue — it never reconciled against the QoQ figure
+                                    // above, so it is shown as direction and strength, with the
+                                    // observed macro readings App\Data\MacroFieldCatalog resolved.
                                     params.data.drivers.forEach(d => {
-                                        const isPos = (d.impact || 0) >= 0;
-                                        const sign = isPos ? '+' : '';
-                                        const icon = d.type === 'macro' ? '🏛' : '📈';
-                                        const metricStr = d.type === 'momentum' 
-                                            ? `(Z=${d.z !== undefined ? d.z : '0'})` 
-                                            : `${sign}${((d.impact || 0) * 100).toFixed(1)}%`;
+                                        const isPos = (d.direction ?? ((d.impact || 0) >= 0 ? 1 : -1)) >= 0;
+                                        const tag = DRIVER_TYPE_TAGS[d.type] || DRIVER_TYPE_TAGS.company;
                                         const colorClass = isPos ? 'text-emerald-400' : 'text-rose-400';
+                                        const readings = Array.isArray(d.readings) ? d.readings : [];
                                         html += `<div class="flex items-center justify-between text-[11px] gap-3">
-                                            <span class="text-slate-300">${icon} ${d.label}</span>
-                                            <span class="font-mono font-bold ${colorClass}">${metricStr}</span>
+                                            <span class="text-slate-300"><span class="text-[9px] uppercase tracking-wider text-slate-500">${tag}</span> ${d.label}</span>
+                                            <span class="font-mono font-bold ${colorClass}">${strengthMeter(d.strength, isPos)}</span>
                                         </div>`;
+                                        if (readings.length > 0) {
+                                            html += `<div class="text-[10px] font-mono text-slate-500 pl-4">${readings.map(formatMacroReading).join('  ·  ')}</div>`;
+                                        } else if (d.type === 'momentum' && d.z !== undefined) {
+                                            const z = Number(d.z);
+                                            html += `<div class="text-[10px] font-mono text-slate-500 pl-4">Operating momentum ${z >= 0 ? '+' : '−'}${Math.abs(z).toFixed(1)}σ ${z >= 0 ? 'above' : 'below'} trend</div>`;
+                                        }
                                     });
                                     html += `</div>`;
                                 }

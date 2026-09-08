@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\EventSubscriber;
 
+use App\Data\MacroFieldCatalog;
 use App\DTO\MacroStateDTO;
 use App\EventSubscriber\EarningsReportSubscriber;
 use Doctrine\ORM\EntityManagerInterface;
@@ -121,6 +122,22 @@ class StreamMacroDriverRoutingTest extends TestCase
             $this->assertSame('macro', $driver['type']);
             $this->assertIsFloat($driver['impact']);
             $this->assertTrue(is_finite($driver['impact']), "Driver impact for {$businessModel}/{$streamKey} must be finite.");
+
+            // A macro driver has to name the observables it was struck from, and each of them has
+            // to be printable — that provenance is the only thing the panel can honestly show in
+            // place of `impact`, which carries no unit.
+            $this->assertArrayHasKey('fields', $driver);
+            $this->assertNotEmpty(
+                $driver['fields'],
+                "Macro driver '{$driver['label']}' for {$businessModel}/{$streamKey} names no macro field."
+            );
+            foreach ($driver['fields'] as $field) {
+                $this->assertArrayHasKey(
+                    $field,
+                    MacroFieldCatalog::FIELDS,
+                    "Macro field '{$field}' behind '{$driver['label']}' is not in MacroFieldCatalog, so it can never be printed."
+                );
+            }
         }
     }
 

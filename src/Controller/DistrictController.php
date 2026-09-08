@@ -9,7 +9,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\District\DistrictEventFeed;
 use App\Service\District\DistrictMapBuilder;
-use App\Service\District\DistrictPriceChangeFeed;
+use App\Service\Market\PriceChangeFeed;
 use App\Service\District\DistrictRevenueFeed;
 use App\Service\District\DistrictStressEvaluator;
 use App\Service\District\DistrictWardComposer;
@@ -42,7 +42,7 @@ class DistrictController extends AbstractController
         DistrictStressEvaluator $stressEvaluator,
         DistrictEventFeed $eventFeed,
         DistrictRevenueFeed $revenueFeed,
-        DistrictPriceChangeFeed $priceChangeFeed,
+        PriceChangeFeed $priceChangeFeed,
         \Redis $redis,
     ): Response {
         if ($ward !== DistrictMap::WARD_SLUG) {

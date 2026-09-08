@@ -1119,6 +1119,80 @@ class MathUtility
     }
 
     /**
+     * Decomposes a period's total revenue growth into each segment's contribution to it.
+     *
+     * Standard arithmetic revenue attribution, as used in segment reporting: a segment's
+     * contribution is its own absolute change measured against the *prior total*, so the
+     * contributions sum exactly to the total growth rate.
+     *
+     * Formula: c_i = (R_i,t - R_i,t-1) / SUM_j R_j,t-1,  and  SUM_i c_i = (R_t - R_t-1) / R_t-1
+     *
+     * This is what separates a segment's own growth rate from its importance: a segment holding
+     * 5% of revenue that grows 40% contributes 2 percentage points, not 40.
+     *
+     * @param  array<string, float> $currentRevenues  Segment revenues this period
+     * @param  array<string, float> $previousRevenues Segment revenues the prior period
+     * @return array<string, float> Segment key => contribution to total growth (decimal fraction)
+     */
+    public function calculateGrowthContributions(array $currentRevenues, array $previousRevenues): array
+    {
+        $previousTotal = array_sum($previousRevenues);
+        if ($previousTotal <= 0.0) {
+            return [];
+        }
+
+        $contributions = [];
+        foreach (array_keys($currentRevenues + $previousRevenues) as $key) {
+            $current = (float) ($currentRevenues[$key] ?? 0.0);
+            $previous = (float) ($previousRevenues[$key] ?? 0.0);
+            $contributions[$key] = ($current - $previous) / $previousTotal;
+        }
+
+        return $contributions;
+    }
+
+    /**
+     * Herfindahl-Hirschman Index of a revenue mix — the standard concentration measure.
+     *
+     * Formula: HHI = SUM_i s_i^2, over shares expressed as decimal fractions, so the result runs
+     * from 1/n (a perfectly even mix across n segments) to 1.0 (a single-segment business).
+     * Applied to a revenue mix it reads as concentration risk: how much of the firm rests on one
+     * line of business.
+     *
+     * @param  array<string, float> $shares Segment shares as decimal fractions
+     * @return float Concentration index on [0, 1]
+     */
+    public function calculateHerfindahlIndex(array $shares): float
+    {
+        $total = array_sum($shares);
+        if ($total <= 0.0) {
+            return 0.0;
+        }
+
+        $hhi = 0.0;
+        foreach ($shares as $share) {
+            $normalized = (float) $share / $total;
+            $hhi += $normalized * $normalized;
+        }
+
+        return $hhi;
+    }
+
+    /**
+     * Effective number of segments implied by a concentration index (the inverse-Simpson count).
+     *
+     * Formula: N_eff = 1 / HHI. A firm with shares 0.5/0.3/0.2 books three segments but behaves
+     * like 2.6 of them; a 0.9/0.05/0.05 firm behaves like 1.2. This is the readable half of HHI.
+     *
+     * @param  float $herfindahlIndex Concentration index on (0, 1]
+     * @return float Effective segment count, 0.0 for an empty mix
+     */
+    public function calculateEffectiveSegmentCount(float $herfindahlIndex): float
+    {
+        return $herfindahlIndex > 0.0 ? 1.0 / $herfindahlIndex : 0.0;
+    }
+
+    /**
      * Normalizes an array of weights to sum strictly to 1.0 (simplex projection).
      * Clamps weights to non-negative values to ensure valid probability simplex.
      *

@@ -21,8 +21,14 @@
   --color-on-surface-variant: #c2c6d6; 
   --color-outline-variant: #424754; 
 
-  --font-headline: "Courier Prime", monospace;
-  --font-body: "Courier Prime", monospace;
+  /* --- Typography ---
+     UI chrome (nav, prose, labels, buttons) is set in a sans; monospace is reserved for
+     figures — prices, tickers, table cells — where digit alignment carries meaning. Setting
+     both to the same face, as this file previously did, removes that distinction entirely
+     and leaves `font-mono` a no-op on the ~320 elements that ask for it. */
+  --font-headline: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-body: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --font-serif: "Times New Roman", Times, serif;
 }
 
@@ -33,6 +39,13 @@
   }
 
   .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Monospace is only ever applied to figures in this app, so give it fixed-width digits
+     unconditionally — a column of prices that does not align reads as broken, and many
+     `font-mono` call sites never paired it with `tabular-nums`. */
+  .font-mono {
     font-variant-numeric: tabular-nums;
   }
 

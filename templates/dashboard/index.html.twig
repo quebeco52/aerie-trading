@@ -12,7 +12,7 @@
                 <div class="lg:col-span-7 flex flex-col space-y-2">
                     <div class="flex items-center gap-2">
                         <span class="w-2 h-2 rounded-full bg-secondary"></span>
-                        <span class="text-xs font-bold tracking-wider text-on-surface-variant uppercase">Total Portfolio Value (NAV)</span>
+                        <span class="text-[11px] font-semibold tracking-wide text-on-surface-variant uppercase">Total Portfolio Value (NAV)</span>
                     </div>
                     <div class="flex flex-wrap items-baseline gap-4">
                         <h1 id="portfolio-total-value" class="text-3xl sm:text-4xl font-bold tracking-tight text-on-surface font-mono tabular-nums transition-colors duration-300">
@@ -24,7 +24,7 @@
                                 <span id="portfolio-pnl-val">{{ totalUnrealizedPnL >= 0 ? '+' : '' }}${{ totalUnrealizedPnL|number_format(2) }}</span>
                                 <span id="portfolio-pnl-pct">({{ totalUnrealizedPnL >= 0 ? '+' : '' }}{{ totalUnrealizedPnLPercent|number_format(2) }}%)</span>
                             </span>
-                            <span class="text-xs font-bold text-on-surface-variant uppercase tracking-wider hidden sm:inline">Total Return</span>
+                            <span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide hidden sm:inline">Total Return</span>
                         </div>
                     </div>
                 </div>
@@ -32,15 +32,15 @@
                 {# Right: Key Account Stats #}
                 <div class="lg:col-span-5 grid grid-cols-2 sm:grid-cols-3 gap-3">
                     <div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between">
-                        <span class="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Cash</span>
+                        <span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Cash</span>
                         <span id="available-cash" class="text-sm font-bold text-on-surface font-mono tabular-nums mt-1">${{ cashBalance|number_format(2) }}</span>
                     </div>
                     <div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between">
-                        <span class="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Invested</span>
+                        <span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Invested</span>
                         <span id="total-invested" class="text-sm font-bold text-on-surface font-mono tabular-nums mt-1">${{ totalInvested|number_format(2) }}</span>
                     </div>
                     <div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between col-span-2 sm:col-span-1">
-                        <span class="text-xs font-bold text-on-surface-variant uppercase tracking-wider">In Orders</span>
+                        <span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">In Orders</span>
                         <span class="text-sm font-bold text-primary font-mono tabular-nums mt-1">${{ escrowedCash|number_format(2) }}</span>
                     </div>
                 </div>
@@ -51,7 +51,7 @@
         <div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/25">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
                 <div>
-                    <h2 class="text-xs font-bold uppercase tracking-wider text-on-surface">Portfolio Performance (NAV)</h2>
+                    <h2 class="text-sm font-semibold text-on-surface">Portfolio Performance (NAV)</h2>
                     <p class="text-xs text-on-surface-variant mt-0.5">Historical portfolio valuation curve</p>
                 </div>
 
@@ -77,20 +77,20 @@
         {# --- TAB NAVIGATION BAR --- #}
         <div class="space-y-5" data-controller="tabs" data-tabs-default-tab-value="holdings">
             <div class="flex border-b border-outline-variant/20 overflow-x-auto gap-2 sm:gap-6 pb-px custom-scrollbar">
-                <button class="portfolio-tab-btn pb-2.5 px-1 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-primary border-primary cursor-pointer" data-tab="holdings" data-tabs-target="tab" data-action="click->tabs#select">
+                <button class="portfolio-tab-btn pb-2.5 px-1 text-sm font-medium border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-primary border-primary cursor-pointer" data-tab="holdings" data-tabs-target="tab" data-action="click->tabs#select">
                     Holdings
                     <span class="px-1.5 py-0.2 rounded text-xs bg-surface-container text-on-surface-variant font-mono">{{ holdings|length }}</span>
                 </button>
-                <button class="portfolio-tab-btn pb-2.5 px-1 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="orders" data-tabs-target="tab" data-action="click->tabs#select">
+                <button class="portfolio-tab-btn pb-2.5 px-1 text-sm font-medium border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="orders" data-tabs-target="tab" data-action="click->tabs#select">
                     Orders & Trades
                     {% if openOrders|length > 0 %}
                         <span class="px-1.5 py-0.2 rounded text-xs bg-primary/20 text-primary font-mono font-bold">{{ openOrders|length }}</span>
                     {% endif %}
                 </button>
-                <button class="portfolio-tab-btn pb-2.5 px-1 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="analytics" data-tabs-target="tab" data-action="click->tabs#select">
+                <button class="portfolio-tab-btn pb-2.5 px-1 text-sm font-medium border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="analytics" data-tabs-target="tab" data-action="click->tabs#select">
                     Analytics & Risk
                 </button>
-                <button class="portfolio-tab-btn pb-2.5 px-1 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="account" data-tabs-target="tab" data-action="click->tabs#select">
+                <button class="portfolio-tab-btn pb-2.5 px-1 text-sm font-medium border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="account" data-tabs-target="tab" data-action="click->tabs#select">
                     Account & Cash
                 </button>
             </div>
@@ -104,7 +104,7 @@
                     <div class="flex items-center gap-3">
                         <div class="w-2.5 h-2.5 rounded-full bg-primary"></div>
                         <div>
-                            <p class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Stocks</p>
+                            <p class="text-sm font-semibold text-on-surface-variant">Stocks</p>
                             <p class="text-sm font-bold text-on-surface font-mono tabular-nums">${{ allocation.stocks|number_format(2) }}</p>
                         </div>
                     </div>
@@ -114,7 +114,7 @@
                     <div class="flex items-center gap-3">
                         <div class="w-2.5 h-2.5 rounded-full bg-secondary"></div>
                         <div>
-                            <p class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">ETFs / Indices</p>
+                            <p class="text-sm font-semibold text-on-surface-variant">ETFs / Indices</p>
                             <p class="text-sm font-bold text-on-surface font-mono tabular-nums">${{ allocation.etfs|number_format(2) }}</p>
                         </div>
                     </div>
@@ -124,7 +124,7 @@
                     <div class="flex items-center gap-3">
                         <div class="w-2.5 h-2.5 rounded-full bg-on-surface-variant"></div>
                         <div>
-                            <p class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Cash</p>
+                            <p class="text-sm font-semibold text-on-surface-variant">Cash</p>
                             <p class="text-sm font-bold text-on-surface font-mono tabular-nums">${{ allocation.cash|number_format(2) }}</p>
                         </div>
                     </div>
@@ -137,7 +137,7 @@
                 <div class="overflow-x-auto">
                     <table class="w-full text-left border-collapse min-w-175">
                         <thead>
-                            <tr class="bg-surface-container-highest/20 text-on-surface-variant text-xs uppercase tracking-wider font-bold border-b border-outline-variant/15">
+                            <tr class="bg-surface-container-highest/20 text-on-surface-variant text-[11px] uppercase tracking-wide font-semibold border-b border-outline-variant/15">
                                 <th class="px-5 py-3">Asset</th>
                                 <th class="px-4 py-3 text-right">Shares</th>
                                 <th class="px-4 py-3 text-right">Avg Cost</th>
@@ -150,15 +150,15 @@
                         </thead>
                         <tbody class="divide-y divide-outline-variant/10 text-xs sm:text-sm">
                             {% for holding in holdings %}
-                                <tr class="hover:bg-surface-container-high/30 transition-colors group cursor-pointer" onclick="window.location.href='/stock/{{ holding.ticker }}'">
+                                <tr class="relative hover:bg-surface-container-high/30 focus-within:bg-surface-container-high/30 transition-colors group">
                                     <td class="px-5 py-3">
                                         <div class="flex items-center gap-3">
                                             <img class="w-7 h-7 rounded shrink-0 border border-outline-variant/20 p-0.5 bg-surface-container-lowest" src="{{ asset('icons/' ~ holding.ticker ~ '.svg') }}" onerror="this.onerror=null; this.src='{{ asset('icons/default.svg') }}';" alt="{{ holding.ticker }} logo">
                                             <div>
                                                 <div class="flex items-center gap-2">
-                                                    <span class="font-bold text-on-surface text-sm group-hover:text-primary transition-colors">{{ holding.name }}</span>
+                                                    <a href="/stock/{{ holding.ticker }}" class="font-bold text-on-surface text-sm group-hover:text-primary transition-colors outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:decoration-primary focus-visible:underline-offset-4">{{ holding.name }}</a>
                                                     {% if holding.isBankrupt %}
-                                                        <span class="px-1.5 py-0.2 rounded bg-red-500/10 text-red-400 text-[9px] font-bold border border-red-500/20">BANKRUPT</span>
+                                                        <span class="relative z-10 px-1.5 py-0.2 rounded bg-tertiary/10 text-tertiary text-[9px] font-bold border border-tertiary/25 uppercase tracking-wide">Bankrupt</span>
                                                     {% endif %}
                                                 </div>
                                                 <div class="flex items-center gap-2 mt-0.5">
@@ -178,7 +178,7 @@
                                     </td>
                                     <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant text-xs">{{ holding.weight|number_format(1) }}%</td>
                                     <td class="px-5 py-3 text-right">
-                                        <a href="/stock/{{ holding.ticker }}" onclick="event.stopPropagation();" class="inline-flex items-center px-2.5 py-1 rounded bg-surface-container hover:bg-primary/20 text-primary border border-primary/25 text-xs font-bold transition-colors uppercase tracking-wider">
+                                        <a href="/stock/{{ holding.ticker }}" class="relative z-10 inline-flex items-center px-2.5 py-1 rounded bg-surface-container hover:bg-primary/20 text-primary border border-primary/25 text-xs font-semibold transition-colors">
                                             Trade
                                         </a>
                                     </td>
@@ -203,7 +203,7 @@
             {# Open Limit Orders Card #}
             <div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-5">
                 <div class="flex items-center justify-between mb-3">
-                    <h3 class="text-xs font-bold uppercase tracking-wider text-on-surface">Active Open Limit Orders</h3>
+                    <h3 class="text-sm font-semibold text-on-surface">Active Open Limit Orders</h3>
                     <span class="text-xs font-mono text-on-surface-variant">{{ openOrders|length }} active</span>
                 </div>
 
@@ -211,7 +211,7 @@
                     <div class="overflow-x-auto">
                         <table class="w-full text-left border-collapse min-w-150">
                             <thead>
-                                <tr class="text-xs text-on-surface-variant uppercase tracking-wider border-b border-outline-variant/15 font-bold">
+                                <tr class="text-[11px] text-on-surface-variant uppercase tracking-wide border-b border-outline-variant/15 font-semibold">
                                     <th class="py-2.5">Order ID</th>
                                     <th class="py-2.5">Type</th>
                                     <th class="py-2.5">Action</th>
@@ -257,7 +257,7 @@
             {# Trade Execution History Card #}
             <div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-5">
                 <div class="flex items-center justify-between mb-3">
-                    <h3 class="text-xs font-bold uppercase tracking-wider text-on-surface">Trade Execution History</h3>
+                    <h3 class="text-sm font-semibold text-on-surface">Trade Execution History</h3>
                     <span class="text-xs font-mono text-on-surface-variant">Last {{ tradeHistory|length }} executions</span>
                 </div>
 
@@ -265,7 +265,7 @@
                     <div class="overflow-x-auto">
                         <table class="w-full text-left border-collapse min-w-150">
                             <thead>
-                                <tr class="text-xs text-on-surface-variant uppercase tracking-wider border-b border-outline-variant/15 font-bold">
+                                <tr class="text-[11px] text-on-surface-variant uppercase tracking-wide border-b border-outline-variant/15 font-semibold">
                                     <th class="py-2.5">Execution Date</th>
                                     <th class="py-2.5">Type</th>
                                     <th class="py-2.5">Action</th>
@@ -313,7 +313,7 @@
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
                 {# Sector Breakdown #}
                 <div class="lg:col-span-7 bg-surface-container-low border border-outline-variant/25 rounded-lg p-5">
-                    <h3 class="text-xs font-bold uppercase tracking-wider text-on-surface mb-3">Sector Diversification</h3>
+                    <h3 class="text-sm font-semibold text-on-surface mb-3">Sector Diversification</h3>
                     <div class="space-y-3">
                         {% for sec in sectorBreakdown %}
                             <div>
@@ -337,7 +337,7 @@
                 {# Portfolio Risk & Concentration #}
                 <div class="lg:col-span-5 bg-surface-container-low border border-outline-variant/25 rounded-lg p-5 flex flex-col justify-between">
                     <div>
-                        <h3 class="text-xs font-bold uppercase tracking-wider text-on-surface mb-3">Portfolio Risk & Structure</h3>
+                        <h3 class="text-sm font-semibold text-on-surface mb-3">Portfolio Risk & Structure</h3>
                         <dl class="divide-y divide-outline-variant/15 text-xs">
                             <div class="py-2.5 flex justify-between">
                                 <dt class="text-on-surface-variant">Number of Positions</dt>
@@ -369,17 +369,17 @@
         <div id="tab-content-account" class="portfolio-tab-panel hidden space-y-5" data-tabs-target="panel" data-tab-panel="account">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-5">
-                    <span class="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Available Cash</span>
+                    <span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Available Cash</span>
                     <h3 class="text-2xl font-bold text-on-surface font-mono tabular-nums mt-1">${{ cashBalance|number_format(2) }}</h3>
                     <p class="text-xs text-on-surface-variant mt-1.5">Liquid capital immediately available for market orders.</p>
                 </div>
                 <div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-5">
-                    <span class="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Escrowed in Limit Orders</span>
+                    <span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Escrowed in Limit Orders</span>
                     <h3 class="text-2xl font-bold text-primary font-mono tabular-nums mt-1">${{ escrowedCash|number_format(2) }}</h3>
                     <p class="text-xs text-on-surface-variant mt-1.5">Funds held in reserve pending execution of buy orders.</p>
                 </div>
                 <div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-5">
-                    <span class="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Total Buying Power</span>
+                    <span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Total Buying Power</span>
                     <h3 class="text-2xl font-bold text-secondary font-mono tabular-nums mt-1">${{ (cashBalance + escrowedCash)|number_format(2) }}</h3>
                     <p class="text-xs text-on-surface-variant mt-1.5">Total non-equity liquidity under user management.</p>
                 </div>

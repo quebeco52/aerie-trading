@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace App\Tests\Service\District;
+namespace App\Tests\Service\Market;
 
 use App\Entity\Stock;
-use App\Service\District\DistrictPriceChangeFeed;
+use App\Service\Market\PriceChangeFeed;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Pins the district's one piece of derived market data: a price change read from the Redis chart
+ * Pins the exchange's one piece of derived market data: a price change read from the Redis chart
  * buffer the ticker already maintains, in a single pipelined pass. Nothing about the buffer is
  * assumed beyond its documented shape — a newest-first list of
  * `{"price": …, "recorded_at": …}` entries — and a ticker with nothing usable buffered must read
@@ -19,17 +19,17 @@ use PHPUnit\Framework\TestCase;
  * facts and the kerb prints them differently.
  */
 #[AllowMockObjectsWithoutExpectations]
-class DistrictPriceChangeFeedTest extends TestCase
+class PriceChangeFeedTest extends TestCase
 {
     private \Redis&MockObject $redis;
-    private DistrictPriceChangeFeed $feed;
+    private PriceChangeFeed $feed;
 
     protected function setUp(): void
     {
         $this->redis = $this->createMock(\Redis::class);
         $this->redis->method('multi')->willReturnSelf();
 
-        $this->feed = new DistrictPriceChangeFeed($this->redis);
+        $this->feed = new PriceChangeFeed($this->redis);
     }
 
     private function makeStock(string $ticker, float $price): Stock
@@ -129,5 +129,57 @@ class DistrictPriceChangeFeedTest extends TestCase
         $this->assertEqualsWithDelta(0.10, $changes['LAKE'], 0.0001);
         $this->assertArrayNotHasKey('SWAN', $changes);
         $this->assertEqualsWithDelta(-0.10, $changes['ROOK'], 0.0001);
+    }
+
+    public function testChangeForTickerReadsTheSameBufferTailAsTheBatchPath(): void
+    {
+        $this->redis->expects($this->once())
+            ->method('lIndex')
+            ->with('chart_buffer:LBI', -1)
+            ->willReturn($this->buffered(400.0));
+
+        $this->assertEqualsWithDelta(0.05, $this->feed->changeForTicker('LBI', 420.0), 0.0001);
+    }
+
+    public function testChangeForTickerReportsAFallAsANegativeChange(): void
+    {
+        $this->redis->method('lIndex')->willReturn($this->buffered(80.0));
+
+        $this->assertEqualsWithDelta(-0.25, $this->feed->changeForTicker('SWAN', 60.0), 0.0001);
+    }
+
+    public function testChangeForTickerIsUnknownWhenNothingIsBuffered(): void
+    {
+        $this->redis->method('lIndex')->willReturn(false);
+
+        $this->assertNull($this->feed->changeForTicker('ROOK', 50.0));
+    }
+
+    public function testChangeForTickerIsUnknownForAMalformedEntry(): void
+    {
+        $this->redis->method('lIndex')->willReturn('not json at all');
+
+        $this->assertNull($this->feed->changeForTicker('ROOK', 50.0));
+    }
+
+    public function testChangeForTickerRefusesToDivideByAZeroBaseline(): void
+    {
+        $this->redis->method('lIndex')->willReturn($this->buffered(0.0));
+
+        $this->assertNull($this->feed->changeForTicker('VULT', 12.0));
+    }
+
+    public function testChangeForTickerTreatsADelistedAssetAtZeroAsUnknown(): void
+    {
+        $this->redis->expects($this->never())->method('lIndex');
+
+        $this->assertNull($this->feed->changeForTicker('VULT', 0.0));
+    }
+
+    public function testChangeForTickerSkipsRedisEntirelyForAnEmptyTicker(): void
+    {
+        $this->redis->expects($this->never())->method('lIndex');
+
+        $this->assertNull($this->feed->changeForTicker('', 42.0));
     }
 }
