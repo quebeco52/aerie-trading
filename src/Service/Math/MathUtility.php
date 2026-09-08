@@ -52,6 +52,21 @@ class MathUtility
     }
 
     /**
+     * Maps a real value onto the open interval (0, 1) with a logistic curve.
+     * Strictly monotonic, so inputs past the calibration window keep differentiating
+     * instead of flat-lining against a clamp. Presentation/scaling use only.
+     *
+     * @param float $x         Input value.
+     * @param float $midpoint  Input that maps to 0.5.
+     * @param float $steepness Logistic growth rate; larger = sharper transition.
+     * @return float A value in (0, 1).
+     */
+    public static function logisticUnitInterval(float $x, float $midpoint, float $steepness): float
+    {
+        return 1.0 / (1.0 + exp(-$steepness * ($x - $midpoint)));
+    }
+
+    /**
      * Generates a random float between 0 and 1 from a uniform distribution.
      *
      * @return float A random float in the interval [0, 1].

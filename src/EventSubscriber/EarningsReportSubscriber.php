@@ -155,7 +155,9 @@ class EarningsReportSubscriber implements EventSubscriberInterface
             case 'commercial_bank':
             case 'shadow_bank':
             case 'credit_services':
-                if (in_array($streamKey, ['net_interest_income', 'mezzanine_lending', 'revolving_interest', 'wholesale_lending', 'lending_revenue'])) {
+                // Real stream keys: net_interest_income (bank), lending (credit_services),
+                // origination_fees + direct_lending (shadow_bank).
+                if (in_array($streamKey, ['net_interest_income', 'lending', 'origination_fees', 'direct_lending'])) {
                     $bankSpread = $macro->yield10yEma - ($macro->yield2yEma + $macro->interbankLiquiditySpreadEma);
                     $spreadBps = (int) round($bankSpread * 10000);
                     $drivers[] = [
@@ -183,7 +185,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
                             'type'   => 'macro',
                         ];
                     }
-                } elseif (in_array($streamKey, ['fee_income', 'interchange_fees', 'network_revenue', 'structured_credit'])) {
+                } elseif (in_array($streamKey, ['fee_income', 'swipe'])) {
                     $drivers[] = [
                         'label'  => 'Payment & Transaction Activity',
                         'impact' => round($macro->outputGapEma * 0.35, 4),
@@ -205,22 +207,30 @@ class EarningsReportSubscriber implements EventSubscriberInterface
                 break;
 
             case 'investment_bank':
-                if (in_array($streamKey, ['advisory_fees', 'advisory_mna'])) {
+                // Real stream keys: advisory, trading, options_premium_income (conditional).
+                // The model itself folds M&A, ECM and DCM stimuli into a single 'advisory'
+                // number, so both underlying demand drivers are surfaced against that one key.
+                if ($streamKey === 'advisory') {
                     $drivers[] = [
                         'label'  => 'Corporate M&A Deal Flow',
                         'impact' => round(($macro->outputGapEma * 0.80) - (($macro->macroCreditSpreadEma - 0.02) * 2.0), 4),
                         'type'   => 'macro',
                     ];
-                } elseif (in_array($streamKey, ['underwriting_fees', 'capital_markets'])) {
                     $drivers[] = [
                         'label'  => 'Debt & Equity Underwriting Appetite',
                         'impact' => round(($macro->outputGapEma * 0.50) - (($macro->policyRateEma - 0.02) * 1.0), 4),
                         'type'   => 'macro',
                     ];
-                } elseif ($streamKey === 'principal_trading') {
+                } elseif ($streamKey === 'trading') {
                     $drivers[] = [
                         'label'  => 'FICC & Equities Desk Volatility',
                         'impact' => round(($macro->marketVolatilityEma - 0.15) * 2.0, 4),
+                        'type'   => 'macro',
+                    ];
+                } elseif ($streamKey === 'options_premium_income') {
+                    $drivers[] = [
+                        'label'  => 'Options & Hedging Premium Capture',
+                        'impact' => round(($macro->marketVolatilityEma - 0.15) * 1.5, 4),
                         'type'   => 'macro',
                     ];
                 }
@@ -228,46 +238,104 @@ class EarningsReportSubscriber implements EventSubscriberInterface
 
             case 'brokerage':
             case 'clearing_house':
-                if (in_array($streamKey, ['commissions_order_flow', 'clearing_fees', 'trading_commissions'])) {
+                // Real stream keys: trading, advisory (brokerage); clearing_fees, custody_float,
+                // data_licensing (clearing_house).
+                if (in_array($streamKey, ['trading', 'clearing_fees'])) {
                     $drivers[] = [
                         'label'  => 'Market Volatility & Trading Activity',
                         'impact' => round(($macro->marketVolatilityEma - 0.15) * 2.2, 4),
                         'type'   => 'macro',
                     ];
-                } elseif (in_array($streamKey, ['margin_interest', 'custody_float'])) {
+                } elseif ($streamKey === 'custody_float') {
                     $drivers[] = [
                         'label'  => 'Benchmark Margin Lending Yield',
                         'impact' => round(($macro->policyRateEma * 1.2) + ($macro->outputGapEma * 0.4), 4),
                         'type'   => 'macro',
                     ];
-                } elseif (in_array($streamKey, ['custody_wealth_fees', 'data_licensing'])) {
+                } elseif ($streamKey === 'data_licensing') {
                     $drivers[] = [
                         'label'  => 'Institutional Market Data & AUM',
                         'impact' => round($macro->outputGapEma * 0.40, 4),
                         'type'   => 'macro',
                     ];
+                } elseif ($streamKey === 'advisory') {
+                    $drivers[] = [
+                        'label'  => 'Corporate Advisory Mandate Flow',
+                        'impact' => round($macro->outputGapEma * 0.50, 4),
+                        'type'   => 'macro',
+                    ];
                 }
                 break;
 
-            case 'asset_management':
-            case 'private_equity':
-            case 'distressed_debt':
-                if (in_array($streamKey, ['base_fee', 'management_fees', 'monitoring_transaction_fees'])) {
+            case 'asset_manager':
+                // Real stream keys: base_fee, alpha.
+                if ($streamKey === 'base_fee') {
                     $drivers[] = [
                         'label'  => 'Committed AUM Capital Base',
                         'impact' => round($macro->outputGapEma * 0.35, 4),
                         'type'   => 'macro',
                     ];
-                } elseif (in_array($streamKey, ['performance_fees', 'carried_interest', 'alpha'])) {
+                } elseif ($streamKey === 'alpha') {
+                    $drivers[] = [
+                        'label'  => 'Active Management Alpha Capture',
+                        'impact' => round(($macro->outputGapEma * 0.60) + (($macro->marketVolatilityEma - 0.15) * 0.80), 4),
+                        'type'   => 'macro',
+                    ];
+                }
+                break;
+
+            case 'private_equity':
+                // Real stream keys: management_fees, carried_interest, principal_investments (conditional).
+                if ($streamKey === 'management_fees') {
+                    $drivers[] = [
+                        'label'  => 'Committed AUM Capital Base',
+                        'impact' => round($macro->outputGapEma * 0.35, 4),
+                        'type'   => 'macro',
+                    ];
+                } elseif (in_array($streamKey, ['carried_interest', 'principal_investments'])) {
                     $drivers[] = [
                         'label'  => 'LBO Exit & Performance Hurdle Realization',
                         'impact' => round(($macro->outputGapEma * 1.10) - (($macro->macroCreditSpreadEma - 0.02) * 2.0), 4),
                         'type'   => 'macro',
                     ];
-                } elseif (in_array($streamKey, ['special_situations_origination', 'debt_restructuring_upside', 'recovery'])) {
+                }
+                break;
+
+            case 'hedge_fund':
+                // Real stream keys: management_fees, directional_bets, quant_alpha.
+                if ($streamKey === 'management_fees') {
+                    $drivers[] = [
+                        'label'  => 'Committed AUM Capital Base',
+                        'impact' => round($macro->outputGapEma * 0.35, 4),
+                        'type'   => 'macro',
+                    ];
+                } elseif ($streamKey === 'directional_bets') {
+                    $drivers[] = [
+                        'label'  => 'Directional Macro Positioning',
+                        'impact' => round(($macro->marketVolatilityEma - 0.15) * 1.8, 4),
+                        'type'   => 'macro',
+                    ];
+                } elseif ($streamKey === 'quant_alpha') {
+                    $drivers[] = [
+                        'label'  => 'Quantitative Arbitrage Capture',
+                        'impact' => round(($macro->marketVolatilityEma - 0.15) * 1.2, 4),
+                        'type'   => 'macro',
+                    ];
+                }
+                break;
+
+            case 'distressed_debt':
+                // Real stream keys: restructuring_advisory, turnaround_recovery, loan_to_own (conditional).
+                if ($streamKey === 'restructuring_advisory') {
                     $drivers[] = [
                         'label'  => 'Corporate Default Restructuring Wave',
                         'impact' => round((($macro->macroCreditSpreadEma - 0.02) * 3.0) + (($macro->retailDefaultRateEma - 0.025) * 2.0), 4),
+                        'type'   => 'macro',
+                    ];
+                } elseif (in_array($streamKey, ['turnaround_recovery', 'loan_to_own'])) {
+                    $drivers[] = [
+                        'label'  => 'Distressed Asset Recovery Value',
+                        'impact' => round(($macro->outputGapEma * 0.90) - (($macro->macroCreditSpreadEma - 0.02) * 1.5), 4),
                         'type'   => 'macro',
                     ];
                 }
@@ -276,7 +344,10 @@ class EarningsReportSubscriber implements EventSubscriberInterface
             case 'insurance':
             case 'reinsurance':
             case 'retail_insurance':
-                if (in_array($streamKey, ['underwriting_premiums', 'treaty_reinsurance', 'personal_lines_premiums', 'premiums'])) {
+                // Real stream keys: premium_revenue (insurance); treaty_reinsurance,
+                // catastrophe_bonds (reinsurance); property_casualty_premiums,
+                // life_insurance_premiums (retail_insurance).
+                if (in_array($streamKey, ['premium_revenue', 'treaty_reinsurance', 'property_casualty_premiums', 'life_insurance_premiums'])) {
                     $drivers[] = [
                         'label'  => 'Policy Underwriting Demand',
                         'impact' => round($macro->outputGapEma * 0.30, 4),
@@ -289,7 +360,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
                             'type'   => 'macro',
                         ];
                     }
-                } elseif (in_array($streamKey, ['float_investment_income', 'catastrophe_bonds', 'statutory_reserve_yield', 'investment_income'])) {
+                } elseif ($streamKey === 'catastrophe_bonds') {
                     $drivers[] = [
                         'label'  => 'Sovereign Float Investment Yield',
                         'impact' => round($macro->yield10yEma * 1.5, 4),
