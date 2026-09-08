@@ -7,9 +7,9 @@
 	{% set verticalClass = vpos == 'bottom' ? 'top-full mt-2.5' : 'bottom-full mb-2.5' %}
 	{% set arrowVerticalClass = vpos == 'bottom' ? '-top-[5px] border-t border-l' : '-bottom-[5px] border-b border-r' %}
 
-	<span role="tooltip" class="block pointer-events-none absolute {{ alignClass }} {{ verticalClass }} {{ width }} p-2.5 bg-[#0f172a] text-white text-[11px] leading-relaxed rounded-lg shadow-2xl opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 group-focus:opacity-100 group-focus:translate-y-0 transition-all duration-200 z-50 normal-case tracking-normal font-normal border border-slate-700">
+	<span role="tooltip" class="block pointer-events-none absolute {{ alignClass }} {{ verticalClass }} {{ width }} p-2.5 bg-surface-container-high text-on-surface text-[11px] leading-relaxed rounded-lg opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 group-focus:opacity-100 group-focus:translate-y-0 transition-all duration-200 z-50 normal-case tracking-normal font-normal border border-outline-variant/40">
 		{{ text }}
-		<span class="block absolute {{ arrowVerticalClass }} {{ arrowPosition }} w-2.5 h-2.5 bg-[#0f172a] border-slate-700 transform rotate-45"></span>
+		<span class="block absolute {{ arrowVerticalClass }} {{ arrowPosition }} w-2.5 h-2.5 bg-surface-container-high border-outline-variant/40 transform rotate-45"></span>
 	</span>
 {% endmacro %}
 
@@ -37,12 +37,12 @@
 		class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-5 w-full space-y-5">
 
 		{# --- TOP ASSET HERO BANNER --- #}
-		<div class="bg-surface-container-low rounded-2xl p-6 lg:p-7 border border-outline-variant/15 shadow-lg relative z-20">
+		<div class="bg-surface-container-low rounded-lg p-6 lg:p-7 border border-outline-variant/15 relative z-20">
 			<div
 				class="flex flex-col md:flex-row md:justify-between md:items-center gap-6 relative z-10">
 				{# Left: Identity & Sector #}
 				<div class="flex items-center gap-4 sm:gap-5 min-w-0">
-					<img class="w-16 h-16 sm:w-20 sm:h-20 rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-2 shrink-0 object-contain shadow-sm" src="{{ asset('icons/' ~ asset.ticker ~ '.svg') }}" onerror="this.onerror=null; this.src='{{ asset('icons/default.svg') }}';" alt="{{ asset.ticker }} icon">
+					<img class="w-16 h-16 sm:w-20 sm:h-20 rounded border border-outline-variant/20 bg-surface-container-lowest p-2 shrink-0 object-contain" src="{{ asset('icons/' ~ asset.ticker ~ '.svg') }}" onerror="this.onerror=null; this.src='{{ asset('icons/default.svg') }}';" alt="{{ asset.ticker }} icon">
 
 					<div class="flex flex-col gap-1 min-w-0">
 						<h1 class="text-xl sm:text-2xl md:text-3xl font-bold text-on-surface tracking-tight wrap-break-word leading-tight">{{ asset.name }}</h1>
@@ -50,7 +50,7 @@
 						<div class="flex flex-wrap items-center gap-2 md:gap-3">
 							<span class="text-sm font-bold text-primary font-mono tracking-wider">{{ asset.ticker }}</span>
 
-							<span class="group relative cursor-help inline-flex items-center rounded bg-surface-container-highest px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-on-surface-variant focus-visible:outline-none" tabindex="0">
+							<span class="group relative cursor-help inline-flex items-center rounded bg-surface-container-highest px-2 py-0.5 text-sm font-semibold text-on-surface-variant focus-visible:outline-none" tabindex="0">
 								<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">{{ isEtf ? 'Market Index' : asset.industry|default('General') }}</span>
 								{% set bmMap = constant('App\\Data\\Sectors::BUSINESS_MODEL_DESCRIPTIONS') %}
 								{% set bmDesc = isEtf ? 'An Exchange Traded Fund tracking a basket of underlying stocks, providing broad market exposure.' : (bmMap[businessModel|default('none')] ?? bmMap['none']) %}
@@ -58,7 +58,7 @@
 							</span>
 
 							{% if not isEtf and asset.isBankrupt %}
-								<span class="inline-flex items-center rounded bg-red-500/10 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-red-400 border border-red-500/20">
+								<span class="inline-flex items-center rounded bg-tertiary/10 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-tertiary border border-tertiary/25">
 									BANKRUPT / DELISTED
 								</span>
 							{% endif %}
@@ -71,15 +71,30 @@
 					<div class="flex items-center md:justify-end gap-2 mb-1">
 						{% if not isEtf and asset.isBankrupt %}
 							<span class="w-2 h-2 rounded-full bg-tertiary"></span>
-							<span class="text-xs font-bold tracking-wider text-tertiary uppercase" id="live-indicator">BANKRUPT / DELISTED</span>
+							<span class="text-[11px] font-semibold tracking-wide text-tertiary uppercase" id="live-indicator">BANKRUPT / DELISTED</span>
 						{% else %}
 							<span class="w-2 h-2 rounded-full bg-secondary"></span>
-							<span class="text-xs font-bold tracking-wider text-secondary uppercase" id="live-indicator">Live Market</span>
+							<span class="text-[11px] font-semibold tracking-wide text-secondary uppercase" id="live-indicator">Live Market</span>
 						{% endif %}
 					</div>
 					<span class="block text-3xl sm:text-4xl md:text-5xl font-bold font-mono tabular-nums {{ not isEtf and asset.isBankrupt ? 'text-tertiary line-through' : 'text-on-surface' }} tracking-tight transition-colors duration-300" id="big-price">
 						${{ (not isEtf and asset.isBankrupt ? 0.00 : asset.price)|number_format(2) }}
 					</span>
+
+					{# A quote without its change is only half a quote. The window is the trailing
+					   month held in the price buffer — there is no session open or previous close
+					   in the schema to compute a daily move from, so it is labelled for what it is. #}
+					<div class="flex items-center md:justify-end gap-2 mt-1.5" id="big-change-row">
+						{% if changePercent is not null %}
+							<span id="big-change" class="inline-flex items-center gap-1 text-sm sm:text-base font-semibold font-mono tabular-nums {{ changePercent >= 0 ? 'text-secondary' : 'text-tertiary' }}">
+								<span class="material-symbols-outlined text-base leading-none" aria-hidden="true">{{ changePercent >= 0 ? 'trending_up' : 'trending_down' }}</span>
+								{{ changePercent >= 0 ? '+' : '' }}{{ (changePercent * 100)|number_format(2) }}%
+							</span>
+						{% else %}
+							<span id="big-change" class="text-sm sm:text-base font-semibold font-mono tabular-nums text-on-surface-variant/50">&mdash;</span>
+						{% endif %}
+						<span class="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant/70">1M</span>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -87,22 +102,22 @@
 		{# --- TAB NAVIGATION BAR (ALL ENGLISH) --- #}
 		<div class="space-y-5" data-controller="tabs" data-tabs-default-tab-value="overview">
 			<div class="flex border-b border-outline-variant/20 overflow-x-auto gap-2 sm:gap-6 pb-px custom-scrollbar">
-				<button class="stock-tab-btn pb-2.5 px-1 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-primary border-primary cursor-pointer" data-tab="overview" data-tabs-target="tab" data-action="click->tabs#select">
+				<button class="stock-tab-btn pb-2.5 px-1 text-sm font-medium border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-primary border-primary cursor-pointer" data-tab="overview" data-tabs-target="tab" data-action="click->tabs#select">
 					Overview
 				</button>
 				{% if isEtf %}
-					<button class="stock-tab-btn pb-2.5 px-1 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="macro" data-tabs-target="tab" data-action="click->tabs#select">
+					<button class="stock-tab-btn pb-2.5 px-1 text-sm font-medium border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="macro" data-tabs-target="tab" data-action="click->tabs#select">
 						Macro Trends & Indicators
 					</button>
 				{% else %}
-					<button class="stock-tab-btn pb-2.5 px-1 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="financials" data-tabs-target="tab" data-action="click->tabs#select">
+					<button class="stock-tab-btn pb-2.5 px-1 text-sm font-medium border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="financials" data-tabs-target="tab" data-action="click->tabs#select">
 						Financials & Fundamentals
 					</button>
-					<button class="stock-tab-btn pb-2.5 px-1 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="sector" data-tabs-target="tab" data-action="click->tabs#select">
+					<button class="stock-tab-btn pb-2.5 px-1 text-sm font-medium border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="sector" data-tabs-target="tab" data-action="click->tabs#select">
 						Company & Sector
 					</button>
 				{% endif %}
-				<button class="stock-tab-btn pb-2.5 px-1 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="orders" data-tabs-target="tab" data-action="click->tabs#select">
+				<button class="stock-tab-btn pb-2.5 px-1 text-sm font-medium border-b-2 transition-all flex items-center gap-2 whitespace-nowrap text-on-surface-variant hover:text-on-surface border-transparent cursor-pointer" data-tab="orders" data-tabs-target="tab" data-action="click->tabs#select">
 					Orders & Trades
 					{% if openOrders|length > 0 %}
 						<span class="px-2 py-0.5 rounded-full text-[10px] bg-primary/20 text-primary font-mono font-bold">{{ openOrders|length }}</span>
@@ -120,12 +135,12 @@
 					<div
 						class="lg:col-span-8 space-y-6">
 						{# Main Price Chart Card #}
-						<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-lg hover:border-outline-variant/30 transition-all">
-							<div class="flex overflow-x-auto gap-1 sm:gap-2 mb-4 bg-surface-container-lowest p-1.5 rounded-xl border border-outline-variant/15 w-full md:w-max [&::-webkit-scrollbar]:hidden" style="scrollbar-width: none; -ms-overflow-style: none;">
+						<div class="bg-surface-container-low rounded-lg p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
+							<div class="flex overflow-x-auto gap-1 sm:gap-2 mb-4 bg-surface-container-lowest p-1.5 rounded border border-outline-variant/15 w-full md:w-max [&::-webkit-scrollbar]:hidden" style="scrollbar-width: none; -ms-overflow-style: none;">
 								<button class="range-btn flex-1 sm:flex-none shrink-0 px-1.5 sm:px-3 py-1 text-xs font-bold rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center cursor-pointer" data-range="1w">1W</button>
 								<button class="range-btn flex-1 sm:flex-none shrink-0 px-1.5 sm:px-3 py-1 text-xs font-bold rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center cursor-pointer" data-range="1m">1M</button>
 								<button class="range-btn flex-1 sm:flex-none shrink-0 px-1.5 sm:px-3 py-1 text-xs font-bold rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center cursor-pointer" data-range="6m">6M</button>
-								<button class="range-btn flex-1 sm:flex-none shrink-0 px-1.5 sm:px-3 py-1 text-xs font-bold rounded-lg bg-primary text-[#001a42] shadow-md shadow-primary/20 transition-colors text-center cursor-pointer" data-range="1y">1Y</button>
+								<button class="range-btn flex-1 sm:flex-none shrink-0 px-1.5 sm:px-3 py-1 text-xs font-bold rounded-lg bg-primary text-[#001a42] shadow-primary/20 transition-colors text-center cursor-pointer" data-range="1y">1Y</button>
 								<button class="range-btn flex-1 sm:flex-none shrink-0 px-1.5 sm:px-3 py-1 text-xs font-bold rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center cursor-pointer" data-range="3y">3Y</button>
 								<button class="range-btn flex-1 sm:flex-none shrink-0 px-1.5 sm:px-3 py-1 text-xs font-bold rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center cursor-pointer" data-range="5y">5Y</button>
 								<button class="range-btn flex-1 sm:flex-none shrink-0 px-1.5 sm:px-3 py-1 text-xs font-bold rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center cursor-pointer" data-range="10y">10Y</button>
@@ -144,8 +159,8 @@
 						</div>
 
 						{# About Card #}
-						<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-lg hover:border-outline-variant/30 transition-all">
-							<h3 class="text-xs font-bold uppercase tracking-wider text-primary mb-3">
+						<div class="bg-surface-container-low rounded-lg p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
+							<h3 class="text-sm font-semibold text-primary mb-3">
 								About {{ asset.name }}
 							</h3>
 							<div class="text-xs font-serif text-on-surface-variant leading-relaxed tracking-wide">
@@ -154,9 +169,9 @@
 						</div>
 
 						{# Corporate News / Events Feed #}
-						<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-lg hover:border-outline-variant/30 transition-all">
+						<div class="bg-surface-container-low rounded-lg p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
 							<div class="flex items-center justify-between mb-4">
-								<h3 class="text-xs font-bold uppercase tracking-wider text-on-surface">
+								<h3 class="text-sm font-semibold text-on-surface">
 									Recent Corporate Events & News
 								</h3>
 								{% if events|length > 0 %}
@@ -170,7 +185,7 @@
 								{% for rawEvent in events %}
 									{% set event = present_event(rawEvent) %}
 									<div
-										class="p-4 rounded-xl bg-surface-container-lowest/80 border border-outline-variant/15 border-l-4 {{ event.borderClass }} hover:border-outline-variant/40 transition-all duration-200 space-y-2.5">
+										class="p-4 rounded bg-surface-container-lowest/80 border border-outline-variant/15 border-l-4 {{ event.borderClass }} hover:border-outline-variant/40 transition-all duration-200 space-y-2.5">
 
 										{# Top Header Row: Icon + Badge + Headline / EPS + Surprise + EVA + Timestamp #}
 										<div class="flex items-start justify-between gap-3">
@@ -235,7 +250,7 @@
 										{% endif %}
 									</div>
 								{% else %}
-									<div id="no-events-msg" class="p-8 rounded-xl bg-surface-container-lowest/40 border border-outline-variant/10 text-center space-y-2">
+									<div id="no-events-msg" class="p-8 rounded bg-surface-container-lowest/40 border border-outline-variant/10 text-center space-y-2">
 										<span class="material-symbols-outlined text-3xl text-on-surface-variant/40">event_busy</span>
 										<p class="text-xs text-on-surface-variant font-serif">No recent corporate events logged for this asset.</p>
 									</div>
@@ -249,14 +264,14 @@
 						class="lg:col-span-4 space-y-6">
 
 						{# Trading Widget #}
-						<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-lg hover:border-outline-variant/30 transition-all">
-							<h3 class="text-xs font-bold uppercase tracking-wider text-on-surface mb-3">
+						<div class="bg-surface-container-low rounded-lg p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
+							<h3 class="text-sm font-semibold text-on-surface mb-3">
 								Trade {{ asset.ticker }}
 							</h3>
 
 							{% if not isEtf and asset.isBankrupt %}
-								<div class="p-3 bg-red-950/20 border border-red-500/20 rounded space-y-1.5">
-									<div class="flex items-center gap-2 text-red-400 font-bold text-xs uppercase tracking-wider">
+								<div class="p-3 bg-tertiary/10 border border-tertiary/25 rounded space-y-1.5">
+									<div class="flex items-center gap-2 text-tertiary font-bold text-xs uppercase tracking-wider">
 										<span class="material-symbols-outlined text-base">block</span>
 										Trading Halted
 									</div>
@@ -268,19 +283,19 @@
 								{% if userQuantity > 0 %}
 									<div class="mb-4 p-3 bg-surface-container-lowest/80 rounded border border-outline-variant/20 space-y-1.5">
 										<div class="flex justify-between items-center text-xs">
-											<span class="text-on-surface-variant uppercase tracking-wider text-xs font-bold">Your Position</span>
+											<span class="text-on-surface-variant uppercase tracking-wide text-[11px] font-semibold">Your Position</span>
 											<span class="font-bold text-on-surface font-mono tabular-nums">{{ userQuantity|number_format }} Shares</span>
 										</div>
 										<div class="flex justify-between items-center text-xs">
-											<span class="text-on-surface-variant uppercase tracking-wider text-xs font-bold">Avg Cost Basis</span>
+											<span class="text-on-surface-variant uppercase tracking-wide text-[11px] font-semibold">Avg Cost Basis</span>
 											<span class="font-mono tabular-nums text-on-surface-variant">${{ userAvgCost|number_format(2) }}</span>
 										</div>
 										<div class="flex justify-between items-center text-xs">
-											<span class="text-on-surface-variant uppercase tracking-wider text-xs font-bold">Market Value</span>
+											<span class="text-on-surface-variant uppercase tracking-wide text-[11px] font-semibold">Market Value</span>
 											<span class="font-bold text-on-surface font-mono tabular-nums" id="user-holding-value">${{ (userQuantity * asset.price)|number_format(2) }}</span>
 										</div>
 										<div class="flex justify-between items-center text-xs pt-1.5 border-t border-outline-variant/15">
-											<span class="text-on-surface-variant uppercase tracking-wider text-xs font-bold">Unrealized Return</span>
+											<span class="text-on-surface-variant uppercase tracking-wide text-[11px] font-semibold">Unrealized Return</span>
 											<span class="font-mono tabular-nums font-bold {{ userUnrealizedPnL >= 0 ? 'text-secondary' : 'text-tertiary' }}">
 												{{ userUnrealizedPnL >= 0 ? '+' : '' }}${{ userUnrealizedPnL|number_format(2) }}
 												({{ userUnrealizedPnL >= 0 ? '+' : '' }}{{ userUnrealizedPnLPercent|number_format(2) }}%)
@@ -324,12 +339,12 @@
 									</div>
 
 									<div id="limit-price-group" class="hidden space-y-1">
-										<label for="limitPrice" class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Limit Price ($)</label>
+										<label for="limitPrice" class="text-sm font-semibold text-on-surface-variant">Limit Price ($)</label>
 										<input type="number" step="0.01" min="0.01" id="limitPrice" name="limitPrice" placeholder="{{ asset.price|number_format(2, '.', '') }}" class="w-full bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1.5 text-sm font-mono tabular-nums text-on-surface focus:ring-1 focus:ring-primary outline-none">
 									</div>
 
 									<div class="space-y-1">
-										<label for="quantity" class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Quantity (Shares)</label>
+										<label for="quantity" class="text-sm font-semibold text-on-surface-variant">Quantity (Shares)</label>
 										<input type="number" id="quantity" name="quantity" min="1" max="1000000" value="1" required class="w-full bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1.5 text-sm font-mono tabular-nums text-on-surface focus:ring-1 focus:ring-primary outline-none" oninput="updateEstimatedTotal()">
 									</div>
 
@@ -347,38 +362,38 @@
 
 						{# Key Fundamentals Grid Card #}
 						{% if not isEtf %}
-							<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-lg hover:border-outline-variant/30 transition-all">
-								<h3 class="text-xs font-bold uppercase tracking-wider text-on-surface mb-3">
+							<div class="bg-surface-container-low rounded-lg p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
+								<h3 class="text-sm font-semibold text-on-surface mb-3">
 									Key Statistics
 								</h3>
 
 								<dl class="divide-y divide-outline-variant/15 text-xs">
 									<div class="py-2 flex justify-between items-center">
-										<dt class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Market Cap</dt>
+										<dt class="text-sm font-semibold text-on-surface-variant">Market Cap</dt>
 										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-mkt-cap">${{ marketCap|format_large }}</dd>
 									</div>
 									<div class="py-2 flex justify-between items-center">
-										<dt class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Shares Out</dt>
+										<dt class="text-sm font-semibold text-on-surface-variant">Shares Out</dt>
 										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-shares">{{ asset.sharesOutstanding|number_format }}</dd>
 									</div>
 									<div class="py-2 flex justify-between items-center">
-										<dt class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">P/E Ratio</dt>
+										<dt class="text-sm font-semibold text-on-surface-variant">P/E Ratio</dt>
 										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-pe">{{ peRatio ? peRatio|number_format(2) ~ 'x' : '-' }}</dd>
 									</div>
 									<div class="py-2 flex justify-between items-center">
-										<dt class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">EPS (TTM)</dt>
+										<dt class="text-sm font-semibold text-on-surface-variant">EPS (TTM)</dt>
 										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-eps">${{ asset.earningsPerShare|number_format(2) }}</dd>
 									</div>
 									<div class="py-2 flex justify-between items-center">
-										<dt class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Volatility</dt>
+										<dt class="text-sm font-semibold text-on-surface-variant">Volatility</dt>
 										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-volatility">{{ ((asset.currentVolatility is not null ? asset.currentVolatility : asset.volatility) * 100)|number_format(2) }}%</dd>
 									</div>
 									<div class="py-2 flex justify-between items-center">
-										<dt class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Beta</dt>
+										<dt class="text-sm font-semibold text-on-surface-variant">Beta</dt>
 										<dd class="font-bold text-on-surface font-mono tabular-nums">{{ asset.beta|number_format(2) }}</dd>
 									</div>
 									<div class="py-2 flex justify-between items-center">
-										<dt class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">{{ isFinancial ? 'ROE' : 'ROIC' }}</dt>
+										<dt class="text-sm font-semibold text-on-surface-variant">{{ isFinancial ? 'ROE' : 'ROIC' }}</dt>
 										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-roic">
 											{% if isFinancial %}
 												{{ ((asset.currentRoe != 0 ? asset.currentRoe : asset.baselineRoe) * 100)|number_format(2) }}%
@@ -388,16 +403,16 @@
 										</dd>
 									</div>
 									<div class="py-2 flex justify-between items-center">
-										<dt class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Book Value (Equity)</dt>
+										<dt class="text-sm font-semibold text-on-surface-variant">Book Value (Equity)</dt>
 										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-equity">${{ asset.totalEquity|format_large }}</dd>
 									</div>
 									<div class="py-2 flex justify-between items-center">
-										<dt class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Debt-to-Equity</dt>
+										<dt class="text-sm font-semibold text-on-surface-variant">Debt-to-Equity</dt>
 										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-debt-ratio">{{ asset.debtToEquityRatio|number_format(2) }}x</dd>
 									</div>
 									{% if asset.creditRating is defined %}
 										<div class="py-2 flex justify-between items-center">
-											<dt class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Credit Rating</dt>
+											<dt class="text-sm font-semibold text-on-surface-variant">Credit Rating</dt>
 											<dd class="font-bold text-primary font-mono" id="stat-credit-rating">{{ asset.creditRating }}</dd>
 										</div>
 									{% endif %}
@@ -407,10 +422,10 @@
 
 						{# Wall Street Analyst Consensus & Price Targets Card #}
 						{% if not isEtf and not asset.isBankrupt %}
-							<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-lg hover:border-outline-variant/30 transition-all">
+							<div class="bg-surface-container-low rounded-lg p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
 								{# Card Header: Title + Recommendation Badge #}
 								<div class="flex items-center justify-between gap-3 mb-4">
-									<h3 class="text-xs font-bold uppercase tracking-wider text-on-surface">
+									<h3 class="text-sm font-semibold text-on-surface">
 										Analyst Consensus & Targets
 									</h3>
 
@@ -425,7 +440,7 @@
 								{# Main Consensus Target Display #}
 								<div class="p-3.5 rounded bg-surface-container-lowest/80 border border-outline-variant/20 mb-3">
 									<div class="flex justify-between items-baseline mb-1">
-										<span class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Consensus 12M Target</span>
+										<span class="text-sm font-semibold text-on-surface-variant">Consensus 12M Target</span>
 										{% set upside = analystTargets.upside_pct|default(0) %}
 										<span id="target-upside" class="text-xs font-mono tabular-nums font-bold {{ upside > 5 ? 'text-secondary' : (upside < -5 ? 'text-tertiary' : 'text-on-surface-variant') }}">
 											{{ upside >= 0 ? '+' : '' }}{{ upside|number_format(1) }}% Implied
@@ -442,7 +457,7 @@
 								{# 3 Distinct Analyst Desk Price Targets #}
 								<div class="space-y-2">
 									{# 1. Growth & DCF Desk #}
-									<div class="p-3 rounded-xl bg-surface-container-lowest/50 border border-outline-variant/10 flex items-center justify-between hover:border-outline-variant/25 transition-all">
+									<div class="p-3 rounded bg-surface-container-lowest/50 border border-outline-variant/10 flex items-center justify-between hover:border-outline-variant/25 transition-all">
 										<div class="flex items-center gap-2.5 min-w-0">
 											<div class="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0">
 												<span class="material-symbols-outlined text-sm">trending_up</span>
@@ -460,7 +475,7 @@
 									</div>
 
 									{# 2. Value & Book Asset Desk #}
-									<div class="p-3 rounded-xl bg-surface-container-lowest/50 border border-outline-variant/10 flex items-center justify-between hover:border-outline-variant/25 transition-all">
+									<div class="p-3 rounded bg-surface-container-lowest/50 border border-outline-variant/10 flex items-center justify-between hover:border-outline-variant/25 transition-all">
 										<div class="flex items-center gap-2.5 min-w-0">
 											<div class="w-7 h-7 rounded-lg bg-sky-500/10 text-sky-400 flex items-center justify-center shrink-0">
 												<span class="material-symbols-outlined text-sm">account_balance</span>
@@ -478,7 +493,7 @@
 									</div>
 
 									{# 3. Income & DDM Desk #}
-									<div class="p-3 rounded-xl bg-surface-container-lowest/50 border border-outline-variant/10 flex items-center justify-between hover:border-outline-variant/25 transition-all">
+									<div class="p-3 rounded bg-surface-container-lowest/50 border border-outline-variant/10 flex items-center justify-between hover:border-outline-variant/25 transition-all">
 										<div class="flex items-center gap-2.5 min-w-0">
 											<div class="w-7 h-7 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0">
 												<span class="material-symbols-outlined text-sm">savings</span>
@@ -500,29 +515,29 @@
 
 						{% if isEtf %}
 							{# Macro Economic Vitals Card #}
-							<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-lg hover:border-outline-variant/30 transition-all">
-								<h3 class="text-xs font-bold uppercase tracking-wider text-on-surface mb-3">
+							<div class="bg-surface-container-low rounded-lg p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
+								<h3 class="text-sm font-semibold text-on-surface mb-3">
 									Economic Vitals
 								</h3>
 								<dl class="divide-y divide-outline-variant/15 text-xs">
 									<div class="py-2 flex justify-between items-center">
-										<dt class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Inflation (CPI)</dt>
+										<dt class="text-sm font-semibold text-on-surface-variant">Inflation (CPI)</dt>
 										<dd class="font-bold text-on-surface font-mono tabular-nums" id="macro-inflation">-</dd>
 									</div>
 									<div class="py-2 flex justify-between items-center">
-										<dt class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Output Gap</dt>
+										<dt class="text-sm font-semibold text-on-surface-variant">Output Gap</dt>
 										<dd class="font-bold text-on-surface font-mono tabular-nums" id="macro-output-gap">-</dd>
 									</div>
 									<div class="py-2 flex justify-between items-center">
-										<dt class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Central Bank Rate</dt>
+										<dt class="text-sm font-semibold text-on-surface-variant">Central Bank Rate</dt>
 										<dd class="font-bold text-on-surface font-mono tabular-nums" id="macro-policy-rate">-</dd>
 									</div>
 									<div class="py-2 flex justify-between items-center">
-										<dt class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">10Y Benchmark Yield</dt>
+										<dt class="text-sm font-semibold text-on-surface-variant">10Y Benchmark Yield</dt>
 										<dd class="font-bold text-on-surface font-mono tabular-nums" id="macro-yield">-</dd>
 									</div>
 									<div class="py-2 flex justify-between items-center" id="qe-status-container">
-										<dt class="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Quant Easing (QE)</dt>
+										<dt class="text-sm font-semibold text-on-surface-variant">Quant Easing (QE)</dt>
 										<dd class="font-bold text-on-surface font-mono tabular-nums" id="macro-qe-status">
 											<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-surface-container-highest/60 text-on-surface-variant border border-outline-variant/10">Inactive</span>
 										</dd>
@@ -531,8 +546,8 @@
 							</div>
 
 							{# ETF Portfolio Allocation Card #}
-							<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-lg hover:border-outline-variant/30 transition-all">
-								<h3 class="text-xs font-bold uppercase tracking-wider text-on-surface mb-3">
+							<div class="bg-surface-container-low rounded-lg p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
+								<h3 class="text-sm font-semibold text-on-surface mb-3">
 									ETF Component Weightings
 								</h3>
 
@@ -567,7 +582,7 @@
 					<div
 					id="stock-tab-content-macro" class="stock-tab-panel hidden space-y-6" data-tabs-target="panel" data-tab-panel="macro">
 					{# Institutional Terminal Header #}
-					<div class="flex flex-col md:flex-row justify-between items-start md:items-center bg-surface-container-low p-6 rounded-2xl border border-outline-variant/15 shadow-lg gap-4">
+					<div class="flex flex-col md:flex-row justify-between items-start md:items-center bg-surface-container-low p-6 rounded-lg border border-outline-variant/15 gap-4">
 						<div>
 							<div class="flex items-center gap-2 mb-1">
 								<span class="material-symbols-outlined text-primary text-base">analytics</span>
@@ -578,19 +593,19 @@
 						</div>
 						<div class="flex items-center gap-3">
 							{# Timeframe Horizon Switcher (5Y / 10Y / 25Y) #}
-							<div class="flex space-x-1 bg-surface-container-lowest p-1 rounded-xl border border-outline-variant/15">
+							<div class="flex space-x-1 bg-surface-container-lowest p-1 rounded border border-outline-variant/15">
 								<button id="btn-macro-5Y" class="macro-range-btn px-3 py-1 text-xs font-bold rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-all cursor-pointer" data-macro-timeframe="5Y">5Y</button>
-								<button id="btn-macro-10Y" class="macro-range-btn px-3 py-1 text-xs font-bold rounded-lg bg-primary text-[#001a42] shadow-md shadow-primary/20 transition-all cursor-pointer" data-macro-timeframe="10Y">10Y</button>
+								<button id="btn-macro-10Y" class="macro-range-btn px-3 py-1 text-xs font-bold rounded-lg bg-primary text-[#001a42] shadow-primary/20 transition-all cursor-pointer" data-macro-timeframe="10Y">10Y</button>
 								<button id="btn-macro-25Y" class="macro-range-btn px-3 py-1 text-xs font-bold rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-all cursor-pointer" data-macro-timeframe="25Y">25Y</button>
 							</div>
 						</div>
 					</div>
 
 					{# Category Filter Bar & Quick Search Filter #}
-					<div class="flex flex-col xl:flex-row justify-between items-stretch xl:items-center bg-surface-container-low border border-outline-variant/15 rounded-2xl p-3 gap-3 shadow-lg">
+					<div class="flex flex-col xl:flex-row justify-between items-stretch xl:items-center bg-surface-container-low border border-outline-variant/15 rounded-lg p-3 gap-3">
 						{# Filter Pills #}
 						<div class="flex items-center flex-wrap gap-1.5" id="macroCategoryPills">
-							<button class="macro-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap bg-primary text-[#001a42] shadow-md shadow-primary/20 cursor-pointer" data-category="all">
+							<button class="macro-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap bg-primary text-[#001a42] shadow-primary/20 cursor-pointer" data-category="all">
 								ALL <span class="ml-1 opacity-75 font-mono text-[10px]">(21)</span>
 							</button>
 							<button class="macro-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface cursor-pointer" data-category="monetary">
@@ -613,17 +628,17 @@
 						{# Quick Indicator Search #}
 						<div class="relative min-w-[200px] max-w-xs">
 							<span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">search</span>
-							<input type="text" id="macroIndicatorSearch" placeholder="Filter indicators..." class="w-full pl-8 pr-3 py-1.5 text-xs bg-surface-container-lowest border border-outline-variant/20 rounded-xl text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/50 transition-all font-mono">
+							<input type="text" id="macroIndicatorSearch" placeholder="Filter indicators..." class="w-full pl-8 pr-3 py-1.5 text-xs bg-surface-container-lowest border border-outline-variant/20 rounded text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/50 transition-all font-mono">
 						</div>
 					</div>
 
 					{# Responsive Grid for Charts #}
 					<div id="macroChartsGrid" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 						{# Chart 1: Inflation & Output Gap #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="inflation">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="inflation">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-amber-500/10 text-amber-400 shrink-0">
+									<div class="p-2 rounded bg-amber-500/10 text-amber-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">price_change</span>
 									</div>
 									<div class="min-w-0">
@@ -636,10 +651,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroEconomyChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Prices</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Prices</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -651,10 +666,10 @@
 						</div>
 
 						{# Chart 2: Yield Curve & Policy Rates #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="monetary">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="monetary">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-sky-500/10 text-sky-400 shrink-0">
+									<div class="p-2 rounded bg-sky-500/10 text-sky-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">stacked_line_chart</span>
 									</div>
 									<div class="min-w-0">
@@ -667,10 +682,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroRatesChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Rates</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Rates</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -682,10 +697,10 @@
 						</div>
 
 						{# Chart 3: 30Y Mortgage Spread #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="monetary">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="monetary">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-rose-500/10 text-rose-400 shrink-0">
+									<div class="p-2 rounded bg-rose-500/10 text-rose-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">home</span>
 									</div>
 									<div class="min-w-0">
@@ -698,10 +713,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroMortgageChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Mortgages</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Mortgages</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -713,10 +728,10 @@
 						</div>
 
 						{# Chart 4: Market Risk & ERP #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="credit">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="credit">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-purple-500/10 text-purple-400 shrink-0">
+									<div class="p-2 rounded bg-purple-500/10 text-purple-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">speed</span>
 									</div>
 									<div class="min-w-0">
@@ -729,10 +744,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroRiskChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Volatility</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Volatility</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -744,10 +759,10 @@
 						</div>
 
 						{# Chart 5: Labor Market & Wage Growth #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="growth">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="growth">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 shrink-0">
+									<div class="p-2 rounded bg-emerald-500/10 text-emerald-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">group</span>
 									</div>
 									<div class="min-w-0">
@@ -760,10 +775,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroLaborCreditChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Labor</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Labor</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -775,10 +790,10 @@
 						</div>
 
 						{# Chart 6: TED Interbank Liquidity #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="credit">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="credit">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 shrink-0">
+									<div class="p-2 rounded bg-cyan-500/10 text-cyan-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">account_balance</span>
 									</div>
 									<div class="min-w-0">
@@ -791,10 +806,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroInterbankLiquidityChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Liquidity</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Liquidity</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -806,10 +821,10 @@
 						</div>
 
 						{# Chart 7: Property Markets #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="assets">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="assets">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-orange-500/10 text-orange-400 shrink-0">
+									<div class="p-2 rounded bg-orange-500/10 text-orange-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">domain</span>
 									</div>
 									<div class="min-w-0">
@@ -822,10 +837,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroPropertyChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Property</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Property</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -837,10 +852,10 @@
 						</div>
 
 						{# Chart 8: Consumer Sentiment & Credit Health #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="growth">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="growth">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 shrink-0">
+									<div class="p-2 rounded bg-indigo-500/10 text-indigo-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">sentiment_satisfied</span>
 									</div>
 									<div class="min-w-0">
@@ -853,10 +868,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroSentimentChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Consumer</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Consumer</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -868,10 +883,10 @@
 						</div>
 
 						{# Chart 9: Commodities Index #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="assets">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="assets">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-yellow-500/10 text-yellow-400 shrink-0">
+									<div class="p-2 rounded bg-yellow-500/10 text-yellow-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">oil_barrel</span>
 									</div>
 									<div class="min-w-0">
@@ -884,10 +899,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroCommoditiesChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Commodities</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Commodities</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -899,10 +914,10 @@
 						</div>
 
 						{# Chart 10: Trade & FX #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="assets">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="assets">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-blue-500/10 text-blue-400 shrink-0">
+									<div class="p-2 rounded bg-blue-500/10 text-blue-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">directions_boat</span>
 									</div>
 									<div class="min-w-0">
@@ -915,10 +930,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroTradeLogisticsChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Logistics</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Logistics</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -930,10 +945,10 @@
 						</div>
 
 						{# Chart 11: Fiscal Spending #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="assets">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="assets">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-teal-500/10 text-teal-400 shrink-0">
+									<div class="p-2 rounded bg-teal-500/10 text-teal-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">account_balance_wallet</span>
 									</div>
 									<div class="min-w-0">
@@ -946,10 +961,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroGovtSpendingChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Fiscal & Debt</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Fiscal & Debt</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -961,10 +976,10 @@
 						</div>
 
 						{# Chart 12: 10-Year Yield Decomposition #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="monetary">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="monetary">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-violet-500/10 text-violet-400 shrink-0">
+									<div class="p-2 rounded bg-violet-500/10 text-violet-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">show_chart</span>
 									</div>
 									<div class="min-w-0">
@@ -977,10 +992,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroTermPremiumChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Yields</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Yields</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -992,10 +1007,10 @@
 						</div>
 
 						{# Chart 13: Economic Growth & Output Momentum (GDP & TFP) #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="growth">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="growth">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-teal-500/10 text-teal-400 shrink-0">
+									<div class="p-2 rounded bg-teal-500/10 text-teal-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">trending_up</span>
 									</div>
 									<div class="min-w-0">
@@ -1008,10 +1023,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroGdpGrowthChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Growth</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Growth</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -1023,10 +1038,10 @@
 						</div>
 
 						{# Chart 14: Central Bank Balance Sheet & Operations (QE / QT) #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="monetary">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="monetary">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 shrink-0">
+									<div class="p-2 rounded bg-emerald-500/10 text-emerald-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">account_balance</span>
 									</div>
 									<div class="min-w-0">
@@ -1039,10 +1054,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroBalanceSheetChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Balance Sheet</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Balance Sheet</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -1054,10 +1069,10 @@
 						</div>
 
 						{# Chart 15: Financial Conditions Index (FCI) #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="credit">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="credit">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-rose-500/10 text-rose-400 shrink-0">
+									<div class="p-2 rounded bg-rose-500/10 text-rose-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">tune</span>
 									</div>
 									<div class="min-w-0">
@@ -1070,10 +1085,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroFciChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Conditions</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Conditions</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -1085,10 +1100,10 @@
 						</div>
 
 						{# Chart 16: Supply-Side Cost Pressures & Food CPI #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="inflation">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="inflation">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-lime-500/10 text-lime-400 shrink-0">
+									<div class="p-2 rounded bg-lime-500/10 text-lime-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">agriculture</span>
 									</div>
 									<div class="min-w-0">
@@ -1101,10 +1116,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroCostPushChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Supply Shocks</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Supply Shocks</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -1116,10 +1131,10 @@
 						</div>
 
 						{# Chart 17: Sectoral Inflation Breakdown (Shapiro 2022) #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="inflation">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="inflation">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-amber-500/10 text-amber-400 shrink-0">
+									<div class="p-2 rounded bg-amber-500/10 text-amber-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">pie_chart</span>
 									</div>
 									<div class="min-w-0">
@@ -1132,10 +1147,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroSectoralInflationChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Inflation</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Inflation</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -1147,10 +1162,10 @@
 						</div>
 
 						{# Chart 18: Dual-Tranche Corporate Credit Spreads (Jarrow-Lando-Turnbull 1997) #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="credit">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="credit">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-rose-500/10 text-rose-400 shrink-0">
+									<div class="p-2 rounded bg-rose-500/10 text-rose-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">stacked_bar_chart</span>
 									</div>
 									<div class="min-w-0">
@@ -1163,10 +1178,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroCreditCliffChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Credit</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Credit</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -1178,10 +1193,10 @@
 						</div>
 
 						{# Chart 19: Inventory Investment Cycle & Commodity Storage (Metzler 1941, Working 1949) #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="inflation">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="inflation">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 shrink-0">
+									<div class="p-2 rounded bg-cyan-500/10 text-cyan-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">inventory_2</span>
 									</div>
 									<div class="min-w-0">
@@ -1194,10 +1209,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroInventoryCycleChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Inventories</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Inventories</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -1209,10 +1224,10 @@
 						</div>
 
 						{# Chart 20: Average Inflation Targeting & Policy Gap (Powell 2020 FAIT) #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="monetary">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="monetary">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-purple-500/10 text-purple-400 shrink-0">
+									<div class="p-2 rounded bg-purple-500/10 text-purple-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">balance</span>
 									</div>
 									<div class="min-w-0">
@@ -1225,10 +1240,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroFaitChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Monetary FAIT</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Monetary FAIT</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -1240,10 +1255,10 @@
 						</div>
 
 						{# Chart 21: Trading Economics Leading Indicators #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="growth">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-macro-category="growth">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-sky-500/10 text-sky-400 shrink-0">
+									<div class="p-2 rounded bg-sky-500/10 text-sky-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">ssid_chart</span>
 									</div>
 									<div class="min-w-0">
@@ -1256,10 +1271,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-macroLeadingIndicatorsChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Leading</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Leading</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -1280,7 +1295,7 @@
 					<div
 					id="stock-tab-content-financials" class="stock-tab-panel hidden space-y-6" data-tabs-target="panel" data-tab-panel="financials">
 					{# Institutional Terminal Header #}
-					<div class="flex flex-col md:flex-row justify-between items-start md:items-center bg-surface-container-low p-6 rounded-2xl border border-outline-variant/15 shadow-lg gap-4">
+					<div class="flex flex-col md:flex-row justify-between items-start md:items-center bg-surface-container-low p-6 rounded-lg border border-outline-variant/15 gap-4">
 						<div>
 							<div class="flex items-center gap-2 mb-1">
 								<span class="material-symbols-outlined text-primary text-base">analytics</span>
@@ -1294,18 +1309,18 @@
 								<span class="material-symbols-outlined text-[16px]">account_tree</span>
 								Earnings Flow (Sankey)
 							</button>
-							<div class="flex space-x-1 bg-surface-container-lowest p-1 rounded-xl border border-outline-variant/15">
+							<div class="flex space-x-1 bg-surface-container-lowest p-1 rounded border border-outline-variant/15">
 								<button onclick="updateCharts('12Q')" id="btn-global-12Q" class="px-3 py-1 text-xs font-bold rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-all cursor-pointer">12Q</button>
-								<button onclick="updateCharts('12Y')" id="btn-global-12Y" class="px-3 py-1 text-xs font-bold rounded-lg bg-primary text-[#001a42] shadow-md shadow-primary/20 transition-all cursor-pointer">12Y</button>
+								<button onclick="updateCharts('12Y')" id="btn-global-12Y" class="px-3 py-1 text-xs font-bold rounded-lg bg-primary text-[#001a42] shadow-primary/20 transition-all cursor-pointer">12Y</button>
 							</div>
 						</div>
 					</div>
 
 					{# Category Filter Bar & Quick Search Filter #}
-					<div class="flex flex-col sm:flex-row justify-between items-stretch sm:items-center bg-surface-container-low border border-outline-variant/15 rounded-2xl p-3 gap-3 shadow-lg">
+					<div class="flex flex-col sm:flex-row justify-between items-stretch sm:items-center bg-surface-container-low border border-outline-variant/15 rounded-lg p-3 gap-3">
 						{# Filter Pills #}
 						<div class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1 sm:pb-0" id="financialCategoryPills">
-							<button class="financial-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap bg-primary text-[#001a42] shadow-md shadow-primary/20 cursor-pointer" data-category="all">
+							<button class="financial-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap bg-primary text-[#001a42] shadow-primary/20 cursor-pointer" data-category="all">
 								ALL
 							</button>
 							<button class="financial-cat-btn px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface cursor-pointer" data-category="income">
@@ -1325,7 +1340,7 @@
 						{# Quick Indicator Search #}
 						<div class="relative min-w-[200px] max-w-xs">
 							<span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">search</span>
-							<input type="text" id="financialIndicatorSearch" placeholder="Filter metrics..." class="w-full pl-8 pr-3 py-1.5 text-xs bg-surface-container-lowest border border-outline-variant/20 rounded-xl text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/50 transition-all font-mono">
+							<input type="text" id="financialIndicatorSearch" placeholder="Filter metrics..." class="w-full pl-8 pr-3 py-1.5 text-xs bg-surface-container-lowest border border-outline-variant/20 rounded text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/50 transition-all font-mono">
 						</div>
 					</div>
 
@@ -1333,10 +1348,10 @@
 					<div id="financialChartsGrid" class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
 						{# 1. Net Income & Profit Engine #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="income">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="income">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 shrink-0">
+									<div class="p-2 rounded bg-emerald-500/10 text-emerald-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">payments</span>
 									</div>
 									<div class="min-w-0">
@@ -1349,10 +1364,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-netIncomeChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Earnings</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Earnings</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -1364,10 +1379,10 @@
 						</div>
 
 						{# 2. Revenue Breakdown by Segment / Stream #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="income">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="income">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-sky-500/10 text-sky-400 shrink-0">
+									<div class="p-2 rounded bg-sky-500/10 text-sky-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">pie_chart</span>
 									</div>
 									<div class="min-w-0">
@@ -1380,10 +1395,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-revenueStreamsChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Revenue</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Revenue</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -1395,10 +1410,10 @@
 						</div>
 
 						{# 3. Debt vs Equity #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="balance">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="balance">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-rose-500/10 text-rose-400 shrink-0">
+									<div class="p-2 rounded bg-rose-500/10 text-rose-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">balance</span>
 									</div>
 									<div class="min-w-0">
@@ -1411,10 +1426,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-debtEquityChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Solvency</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Solvency</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -1426,10 +1441,10 @@
 						</div>
 
 						{# 4. Credit Health & Maturity Wall #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="balance">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="balance">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-amber-500/10 text-amber-400 shrink-0">
+									<div class="p-2 rounded bg-amber-500/10 text-amber-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">health_and_safety</span>
 									</div>
 									<div class="min-w-0">
@@ -1442,10 +1457,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-creditHealthChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Credit</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Credit</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -1457,10 +1472,10 @@
 						</div>
 
 						{# 5. Capital Efficiency (EVA & Return) #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="valuation">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="valuation">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 shrink-0">
+									<div class="p-2 rounded bg-emerald-500/10 text-emerald-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">trending_up</span>
 									</div>
 									<div class="min-w-0">
@@ -1473,10 +1488,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-capitalEfficiencyChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Efficiency</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Efficiency</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -1488,10 +1503,10 @@
 						</div>
 
 						{# 6. Return on Capital (ROIC vs WACC) #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="valuation">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="valuation">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-purple-500/10 text-purple-400 shrink-0">
+									<div class="p-2 rounded bg-purple-500/10 text-purple-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">percent</span>
 									</div>
 									<div class="min-w-0">
@@ -1504,10 +1519,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-capitalReturnChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Shareholder Yield</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Shareholder Yield</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -1519,10 +1534,10 @@
 						</div>
 
 						{# 7. Payout Allocation & Dividends #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="valuation">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="valuation">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-amber-500/10 text-amber-400 shrink-0">
+									<div class="p-2 rounded bg-amber-500/10 text-amber-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">savings</span>
 									</div>
 									<div class="min-w-0">
@@ -1535,10 +1550,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-payoutRatioChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Allocation</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Allocation</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -1550,10 +1565,10 @@
 						</div>
 
 						{# 8. Valuation Multiples #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="valuation">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="valuation">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-blue-500/10 text-blue-400 shrink-0">
+									<div class="p-2 rounded bg-blue-500/10 text-blue-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">query_stats</span>
 									</div>
 									<div class="min-w-0">
@@ -1566,10 +1581,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-valuationMultiplesChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Multiples</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Multiples</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -1581,10 +1596,10 @@
 						</div>
 
 						{# 9. Shareholder Yield & Cumulative Value Creation #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="valuation">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="valuation">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 shrink-0">
+									<div class="p-2 rounded bg-cyan-500/10 text-cyan-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">diamond</span>
 									</div>
 									<div class="min-w-0">
@@ -1597,10 +1612,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-shareholderValueChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Per-Share</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Per-Share</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -1612,10 +1627,10 @@
 						</div>
 
 						{# 10. Free Cash Flow & Reinvestment #}
-						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="income">
+						<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="income">
 							<div class="flex items-start justify-between mb-3 gap-2">
 								<div class="flex items-center gap-2.5 min-w-0">
-									<div class="p-2 rounded-xl bg-teal-500/10 text-teal-400 shrink-0">
+									<div class="p-2 rounded bg-teal-500/10 text-teal-400 shrink-0">
 										<span class="material-symbols-outlined text-lg leading-none">account_balance_wallet</span>
 									</div>
 									<div class="min-w-0">
@@ -1628,10 +1643,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									<div class="hidden sm:flex flex-col items-end text-right">
-										<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+										<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 										<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-cashFlowSummaryChart">-</span>
 									</div>
-									<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Cash Flow</span>
+									<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Cash Flow</span>
 									<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 										<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 									</button>
@@ -1646,10 +1661,10 @@
 
 						{# Banking / Credit Services: Net Interest Margin #}
 						{% if businessModel|default('none') in ['commercial_bank', 'credit_services', 'shadow_bank'] %}
-							<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="sector">
+							<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="sector">
 								<div class="flex items-start justify-between mb-3 gap-2">
 									<div class="flex items-center gap-2.5 min-w-0">
-										<div class="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 shrink-0">
+										<div class="p-2 rounded bg-indigo-500/10 text-indigo-400 shrink-0">
 											<span class="material-symbols-outlined text-lg leading-none">account_balance</span>
 										</div>
 										<div class="min-w-0">
@@ -1662,10 +1677,10 @@
 									</div>
 									<div class="flex items-center gap-2 shrink-0">
 										<div class="hidden sm:flex flex-col items-end text-right">
-											<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+											<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 											<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-netInterestEngineChart">-</span>
 										</div>
-										<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Banking NIM</span>
+										<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Banking NIM</span>
 										<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 											<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 										</button>
@@ -1679,10 +1694,10 @@
 
 						{# Financials: Regulatory Capital Ratios #}
 						{% if isFinancial|default(false) %}
-							<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="sector">
+							<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="sector">
 								<div class="flex items-start justify-between mb-3 gap-2">
 									<div class="flex items-center gap-2.5 min-w-0">
-										<div class="p-2 rounded-xl bg-blue-500/10 text-blue-400 shrink-0">
+										<div class="p-2 rounded bg-blue-500/10 text-blue-400 shrink-0">
 											<span class="material-symbols-outlined text-lg leading-none">verified_user</span>
 										</div>
 										<div class="min-w-0">
@@ -1695,10 +1710,10 @@
 									</div>
 									<div class="flex items-center gap-2 shrink-0">
 										<div class="hidden sm:flex flex-col items-end text-right">
-											<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+											<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 											<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-regulatoryRatiosChart">-</span>
 										</div>
-										<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Prudential</span>
+										<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Prudential</span>
 										<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 											<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 										</button>
@@ -1712,10 +1727,10 @@
 
 						{# Insurance: Dual Engine Underwriting vs Float #}
 						{% if businessModel|default('none') == 'insurance' %}
-							<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="sector">
+							<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="sector">
 								<div class="flex items-start justify-between mb-3 gap-2">
 									<div class="flex items-center gap-2.5 min-w-0">
-										<div class="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 shrink-0">
+										<div class="p-2 rounded bg-emerald-500/10 text-emerald-400 shrink-0">
 											<span class="material-symbols-outlined text-lg leading-none">security</span>
 										</div>
 										<div class="min-w-0">
@@ -1728,10 +1743,10 @@
 									</div>
 									<div class="flex items-center gap-2 shrink-0">
 										<div class="hidden sm:flex flex-col items-end text-right">
-											<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+											<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 											<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-insuranceDualEngineChart">-</span>
 										</div>
-										<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Insurance</span>
+										<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Insurance</span>
 										<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 											<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 										</button>
@@ -1745,10 +1760,10 @@
 
 						{# REITs: AFFO Coverage & LTV #}
 						{% if businessModel|default('none') == 'reit' %}
-							<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="sector">
+							<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="sector">
 								<div class="flex items-start justify-between mb-3 gap-2">
 									<div class="flex items-center gap-2.5 min-w-0">
-										<div class="p-2 rounded-xl bg-amber-500/10 text-amber-400 shrink-0">
+										<div class="p-2 rounded bg-amber-500/10 text-amber-400 shrink-0">
 											<span class="material-symbols-outlined text-lg leading-none">apartment</span>
 										</div>
 										<div class="min-w-0">
@@ -1761,10 +1776,10 @@
 									</div>
 									<div class="flex items-center gap-2 shrink-0">
 										<div class="hidden sm:flex flex-col items-end text-right">
-											<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+											<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 											<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-reitCoverageChart">-</span>
 										</div>
-										<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Real Estate</span>
+										<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Real Estate</span>
 										<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 											<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 										</button>
@@ -1778,10 +1793,10 @@
 
 						{# Tech / Semi / Biotech / Defense: R&D & Reinvestment Intensity #}
 						{% if businessModel|default('none') in ['tech', 'semiconductor', 'biotech', 'defense_contractor'] %}
-							<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="sector">
+							<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="sector">
 								<div class="flex items-start justify-between mb-3 gap-2">
 									<div class="flex items-center gap-2.5 min-w-0">
-										<div class="p-2 rounded-xl bg-purple-500/10 text-purple-400 shrink-0">
+										<div class="p-2 rounded bg-purple-500/10 text-purple-400 shrink-0">
 											<span class="material-symbols-outlined text-lg leading-none">science</span>
 										</div>
 										<div class="min-w-0">
@@ -1794,10 +1809,10 @@
 									</div>
 									<div class="flex items-center gap-2 shrink-0">
 										<div class="hidden sm:flex flex-col items-end text-right">
-											<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+											<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 											<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-reinvestmentIntensityChart">-</span>
 										</div>
-										<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">R&D Moat</span>
+										<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">R&D Moat</span>
 										<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 											<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 										</button>
@@ -1811,10 +1826,10 @@
 
 						{# Commodities / Shipping: Cyclical Dynamics & Deleveraging #}
 						{% if businessModel|default('none') in ['commodity', 'shipping'] %}
-							<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-2xl p-5 shadow-lg hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="sector">
+							<div class="chart-card bg-surface-container-low border border-outline-variant/15 rounded-lg p-5 hover:border-outline-variant/30 transition-all flex flex-col justify-between" data-financial-category="sector">
 								<div class="flex items-start justify-between mb-3 gap-2">
 									<div class="flex items-center gap-2.5 min-w-0">
-										<div class="p-2 rounded-xl bg-rose-500/10 text-rose-400 shrink-0">
+										<div class="p-2 rounded bg-rose-500/10 text-rose-400 shrink-0">
 											<span class="material-symbols-outlined text-lg leading-none">cyclone</span>
 										</div>
 										<div class="min-w-0">
@@ -1827,10 +1842,10 @@
 									</div>
 									<div class="flex items-center gap-2 shrink-0">
 										<div class="hidden sm:flex flex-col items-end text-right">
-											<span class="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant/70">Latest</span>
+											<span class="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Latest</span>
 											<span class="text-xs font-mono font-bold text-on-surface tabular-nums" id="hud-cyclicalDynamicsChart">-</span>
 										</div>
-										<span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wider">Cyclicals</span>
+										<span class="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant uppercase tracking-wide">Cyclicals</span>
 										<button type="button" class="expand-chart-btn p-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-all cursor-pointer" title="Toggle Fullscreen / Expand">
 											<span class="material-symbols-outlined text-[15px] expand-icon">open_in_full</span>
 										</button>
@@ -1852,20 +1867,20 @@
 				{% if not isEtf %}
 					<div
 					id="stock-tab-content-sector" class="stock-tab-panel hidden space-y-5" data-tabs-target="panel" data-tab-panel="sector"> {# Sector Profile & Business Model Details #}
-					<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-lg hover:border-outline-variant/30 transition-all">
-						<h3 class="text-xs font-bold uppercase tracking-wider text-primary mb-3">
+					<div class="bg-surface-container-low rounded-lg p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
+						<h3 class="text-sm font-semibold text-primary mb-3">
 							Sector Mechanics & Industry Profile
 						</h3>
 						<div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs mt-3">
-							<div class="p-4 rounded-xl bg-surface-container-lowest/80 border border-outline-variant/15">
+							<div class="p-4 rounded bg-surface-container-lowest/80 border border-outline-variant/15">
 								<span class="text-on-surface-variant uppercase text-xs font-bold">Sector</span>
 								<p class="text-sm font-bold text-on-surface mt-1">{{ asset.sector }}</p>
 							</div>
-							<div class="p-4 rounded-xl bg-surface-container-lowest/80 border border-outline-variant/15">
+							<div class="p-4 rounded bg-surface-container-lowest/80 border border-outline-variant/15">
 								<span class="text-on-surface-variant uppercase text-xs font-bold">Industry</span>
 								<p class="text-sm font-bold text-on-surface mt-1">{{ asset.industry|default('General') }}</p>
 							</div>
-							<div class="p-4 rounded-xl bg-surface-container-lowest/80 border border-outline-variant/15">
+							<div class="p-4 rounded bg-surface-container-lowest/80 border border-outline-variant/15">
 								<span class="text-on-surface-variant uppercase text-xs font-bold">Market Share</span>
 								<p class="text-sm font-bold text-primary font-mono tabular-nums mt-1">{{ (marketShare * 100)|number_format(2) }}%</p>
 							</div>
@@ -1873,15 +1888,15 @@
 					</div>
 
 					{# Sector Peer Comparison Table #}
-					<div class="bg-surface-container-low rounded-2xl border border-outline-variant/15 shadow-lg overflow-hidden p-6 hover:border-outline-variant/30 transition-all">
-						<h3 class="text-xs font-bold uppercase tracking-wider text-on-surface mb-3">
+					<div class="bg-surface-container-low rounded-lg border border-outline-variant/15 overflow-hidden p-6 hover:border-outline-variant/30 transition-all">
+						<h3 class="text-sm font-semibold text-on-surface mb-3">
 							Sector Peer Comparison ({{ asset.sector }})
 						</h3>
 
 						<div class="overflow-x-auto">
 							<table class="w-full text-left border-collapse min-w-162.5">
 								<thead>
-									<tr class="text-xs text-on-surface-variant uppercase tracking-wider border-b border-outline-variant/15 font-bold">
+									<tr class="text-[11px] text-on-surface-variant uppercase tracking-wide border-b border-outline-variant/15 font-semibold">
 										<th class="py-2.5">Company</th>
 										<th class="py-2.5 text-right">Price</th>
 										<th class="py-2.5 text-right">Market Cap</th>
@@ -1910,18 +1925,18 @@
 
 									{# Peer Companies #}
 									{% for peer in peers %}
-										<tr class="hover:bg-surface-container-high/30 transition-colors cursor-pointer group" onclick="window.location.href='/stock/{{ peer.ticker }}'">
-											<td class="py-2.5 flex items-center gap-2">
-												<span class="font-mono text-primary font-bold group-hover:underline">{{ peer.ticker }}</span>
+										<tr class="relative hover:bg-surface-container-high/30 focus-within:bg-surface-container-high/30 transition-colors group">
+											<th scope="row" class="py-2.5 flex items-center gap-2 text-left font-normal">
+												<a href="/stock/{{ peer.ticker }}" class="font-mono text-primary font-bold group-hover:underline outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:underline-offset-4">{{ peer.ticker }}</a>
 												<span class="text-on-surface-variant text-xs">{{ peer.name }}</span>
-											</td>
+											</th>
 											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">${{ peer.price|number_format(2) }}</td>
 											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">${{ peer.marketCap|format_large }}</td>
 											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ peer.peRatio ? peer.peRatio|number_format(2) ~ 'x' : '-' }}</td>
 											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ (peer.roic * 100)|number_format(2) }}%</td>
 											<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">${{ peer.totalEquity|format_large }}</td>
 											<td class="py-2.5 text-right">
-												<a href="/stock/{{ peer.ticker }}" class="px-2 py-0.5 text-xs font-bold text-primary bg-primary/10 rounded hover:bg-primary/20 transition-colors uppercase tracking-wider">
+												<a href="/stock/{{ peer.ticker }}" class="relative z-10 px-2 py-0.5 text-xs font-semibold text-primary bg-primary/10 rounded hover:bg-primary/20 transition-colors">
 													View
 												</a>
 											</td>
@@ -1944,9 +1959,9 @@
 			{# ========================================================================= #}
 				<div
 				id="stock-tab-content-orders" class="stock-tab-panel hidden space-y-5" data-tabs-target="panel" data-tab-panel="orders"> {# Open Limit Orders for this Ticker #}
-				<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-lg hover:border-outline-variant/30 transition-all">
+				<div class="bg-surface-container-low rounded-lg p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
 					<div class="flex items-center justify-between mb-3">
-						<h3 class="text-xs font-bold uppercase tracking-wider text-on-surface">
+						<h3 class="text-sm font-semibold text-on-surface">
 							Your Active Orders for {{ asset.ticker }}
 						</h3>
 						<span class="text-xs font-mono text-on-surface-variant">{{ openOrders|length }} active</span>
@@ -1956,7 +1971,7 @@
 						<div class="overflow-x-auto">
 							<table class="w-full text-left border-collapse min-w-125">
 								<thead>
-									<tr class="text-xs text-on-surface-variant uppercase tracking-wider border-b border-outline-variant/15 font-bold">
+									<tr class="text-[11px] text-on-surface-variant uppercase tracking-wide border-b border-outline-variant/15 font-semibold">
 										<th class="py-2.5">Placed Date</th>
 										<th class="py-2.5">Action</th>
 										<th class="py-2.5 text-right">Shares</th>
@@ -1992,8 +2007,8 @@
 				</div>
 
 				{# Your Past Trades on this Ticker #}
-				<div class="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/15 shadow-lg hover:border-outline-variant/30 transition-all">
-					<h3 class="text-xs font-bold uppercase tracking-wider text-on-surface mb-3">
+				<div class="bg-surface-container-low rounded-lg p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all">
+					<h3 class="text-sm font-semibold text-on-surface mb-3">
 						Your Execution History for {{ asset.ticker }}
 					</h3>
 
@@ -2044,7 +2059,7 @@
 
 	{# --- SANKEY MODAL (INCOME STATEMENT FLOW) --- #}
 	<div id="sankey-modal" data-controller="sankey" data-sankey-ticker-value="{{ asset.ticker }}" data-sankey-url-value="/api/earnings-flow" data-action="click->sankey#backdropClick" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-md p-4">
-		<div class="bg-surface-container-low border border-outline-variant/20 rounded-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+		<div class="bg-surface-container-low border border-outline-variant/20 rounded-lg w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden shadow-2xl">
 			<div class="flex justify-between items-center p-6 border-b border-outline-variant/10">
 				<div>
 					<h3 class="text-lg font-bold text-on-surface flex items-center gap-2">

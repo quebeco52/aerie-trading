@@ -8,7 +8,7 @@
     {# Hero Section #}
     <div class="bg-surface-container-low rounded-lg p-5 md:p-6 border border-outline-variant/25">
         <div class="flex items-center gap-2 mb-2">
-            <span class="text-xs font-bold tracking-wider text-primary uppercase">Trader Rankings</span>
+            <span class="text-[11px] font-semibold tracking-wide text-primary uppercase">Trader Rankings</span>
         </div>
         <h1 class="text-2xl md:text-3xl font-bold text-on-surface tracking-tight">Exchange Leaderboard</h1>
         <p class="text-xs text-on-surface-variant mt-1">Top performing traders ranked by total portfolio net worth across the exchange.</p>
@@ -20,8 +20,8 @@
             {# 2nd Place (Silver) #}
             <div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-4 flex flex-col justify-between order-2 md:order-1">
                 <div class="flex items-center justify-between mb-3">
-                    <span class="w-7 h-7 rounded bg-slate-400/10 border border-slate-400/30 text-slate-300 flex items-center justify-center font-bold text-xs font-mono">#2</span>
-                    <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Silver</span>
+                    <span class="w-7 h-7 rounded bg-surface-container-high border border-outline-variant/30 text-on-surface flex items-center justify-center font-bold text-xs font-mono">2</span>
+                    <span class="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">Second</span>
                 </div>
                 <div>
                     <h3 class="text-base font-bold text-on-surface">{{ leaders[1].username }}</h3>
@@ -36,8 +36,8 @@
             {# 1st Place (Gold) #}
             <div class="bg-surface-container-low border border-primary/40 rounded-lg p-4 flex flex-col justify-between order-1 md:order-2 bg-linear-to-b from-primary/5 to-transparent">
                 <div class="flex items-center justify-between mb-3">
-                    <span class="w-7 h-7 rounded bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 flex items-center justify-center font-bold text-xs font-mono">#1</span>
-                    <span class="text-xs font-bold uppercase tracking-wider text-yellow-400">Gold Champion</span>
+                    <span class="w-7 h-7 rounded bg-primary/15 border border-primary/40 text-primary flex items-center justify-center font-bold text-xs font-mono">1</span>
+                    <span class="text-[11px] font-semibold uppercase tracking-wide text-primary">Leader</span>
                 </div>
                 <div>
                     <h3 class="text-lg font-bold text-on-surface">{{ leaders[0].username }}</h3>
@@ -52,8 +52,8 @@
             {# 3rd Place (Bronze) #}
             <div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-4 flex flex-col justify-between order-3 md:order-3">
                 <div class="flex items-center justify-between mb-3">
-                    <span class="w-7 h-7 rounded bg-amber-700/10 border border-amber-700/30 text-amber-500 flex items-center justify-center font-bold text-xs font-mono">#3</span>
-                    <span class="text-xs font-bold uppercase tracking-wider text-amber-600">Bronze</span>
+                    <span class="w-7 h-7 rounded bg-surface-container-high border border-outline-variant/30 text-on-surface flex items-center justify-center font-bold text-xs font-mono">3</span>
+                    <span class="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">Third</span>
                 </div>
                 <div>
                     <h3 class="text-base font-bold text-on-surface">{{ leaders[2].username }}</h3>
@@ -72,19 +72,19 @@
         <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse min-w-150">
                 <thead>
-                    <tr class="bg-surface-container-highest/20 text-on-surface-variant text-xs uppercase tracking-wider font-bold border-b border-outline-variant/15">
-                        <th class="px-5 py-3 font-bold">Rank</th>
-                        <th class="px-5 py-3 font-bold">Trader</th>
-                        <th class="px-4 py-3 font-bold text-right">Cash Balance</th>
-                        <th class="px-4 py-3 font-bold text-right">Assets Value</th>
-                        <th class="px-5 py-3 font-bold text-right">Total Net Worth</th>
+                    <tr class="bg-surface-container-highest/20 text-on-surface-variant text-[11px] uppercase tracking-wide font-semibold border-b border-outline-variant/15">
+                        <th scope="col" class="px-5 py-3">Rank</th>
+                        <th scope="col" class="px-5 py-3">Trader</th>
+                        <th scope="col" class="px-4 py-3 text-right">Cash balance</th>
+                        <th scope="col" class="px-4 py-3 text-right">Assets value</th>
+                        <th scope="col" class="px-5 py-3 text-right">Total net worth</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-outline-variant/10 text-xs sm:text-sm">
                     {% for leader in leaders %}
                         <tr class="hover:bg-surface-container-high/30 transition-colors">
                             <td class="px-5 py-3">
-                                <span class="w-6 h-6 rounded flex items-center justify-center font-bold font-mono text-xs {{ loop.index == 1 ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/25' : (loop.index == 2 ? 'bg-slate-400/10 text-slate-300 border border-slate-400/25' : (loop.index == 3 ? 'bg-amber-700/10 text-amber-500 border border-amber-700/25' : 'bg-surface-container text-on-surface-variant border border-outline-variant/15')) }}">
+                                <span class="w-6 h-6 rounded flex items-center justify-center font-bold font-mono text-xs {{ loop.index == 1 ? 'bg-primary/15 text-primary border border-primary/30' : 'bg-surface-container text-on-surface-variant border border-outline-variant/15' }}">
                                     {{ loop.index }}
                                 </span>
                             </td>

@@ -1197,7 +1197,7 @@ class InitialMarket
         [
             'ticker' => 'BRKW',
             'name' => 'Breakwater Trust',
-            'sector' => 'Industrials',
+            'sector' => 'Financials',
             'industry' => 'Conglomerates',
             'systemic_importance' => 'titan',
             'shares_outstanding' => 1_000_000_000,

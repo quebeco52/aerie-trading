@@ -229,4 +229,22 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
             $stock->setOperatingMargin((string) $updatedMargin);
         }
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'consumer_sentiment_index_ema',
+            'exchange_rate_index_ema',
+            'inflation_ema',
+            'money_supply_growth_ema',
+            'output_gap_ema',
+            'residential_property_index_ema',
+        ];
+    }
 }

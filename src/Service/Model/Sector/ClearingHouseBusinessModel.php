@@ -289,7 +289,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         ];
     }
 
-    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): float
+    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
     {
         // Non-operating interest income is earned ONLY on surplus corporate cash ($ownCash).
         // Margin pool custody spread is an operating revenue stream included in calculateSectorPhysics.
@@ -452,6 +452,26 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
             // It should never be flagged as a corporate cash hoarder for buyback or aggressive deleveraging sweeps.
             'is_hoarder'      => false,
             'is_mega_hoarder' => false,
+        ];
+    }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'corporate_default_rate_ema',
+            'inflation_ema',
+            'market_volatility_ema',
+            'output_gap_ema',
+            'policy_rate_ema',
+            'yield_10y_ema',
+            'yield_2y_ema',
+            'yield_5y_ema',
         ];
     }
 }

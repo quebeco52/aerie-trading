@@ -212,4 +212,19 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
             $stock->setOperatingMargin((string) $updatedMargin);
         }
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+            'output_gap_ema',
+            'tips_breakeven_ema',
+            'yield_10y_ema',
+        ]));
+    }
 }

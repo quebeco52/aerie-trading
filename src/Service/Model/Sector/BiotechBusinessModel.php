@@ -286,4 +286,17 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         // Clinical-stage biotechnology firms trade entirely on clinical pipeline rNPV and cash runway, not Book Value.
         return $earningsValue;
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     * Both operating methods return hardcoded constants — biotech's physics is R&D-cycle driven,
+     * not macro-coupled, so this model draws no conduits at all.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [];
+    }
 }

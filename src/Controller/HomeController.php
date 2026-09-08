@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\Entity\Stock;
 use App\Entity\Etf;
+use App\Service\Market\PriceChangeFeed;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
@@ -25,13 +26,13 @@ class HomeController extends AbstractController
      * @return Response Returns the rendered home page view with market data.
      */
     #[Route('/', name: 'app_home')]
-    public function index(EntityManagerInterface $entityManager, \App\Service\Macro\MacroEngine $macroEngine): Response
+    public function index(EntityManagerInterface $entityManager, \App\Service\Macro\MacroEngine $macroEngine, PriceChangeFeed $priceChangeFeed): Response
     {
         $etf = $entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
         $stocks = $entityManager->getRepository(Stock::class)->findAll();
         $macroState = $macroEngine->getLiveState();
 
-        $marketData = $this->buildBaseMarketData($stocks);
+        $marketData = $this->buildBaseMarketData($stocks, $priceChangeFeed->changeByTicker($stocks));
         usort($marketData, function ($a, $b) {
             if ($a['isBankrupt'] !== $b['isBankrupt']) {
                 return $a['isBankrupt'] ? 1 : -1;
@@ -43,7 +44,9 @@ class HomeController extends AbstractController
         if (!$this->getUser()) {
             return $this->render('home/landing.html.twig', [
                 'etf'        => $etf,
-                'top_stocks' => array_slice($marketData, 0, 6) // Show a preview of the top 6 stocks
+                'top_stocks' => array_slice($marketData, 0, 6), // Show a preview of the top 6 stocks
+                'breadth'    => $this->buildBreadth($marketData),
+                'macro'      => $macroState->toArray(),
             ]);
         }
 
@@ -62,7 +65,7 @@ class HomeController extends AbstractController
      * @return Response Returns a JSON response containing ETF and stock overview data.
      */
     #[Route('/api/market', name: 'api_market')]
-    public function apiMarket(EntityManagerInterface $entityManager): Response
+    public function apiMarket(EntityManagerInterface $entityManager, PriceChangeFeed $priceChangeFeed): Response
     {
         $etf    = $entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
         $stocks = $entityManager->getRepository(Stock::class)->findAll();
@@ -75,7 +78,7 @@ class HomeController extends AbstractController
         };
 
         $marketData = [];
-        foreach ($this->buildBaseMarketData($stocks) as $row) {
+        foreach ($this->buildBaseMarketData($stocks, $priceChangeFeed->changeByTicker($stocks)) as $row) {
             $marketData[] = [
                 'ticker'       => $row['ticker'],
                 'name'         => $row['name'],
@@ -86,6 +89,7 @@ class HomeController extends AbstractController
                 'treasury'     => $formatLarge($row['treasury']),
                 'equity'       => $formatLarge($row['equity']),
                 'currentRoic'  => $row['currentRoic'],
+                'changePercent' => $row['changePercent'],
                 'is_bankrupt'  => $row['isBankrupt'],
             ];
         }
@@ -107,9 +111,10 @@ class HomeController extends AbstractController
      * Builds the base market data array shared across page and API endpoints.
      *
      * @param Stock[] $stocks
-     * @return array<int, array{ticker: string, name: string, sector: string, price: float, shares: float, marketCap: float, treasury: float, equity: float, currentRoic: float, isBankrupt: bool}>
+     * @param array<string, float> $changes ticker => fractional change, absent when unbuffered
+     * @return array<int, array{ticker: string, name: string, sector: string, price: float, shares: float, marketCap: float, treasury: float, equity: float, currentRoic: float, isBankrupt: bool, changePercent: float|null}>
      */
-    private function buildBaseMarketData(array $stocks): array
+    private function buildBaseMarketData(array $stocks, array $changes = []): array
     {
         $marketData = [];
         foreach ($stocks as $stock) {
@@ -134,9 +139,51 @@ class HomeController extends AbstractController
                 'equity'      => (float) $stock->getTotalEquity(),
                 'currentRoic' => $effectiveRoic,
                 'isBankrupt'  => $stock->isBankrupt(),
+                // Null, not zero: "no history buffered yet" and "has not moved" are different
+                // facts, and the table prints them differently.
+                'changePercent' => $changes[$stock->getTicker()] ?? null,
             ];
         }
         return $marketData;
     }
 
+    /**
+     * Summarises the session for the signed-out landing page: how many names are up, how many
+     * are down, and the single largest move either way.
+     *
+     * Names with nothing buffered yet are counted as unchanged rather than as decliners, so a
+     * freshly started exchange does not read as a market-wide sell-off.
+     *
+     * @param array<int, array{ticker: string, changePercent: float|null, isBankrupt: bool}> $marketData
+     * @return array{advancing: int, declining: int, unchanged: int, topMover: array{ticker: string, changePercent: float}|null}
+     */
+    private function buildBreadth(array $marketData): array
+    {
+        $advancing = 0;
+        $declining = 0;
+        $unchanged = 0;
+        $topMover  = null;
+
+        foreach ($marketData as $row) {
+            $change = $row['changePercent'];
+
+            if ($row['isBankrupt'] || $change === null || abs($change) < 0.00005) {
+                $unchanged++;
+                continue;
+            }
+
+            $change > 0 ? $advancing++ : $declining++;
+
+            if ($topMover === null || abs($change) > abs($topMover['changePercent'])) {
+                $topMover = ['ticker' => $row['ticker'], 'changePercent' => $change];
+            }
+        }
+
+        return [
+            'advancing' => $advancing,
+            'declining' => $declining,
+            'unchanged' => $unchanged,
+            'topMover'  => $topMover,
+        ];
+    }
 }

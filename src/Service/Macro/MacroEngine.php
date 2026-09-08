@@ -9,6 +9,7 @@ use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Macro\Subsystem\LaborMarketSubsystem;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
+use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
 use Psr\Log\LoggerInterface;
 
@@ -783,6 +784,46 @@ class MacroEngine
     /** Standard quarterly macro indicator EMA smoothing horizon. */
     public const STANDARD_EMA_HORIZON_YEARS = 0.25;
 
+    // --- Systemic Market Factor ---
+    /** Decay time constant (years) of the common equity factor's regime leg, giving a ~20 day trend half-life. */
+    public const MARKET_FACTOR_DECAY_TAU_YEARS = 0.08;
+    /** Degrees of freedom of the market factor's Student's t shock; 5 is the lowest with a finite fourth moment. */
+    public const MARKET_FACTOR_TAIL_DF = 5;
+    /** Share of market factor variance carried by the slow regime leg; kept small so beta stays horizon-stable. */
+    public const MARKET_FACTOR_REGIME_VARIANCE_SHARE = 0.15;
+    /** Market-wide jump arrivals per year, giving the index the discontinuous crash days a diffusion cannot. */
+    public const SYSTEMIC_JUMP_INTENSITY = 4.0;
+    /** Probability a market-wide jump is upward; below one half, encoding the downward skew of index returns. */
+    public const SYSTEMIC_JUMP_PROBABILITY_UP = 0.35;
+    /** Decay rate of upward market jumps; the reciprocal is the mean up-jump log return (~2.5%). */
+    public const SYSTEMIC_JUMP_ETA_UP = 40.0;
+    /** Decay rate of downward market jumps; the reciprocal is the mean crash log return (~3.6%). */
+    public const SYSTEMIC_JUMP_ETA_DOWN = 28.0;
+    /** Mean of the contemporaneous variance jump accompanying a market-wide price jump. */
+    public const SYSTEMIC_JUMP_VARIANCE_MEAN = 0.02;
+
+    // --- Sector Factor ---
+    /** Fraction of a stock's non-market variance loaded onto its sector factor, setting within- vs cross-sector correlation. */
+    public const SECTOR_FACTOR_VARIANCE_SHARE = 0.20;
+
+    // --- District-Wide Systemic Event Triggers ---
+    /** Minimum simulated years between district-wide events, so a sustained crisis reports once rather than every tick. */
+    public const SYSTEMIC_EVENT_COOLDOWN_YEARS = 0.25;
+    /** Interbank spread (100 bps) marking a genuine wholesale funding freeze rather than routine tightness. */
+    public const SYSTEMIC_LIQUIDITY_FREEZE_SPREAD = 0.0100;
+    /** High-yield spread (1000 bps) at which speculative-grade primary issuance effectively shuts. */
+    public const SYSTEMIC_CREDIT_SEIZURE_SPREAD = 0.1000;
+    /** Recession probability above which the downturn is formally declared. */
+    public const SYSTEMIC_RECESSION_DECLARE_PROBABILITY = 0.50;
+    /** Output gap that must accompany the probability trigger, confirming output is genuinely contracting. */
+    public const SYSTEMIC_RECESSION_DECLARE_GAP = -0.010;
+    /** Sustained inversion duration (years) that historically precedes a downturn and trips the curve alarm. */
+    public const SYSTEMIC_INVERSION_ALARM_YEARS = 0.75;
+    /** Balance sheet expansion intensity marking an intervention large enough to read as a policy backstop. */
+    public const SYSTEMIC_INTERVENTION_QE_INTENSITY = 0.010;
+    /** Equity risk premium above which capital is being deployed into genuinely distressed valuations. */
+    public const SYSTEMIC_DEPLOYMENT_ERP_THRESHOLD = 0.070;
+
     public function __construct(
         private readonly MathUtility $mathUtility,
         private readonly \Redis $redis,
@@ -894,7 +935,49 @@ class MacroEngine
             $state->inversionDuration = 0.0;
         }
 
-        $state->marketZ = $this->mathUtility->generateStandardNormal();
+        // Systemic Market Factor: the single common driver behind every equity price, built from two
+        // components because one process cannot supply both properties markets actually exhibit.
+        //
+        // An i.i.d. normal draw -- the previous behaviour -- gave the factor no memory at all, so a
+        // market-wide selloff could not mathematically survive into the next tick and no drawdown or rally
+        // ever lasted longer than one. The regime leg fixes that with an AR(1) memory whose persistence is a
+        // decay constant in YEARS, keeping regime length invariant to SIM_TICKS_PER_YEAR.
+        //
+        // Fat tails cannot ride on that leg: at this persistence the AR(1) averages on the order of a hundred
+        // innovations, and the central limit theorem erases their kurtosis entirely (a t(4) innovation with
+        // kurtosis ~11 emerges from the recursion at ~2.8, thinner than a normal). So the crash component is
+        // carried by an independent i.i.d. Student's t shock, where the kurtosis survives.
+        //
+        // Both legs are scaled so integrated annual variance is exactly preserved: the regime leg is divided
+        // by its own autocorrelation inflation (otherwise persistence alone would multiply realised market
+        // volatility roughly twenty-five fold), and the two are then combined in variance shares summing to
+        // one. Persistence and tails therefore change the SHAPE of the market's path, never its magnitude.
+        $marketFactorPhi = exp(-$dt / self::MARKET_FACTOR_DECAY_TAU_YEARS);
+        $state->marketZLatent = $this->mathUtility->generatePersistentZ($state->marketZLatent, $marketFactorPhi);
+
+        $regimeShock = $state->marketZLatent * $this->mathUtility->calculatePersistenceVarianceScale($marketFactorPhi);
+        $tailShock = $this->mathUtility->generateStudentsT(self::MARKET_FACTOR_TAIL_DF);
+
+        $state->marketZ = (sqrt(self::MARKET_FACTOR_REGIME_VARIANCE_SHARE) * $regimeShock)
+            + (sqrt(1.0 - self::MARKET_FACTOR_REGIME_VARIANCE_SHARE) * $tailShock);
+
+        // Market-Wide Jump: the discontinuous component of the common factor.
+        // A fat-tailed diffusion shock alone cannot produce a crash DAY. At this tick rate a day is a sum of
+        // many shocks, and the central limit theorem flattens their kurtosis back toward normal long before a
+        // player sees it -- swapping the market factor's normal draw for a Student's t moves index daily
+        // kurtosis only from about 2.97 to 3.19. Genuine index tail risk has to arrive as a jump that is large
+        // in a single tick and therefore survives aggregation, which is exactly how per-stock tail risk is
+        // already modelled by the SVJJ process. The same Kou double-exponential is reused here, skewed
+        // downward, so the whole district can gap at once rather than only individual firms.
+        $systemicJump = $this->mathUtility->calculateSVJJJumps(
+            lambda: self::SYSTEMIC_JUMP_INTENSITY,
+            pUp: self::SYSTEMIC_JUMP_PROBABILITY_UP,
+            etaUp: self::SYSTEMIC_JUMP_ETA_UP,
+            etaDown: self::SYSTEMIC_JUMP_ETA_DOWN,
+            muV: self::SYSTEMIC_JUMP_VARIANCE_MEAN,
+            dt: $dt
+        );
+        $state->marketJumpMultiplier = $systemicJump['price_multiplier'];
 
         // 2D Kaldor Phase Space: Capital Stock tracking
         // Booms build excess capacity (+k); Recessions cause physical depreciation and pent-up demand (-k).
@@ -943,8 +1026,87 @@ class MacroEngine
         $this->monetarySubsystem->calculateRecessionProbability($state);
         $this->assetSubsystem->calculateCapitalMarketsDealIndex($state, $dt);
 
+        $this->updateSectorFactors($state);
+        $this->evaluateSystemicEvent($state, $dt);
+
         $this->saveState($state);
         return \App\DTO\MacroStateDTO::fromMacroState($state);
+    }
+
+    /**
+     * Advances one persistent shock per macro sector, the second common factor behind every equity price.
+     *
+     * With only the market factor, two banks co-move solely through their betas, so a banking crisis moves
+     * their earnings together while their prices diffuse independently between reporting dates.
+     *
+     * These shocks are deliberately i.i.d. rather than autocorrelated. Autocorrelating them would have to be
+     * paid for by scaling each shock down to keep integrated variance intact, which shrinks the factor's
+     * per-step contribution to nearly nothing and makes the sector correlation it exists to create invisible
+     * at any horizon a player actually looks at. It is also unnecessary: a sector ROTATION lives in the
+     * cumulative level, and the level of a random walk wanders and stays displaced for months at a time
+     * without any memory in its increments. Autocorrelation would only add predictable momentum, which is
+     * the market factor's job and is kept small there for the same horizon-stability reason.
+     */
+    private function updateSectorFactors(MacroState $state): void
+    {
+        foreach (array_keys(\App\Data\Sectors::MACRO_SECTORS) as $sector) {
+            $state->sectorZ[$sector] = $this->mathUtility->generateStandardNormal();
+        }
+    }
+
+    /**
+     * Selects at most one district-wide systemic event per tick from the macro state just computed.
+     *
+     * Edge-triggered with a refractory cooldown rather than level-triggered: a crisis satisfies its threshold
+     * for many consecutive ticks, so a level trigger would republish the same headline thousands of times per
+     * simulated year and bury the news feed. The event is a single-tick pulse -- consumers read it on the tick
+     * it fires and it is cleared on the next -- and the cooldown then suppresses further events until the
+     * regime has had time to develop.
+     *
+     * Conditions are evaluated most-severe-first so a funding freeze outranks a recession declaration that
+     * would inevitably accompany it.
+     */
+    private function evaluateSystemicEvent(MacroState $state, float $dt): void
+    {
+        // The event is a pulse, not a latch: clear last tick's value before deciding this tick's.
+        $state->eventType = null;
+
+        if ($state->eventCooldownTimer > 0.0) {
+            $state->eventCooldownTimer = max(0.0, $state->eventCooldownTimer - $dt);
+            return;
+        }
+
+        $eventType = match (true) {
+            $state->interbankLiquiditySpread >= self::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD
+                => ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE,
+
+            $state->highYieldCreditSpread >= self::SYSTEMIC_CREDIT_SEIZURE_SPREAD
+                => ShockEvent::CREDIT_MARKET_SEIZURE,
+
+            // The backstop only reads as a backstop if it arrives while conditions are actually stressed.
+            $state->qeIntensity >= self::SYSTEMIC_INTERVENTION_QE_INTENSITY && $state->outputGapEma < 0.0
+                => ShockEvent::TITAN_INTERVENTION,
+
+            $state->recessionProbability >= self::SYSTEMIC_RECESSION_DECLARE_PROBABILITY
+                && $state->outputGap <= self::SYSTEMIC_RECESSION_DECLARE_GAP
+                => ShockEvent::RECESSION_DECLARED,
+
+            $state->inversionDuration >= self::SYSTEMIC_INVERSION_ALARM_YEARS
+                => ShockEvent::YIELD_CURVE_INVERSION_ALARM,
+
+            // Deep value with the cycle already turning: capital steps in as the gap closes from below.
+            $state->equityRiskPremium >= self::SYSTEMIC_DEPLOYMENT_ERP_THRESHOLD
+                && $state->outputGapEma < 0.0
+                && $state->outputGap > $state->outputGapEma
+                => ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT,
+
+            default => null,
+        };
+
+        if ($eventType !== null) {
+            $state->eventType = $eventType;
+            $state->eventCooldownTimer = self::SYSTEMIC_EVENT_COOLDOWN_YEARS;
+        }
     }
 
     /**

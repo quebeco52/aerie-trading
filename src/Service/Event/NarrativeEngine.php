@@ -285,16 +285,72 @@ class NarrativeEngine
                 "Asset management AUM contracted following market volatility and client rebalancing.",
                 "Net redemption outflows reduced recurring management fee revenues."
             ]),
-            ShockEvent::TITAN_INTERVENTION => $this->getRandomPhrase([
-                "Emergency liquidity support and capital injections from District Titans restored market confidence.",
-                "Coordinated institutional backstop facility averted systemic credit contagion.",
-                "Strategic cornerstone investment by major financial institutions stabilized asset prices."
-            ]),
-            ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT => $this->getRandomPhrase([
-                "Sovereign wealth funds deployed massive capital reserves to stabilize distressed assets.",
-                "Large-scale sovereign capital injections supported district balance sheets during market turmoil.",
-                "Strategic sovereign liquidity facilities bolstered broad market liquidity."
-            ]),
+            ShockEvent::SYSTEMIC_LIQUIDITY_FREEZE => $this->getRandomPhrase(
+                isset($context['interbank_spread_bps']) ? [
+                    "Interbank liquidity freeze: Short-term wholesale funding spread spiked to {$context['interbank_spread_bps']} bps, reflecting acute money-market distress.",
+                    "Wholesale funding seized: Interbank liquidity spread widened to {$context['interbank_spread_bps']} bps as institutions hoarded cash and restricted counterparty lending.",
+                    "Money market distress: Short-term interbank spreads expanded to {$context['interbank_spread_bps']} bps, freezing unsecured wholesale financing.",
+                ] : [
+                    "Interbank liquidity freeze: Short-term wholesale funding spreads spiked sharply as institutions restricted counterparty lending.",
+                    "Wholesale funding seized: Interbank lending spreads widened to crisis levels amid acute liquidity hoarding.",
+                    "Money market distress: Short-term funding markets seized, sharply restricting interbank credit access.",
+                ]
+            ),
+            ShockEvent::CREDIT_MARKET_SEIZURE => $this->getRandomPhrase(
+                isset($context['hy_spread_pct']) ? [
+                    "Credit market seizure: High-yield credit spreads blew out to {$context['hy_spread_pct']}%, shutting speculative-grade primary debt issuance.",
+                    "High-yield debt freeze: Speculative corporate bond spreads widened to {$context['hy_spread_pct']}%, halting corporate refinancing.",
+                    "Corporate credit freeze: Speculative-grade bond yields surged ({$context['hy_spread_pct']}% spread), locking leveraged borrowers out of debt markets.",
+                ] : [
+                    "Credit market seizure: Speculative-grade credit spreads widened sharply, shutting primary corporate debt issuance.",
+                    "High-yield debt freeze: Corporate credit spreads blew out to crisis levels, freezing corporate refinancing.",
+                    "Corporate credit freeze: Speculative-grade bond yields surged, locking leveraged borrowers out of primary debt markets.",
+                ]
+            ),
+            ShockEvent::RECESSION_DECLARED => $this->getRandomPhrase(
+                isset($context['recession_prob_pct']) || isset($context['output_gap_pct']) ? [
+                    "Recession confirmed: Macroeconomic indicators signaled a " . ($context['recession_prob_pct'] ?? '50+') . "% recession probability as real GDP output contracted to " . ($context['output_gap_pct'] ?? 'negative') . "%.",
+                    "Technical recession confirmed: Consecutive quarters of output contraction (" . ($context['output_gap_pct'] ?? 'negative') . "% output gap) and softening labor conditions met statutory recession criteria (" . ($context['recession_prob_pct'] ?? '50+') . "% probability).",
+                    "Macroeconomic downturn confirmed: Econometric models signaled recession probability reached " . ($context['recession_prob_pct'] ?? 'elevated') . "% amid broad output contraction (" . ($context['output_gap_pct'] ?? 'negative') . "% output gap).",
+                ] : [
+                    "Recession confirmed: Macroeconomic indicators signaled sustained output contraction and rising economic slack.",
+                    "Technical recession confirmed: Contracting aggregate output and deteriorating labor conditions met formal recession criteria.",
+                    "Macroeconomic downturn confirmed: Consecutive periods of output contraction confirmed the economy has entered recession.",
+                ]
+            ),
+            ShockEvent::YIELD_CURVE_INVERSION_ALARM => $this->getRandomPhrase(
+                isset($context['inversion_months']) ? [
+                    "Yield curve inversion alert: Benchmark sovereign yield curve has remained inverted for {$context['inversion_months']} consecutive months, signaling heightened recession risk.",
+                    "Persistent yield curve inversion: Short rates exceeded long-term sovereign yields for {$context['inversion_months']} months, historically a reliable downturn indicator.",
+                    "Yield curve warning: Sustained term spread inversion reached {$context['inversion_months']} months, reflecting tight monetary conditions and future growth deceleration.",
+                ] : [
+                    "Yield curve inversion alert: Benchmark sovereign yield curve has remained inverted for a sustained period, signaling heightened recession risk.",
+                    "Persistent yield curve inversion: Short-term rates remained above long-term sovereign yields, historically a reliable recession warning.",
+                    "Yield curve warning: Sustained negative term spread signaled tight monetary conditions and economic deceleration ahead.",
+                ]
+            ),
+            ShockEvent::TITAN_INTERVENTION => $this->getRandomPhrase(
+                isset($context['qe_intensity_pct']) ? [
+                    "Central bank Quantitative Easing: Monetary authority expanded asset purchases (QE intensity: {$context['qe_intensity_pct']}%) to compress bond yields and inject liquidity" . (isset($context['output_gap_pct']) ? " amid negative output gap ({$context['output_gap_pct']}%)" : "") . ".",
+                    "Emergency monetary easing: Central bank initiated large-scale asset purchases (QE: {$context['qe_intensity_pct']}%) to stabilize credit markets and lower borrowing costs" . (isset($context['output_gap_pct']) ? " (output gap: {$context['output_gap_pct']}%)" : "") . ".",
+                    "Central bank liquidity facility activated: Quantitative easing purchases ramped up to {$context['qe_intensity_pct']}%" . (isset($context['output_gap_pct']) ? " (output gap: {$context['output_gap_pct']}%)" : "") . " to support aggregate liquidity and counter recessionary pressure.",
+                ] : [
+                    "Central bank Quantitative Easing: Monetary authority expanded emergency asset purchases to suppress bond yields and restore liquidity.",
+                    "Emergency monetary easing: Central bank launched large-scale asset purchases to stabilize credit markets and lower borrowing costs.",
+                    "Monetary authorities activated emergency asset purchases (QE) to counter recessionary pressures and support market liquidity.",
+                ]
+            ),
+            ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT => $this->getRandomPhrase(
+                isset($context['erp_pct']) ? [
+                    "Cyclical valuation bottom reached: Equity risk premium expanded to {$context['erp_pct']}% as GDP output gap inflected upward" . (isset($context['output_gap_pct']) ? " ({$context['output_gap_pct']}%)" : "") . ", triggering broad institutional equity buying.",
+                    "Deep-value market inflection: Equity risk premium reached {$context['erp_pct']}%" . (isset($context['output_gap_pct']) ? " (output gap: {$context['output_gap_pct']}%)" : "") . ", driving counter-cyclical institutional equity inflows as economic growth bottomed.",
+                    "Counter-cyclical equity rally: Favorable equity risk premium ({$context['erp_pct']}%) and turning output momentum" . (isset($context['output_gap_pct']) ? " ({$context['output_gap_pct']}%)" : "") . " stimulated broad institutional value accumulation.",
+                ] : [
+                    "Cyclical valuation bottom reached: Elevated equity risk premium and recovering growth momentum triggered broad counter-cyclical institutional equity buying.",
+                    "Deep-value market inflection: Equity risk premium widened to deep-value levels, driving institutional inflows as economic growth bottomed.",
+                    "Counter-cyclical equity rally: Favorable equity risk premium and recovering output momentum stimulated broad institutional value accumulation.",
+                ]
+            ),
             ShockEvent::PE_LEVERAGE_RECAPITALIZATION => $this->getRandomPhrase([
                 "Executed dividend recapitalizations across private equity portfolio assets, unlocking substantial liquidity.",
                 "Completed opportunistic debt refinancing and special dividend payouts across core portfolio holdings.",

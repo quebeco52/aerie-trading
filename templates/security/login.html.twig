@@ -1,58 +1,65 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Log in! | Aerie Exchange{% endblock %}
+{% block title %}Sign in | Aerie Exchange{% endblock %}
 
 {% block body %}
-<div class="flex min-h-full flex-col justify-center px-6 py-12 lg:px-8">
-    <div class="sm:mx-auto sm:w-full sm:max-w-sm">
-        <h2 class="mt-10 text-center text-2xl font-bold leading-9 tracking-tight text-white">Sign in to Aerie</h2>
-    </div>
+	<div class="flex grow flex-col justify-center px-4 sm:px-6 lg:px-8 py-12">
+		<div class="sm:mx-auto sm:w-full sm:max-w-md">
+			<h1 class="text-center text-2xl font-bold tracking-tight text-on-surface">Sign in to Aerie Exchange</h1>
+			<p class="mt-2 text-center text-xs text-on-surface-variant">Access your portfolio, open orders and market analytics.</p>
+		</div>
 
-    <div class="mt-10 sm:mx-auto sm:w-full sm:max-w-sm">
-        <form class="space-y-6" method="post">
-            
-            {# Show errors #}
-            {% if error %}
-                <div class="text-red-400 text-sm font-bold bg-red-900/50 p-3 rounded">
-                    {{ error.messageKey|trans(error.messageData, 'security') }}
-                </div>
-            {% endif %}
+		<div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+			<div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-6 sm:p-7">
+				<form class="space-y-5" method="post">
 
-            {# If they are already logged in but somehow hit this page #}
-            {% if app.user %}
-                <div class="text-indigo-300 text-sm font-bold bg-indigo-900/50 p-3 rounded mb-3">
-                    You are logged in as {{ app.user.userIdentifier }}, <a href="{{ path('app_logout') }}" class="underline hover:text-white">Logout</a>
-                </div>
-            {% endif %}
+					{# Show errors #}
+					{% if error %}
+						<div role="alert" class="flex items-start gap-2.5 rounded border border-tertiary/25 bg-tertiary/10 p-3 text-xs text-tertiary">
+							<span class="material-symbols-outlined text-base leading-none shrink-0">error</span>
+							<span class="font-semibold">{{ error.messageKey|trans(error.messageData, 'security') }}</span>
+						</div>
+					{% endif %}
 
-            <div>
-                <label for="username" class="block text-sm font-medium leading-6 text-white">Email address</label>
-                <div class="mt-2">
-                    <input type="email" value="{{ last_username }}" name="_username" id="username" class="block w-full rounded-md border-0 bg-white/5 py-1.5 text-white shadow-sm ring-1 ring-inset ring-white/10 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm sm:leading-6 px-3" autocomplete="email" required autofocus>
-                </div>
-            </div>
+					{# If they are already logged in but somehow hit this page #}
+					{% if app.user %}
+						<div class="flex items-start gap-2.5 rounded border border-primary/25 bg-primary/10 p-3 text-xs text-primary">
+							<span class="material-symbols-outlined text-base leading-none shrink-0">info</span>
+							<span>
+								Signed in as <span class="font-mono font-semibold">{{ app.user.userIdentifier }}</span>.
+								<a href="{{ path('app_logout') }}" class="underline underline-offset-2 hover:text-on-surface">Sign out</a>
+							</span>
+						</div>
+					{% endif %}
 
-            <div>
-                <label for="password" class="block text-sm font-medium leading-6 text-white">Password</label>
-                <div class="mt-2">
-                    <input type="password" name="_password" id="password" class="block w-full rounded-md border-0 bg-white/5 py-1.5 text-white shadow-sm ring-1 ring-inset ring-white/10 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm sm:leading-6 px-3" autocomplete="current-password" required>
-                </div>
-            </div>
+					<div>
+						<label for="username" class="block text-xs font-semibold text-on-surface-variant mb-1.5">Email address</label>
+						<input type="email" value="{{ last_username }}" name="_username" id="username"
+							class="block w-full rounded border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-sm text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/50 focus:border-primary focus:ring-1 focus:ring-primary"
+							autocomplete="email" required autofocus>
+					</div>
 
-            {# CRITICAL: CSRF Protection for the form #}
-            <input type="hidden" name="_csrf_token" data-controller="csrf-protection" value="{{ csrf_token('authenticate') }}">
+					<div>
+						<label for="password" class="block text-xs font-semibold text-on-surface-variant mb-1.5">Password</label>
+						<input type="password" name="_password" id="password"
+							class="block w-full rounded border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-sm text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/50 focus:border-primary focus:ring-1 focus:ring-primary"
+							autocomplete="current-password" required>
+					</div>
 
-            <div>
-                <button type="submit" class="flex w-full justify-center rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
-                    Sign in
-                </button>
-            </div>
-        </form>
+					{# CRITICAL: CSRF Protection for the form #}
+					<input type="hidden" name="_csrf_token" data-controller="csrf-protection" value="{{ csrf_token('authenticate') }}">
 
-        <p class="mt-10 text-center text-sm text-gray-400">
-            Not a member?
-            <a href="{{ path('app_register') }}" class="font-semibold leading-6 text-indigo-400 hover:text-indigo-300">Create an account</a>
-        </p>
-    </div>
-</div>
+					<button type="submit"
+						class="flex w-full justify-center rounded bg-primary px-3 py-2 text-sm font-semibold text-[#001a42] transition-colors hover:bg-primary-container focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+						Sign in
+					</button>
+				</form>
+			</div>
+
+			<p class="mt-6 text-center text-xs text-on-surface-variant">
+				Don't have an account?
+				<a href="{{ path('app_register') }}" class="font-semibold text-primary hover:underline underline-offset-2">Create one</a>
+			</p>
+		</div>
+	</div>
 {% endblock %}

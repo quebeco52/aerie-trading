@@ -489,7 +489,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         return max(0.0, (self::PORTFOLIO_BOND_ALLOCATION * $bondReturn) + (self::PORTFOLIO_EQUITY_ALLOCATION * $equityReturn));
     }
 
-    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): float
+    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
     {
         $operatingBase = $this->getOperatingBase($stock);
         $minCash = $this->calculateMinOperatingCash($operatingBase, 0.0, (float) $stock->getWholesaleDebt());
@@ -531,5 +531,25 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     public function supportsUnderleveragedDebtExpansion(): bool
     {
         return true;
+    }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'deal_activity_index_ema',
+            'macro_credit_spread_ema',
+            'market_volatility_ema',
+            'output_gap_ema',
+            'policy_rate_ema',
+            'sloos_tightening_index_ema',
+            'yield_10y_ema',
+            'yield_5y_ema',
+        ];
     }
 }

@@ -187,4 +187,21 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
             'is_mega_hoarder' => $excessCash > ($operatingBase * self::DRY_POWDER_MEGA_THRESHOLD),
         ];
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'corporate_default_rate_ema',
+            'high_yield_credit_spread_ema',
+            'macro_credit_spread',
+            'macro_credit_spread_ema',
+            'output_gap_ema',
+        ];
+    }
 }

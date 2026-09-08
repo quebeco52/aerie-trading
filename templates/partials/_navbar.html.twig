@@ -9,20 +9,22 @@
                 <div class="hidden md:flex gap-6">
                     {% set current_path = app.request.pathInfo %}
                     
-                    <a href="/" class="text-xs font-bold uppercase tracking-wider pb-1 border-b-2 transition-colors {{ current_path == '/' ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">Markets</a>
+                    <a href="/" class="text-sm font-medium pb-1 border-b-2 transition-colors {{ current_path == '/' ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">Markets</a>
                     
-                    <a href="/dashboard" class="text-xs font-bold uppercase tracking-wider pb-1 border-b-2 transition-colors {{ current_path == '/dashboard' ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">Portfolio</a>
+                    <a href="/dashboard" class="text-sm font-medium pb-1 border-b-2 transition-colors {{ current_path == '/dashboard' ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">Portfolio</a>
                     
-                    <a href="/leaderboard" class="text-xs font-bold uppercase tracking-wider pb-1 border-b-2 transition-colors {{ current_path == '/leaderboard' ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">Leaderboard</a>
+                    <a href="/leaderboard" class="text-sm font-medium pb-1 border-b-2 transition-colors {{ current_path == '/leaderboard' ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">Leaderboard</a>
 
-                    <a href="/screener" class="text-xs font-bold uppercase tracking-wider pb-1 border-b-2 transition-colors {{ current_path == '/screener' ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">Screener</a>
+                    <a href="/screener" class="text-sm font-medium pb-1 border-b-2 transition-colors {{ current_path == '/screener' ? 'text-primary border-primary' : 'text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30' }}">Screener</a>
+                    
+                    <a href="/district/glasswater-row" class="text-sm font-medium pb-1 border-b-2 transition-colors {{ current_path starts with "/district" ? "text-primary border-primary" : "text-on-surface-variant hover:text-on-surface border-transparent hover:border-outline-variant/30" }}">District</a>
                 </div>
             </div>
             
             <div class="flex items-center gap-4">
                 <div class="relative hidden sm:block" data-controller="navbar-search">
                     <form action="/search" method="GET" id="search-form">
-                        <input id="market-search-input" name="q" type="text" placeholder="Search ticker or company..." class="bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1 text-xs focus:ring-1 focus:ring-primary focus:border-primary w-64 text-on-surface outline-none placeholder:text-on-surface-variant/50 font-mono" autocomplete="off" data-navbar-search-target="input" data-action="input->navbar-search#onInput keydown->navbar-search#onKeyDown">
+                        <input id="market-search-input" name="q" type="text" placeholder="Search ticker or company..." class="bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1 text-xs focus:ring-1 focus:ring-primary focus:border-primary w-64 text-on-surface outline-none placeholder:text-on-surface-variant/50" autocomplete="off" data-navbar-search-target="input" data-action="input->navbar-search#onInput keydown->navbar-search#onKeyDown">
                         <div id="search-results-dropdown" data-navbar-search-target="dropdown" class="absolute left-0 mt-1 w-full bg-surface-container-high border border-outline-variant/30 rounded shadow-md hidden z-50 overflow-hidden text-xs">
                         </div>
                     </form>

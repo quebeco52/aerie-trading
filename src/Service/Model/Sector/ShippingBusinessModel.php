@@ -246,4 +246,25 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
             ? ($baseConsensus * (1.0 - FinancialConstants::FAIR_VALUE_DDM_WEIGHT)) + ($dividendSupportValue * FinancialConstants::FAIR_VALUE_DDM_WEIGHT)
             : $baseConsensus;
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'energy_cost_push_lag',
+            'exchange_rate_index_ema',
+            'freight_rate_index_ema',
+            'industrial_metals_index_ema',
+            'inflation_ema',
+            'output_gap_ema',
+            'supply_chain_pressure_index_ema',
+            'tips_breakeven_ema',
+            'trade_balance_to_gdp_ema',
+        ];
+    }
 }

@@ -247,4 +247,22 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
             $stock->setOperatingMargin((string) $updatedMargin);
         }
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+            'agricultural_commodity_index_ema',
+            'consumer_sentiment_index_ema',
+            'energy_cost_push_lag',
+            'inflation_ema',
+            'producer_price_inflation_ema',
+            'unemployment_rate_ema',
+        ]));
+    }
 }

@@ -10,7 +10,7 @@
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
                 <div class="flex items-center gap-2 mb-2">
-                    <span class="text-xs font-bold tracking-wider text-primary uppercase">Market Intelligence</span>
+                    <span class="text-[11px] font-semibold tracking-wide text-primary uppercase">Market Intelligence</span>
                 </div>
                 <h1 class="text-2xl md:text-3xl font-bold text-on-surface tracking-tight">Stock Screener</h1>
                 <p class="text-xs text-on-surface-variant mt-1">Filter, sort, and analyze corporate fundamentals across the entire exchange.</p>
@@ -48,31 +48,31 @@
         <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse min-w-225" id="screener-table">
                 <thead>
-                    <tr class="bg-surface-container-highest/20 text-on-surface-variant text-xs uppercase tracking-wider font-bold border-b border-outline-variant/15">
-                        <th class="px-5 py-3 cursor-pointer select-none hover:text-primary transition-colors" data-col="ticker" data-screener-target="header" data-action="click->screener#sort">Ticker</th>
-                        <th class="px-4 py-3 cursor-pointer select-none hover:text-primary transition-colors" data-col="name" data-screener-target="header" data-action="click->screener#sort">Company</th>
-                        <th class="px-4 py-3 cursor-pointer select-none hover:text-primary transition-colors" data-col="sector" data-screener-target="header" data-action="click->screener#sort">Sector</th>
-                        <th class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="price" data-screener-target="header" data-action="click->screener#sort">Price</th>
-                        <th class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="mcap" data-screener-target="header" data-action="click->screener#sort">Market Cap</th>
-                        <th class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="pe" data-screener-target="header" data-action="click->screener#sort">P/E</th>
-                        <th class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="eps" data-screener-target="header" data-action="click->screener#sort">EPS</th>
-                        <th class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="roic" data-screener-target="header" data-action="click->screener#sort">ROIC</th>
-                        <th class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="equity" data-screener-target="header" data-action="click->screener#sort">Equity</th>
-                        <th class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="de" data-screener-target="header" data-action="click->screener#sort">D/E</th>
+                    <tr class="bg-surface-container-highest/20 text-on-surface-variant text-[11px] uppercase tracking-wide font-semibold border-b border-outline-variant/15">
+                        <th scope="col" class="px-5 py-3 cursor-pointer select-none hover:text-primary transition-colors" data-col="ticker" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Ticker</th>
+                        <th scope="col" class="px-4 py-3 cursor-pointer select-none hover:text-primary transition-colors" data-col="name" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Company</th>
+                        <th scope="col" class="px-4 py-3 cursor-pointer select-none hover:text-primary transition-colors" data-col="sector" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Sector</th>
+                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="price" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Price</th>
+                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="mcap" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Market Cap</th>
+                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="pe" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">P/E</th>
+                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="eps" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">EPS</th>
+                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="roic" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">ROIC</th>
+                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="equity" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Equity</th>
+                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="de" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">D/E</th>
                         <th class="px-5 py-3 text-right">Action</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-outline-variant/10 text-xs sm:text-sm" id="screener-tbody" data-screener-target="tbody">
                     {% for stock in stocks %}
-                        <tr class="hover:bg-surface-container-high/30 transition-colors group cursor-pointer screener-row {{ stock.isBankrupt ? 'opacity-50 bg-red-950/10' : '' }}" onclick="window.location.href='/stock/{{ stock.ticker }}'" data-ticker="{{ stock.ticker }}" data-name="{{ stock.name|lower }}" data-sector="{{ stock.sector }}" data-screener-target="row">
-                            <td class="px-5 py-2.5" data-value="{{ stock.ticker }}">
+                        <tr class="relative hover:bg-surface-container-high/30 focus-within:bg-surface-container-high/30 transition-colors group screener-row {{ stock.isBankrupt ? 'opacity-50 bg-tertiary/10' : '' }}" data-ticker="{{ stock.ticker }}" data-name="{{ stock.name|lower }}" data-sector="{{ stock.sector }}" data-screener-target="row">
+                            <th scope="row" class="px-5 py-2.5 text-left font-normal" data-value="{{ stock.ticker }}">
                                 <div class="flex items-center gap-2">
-                                    <span class="font-bold text-primary font-mono group-hover:underline">{{ stock.ticker }}</span>
+                                    <a href="/stock/{{ stock.ticker }}" class="font-bold text-primary font-mono group-hover:underline outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:underline-offset-4">{{ stock.ticker }}</a>
                                     {% if stock.isBankrupt %}
-                                        <span class="px-1.5 py-0.2 rounded bg-red-500/10 text-red-400 text-[9px] font-bold border border-red-500/20">BANKRUPT</span>
+                                        <span class="relative z-10 px-1.5 py-0.2 rounded bg-tertiary/10 text-tertiary text-[9px] font-bold border border-tertiary/25 uppercase tracking-wide">Bankrupt</span>
                                     {% endif %}
                                 </div>
-                            </td>
+                            </th>
                             <td class="px-4 py-2.5 font-bold text-on-surface max-w-55 truncate" data-value="{{ stock.name }}">{{ stock.name }}</td>
                             <td class="px-4 py-2.5 text-on-surface-variant text-xs" data-value="{{ stock.sector }}">
                                 <span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant text-xs font-mono border border-outline-variant/15">{{ stock.sector }}</span>
@@ -91,7 +91,7 @@
                                 {{ stock.debtToEquity is not null ? stock.debtToEquity|number_format(2) ~ 'x' : '-' }}
                             </td>
                             <td class="px-5 py-2.5 text-right">
-                                <a href="/stock/{{ stock.ticker }}" onclick="event.stopPropagation();" class="inline-flex items-center px-2.5 py-0.5 rounded bg-surface-container hover:bg-primary/20 text-primary border border-primary/20 text-xs font-bold transition-colors uppercase tracking-wider">
+                                <a href="/stock/{{ stock.ticker }}" class="relative z-10 inline-flex items-center px-2.5 py-0.5 rounded bg-surface-container hover:bg-primary/20 text-primary border border-primary/20 text-xs font-semibold transition-colors">
                                     View
                                 </a>
                             </td>

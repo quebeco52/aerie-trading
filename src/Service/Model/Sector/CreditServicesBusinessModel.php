@@ -355,14 +355,11 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         ];
     }
 
-    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): float
+    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
     {
-        // Credit services generate their interest income from their unsecured loan book.
-        $earningAssets = max(1.0, (float) $stock->getTotalEquity() + (float) $stock->getTotalDebt() - (float) $stock->getCorporateTreasury());
-
-        $policyRate = $macroState->policyRateEma;
-        // However, this is largely captured in Revenue (Gross Yield). 
-        // We only return the supplemental interest from excess treasury cash to avoid double-counting.
+        // Credit services generate their interest income from their unsecured loan book, but that is largely
+        // captured in Revenue (Gross Yield). We only return the supplemental interest from excess treasury
+        // cash to avoid double-counting.
         $operatingBase = $this->getOperatingBase($stock);
         // Credit services act like banks and use standard cash buffering
         $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - ($operatingBase * self::TARGET_CASH_OPERATING_MULT));
@@ -422,5 +419,29 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     {
         $bankEquityLimit = $targetDebtTolerance > 0.0 ? $targetDebtTolerance : $this->getWholesaleLeverageLimit();
         return $currentDebtRatio < ($bankEquityLimit * 0.90);
+    }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'consumer_sentiment_index_ema',
+            'inflation_ema',
+            'interbank_liquidity_spread_ema',
+            'macro_credit_spread_ema',
+            'policy_rate_ema',
+            'recession_probability_ema',
+            'retail_default_rate_ema',
+            'sloos_tightening_index_ema',
+            'unemployment_rate_ema',
+            'yield_10y_ema',
+            'yield_2y_ema',
+            'yield_5y_ema',
+        ];
     }
 }

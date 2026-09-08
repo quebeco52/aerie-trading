@@ -113,7 +113,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     // --- Analyst Visibility & Error ---
     // Moved to getCoverageProfile() — see MarketConsensusEngine.
 
-    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): float
+    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
     {
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
         $treasury = (float) $stock->getCorporateTreasury();
@@ -343,5 +343,31 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     public function supportsUnderleveragedDebtExpansion(): bool
     {
         return true;
+    }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'commercial_property_index_ema',
+            'corporate_default_rate_ema',
+            'housing_starts_index_ema',
+            'interbank_liquidity_spread_ema',
+            'macro_credit_spread_ema',
+            'money_supply_growth_ema',
+            'output_gap_ema',
+            'policy_rate_ema',
+            'recession_probability_ema',
+            'residential_property_index_ema',
+            'retail_default_rate_ema',
+            'sloos_tightening_index_ema',
+            'yield_30y_ema',
+            'yield_5y_ema',
+        ];
     }
 }

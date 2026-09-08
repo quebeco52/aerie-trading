@@ -262,4 +262,21 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         }
         return ($pbFairValue * 0.70) + ($earningsValue * 0.30);
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+            'energy_cost_push_lag',
+            'inflation_ema',
+            'output_gap_ema',
+            'tips_breakeven_ema',
+            'yield_10y_ema',
+        ]));
+    }
 }

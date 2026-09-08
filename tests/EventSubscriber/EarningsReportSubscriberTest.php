@@ -216,10 +216,31 @@ class EarningsReportSubscriberTest extends TestCase
         $nii = $streamDetails['net_interest_income'];
         
         $driverLabels = array_column($nii['drivers'], 'label');
-        $this->assertContains('Yield Curve & NIM Spread (90 bps)', $driverLabels);
+        // The spread is no longer baked into the label — it ships as a resolved reading instead,
+        // so the same variable prints in the same unit here and everywhere else it appears.
+        $this->assertContains('Yield Curve & NIM Spread', $driverLabels);
         $this->assertContains('Commercial Loan Demand', $driverLabels);
         $this->assertContains('Credit Spread & CECL Reserves', $driverLabels);
         $this->assertContains('Operational Headwinds', $driverLabels);
+
+        $nimDriver = array_values(array_filter(
+            $nii['drivers'],
+            static fn (array $driver): bool => $driver['label'] === 'Yield Curve & NIM Spread',
+        ))[0];
+        $readingFields = array_column($nimDriver['readings'], 'field');
+        $this->assertSame(['interbank_liquidity_spread_ema', 'yield_10y_ema', 'yield_2y_ema'], $readingFields);
+        $this->assertContains($nimDriver['direction'], [-1, 0, 1]);
+        $this->assertGreaterThanOrEqual(1, $nimDriver['strength']);
+        $this->assertLessThanOrEqual(3, $nimDriver['strength']);
+        // `impact` is an unpriced coefficient, so the field the panel may print must never be it.
+        $this->assertArrayNotHasKey('fields', $nimDriver);
+
+        // Strongest first — the panel prints the head of this list, so the ranking must be the
+        // mix's, not the order the business-model switch happened to append drivers in.
+        $impacts = array_map(static fn (array $d): float => abs((float) $d['impact']), $nii['drivers']);
+        $sorted = $impacts;
+        rsort($sorted);
+        $this->assertSame($sorted, $impacts);
     }
 
     public function testCalculatesQoQDeltaAgainstPreviousReport(): void

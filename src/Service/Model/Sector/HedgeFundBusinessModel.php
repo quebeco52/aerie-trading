@@ -409,7 +409,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         return max(0.0, (self::PORTFOLIO_BOND_ALLOCATION * $bondReturn) + (self::PORTFOLIO_EQUITY_ALLOCATION * $equityReturn));
     }
 
-    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): float
+    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
     {
         $operatingBase = $this->getOperatingBase($stock);
         $minCash = $this->calculateMinOperatingCash($operatingBase, 0.0, (float) $stock->getWholesaleDebt());
@@ -484,5 +484,24 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     public function getAcquisitionType(string $defaultType): string
     {
         return 'HOSTILE TAKEOVER';
+    }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'macro_credit_spread_ema',
+            'market_volatility_ema',
+            'money_supply_growth_ema',
+            'output_gap_ema',
+            'policy_rate_ema',
+            'yield_10y_ema',
+            'yield_5y_ema',
+        ];
     }
 }

@@ -100,7 +100,16 @@ class MarketSimulateCommand extends Command
             if ($macroState->eventType !== null) {
                 $lbi = $this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
                 if ($lbi) {
-                    $desc = $this->narrativeEngine->generateLore($macroState->eventType);
+                    $macroContext = [
+                        'interbank_spread_bps' => number_format($macroState->interbankLiquiditySpread * 10000.0, 0),
+                        'hy_spread_pct' => number_format($macroState->highYieldCreditSpread * 100.0, 2),
+                        'recession_prob_pct' => number_format($macroState->recessionProbability * 100.0, 1),
+                        'output_gap_pct' => number_format($macroState->outputGap * 100.0, 2),
+                        'inversion_months' => number_format($macroState->inversionDuration * 12.0, 1),
+                        'erp_pct' => number_format($macroState->equityRiskPremium * 100.0, 2),
+                        'qe_intensity_pct' => number_format($macroState->qeIntensity * 100.0, 2),
+                    ];
+                    $desc = $this->narrativeEngine->generateLore($macroState->eventType, $macroContext);
                     $shockPct = in_array($macroState->eventType, [ShockEvent::TITAN_INTERVENTION, ShockEvent::SOVEREIGN_WEALTH_DEPLOYMENT]) ? 5.0 : -5.0;
                     $this->marketEvent->publish($lbi, 'SHOCK', $desc, $shockPct);
                 }

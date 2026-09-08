@@ -186,4 +186,23 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
             streamRevenue: $streamRevenues,
         );
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'energy_cost_push_lag',
+            'freight_rate_index_ema',
+            'manufacturing_pmi_ema',
+            'output_gap_ema',
+            'supply_chain_pressure_index_ema',
+            'tips_breakeven_ema',
+            'trade_balance_to_gdp_ema',
+        ];
+    }
 }

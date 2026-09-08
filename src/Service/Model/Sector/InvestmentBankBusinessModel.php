@@ -174,33 +174,19 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         return $physics;
     }
 
-    /**
-     * Blended wholesale funding rate: floating/fixed debt mix priced off the policy rate and 5-year yield
-     * curve, plus the firm's structural credit spread. Single source of truth shared by realized interest
-     * income and target metrics so the two rails cannot silently diverge (see
-     * DebtEngine::calculateInterestExpenseAndWholesaleRate for the analogous actual expense-side rate,
-     * which additionally layers on the dynamic Merton/BGG spread).
-     */
-    private function calculateBlendedWholesaleRate(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
-    {
-        $policyRate = $macroState->policyRateEma;
-        $yield5y = $macroState->yield5yEma;
-        $structuralSpread = (float) $stock->getCreditSpread();
-        $floatingRatio = (float) $stock->getFloatingDebtRatio();
-
-        $floatingRate = $policyRate + $macroState->interbankLiquiditySpreadEma;
-
-        return ($floatingRatio * $floatingRate) + ((1.0 - $floatingRatio) * $yield5y) + $structuralSpread;
-    }
-
-    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): float
+    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
     {
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
 
-        // Effective funding benchmark: prime brokers pass their blended wholesale borrowing rate through to
-        // institutional clients. Must match the benchmark used in getTargetMetrics() so realized NII cannot
-        // structurally diverge from the ROIC target the firm is graded against.
-        $fundingBenchmark = max(0.0, $this->calculateBlendedWholesaleRate($stock, $macroState));
+        // Effective funding benchmark: prime brokerage margin loans and matched-book repo reprice directly off
+        // the firm's OWN wholesale borrowing cost, so the client-facing asset yield must be built on the same
+        // realized rate DebtEngine charges on the liability side (DebtMetricsDTO::$wholesaleRate), dynamic
+        // credit-spread widening included. Falling back to the static approximation here previously let a
+        // distressed firm keep pricing prime brokerage assets at the calm-market rate while paying the live
+        // blown-out rate on its liabilities -- an unhedgeable negative carry on the wholesale book that only
+        // grew as spreads widened further. Fall back to the static approximation only when no live debt calc
+        // has run yet (see calculateBlendedWholesaleRate()).
+        $fundingBenchmark = max(0.0, $realizedWholesaleRate ?? $this->calculateBlendedWholesaleRate($stock, $macroState));
 
         // 1. Institutional Prime Brokerage & Secured Financing (Securities Lending & Margin Debits):
         // Investment banks lend wholesale funding to institutional hedge fund clients against liquid collateral.
@@ -498,5 +484,28 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
         );
+    }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'corporate_default_rate_ema',
+            'deal_activity_index_ema',
+            'high_yield_credit_spread_ema',
+            'macro_credit_spread_ema',
+            'market_volatility_ema',
+            'money_supply_growth_ema',
+            'ns_slope',
+            'ns_slope_ema',
+            'output_gap_ema',
+            'policy_rate_ema',
+            'yield_5y_ema',
+        ];
     }
 }

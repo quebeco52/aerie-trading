@@ -395,7 +395,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
      * Asset Managers invest excess corporate treasury in seed capital co-investment portfolios (60/40).
      * The 40% equity seed tranche experiences quarterly stochastic mark-to-market volatility and VIX tail risk.
      */
-    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): float
+    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
     {
         $operatingBase = $this->getOperatingBase($stock);
         $minCash = $this->calculateMinOperatingCash($operatingBase, 0.0, (float) $stock->getWholesaleDebt());
@@ -480,5 +480,23 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         return $dividendSupportValue > 0.0
             ? ($earningsValue * 0.80) + ($dividendSupportValue * 0.20)
             : $earningsValue;
+    }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'market_volatility_ema',
+            'money_supply_growth_ema',
+            'output_gap_ema',
+            'policy_rate_ema',
+            'yield_10y_ema',
+            'yield_5y_ema',
+        ];
     }
 }

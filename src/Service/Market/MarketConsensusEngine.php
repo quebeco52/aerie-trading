@@ -7,6 +7,7 @@ namespace App\Service\Market;
 use App\DTO\ActualFinancialsDTO;
 use App\DTO\ConsensusDTO;
 use App\DTO\SectorCoverageProfile;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
 /**
@@ -36,6 +37,7 @@ class MarketConsensusEngine
      *   dynamicVisibility   = clamp(baseVisibility + analystError, minVisibility, 1.0)
      *   analystExpectedRev  = BayesianUpdate(priorAnchor, freshEstimate) * (1 - walkdownBias)
      *   analystExpectedVarC = analystExpectedRev * expectedVariableMargin
+     *   estimateDispersion  = coverage.errorStdDev * volatilityScale
      *
      * @param ActualFinancialsDTO    $actuals                What the company actually produced this quarter.
      * @param SectorCoverageProfile  $coverage               Analyst coverage parameters for this sector.
@@ -70,14 +72,14 @@ class MarketConsensusEngine
         $dynamicVisibility = min(1.0, max($minVisibility, $baseVisibility + $analystError));
 
         // Sloan (1996) Accruals Quality Anomaly: High non-cash accruals decay future growth expectations
-        $accrualsDiscount = max(0.0, (float) ($stock->getAccrualsRatio() ?? 0.0) * \App\Service\Math\FinancialConstants::ACCRUALS_DECAY_EPS_GROWTH_SENSITIVITY);
+        $accrualsDiscount = max(0.0, (float) ($stock->getAccrualsRatio() ?? 0.0) * FinancialConstants::ACCRUALS_DECAY_EPS_GROWTH_SENSITIVITY);
         $discountedExpectedRevenue = max(1.0, $expectedRevenue * (1.0 - min(0.25, $accrualsDiscount)));
 
         $freshEstimate = $discountedExpectedRevenue * (1.0 + $actuals->observableShockZ * $dynamicVisibility);
 
         // Bayesian Updating: Analysts blend structural baseline capacity / anchored prior with noisy channel signals (fresh estimate)
-        $priorVariance = \App\Service\Math\FinancialConstants::BAYESIAN_BASE_PRIOR_VARIANCE 
-            + ($marketVolatility * \App\Service\Math\FinancialConstants::BAYESIAN_VIX_SCALING_FACTOR);
+        $priorVariance = FinancialConstants::BAYESIAN_BASE_PRIOR_VARIANCE 
+            + ($marketVolatility * FinancialConstants::BAYESIAN_VIX_SCALING_FACTOR);
             
         $signalVariance = max(0.0001, pow($coverage->errorStdDev, 2));
 
@@ -100,11 +102,22 @@ class MarketConsensusEngine
         $marginForCosts = $expectedVariableMargin !== null ? $expectedVariableMargin : $actuals->clampedMargin;
         $analystExpectedVariableCosts = $analystExpectedRevenue * $marginForCosts;
 
+        // Analyst disagreement is regime-dependent: forecasts fan out when the macro outlook is volatile and
+        // converge when it is calm. Holding dispersion at the sector's calm-market constant made the SUE
+        // denominator regime-blind, so an identical percentage miss read as an identical sigma event in a
+        // panic as in a quiet quarter. This mirrors the volatility scaling already applied to the Bayesian
+        // prior variance above, keeping both halves of the consensus on the same uncertainty measure.
+        $volatilityExcess = max(0.0, $marketVolatility - FinancialConstants::DISPERSION_BASELINE_VOLATILITY);
+        $dispersionScale = min(
+            FinancialConstants::DISPERSION_MAX_SCALE,
+            1.0 + ($volatilityExcess * FinancialConstants::DISPERSION_VIX_SENSITIVITY)
+        );
+
         return new ConsensusDTO(
             analystExpectedRevenue: $analystExpectedRevenue,
             analystExpectedVariableCosts: $analystExpectedVariableCosts,
             dynamicVisibility: $dynamicVisibility,
-            estimateDispersion: $coverage->errorStdDev,
+            estimateDispersion: $coverage->errorStdDev * $dispersionScale,
         );
     }
 }

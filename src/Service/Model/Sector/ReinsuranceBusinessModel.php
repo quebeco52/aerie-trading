@@ -156,4 +156,25 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
             streamRevenue: $streamRevenues,
         );
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     * Inherits InsuranceBusinessModel::getMacroPhysics()/getTargetMetrics() in full — own
+     * calculateSectorPhysics() is purely Z-driven and reads no macro field directly.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'commercial_property_index_ema',
+            'inflation_ema',
+            'market_volatility_ema',
+            'output_gap_ema',
+            'policy_rate_ema',
+            'residential_property_index_ema',
+            'yield_10y_ema',
+        ];
+    }
 }

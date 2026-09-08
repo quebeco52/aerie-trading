@@ -36,6 +36,14 @@ class FinancialConstants
     /** Multiplier scaling analyst consensus prior uncertainty as VIX rises. */
     public const BAYESIAN_VIX_SCALING_FACTOR = 0.02;
 
+    // --- Analyst Estimate Dispersion ---
+    /** Calm-market volatility at which the per-sector analyst error standard deviations are calibrated. */
+    public const DISPERSION_BASELINE_VOLATILITY = 0.15;
+    /** Sensitivity of analyst estimate dispersion to market volatility above its calibration baseline. */
+    public const DISPERSION_VIX_SENSITIVITY = 3.0;
+    /** Ceiling on dispersion widening, so a volatility spike cannot drive the SUE denominator to infinity. */
+    public const DISPERSION_MAX_SCALE = 2.50;
+
     // --- Leverage Effect (Black, 1976) ---
     /** Asymmetric leverage effect scalar magnifying volatility on negative earnings surprises. */
     public const NEGATIVE_SURPRISE_VOL_MULTIPLIER = 1.4;

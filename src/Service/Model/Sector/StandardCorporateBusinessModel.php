@@ -251,4 +251,21 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
             $stock->setOperatingMargin((string) $updatedMargin);
         }
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'exchange_rate_index_ema',
+            'inflation_ema',
+            'output_gap_ema',
+            'producer_price_inflation_ema',
+            'tips_breakeven_ema',
+        ];
+    }
 }

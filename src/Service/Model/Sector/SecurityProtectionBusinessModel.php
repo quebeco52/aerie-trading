@@ -231,4 +231,22 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
             streamRevenue: $streamRevenues,
         );
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+            'government_spending_index_ema',
+            'inflation_ema',
+            'macro_credit_spread_ema',
+            'market_volatility_ema',
+            'output_gap_ema',
+            'tips_breakeven_ema',
+        ]));
+    }
 }

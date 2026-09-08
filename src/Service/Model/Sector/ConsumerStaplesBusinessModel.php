@@ -325,5 +325,24 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
             $stock->setOperatingMargin((string) $updatedMargin);
         }
     }
-}
 
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'agricultural_commodity_index_ema',
+            'energy_cost_push_lag',
+            'exchange_rate_index_ema',
+            'freight_rate_index_ema',
+            'inflation_ema',
+            'output_gap_ema',
+            'producer_price_inflation_ema',
+            'tips_breakeven_ema',
+        ];
+    }
+}

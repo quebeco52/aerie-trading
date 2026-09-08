@@ -338,4 +338,34 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
             streamRevenue: $streamRevenues,
         );
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+            'capacity_utilization_rate_ema',
+            'consumer_sentiment_index_ema',
+            'corporate_default_rate_ema',
+            'energy_cost_push_lag',
+            'equity_risk_premium',
+            'exchange_rate_index_ema',
+            'freight_rate_index_ema',
+            'industrial_metals_index_ema',
+            'inflation_ema',
+            'macro_credit_spread',
+            'policy_rate_ema',
+            'producer_price_inflation',
+            'qe_active',
+            'qe_intensity',
+            'retail_default_rate_ema',
+            'supply_chain_pressure_index_ema',
+            'yield_10y_ema',
+            'yield_2y_ema',
+        ]));
+    }
 }

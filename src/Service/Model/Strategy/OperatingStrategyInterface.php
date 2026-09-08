@@ -16,6 +16,18 @@ interface OperatingStrategyInterface
     public function computeActualFinancials(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): ActualFinancialsDTO;
     public function getCoverageProfile(Stock $stock): SectorCoverageProfile;
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array;
+    /**
+     * MacroStateDTO field names (snake_case, matching MacroStateDTO::toArray()) this model's
+     * operating physics reads in calculateSectorPhysics()/getMacroPhysics(). Valuation-only reads
+     * feeding WACC alone (equityRiskPremium, corporateTaxRate, policyRate) are excluded, so this
+     * stays a genuine operating-coupling declaration rather than everything a model touches.
+     *
+     * Consumed by App\Service\District\DistrictConduitResolver to derive which district
+     * institutions draw a conduit to this model — see App\Data\DistrictMap's class docblock.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array;
     public function getEffectiveTaxRate(float $macroTaxRate): float;
     public function calculateEconomicReturn(Stock $stock, float $nopat, float $investedCapital): float;
     public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null): float;
