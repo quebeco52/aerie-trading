@@ -190,7 +190,14 @@ class MarketResetCommand extends Command
                 businessModel: $businessModel,
                 liveCostOfEquity: $debtHealth->costOfEquity ?? 0.10,
                 baselineRoic: $impliedPricingRoic,
-                baselineMargin: (float) ($stockData['operating_margin'] ?? 0.20)
+                baselineMargin: (float) ($stockData['operating_margin'] ?? 0.20),
+                // The reset writes the balance sheet by SQL rather than through the entity, so capital per share
+                // is built from the same seed figures with the entity's own formula.
+                investedCapitalPerShare: \App\Service\Math\CorporateMetrics::getInstance()->calculateLiveInvestedCapital(
+                    (float) ($stockData['total_equity'] ?? 0.0),
+                    (float) ($stockData['wholesale_debt'] ?? 0.0) + (float) ($stockData['customer_deposits'] ?? 0.0),
+                    (float) ($stockData['corporate_treasury'] ?? 1000000000.00)
+                ) / max(1.0, (float) ($stockData['shares_outstanding'] ?? 1000000000))
             );
 
             $marketCalc = $this->marketEngine->calculateNextPrice($pricingCtx);

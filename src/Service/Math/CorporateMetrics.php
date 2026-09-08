@@ -104,12 +104,51 @@ class CorporateMetrics
     }
 
     /**
+     * Writes the three trade balances implied by a set of day counts and returns the resulting net figure.
+     *
+     * Receivables scale with revenue (they are billed sales); inventory and payables scale with the cost
+     * base (they are carried at cost, not at what the firm hopes to sell them for). Used both to seed the
+     * ledger and to roll it forward, so an opening balance sheet and its first quarter are built by the
+     * same arithmetic and cannot disagree by construction.
+     *
+     * @param array{dso?: float, dio?: float, dpo?: float} $days
+     */
+    public function buildWorkingCapitalBalances(Stock $stock, array $days, float $annualRevenue, float $annualCosts): float
+    {
+        $perDay = FinancialConstants::DAYS_PER_YEAR;
+
+        $stock->setReceivables((string) max(0.0, max(0.0, $annualRevenue) * ($days['dso'] ?? 0.0) / $perDay));
+        $stock->setInventory((string) max(0.0, max(0.0, $annualCosts) * ($days['dio'] ?? 0.0) / $perDay));
+        $stock->setPayables((string) max(0.0, max(0.0, $annualCosts) * ($days['dpo'] ?? 0.0) / $perDay));
+
+        return (float) $stock->getNetWorkingCapital();
+    }
+
+    /**
+     * Sets the expected-credit-loss allowance to its target for the current default outlook (ASC 326), so a
+     * ledger opens the way a real one would: with the loss the firm already expects on its receivables
+     * provided for, rather than discovered and charged in the first quarter.
+     */
+    public function seedReceivablesAllowance(Stock $stock, float $corporateDefaultRate): void
+    {
+        $receivables = (float) ($stock->getReceivables() ?? 0.0);
+        $lossRate = max(0.0, min(1.0, $corporateDefaultRate)) * FinancialConstants::TRADE_RECEIVABLE_LGD;
+
+        $stock->setReceivablesAllowance((string) max(0.0, $receivables * $lossRate));
+    }
+
+    /**
      * Seeds the fixed-asset ledger for a firm that has never reported, so depreciation has a real asset
      * account to run against from the first quarter.
      *
      * Net PP&E is invested capital less the other things invested capital is made of (working capital,
-     * goodwill and construction in progress), which is the accounting identity read backwards; the floor
-     * keeps an asset-light firm from seeding a zero base. Gross cost is then grossed up by the assumed
+     * goodwill and construction in progress), which is the accounting identity read backwards. Working
+     * capital keeps its sign: a business funded by its suppliers (negative working capital) carries MORE
+     * plant than its invested capital, because part of the plant is paid for with trade credit that
+     * invested capital nets out. Clamping it to zero left that plant off the books and the sheet out of
+     * balance by exactly the payables float. The floor is a bare viability minimum, not a target: a firm
+     * whose capital is all trade cycle has almost no plant and, correctly, almost no depreciation.
+     * Gross cost is then grossed up by the assumed
      * age of the plant, because a firm mid-life carries assets whose historical cost exceeds their book
      * value. Seeding gross and accumulated separately (rather than starting a brand-new plant) matters:
      * a zero-age base would under-depreciate for years and overstate early free cash flow.
@@ -125,7 +164,7 @@ class CorporateMetrics
         $capital = abs($investedCapital);
         $netPpe = max(
             $capital * FinancialConstants::MIN_PPE_SHARE_OF_CAPITAL,
-            $capital - max(0.0, $netWorkingCapital) - max(0.0, $goodwill) - max(0.0, $constructionInProgress)
+            $capital - $netWorkingCapital - max(0.0, $goodwill) - max(0.0, $constructionInProgress)
         );
 
         $age = min(0.90, max(0.0, $assetAgeRatio));

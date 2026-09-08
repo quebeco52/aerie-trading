@@ -83,8 +83,14 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $report->setCip($stock->getCipBalance());
         $report->setGoodwill($stock->getGoodwill());
         $report->setLeaseLiability(\App\Service\Math\MathUtility::formatDecimal($leaseLiability, 4));
-        $report->setTotalAssets(\App\Service\Math\MathUtility::formatDecimal($stock->getTotalAssets($leaseLiability), 4));
+        // A balance-sheet business (bank, insurer, broker) keeps no plant or trade ledger, and its loan book
+        // and securities are not modelled as assets at all. Reporting a total-assets figure for it would
+        // publish a sheet that is out by the whole deposit base, so the asset side is left unstated and the
+        // page renders the cash flow statement alone. Liabilities are real either way.
+        $hasAssetSide = $stock->getGrossPpe() !== null;
+        $report->setTotalAssets($hasAssetSide ? \App\Service\Math\MathUtility::formatDecimal($stock->getTotalAssets($leaseLiability), 4) : null);
         $report->setTotalLiabilities(\App\Service\Math\MathUtility::formatDecimal($stock->getTotalLiabilities($leaseLiability), 4));
+        $report->setAssetAge($hasAssetSide ? \App\Service\Math\MathUtility::formatDecimal($stock->getAssetAge(), 4) : null);
 
         // Cash flow statement, in the three sections whose signs classify the life-cycle stage.
         $report->setOperatingCashFlow(\App\Service\Math\MathUtility::formatDecimal($ctx->operatingCashFlow, 4));

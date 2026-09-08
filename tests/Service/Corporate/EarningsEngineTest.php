@@ -264,11 +264,16 @@ class EarningsEngineTest extends TestCase
         $this->assertGreaterThan(0.05, $intensity, 'software pays a material share of revenue in equity');
         $this->assertEqualsWithDelta($captured->actualRevenue * $intensity, $captured->stockCompensation, 1.0);
 
-        // Non-cash: operating cash flow carries the add-back above the accounting profit line.
-        $this->assertGreaterThan(
-            $captured->actualQuarterlyNetIncome + $captured->quarterlyDepreciation - $captured->stockCompensation,
-            $captured->operatingCashFlow
-        );
+        // Non-cash: the charge sits inside net income and comes straight back in operating cash flow. The
+        // whole bridge is asserted, working capital included, so the add-back cannot hide behind a loose bound.
+        $expectedOperatingCashFlow = $captured->actualQuarterlyNetIncome
+            + $captured->quarterlyDepreciation
+            + $captured->stockCompensation
+            + $captured->inventoryWriteDown
+            + $captured->receivablesProvision
+            + $captured->deferredTaxExpense
+            - $captured->deltaWorkingCapital;
+        $this->assertEqualsWithDelta($expectedOperatingCashFlow, $captured->operatingCashFlow, 1.0);
 
         // Settled in shares: the count ends above whatever the capital allocation left it at, by SBC / price.
         $expectedShares = ((float) $captured->allocation['new_shares']) + ($captured->stockCompensation / 50.0);
@@ -994,6 +999,75 @@ class EarningsEngineTest extends TestCase
         $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04), EarningsEngine::resolveReportingTick('FBNK', 252), 252);
 
         $this->assertEqualsWithDelta(0.0, (float) $stock->getDeferredTaxLiability(), 0.01);
+    }
+
+    /**
+     * The cash flow statement has exactly one job: its three sections must sum to the change in cash. If
+     * they do not, some flow is being booked at a value other than the cash that moved (an emergency raise
+     * at the screen price rather than the discounted offering price was one such case). Asserted every
+     * quarter, on an industrial that invests, distributes and borrows.
+     */
+    public function testCashFlowStatementReconcilesToTheChangeInCashEveryQuarter(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+
+        mt_srand(4242);
+        $stock = $this->buildMatureIndustrial('RCNL');
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, inflationEma: 0.02, gdpDeflator: 1.0);
+        $reportingTick = EarningsEngine::resolveReportingTick('RCNL', 252);
+
+        for ($quarter = 0; $quarter < 8; $quarter++) {
+            $cashBefore = (float) $stock->getCorporateTreasury();
+            $debtBefore = (float) $stock->getWholesaleDebt();
+            $engine->calculate($stock, $macroState, ($quarter * 63) + $reportingTick, 252);
+            $cashAfter = (float) $stock->getCorporateTreasury();
+
+            $statement = $captured->operatingCashFlow + $captured->investingCashFlow + $captured->financingCashFlow;
+            $this->assertEqualsWithDelta($cashAfter - $cashBefore, $statement, 1.0, "cash flow statement failed to reconcile in Q{$quarter}");
+
+            // And the financing section is built from cash that moved, never from a share count times a price.
+            $allocation = $captured->allocation;
+            $this->assertEqualsWithDelta(
+                ($debtAfter = (float) $stock->getWholesaleDebt()) - $debtBefore
+                    + (float) $allocation['equity_raised'] - (float) $allocation['total_cash_spent'] - (float) $allocation['total_paid'],
+                $captured->financingCashFlow,
+                1.0,
+                "financing section is not the sum of its cash legs in Q{$quarter}"
+            );
+        }
+    }
+
+    /**
+     * Sloan (1996): accruals are the gap between reported profit and cash from OPERATIONS. Measuring them
+     * against free cash flow after capex penalized every firm that built plant, which is the opposite of
+     * what the anomaly describes.
+     */
+    public function testAccrualsAreMeasuredAgainstOperatingCashFlowNotFreeCashFlow(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+
+        mt_srand(6161);
+        $stock = $this->buildProfitableIndustrial('SLOA');
+        $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04), EarningsEngine::resolveReportingTick('SLOA', 252), 252);
+
+        $lease = (new CorporateMetrics())->calculateLeaseLiability((float) $stock->getTotalRevenue(), $captured->strategy->getLeaseIntensity());
+        $expected = (($captured->actualQuarterlyNetIncome - $captured->operatingCashFlow) * 4.0) / $stock->getTotalAssets($lease);
+
+        $this->assertEqualsWithDelta($expected, (float) $stock->getAccrualsRatio(), 1e-9);
+
+        // The old definition would have charged this quarter's capex against earnings quality.
+        $oldDefinition = (($captured->actualQuarterlyNetIncome - $captured->trueQuarterlyFcf) * 4.0) / $stock->getTotalAssets($lease);
+        $this->assertNotEqualsWithDelta($oldDefinition, (float) $stock->getAccrualsRatio(), 1e-9, 'capex must not be read as an accrual');
     }
 
     public function testAnnualImpairmentTestWritesGoodwillDownWhenReturnsTrailTheHurdle(): void

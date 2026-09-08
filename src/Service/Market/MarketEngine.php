@@ -102,6 +102,7 @@ class MarketEngine
         $macroState = $ctx->macroState;
         $fcfPerShare = $ctx->fcfPerShare;
         $bookValuePerShare = $ctx->bookValuePerShare;
+        $investedCapitalPerShare = $ctx->investedCapitalPerShare;
         $maShock = $ctx->maShock;
         $currentRoic = $ctx->currentRoic;
         $roicTtm = $ctx->roicTtm;
@@ -212,7 +213,8 @@ class MarketEngine
             $secularGrowth,
             $baselineRoic,
             $baselineMargin,
-            $accrualsRatio
+            $accrualsRatio,
+            $investedCapitalPerShare
         );
 
         $perceivedFairValue = $fundamentalState['perceived_fair_value'];
@@ -363,7 +365,8 @@ class MarketEngine
         float $secularGrowth = 0.02,
         float $baselineRoic = 0.10,
         float $baselineMargin = 0.20,
-        float $accrualsRatio = 0.0
+        float $accrualsRatio = 0.0,
+        float $investedCapitalPerShare = 0.0
     ): array {
 
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
@@ -405,7 +408,10 @@ class MarketEngine
             $bookValuePerShare,
             $structuralRoic,
             $revenuePerShare,
-            $riskFreeRate
+            $riskFreeRate,
+            // Real capital employed when the caller supplied a balance sheet; the model's structural
+            // approximation from revenue and book value otherwise.
+            $investedCapitalPerShare > 0.0 ? $investedCapitalPerShare : null
         );
 
         // 2. STRUCTURAL EPS SMOOTHING (Past Performance via Kalman Filter)

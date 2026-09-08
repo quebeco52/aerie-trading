@@ -147,7 +147,8 @@ class StockController extends AbstractController
                     netDebtPerShare: $netDebt / $shares,
                     secularGrowth: $secularGrowth,
                     baselineRoic: (float) ($asset->getBaselineRoic() ?? 0.10),
-                    baselineMargin: (float) ($asset->getOperatingMargin() ?? 0.20)
+                    baselineMargin: (float) ($asset->getOperatingMargin() ?? 0.20),
+                    investedCapitalPerShare: $asset->getInvestedCapital() / max(1.0, (float) $asset->getSharesOutstanding())
                 );
 
                 $pricingResult = $marketEngine->calculateNextPrice($pricingCtx);
@@ -510,6 +511,7 @@ class StockController extends AbstractController
 
         // Fetch granular fields (fallback to 0 if migration hasn't run yet)
         $operatingCostsRaw = max(0, (float)($latestReport['operating_costs'] ?? 0));
+        $depreciationRaw = max(0, (float)($latestReport['depreciation'] ?? 0));
         $capexRaw = max(0, (float)$latestReport['capital_expenditures']);
         $interestExpenseRaw = max(0, (float)$latestReport['interest_expense']);
         $taxPaidRaw = max(0, (float)($latestReport['tax_paid'] ?? 0));
@@ -519,7 +521,12 @@ class StockController extends AbstractController
         // Balance the flows so the Sankey diagram is perfectly aligned. 
         // Sankey diagrams require flow in = flow out.
         $actualOperatingCosts = min($totalRevenue, $operatingCostsRaw);
-        $opProfit = $totalRevenue - $actualOperatingCosts;
+        $ebitda = $totalRevenue - $actualOperatingCosts;
+
+        // Operating costs are the cash cost base, so what is left is EBITDA. Depreciation is the non-cash
+        // charge struck below it; the operating profit that pays interest and tax is what remains.
+        $actualDepreciation = min($ebitda, $depreciationRaw);
+        $opProfit = $ebitda - $actualDepreciation;
         
         $actualInterest = min($opProfit, $interestExpenseRaw);
         $preTax = $opProfit - $actualInterest;
@@ -535,6 +542,8 @@ class StockController extends AbstractController
         $nodes = [
             ['name' => 'Total Revenue', 'itemStyle' => ['color' => '#3b82f6']], // blue
             ['name' => 'Operating Costs', 'itemStyle' => ['color' => '#ef4444']], // red
+            ['name' => 'EBITDA', 'itemStyle' => ['color' => '#a78bfa']], // violet
+            ['name' => 'Depreciation', 'itemStyle' => ['color' => '#94a3b8']], // slate (non-cash)
             ['name' => 'Operating Profit', 'itemStyle' => ['color' => '#8b5cf6']], // purple
             ['name' => 'Capital Expenditures', 'itemStyle' => ['color' => '#eab308']], // yellow
             ['name' => 'Interest Expense', 'itemStyle' => ['color' => '#f97316']], // orange
@@ -588,7 +597,9 @@ class StockController extends AbstractController
 
 
         $addLink('Total Revenue', 'Operating Costs', $actualOperatingCosts);
-        $addLink('Total Revenue', 'Operating Profit', $opProfit);
+        $addLink('Total Revenue', 'EBITDA', $ebitda);
+        $addLink('EBITDA', 'Depreciation', $actualDepreciation);
+        $addLink('EBITDA', 'Operating Profit', $opProfit);
         
         $addLink('Operating Profit', 'Interest Expense', $actualInterest);
         $addLink('Operating Profit', 'Pre-Tax Income', $preTax);

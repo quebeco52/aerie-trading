@@ -196,7 +196,8 @@ class StockTracker
                 secularGrowth: $secularGrowth,
                 baselineRoic: (float) ($stock->getBaselineRoic() ?? 0.10),
                 baselineMargin: (float) ($stock->getOperatingMargin() ?? 0.20),
-                accrualsRatio: (float) ($stock->getAccrualsRatio() ?? 0.0)
+                accrualsRatio: (float) ($stock->getAccrualsRatio() ?? 0.0),
+                investedCapitalPerShare: $stock->getInvestedCapital() / max(1.0, (float) $stock->getSharesOutstanding())
             );
 
             // Calculate new price (GBM + SVJJ)

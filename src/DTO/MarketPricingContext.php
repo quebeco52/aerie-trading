@@ -43,6 +43,8 @@ class MarketPricingContext
         public float $secularGrowth = 0.02,
         public float $baselineRoic = 0.10,
         public float $baselineMargin = 0.20,
-        public float $accrualsRatio = 0.0
+        public float $accrualsRatio = 0.0,
+        /** Capital actually employed per share (equity + debt + deferred tax - cash); 0 when the caller has no balance sheet. */
+        public float $investedCapitalPerShare = 0.0
     ) {}
 }

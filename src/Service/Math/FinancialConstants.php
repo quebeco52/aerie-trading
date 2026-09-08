@@ -316,8 +316,8 @@ class FinancialConstants
     // --- Fixed Asset Ledger (PP&E) ---
     /** Accumulated depreciation as a share of gross PP&E at seed; the median US non-financial runs a half-aged plant. */
     public const SEED_ASSET_AGE_RATIO = 0.50;
-    /** Floor on net PP&E as a share of invested capital, so asset-light firms still carry a depreciable base. */
-    public const MIN_PPE_SHARE_OF_CAPITAL = 0.15;
+    /** Viability floor on net PP&E as a share of invested capital. Kept minimal on purpose: a distributor's or staffing firm's capital genuinely IS its working capital, and a larger floor would invent plant the balance sheet cannot fund. */
+    public const MIN_PPE_SHARE_OF_CAPITAL = 0.02;
     /** Floor on the cash share of the structural cost base once depreciation is carved out as its own expense line. */
     public const MIN_CASH_COST_SHARE = 0.40;
 

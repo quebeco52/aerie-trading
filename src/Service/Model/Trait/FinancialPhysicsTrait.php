@@ -201,7 +201,7 @@ trait FinancialPhysicsTrait
     public function getReturnBasisIncome(Stock $stock, float $quarterlyNopat, float $actualTotalNetIncome): float { return $actualTotalNetIncome; }
     public function appliesDistressPremiumToCostOfEquity(): bool { return true; }
     public function shouldForceDeleveragingOnJunkOrHoarding(): bool { return false; }
-    public function calculateStructuralEps(float $bookValuePerShare, float $structuralRoic, float $revenuePerShare, float $riskFreeRate): float
+    public function calculateStructuralEps(float $bookValuePerShare, float $structuralRoic, float $revenuePerShare, float $riskFreeRate, ?float $investedCapitalPerShare = null): float
     {
         return $bookValuePerShare * $structuralRoic;
     }

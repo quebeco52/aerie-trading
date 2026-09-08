@@ -96,6 +96,7 @@ class CapitalAllocationEngine
             'dividend_paid' => $ctx->newDividend,
             'total_paid' => $ctx->totalPaid,
             'total_cash_spent' => $ctx->totalCashSpent,
+            'equity_raised' => $ctx->equityRaised,
             'bank_apy' => $ctx->bankApy,
             'organic_capex' => $ctx->organicCapex,
             'events' => $ctx->events

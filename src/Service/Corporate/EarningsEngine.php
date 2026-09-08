@@ -202,11 +202,35 @@ class EarningsEngine
             return;
         }
 
-        // Working capital is normally persisted by the first cash-flow pass; before that, estimate it the
-        // same way that pass will, so the seed is not thrown off by a missing balance.
-        $netWorkingCapital = $stock->getNetWorkingCapital() !== null
-            ? (float) $stock->getNetWorkingCapital()
-            : $ctx->strategy->getWorkingCapitalIntensity($stock) * (float) $stock->getTotalRevenue();
+        // The plant is what invested capital is made of once working capital, goodwill and construction
+        // are taken out, so the working capital ledger has to exist BEFORE the plant is sized. Seeding it
+        // here with the same day counts the quarterly roll-forward uses means the opening balance sheet
+        // balances to the dollar; estimating it any other way left a permanent hole the size of the
+        // difference between the estimate and what the ledger then built.
+        if (!$stock->hasWorkingCapitalLedger()) {
+            // A firm that has never reported may carry no revenue figure at all. Seeding the trade cycle
+            // against zero would open an empty ledger and then charge the whole first quarter's working
+            // capital to cash as if it had been built from nothing. Structural revenue is what capital can
+            // generate at its DuPont turnover, the same anchor the revenue engine uses, so the opening
+            // balances land where the first quarter will actually put them.
+            $recordedRevenue = max(0.0, (float) $stock->getTotalRevenue());
+            $structuralRevenue = $recordedRevenue > 0.0
+                ? $recordedRevenue
+                : abs($ctx->investedCapital) * $this->resolveAnnualCapitalTurnover($ctx);
+            $structuralCashCosts = $structuralRevenue * (1.0 - $ctx->stableMargin);
+            $this->corporateMetrics->buildWorkingCapitalBalances(
+                $stock,
+                $ctx->strategy->getWorkingCapitalDays($stock),
+                $structuralRevenue,
+                $structuralCashCosts
+            );
+
+            // A going concern already carries a credit-loss allowance against its receivables. Opening the
+            // ledger with none would have every firm book a provision on its first report to build one,
+            // a phantom miss that lands on the whole market in the same earnings season.
+            $this->corporateMetrics->seedReceivablesAllowance($stock, $ctx->macroState->corporateDefaultRateEma);
+        }
+        $netWorkingCapital = (float) $stock->getNetWorkingCapital();
 
         $this->corporateMetrics->seedFixedAssetLedger(
             $stock,
@@ -779,8 +803,13 @@ class EarningsEngine
         // organic expansion, net financing is debt raised plus shares issued net of dividends and buybacks.
         $ctx->investingCashFlow -= $organicCapex;
         $sharesDelta = ((float) $ctx->allocation['new_shares']) - $ctx->sharesOutstanding;
+        // Every financing flow is booked at the cash that actually moved. Valuing the share count change at
+        // the screen price overstated an emergency raise by its discount (shares go out at 90 cents on the
+        // dollar) and would have left the cash flow statement failing to reconcile in exactly the quarters
+        // a reader most needs it to.
         $ctx->financingCashFlow = ((float) $stock->getWholesaleDebt() - $debtBeforeAllocation)
-            + ($sharesDelta * $currentPrice)
+            + (float) ($ctx->allocation['equity_raised'] ?? 0.0)
+            - (float) ($ctx->allocation['total_cash_spent'] ?? 0.0)
             - (float) ($ctx->allocation['total_paid'] ?? 0.0);
         $ctx->lifecycleStage = \App\Data\LifecycleStage::fromCashFlowSigns(
             $ctx->operatingCashFlow > 0.0,
@@ -803,9 +832,18 @@ class EarningsEngine
         $ctx->totalReportedCapex = ($actualAnnualCapEx / 4.0) + $reportedOrganicCapex;
         $ctx->trueQuarterlyFcf = ($trueAnnualFcfPerShare * $ctx->sharesOutstanding) / 4.0;
 
-        // Sloan (1996) Accruals Anomaly: Accruals = (Net Income - FCF) / Total Assets
-        $totalAssets = max(FinancialConstants::MIN_OPERATING_BASE_CASH, (float) $stock->getTotalEquity() + (float) $stock->getTotalDebt());
-        $quarterlyAccruals = $ctx->actualQuarterlyNetIncome - $ctx->trueQuarterlyFcf;
+        // Sloan (1996) accruals: the gap between the profit a firm reports and the cash its operations
+        // produced, scaled by its assets. Sloan's numerator is net income less cash from OPERATIONS. It
+        // used to be measured against free cash flow after capex, which flagged every heavy reinvestor as
+        // low-quality earnings and docked its fair-value multiple for building plant — the opposite of
+        // what the anomaly is about. Now that operating cash flow is a real statement line it is used
+        // directly, and total assets come from the balance sheet where one exists. A balance-sheet
+        // business keeps no plant ledger, and for it equity plus funding IS total assets by identity.
+        $totalAssets = $stock->getGrossPpe() !== null
+            ? $stock->getTotalAssets($this->corporateMetrics->calculateLeaseLiability((float) $stock->getTotalRevenue(), $ctx->strategy->getLeaseIntensity()))
+            : (float) $stock->getTotalEquity() + (float) $stock->getTotalDebt();
+        $totalAssets = max(FinancialConstants::MIN_OPERATING_BASE_CASH, $totalAssets);
+        $quarterlyAccruals = $ctx->actualQuarterlyNetIncome - $ctx->operatingCashFlow;
         $accrualsRatio = ($quarterlyAccruals * 4.0) / $totalAssets;
         $stock->setAccrualsRatio($accrualsRatio);
     }
@@ -905,13 +943,13 @@ class EarningsEngine
         $dpo = $shiftDays($baseDays['dpo'] ?? 0.0, $shifts['dpo'] ?? 0.0);
 
         $annualizedCosts = max(0.0, ($ctx->actualVariableCosts + $ctx->fixedCosts) / max(0.001, $ctx->dt));
-        $perDay = FinancialConstants::DAYS_PER_YEAR;
 
-        $stock->setReceivables((string) max(0.0, $annualizedRevenue * $dso / $perDay));
-        $stock->setInventory((string) max(0.0, $annualizedCosts * $dio / $perDay));
-        $stock->setPayables((string) max(0.0, $annualizedCosts * $dpo / $perDay));
-
-        return (float) $stock->getNetWorkingCapital();
+        return $this->corporateMetrics->buildWorkingCapitalBalances(
+            $stock,
+            ['dso' => $dso, 'dio' => $dio, 'dpo' => $dpo],
+            $annualizedRevenue,
+            $annualizedCosts
+        );
     }
 
     /**

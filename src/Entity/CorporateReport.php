@@ -207,6 +207,10 @@ class CorporateReport
     #[ORM\Column(length: 16, nullable: true)]
     private ?string $lifecycleStage = null;
 
+    /** Accumulated depreciation over gross PP&E: the average age of the plant, 0 new to 1 fully written off. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 6, scale: 4, nullable: true)]
+    private ?string $assetAge = null;
+
     public function __construct()
     {
         $this->recordedAt = new \DateTime();
@@ -838,6 +842,17 @@ class CorporateReport
     public function setLifecycleStage(?string $lifecycleStage): static
     {
         $this->lifecycleStage = $lifecycleStage;
+        return $this;
+    }
+
+    public function getAssetAge(): ?string
+    {
+        return $this->assetAge;
+    }
+
+    public function setAssetAge(?string $assetAge): static
+    {
+        $this->assetAge = $assetAge;
         return $this;
     }
 }

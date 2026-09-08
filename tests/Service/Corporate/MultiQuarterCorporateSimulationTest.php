@@ -275,17 +275,26 @@ class MultiQuarterCorporateSimulationTest extends TestCase
             $this->assertLessThanOrEqual($gross, $accumulated, "Accumulated depreciation exceeded gross cost in Q{$quarter} for {$industry}");
             $this->assertGreaterThanOrEqual(0.0, $accumulated, "Accumulated depreciation went negative in Q{$quarter} for {$industry}");
 
-            // Net book value is carved out of invested capital, so it can never exceed it.
-            $investedCapital = abs($stock->getInvestedCapital());
-            $this->assertLessThanOrEqual(
-                $investedCapital * 1.05,
-                $netPpe,
-                "Net PP&E outgrew invested capital in Q{$quarter} for {$industry}"
-            );
             $this->assertGreaterThan(
                 0.0,
                 $netPpe,
                 "Net PP&E fully depreciated away in Q{$quarter} for {$industry}"
+            );
+
+            // The balance sheet balances: every asset is claimed by a creditor or a shareholder and nothing
+            // is left over. This is stronger than any bound on the plant alone, and it is the only test that
+            // catches a ledger drifting free of the capital it was carved out of. (A negative-working-capital
+            // business legitimately carries more plant than invested capital, because its suppliers fund
+            // part of it, which is why a plant-to-capital bound was the wrong invariant here.)
+            $strategy = Sectors::getBusinessModelStrategy($businessModel);
+            $lease = (new CorporateMetrics())->calculateLeaseLiability((float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity());
+            $assets = $stock->getTotalAssets($lease);
+            $claims = $stock->getTotalLiabilities($lease) + (float) $stock->getTotalEquity();
+            $this->assertEqualsWithDelta(
+                $assets,
+                $claims,
+                max(1.0, $assets * 1e-6),
+                "Balance sheet failed to balance in Q{$quarter} for {$industry}"
             );
         }
     }

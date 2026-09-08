@@ -429,6 +429,7 @@ class TreasuryEngine
 
                 $stock->setSharesOutstanding((string) ($ctx->sharesOutstanding + $sharesIssued));
                 $ctx->newTreasury += $targetRaise;
+                $ctx->equityRaised += $targetRaise;
 
                 $currentEquityStr = $this->formatBc($stock->getTotalEquity());
                 $stock->setTotalEquity(\bcadd($currentEquityStr, $this->formatBc($targetRaise), 4));

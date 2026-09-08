@@ -76,6 +76,8 @@ class CapitalAllocationContext
     public bool $debtActionTaken = false;
     
     public float $totalCashSpent = 0.0; // buybacks
+    /** Cash actually received from shares issued this quarter, net of any offering discount. */
+    public float $equityRaised = 0.0;
     public float $newShares = 0.0;
     
     // Market Events

@@ -112,6 +112,10 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
     let fcfData = [];
     let fcfConversionData = [];
     let retainedCashData = [];
+    // The three statement sections, now real lines rather than reconstructions.
+    let operatingCashFlowData = [];
+    let investingCashFlowData = [];
+    let financingCashFlowData = [];
 
     // Sector Arrays
     let interestIncomeData = [];
@@ -201,6 +205,9 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
             fcfData.push(fcf);
             fcfConversionData.push(inc > 0 ? (fcf / inc) * 100 : (inc < 0 && fcf < 0 ? -100 : 0));
             retainedCashData.push(fcf - divPaid - buybackData[buybackData.length - 1]);
+            operatingCashFlowData.push(parseFloat(report.operating_cash_flow ?? 0));
+            investingCashFlowData.push(parseFloat(report.investing_cash_flow ?? 0));
+            financingCashFlowData.push(parseFloat(report.financing_cash_flow ?? 0));
 
             interestIncomeData.push(intInc);
             interestExpenseData.push(intExp);
@@ -238,9 +245,13 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
             let sumDiv = 0;
             let sumBuy = 0;
             let sumFcf = 0;
+            let sumOcf = 0, sumIcf = 0, sumFinCf = 0;
             for (let j = 0; j < 4; j++) {
                 if (i - j >= 0) {
                     let rep = rawReports[i - j];
+                    sumOcf += parseFloat(rep.operating_cash_flow ?? 0);
+                    sumIcf += parseFloat(rep.investing_cash_flow ?? 0);
+                    sumFinCf += parseFloat(rep.financing_cash_flow ?? 0);
                     sumRev += parseFloat(rep.revenue || 0);
                     sumInc += parseFloat(rep.net_income || 0);
                     sumIntExp += parseFloat(rep.interest_expense || 0);
@@ -325,6 +336,9 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
             fcfData.unshift(fcf);
             fcfConversionData.unshift(sumInc > 0 ? (fcf / sumInc) * 100 : (sumInc < 0 && fcf < 0 ? -100 : 0));
             retainedCashData.unshift(fcf - sumDiv - sumBuy);
+            operatingCashFlowData.unshift(sumOcf);
+            investingCashFlowData.unshift(sumIcf);
+            financingCashFlowData.unshift(sumFinCf);
 
             let sumIntInc = 0;
             for (let j = 0; j < 4; j++) {
@@ -1292,9 +1306,27 @@ function renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retained
                 },
                 {
                     type: 'bar',
-                    label: 'Net Retained Cash',
-                    data: retainedCashData,
-                    backgroundColor: 'rgba(56, 189, 248, 0.6)',
+                    label: 'Operating CF',
+                    data: operatingCashFlowData,
+                    backgroundColor: 'rgba(56, 189, 248, 0.65)',
+                    borderRadius: 4,
+                    yAxisID: 'y',
+                    order: 1
+                },
+                {
+                    type: 'bar',
+                    label: 'Investing CF',
+                    data: investingCashFlowData,
+                    backgroundColor: 'rgba(234, 179, 8, 0.65)',
+                    borderRadius: 4,
+                    yAxisID: 'y',
+                    order: 1
+                },
+                {
+                    type: 'bar',
+                    label: 'Financing CF',
+                    data: financingCashFlowData,
+                    backgroundColor: 'rgba(217, 70, 239, 0.65)',
                     borderRadius: 4,
                     yAxisID: 'y',
                     order: 1
@@ -1799,14 +1831,23 @@ function renderFinancialStatements(latest) {
     if (!latest) return;
 
     const num = (k) => parseFloat(latest[k] || 0);
+    const hasCashFlow = latest.operating_cash_flow !== null && latest.operating_cash_flow !== undefined;
+    // A balance-sheet business (bank, insurer, broker) has no modelled asset side: its loan book is not a
+    // ledger here, so the report carries no total-assets figure and the sheet is not drawn for it.
+    const hasAssetSide = latest.total_assets !== null && latest.total_assets !== undefined && num('total_assets') > 0;
     const totalAssets = num('total_assets');
 
     // A report written before these columns existed has nothing to show; leave the panel hidden.
     const panel = document.getElementById('financial-statements-panel');
-    if (panel) panel.classList.toggle('hidden', !(totalAssets > 0));
-    if (!(totalAssets > 0)) return;
+    if (panel) panel.classList.toggle('hidden', !hasCashFlow);
+    if (!hasCashFlow) return;
 
-    renderStatementRows('balance-sheet-rows', [
+    const sheetColumn = document.getElementById('balance-sheet-column');
+    if (sheetColumn) sheetColumn.classList.toggle('hidden', !hasAssetSide);
+    const sheetNote = document.getElementById('balance-sheet-unavailable');
+    if (sheetNote) sheetNote.classList.toggle('hidden', hasAssetSide);
+
+    if (hasAssetSide) renderStatementRows('balance-sheet-rows', [
         { label: 'Cash & equivalents', value: num('treasury'), indent: true },
         { label: 'Receivables, net', value: num('receivables'), indent: true },
         { label: 'Inventory', value: num('inventory'), indent: true },
@@ -1825,6 +1866,12 @@ function renderFinancialStatements(latest) {
         { label: 'Total liabilities', value: num('total_liabilities'), total: true },
         { label: 'Shareholders equity', value: num('equity'), total: true },
     ]);
+
+    const ageEl = document.getElementById('asset-age-badge');
+    if (ageEl) {
+        const age = latest.asset_age !== null && latest.asset_age !== undefined ? parseFloat(latest.asset_age) : NaN;
+        ageEl.innerText = isFinite(age) ? `${(age * 100).toFixed(0)}% depreciated` : '-';
+    }
 
     renderStatementRows('cash-flow-rows', [
         { label: 'Net income', value: num('net_income'), signed: true, indent: true },

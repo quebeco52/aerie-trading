@@ -297,6 +297,44 @@ class EarningsReportSubscriberTest extends TestCase
         );
     }
 
+    /**
+     * A bank's loan book is not modelled as an asset ledger, so its report must not claim a total-assets
+     * figure: publishing one would show a sheet out by the whole deposit base. Liabilities are real either way.
+     */
+    public function testBalanceSheetBusinessReportsNoAssetSide(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('BNKR');
+        $stock->setIndustry('Banks - Diversified');
+        $stock->setSharesOutstanding('10000000');
+        $stock->setTotalRevenue('40000000.0000');
+        $stock->setTotalEquity('50000000.0000');
+        $stock->setWholesaleDebt('10000000.0000');
+        $stock->setCustomerDeposits('300000000.00');
+        $stock->setCorporateTreasury('5000000.0000');
+        // No plant ledger: gross PP&E stays null for a financial model.
+
+        $strategy = $this->createMock(BusinessModelInterface::class);
+        $strategy->method('getLeaseIntensity')->willReturn(0.0);
+
+        $ctx = new EarningsSimulationContext(stock: $stock, macroState: new MacroStateDTO(), strategy: $strategy, businessModel: 'commercial_bank');
+        $ctx->actualRevenue = 10000000.0;
+        $ctx->streamRevenue = ['net_interest_income' => 10000000.0];
+        $ctx->operatingCashFlow = 1000000.0;
+        $ctx->debtMetrics = new \App\DTO\DebtMetricsDTO(1.0, 0.04, 0.04, 0.01, 0.04, 0.04, 1.0, 1.0, 0.0, 1.0);
+
+        $this->reportRepository->method('findOneBy')->willReturn(null);
+        $persisted = null;
+        $this->entityManager->expects($this->once())->method('persist')->willReturnCallback(function ($r) use (&$persisted) { $persisted = $r; });
+
+        $this->subscriber->onEarningsReported(new EarningsReportedEvent($ctx));
+
+        $this->assertNull($persisted->getTotalAssets(), 'no asset side is modelled for a bank');
+        $this->assertNull($persisted->getAssetAge());
+        $this->assertGreaterThan(300000000.0, (float) $persisted->getTotalLiabilities(), 'deposits are a real liability');
+        $this->assertNotNull($persisted->getOperatingCashFlow(), 'the cash flow statement is still reported');
+    }
+
     public function testBuildsCommercialBankStreamDetails(): void
     {
         $stock = new Stock();

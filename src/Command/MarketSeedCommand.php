@@ -154,10 +154,19 @@ class MarketSeedCommand extends Command
                 // Open the fixed-asset ledger so the very first earnings report depreciates a real plant
                 // rather than falling back to the capital proxy. Financial balance sheets keep no plant.
                 if (!$isFinancial) {
-                    \App\Service\Math\CorporateMetrics::getInstance()->seedFixedAssetLedger(
+                    $metrics = \App\Service\Math\CorporateMetrics::getInstance();
+                    $metrics->buildWorkingCapitalBalances(
+                        $stock,
+                        $strategy->getWorkingCapitalDays($stock),
+                        $revenue,
+                        $revenue * (1.0 - $margin)
+                    );
+                    $metrics->seedReceivablesAllowance($stock, $dummyMacro->corporateDefaultRateEma);
+                    $openingNwc = (float) $stock->getNetWorkingCapital();
+                    $metrics->seedFixedAssetLedger(
                         $stock,
                         $investedCapital,
-                        $strategy->getWorkingCapitalIntensity($stock) * $revenue,
+                        $openingNwc,
                         (float) $stock->getGoodwill(),
                         $stock->getTotalCipAmount(),
                         (float) ($stockData['asset_age_ratio'] ?? \App\Service\Math\FinancialConstants::SEED_ASSET_AGE_RATIO)
@@ -193,7 +202,8 @@ class MarketSeedCommand extends Command
                     businessModel: $businessModel,
                     liveCostOfEquity: $debtHealth->costOfEquity ?? 0.10,
                     baselineRoic: $impliedPricingRoic,
-                    baselineMargin: (float) ($stockData['operating_margin'] ?? 0.20)
+                    baselineMargin: (float) ($stockData['operating_margin'] ?? 0.20),
+                    investedCapitalPerShare: $stock->getInvestedCapital() / max(1.0, (float) $stock->getSharesOutstanding())
                 );
 
                 $marketCalc = $this->marketEngine->calculateNextPrice($pricingCtx);

@@ -59,6 +59,8 @@
                         <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="roic" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">ROIC</th>
                         <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="equity" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Equity</th>
                         <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="de" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">D/E</th>
+                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="ndebt" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort" title="Net debt over annualized EBITDA">ND/EBITDA</th>
+                        <th scope="col" class="px-4 py-3 text-right cursor-pointer select-none hover:text-primary transition-colors" data-col="fcfconv" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort" title="Free cash flow over trailing net income">FCF Conv.</th>
                         <th class="px-5 py-3 text-right">Action</th>
                     </tr>
                 </thead>
@@ -89,6 +91,12 @@
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.equity }}">${{ stock.equity|format_large }}</td>
                             <td class="px-4 py-2.5 font-mono tabular-nums text-right text-on-surface" data-value="{{ stock.debtToEquity ?? 0 }}">
                                 {{ stock.debtToEquity is not null ? stock.debtToEquity|number_format(2) ~ 'x' : '-' }}
+                            </td>
+                            <td class="px-4 py-2.5 font-mono tabular-nums text-right {{ stock.netDebtToEbitda is not null and stock.netDebtToEbitda > 4 ? 'text-tertiary' : 'text-on-surface' }}" data-value="{{ stock.netDebtToEbitda ?? 0 }}">
+                                {{ stock.netDebtToEbitda is not null ? stock.netDebtToEbitda|number_format(2) ~ 'x' : '-' }}
+                            </td>
+                            <td class="px-4 py-2.5 font-mono tabular-nums text-right {{ stock.fcfConversion is not null and stock.fcfConversion < 0.8 ? 'text-tertiary' : 'text-on-surface' }}" data-value="{{ stock.fcfConversion ?? 0 }}">
+                                {{ stock.fcfConversion is not null ? (stock.fcfConversion * 100)|number_format(0) ~ '%' : '-' }}
                             </td>
                             <td class="px-5 py-2.5 text-right">
                                 <a href="/stock/{{ stock.ticker }}" class="relative z-10 inline-flex items-center px-2.5 py-0.5 rounded bg-surface-container hover:bg-primary/20 text-primary border border-primary/20 text-xs font-semibold transition-colors">

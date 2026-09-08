@@ -606,6 +606,63 @@ class DebtEngineTest extends TestCase
         );
     }
 
+    /**
+     * Once a firm carries a real trade ledger, Altman's working capital term reads it: payables are a
+     * current claim that the old cash-minus-a-fifth-of-debt proxy could not see at all.
+     */
+    public function testAltmanWorkingCapitalReadsTheRealTradeLedgerWhenOneExists(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+
+        $build = function (string $payables): Stock {
+            $stock = new Stock();
+            $stock->setTicker('ALTM');
+            $stock->setIndustry('Auto Manufacturers');
+            $stock->setTotalEquity('20000000000.00');
+            $stock->setWholesaleDebt('10000000000.00');
+            $stock->setCorporateTreasury('3000000000.00');
+            $stock->setRetainedEarnings('5000000000.00');
+            $stock->setSharesOutstanding('1000000000');
+            $stock->setTotalRevenue('40000000000.00');
+            $stock->setGrossPpe('30000000000.00');
+            $stock->setAccumulatedDepreciation('12000000000.00');
+            $stock->setReceivables('5000000000.00');
+            $stock->setInventory('4000000000.00');
+            $stock->setPayables($payables);
+
+            return $stock;
+        };
+
+        $lean = $engine->calculateAltmanZScore($build('1000000000.00'), 3_000_000_000.0, 40_000_000_000.0, 30.0);
+        $stretched = $engine->calculateAltmanZScore($build('6000000000.00'), 3_000_000_000.0, 40_000_000_000.0, 30.0);
+
+        $this->assertLessThan($lean['z_score'], $stretched['z_score'], 'more payables must mean less working capital and a lower score');
+    }
+
+    /**
+     * Before the ledger exists the score falls back to the proxies it always used, so a freshly seeded
+     * or pre-migration firm is not scored on balances it does not yet carry.
+     */
+    public function testAltmanFallsBackToProxiesWithoutATradeLedger(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
+
+        $stock = new Stock();
+        $stock->setTicker('NOLG');
+        $stock->setIndustry('Auto Manufacturers');
+        $stock->setTotalEquity('20000000000.00');
+        $stock->setWholesaleDebt('10000000000.00');
+        $stock->setCorporateTreasury('3000000000.00');
+        $stock->setRetainedEarnings('5000000000.00');
+        $stock->setSharesOutstanding('1000000000');
+        $stock->setTotalRevenue('40000000000.00');
+
+        $this->assertFalse($stock->hasWorkingCapitalLedger());
+        $result = $engine->calculateAltmanZScore($stock, 3_000_000_000.0, 40_000_000_000.0, 30.0);
+        $this->assertIsFloat($result['z_score']);
+        $this->assertContains($result['zone'], ['Safe', 'Grey', 'Distress']);
+    }
+
     public function testIssueDebtUpdatesWholesaleBalanceAndWeightedHistoricalRate(): void
     {
         $realMath = new MathUtility();

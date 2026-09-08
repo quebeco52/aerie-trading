@@ -510,9 +510,22 @@ class DebtEngine
             ];
         }
 
-        // Estimate Working Capital
-        $currentLiabilities = $debt * 0.20;
-        $workingCapital = $treasury - $currentLiabilities;
+        if ($stock->hasWorkingCapitalLedger()) {
+            // The real current balances. Debt due within a year is what the maturity ladder says comes
+            // due in the next four quarters; the rest is long-term and is not a current claim.
+            $currentAssets = $treasury + $stock->getNetReceivables() + (float) ($stock->getInventory() ?? 0.0);
+            $currentDebt = (float) $stock->getWholesaleDebt() * min(1.0, $strategy->getDebtMaturityRolloverRate() * 4.0);
+            $currentLiabilities = (float) ($stock->getPayables() ?? 0.0) + $currentDebt;
+            $workingCapital = $currentAssets - $currentLiabilities;
+
+            if ($stock->getGrossPpe() !== null) {
+                $totalAssets = max(1.0, $stock->getTotalAssets($leaseLiability));
+            }
+        } else {
+            // No trade ledger yet: fall back to the proxies the model started with.
+            $currentLiabilities = $debt * 0.20;
+            $workingCapital = $treasury - $currentLiabilities;
+        }
 
         // The 4 Z''-Score Ratios (X5 Revenue/Assets is removed for non-manufacturing)
         $x1 = $workingCapital / $totalAssets;

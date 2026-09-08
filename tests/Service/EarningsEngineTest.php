@@ -128,6 +128,25 @@ class EarningsEngineTest extends TestCase
 
         $this->corporateMetricsMock = $this->createStub(CorporateMetrics::class);
         $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(10000000.0);
+        // The ledger builders are pure arithmetic that writes balances onto the stock. A stub that returns
+        // nothing would leave every firm here with no working capital, no plant and no lease, and the
+        // tests below that measure working capital strain would be measuring an empty ledger.
+        $realMetrics = new CorporateMetrics();
+        $this->corporateMetricsMock->method('buildWorkingCapitalBalances')->willReturnCallback(
+            fn($stock, $days, $rev, $costs) => $realMetrics->buildWorkingCapitalBalances($stock, $days, $rev, $costs)
+        );
+        $this->corporateMetricsMock->method('seedFixedAssetLedger')->willReturnCallback(
+            fn($stock, $ic, $nwc, $gw, $cip, $age = \App\Service\Math\FinancialConstants::SEED_ASSET_AGE_RATIO) => $realMetrics->seedFixedAssetLedger($stock, $ic, $nwc, $gw, $cip, $age)
+        );
+        $this->corporateMetricsMock->method('seedReceivablesAllowance')->willReturnCallback(
+            fn($stock, $rate) => $realMetrics->seedReceivablesAllowance($stock, $rate)
+        );
+        $this->corporateMetricsMock->method('calculateLeaseLiability')->willReturnCallback(
+            fn($rev, $intensity) => $realMetrics->calculateLeaseLiability($rev, $intensity)
+        );
+        $this->corporateMetricsMock->method('getIndustryDepreciationRate')->willReturnCallback(
+            fn($industry) => $realMetrics->getIndustryDepreciationRate($industry)
+        );
 
         $this->narrativeEngineMock = $this->createStub(NarrativeEngine::class);
         $this->eventDispatcherMock = $this->createMock(EventDispatcherInterface::class);
