@@ -8,17 +8,21 @@ use App\Entity\Stock;
 use App\Entity\StockEvent;
 use App\Service\District\DistrictEventFeed;
 use App\Service\Event\EventPresenter;
+use Doctrine\ORM\Query;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
+use Doctrine\ORM\QueryBuilder;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Pins the district event backfill's one job: fetch each tenant's recent history and hand it to
- * the real App\Service\Event\EventPresenter, never a parallel presentation of its own — so a
- * district badge and the stock page's own event feed always agree on badge/icon/colour for the
- * same event.
+ * Pins the district event backfill's job: fetch every tenant's recent history in one query and
+ * hand each event to the real App\Service\Event\EventPresenter, never a parallel presentation of
+ * its own — so a district badge and the stock page's own event feed always agree on
+ * badge/icon/colour for the same event. One query rather than one per tenant is what
+ * StockEvent's (stock_id, recorded_at) index exists to make cheap — see recentEventsByTicker()'s
+ * own docblock.
  */
 #[AllowMockObjectsWithoutExpectations]
 class DistrictEventFeedTest extends TestCase
@@ -27,6 +31,9 @@ class DistrictEventFeedTest extends TestCase
 
     /** @var EntityRepository<StockEvent>&MockObject */
     private EntityRepository&MockObject $repository;
+    private QueryBuilder&MockObject $queryBuilder;
+    /** @var Query<int, mixed>&MockObject */
+    private Query&MockObject $query;
     private DistrictEventFeed $feed;
 
     protected function setUp(): void
@@ -34,6 +41,16 @@ class DistrictEventFeedTest extends TestCase
         $this->entityManager = $this->createMock(EntityManagerInterface::class);
         $this->repository = $this->createMock(EntityRepository::class);
         $this->entityManager->method('getRepository')->willReturn($this->repository);
+
+        $this->queryBuilder = $this->createMock(QueryBuilder::class);
+        $this->repository->method('createQueryBuilder')->willReturn($this->queryBuilder);
+        $this->queryBuilder->method('andWhere')->willReturn($this->queryBuilder);
+        $this->queryBuilder->method('setParameter')->willReturn($this->queryBuilder);
+        $this->queryBuilder->method('orderBy')->willReturn($this->queryBuilder);
+        $this->queryBuilder->method('addOrderBy')->willReturn($this->queryBuilder);
+
+        $this->query = $this->createMock(Query::class);
+        $this->queryBuilder->method('getQuery')->willReturn($this->query);
 
         $this->feed = new DistrictEventFeed($this->entityManager, new EventPresenter());
     }
@@ -47,9 +64,10 @@ class DistrictEventFeedTest extends TestCase
         return $stock;
     }
 
-    private function makeEvent(string $type, string $description, ?float $changePercent = null): StockEvent
+    private function makeEvent(Stock $stock, string $type, string $description, ?float $changePercent = null): StockEvent
     {
         $event = new StockEvent();
+        $event->setStock($stock);
         $event->setEventType($type);
         $event->setDescription($description);
         if ($changePercent !== null) {
@@ -67,9 +85,9 @@ class DistrictEventFeedTest extends TestCase
     public function testKeysResultByTickerAndPresentsEachEvent(): void
     {
         $stock = $this->makeStock('LAKE');
-        $shockEvent = $this->makeEvent('SHOCK', 'A sudden liquidity event rattled the row.', -4.2);
+        $shockEvent = $this->makeEvent($stock, 'SHOCK', 'A sudden liquidity event rattled the row.', -4.2);
 
-        $this->repository->method('findBy')->willReturn([$shockEvent]);
+        $this->query->method('getResult')->willReturn([$shockEvent]);
 
         $result = $this->feed->recentEventsByTicker([$stock]);
 
@@ -86,10 +104,10 @@ class DistrictEventFeedTest extends TestCase
     public function testFlattensRecordedAtToAPlainStringForJsonTransport(): void
     {
         $stock = $this->makeStock('SWAN');
-        $event = $this->makeEvent('BANKRUPTCY', 'Filed for liquidation.');
+        $event = $this->makeEvent($stock, 'BANKRUPTCY', 'Filed for liquidation.');
         $event->setRecordedAt(new \DateTime('2026-03-14 09:30:00'));
 
-        $this->repository->method('findBy')->willReturn([$event]);
+        $this->query->method('getResult')->willReturn([$event]);
 
         $result = $this->feed->recentEventsByTicker([$stock]);
 
@@ -97,34 +115,41 @@ class DistrictEventFeedTest extends TestCase
         $this->assertSame('2026-03-14 09:30', $result['SWAN'][0]['recordedAt']);
     }
 
-    public function testQueriesEachStockIndependentlyOrderedNewestFirstWithACap(): void
+    public function testFetchesAllStocksInOneQuery(): void
     {
         $lake = $this->makeStock('LAKE');
         $swan = $this->makeStock('SWAN');
 
-        $calls = [];
-        $this->repository
-            ->method('findBy')
-            ->willReturnCallback(function ($criteria, $orderBy, $limit) use (&$calls) {
-                $calls[] = [$criteria, $orderBy, $limit];
-
-                return [];
-            });
+        $this->repository->expects($this->once())->method('createQueryBuilder');
+        $this->query->method('getResult')->willReturn([]);
 
         $this->feed->recentEventsByTicker([$lake, $swan]);
+    }
 
-        $this->assertCount(2, $calls, 'Expected one findBy() call per stock');
-        foreach ($calls as [$criteria, $orderBy, $limit]) {
-            $this->assertSame(['recordedAt' => 'DESC'], $orderBy);
-            $this->assertIsInt($limit);
-            $this->assertGreaterThan(0, $limit);
+    public function testGroupsRowsByTickerAndCapsAtEventsPerTicker(): void
+    {
+        $lake = $this->makeStock('LAKE');
+        $swan = $this->makeStock('SWAN');
+
+        // Newest-first per ticker, as the query orders — 7 for LAKE (one past the cap of 6), 1 for SWAN.
+        $rows = [];
+        for ($i = 0; $i < 7; $i++) {
+            $rows[] = $this->makeEvent($lake, 'EARNINGS', "Lake report {$i}");
         }
+        $rows[] = $this->makeEvent($swan, 'EARNINGS', 'Swan report');
+
+        $this->query->method('getResult')->willReturn($rows);
+
+        $result = $this->feed->recentEventsByTicker([$lake, $swan]);
+
+        $this->assertCount(6, $result['LAKE'], 'Should cap at EVENTS_PER_TICKER even though 7 rows were returned for LAKE');
+        $this->assertCount(1, $result['SWAN']);
     }
 
     public function testEmptyHistoryYieldsAnEmptyListNotAMissingKey(): void
     {
         $stock = $this->makeStock('ROOK');
-        $this->repository->method('findBy')->willReturn([]);
+        $this->query->method('getResult')->willReturn([]);
 
         $result = $this->feed->recentEventsByTicker([$stock]);
 

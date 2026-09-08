@@ -454,4 +454,24 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
             'is_mega_hoarder' => false,
         ];
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'corporate_default_rate_ema',
+            'inflation_ema',
+            'market_volatility_ema',
+            'output_gap_ema',
+            'policy_rate_ema',
+            'yield_10y_ema',
+            'yield_2y_ema',
+            'yield_5y_ema',
+        ];
+    }
 }

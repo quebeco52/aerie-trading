@@ -420,4 +420,28 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $bankEquityLimit = $targetDebtTolerance > 0.0 ? $targetDebtTolerance : $this->getWholesaleLeverageLimit();
         return $currentDebtRatio < ($bankEquityLimit * 0.90);
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'consumer_sentiment_index_ema',
+            'inflation_ema',
+            'interbank_liquidity_spread_ema',
+            'macro_credit_spread_ema',
+            'policy_rate_ema',
+            'recession_probability_ema',
+            'retail_default_rate_ema',
+            'sloos_tightening_index_ema',
+            'unemployment_rate_ema',
+            'yield_10y_ema',
+            'yield_2y_ema',
+            'yield_5y_ema',
+        ];
+    }
 }

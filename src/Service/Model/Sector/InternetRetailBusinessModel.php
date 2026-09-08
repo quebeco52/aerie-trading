@@ -245,4 +245,22 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
             streamRevenue: $streamRevenues,
         );
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+            'exchange_rate_index_ema',
+            'freight_rate_index_ema',
+            'inflation_ema',
+            'output_gap_ema',
+            'producer_price_inflation_ema',
+            'unemployment_rate_ema',
+        ]));
+    }
 }

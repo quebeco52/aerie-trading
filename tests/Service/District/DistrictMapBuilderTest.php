@@ -5,20 +5,46 @@ declare(strict_types=1);
 namespace App\Tests\Service\District;
 
 use App\Data\DistrictMap;
+use App\Data\Sectors;
+use App\DTO\DistrictPlotDTO;
 use App\Entity\Stock;
+use App\Service\District\DistrictConduitResolver;
 use App\Service\District\DistrictMapBuilder;
+use App\Service\District\DistrictWardComposer;
+use App\Service\Model\BusinessModelInterface;
+use App\Service\Model\BusinessModelRegistryInterface;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Verifies the presentation mapping from company fundamentals onto ward facades.
+ * Verifies the presentation mapping from company fundamentals onto ward facades and the
+ * institutions derived from their conduits.
  */
 class DistrictMapBuilderTest extends TestCase
 {
     private DistrictMapBuilder $builder;
+    private DistrictWardComposer $composer;
 
     protected function setUp(): void
     {
-        $this->builder = new DistrictMapBuilder();
+        $registry = new class implements BusinessModelRegistryInterface {
+            public function get(string $identifier): BusinessModelInterface
+            {
+                return Sectors::getBusinessModelStrategy($identifier);
+            }
+
+            public function has(string $identifier): bool
+            {
+                return true;
+            }
+
+            public function all(): array
+            {
+                return [];
+            }
+        };
+
+        $this->builder = new DistrictMapBuilder(new DistrictConduitResolver($registry));
+        $this->composer = new DistrictWardComposer();
     }
 
     private function makeStock(
@@ -27,6 +53,7 @@ class DistrictMapBuilderTest extends TestCase
         float $shares = 1_000_000_000.0,
         string $rating = 'BBB',
         bool $bankrupt = false,
+        string $importance = 'none',
     ): Stock {
         $stock = new Stock();
         $stock->setTicker($ticker);
@@ -36,11 +63,19 @@ class DistrictMapBuilderTest extends TestCase
         $stock->setPrice((string) $price);
         $stock->setSharesOutstanding((string) $shares);
         $stock->setCreditRating($rating);
-        $stock->setSystemicImportance('none');
+        $stock->setSystemicImportance($importance);
         $stock->setBaselineRoe('0.15');
         $stock->setIsBankrupt($bankrupt);
 
         return $stock;
+    }
+
+    /** @param Stock[] $stocks */
+    private function buildPlots(array $stocks): array
+    {
+        $frontage = $this->composer->composeFrontage($stocks);
+
+        return $this->builder->buildWard($frontage['slots'], $stocks);
     }
 
     public function testFacadeHeightIsClampedToTheEnvelope(): void
@@ -48,8 +83,10 @@ class DistrictMapBuilderTest extends TestCase
         $tiny = $this->builder->calculateFacadeHeight(1.0);
         $vast = $this->builder->calculateFacadeHeight(1.0e18);
 
-        $this->assertSame(DistrictMap::MIN_FACADE_HEIGHT, $tiny);
-        $this->assertSame(DistrictMap::MAX_FACADE_HEIGHT, $vast);
+        // The logistic curve only asymptotically approaches its bounds — even at 1e18 market cap
+        // it lands a fraction of a unit short of MAX_FACADE_HEIGHT, never exactly on it.
+        $this->assertEqualsWithDelta(DistrictMap::MIN_FACADE_HEIGHT, $tiny, 1.0e-3);
+        $this->assertEqualsWithDelta(DistrictMap::MAX_FACADE_HEIGHT, $vast, 1.0e-3);
     }
 
     public function testFacadeHeightRisesMonotonicallyWithMarketCap(): void
@@ -62,38 +99,78 @@ class DistrictMapBuilderTest extends TestCase
         $this->assertGreaterThan($medium, $large);
     }
 
-    public function testOccupiedFacadesStandOnTheGroundLine(): void
+    public function testFacadesStandOnTheirOwnRowsGroundLine(): void
     {
-        $ground = (float) DistrictMap::WARDS['glasswater-row']['ground_line'];
-        $plots = $this->builder->buildWard('glasswater-row', $this->buildTenants());
+        $plots = $this->buildPlots([$this->makeStock('LAKE'), $this->makeStock('RIVR')]);
 
         $this->assertNotEmpty($plots);
         foreach ($plots as $plot) {
-            $this->assertEqualsWithDelta($ground, $plot->y + $plot->height, 0.0001);
+            $this->assertEqualsWithDelta($plot->groundLine, $plot->y + $plot->height, 0.0001);
+            $this->assertSame(DistrictMap::groundLineForRow($plot->row), $plot->groundLine);
             $this->assertGreaterThanOrEqual(0.0, $plot->y);
         }
     }
 
-    public function testEveryAuthoredPlotIsRenderedInOrder(): void
+    public function testGridlinesAgreeWithTheFacadeCurveOnEveryRow(): void
     {
-        $plots = $this->builder->buildWard('glasswater-row', $this->buildTenants());
-        $authored = array_keys(DistrictMap::plotsForWard('glasswater-row'));
+        $gridlines = $this->builder->buildGridlines(2);
 
-        $this->assertSame($authored, array_map(static fn ($plot) => $plot->plotId, $plots));
+        $this->assertCount(2 * count(DistrictMap::MARKET_CAP_GRIDLINES), $gridlines);
+
+        foreach ($gridlines as $line) {
+            $marketCap = DistrictMap::MARKET_CAP_GRIDLINES[$line['label']];
+            $expected = DistrictMap::groundLineForRow($line['row']) - $this->builder->calculateFacadeHeight($marketCap);
+
+            $this->assertEqualsWithDelta($expected, $line['y'], 0.0001);
+        }
     }
 
-    public function testVacantLotsRenderUnoccupied(): void
+    public function testTheSameCapSitsAtADifferentHeightOnEachRow(): void
     {
-        $plots = $this->builder->buildWard('glasswater-row', $this->buildTenants());
+        $gridlines = $this->builder->buildGridlines(2);
 
-        $vacant = array_values(array_filter($plots, static fn ($plot) => !$plot->isOccupied()));
+        $upper = array_values(array_filter($gridlines, static fn (array $l) => $l['row'] === 0 && $l['label'] === '$1T'));
+        $lower = array_values(array_filter($gridlines, static fn (array $l) => $l['row'] === 1 && $l['label'] === '$1T'));
 
-        $this->assertNotEmpty($vacant, 'Expected reserved frontage on Glasswater Row');
-        foreach ($vacant as $plot) {
-            $this->assertNull($plot->ticker);
-            $this->assertSame('vacant', $plot->condition);
-            $this->assertSame(0, $plot->floors);
-        }
+        $this->assertNotSame(
+            $upper[0]['y'],
+            $lower[0]['y'],
+            'A market cap maps to a facade height, so its rule must sit at each row\'s own y'
+        );
+    }
+
+    public function testEverySlotIsRenderedInComposedOrder(): void
+    {
+        $stocks = [$this->makeStock('LAKE'), $this->makeStock('RIVR')];
+        $frontage = $this->composer->composeFrontage($stocks);
+        $plots = $this->builder->buildWard($frontage['slots'], $stocks);
+
+        $this->assertSame(
+            array_map(static fn (array $slot) => $slot['ticker'], $frontage['slots']),
+            array_map(static fn (DistrictPlotDTO $plot) => $plot->ticker, $plots)
+        );
+    }
+
+    public function testEveryQualifyingTenantCarriesItsIdentityAndRank(): void
+    {
+        $plots = $this->buildPlots([$this->makeStock('LAKE')]);
+
+        $this->assertCount(1, $plots);
+        $this->assertSame('LAKE', $plots[0]->ticker);
+        $this->assertSame(1, $plots[0]->rank, 'The only tenant is the largest on the street');
+        $this->assertSame('Financials', $plots[0]->sector);
+    }
+
+    public function testChangePercentIsCarriedThroughWhenSuppliedAndNullOtherwise(): void
+    {
+        $stocks = [$this->makeStock('LAKE')];
+        $frontage = $this->composer->composeFrontage($stocks);
+
+        $withChange = $this->builder->buildWard($frontage['slots'], $stocks, ['LAKE' => 0.0125]);
+        $this->assertEqualsWithDelta(0.0125, $withChange[0]->changePercent, 0.0001);
+
+        $withoutChange = $this->builder->buildWard($frontage['slots'], $stocks);
+        $this->assertNull($withoutChange[0]->changePercent, 'No buffered history must read as unknown, not as flat');
     }
 
     public function testInvestmentGradeTenantsRenderAsSound(): void
@@ -115,33 +192,93 @@ class DistrictMapBuilderTest extends TestCase
         $plot = $this->findPlot('LAKE', [$this->makeStock('LAKE', price: 0.0, rating: 'D', bankrupt: true)]);
 
         $this->assertSame('ruin', $plot->condition);
-        $this->assertSame(DistrictMap::MIN_FACADE_HEIGHT, $plot->height);
+        $this->assertEqualsWithDelta(DistrictMap::MIN_FACADE_HEIGHT, $plot->height, 1.0e-6);
     }
 
-    public function testMissingTenantsFallBackToAnEmptyLot(): void
+    public function testNoStocksYieldsNoPlots(): void
     {
-        $plots = $this->builder->buildWard('glasswater-row', []);
+        $this->assertSame([], $this->buildPlots([]));
+    }
 
+    public function testOccupiedPlotsCarryConduitsForTheirBusinessModel(): void
+    {
+        $plot = $this->findPlot('LAKE', [$this->makeStock('LAKE')]);
+
+        // Banks - Diversified => commercial_bank, which reads land-registry fields — see
+        // DistrictConduitTopologyTest::financialModelConduitProvider().
+        $this->assertContains('land-registry', $plot->conduits);
+    }
+
+    public function testInstitutionsAreOnlyThoseWiredToAnOccupiedPlot(): void
+    {
+        $stocks = [$this->makeStock('LAKE')];
+        $frontage = $this->composer->composeFrontage($stocks);
+        $plots = $this->builder->buildWard($frontage['slots'], $stocks);
+        $viewboxWidth = $this->builder->resolveViewboxWidth($plots, $frontage['viewboxWidth']);
+
+        $institutions = $this->builder->buildInstitutions($plots, $viewboxWidth);
+
+        $expectedIds = [];
         foreach ($plots as $plot) {
-            $this->assertFalse($plot->isOccupied());
+            foreach ($plot->conduits as $id) {
+                $expectedIds[$id] = true;
+            }
+        }
+
+        $this->assertSame(array_keys($expectedIds), array_map(static fn ($i) => $i->id, $institutions));
+        $this->assertNotEmpty($institutions);
+    }
+
+    public function testInstitutionsDoNotOverlapAndStayInsideTheCanvas(): void
+    {
+        $stocks = [$this->makeStock('LAKE'), $this->makeStock('RIVR'), $this->makeStock('ACC')];
+        $frontage = $this->composer->composeFrontage($stocks);
+        $plots = $this->builder->buildWard($frontage['slots'], $stocks);
+        $viewboxWidth = $this->builder->resolveViewboxWidth($plots, $frontage['viewboxWidth']);
+        $institutions = $this->builder->buildInstitutions($plots, $viewboxWidth);
+
+        $previousEdge = 0;
+        foreach ($institutions as $institution) {
+            $this->assertGreaterThanOrEqual($previousEdge, $institution->x);
+            $this->assertLessThanOrEqual($viewboxWidth, $institution->x + $institution->width);
+            $this->assertGreaterThanOrEqual(DistrictMap::MIN_INSTITUTION_WIDTH, $institution->width);
+            $this->assertLessThanOrEqual(DistrictMap::MAX_INSTITUTION_WIDTH, $institution->width);
+            $previousEdge = $institution->x + $institution->width;
         }
     }
 
-    /** @return Stock[] */
-    private function buildTenants(): array
+    public function testResolveViewboxWidthGrowsToFitAWideInstitutionBandOnANarrowStreet(): void
     {
-        $stocks = [];
-        foreach (DistrictMap::tickersForWard('glasswater-row') as $ticker) {
-            $stocks[] = $this->makeStock($ticker);
-        }
+        // A single narrow-street tenant wired to several institutions must never let
+        // MIN_INSTITUTION_WIDTH push the band past the frontage's own (narrow) width.
+        $stocks = [$this->makeStock('LAKE')];
+        $frontage = $this->composer->composeFrontage($stocks);
+        $plots = $this->builder->buildWard($frontage['slots'], $stocks);
 
-        return $stocks;
+        $viewboxWidth = $this->builder->resolveViewboxWidth($plots, $frontage['viewboxWidth']);
+        $institutions = $this->builder->buildInstitutions($plots, $viewboxWidth);
+
+        $this->assertGreaterThanOrEqual($frontage['viewboxWidth'], $viewboxWidth);
+        foreach ($institutions as $institution) {
+            $this->assertLessThanOrEqual($viewboxWidth, $institution->x + $institution->width);
+        }
+    }
+
+    public function testNoOccupiedPlotsYieldsNoInstitutionsAndNoWidening(): void
+    {
+        $frontage = $this->composer->composeFrontage([]);
+        $plots = $this->builder->buildWard($frontage['slots'], []);
+
+        $viewboxWidth = $this->builder->resolveViewboxWidth($plots, $frontage['viewboxWidth']);
+
+        $this->assertSame($frontage['viewboxWidth'], $viewboxWidth);
+        $this->assertSame([], $this->builder->buildInstitutions($plots, $viewboxWidth));
     }
 
     /** @param Stock[] $stocks */
-    private function findPlot(string $ticker, array $stocks): \App\DTO\DistrictPlotDTO
+    private function findPlot(string $ticker, array $stocks): DistrictPlotDTO
     {
-        foreach ($this->builder->buildWard('glasswater-row', $stocks) as $plot) {
+        foreach ($this->buildPlots($stocks) as $plot) {
             if ($plot->ticker === $ticker) {
                 return $plot;
             }

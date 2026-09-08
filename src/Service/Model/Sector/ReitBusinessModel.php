@@ -463,4 +463,24 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     {
         return self::REIT_LOSS_GIVEN_DEFAULT;
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+            'commercial_property_index_ema',
+            'corporate_default_rate_ema',
+            'housing_starts_index_ema',
+            'inflation_ema',
+            'output_gap_ema',
+            'residential_property_index_ema',
+            'retail_default_rate_ema',
+            'yield_10y_ema',
+        ]));
+    }
 }

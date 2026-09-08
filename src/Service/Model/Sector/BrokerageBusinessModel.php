@@ -380,5 +380,23 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     {
         return true;
     }
-}
 
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'deal_activity_index_ema',
+            'interbank_liquidity_spread_ema',
+            'market_volatility_ema',
+            'money_supply_growth_ema',
+            'output_gap_ema',
+            'policy_rate_ema',
+            'yield_5y_ema',
+        ];
+    }
+}

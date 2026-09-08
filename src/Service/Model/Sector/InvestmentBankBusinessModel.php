@@ -485,4 +485,27 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             streamRevenue: $streamRevenues,
         );
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'corporate_default_rate_ema',
+            'deal_activity_index_ema',
+            'high_yield_credit_spread_ema',
+            'macro_credit_spread_ema',
+            'market_volatility_ema',
+            'money_supply_growth_ema',
+            'ns_slope',
+            'ns_slope_ema',
+            'output_gap_ema',
+            'policy_rate_ema',
+            'yield_5y_ema',
+        ];
+    }
 }

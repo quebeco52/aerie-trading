@@ -34,20 +34,34 @@ class DistrictEventFeed
      */
     public function recentEventsByTicker(array $stocks): array
     {
-        $repository = $this->entityManager->getRepository(StockEvent::class);
         $eventsByTicker = [];
-
         foreach ($stocks as $stock) {
-            $rows = $repository->findBy(
-                ['stock' => $stock],
-                ['recordedAt' => 'DESC'],
-                self::EVENTS_PER_TICKER,
-            );
+            $eventsByTicker[$stock->getTicker()] = [];
+        }
 
-            $eventsByTicker[$stock->getTicker()] = array_map(
-                fn (StockEvent $event): array => $this->presentForTransport($event),
-                $rows,
-            );
+        if ($stocks === []) {
+            return $eventsByTicker;
+        }
+
+        // One query for every tenant instead of one per tenant — StockEvent carries an
+        // (stock_id, recorded_at) index (see its class attributes), so this stays a single
+        // efficient index scan as history accumulates. Grouped in PHP rather than with a
+        // per-stock SQL LIMIT, which Doctrine has no portable way to express in one query.
+        $rows = $this->entityManager->getRepository(StockEvent::class)->createQueryBuilder('e')
+            ->andWhere('e.stock IN (:stocks)')
+            ->setParameter('stocks', $stocks)
+            ->orderBy('e.stock', 'ASC')
+            ->addOrderBy('e.recordedAt', 'DESC')
+            ->getQuery()
+            ->getResult();
+
+        foreach ($rows as $event) {
+            $ticker = $event->getStock()->getTicker();
+            if (count($eventsByTicker[$ticker]) >= self::EVENTS_PER_TICKER) {
+                continue;
+            }
+
+            $eventsByTicker[$ticker][] = $this->presentForTransport($event);
         }
 
         return $eventsByTicker;

@@ -481,4 +481,22 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
             ? ($earningsValue * 0.80) + ($dividendSupportValue * 0.20)
             : $earningsValue;
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'market_volatility_ema',
+            'money_supply_growth_ema',
+            'output_gap_ema',
+            'policy_rate_ema',
+            'yield_10y_ema',
+            'yield_5y_ema',
+        ];
+    }
 }

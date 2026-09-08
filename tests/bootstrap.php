@@ -15,6 +15,10 @@ if ($_SERVER['APP_DEBUG']) {
 // Bypass missing php-redis extension in CLI for tests
 if (!class_exists('Redis')) {
     class Redis {
+        // Mirrors the real extension's pipeline mode flag; services select it by name.
+        public const PIPELINE = 2;
+        public const MULTI = 1;
+
         public function connect($host, $port = 6379, $timeout = 0.0, $reserved = null, $retry_interval = 0, $read_timeout = 0.0) {}
         public function get($key) {}
         public function set($key, $val) {}
@@ -23,6 +27,9 @@ if (!class_exists('Redis')) {
         public function lPush($key, $value) {}
         public function lTrim($key, $start, $stop) {}
         public function lRange($key, $start, $end) { return []; }
+        public function lIndex($key, $index) {}
+        public function multi($mode = self::MULTI) { return $this; }
+        public function exec() { return []; }
     }
 }
 

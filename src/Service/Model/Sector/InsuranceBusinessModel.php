@@ -713,4 +713,23 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         return parent::getRegulatoryDividendCap($stock, $currentTreasury);
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'commercial_property_index_ema',
+            'inflation_ema',
+            'market_volatility_ema',
+            'output_gap_ema',
+            'policy_rate_ema',
+            'residential_property_index_ema',
+            'yield_10y_ema',
+        ];
+    }
 }

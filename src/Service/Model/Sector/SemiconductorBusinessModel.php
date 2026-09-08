@@ -313,4 +313,24 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
             $stock->setOperatingMargin((string) $updatedMargin);
         }
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'capacity_utilization_rate_ema',
+            'energy_cost_push_lag',
+            'exchange_rate_index_ema',
+            'industrial_metals_index_ema',
+            'manufacturing_pmi_ema',
+            'output_gap_ema',
+            'producer_price_inflation_ema',
+            'tips_breakeven_ema',
+        ];
+    }
 }

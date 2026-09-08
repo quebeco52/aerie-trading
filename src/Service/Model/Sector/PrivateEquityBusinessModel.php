@@ -532,4 +532,24 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     {
         return true;
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'deal_activity_index_ema',
+            'macro_credit_spread_ema',
+            'market_volatility_ema',
+            'output_gap_ema',
+            'policy_rate_ema',
+            'sloos_tightening_index_ema',
+            'yield_10y_ema',
+            'yield_5y_ema',
+        ];
+    }
 }

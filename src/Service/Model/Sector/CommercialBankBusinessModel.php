@@ -864,4 +864,33 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
         return 1.0;
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'commercial_property_index_ema',
+            'consumer_sentiment_index_ema',
+            'corporate_default_rate_ema',
+            'housing_starts_index_ema',
+            'inflation_ema',
+            'interbank_liquidity_spread_ema',
+            'macro_credit_spread_ema',
+            'money_supply_growth_ema',
+            'output_gap_ema',
+            'policy_rate_ema',
+            'recession_probability_ema',
+            'residential_property_index_ema',
+            'retail_default_rate_ema',
+            'sloos_tightening_index_ema',
+            'yield_10y_ema',
+            'yield_2y_ema',
+            'yield_5y_ema',
+        ];
+    }
 }

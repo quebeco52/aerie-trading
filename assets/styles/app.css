@@ -11,6 +11,10 @@
   --color-surface-container-low: #131b2e; 
   --color-surface-container: #171f33;
   --color-surface-container-high: #222a3d;
+  /* Referenced by home, screener, dashboard, leaderboard, stock and district for raised header
+     bands, but never defined — every `bg-surface-container-highest` in the app silently rendered
+     nothing until this was added. */
+  --color-surface-container-highest: #2a3348;
   --color-surface-bright: #31394d;
   
   --color-on-surface: #dae2fd; 

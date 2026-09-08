@@ -9,6 +9,8 @@ use App\Entity\Stock;
 use App\Service\District\DistrictRevenueFeed;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
+use Doctrine\ORM\Query;
+use Doctrine\ORM\QueryBuilder;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -16,7 +18,8 @@ use PHPUnit\Framework\TestCase;
 /**
  * Pins the district revenue-mix summary: it must read the same revenueStreams/streamDetails
  * EarningsReportSubscriber already writes onto CorporateReport, never recompute a mix of its own,
- * and it must degrade gracefully for a tenant with no quarterly report yet.
+ * degrade gracefully for a tenant with no quarterly report yet, and fetch every tenant's latest
+ * report in one query rather than one per tenant — see latestRevenueMixByTicker()'s own docblock.
  */
 #[AllowMockObjectsWithoutExpectations]
 class DistrictRevenueFeedTest extends TestCase
@@ -25,6 +28,9 @@ class DistrictRevenueFeedTest extends TestCase
 
     /** @var EntityRepository<CorporateReport>&MockObject */
     private EntityRepository&MockObject $repository;
+    private QueryBuilder&MockObject $queryBuilder;
+    /** @var Query<int, mixed>&MockObject */
+    private Query&MockObject $query;
     private DistrictRevenueFeed $feed;
 
     protected function setUp(): void
@@ -32,6 +38,16 @@ class DistrictRevenueFeedTest extends TestCase
         $this->entityManager = $this->createMock(EntityManagerInterface::class);
         $this->repository = $this->createMock(EntityRepository::class);
         $this->entityManager->method('getRepository')->willReturn($this->repository);
+
+        $this->queryBuilder = $this->createMock(QueryBuilder::class);
+        $this->repository->method('createQueryBuilder')->willReturn($this->queryBuilder);
+        $this->queryBuilder->method('andWhere')->willReturn($this->queryBuilder);
+        $this->queryBuilder->method('setParameter')->willReturn($this->queryBuilder);
+        $this->queryBuilder->method('orderBy')->willReturn($this->queryBuilder);
+        $this->queryBuilder->method('addOrderBy')->willReturn($this->queryBuilder);
+
+        $this->query = $this->createMock(Query::class);
+        $this->queryBuilder->method('getQuery')->willReturn($this->query);
 
         $this->feed = new DistrictRevenueFeed($this->entityManager);
     }
@@ -69,13 +85,38 @@ class DistrictRevenueFeedTest extends TestCase
     public function testTenantWithNoReportGetsAnEmptyMixNotAMissingKey(): void
     {
         $stock = $this->makeStock('ROOK');
-        $this->repository->method('findOneBy')->willReturn(null);
+        $this->query->method('getResult')->willReturn([]);
 
         $result = $this->feed->latestRevenueMixByTicker([$stock]);
 
         $this->assertArrayHasKey('ROOK', $result);
         $this->assertSame(0.0, $result['ROOK']['totalRevenue']);
         $this->assertSame([], $result['ROOK']['streams']);
+    }
+
+    public function testFetchesAllStocksInOneQuery(): void
+    {
+        $lake = $this->makeStock('LAKE');
+        $swan = $this->makeStock('SWAN');
+
+        $this->repository->expects($this->once())->method('createQueryBuilder');
+        $this->query->method('getResult')->willReturn([]);
+
+        $this->feed->latestRevenueMixByTicker([$lake, $swan]);
+    }
+
+    public function testOnlyTheFirstRowPerTickerIsUsedAsItsLatestReport(): void
+    {
+        $stock = $this->makeStock('LAKE');
+        $newer = $this->makeReport($stock, 300.0, ['fee_income' => 300.0], ['fee_income' => ['share' => 1.0, 'qoq_delta' => 0.0, 'drivers' => []]]);
+        $older = $this->makeReport($stock, 100.0, ['fee_income' => 100.0], ['fee_income' => ['share' => 1.0, 'qoq_delta' => 0.0, 'drivers' => []]]);
+
+        // The query orders newest-first per ticker, so the first row for a ticker is its latest.
+        $this->query->method('getResult')->willReturn([$newer, $older]);
+
+        $result = $this->feed->latestRevenueMixByTicker([$stock]);
+
+        $this->assertSame(300.0, $result['LAKE']['totalRevenue']);
     }
 
     public function testBuildsAStreamPerRevenueStreamKeyedByTicker(): void
@@ -94,7 +135,7 @@ class DistrictRevenueFeedTest extends TestCase
             ],
         );
 
-        $this->repository->method('findOneBy')->willReturn($report);
+        $this->query->method('getResult')->willReturn([$report]);
 
         $result = $this->feed->latestRevenueMixByTicker([$stock]);
 
@@ -115,7 +156,7 @@ class DistrictRevenueFeedTest extends TestCase
                 'net_interest_income' => ['share' => 0.80, 'qoq_delta' => 0.0, 'drivers' => []],
             ],
         );
-        $this->repository->method('findOneBy')->willReturn($report);
+        $this->query->method('getResult')->willReturn([$report]);
 
         $streams = $this->feed->latestRevenueMixByTicker([$stock])['LAKE']['streams'];
 
@@ -132,7 +173,7 @@ class DistrictRevenueFeedTest extends TestCase
             ['net_interest_income' => 100.0],
             ['net_interest_income' => ['share' => 1.0, 'qoq_delta' => 0.0, 'drivers' => []]],
         );
-        $this->repository->method('findOneBy')->willReturn($report);
+        $this->query->method('getResult')->willReturn([$report]);
 
         $stream = $this->feed->latestRevenueMixByTicker([$stock])['LAKE']['streams'][0];
 
@@ -149,7 +190,7 @@ class DistrictRevenueFeedTest extends TestCase
             ['directional_bets' => 50.0],
             ['directional_bets' => ['share' => 1.0, 'qoq_delta' => 0.22, 'drivers' => [$driver], 'event' => 'Hf Margin Call']],
         );
-        $this->repository->method('findOneBy')->willReturn($report);
+        $this->query->method('getResult')->willReturn([$report]);
 
         $stream = $this->feed->latestRevenueMixByTicker([$stock])['SWAN']['streams'][0];
 
@@ -162,7 +203,7 @@ class DistrictRevenueFeedTest extends TestCase
     {
         $stock = $this->makeStock('VULT');
         $report = $this->makeReport($stock, 10.0, ['restructuring_advisory' => 10.0], []);
-        $this->repository->method('findOneBy')->willReturn($report);
+        $this->query->method('getResult')->willReturn([$report]);
 
         $stream = $this->feed->latestRevenueMixByTicker([$stock])['VULT']['streams'][0];
 

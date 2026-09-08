@@ -9,59 +9,58 @@ const IMPORTANCE_LABELS = {
 };
 
 /**
- * Institution stress predicates, mirrored from App\Service\District\DistrictStressEvaluator so
- * conduits can react between full page loads without a round trip. Each threshold is the exact
- * constant that PHP class cites as its source — see that class for why no new one is invented
- * here. Field names match payload.macro (App\DTO\MacroStateDTO::toArray()).
+ * Evaluates one stress rule against a live macro snapshot. Mirrors
+ * App\Service\District\DistrictStressEvaluator::ruleTriggered() exactly, but the rules
+ * themselves are never duplicated in this file — they ship from
+ * App\Data\DistrictMap::INSTITUTIONS[*]['stress_rules'] as the `institutions` Stimulus value, so
+ * PHP stays the only place a threshold is written down. Field names match payload.macro
+ * (App\DTO\MacroStateDTO::toArray()).
  */
-const STRESS_PREDICATES = {
-    'rate-council': macro =>
-        macro.inversion_duration >= 0.75 // MacroEngine::SYSTEMIC_INVERSION_ALARM_YEARS
-        || macro.policy_rate_ema <= 0.015, // MacroEngine::ZLB_PROXIMITY_THRESHOLD
-    'credit-registry': macro =>
-        macro.interbank_liquidity_spread_ema >= 0.0100 // MacroEngine::SYSTEMIC_LIQUIDITY_FREEZE_SPREAD
-        || macro.high_yield_credit_spread_ema >= 0.1000 // MacroEngine::SYSTEMIC_CREDIT_SEIZURE_SPREAD
-        || macro.recession_probability_ema >= 0.50, // MacroEngine::SYSTEMIC_RECESSION_DECLARE_PROBABILITY
-    'exchange-floor': macro =>
-        macro.market_volatility_ema >= 0.30, // ClearingHouseBusinessModel::VIX_EXTREME_THRESHOLD
-    'statistical-office': macro =>
-        macro.inflation_ema >= 0.035 // MacroEngine::CB_INFLATION_PANIC_THRESHOLD
-        || macro.output_gap_ema <= -0.010 // MacroEngine::SYSTEMIC_RECESSION_DECLARE_GAP
-        || macro.unemployment_rate_ema >= 0.050, // MacroEngine::EVANS_RULE_UNEMPLOYMENT
-    'land-registry': macro =>
-        Math.abs(macro.commercial_property_index_ema - 100.0) / 100.0 >= 0.15 // DistrictMap::LAND_REGISTRY_PROPERTY_STRESS_DEVIATION
-        || Math.abs(macro.residential_property_index_ema - 100.0) / 100.0 >= 0.15,
-};
+function ruleTriggered(rule, macro) {
+    const value = macro[rule.field];
+    if (typeof value !== 'number' || !Number.isFinite(value)) return false;
+
+    switch (rule.op) {
+        case 'gte': return value >= rule.value;
+        case 'lte': return value <= rule.value;
+        case 'lt': return value < rule.value;
+        case 'index_deviation': return Math.abs(value - 100.0) / 100.0 >= rule.value;
+        default: return false;
+    }
+}
+
+/** True if any rule in the (possibly empty) list is triggered — an institution with no rules never stresses. */
+function anyRuleTriggered(rules, macro) {
+    return Array.isArray(rules) && rules.some(rule => ruleTriggered(rule, macro));
+}
+
+/** Tooltip card size in viewBox units — must match the <rect class="tooltip-bg"> in the template. */
+const TOOLTIP_WIDTH = 520;
+const TOOLTIP_HEIGHT = 210;
+
+/** Clips a company name to the tooltip's width; SVG text has no wrapping of its own. */
+function truncate(text, maxLength) {
+    return text.length > maxLength ? text.slice(0, maxLength - 1) + '…' : text;
+}
 
 /**
- * The readout fields printed on each institution, mirrored from
- * App\Data\DistrictMap::INSTITUTIONS[*]['readouts'] in the same order the server rendered their
- * <tspan> values in — index-matched, not looked up by name, so this must stay in lockstep with
- * that PHP array. 'pct' fields are decimal fractions (multiply by 100); 'index' fields already
- * sit around a 100.0 baseline and print as-is.
+ * The `d` for one conduit, from an institution's outlet down to a tenant's roofline. Mirrors the
+ * two forms the Twig template renders on first paint — keep the two in step, the way the logistic
+ * facade curve already is.
+ *
+ * The upper row takes a symmetric S. The lower row cannot: that curve's horizontal traverse sits
+ * at the midpoint between outlet and target, which for a lower-row tenant lands in the middle of
+ * the upper row's buildings and would show only through the few clear units between them. So it
+ * traverses a corridor above every possible upper-row roofline first, then drops straight down.
  */
-const INSTITUTION_READOUTS = {
-    'rate-council': [
-        { field: 'policy_rate_ema', unit: 'pct' },
-        { field: 'yield_10y_ema', unit: 'pct' },
-    ],
-    'credit-registry': [
-        { field: 'macro_credit_spread_ema', unit: 'pct' },
-        { field: 'high_yield_credit_spread_ema', unit: 'pct' },
-    ],
-    'exchange-floor': [
-        { field: 'market_volatility_ema', unit: 'pct' },
-        { field: 'deal_activity_index_ema', unit: 'index' },
-    ],
-    'statistical-office': [
-        { field: 'output_gap_ema', unit: 'pct' },
-        { field: 'inflation_ema', unit: 'pct' },
-    ],
-    'land-registry': [
-        { field: 'commercial_property_index_ema', unit: 'index' },
-        { field: 'residential_property_index_ema', unit: 'index' },
-    ],
-};
+function conduitPath(sx, sy, tx, ty, row, corridorY) {
+    if (row === 0) {
+        const mid = sy + (ty - sy) / 2;
+        return `M ${sx} ${sy} C ${sx} ${mid}, ${tx} ${mid}, ${tx} ${ty}`;
+    }
+
+    return `M ${sx} ${sy} C ${sx} ${sy + 20}, ${tx} ${corridorY - 20}, ${tx} ${corridorY} L ${tx} ${ty}`;
+}
 
 /** Formats one readout value to match the server-rendered `number_format` precision exactly. */
 function formatReadoutValue(rawValue, unit) {
@@ -139,19 +138,28 @@ function nowStamp() {
  */
 export default class extends Controller {
     static targets = [
-        'plot', 'facade', 'roofline', 'windows', 'label',
-        'institution', 'conduit', 'institutionReadout',
+        'plot', 'label', 'rank', 'kerbPrice', 'kerbChange',
+        'institution', 'conduit', 'institutionReadout', 'svg', 'summaryStress',
         'flare', 'badge', 'badgeCount',
+        'tooltip', 'tooltipTicker', 'tooltipRank', 'tooltipName', 'tooltipMeta',
+        'tooltipPrice', 'tooltipChange', 'tooltipCap',
         'empty', 'detail', 'detailTicker', 'detailPlot', 'detailName', 'detailIndustry',
-        'detailPrice', 'detailMcap', 'detailRating', 'detailRoc', 'detailImportance',
-        'detailBlurb', 'detailLink', 'detailEvents', 'noEvents',
+        'detailPrice', 'detailChange', 'detailMcap', 'detailRating', 'detailRoc',
+        'detailImportance', 'detailRank', 'detailBlurb', 'detailLink', 'detailEvents', 'noEvents',
         'detailRevenueMix', 'detailRevenueTotal', 'noRevenueMix',
+        'institutionDetail', 'institutionName', 'institutionStatus', 'institutionReadings',
+        'institutionFeeds', 'institutionFeedCount',
     ];
 
-    static values = { shares: Object, envelope: Object, events: Object, revenueMix: Object };
+    static values = { shares: Object, envelope: Object, events: Object, revenueMix: Object, institutions: Array };
 
     /** Maximum recent events kept per ticker client-side, oldest dropped first. */
     static MAX_EVENTS_PER_TICKER = 8;
+
+    /** Zoom multiplier bounds — 1 is the fit-to-width state (natural container width). */
+    static MIN_ZOOM = 1;
+    static MAX_ZOOM = 4;
+    static ZOOM_STEP = 1.25;
 
     connect() {
         this.previousPrices = {};
@@ -199,6 +207,13 @@ export default class extends Controller {
 
         this.flareTargets.forEach(flare => this.flaresByTicker.set(flare.dataset.flareFor, flare));
         this.badgeTargets.forEach(badge => this.badgesByTicker.set(badge.dataset.badgeFor, badge));
+
+        // Kerb plates are rewritten on every tick, so index them once rather than searching the
+        // DOM 30 times per animation frame.
+        this.kerbPriceByTicker = new Map();
+        this.kerbPriceTargets.forEach(node => this.kerbPriceByTicker.set(node.dataset.priceFor, node));
+        this.kerbChangeByTicker = new Map();
+        this.kerbChangeTargets.forEach(node => this.kerbChangeByTicker.set(node.dataset.changeFor, node));
         this.badgeCountTargets.forEach(count => {
             const badge = count.closest('[data-district-target="badge"]');
             if (badge) this.badgeCountsByTicker.set(badge.dataset.badgeFor, count);
@@ -209,6 +224,13 @@ export default class extends Controller {
             const institutionId = readout.dataset.institutionReadoutFor;
             this.readoutValueNodesByInstitution.set(institutionId, readout.querySelectorAll('.readout-value'));
         });
+
+        // The single source for stress rules and readout config, shipped straight from
+        // App\Data\DistrictMap::INSTITUTIONS by the controller — see ruleTriggered() above and
+        // updateReadout() below for why this replaced two hand-mirrored constants.
+        this.institutionsById = new Map((this.institutionsValue || []).map(i => [i.id, i]));
+
+        this.zoomFactor = 1;
 
         this.onMarketUpdate = this.onMarketUpdate.bind(this);
         this.flushPending = this.flushPending.bind(this);
@@ -238,24 +260,26 @@ export default class extends Controller {
         const plot = event.currentTarget;
         if (!plot.dataset.ticker) return;
 
-        this.plotTargets.forEach(p => p.removeAttribute('data-selected'));
-        this.labelTargets.forEach(l => l.removeAttribute('data-selected'));
-        this.institutionTargets.forEach(i => i.removeAttribute('data-selected'));
-        plot.setAttribute('data-selected', 'true');
+        // The SVG itself listens for clicks to deselect; a click that landed on a building is
+        // already handled here.
+        event.stopPropagation();
 
-        const label = this.labelTargets.find(l => l.dataset.labelFor === plot.dataset.ticker);
-        if (label) label.setAttribute('data-selected', 'true');
+        this.clearSelection();
+        plot.setAttribute('data-selected', 'true');
+        this.markKerbSelected(plot.dataset.ticker, true);
 
         this.highlightConduits(this.conduitsByBuilding.get(plot.dataset.ticker) || []);
 
+        this.institutionDetailTarget.classList.add('hidden');
         this.emptyTarget.classList.add('hidden');
         this.detailTarget.classList.remove('hidden');
 
         this.detailTickerTarget.innerText = plot.dataset.ticker;
-        this.detailPlotTarget.innerText = `Plot ${plot.dataset.plot}`;
+        this.detailPlotTarget.innerText = plot.dataset.sector || '';
         this.detailNameTarget.innerText = plot.dataset.name || '';
         this.detailIndustryTarget.innerText = plot.dataset.industry || '';
         this.detailRatingTarget.innerText = plot.dataset.rating || '—';
+        this.detailRankTarget.innerText = `#${plot.dataset.rank}`;
         this.detailImportanceTarget.innerText = IMPORTANCE_LABELS[plot.dataset.importance] || 'Unclassified';
         this.detailBlurbTarget.innerText = plot.dataset.blurb || '';
         this.detailLinkTarget.href = `/stock/${plot.dataset.ticker}`;
@@ -267,29 +291,206 @@ export default class extends Controller {
         this.renderRevenueMix(plot.dataset.ticker);
     }
 
+    /** Drops any current selection and returns the panel to its resting copy. */
+    deselect() {
+        this.clearSelection();
+        this.highlightConduits([]);
+        this.currentSelectedTicker = null;
+
+        this.detailTarget.classList.add('hidden');
+        this.institutionDetailTarget.classList.add('hidden');
+        this.emptyTarget.classList.remove('hidden');
+    }
+
+    clearSelection() {
+        this.plotTargets.forEach(p => p.removeAttribute('data-selected'));
+        this.institutionTargets.forEach(i => i.removeAttribute('data-selected'));
+        this.labelTargets.forEach(l => l.removeAttribute('data-selected'));
+        this.rankTargets.forEach(r => r.removeAttribute('data-selected'));
+    }
+
+    /** The kerb plate is two separate text nodes, so selection has to light both. */
+    markKerbSelected(ticker, selected) {
+        const label = this.labelTargets.find(l => l.dataset.labelFor === ticker);
+        const rank = this.rankTargets.find(r => r.dataset.rankFor === ticker);
+        [label, rank].forEach(node => {
+            if (node) node.setAttribute('data-selected', selected ? 'true' : 'false');
+        });
+    }
+
+    /**
+     * Shows the hover card for a building. Reading the street should not require clicking — a
+     * base plot's click target is only ~45px wide even at the two-row scale.
+     */
+    showTooltip(event) {
+        const plot = event.currentTarget;
+        const tooltip = this.tooltipTarget;
+        const change = parseFloat(plot.dataset.change);
+        const hasChange = Number.isFinite(change);
+
+        this.tooltipTickerTarget.textContent = plot.dataset.ticker;
+        this.tooltipRankTarget.textContent = `RANK #${plot.dataset.rank}`;
+        this.tooltipNameTarget.textContent = truncate(plot.dataset.name || '', 30);
+        this.tooltipMetaTarget.textContent = `${plot.dataset.sector || ''} · ${plot.dataset.rating || '—'}`;
+        this.tooltipPriceTarget.textContent = formatCurrency(parseFloat(plot.dataset.price) || 0);
+        this.tooltipCapTarget.textContent = 'CAP $' + formatLarge(parseFloat(plot.dataset.mcap) || 0);
+
+        this.tooltipChangeTarget.textContent = hasChange ? formatPercent(change, 2, false, true) : '—';
+        this.tooltipChangeTarget.setAttribute(
+            'data-direction',
+            hasChange ? (change > 0 ? 'up' : (change < 0 ? 'down' : 'flat')) : 'flat',
+        );
+
+        this.positionTooltip(plot);
+        tooltip.setAttribute('data-visible', 'true');
+    }
+
+    hideTooltip() {
+        this.tooltipTarget.setAttribute('data-visible', 'false');
+    }
+
+    /**
+     * Places the card above the hovered building, flipping it inside the canvas at either edge so
+     * it is never clipped by the viewBox.
+     */
+    positionTooltip(plot) {
+        const facade = plot.querySelector('.facade');
+        if (!facade) return;
+
+        const width = TOOLTIP_WIDTH;
+        const height = TOOLTIP_HEIGHT;
+        const plotX = parseFloat(facade.getAttribute('x'));
+        const plotWidth = parseFloat(facade.getAttribute('width'));
+        const plotY = parseFloat(facade.getAttribute('y'));
+
+        const [, , canvasWidth] = this.svgTarget.getAttribute('viewBox').split(' ').map(Number);
+
+        let x = plotX + plotWidth / 2 - width / 2;
+        x = Math.max(8, Math.min(canvasWidth - width - 8, x));
+
+        // Prefer above the roofline; drop below it when the building is tall enough to run out of sky.
+        let y = plotY - height - 24;
+        if (y < 8) y = plotY + 24;
+
+        this.tooltipTarget.setAttribute('transform', `translate(${x} ${y})`);
+    }
+
     /** Selects an institution: highlights every conduit it feeds, without touching the building panel. */
     selectInstitution(event) {
         const institution = event.currentTarget;
         const institutionId = institution.dataset.institution;
         if (!institutionId) return;
 
+        event.stopPropagation();
         this.currentSelectedTicker = null;
 
-        this.plotTargets.forEach(p => p.removeAttribute('data-selected'));
-        this.labelTargets.forEach(l => l.removeAttribute('data-selected'));
-        this.institutionTargets.forEach(i => i.removeAttribute('data-selected'));
+        this.clearSelection();
         institution.setAttribute('data-selected', 'true');
 
-        this.highlightConduits(this.conduitsByInstitution.get(institutionId) || []);
+        const fed = this.conduitsByInstitution.get(institutionId) || [];
+        this.highlightConduits(fed);
 
-        this.emptyTarget.classList.remove('hidden');
+        this.emptyTarget.classList.add('hidden');
         this.detailTarget.classList.add('hidden');
+        this.institutionDetailTarget.classList.remove('hidden');
+
+        const config = this.institutionsById.get(institutionId);
+        const stressed = institution.getAttribute('data-stressed') === 'true';
+
+        this.institutionNameTarget.textContent = config ? config.label : institutionId;
+        this.institutionStatusTarget.textContent = stressed ? 'Stressed' : 'Calm';
+        this.institutionStatusTarget.className = 'text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border '
+            + (stressed
+                ? 'bg-tertiary/10 text-tertiary border-tertiary/30'
+                : 'bg-secondary/10 text-secondary border-secondary/30');
+
+        this.renderInstitutionReadings(config);
+        this.renderInstitutionFeeds(fed);
+    }
+
+    /** Prints the institution's published readings from the last macro snapshot it was given. */
+    renderInstitutionReadings(config) {
+        const container = this.institutionReadingsTarget;
+        container.replaceChildren();
+
+        const readouts = config && Array.isArray(config.readouts) ? config.readouts : [];
+        if (readouts.length === 0) {
+            return;
+        }
+
+        readouts.forEach(readout => {
+            const wrap = document.createElement('div');
+
+            const label = document.createElement('dt');
+            label.className = 'text-on-surface-variant/60 uppercase tracking-wider text-[10px]';
+            label.textContent = readout.label;
+
+            const value = document.createElement('dd');
+            value.className = 'text-on-surface tabular-nums';
+            // The rendered SVG readout is the live one — read it back rather than keeping a
+            // second copy of the macro snapshot in sync.
+            const node = this.element.querySelector(`.readout-value[data-readout-field="${readout.field}"]`);
+            value.textContent = node ? node.textContent : '—';
+
+            wrap.append(label, value);
+            container.appendChild(wrap);
+        });
+    }
+
+    /** Lists the tenants this institution feeds, as ticker chips. */
+    renderInstitutionFeeds(conduits) {
+        const container = this.institutionFeedsTarget;
+        container.replaceChildren();
+
+        const tickers = [...new Set(conduits.map(c => c.dataset.conduitBuilding))].sort();
+        this.institutionFeedCountTarget.textContent = `(${tickers.length})`;
+
+        tickers.forEach(ticker => {
+            const chip = document.createElement('span');
+            chip.className = 'px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant text-[10px] font-mono border border-outline-variant/15';
+            chip.textContent = ticker;
+            container.appendChild(chip);
+        });
     }
 
     /** Marks exactly the given conduits as highlighted, clearing any previous highlight. */
     highlightConduits(conduits) {
         this.conduitTargets.forEach(c => c.removeAttribute('data-highlighted'));
         conduits.forEach(c => c.setAttribute('data-highlighted', 'true'));
+    }
+
+    zoomIn() {
+        this.setZoomFactor(this.zoomFactor * this.constructor.ZOOM_STEP);
+    }
+
+    zoomOut() {
+        this.setZoomFactor(this.zoomFactor / this.constructor.ZOOM_STEP);
+    }
+
+    /**
+     * Restores the natural fit-to-container width — the whole derived street frontage visible
+     * at once, same as first paint.
+     */
+    fitToWidth() {
+        this.setZoomFactor(1);
+    }
+
+    /**
+     * Sets the SVG's rendered pixel width as a multiple of its natural (fit-to-width) width.
+     * The viewBox itself never changes — only the element's CSS width — so the browser does the
+     * scaling and the existing horizontal scrollbar becomes the pan mechanism at any zoom level.
+     */
+    setZoomFactor(factor) {
+        const { MIN_ZOOM, MAX_ZOOM } = this.constructor;
+        this.zoomFactor = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, factor));
+
+        if (this.zoomFactor === 1) {
+            this.svgTarget.style.width = '';
+            return;
+        }
+
+        const naturalWidth = this.svgTarget.parentElement.clientWidth;
+        this.svgTarget.style.width = Math.round(naturalWidth * this.zoomFactor) + 'px';
     }
 
     /** Writes the numeric fields of the panel from a plot's current dataset. */
@@ -301,6 +502,15 @@ export default class extends Controller {
         this.detailPriceTarget.innerText = formatCurrency(price);
         this.detailMcapTarget.innerText = '$' + formatLarge(mcap);
         this.detailRocTarget.innerText = formatPercent(roc);
+
+        const change = parseFloat(plot.dataset.change);
+        if (Number.isFinite(change)) {
+            this.detailChangeTarget.innerText = formatPercent(change, 2, false, true);
+            this.detailChangeTarget.className = 'tabular-nums ' + (change >= 0 ? 'text-secondary' : 'text-tertiary');
+        } else {
+            this.detailChangeTarget.innerText = '—';
+            this.detailChangeTarget.className = 'tabular-nums text-on-surface-variant/50';
+        }
     }
 
     /** Rebuilds the "Recent Events" list in the side panel for the given ticker. */
@@ -571,11 +781,16 @@ export default class extends Controller {
 
     /** Recomputes institution stress from a live macro snapshot and toggles matching conduits. */
     applyStress(macro) {
+        let stressedCount = 0;
+
         this.institutionTargets.forEach(institution => {
             const institutionId = institution.dataset.institution;
-            const predicate = STRESS_PREDICATES[institutionId];
-            if (predicate) {
-                const stressed = predicate(macro) ? 'true' : 'false';
+            const config = this.institutionsById.get(institutionId);
+            if (config) {
+                const isStressed = anyRuleTriggered(config.stressRules, macro);
+                if (isStressed) stressedCount++;
+
+                const stressed = isStressed ? 'true' : 'false';
                 institution.setAttribute('data-stressed', stressed);
 
                 (this.conduitsByInstitution.get(institutionId) || []).forEach(conduit => {
@@ -585,16 +800,23 @@ export default class extends Controller {
 
             this.updateReadout(institutionId, macro);
         });
+
+        // Keep the summary tile honest — it is a server-rendered count of the same verdict.
+        if (this.hasSummaryStressTarget) {
+            this.summaryStressTarget.textContent = `${stressedCount}/${this.institutionTargets.length} stressed`;
+            this.summaryStressTarget.className = 'text-sm font-bold font-mono tabular-nums mt-1 '
+                + (stressedCount > 0 ? 'text-tertiary' : 'text-on-surface');
+        }
     }
 
-    /** Rewrites an institution's printed values from a live macro snapshot. */
+    /** Rewrites an institution's printed values from a live macro snapshot, matched by field name. */
     updateReadout(institutionId, macro) {
-        const config = INSTITUTION_READOUTS[institutionId];
+        const config = this.institutionsById.get(institutionId);
         const valueNodes = this.readoutValueNodesByInstitution.get(institutionId);
         if (!config || !valueNodes) return;
 
-        config.forEach((readout, index) => {
-            const node = valueNodes[index];
+        config.readouts.forEach(readout => {
+            const node = Array.from(valueNodes).find(n => n.dataset.readoutField === readout.field);
             if (node) node.textContent = formatReadoutValue(macro[readout.field], readout.unit);
         });
     }
@@ -617,24 +839,41 @@ export default class extends Controller {
 
         this.resizeFacade(plot, update.is_bankrupt ? 0 : marketCap);
         this.flashTick(plot, ticker, newPrice);
+        this.updateKerbPlate(ticker, newPrice);
 
         if (plot.getAttribute('data-selected') === 'true') {
             this.renderFigures(plot);
-            this.detailRatingTarget.innerText = plot.dataset.rating || '—';
         }
     }
 
     /**
-     * Applies the log-scale height envelope to a facade. Mirrors DistrictMapBuilder so the
-     * skyline keeps rising and falling between full page loads.
+     * Rewrites a kerb plate's price on a live tick. The change % beside it is left alone: it is
+     * measured against the oldest price in the ticker's Redis buffer (see DistrictPriceChangeFeed)
+     * and the client has no access to that baseline, so recomputing it here would quietly invent
+     * a different number from the one the server rendered.
+     */
+    updateKerbPlate(ticker, price) {
+        const priceNode = this.kerbPriceByTicker.get(ticker);
+        if (priceNode) priceNode.textContent = formatCurrency(price);
+    }
+
+    /**
+     * Applies the log-scale height envelope to a facade. Mirrors
+     * DistrictMapBuilder::calculateFacadeHeight()'s logistic curve exactly — the two used to
+     * disagree (this was a plain clamped linear map), so a facade would visibly jump in height
+     * on the very first live tick after page load; see MathUtility::logisticUnitInterval().
      */
     resizeFacade(plot, marketCap) {
         const env = this.envelopeValue;
         const logCap = Math.log10(Math.max(marketCap, 1));
-        const span = env.logCeiling - env.logFloor;
-        const normalised = Math.max(0, Math.min(1, (logCap - env.logFloor) / span));
+        const midpoint = (env.logCeiling + env.logFloor) / 2;
+        const halfSpan = (env.logCeiling - env.logFloor) / 2;
+        const steepness = Math.log((1 - env.edgeTolerance) / env.edgeTolerance) / halfSpan;
+        const normalised = 1 / (1 + Math.exp(-steepness * (logCap - midpoint)));
         const height = env.minHeight + normalised * (env.maxHeight - env.minHeight);
-        const y = env.groundLine - height;
+        // Each row stands on its own ground line, carried per plot — reading one shared value
+        // here would drop every lower-row facade onto the upper row on the first live tick.
+        const y = parseFloat(plot.dataset.groundLine) - height;
 
         const facade = plot.querySelector('.facade');
         const roofline = plot.querySelector('.roofline');
@@ -643,30 +882,43 @@ export default class extends Controller {
         if (facade) {
             facade.setAttribute('y', y);
             facade.setAttribute('height', height);
+            if (windows) {
+                windows.setAttribute('transform', `translate(${facade.getAttribute('x')} ${y})`);
+            }
         }
         if (roofline) {
             roofline.setAttribute('y', y - 7);
-        }
-        if (windows) {
-            windows.setAttribute('transform', `translate(${plot.querySelector('.facade').getAttribute('x')} ${y})`);
         }
 
         // Conduits terminate at the roofline, so they must be redrawn every time it moves —
         // their source end (sx, sy) is fixed (institutions don't move), only ty changes.
         const ty = y - 7;
         (this.conduitsByBuilding.get(plot.dataset.ticker) || []).forEach(conduit => {
-            const sx = parseFloat(conduit.dataset.sx);
-            const sy = parseFloat(conduit.dataset.sy);
-            const tx = parseFloat(conduit.dataset.tx);
-            conduit.setAttribute('d', `M ${sx} ${sy} C ${sx} ${sy + (ty - sy) / 2}, ${tx} ${ty - (ty - sy) / 2}, ${tx} ${ty}`);
+            conduit.setAttribute('d', conduitPath(
+                parseFloat(conduit.dataset.sx),
+                parseFloat(conduit.dataset.sy),
+                parseFloat(conduit.dataset.tx),
+                ty,
+                parseInt(conduit.dataset.conduitRow, 10) || 0,
+                env.corridorY,
+            ));
         });
 
-        // The flare sits just above the roofline; it is invisible almost all the time, but must
-        // still track a resized facade so it bursts from the right spot whenever it next fires.
+        // The rank, badge and flare all ride the roofline, so they move with it.
         const flare = this.flaresByTicker.get(plot.dataset.ticker);
-        if (flare) {
-            flare.setAttribute('cy', y - 30);
+        if (flare) flare.setAttribute('cy', y - 34);
+
+        const rank = plot.querySelector('.plot-rank');
+        if (rank) rank.setAttribute('y', y - 14);
+
+        const badge = this.badgesByTicker.get(plot.dataset.ticker);
+        if (badge) {
+            const circle = badge.querySelector('circle');
+            const count = badge.querySelector('text');
+            if (circle) circle.setAttribute('cy', y - 18);
+            if (count) count.setAttribute('y', y - 18);
         }
+
     }
 
     /** Lights the roofline green or red for a moment on a price change. */

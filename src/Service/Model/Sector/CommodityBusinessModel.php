@@ -294,4 +294,22 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
             ? ($baseConsensus * (1.0 - FinancialConstants::FAIR_VALUE_DDM_WEIGHT)) + ($dividendSupportValue * FinancialConstants::FAIR_VALUE_DDM_WEIGHT)
             : $baseConsensus;
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+            'agricultural_commodity_index_ema',
+            'energy_price_index_ema',
+            'industrial_metals_index_ema',
+            'inflation_ema',
+            'output_gap_ema',
+            'refining_crack_spread_ema',
+        ]));
+    }
 }

@@ -311,4 +311,21 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
             $stock->setOperatingMargin((string) $updatedMargin);
         }
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return [
+            'exchange_rate_index_ema',
+            'government_spending_index_ema',
+            'industrial_metals_index_ema',
+            'inflation_ema',
+            'macro_credit_spread_ema',
+        ];
+    }
 }

@@ -17,12 +17,13 @@ use Doctrine\ORM\EntityManagerInterface;
  * This is a snapshot of the latest report only, not a time series — App\Service\Corporate's own
  * /api/earnings-flow (App\Controller\StockController::earningsFlow()) already serves a single
  * ticker's waterfall and assets/js/stock/fundamental-charts.js already renders the historical
- * stacked-bar view across quarters; this service exists so the ward can show the same latest-
- * quarter mix for all of its tenants in one query pass instead of 17 separate requests.
+ * stacked-bar view across quarters; this service exists so the street can show the same latest-
+ * quarter mix for all of its tenants in one query pass instead of one request per tenant.
  *
  * The `drivers[]` this returns name the same macro variables the district's conduits draw
- * (App\Data\DistrictMap::CONDUITS) — that attribution is what ties the revenue panel back to the
- * conduit layer, and its correctness for every financial business model is what
+ * (App\Service\Model\Strategy\OperatingStrategyInterface::getOperatingMacroFields(), resolved by
+ * App\Service\District\DistrictConduitResolver) — that attribution is what ties the revenue panel
+ * back to the conduit layer, and its correctness for every financial business model is what
  * StreamMacroDriverRoutingTest pins.
  */
 class DistrictRevenueFeed
@@ -37,18 +38,38 @@ class DistrictRevenueFeed
      */
     public function latestRevenueMixByTicker(array $stocks): array
     {
-        $repository = $this->entityManager->getRepository(CorporateReport::class);
+        $emptyMix = ['totalRevenue' => 0.0, 'streams' => []];
+
         $mixByTicker = [];
-
         foreach ($stocks as $stock) {
-            $report = $repository->findOneBy(
-                ['stock' => $stock],
-                ['recordedAt' => 'DESC'],
-            );
+            $mixByTicker[$stock->getTicker()] = $emptyMix;
+        }
 
-            $mixByTicker[$stock->getTicker()] = $report instanceof CorporateReport
-                ? $this->buildMix($report)
-                : ['totalRevenue' => 0.0, 'streams' => []];
+        if ($stocks === []) {
+            return $mixByTicker;
+        }
+
+        // One query for every tenant instead of one per tenant — CorporateReport carries an
+        // (stock_id, recorded_at) index (see its class attributes), so this stays a single
+        // efficient index scan as quarterly history accumulates. The first row seen per ticker,
+        // in this order, is its latest report; later rows for an already-seen ticker are skipped.
+        $rows = $this->entityManager->getRepository(CorporateReport::class)->createQueryBuilder('r')
+            ->andWhere('r.stock IN (:stocks)')
+            ->setParameter('stocks', $stocks)
+            ->orderBy('r.stock', 'ASC')
+            ->addOrderBy('r.recordedAt', 'DESC')
+            ->getQuery()
+            ->getResult();
+
+        $seen = [];
+        foreach ($rows as $report) {
+            $ticker = $report->getStock()->getTicker();
+            if (isset($seen[$ticker])) {
+                continue;
+            }
+
+            $seen[$ticker] = true;
+            $mixByTicker[$ticker] = $this->buildMix($report);
         }
 
         return $mixByTicker;

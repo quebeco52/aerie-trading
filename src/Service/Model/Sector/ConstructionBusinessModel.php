@@ -259,4 +259,28 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
             streamRevenue: $streamRevenues,
         );
     }
+
+    /**
+     * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
+     * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
+     *
+     * @return list<string>
+     */
+    public function getOperatingMacroFields(): array
+    {
+        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+            'commercial_property_index_ema',
+            'energy_cost_push_lag',
+            'government_spending_index_ema',
+            'housing_starts_index_ema',
+            'industrial_metals_index_ema',
+            'inflation_ema',
+            'natural_rate_ema',
+            'output_gap_ema',
+            'policy_rate_ema',
+            'producer_price_inflation',
+            'residential_property_index_ema',
+            'sloos_tightening_index_ema',
+        ]));
+    }
 }

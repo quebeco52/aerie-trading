@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\DTO;
 
 /**
- * Render-ready state for a single authored plot on a district ward elevation.
+ * Render-ready state for a single plot on the district street elevation.
  *
- * Geometry (x, width) is authored cartography; the facade dimensions and condition are
- * derived purely for display from live company fundamentals.
+ * Geometry is derived, not authored (see App\Service\District\DistrictWardComposer); the facade
+ * dimensions and condition come purely from live company fundamentals, for display only.
  */
 class DistrictPlotDTO
 {
@@ -18,24 +18,27 @@ class DistrictPlotDTO
         public readonly int $width,
         public readonly float $height,
         public readonly float $y,
+        /** Which frontage row this plot stands on, 0 being the upper one. A grouping key only — every coordinate here is already absolute. */
+        public readonly int $row,
+        /** Absolute y of this row's kerb line. Carried rather than re-derived so nothing downstream has to index DistrictMap::ROW_GROUND_LINES. */
+        public readonly float $groundLine,
         public readonly int $floors,
-        public readonly ?string $ticker = null,
-        public readonly ?string $name = null,
+        public readonly string $ticker,
+        public readonly string $name,
+        /** Market-cap position on the street, 1 being the largest tenant. */
+        public readonly int $rank,
+        public readonly ?string $sector = null,
         public readonly ?string $industry = null,
         public readonly ?string $systemicImportance = null,
         public readonly ?string $creditRating = null,
-        public readonly string $condition = 'vacant',
+        public readonly string $condition = 'sound',
         public readonly float $price = 0.0,
         public readonly float $marketCap = 0.0,
         public readonly float $returnOnCapital = 0.0,
+        /** Fractional price change over the district's lookback window, or null when no history is buffered yet. */
+        public readonly ?float $changePercent = null,
         public readonly ?string $blurb = null,
         /** @var list<string> institution ids this tenant draws a macro conduit from */
         public readonly array $conduits = [],
     ) {}
-
-    /** True when the plot carries a listed company rather than being held vacant for a future listing. */
-    public function isOccupied(): bool
-    {
-        return $this->ticker !== null;
-    }
 }
