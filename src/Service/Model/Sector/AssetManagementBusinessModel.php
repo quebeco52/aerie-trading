@@ -25,6 +25,14 @@ use App\Service\Math\FinancialConstants;
  */
 class AssetManagementBusinessModel extends BaseFinancialBusinessModel
 {
+    // --- Balance Sheet Realism ---
+    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Portfolio manager retention grants settle in stock. */
+    public const STOCK_COMPENSATION_INTENSITY = 0.05;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Portfolio manager and distribution compensation dominates asset manager overhead. */
+    public const FIXED_COST_LABOR_SHARE = 0.70;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for asset managers with quarterly public AUM disclosures. */
     public const BASE_COVERAGE_VISIBILITY = 0.45;
@@ -307,7 +315,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         $perfScalar      = $params[ModelParam::PerformanceFeeScalar];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -496,7 +504,6 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
             'output_gap_ema',
             'policy_rate_ema',
             'yield_10y_ema',
-            'yield_5y_ema',
         ];
     }
 }

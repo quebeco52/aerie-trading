@@ -25,6 +25,26 @@ use App\Service\Event\ShockEvent;
  */
 class TechBusinessModel extends StandardCorporateBusinessModel
 {
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 enterprise budget flush and holiday advertising.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [0.95, 0.98, 0.97, 1.10];
+    }
+
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Office campuses and colocation leases. */
+    public const LEASE_LIABILITY_INTENSITY = 0.10;
+    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Engineering talent is paid heavily in equity; FCF runs well above GAAP earnings. */
+    public const STOCK_COMPENSATION_INTENSITY = 0.10;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Engineering and go-to-market payroll dominates software overhead; talent inflation bites hardest here. */
+    public const FIXED_COST_LABOR_SHARE = 0.75;
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.20;
     public const BASE_COVERAGE_ERROR = 0.05;
@@ -52,6 +72,8 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     public const ADVERTISING_REVENUE_WEIGHT     = 0.40;
     /** Sensitivity of digital advertising revenue to macroeconomic output gap cycles. */
     public const ADVERTISING_CYCLICALITY_SCALAR = 0.15;
+    /** Fraction of deferred subscription bookings recognized as revenue each quarter (annual contracts, ASC 606 ratable). */
+    public const SUBSCRIPTION_RECOGNITION_RATE = 0.25;
 
     // --- Revenue Volatility & Wage Inflation Rails ---
     /** Volatility multiplier for top-line revenue shocks reflecting rapid software user scaling and churn. */
@@ -70,6 +92,12 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     public const REGULATORY_FINE_Z_SCORE   = -2.50;
     /** Variable cost penalty applied during severe regulatory fines and legal compliance mandates. */
     public const REGULATORY_FINE_PENALTY   = 0.15;
+    /** Regime key for the court-supervised compliance period that follows an antitrust or privacy settlement. */
+    public const REGIME_CONSENT_DECREE     = 'consent_decree';
+    /** Quarterly probability the consent decree lapses (~8 quarter expected remediation period). */
+    public const CONSENT_DECREE_EXIT_HAZARD = 0.125;
+    /** Ongoing quarterly compliance and remediation cost on the ad stack while a consent decree is in force. */
+    public const CONSENT_DECREE_COMPLIANCE_PENALTY = 0.03;
     /** Negative z-score threshold indicating severe user churn and platform defection. */
     public const SEVERE_CHURN_Z_SCORE      = -2.00;
     /** Variable cost penalty applied during severe customer churn events. */
@@ -129,7 +157,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         $regulatorySeverity   = self::REGULATORY_FINE_PENALTY * (0.5 + $aggression);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         $targetWeights = [
             'subscription' => $params[ModelParam::SubscriptionRevenueWeight],
@@ -149,17 +177,21 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         // Independent stream Z-scores with AR(1) persistence
         $subscriptionZ = $streams->generateZ('subscription', 0.45); // Enterprise SaaS ARR & Cloud compute contract volume
         $adZ           = $streams->generateZ('advertising', 0.30); // Digital advertising auction demand & impression volume
-        $eventZ        = $streams->generateZ('event', 0.10); // Fat-tail regulatory antitrust / data breach Z-score
+        $eventZ        = $streams->generateExogenousZ('event', 0.10); // Fat-tail regulatory antitrust / data breach Z-score
 
         // Macro advertising cyclicality (marketing budgets expand with positive output gap, collapse in recessions)
         $outputGap = $macroState->outputGapEma;
         $adCyclicality = $outputGap * $adCyclicalityScalar;
 
         // Fat Tail Risk: Data Breaches, Anti-Trust, and Viral Breakthroughs
+        // A settlement is a one-quarter fine followed by a multi-year consent decree: court-supervised
+        // compliance spending keeps the ad stack's cost base elevated until the decree lapses.
+        $decreeElapsed = $streams->evolveRegime(self::REGIME_CONSENT_DECREE, 0.0, self::CONSENT_DECREE_EXIT_HAZARD);
         $regulatoryShock = 0.0;
         $eventType       = null;
 
-        if ($eventZ < $regulatoryZThreshold) {
+        if ($eventZ < $regulatoryZThreshold && $decreeElapsed === 0) {
+            $decreeElapsed = $streams->startRegime(self::REGIME_CONSENT_DECREE);
             $regulatoryShock = $regulatorySeverity; // Massive antitrust / surveillance fine
             $eventType = ShockEvent::REGULATORY_FINE;
         } elseif ($eventZ < self::SEVERE_CHURN_Z_SCORE) {
@@ -171,8 +203,11 @@ class TechBusinessModel extends StandardCorporateBusinessModel
 
         // Blended dual-stream revenue (SaaS Subscription vs. Digital Advertising & Platform Usage)
         // Subscription ARR has lower baseline volatility (0.6x scalar), whereas Ads take the full swing plus cyclicality
-        $subscriptionRevenue = max(0.0, $expectedRevenue * $subWeight
-            * (1.0 + ($subscriptionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.6))));
+        // Subscriptions are BOOKED as annual contracts and recognized ratably from deferred revenue, so an
+        // ARR shock reaches the income statement over the contract term rather than in one quarter.
+        $subscriptionBook = $streams->recognizeBacklog('subscription', $expectedRevenue * $subWeight,
+            max(0.0, 1.0 + ($subscriptionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.6))), self::SUBSCRIPTION_RECOGNITION_RATE);
+        $subscriptionRevenue = $subscriptionBook['revenue'];
 
         $viralMultiplier = ($eventType === ShockEvent::VIRAL_GROWTH) ? self::VIRAL_GROWTH_REV_MULT : 1.0;
         $adRevenue = max(0.0, $expectedRevenue * $adWeight
@@ -206,7 +241,8 @@ class TechBusinessModel extends StandardCorporateBusinessModel
 
         // Crucially, antitrust and data privacy regulatory penalties apply proportionally to the Advertising
         // & Platform data-harvesting stream ($adWeight), insulating enterprise subscription margins.
-        $adCostAddon = $regulatoryShock * $adWeight;
+        $complianceDrag = $decreeElapsed > 1 ? self::CONSENT_DECREE_COMPLIANCE_PENALTY * (0.5 + $aggression) : 0.0;
+        $adCostAddon = ($regulatoryShock + $complianceDrag) * $adWeight;
         $rawMargin = $realizedVariableMargin + $wageInflationPenalty + $saasOperatingLeverageShift + $adCostAddon - $marginBonus;
         $clampedMargin = $this->clampMargin($rawMargin);
 
@@ -224,6 +260,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+                    kpis: ['bookings_to_revenue' => $subscriptionBook['book_to_bill'], 'deferred_revenue_quarters' => $subscriptionBook['backlog_quarters']],
         );
     }
 
@@ -232,39 +269,16 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         return self::TECH_REVERSION_SPEED; // Rapid innovation cycles and intense technological competition erode excess margins quickly
     }
 
-    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
+    /** Software tech debt & customer churn decay toward floor */
+    public function getDepreciationDecayRate(): float
     {
-        // Intangible asset-heavy businesses (Tech) have a natural optimal capital structure near zero debt
-        // due to high financial distress costs. They should only recapitalize under extreme WACC arbitrage
-        // (Ke > Kd + 3.0%) and extraordinary cash flow safety (ICR > 15.0).
-        if ($costOfEquity <= ($effectiveCostOfDebt + self::WACC_ARBITRAGE_THRESHOLD)) {
-            return false;
-        }
-        if ($interestCoverage < self::MIN_RECAP_ICR_FLOOR) {
-            return false;
-        }
-        return $currentDebtRatio < ($targetDebtTolerance * self::UNDERLEVERAGED_DEBT_RATIO);
+        return self::TECH_DEBT_DECAY_RATE;
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /** Cloud ARR platform modernization expands SaaS margin ceiling */
+    public function getModernizationGainRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
-
-        if ($reinvestmentRatio < 1.0) {
-            // Software tech debt & customer churn decay toward floor
-            $decayRate = self::TECH_DEBT_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            // Cloud ARR platform modernization expands SaaS margin ceiling
-            $modGain = self::PLATFORM_MODERNIZATION_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+        return self::PLATFORM_MODERNIZATION_GAIN_RATE;
     }
 
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
@@ -283,9 +297,11 @@ class TechBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
+            'exchange_rate_index_ema',
             'inflation_ema',
             'output_gap_ema',
-        ]));
+            'tips_breakeven_ema',
+        ];
     }
 }

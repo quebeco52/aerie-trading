@@ -22,13 +22,31 @@ use App\Service\Math\MathUtility;
  * Financial Physics:
  * - Ultimate Price Takers: Upstream extractors have zero ability to set their own prices; revenue is dictated
  *   by global commodity supply/demand super-cycles.
- * - Schwartz 1-Factor Convenience Yield: Spot revenues explode when physical inventories are tight (high convenience yield).
+ * - Price x Volume: the spot price is a MARKET variable, the exposure-weighted commodity complex index (energy,
+ *   industrial metals, agriculture), signed in both directions. The firm-specific residual is only the basis
+ *   differential (grade, location, contract timing).
+ * - Theory of Storage (Working 1949): tight physical inventories put the curve in backwardation and pay a
+ *   convenience yield to holders of physical barrels; ample inventories (contango) pay nothing.
  * - 3-2-1 Crack Spread Physics: Downstream refining margins expand when output gap (demand) outpaces crude spot prices (input costs).
  * - Ricardian Marginal Cost: Diseconomies of scale apply to extraction. Pushing volume higher requires tapping 
  *   lower-grade, high-cost reserves, driving up the variable cost ratio quadratically.
  */
 class CommodityBusinessModel extends StandardCorporateBusinessModel
 {
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: winter heating demand for energy volumes.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [1.03, 0.98, 0.97, 1.02];
+    }
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Extraction overhead is dominated by rigs, mines and royalties, not payroll. */
+    public const FIXED_COST_LABOR_SHARE = 0.30;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for publicly traded commodity and mining firms. */
     public const BASE_COVERAGE_VISIBILITY = 0.80;
@@ -46,15 +64,27 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
     public const SPOT_PRICE_WEIGHT = 0.35;
     /** Baseline fraction of revenue derived from downstream crack spreads and merchant refining. */
     public const REFINING_SPREAD_WEIGHT = 0.20;
-    /** Baseline multiplier scaling spot price sensitivity to macro inflation and energy spikes (0.50 = 50% hedged). */
+    /** Baseline pass-through of commodity complex price moves to spot revenue (0.50 = 50% hedged). */
     public const SPOT_PRICE_SENSITIVITY = 0.50;
+
+    // --- Commodity Complex Exposure (price-taker book) ---
+    /** Default share of the spot book priced off the energy complex (crude, gas, refined products). */
+    public const ENERGY_PRICE_EXPOSURE = 0.60;
+    /** Default share of the spot book priced off industrial metals (copper, aluminium, iron ore). */
+    public const INDUSTRIAL_METALS_EXPOSURE = 0.20;
+    /** Default share of the spot book priced off agricultural commodities (grains, softs). */
+    public const AGRICULTURAL_EXPOSURE = 0.20;
+    /** Firm-specific basis differential noise as a fraction of the revenue variance scalar (price itself is a market variable). */
+    public const BASIS_DIFFERENTIAL_VOL_SCALAR = 0.40;
+    /** Revenue pass-through of the theory-of-storage convenience yield earned on physical energy inventory. */
+    public const CONVENIENCE_YIELD_SCALAR = 1.00;
 
     // --- Spot Price & Schwartz Convenience Yield Physics ---
     /** Volatility multiplier for top-line revenue shocks driven by global commodity spot prices. */
     public const REVENUE_VARIANCE_SCALAR = 0.25;
     /** Volatility scalar applied to refining crack spread variance. */
     public const REFINING_SHOCK_VOLATILITY_SCALAR = 1.50;
-    /** Sensitivity scalar translating excess macroeconomic inflation into spot price revenue. */
+    /** Signed pass-through of inflation above or below target into nominal spot revenue (commodities hedge inflation both ways). */
     public const INFLATION_BONUS_SCALAR = 1.00;
     /** Multiplier for macro output gap sensitivity on extraction volume. */
     public const MACRO_DEMAND_BETA_SCALAR = 1.50;
@@ -143,10 +173,13 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
             ModelParam::SpotPriceWeight->value         => self::SPOT_PRICE_WEIGHT,
             ModelParam::RefiningSpreadWeight->value    => self::REFINING_SPREAD_WEIGHT,
             ModelParam::SpotPriceSensitivity->value    => self::SPOT_PRICE_SENSITIVITY,
+            ModelParam::EnergyPriceExposure->value     => self::ENERGY_PRICE_EXPOSURE,
+            ModelParam::IndustrialMetalsExposure->value => self::INDUSTRIAL_METALS_EXPOSURE,
+            ModelParam::AgriculturalExposure->value    => self::AGRICULTURAL_EXPOSURE,
         ]);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new StreamContext($momentum, $mathUtility);
+        $streams = $this->createStreamContext($momentum, $mathUtility);
         $beta = abs((float) $stock->getBeta());
 
         // --- Dynamic Revenue Mix Drift ---
@@ -160,11 +193,14 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         $spotWeight       = $activeWeights['spot_price'];
         $refiningWeight   = $activeWeights['refining_spread'];
         $spotSensitivity  = $params[ModelParam::SpotPriceSensitivity];
+        $energyExposure   = max(0.0, $params[ModelParam::EnergyPriceExposure]);
+        $metalsExposure   = max(0.0, $params[ModelParam::IndustrialMetalsExposure]);
+        $agriExposure     = max(0.0, $params[ModelParam::AgriculturalExposure]);
 
         $extractionZ = $streams->generateZ('extraction_volume', 0.35);
         $spotZ       = $streams->generateZ('spot_price', 0.15);
         $refiningZ   = $streams->generateZ('refining_spread', 0.40);
-        $eventZ      = $streams->generateZ('event', 0.10);
+        $eventZ      = $streams->generateExogenousZ('event', 0.10);
 
         // --- Tail Risk & Geopolitical Events ---
         $extractionMultiplier = 1.0;
@@ -184,19 +220,22 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
             $extractionMultiplier = self::SANCTIONS_EXTRACTION_MULT;
         }
 
-        // --- Spot Price & Schwartz Convenience Yield Dynamics ---
-        $inflation = $macroState->inflationEma;
-        $energyShift = ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / 100.0;
-
-        $excessInflation = max(0.0, $inflation - MacroEngine::TARGET_INFLATION);
-        $inflationBonus = $excessInflation * $beta * self::INFLATION_BONUS_SCALAR * $spotSensitivity;
-
-        // High energy/metals/agri shifts imply high convenience yield (tight spot market inventory)
+        // --- Spot Price: a market variable, not a firm draw ---
+        // Price-takers book price x volume. The price is the exposure-weighted commodity complex index, signed:
+        // a 20% crude slump cuts an E&P's spot revenue just as a spike lifts it.
+        $inflation   = $macroState->inflationEma;
+        $energyShift = ($macroState->energyPriceIndexEma - MacroEngine::ENERGY_BASELINE) / MacroEngine::ENERGY_BASELINE;
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
-        $agriShift = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
-        
-        $commodityTightness = max(0.0, $energyShift) + max(0.0, $metalsShift * 0.50) + max(0.0, $agriShift * 0.50);
-        $convenienceYieldBonus = $commodityTightness * self::INFLATION_BONUS_SCALAR * $spotSensitivity;
+        $agriShift   = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
+        $complexPriceShift = ($energyExposure * $energyShift) + ($metalsExposure * $metalsShift) + ($agriExposure * $agriShift);
+
+        // Nominal pass-through: commodities hedge inflation in both directions.
+        $inflationBonus = ($inflation - MacroEngine::TARGET_INFLATION) * $beta * self::INFLATION_BONUS_SCALAR * $spotSensitivity;
+
+        // Theory of storage: the convenience yield on physical energy inventory is zero in contango (ample
+        // stocks) and rises non-linearly as inventories deplete toward the buffer floor (backwardation).
+        $convenienceYield = $mathUtility->calculateConvenienceYield($macroState->energyInventoryIndexEma);
+        $convenienceYieldBonus = $convenienceYield * self::CONVENIENCE_YIELD_SCALAR * $energyExposure * $spotSensitivity;
 
         // --- 3-2-1 Crack Spread Physics ---
         // Refineries buy raw energy (energyShift) and sell end products governed by industrial demand (outputGapEma).
@@ -207,11 +246,11 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
 
         // --- Tri-Stream Revenue Calculation ---
         $extractionShock = $extractionZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
-        $spotShock       = $spotZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR);
+        $spotShock       = $spotZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::BASIS_DIFFERENTIAL_VOL_SCALAR);
         $refiningShock   = $refiningZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::REFINING_SHOCK_VOLATILITY_SCALAR);
 
         $extractionRevenue = max(0.0, $expectedRevenue * $extractionWeight * (1.0 + $extractionShock) * $extractionMultiplier);
-        $spotRevenue       = max(0.0, $expectedRevenue * $spotWeight * (1.0 + $spotShock + $inflationBonus + $convenienceYieldBonus) * $spotMultiplier);
+        $spotRevenue       = max(0.0, $expectedRevenue * $spotWeight * (1.0 + ($complexPriceShift * $spotSensitivity) + $spotShock + $inflationBonus + $convenienceYieldBonus) * $spotMultiplier);
         $refiningRevenue   = max(0.0, $expectedRevenue * $refiningWeight * (1.0 + $refiningShock + $crackSpreadBonus));
 
         $streamRevenues = [
@@ -242,7 +281,7 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
 
         $primaryShockZ = $streams->resolveDominantShockZ([$extractionZ, $spotZ, $refiningZ], $eventZ);
 
-        $spotShockTotal = $spotShock + $inflationBonus + $convenienceYieldBonus;
+        $spotShockTotal = ($complexPriceShift * $spotSensitivity) + $spotShock + $inflationBonus + $convenienceYieldBonus;
         $observableShockZ = ($extractionShock * $extractionWeight) +
             (($spotShockTotal * $spotWeight) / self::OBSERVABLE_SPOT_WEIGHT_DIVISOR) +
             ($refiningShock * $refiningWeight * self::OBSERVABLE_REFINING_WEIGHT_SCALAR);
@@ -262,25 +301,6 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
     public function getWorkingCapitalIntensity(Stock $stock): float
     {
         return 0.15; // Physical mining inventory holding & bulk refining working capital
-    }
-
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
-    {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
-
-        if ($reinvestmentRatio < 1.0) {
-            $decayRate = self::DEPRECIATION_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            $modGain = self::MODERNIZATION_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
     }
 
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
@@ -303,13 +323,16 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
             'agricultural_commodity_index_ema',
+            'energy_inventory_index_ema',
             'energy_price_index_ema',
+            'exchange_rate_index_ema',
             'industrial_metals_index_ema',
             'inflation_ema',
             'output_gap_ema',
             'refining_crack_spread_ema',
-        ]));
+            'tips_breakeven_ema',
+        ];
     }
 }

@@ -13,6 +13,7 @@ use App\Service\Event\ShockEvent;
 use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ReitBusinessModel;
+use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -310,28 +311,42 @@ class ReitBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(0.285, $leasingBonusResult->clampedMargin, 0.001);
     }
 
-    public function testRefinancingWallDrag(): void
+    public function testTenYearYieldDoesNotTouchPropertyOperatingMargin(): void
     {
         $model = new ReitBusinessModel();
         $stock = new Stock();
         $stock->setTicker('REIT_REFI');
 
-        // 10y Yield = 6.0% (200bps above 4.0% fallback)
-        // Refinancing drag = (0.06 - 0.04) * 0.25 = +0.005 margin drag
-        $macroState = $this->createMacroState(yield10y: 0.06);
+        // A 200bps 10Y move reprices the mortgage book through DebtEngine's maturity wall (below NOI).
+        // The property-level operating cost ratio must be identical in both regimes.
+        $lowYield  = $this->createMacroState(yield10y: 0.04);
+        $highYield = $this->createMacroState(yield10y: 0.06);
 
-        $mathMock = $this->createMathUtilityMock([0.0, 0.0, 0.0]);
-        $result = $model->computeActualFinancials(
+        $resultLow = $model->computeActualFinancials(
             $stock,
             expectedRevenue: 1000000.0,
             realizedVariableMargin: 0.30,
             fixedCosts: 100000.0,
             baselineVol: 0.10,
-            macroState: $macroState,
-            mathUtility: $mathMock
+            macroState: $lowYield,
+            mathUtility: $this->createMathUtilityMock([0.0, 0.0, 0.0])
+        );
+        $resultHigh = $model->computeActualFinancials(
+            $stock,
+            expectedRevenue: 1000000.0,
+            realizedVariableMargin: 0.30,
+            fixedCosts: 100000.0,
+            baselineVol: 0.10,
+            macroState: $highYield,
+            mathUtility: $this->createMathUtilityMock([0.0, 0.0, 0.0])
         );
 
-        $this->assertEqualsWithDelta(0.305, $result->clampedMargin, 0.001);
+        $this->assertEqualsWithDelta(0.30, $resultLow->clampedMargin, 0.001);
+        $this->assertEqualsWithDelta($resultLow->clampedMargin, $resultHigh->clampedMargin, 1e-9);
+        $this->assertLessThan(
+            (new StandardCorporateBusinessModel())->getDebtMaturityRolloverRate(),
+            $model->getDebtMaturityRolloverRate()
+        );
     }
 
     public function testAssetDepreciationDecayAndModernization(): void

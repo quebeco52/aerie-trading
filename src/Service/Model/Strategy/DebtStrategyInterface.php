@@ -25,6 +25,13 @@ interface DebtStrategyInterface
     public function getLossGivenDefault(): float;
     public function getRequiredIcrBuffer(): float;
     public function getMaxFloatingDebtRatio(): float;
+    /**
+     * Fraction of the fixed-rate debt stock that matures and is refinanced at the current market rate each
+     * quarter. This is the ONLY channel through which the yield curve reaches a firm's interest expense:
+     * long-tenor issuers (utilities, telecoms, REITs) roll slowly, so rate shocks reach them later and linger.
+     * Interest is a financing cost below EBIT and must never be re-applied as an operating margin drag.
+     */
+    public function getDebtMaturityRolloverRate(): float;
     public function getDeleveragingEvaluationDebt(float $totalDebt, float $wholesaleDebt): float;
     public function getDeleveragingEvaluationLimit(float $macroDebtTolerance): float;
     public function getDebtCostMetrics(DebtMetricsDTO $debtMetrics, float $currentDebt, float $wholesaleDebt, float $interestExpense): array;

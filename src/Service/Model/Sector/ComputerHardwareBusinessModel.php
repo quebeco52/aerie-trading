@@ -24,6 +24,24 @@ use App\Service\Macro\MacroEngine;
  */
 class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Inventory Cycle ---
+    /** Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking, shortfalls restocking. Channel inventory whipsaws PC and server shipments hardest. */
+    public const INVENTORY_CYCLE_SENSITIVITY = 1.00;
+
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: back-to-school and holiday device cycles.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [0.92, 0.97, 1.03, 1.08];
+    }
+
+    // --- Balance Sheet Realism ---
+    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Hardware engineering talent paid partly in equity. */
+    public const STOCK_COMPENSATION_INTENSITY = 0.04;
+
     // --- Dual-Stream Architecture ---
     /** Baseline fraction of revenue derived from high-margin enterprise B2B sales. */
     public const ENTERPRISE_WEIGHT = 0.60;
@@ -100,7 +118,7 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         $consumerWeight   = $params[ModelParam::ConsumerWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams = $this->createStreamContext($momentum, $mathUtility);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -114,7 +132,7 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         // Consumer hardware is volatile, enterprise hardware is stickier
         $enterpriseZ = $streams->generateZ('enterprise_hardware', 0.15);
         $consumerZ   = $streams->generateZ('consumer_hardware', 0.05);
-        $eventZ      = $streams->generateZ('event', 0.10);
+        $eventZ      = $streams->generateExogenousZ('event', 0.10);
 
         $standardParams = $this->resolveModelParameters($stock, [ModelParam::PricingPowerIndex->value => 0.5]);
         $pricingPower = max(0.0, min(1.0, $standardParams[ModelParam::PricingPowerIndex]));
@@ -124,8 +142,10 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
 
         $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY);
-        $enterpriseMacroVolumeShock = ($macroState->outputGapEma * $macroSensitivityMultiplier * abs((float) $stock->getBeta())) - ($fxShift * 0.10) + ($tradeShift * 0.50);
-        $consumerMacroVolumeShock = ($sentimentShift * $macroSensitivityMultiplier * abs((float) $stock->getBeta())) - ($fxShift * 0.15) + ($tradeShift * 0.50);
+        // Metzler inventory cycle: a channel overhang (positive gap) means distributors destock before reordering.
+        $inventoryCycleShift = -$macroState->inventoryStockGapEma * self::INVENTORY_CYCLE_SENSITIVITY;
+        $enterpriseMacroVolumeShock = ($macroState->outputGapEma * $macroSensitivityMultiplier * abs((float) $stock->getBeta())) - ($fxShift * 0.10) + ($tradeShift * 0.50) + $inventoryCycleShift;
+        $consumerMacroVolumeShock = ($sentimentShift * $macroSensitivityMultiplier * abs((float) $stock->getBeta())) - ($fxShift * 0.15) + ($tradeShift * 0.50) + $inventoryCycleShift;
 
         // Tail Risk Events
         $enterpriseMultiplier = 1.0;
@@ -220,25 +240,16 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /** R&D tech debt and architecture lag */
+    public function getDepreciationDecayRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
+        return self::HARDWARE_RND_DECAY_RATE;
+    }
 
-        if ($reinvestmentRatio < 1.0) {
-            // R&D tech debt and architecture lag
-            $decayRate = self::HARDWARE_RND_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            // Next-gen silicon design modernization
-            $modGain = self::SILICON_MODERNIZATION_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+    /** Next-gen silicon design modernization */
+    public function getModernizationGainRate(): float
+    {
+        return self::SILICON_MODERNIZATION_GAIN_RATE;
     }
 
     /**
@@ -249,14 +260,16 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
             'consumer_sentiment_index_ema',
             'exchange_rate_index_ema',
             'industrial_metals_index_ema',
             'inflation_ema',
+            'inventory_stock_gap_ema',
             'output_gap_ema',
             'producer_price_inflation',
+            'tips_breakeven_ema',
             'trade_balance_to_gdp_ema',
-        ]));
+        ];
     }
 }

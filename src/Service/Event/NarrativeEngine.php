@@ -12,6 +12,11 @@ class NarrativeEngine
                 "Experienced unprecedented viral adoption of a new product feature.",
                 "Captured massive market attention following a breakthrough software release."
             ]),
+            ShockEvent::GOODWILL_IMPAIRMENT => $this->getRandomPhrase([
+                "Booked a \$" . ($context['amount'] ?? '0.00') . "B non-cash goodwill impairment after the annual test found acquired businesses earning below their cost of capital.",
+                "Wrote down \$" . ($context['amount'] ?? '0.00') . "B of acquisition goodwill, conceding that past deals are not earning their keep.",
+                "Took a \$" . ($context['amount'] ?? '0.00') . "B goodwill charge as returns on acquired capital fell short of the hurdle rate."
+            ]),
             ShockEvent::REGULATORY_FINE => $this->getRandomPhrase([
                 "Suffered a massive anti-trust fine and sweeping data privacy restrictions.",
                 "Hit with severe regulatory penalties after a major data breach investigation.",

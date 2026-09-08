@@ -25,6 +25,14 @@ use App\Service\Macro\MacroEngine;
  */
 class PrivateEquityBusinessModel extends AssetManagementBusinessModel
 {
+    // --- Balance Sheet Realism ---
+    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Deal team deferrals settle in manager equity. */
+    public const STOCK_COMPENSATION_INTENSITY = 0.05;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Deal team compensation dominates private equity overhead. */
+    public const FIXED_COST_LABOR_SHARE = 0.70;
+
         public function getWholesaleLeverageLimit(): float { return 2.5; }
 
     // --- Leverage & Aggression Physics ---
@@ -263,7 +271,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $rawPrincipalWeight = $params[ModelParam::PrincipalInvestmentsWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         $targetWeights = [
             'management_fees'  => $params[ModelParam::ManagementFeeWeight],
@@ -549,7 +557,6 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
             'policy_rate_ema',
             'sloos_tightening_index_ema',
             'yield_10y_ema',
-            'yield_5y_ema',
         ];
     }
 }

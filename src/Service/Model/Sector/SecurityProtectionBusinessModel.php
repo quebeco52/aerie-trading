@@ -30,6 +30,24 @@ use App\Service\Macro\MacroEngine;
  */
 class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Services Pricing ---
+    /** Pass-through of supercore (core services ex-housing) inflation into fee and rate pricing. Contract guard rates pass through services wage inflation. */
+    public const SERVICES_INFLATION_PASS_THROUGH = 0.85;
+
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: summer event and site staffing peak.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [0.98, 1.00, 1.02, 1.00];
+    }
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Guard and monitoring staff payroll dominates security services overhead. */
+    public const FIXED_COST_LABOR_SHARE = 0.80;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for security and private military contractors. */
     public const BASE_COVERAGE_VISIBILITY = 0.20;
@@ -106,8 +124,9 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         // allowing each stream to pull directly from its assigned macro variables in calculateSectorPhysics.
         $physics['macro_demand_shift'] = 0.0;
 
-        // PMCs have immense pricing power to pass wage and gear inflation through to corporate and government clients.
-        $physics['pricing_power_multiplier'] = 1.0 + ($macroState->tipsBreakevenEma * 0.80);
+        // PMCs pass guard wage inflation through to corporate and government clients: contract rates track
+        // services (supercore) inflation, not goods breakevens.
+        $physics['pricing_power_multiplier'] = 1.0 + ($macroState->supercoreInflationEma * self::SERVICES_INFLATION_PASS_THROUGH);
 
         return $physics;
     }
@@ -126,7 +145,7 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         $expeditionaryWeight = $params[ModelParam::ExpeditionaryWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams = $this->createStreamContext($momentum, $mathUtility);
         $beta = abs((float) $stock->getBeta());
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
@@ -144,7 +163,7 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         $govZ           = $streams->generateZ('government_contracts', 0.60); // High persistence (multi-year budgets)
         $retainerZ      = $streams->generateZ('corporate_retainers', 0.40); // High persistence
         $expeditionaryZ = $streams->generateZ('expeditionary_ops', 0.10); // Unpredictable
-        $eventZ         = $streams->generateZ('event', 0.05);
+        $eventZ         = $streams->generateExogenousZ('event', 0.05);
 
         // =========================================================================
         // DIVERGENT MACRO PULLS
@@ -240,13 +259,15 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
+            'exchange_rate_index_ema',
             'government_spending_index_ema',
             'inflation_ema',
             'macro_credit_spread_ema',
             'market_volatility_ema',
             'output_gap_ema',
+            'supercore_inflation_ema',
             'tips_breakeven_ema',
-        ]));
+        ];
     }
 }

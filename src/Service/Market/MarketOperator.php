@@ -64,6 +64,7 @@ class MarketOperator
             $restructureEvents = $this->applyRestructuringRule($stock, $marketCap, $name, $macroState);
             if ($restructureEvents !== null) {
                 $generatedEvents = array_merge($generatedEvents, $restructureEvents);
+                $this->redistributeAddressableMarket($stock, $stocks);
                 continue;
             }
 
@@ -76,6 +77,49 @@ class MarketOperator
         }
 
         return $generatedEvents;
+    }
+
+    /**
+     * Industry consolidation: a failed rival's demand does not vanish with it. Surviving peers in the same
+     * industry absorb most of its addressable market in proportion to their own, which is how exits leave
+     * survivors with more share and pricing headroom (airline, steel and retail consolidations). The
+     * remainder leaks to substitutes or is destroyed.
+     *
+     * @param Stock[] $stocks
+     */
+    private function redistributeAddressableMarket(Stock $failed, array $stocks): void
+    {
+        $industry = $failed->getIndustry();
+        if ($industry === null) {
+            return;
+        }
+
+        $peers = array_values(array_filter(
+            $stocks,
+            static fn (Stock $peer): bool => $peer !== $failed && !$peer->isBankrupt() && $peer->getIndustry() === $industry
+        ));
+        if ($peers === []) {
+            return;
+        }
+
+        $recaptured = ((float) $failed->getSamRatio()) * \App\Service\Math\FinancialConstants::MARKET_EXIT_RECAPTURE_FRACTION;
+        if ($recaptured <= 0.0) {
+            return;
+        }
+
+        $peerAddressableTotal = array_sum(array_map(static fn (Stock $peer): float => (float) $peer->getSamRatio(), $peers));
+        foreach ($peers as $peer) {
+            $weight = $peerAddressableTotal > 0.0 ? ((float) $peer->getSamRatio()) / $peerAddressableTotal : 1.0 / count($peers);
+            $peer->setSamRatio((string) (((float) $peer->getSamRatio()) + ($recaptured * $weight)));
+        }
+
+        $this->logger->info(sprintf(
+            'CONSOLIDATION: %d surviving %s peers absorbed %.0f%% of %s\'s addressable market.',
+            count($peers),
+            $industry,
+            \App\Service\Math\FinancialConstants::MARKET_EXIT_RECAPTURE_FRACTION * 100,
+            $failed->getTicker()
+        ));
     }
 
     /**

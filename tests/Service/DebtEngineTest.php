@@ -180,6 +180,53 @@ class DebtEngineTest extends TestCase
         $this->assertSame('D', $stock->getCreditRating());
     }
 
+    public function testMaturityWallRollsAtBusinessModelRolloverRate(): void
+    {
+        // Historical coupon 2%, market now 6%: how far the blended rate moves in one quarter is the
+        // business model's rollover rate. A regulated utility (12-year bonds) must reprice far slower
+        // than a standard corporate (5-year bonds), which is the only legitimate bond-proxy channel.
+        $macroState = new MacroStateDTO(
+            policyRateEma: 0.05,
+            corporateTaxRate: 0.21,
+            yield5yEma: 0.06
+        );
+
+        $this->mathUtilityMock->method('calculateDistanceToDefault')->willReturn(6.0);
+        $this->mathUtilityMock->method('calculateMertonCreditSpread')->willReturn(0.0);
+
+        $buildStock = function (string $industry): Stock {
+            $stock = new Stock();
+            $stock->setTicker('ROLL');
+            $stock->setIndustry($industry);
+            $stock->setTotalEquity('1000000000');
+            $stock->setWholesaleDebt('500000000');
+            $stock->setTotalRevenue('800000000');
+            $stock->setOperatingMargin('0.20');
+            $stock->setHistoricalFixedRate('0.02');
+            $stock->setFloatingDebtRatio('0.0');
+            $stock->setCreditSpread('0.0');
+            $stock->setVolatility('0.15');
+            $stock->setSharesOutstanding('10000000');
+            $stock->setPrice('100.00');
+            return $stock;
+        };
+
+        $utility = $buildStock('Utilities - Regulated Electric');
+        $corporate = $buildStock('General');
+
+        $utilityMetrics = $this->engine->calculateInterestExpense($utility, $macroState, true);
+        $corporateMetrics = $this->engine->calculateInterestExpense($corporate, $macroState, true);
+
+        $marketRate = $utilityMetrics->currentMarketRate;
+        $utilityRollover = \App\Data\Sectors::getBusinessModelStrategy('utility')->getDebtMaturityRolloverRate();
+        $corporateRollover = \App\Data\Sectors::getBusinessModelStrategy('none')->getDebtMaturityRolloverRate();
+
+        $this->assertLessThan($corporateRollover, $utilityRollover);
+        $this->assertEqualsWithDelta((0.02 * (1.0 - $utilityRollover)) + ($marketRate * $utilityRollover), $utilityMetrics->historicalFixedRate, 1e-9);
+        $this->assertEqualsWithDelta((0.02 * (1.0 - $corporateRollover)) + ($marketRate * $corporateRollover), $corporateMetrics->historicalFixedRate, 1e-9);
+        $this->assertLessThan($corporateMetrics->historicalFixedRate, $utilityMetrics->historicalFixedRate);
+    }
+
     public function testAnalyzeDebtHealthHealthySolventCompany(): void
     {
         $realMath = new MathUtility();
@@ -508,4 +555,33 @@ class DebtEngineTest extends TestCase
             'Credit spreads on leveraged corporate debt must widen non-linearly during economic contractions via the BGG Financial Accelerator.'
         );
     }
+    public function testCapitalizedLeasesLowerAltmanZForLeaseHeavySectors(): void
+    {
+        // Identical books: the restaurant franchisor carries a store lease book worth 60% of revenue that
+        // IFRS 16 / ASC 842 puts on the balance sheet, so it must screen as more levered than a plain
+        // corporate with the same reported debt.
+        $build = function (string $industry): Stock {
+            $stock = new Stock();
+            $stock->setTicker('LEASE');
+            $stock->setIndustry($industry);
+            $stock->setTotalEquity('1000000000');
+            $stock->setWholesaleDebt('300000000');
+            $stock->setCorporateTreasury('150000000');
+            $stock->setRetainedEarnings('400000000');
+            $stock->setSharesOutstanding('50000000');
+            return $stock;
+        };
+
+        // Real metrics: the lease capitalization must actually run, not the test class's stub.
+        $engine = new DebtEngine($this->mathUtilityMock, new CorporateMetrics(), $this->creditRatingAgency, $this->marketEventPublisherMock);
+        $restaurant = $engine->calculateAltmanZScore($build('Restaurants'), 120_000_000.0, 2_000_000_000.0, 40.0);
+        $plain = $engine->calculateAltmanZScore($build('General'), 120_000_000.0, 2_000_000_000.0, 40.0);
+
+        $this->assertGreaterThan(
+            \App\Data\Sectors::getBusinessModelStrategy('none')->getLeaseIntensity(),
+            \App\Data\Sectors::getBusinessModelStrategy('restaurant')->getLeaseIntensity()
+        );
+        $this->assertLessThan($plain['z_score'], $restaurant['z_score']);
+    }
+
 }

@@ -1,0 +1,178 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Service\Model;
+
+use App\DTO\MacroStateDTO;
+use App\Service\Model\Strategy\OperatingStrategyInterface;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\TestCase;
+use ReflectionClass;
+use ReflectionMethod;
+
+/**
+ * Keeps every model's getOperatingMacroFields() declaration honest against the MacroStateDTO fields its
+ * operating physics actually reads. The district conduit map is derived from these declarations, so a
+ * stale list silently draws (or hides) institution-to-model edges on the map.
+ *
+ * The rule mirrors OperatingStrategyInterface: fields read by the model's own operating code
+ * (calculateSectorPhysics, getMacroPhysics, calculateInterestIncome, processPassiveLiabilityGrowth and the
+ * helpers they call), following parent:: delegation, minus the WACC-only reads. Generic trait code is not
+ * model-specific coupling and is skipped.
+ */
+final class BusinessModelMacroFieldDeclarationTest extends TestCase
+{
+    /** @var list<string> */
+    private const OPERATING_METHODS = ['calculateSectorPhysics', 'getMacroPhysics', 'calculateInterestIncome', 'processPassiveLiabilityGrowth'];
+
+    /** Valuation-only reads feeding WACC alone, excluded by the interface contract. */
+    private const VALUATION_ONLY_FIELDS = ['equity_risk_premium', 'corporate_tax_rate', 'policy_rate'];
+
+    /**
+     * @return array<string, array{class-string<OperatingStrategyInterface>}>
+     */
+    public static function businessModelProvider(): array
+    {
+        $dir = dirname(__DIR__, 3) . '/src/Service/Model/Sector';
+        $models = [];
+
+        foreach (glob($dir . '/*BusinessModel.php') ?: [] as $file) {
+            /** @var class-string<OperatingStrategyInterface> $className */
+            $className = 'App\\Service\\Model\\Sector\\' . basename($file, '.php');
+            $ref = new ReflectionClass($className);
+            if ($ref->isAbstract()) {
+                continue;
+            }
+            $models[basename($file, '.php')] = [$className];
+        }
+
+        return $models;
+    }
+
+    /**
+     * @param class-string<OperatingStrategyInterface> $modelClass
+     */
+    #[DataProvider('businessModelProvider')]
+    public function testDeclaredOperatingMacroFieldsMatchSourceReads(string $modelClass): void
+    {
+        $model = new $modelClass();
+        $declared = array_values(array_unique($model->getOperatingMacroFields()));
+        sort($declared);
+
+        $actual = $this->collectOperatingMacroReads($modelClass);
+        sort($actual);
+
+        $this->assertSame($actual, $declared, sprintf(
+            "%s declares operating macro fields that drift from its source.\nRead but not declared: [%s]\nDeclared but never read: [%s]",
+            $modelClass,
+            implode(', ', array_diff($actual, $declared)),
+            implode(', ', array_diff($declared, $actual))
+        ));
+    }
+
+    /**
+     * @param class-string $concreteClass
+     * @return list<string>
+     */
+    private function collectOperatingMacroReads(string $concreteClass): array
+    {
+        $fields = [];
+        $visited = [];
+        foreach (self::OPERATING_METHODS as $method) {
+            $this->walk($concreteClass, $concreteClass, $method, $fields, $visited);
+        }
+
+        $snake = array_map([$this, 'canonicalKey'], $fields);
+
+        return array_values(array_unique(array_diff($snake, self::VALUATION_ONLY_FIELDS)));
+    }
+
+    /**
+     * Maps a MacroStateDTO property name to the snake_case key MacroStateDTO::toArray() emits for it,
+     * which is the vocabulary DistrictConduitResolver and every declaration use.
+     */
+    private function canonicalKey(string $property): string
+    {
+        static $map = null;
+        if ($map === null) {
+            $map = [];
+            foreach (array_keys((new MacroStateDTO())->toArray()) as $key) {
+                $map[strtolower(str_replace('_', '', $key))] = $key;
+            }
+        }
+
+        return $map[strtolower($property)] ?? strtolower((string) preg_replace('/(?<!^)[A-Z]/', '_$0', $property));
+    }
+
+    /**
+     * @param class-string $concreteClass Class whose late-bound $this-> helpers resolve.
+     * @param class-string $ownerClass    Class level whose implementation of $method is being read.
+     * @param list<string> $fields
+     * @param array<string, bool> $visited
+     */
+    private function walk(string $concreteClass, string $ownerClass, string $method, array &$fields, array &$visited): void
+    {
+        if (!method_exists($ownerClass, $method)) {
+            return;
+        }
+
+        $reflection = new ReflectionMethod($ownerClass, $method);
+        $key = $reflection->getDeclaringClass()->getName() . '::' . $reflection->getFileName() . '::' . $method;
+        if (isset($visited[$key])) {
+            return;
+        }
+        $visited[$key] = true;
+
+        // Generic physics shared by every model (traits) is not a model-specific macro coupling.
+        if (str_contains((string) $reflection->getFileName(), '/Service/Model/Trait/')) {
+            return;
+        }
+
+        $body = $this->methodSource($reflection);
+
+        $macroVariable = 'macroState';
+        if (preg_match('/MacroStateDTO\s+\$([a-zA-Z0-9_]+)/', $body, $signature) === 1) {
+            $macroVariable = $signature[1];
+        }
+        if (preg_match_all('/\$' . preg_quote($macroVariable, '/') . '->([a-zA-Z0-9]+)/', $body, $reads) > 0) {
+            foreach ($reads[1] as $field) {
+                $fields[] = $field;
+            }
+        }
+
+        // Helpers invoked on $this resolve late-bound against the concrete class.
+        if (preg_match_all('/\$this->([a-zA-Z0-9_]+)\(/', $body, $helpers) > 0) {
+            foreach (array_unique($helpers[1]) as $helper) {
+                if ($helper === $method || !method_exists($concreteClass, $helper)) {
+                    continue;
+                }
+                $helperOwner = (new ReflectionMethod($concreteClass, $helper))->getDeclaringClass()->getName();
+                $this->walk($concreteClass, $helperOwner, $helper, $fields, $visited);
+            }
+        }
+
+        // parent::method() delegation continues one level up the hierarchy.
+        $parent = $reflection->getDeclaringClass()->getParentClass();
+        if ($parent !== false && str_contains($body, 'parent::' . $method . '(')) {
+            $this->walk($concreteClass, $parent->getName(), $method, $fields, $visited);
+        }
+    }
+
+    private function methodSource(ReflectionMethod $method): string
+    {
+        $file = $method->getFileName();
+        $start = $method->getStartLine();
+        $end = $method->getEndLine();
+        if ($file === false || $start === false || $end === false) {
+            return '';
+        }
+
+        $lines = file($file);
+        if ($lines === false) {
+            return '';
+        }
+
+        return implode('', array_slice($lines, $start - 1, $end - $start + 1));
+    }
+}

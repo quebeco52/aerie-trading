@@ -20,8 +20,10 @@ trait StandardValuationTrait
             $dcfFairValue = min(max(0.01, $annualFcf * $multiplier), $peFairValue * $maxDcfCap);
             return ($peFairValue + $dcfFairValue) / 2.0;
         }
-        $discount = defined('static::NEGATIVE_FCF_VAL_DISCOUNT') ? static::NEGATIVE_FCF_VAL_DISCOUNT : 0.75;
-        return $fcfPerShare !== null ? max($revenueFloorValue, $peFairValue) * $discount : max($revenueFloorValue, $peFairValue);
+        // Negative FCF (capex burn, R&D burn) discounts the earnings multiple, never the revenue floor:
+        // the floor is the liquidation-style value a buyer pays for the top line regardless of current cash burn.
+        $discount = defined('static::NEGATIVE_FCF_VAL_DISCOUNT') ? (float) static::NEGATIVE_FCF_VAL_DISCOUNT : 0.75;
+        return $fcfPerShare !== null ? max($revenueFloorValue, $peFairValue * $discount) : max($revenueFloorValue, $peFairValue);
     }
 
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float

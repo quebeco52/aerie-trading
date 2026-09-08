@@ -26,6 +26,10 @@ use App\Service\Math\FinancialConstants;
  */
 class InsuranceBusinessModel extends BaseFinancialBusinessModel
 {
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Underwriting, claims and distribution payroll is roughly half of an insurer's overhead. */
+    public const FIXED_COST_LABOR_SHARE = 0.50;
+
         public function getMoatSpread(): float { return 0.01; }
 
     // --- The Kenney Rule & Capacity Limits ---
@@ -306,7 +310,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         // 1. Premium Revenue Shock
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams = $this->createStreamContext($momentum, $mathUtility);
 
         // Independent stream Z-scores with AR(1) persistence (supporting subclass key aliases)
         $prevRevenueZ = $momentum['revenue'] ?? $momentum['reinsurance_premiums'] ?? $momentum['property_casualty_premiums'] ?? 0.0;

@@ -26,6 +26,16 @@ use App\Service\Macro\MacroEngine;
  */
 class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusinessModel
 {
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 customer capex budget flush.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [0.97, 1.01, 0.99, 1.03];
+    }
+
     // --- Dual-Stream Revenue Weights ---
     /** Baseline fraction of revenue from heavy equipment and automated machinery sales. */
     public const EQUIPMENT_WEIGHT = 0.70;
@@ -39,8 +49,8 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     // --- Macro & Backlog Physics ---
     /** Macro sensitivity multiplier for equipment demand to the broader output gap. */
     public const MACRO_GDP_SENSITIVITY = 1.50;
-    /** Fraction of equipment revenue shock absorbed by multi-quarter order backlog (1.0 = fully absorbed). */
-    public const BACKLOG_DAMPING_FACTOR = 0.60;
+    /** Fraction of the equipment order backlog (opening backlog plus new orders) executed and recognized each quarter (~1.9 quarters of coverage). */
+    public const EQUIPMENT_BACKLOG_BURN_RATE = 0.35;
     /** Volatility multiplier for equipment sales variance. */
     public const REVENUE_VARIANCE_SCALAR = 0.25;
     /** Volatility reduction factor for aftermarket services relative to equipment sales. */
@@ -125,7 +135,7 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         $servicesWeight  = $params[ModelParam::ServicesWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
         $beta = abs((float) $stock->getBeta());
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
@@ -140,15 +150,16 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         // Independent stream Z-scores
         $equipmentZ = $streams->generateZ('equipment_sales', 0.20);
         $servicesZ  = $streams->generateZ('aftermarket_services', 0.05);
-        $eventZ     = $streams->generateZ('event', 0.10);
+        $eventZ     = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Sensitivities ---
         // Equipment is highly exposed to GDP, but cushioned by the backlog
         // High industrial capacity utilization triggers capex expansion for factory automation
-        $overhangDrag = ($macroState->capitalStockOverhangEma * self::CAPITAL_OVERHANG_SCALAR) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
-        $cuEquipmentBoost = MathUtility::calculateCapacityUtilizationShift($macroState->capacityUtilizationRateEma, MacroEngine::CU_BASELINE, self::CU_EQUIPMENT_EXPANSION_SENSITIVITY) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
-        $pmiEquipmentBoost = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroEngine::PMI_BASELINE, self::PMI_EQUIPMENT_SENSITIVITY) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
-        $macroEquipmentBoost = (($macroState->outputGapEma * self::MACRO_GDP_SENSITIVITY * $beta) * (1.0 - self::BACKLOG_DAMPING_FACTOR)) - $overhangDrag + $cuEquipmentBoost + $pmiEquipmentBoost;
+        // Macro demand hits ORDERS in full; the order backlog below is what cushions recognized revenue.
+        $overhangDrag = $macroState->capitalStockOverhangEma * self::CAPITAL_OVERHANG_SCALAR;
+        $cuEquipmentBoost = MathUtility::calculateCapacityUtilizationShift($macroState->capacityUtilizationRateEma, MacroEngine::CU_BASELINE, self::CU_EQUIPMENT_EXPANSION_SENSITIVITY);
+        $pmiEquipmentBoost = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroEngine::PMI_BASELINE, self::PMI_EQUIPMENT_SENSITIVITY);
+        $macroEquipmentBoost = ($macroState->outputGapEma * self::MACRO_GDP_SENSITIVITY * $beta) - $overhangDrag + $cuEquipmentBoost + $pmiEquipmentBoost;
 
         // --- Tail Risk Events ---
         $dealMultiplier = 1.0;
@@ -166,9 +177,10 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
 
         // --- Clamped Stream Revenue Calculation ---
         $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
-        $dampedEquipmentShock = $equipmentZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
-
-        $equipmentRevenue = max(0.0, $expectedRevenue * $equipmentWeight * (1.0 + $dampedEquipmentShock + $macroEquipmentBoost - ($fxShift * 0.10)) * $dealMultiplier);
+        // Equipment orders enter a multi-quarter backlog and are recognized at the burn rate (percentage of completion).
+        $equipmentOrderMultiplier = max(0.0, (1.0 + ($equipmentZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $macroEquipmentBoost - ($fxShift * 0.10)) * $dealMultiplier);
+        $equipmentBook = $streams->recognizeBacklog('equipment_sales', $expectedRevenue * $equipmentWeight, $equipmentOrderMultiplier, self::EQUIPMENT_BACKLOG_BURN_RATE);
+        $equipmentRevenue = $equipmentBook['revenue'];
         $servicesRevenue  = max(0.0, $expectedRevenue * $servicesWeight * (1.0 + ($servicesZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::SERVICES_VARIANCE_RATIO))));
 
         $streamRevenues = [
@@ -229,6 +241,7 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+                    kpis: ['book_to_bill' => $equipmentBook['book_to_bill'], 'backlog_quarters' => $equipmentBook['backlog_quarters']],
         );
     }
 
@@ -243,23 +256,16 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         );
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /** Under-investment below replacement CapEx erodes operating margin toward the sector floor. */
+    public function getDepreciationDecayRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
+        return self::PRECISION_TOOLING_DECAY_RATE;
+    }
 
-        if ($reinvestmentRatio < 1.0) {
-            $decayRate = self::PRECISION_TOOLING_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            $modGain = self::AUTOMATION_RND_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+    /** Over-investment above replacement CapEx compounds margin toward the sector ceiling. */
+    public function getModernizationGainRate(): float
+    {
+        return self::AUTOMATION_RND_GAIN_RATE;
     }
 
     /**
@@ -270,7 +276,7 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
             'capacity_utilization_rate_ema',
             'capital_stock_overhang_ema',
             'energy_cost_push_lag',
@@ -280,6 +286,7 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
             'output_gap_ema',
             'producer_price_inflation_ema',
             'supply_chain_pressure_index_ema',
-        ]));
+            'tips_breakeven_ema',
+        ];
     }
 }

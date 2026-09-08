@@ -27,6 +27,28 @@ use App\Service\Event\ShockEvent;
  */
 class EducationBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Services Pricing ---
+    /** Pass-through of supercore (core services ex-housing) inflation into fee and rate pricing. Tuition follows services inflation with a lag from annual rate setting. */
+    public const SERVICES_INFLATION_PASS_THROUGH = 0.70;
+
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: spring and fall terms; summer trough.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [1.05, 0.85, 1.00, 1.10];
+    }
+
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Campus and classroom leases. */
+    public const LEASE_LIABILITY_INTENSITY = 0.25;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Faculty and administrative payroll dominates education overhead. */
+    public const FIXED_COST_LABOR_SHARE = 0.75;
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.40;
     public const BASE_COVERAGE_ERROR = 0.06;
@@ -56,10 +78,22 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
 
     // --- Physics & Variances ---
     public const TUITION_VARIANCE_SCALAR    = 0.10; // Stable enrollment base
+    /** Fraction of deferred tuition recognized each quarter (semester-length programs, ratable over the term). */
+    public const TUITION_RECOGNITION_RATE   = 0.50;
     public const ENTERPRISE_VARIANCE_SCALAR = 0.40; // Pro-cyclical corporate training
     public const LMS_VARIANCE_SCALAR        = 0.08; // Highly sticky software ARR
     /** Countercyclical sensitivity of degree enrollment to elevated unemployment rates (workforce retraining). */
     public const UNEMPLOYMENT_RETRAINING_SCALAR = 0.80;
+
+    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    {
+        $physics = parent::getMacroPhysics($stock, $macroState);
+
+        // Service providers price off services inflation (supercore), not goods or headline breakevens.
+        $physics['pricing_power_multiplier'] = 1.0 + ($macroState->supercoreInflationEma * self::SERVICES_INFLATION_PASS_THROUGH);
+
+        return $physics;
+    }
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
@@ -74,7 +108,7 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
         $lmsWeight        = $params[ModelParam::LmsLicensingWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
         $beta     = abs((float) $stock->getBeta());
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
@@ -101,7 +135,10 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
         $enterpriseZ = $streams->generateZ('enterprise_b2b_training', 0.20);
         $lmsZ        = $streams->generateZ('digital_lms_licensing', 0.60);
 
-        $tuitionRevenue    = max(0.0, $expectedRevenue * $tuitionWeight    * (1.0 + ($tuitionZ * ($baselineVol * self::TUITION_VARIANCE_SCALAR)) + $counterCyclicalEnrollmentBoost));
+        // Tuition is billed at enrollment and recognized ratably over the term from deferred revenue.
+        $tuitionBook = $streams->recognizeBacklog('degree_tuition_enrollment', $expectedRevenue * $tuitionWeight,
+            max(0.0, 1.0 + ($tuitionZ * ($baselineVol * self::TUITION_VARIANCE_SCALAR)) + $counterCyclicalEnrollmentBoost), self::TUITION_RECOGNITION_RATE);
+        $tuitionRevenue    = $tuitionBook['revenue'];
         $enterpriseRevenue = max(0.0, $expectedRevenue * $enterpriseWeight * (1.0 + ($enterpriseZ * ($baselineVol * self::ENTERPRISE_VARIANCE_SCALAR)) + $proCyclicalEnterpriseShift));
         $lmsRevenue        = max(0.0, $expectedRevenue * $lmsWeight        * (1.0 + ($lmsZ * ($baselineVol * self::LMS_VARIANCE_SCALAR))));
 
@@ -132,6 +169,7 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+                    kpis: ['enrollment_to_revenue' => $tuitionBook['book_to_bill'], 'deferred_tuition_quarters' => $tuitionBook['backlog_quarters']],
         );
     }
 
@@ -143,10 +181,13 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
+            'exchange_rate_index_ema',
             'government_spending_index_ema',
             'output_gap_ema',
+            'supercore_inflation_ema',
+            'tips_breakeven_ema',
             'unemployment_rate_ema',
-        ]));
+        ];
     }
 }

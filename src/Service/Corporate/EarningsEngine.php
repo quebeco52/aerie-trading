@@ -75,6 +75,10 @@ class EarningsEngine
     /** Duration of the clustered earnings reporting window as a fraction of the quarter (~25 ticks). */
     public const EARNINGS_SEASON_LENGTH_RATIO = 0.40;
 
+    // --- Fiscal Calendar ---
+    /** Fiscal quarter index at which the annual goodwill impairment test runs (fiscal Q4). */
+    public const FISCAL_YEAR_END_QUARTER = 3;
+
     // --- SUE Dispersion ---
     /** Minimum analyst estimate dispersion floor to avoid division by near-zero in SUE. */
     public const MIN_ESTIMATE_DISPERSION = 0.02;
@@ -175,7 +179,7 @@ class EarningsEngine
         $strategy = $ctx->strategy;
         $macroState = $ctx->macroState;
 
-        $annualTurnover = max(0.01, $ctx->baselineRoic) / ($ctx->stableMargin * (1.0 - $ctx->corporateTaxRate));
+        $annualTurnover = $this->resolveAnnualCapitalTurnover($ctx);
         $assetTurnover = min(self::MAX_QUARTERLY_ASSET_TURNOVER, $annualTurnover / 4.0);
 
         $macroPhysics = $strategy->getMacroPhysics($stock, $macroState);
@@ -186,10 +190,12 @@ class EarningsEngine
         $z1 = $this->mathUtility->generateStandardNormal();
 
         $ticksPerQuarter = max(1, (int) ($ctx->ticksPerYear / 4));
-        $ctx->fiscalQuarter = intdiv($ctx->tickCount, $ticksPerQuarter) % 4;
+        $ctx->calendarQuarter = intdiv($ctx->tickCount, $ticksPerQuarter) % 4;
+        // Seasonality follows the calendar; the fiscal quarter only shifts annual events (impairment tests).
+        $ctx->fiscalQuarter = (($ctx->calendarQuarter - $strategy->getFiscalYearStartQuarter($stock)) % 4 + 4) % 4;
         $factors = $strategy->getSeasonalityFactors();
-        $ctx->seasonalFactor = $factors[$ctx->fiscalQuarter] ?? 1.0;
-        $ctx->priorSeasonalFactor = $factors[($ctx->fiscalQuarter + 3) % 4] ?? 1.0;
+        $ctx->seasonalFactor = $factors[$ctx->calendarQuarter] ?? 1.0;
+        $ctx->priorSeasonalFactor = $factors[($ctx->calendarQuarter + 3) % 4] ?? 1.0;
 
         $priceJumpIntensity = (float) ($stock->getJumpIntensity() ?? 2.00);
         $priceJumpVol = (float) ($stock->getJumpVol() ?? 0.10);
@@ -229,14 +235,49 @@ class EarningsEngine
         $structuralCosts = $ctx->structuralRevenue * (1.0 - $ctx->stableMargin);
 
         // Beveridge Wage-Price Spiral SG&A Squeeze:
-        // When labor tightness causes wage growth above trend (3.5%), corporate overhead/SG&A fixed costs
-        // inflate, squeezing margins for firms that cannot pass costs through via pricing power.
+        // When labor tightness causes wage growth above trend (3.5%), the LABOR share of corporate overhead
+        // inflates, squeezing margins for firms that cannot pass costs through via pricing power. The share
+        // is sector-specific (OperatingStrategyInterface::getLaborCostShare): a law firm feels nearly all
+        // of it, a pipeline operator very little.
         $excessWageGrowth = max(0.0, $macroState->wageGrowth - (MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION));
-        $wageInflationFactor = 1.0 + ($excessWageGrowth / max(0.5, $pricingPowerMultiplier));
+        $wageInflationFactor = 1.0 + ($strategy->getLaborCostShare() * $excessWageGrowth / max(0.5, $pricingPowerMultiplier));
         $ctx->fixedCosts = $structuralCosts * $fixedCostRatio * $wageInflationFactor;
 
         $structuralVariableCosts = $structuralCosts - ($structuralCosts * $fixedCostRatio);
         $ctx->baselineVariableMargin = $structuralVariableCosts / $ctx->structuralRevenue;
+    }
+
+    /**
+     * Annual capital turnover (revenue / invested capital), the DuPont component that fixes how much revenue a
+     * dollar of capital can generate: ROIC = after-tax margin x turnover.
+     *
+     * For physical businesses turnover is a technology parameter, so it is seeded once from the identity using the
+     * structural baseline ROIC and margin, persisted on the stock, and then held. Deriving it every quarter from
+     * the trailing-return blend let a margin squeeze lower trailing ROIC, which cut the target return and with it
+     * the firm's revenue capacity on top of the margin loss; the shortfall lowered ROIC again, a feedback loop with
+     * no physical counterpart (a plant does not shrink because last quarter was unprofitable). Growth in capacity
+     * now flows only through invested capital (Damodaran: g = reinvestment x ROIC) and the sector TAM cap.
+     *
+     * Financial intermediaries keep the dynamic derivation: their target return carries net interest margin and
+     * cost-of-funds physics that genuinely move the yield on earning assets.
+     */
+    private function resolveAnnualCapitalTurnover(EarningsSimulationContext $ctx): float
+    {
+        $afterTaxMargin = $ctx->stableMargin * (1.0 - $ctx->corporateTaxRate);
+
+        if ($ctx->strategy->isFinancial()) {
+            return max(0.01, $ctx->baselineRoic) / $afterTaxMargin;
+        }
+
+        $stored = $ctx->stock->getAssetTurnover();
+        if ($stored !== null && (float) $stored > 0.0) {
+            return (float) $stored;
+        }
+
+        $structuralTurnover = max(0.01, (float) $ctx->stock->getBaselineRoic()) / $afterTaxMargin;
+        $ctx->stock->setAssetTurnover((string) $structuralTurnover);
+
+        return $structuralTurnover;
     }
 
     private function processVariableMargins(EarningsSimulationContext $ctx): void
@@ -323,6 +364,13 @@ class EarningsEngine
         $ctx->eventContext = $actuals->eventContext;
         $ctx->stock->setEarningsMomentumZ($actuals->streamZ);
         $ctx->streamRevenue = $actuals->streamRevenue;
+        $ctx->scheduledCapex = max(0.0, $actuals->scheduledCapex);
+        $ctx->kpis = $actuals->kpis;
+
+        // Stock-based compensation (ASC 718) is already inside the operating cost base: it changes no margin,
+        // but it is non-cash (added back to FCF below) and is settled in newly issued shares.
+        $ctx->stockCompensation = max(0.0, $ctx->actualRevenue) * $ctx->strategy->getStockCompensationIntensity();
+        $ctx->kpis['stock_compensation'] = $ctx->stockCompensation;
     }
 
     private function calculateInterestAndDepreciation(EarningsSimulationContext $ctx): void
@@ -439,6 +487,44 @@ class EarningsEngine
             $ctx->health->costOfEquity ?? 0.10,
             $ctx->macroState
         );
+
+        $this->testGoodwillForImpairment($ctx);
+    }
+
+    /**
+     * Annual goodwill impairment test (ASC 350 / IAS 36), run in the fiscal fourth quarter. Value in use of the
+     * acquired capital is its perpetuity value, capital x ROIC / hurdle; when the trailing return has fallen
+     * below the hurdle the carrying amount exceeds that value and the shortfall is written off against
+     * goodwill. The charge is non-cash: it hits reported (GAAP) earnings, equity and the goodwill balance,
+     * never free cash flow, and analysts do not forecast it, so it lands as a negative earnings surprise.
+     */
+    private function testGoodwillForImpairment(EarningsSimulationContext $ctx): void
+    {
+        $stock = $ctx->stock;
+        $goodwill = (float) $stock->getGoodwill();
+        if ($goodwill <= 0.0 || $ctx->fiscalQuarter !== self::FISCAL_YEAR_END_QUARTER || !$ctx->health instanceof \App\DTO\DebtHealthDTO) {
+            return;
+        }
+
+        $trailingReturn = $ctx->strategy->getTrueReturn($stock);
+        $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
+        if ($hurdleRate <= 0.0 || $trailingReturn >= $hurdleRate) {
+            return;
+        }
+
+        $carryingCapital = $ctx->strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $ctx->investedCapital);
+        $valueShortfall = max(0.0, $carryingCapital) * (1.0 - (max(0.0, $trailingReturn) / $hurdleRate));
+        $impairment = min($goodwill, max(0.0, $valueShortfall));
+        if ($impairment < $goodwill * FinancialConstants::MIN_GOODWILL_IMPAIRMENT_FRACTION) {
+            return;
+        }
+
+        $stock->setGoodwill((string) ($goodwill - $impairment));
+        $stock->setTotalEquity((string) max(10.0, (float) $stock->getTotalEquity() - $impairment));
+        $stock->setRetainedEarnings((string) ((float) $stock->getRetainedEarnings() - $impairment));
+
+        $ctx->goodwillImpairment = $impairment;
+        $ctx->reportedActualNetIncome -= $impairment;
     }
 
     private function calculateEPSAndSurprise(EarningsSimulationContext $ctx): void
@@ -493,7 +579,6 @@ class EarningsEngine
         if ($ctx->sharesOutstanding <= 0) {
             $fcfData = ['fcf_per_share' => 0.0, 'capex' => 0.0];
         } else {
-            $capExRatio = (float) $stock->getCapexRatio();
             $outputGap = $ctx->macroState->outputGapEma;
             $capexCyclicality = $ctx->strategy->getCapexCyclicality();
             $cycleCapExModifier = max(0.50, min(1.50, 1.00 + ($outputGap * $capexCyclicality)));
@@ -505,11 +590,6 @@ class EarningsEngine
                 ? 1.0
                 : max(0.20, 1.0 + ($ctx->actualQuarterlyNetIncome / max(1.0, abs($ctx->investedCapital))));
             $maintenanceCapEx = $ctx->quarterlyDepreciation * $cycleCapExModifier * $solvencyFactor;
-
-            // 2. Growth CapEx: funded from operational profits scaled by capexRatio.
-            $growthCapEx = max(0.0, $ctx->actualQuarterlyNetIncome) * ($capExRatio * $cycleCapExModifier);
-
-            $actualCapEx = $maintenanceCapEx + $growthCapEx;
 
             $baseWorkingCapitalIntensity = $ctx->strategy->getWorkingCapitalIntensity($stock);
             $deseasonalizedUtilization = $ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor);
@@ -533,7 +613,23 @@ class EarningsEngine
             $deltaNwc = max(-$maxNwcSwing, min($maxNwcSwing, $rawDeltaNwc));
             $stock->setNetWorkingCapital((string) $currentNwc);
 
-            $fcff = $ctx->actualQuarterlyNetIncome + $ctx->quarterlyDepreciation - $deltaNwc - $actualCapEx;
+            // 2. Growth CapEx: fundamental reinvestment planned on normalized earnings power,
+            //    gated by the NPV hurdle and bounded by internally available funding.
+            $growthCapEx = $this->calculateGrowthCapEx($ctx, $cycleCapExModifier, $maintenanceCapEx, $deltaNwc);
+
+            // 3. Scheduled CapEx: outlays the sector physics itself commits (spectrum licences, grid rebuilds).
+            //    Mandatory, so it bypasses the funding gate; a cash shortfall is the treasury's problem. The
+            //    asset is not productive on day one, so it is queued as construction-in-progress.
+            if ($ctx->scheduledCapex > 0.0) {
+                $this->capExEngine->allocateGrowthCapEx($stock, $ctx->scheduledCapex);
+            }
+
+            $actualCapEx = $maintenanceCapEx + $growthCapEx + $ctx->scheduledCapex;
+
+            // Stock-based compensation is a non-cash expense: added back to operating cash flow (ASC 718).
+            $fcff = $ctx->actualQuarterlyNetIncome + $ctx->quarterlyDepreciation + $ctx->stockCompensation - $deltaNwc - $actualCapEx;
+            $ctx->operatingCashFlow = $fcff + $actualCapEx;
+            $ctx->investingCashFlow = -$actualCapEx;
 
             $fcfData = [
                 'fcf_per_share' => $fcff / $ctx->sharesOutstanding,
@@ -548,6 +644,7 @@ class EarningsEngine
         $ctx->strategy->applyAssetDepreciationDecay($stock, $reinvestmentRatio, $ctx->dt);
 
         $currentPrice = (float) $stock->getPrice();
+        $debtBeforeAllocation = (float) $stock->getWholesaleDebt();
         $ctx->allocation = $this->capitalAllocationEngine->allocateCapital(
             $stock,
             $ctx->actualAnnualEpsRaw,
@@ -561,6 +658,25 @@ class EarningsEngine
         $stock->setSharesOutstanding((string) $ctx->allocation['new_shares']);
 
         $organicCapex = $ctx->allocation['organic_capex'] ?? 0.0;
+
+        // Cash-flow statement signs classify the life-cycle stage (Dickinson 2011): net investment includes
+        // organic expansion, net financing is debt raised plus shares issued net of dividends and buybacks.
+        $ctx->investingCashFlow -= $organicCapex;
+        $sharesDelta = ((float) $ctx->allocation['new_shares']) - $ctx->sharesOutstanding;
+        $ctx->financingCashFlow = ((float) $stock->getWholesaleDebt() - $debtBeforeAllocation)
+            + ($sharesDelta * $currentPrice)
+            - (float) ($ctx->allocation['total_paid'] ?? 0.0);
+        $ctx->lifecycleStage = \App\Data\LifecycleStage::fromCashFlowSigns(
+            $ctx->operatingCashFlow > 0.0,
+            $ctx->investingCashFlow > 0.0,
+            $ctx->financingCashFlow > 0.0
+        );
+        $stock->setLifecycleStage($ctx->lifecycleStage);
+
+        // Settle this quarter's stock-based compensation in new shares (dilution), a non-cash, non-financing flow.
+        if ($ctx->stockCompensation > 0.0 && $currentPrice > 0.0) {
+            $stock->setSharesOutstanding((string) ((float) $stock->getSharesOutstanding() + ($ctx->stockCompensation / $currentPrice)));
+        }
         $reportedOrganicCapex = $ctx->strategy->allowsPhysicalOrganicCapex() ? $organicCapex : 0.0;
         $annualizedOrganicCapex = $reportedOrganicCapex * 4.0;
         $organicCapexPerShare = $ctx->sharesOutstanding > 0 ? ($annualizedOrganicCapex / $ctx->sharesOutstanding) : 0.0;
@@ -576,6 +692,40 @@ class EarningsEngine
         $quarterlyAccruals = $ctx->actualQuarterlyNetIncome - $ctx->trueQuarterlyFcf;
         $accrualsRatio = ($quarterlyAccruals * 4.0) / $totalAssets;
         $stock->setAccrualsRatio($accrualsRatio);
+    }
+
+    /**
+     * Growth CapEx follows the fundamental reinvestment identity (Damodaran): the capital budget is planned on
+     * normalized earnings power (structural ROIC x invested capital), not on the current quarter's reported
+     * profit. A loss-making growth firm therefore keeps investing from its cash pile while a boom quarter does
+     * not trigger a one-off splurge. The stock's capexRatio is its reinvestment rate (g = reinvestment x ROIC).
+     *
+     * Two real-world gates apply:
+     *  1. NPV rule: no growth investment while the structural return fails the model's hurdle rate.
+     *  2. Funding constraint: spend is bounded by internally generated cash plus cash above the operating floor.
+     */
+    private function calculateGrowthCapEx(EarningsSimulationContext $ctx, float $cycleCapExModifier, float $maintenanceCapEx, float $deltaNwc): float
+    {
+        $stock = $ctx->stock;
+        $reinvestmentRate = max(0.0, (float) $stock->getCapexRatio());
+        $hurdleRate = $ctx->health instanceof \App\DTO\DebtHealthDTO
+            ? $ctx->strategy->getHurdleRate($ctx->health)
+            : FinancialConstants::DEFAULT_WACC_FALLBACK;
+
+        if ($reinvestmentRate <= 0.0 || $ctx->baselineRoic < $hurdleRate) {
+            return 0.0;
+        }
+
+        $structuralQuarterlyNopat = $ctx->baselineRoic * abs($ctx->investedCapital) / 4.0;
+        $plannedGrowthCapEx = $structuralQuarterlyNopat * $reinvestmentRate * $cycleCapExModifier;
+
+        $operatingBase = $this->corporateMetrics->calculateOperatingBase((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity());
+        $minOperatingCash = $ctx->strategy->calculateMinOperatingCash($operatingBase, (float) $stock->getCustomerDeposits(), (float) $stock->getWholesaleDebt());
+        $deployableCash = max(0.0, (float) $stock->getCorporateTreasury() - $minOperatingCash);
+        $internalCashFlow = $ctx->actualQuarterlyNetIncome + $ctx->quarterlyDepreciation - $deltaNwc - $maintenanceCapEx;
+        $fundingCapacity = max(0.0, $internalCashFlow + $deployableCash);
+
+        return min($plannedGrowthCapEx, $fundingCapacity);
     }
 
     private function executePriceAndVolatilityShocks(EarningsSimulationContext $ctx): void
@@ -622,6 +772,15 @@ class EarningsEngine
         $customEventLore = $ctx->eventType !== null ? $this->narrativeEngine->generateLore($ctx->eventType, $ctx->eventContext) : null;
         if ($customEventLore) {
             $ctx->corporateActionDescriptions .= "\n• " . $customEventLore;
+        }
+
+        if ($ctx->goodwillImpairment > 0.0) {
+            $impairmentLore = $this->narrativeEngine->generateLore(\App\Service\Event\ShockEvent::GOODWILL_IMPAIRMENT, [
+                'amount' => number_format($ctx->goodwillImpairment / 1_000_000_000, 2),
+            ]);
+            if ($impairmentLore) {
+                $ctx->corporateActionDescriptions .= "\n• " . $impairmentLore;
+            }
         }
 
         if (!empty($ctx->allocation['events'])) {

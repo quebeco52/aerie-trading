@@ -116,6 +116,9 @@ class ShockEvent
     public const CHEMICAL_PLANT_TURNAROUND = 'chemical_plant_turnaround';
     public const CHEMICAL_AGRI_BOOM = 'chemical_agri_boom';
 
+    /** Annual ASC 350 test wrote acquired goodwill down to its value in use (non-cash GAAP charge). */
+    public const GOODWILL_IMPAIRMENT = 'goodwill_impairment';
+
     public const CONGLOMERATE_PORTFOLIO_REALIGNMENT = 'conglomerate_portfolio_realignment';
     public const CONGLOMERATE_SUBSIDIARY_WRITEDOWN = 'conglomerate_subsidiary_writedown';
 }

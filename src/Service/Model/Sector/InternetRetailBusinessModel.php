@@ -27,6 +27,12 @@ use App\Service\Macro\MacroEngine;
  */
 class InternetRetailBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Fulfilment and data-centre footprints are largely leased. */
+    public const LEASE_LIABILITY_INTENSITY = 0.35;
+    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Technology and fulfilment leadership paid partly in equity. */
+    public const STOCK_COMPENSATION_INTENSITY = 0.06;
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.40; // 1P sales are visible, but 3P/Ads are a black box
     public const BASE_COVERAGE_ERROR = 0.08;
@@ -113,7 +119,7 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $adsWeight = $params[ModelParam::DigitalAdsWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams = $this->createStreamContext($momentum, $mathUtility);
         $beta = abs((float) $stock->getBeta());
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
@@ -131,7 +137,7 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $fpZ  = $streams->generateZ('first_party_retail', 0.25);
         $tpZ  = $streams->generateZ('third_party_seller', 0.40); // High persistence tollbooth
         $adsZ = $streams->generateZ('digital_ads_cloud', 0.20);
-        $eventZ = $streams->generateZ('event', 0.10);
+        $eventZ = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Sensitivities ---
         $outputGap = $macroState->outputGapEma;

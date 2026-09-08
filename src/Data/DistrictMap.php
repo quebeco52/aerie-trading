@@ -282,9 +282,10 @@ class DistrictMap
     /**
      * MacroStateDTO fields read by a large majority of business models' operating physics (via
      * App\Service\Model\Strategy\OperatingStrategyInterface::getOperatingMacroFields()) —
-     * output_gap_ema (93%), inflation_ema (72%), tips_breakeven_ema (63%) and
-     * exchange_rate_index_ema (63%) of the 46 concrete models, measured against every model's
-     * fully-inherited declaration. Excluded from conduit derivation only (they remain published
+     * output_gap_ema (96%), exchange_rate_index_ema (66%), tips_breakeven_ema (66%) and
+     * inflation_ema (57%) of the 47 concrete models, measured against each model's declaration of
+     * the fields its own operating code reads (BusinessModelMacroFieldDeclarationTest keeps those
+     * declarations honest). Excluded from conduit derivation only (they remain published
      * `fields` and printable readouts) so a field nearly every model shares does not wire every
      * tenant to the same institution — the same principle CONDUITS already applied by hand to
      * equityRiskPremium/corporateTaxRate/policyRate feeding WACC alone.

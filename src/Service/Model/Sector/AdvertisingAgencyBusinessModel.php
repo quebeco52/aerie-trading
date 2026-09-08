@@ -26,6 +26,28 @@ use App\Service\Event\ShockEvent;
  */
 class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Services Pricing ---
+    /** Pass-through of supercore (core services ex-housing) inflation into fee and rate pricing. Retainer and fee schedules reprice with services inflation. */
+    public const SERVICES_INFLATION_PASS_THROUGH = 0.80;
+
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 holiday campaign spend, Q1 post-holiday lull.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [0.90, 1.00, 0.95, 1.15];
+    }
+
+    // --- Balance Sheet Realism ---
+    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Creative leadership retention grants. */
+    public const STOCK_COMPENSATION_INTENSITY = 0.03;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Creative and account payroll dominates an agency's overhead. */
+    public const FIXED_COST_LABOR_SHARE = 0.80;
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.25;
     public const BASE_COVERAGE_ERROR = 0.06;
@@ -58,6 +80,16 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
     public const BRAND_VARIANCE_SCALAR   = 0.10; // Sticky multi-year retainers
     public const MARTECH_VARIANCE_SCALAR = 0.20; // B2B technology consulting
 
+    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    {
+        $physics = parent::getMacroPhysics($stock, $macroState);
+
+        // Service providers price off services inflation (supercore), not goods or headline breakevens.
+        $physics['pricing_power_multiplier'] = 1.0 + ($macroState->supercoreInflationEma * self::SERVICES_INFLATION_PASS_THROUGH);
+
+        return $physics;
+    }
+
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
@@ -71,7 +103,7 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
         $martechWeight = $params[ModelParam::MartechConsultingWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
         $beta     = abs((float) $stock->getBeta());
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
@@ -134,9 +166,12 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
             'consumer_sentiment_index_ema',
+            'exchange_rate_index_ema',
             'output_gap_ema',
-        ]));
+            'supercore_inflation_ema',
+            'tips_breakeven_ema',
+        ];
     }
 }

@@ -40,4 +40,8 @@ abstract class BaseFinancialBusinessModel implements BusinessModelInterface
         FinancialPhysicsTrait::checkBuybackRegulatoryLockout insteadof StandardCapitalAllocationTrait;
         FinancialPhysicsTrait::calculateStructuralEps insteadof StandardValuationTrait;
     }
+
+    // --- Firm-Level Common Factor ---
+    /** One-factor loading of fee and spread streams on the institution-wide franchise innovation (rho^2 = 16% shared variance). */
+    public const FIRM_FACTOR_LOADING = 0.40;
 }

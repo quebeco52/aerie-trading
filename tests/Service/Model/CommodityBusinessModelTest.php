@@ -9,8 +9,10 @@ use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\CommodityBusinessModel;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class CommodityBusinessModelTest extends TestCase
 {
     private CommodityBusinessModel $model;
@@ -394,4 +396,75 @@ class CommodityBusinessModelTest extends TestCase
 
         $this->assertGreaterThan($resultNormal->streamRevenue['refining_spread'], $resultSpike->streamRevenue['refining_spread'], 'Elevated 3:2:1 refining crack spread index must expand refining revenue.');
     }
+    public function testSpotRevenueIsSignedInTheCommodityComplexPrice(): void
+    {
+        // Price-takers book price x volume: a crude slump must cut an E&P's spot revenue, not leave it flat.
+        $sink = new Stock();
+        $sink->setTicker('SINK');
+        $sink->setBeta('1.5');
+
+        $mathMock = $this->createStub(MathUtility::class);
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $run = function (Stock $stock, MacroStateDTO $macro) use ($mathMock): float {
+            return $this->model->computeActualFinancials(
+                $stock,
+                expectedRevenue: 100_000_000.0,
+                realizedVariableMargin: 0.35,
+                fixedCosts: 20_000_000.0,
+                baselineVol: 0.0,
+                macroState: $macro,
+                mathUtility: $mathMock
+            )->streamRevenue['spot_price'];
+        };
+
+        $neutral = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 100.0);
+        $slump   = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 70.0);
+
+        $neutralSpot = $run($sink, $neutral);
+        $slumpSpot   = $run($sink, $slump);
+
+        // SINK: 100% energy exposure at 0.85 pass-through -> -30% x 0.85 = -25.5%
+        $this->assertEqualsWithDelta($neutralSpot * (1.0 - (0.30 * 0.85)), $slumpSpot, 1.0);
+
+        // CNDR is a base-metals miner: crude is irrelevant, the metals complex is everything.
+        $cndr = new Stock();
+        $cndr->setTicker('CNDR');
+        $cndr->setBeta('1.2');
+
+        $metalsSlump = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 70.0, industrialMetalsIndexEma: 80.0);
+        $this->assertEqualsWithDelta($run($cndr, $neutral), $run($cndr, $slump), 1.0);
+        $this->assertLessThan($run($cndr, $neutral), $run($cndr, $metalsSlump));
+    }
+
+    public function testTightPhysicalInventoryPaysConvenienceYieldOnlyInBackwardation(): void
+    {
+        $sink = new Stock();
+        $sink->setTicker('SINK');
+        $sink->setBeta('1.5');
+
+        $math = new MathUtility();
+        $mathMock = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generatePersistentZ'])->getMock();
+        $mathMock->method('generatePersistentZ')->willReturn(0.0);
+
+        $run = function (float $inventory) use ($sink, $mathMock): float {
+            $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 100.0, energyInventoryIndexEma: $inventory);
+            return $this->model->computeActualFinancials(
+                $sink,
+                expectedRevenue: 100_000_000.0,
+                realizedVariableMargin: 0.35,
+                fixedCosts: 20_000_000.0,
+                baselineVol: 0.0,
+                macroState: $macro,
+                mathUtility: $mathMock
+            )->streamRevenue['spot_price'];
+        };
+
+        // Contango (ample stocks): no convenience yield, spot revenue at par.
+        $this->assertEqualsWithDelta($run(100.0), $run(120.0), 1.0);
+        // Backwardation (tight stocks): holders of physical barrels earn the convenience yield.
+        $this->assertGreaterThan($run(100.0), $run(70.0));
+        $this->assertGreaterThan(0.0, $math->calculateConvenienceYield(70.0));
+    }
+
 }

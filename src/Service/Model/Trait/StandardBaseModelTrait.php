@@ -7,8 +7,10 @@ namespace App\Service\Model\Trait;
 use App\Data\ModelParam;
 use App\Data\StockModelTuning;
 use App\DTO\ModelParameters;
+use App\DTO\StreamContext;
 use App\Entity\Stock;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\MathUtility;
 
 trait StandardBaseModelTrait
 {
@@ -35,6 +37,26 @@ trait StandardBaseModelTrait
     public function getOperatingMacroFields(): array
     {
         return [];
+    }
+
+    /**
+     * One-factor loading that every revenue stream drawn through createStreamContext() places on the
+     * firm-wide demand innovation. Both model roots define FIRM_FACTOR_LOADING; sector models override
+     * the constant (conglomerates lower, single-product firms higher).
+     */
+    public function getFirmFactorLoading(): float
+    {
+        return static::FIRM_FACTOR_LOADING;
+    }
+
+    /**
+     * Builds the quarterly stream context with this model's firm-factor loading applied.
+     *
+     * @param array<string, float> $momentum Previous quarter stream map ($stock->getEarningsMomentumZ()).
+     */
+    protected function createStreamContext(array $momentum, MathUtility $mathUtility): StreamContext
+    {
+        return new StreamContext($momentum, $mathUtility, $this->getFirmFactorLoading());
     }
 
     protected function getOperatingBase(Stock $stock): float

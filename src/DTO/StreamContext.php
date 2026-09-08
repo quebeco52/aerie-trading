@@ -16,29 +16,76 @@ class StreamContext
     /** @var array<string, float> */
     private array $nextZ = [];
 
+    /** Firm-wide N(0,1) demand innovation shared by every loaded stream this quarter (drawn lazily). */
+    private ?float $firmInnovation = null;
+
+    /** Namespace prefix under which regime clocks are persisted in the stream state map. */
+    public const REGIME_STATE_PREFIX = 'state:regime:';
+
+    /** Namespace prefix under which order backlogs (in quarters of expected stream revenue) are persisted. */
+    public const BACKLOG_STATE_PREFIX = 'state:backlog:';
+
+    /** Ceiling on a persisted backlog, in quarters of expected stream revenue. */
+    public const MAX_BACKLOG_QUARTERS = 8.0;
+
+    /** @var array<string, int> Regime clocks resolved this quarter (quarters active including this one; 0 = inactive). */
+    private array $regimes = [];
+
     /**
      * @param array<string, float> $previousMomentum Map of previous quarter stream Z-scores ($stock->getEarningsMomentumZ())
      * @param MathUtility $mathUtility
+     * @param float $firmFactorLoading Default one-factor loading rho applied to every stream drawn via generateZ().
+     *                                 Segments of one firm share customers, brand and management, so their
+     *                                 innovations are correlated (rho^2 = shared variance); 0.0 = independent.
      */
     public function __construct(
         private readonly array $previousMomentum,
-        private readonly MathUtility $mathUtility
+        private readonly MathUtility $mathUtility,
+        private readonly float $firmFactorLoading = 0.0
     ) {}
 
     /**
      * Generates a stationary AR(1) Z-score for the given stream key and registers it for persistence.
      *
+     * Revenue streams load on the firm-wide common innovation (one-factor model) unless an explicit
+     * loading is given. Use generateExogenousZ() for drivers that are not firm demand (catastrophes,
+     * credit defaults, regulatory events), which must stay independent of the sales cycle.
+     *
      * @param string $key The unique identifier for this revenue stream (e.g., 'government_contracts').
      * @param float $phi  Autoregressive persistence parameter (0 = i.i.d., 1 = random walk).
+     * @param float|null $commonLoading Loading on the firm factor for this stream; null = context default.
      * @return float The newly generated stationary Z-score ~ N(0, 1).
      */
-    public function generateZ(string $key, float $phi): float
+    public function generateZ(string $key, float $phi, ?float $commonLoading = null): float
     {
+        $loading = max(0.0, min(1.0, $commonLoading ?? $this->firmFactorLoading));
         $prevZ = $this->previousMomentum[$key] ?? 0.0;
-        $newZ = $this->mathUtility->generatePersistentZ($prevZ, $phi);
+
+        $newZ = $loading > 0.0
+            ? $this->mathUtility->generatePersistentZ($prevZ, $phi, $this->getFirmInnovation(), $loading)
+            : $this->mathUtility->generatePersistentZ($prevZ, $phi);
+
         $this->nextZ[$key] = $newZ;
 
         return $newZ;
+    }
+
+    /**
+     * Generates an AR(1) Z-score that is independent of the firm's demand factor. Reserved for exogenous
+     * drivers (catastrophe claims, credit defaults, regulatory or operational tail events).
+     */
+    public function generateExogenousZ(string $key, float $phi): float
+    {
+        return $this->generateZ($key, $phi, 0.0);
+    }
+
+    /**
+     * The firm-wide N(0,1) innovation for this quarter, drawn once on first use so every loaded stream
+     * (and any model-level demand logic) sees the same realization.
+     */
+    public function getFirmInnovation(): float
+    {
+        return $this->firmInnovation ??= $this->mathUtility->generateStandardNormal();
     }
 
     /**
@@ -76,6 +123,101 @@ class StreamContext
     public function getPersistedState(string $key, float $default = 0.0): float
     {
         return isset($this->previousMomentum[$key]) ? (float) $this->previousMomentum[$key] : $default;
+    }
+
+    /**
+     * Recognizes revenue for a long-cycle stream through a persistent order backlog.
+     *
+     * Percentage-of-completion accounting (ASC 606 over-time recognition): orders booked this quarter join the
+     * opening backlog, and a fraction $burnRate of the total work available is executed and recognized. The
+     * same identity models deferred revenue for subscriptions, where "orders" are bookings and $burnRate is
+     * the inverse contract length. At steady state revenue equals orders and the backlog settles at
+     * (1 - burnRate) / burnRate quarters of revenue, so a demand shock reaches revenue only at $burnRate per
+     * quarter and the remainder persists in the backlog. The backlog is persisted normalized to expected
+     * stream revenue so it survives growth and seeding, and is seeded at steady state on first use.
+     *
+     * @param string $key                   Stream key (persisted under BACKLOG_STATE_PREFIX).
+     * @param float  $expectedStreamRevenue Steady-state quarterly revenue of the stream (expected revenue x weight).
+     * @param float  $orderMultiplier       This quarter's order intake relative to steady state (1.0 = flat).
+     * @param float  $burnRate              Fraction of available work executed per quarter (0.05 .. 1.0).
+     * @return array{revenue: float, orders: float, backlog: float, backlog_quarters: float, book_to_bill: float}
+     */
+    public function recognizeBacklog(string $key, float $expectedStreamRevenue, float $orderMultiplier, float $burnRate): array
+    {
+        $burn = max(0.05, min(1.0, $burnRate));
+        $steadyStateQuarters = (1.0 - $burn) / $burn;
+        $base = max(1.0, $expectedStreamRevenue);
+
+        $openingQuarters = max(0.0, $this->getPersistedState(self::BACKLOG_STATE_PREFIX . $key, $steadyStateQuarters));
+        $orders = $base * max(0.0, $orderMultiplier);
+        $available = ($openingQuarters * $base) + $orders;
+        $revenue = $burn * $available;
+        $closingBacklog = max(0.0, $available - $revenue);
+        $closingQuarters = min(self::MAX_BACKLOG_QUARTERS, $closingBacklog / $base);
+
+        $this->registerState(self::BACKLOG_STATE_PREFIX . $key, $closingQuarters);
+
+        return [
+            'revenue'          => $revenue,
+            'orders'           => $orders,
+            'backlog'          => $closingQuarters * $base,
+            'backlog_quarters' => $closingQuarters,
+            'book_to_bill'     => $revenue > 0.0 ? $orders / $revenue : 1.0,
+        ];
+    }
+
+    /**
+     * Advances a persistent two-state regime for this quarter (Hamilton 1989 Markov switching).
+     *
+     * Tail events such as strikes, price wars, consent decrees, recall recoveries or port congestion are not
+     * one-quarter blips: once entered they persist for a random number of quarters. While inactive the regime
+     * starts with probability $onsetHazard; while active it ends with probability $exitHazard, so the expected
+     * duration is 1 / $exitHazard quarters. Models whose onset is driven by a Z threshold or a macro condition
+     * pass an onset hazard of 0.0 and call startRegime() themselves once this method has processed the exit.
+     *
+     * @param string $key         Regime identifier (persisted under REGIME_STATE_PREFIX).
+     * @param float  $onsetHazard Quarterly probability of entering the regime while inactive.
+     * @param float  $exitHazard  Quarterly probability of leaving the regime while active.
+     * @return int Quarters the regime has been active including this one (1 = onset quarter), 0 when inactive.
+     */
+    public function evolveRegime(string $key, float $onsetHazard, float $exitHazard): int
+    {
+        $elapsed = (int) round($this->getPersistedState(self::REGIME_STATE_PREFIX . $key, 0.0));
+
+        if ($elapsed > 0) {
+            $elapsed = $this->mathUtility->checkProbability(max(0.0, min(1.0, $exitHazard))) ? 0 : $elapsed + 1;
+        } elseif ($onsetHazard > 0.0 && $this->mathUtility->checkProbability(min(1.0, $onsetHazard))) {
+            $elapsed = 1;
+        }
+
+        $this->regimes[$key] = $elapsed;
+        $this->registerState(self::REGIME_STATE_PREFIX . $key, (float) $elapsed);
+
+        return $elapsed;
+    }
+
+    /**
+     * Forces regime onset this quarter for triggers the model resolves itself (a Z-score crossing a
+     * threshold, a macro condition). A no-op when the regime is already active.
+     *
+     * @return int Quarters active including this one (1 on a fresh onset).
+     */
+    public function startRegime(string $key): int
+    {
+        $elapsed = max(1, $this->regimes[$key] ?? 0);
+        $this->regimes[$key] = $elapsed;
+        $this->registerState(self::REGIME_STATE_PREFIX . $key, (float) $elapsed);
+
+        return $elapsed;
+    }
+
+    /**
+     * Quarters the regime has been active including this one, as resolved by evolveRegime()/startRegime()
+     * earlier this quarter; 0 when inactive or not yet evolved.
+     */
+    public function getRegimeElapsed(string $key): int
+    {
+        return $this->regimes[$key] ?? 0;
     }
 
     /**

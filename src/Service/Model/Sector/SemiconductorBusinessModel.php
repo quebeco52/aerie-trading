@@ -25,6 +25,18 @@ use App\Service\Macro\MacroEngine;
  */
 class SemiconductorBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Inventory Cycle ---
+    /** Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking, shortfalls restocking. Distributor and OEM chip inventories drive the wafer order book. */
+    public const INVENTORY_CYCLE_SENSITIVITY = 1.00;
+
+    // --- Balance Sheet Realism ---
+    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Design and process engineering talent paid partly in equity. */
+    public const STOCK_COMPENSATION_INTENSITY = 0.05;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Fab depreciation, cleanroom energy and materials dominate; engineering payroll is a minority of overhead. */
+    public const FIXED_COST_LABOR_SHARE = 0.35;
+
         public function getReversionSpeed(): float { return 0.15; }
     public function getMoatSpread(): float { return 0.02; }
     public function getCapExCompletionRate(Stock $stock): float { return 0.125; }
@@ -53,6 +65,8 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
 
     // --- Fab Utilization Leverage & Cycle Thresholds ---
     /** Volatility multiplier for top-line revenue shocks reflecting chip inventory cycles. */
+    /** Fraction of the wafer-start order book shipped and recognized each quarter (~1 quarter of lead time). */
+    public const FOUNDRY_BACKLOG_BURN_RATE = 0.50;
     public const REVENUE_VARIANCE_SCALAR   = 0.22;
     /** Positive output gap threshold triggering tech super-cycle fab utilization booms. */
     public const BOOM_GAP_THRESHOLD        = 0.01;
@@ -148,7 +162,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         $designWeight  = $params[ModelParam::DesignRevenueWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -162,7 +176,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         // Independent stream Z-scores with AR(1) persistence
         $foundryZ = $streams->generateZ('foundry', 0.35); // Cleanroom wafer manufacturing volume
         $designZ  = $streams->generateZ('design', 0.45); // IP architecture licensing & AI design mandates
-        $cycleZ   = $streams->generateZ('cycle', 0.10);
+        $cycleZ   = $streams->generateExogenousZ('cycle', 0.10);
 
         // Fab Utilization Leverage & Tech Super-Cycles
         // Fab Utilization Leverage & Tech Super-Cycles
@@ -191,14 +205,20 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::SEMICONDUCTOR_INVENTORY_CORRECTION;
         }
 
-        $foundryRevenue = max(0.0, $expectedRevenue * $foundryWeight * (1.0 + ($foundryZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $utilizationMultiplier));
         $designRevenue  = max(0.0, $expectedRevenue * $designWeight * (1.0 + ($designZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
 
+        // Wafer starts are ordered a couple of quarters ahead of shipment: demand and export-ban reshoring
+        // hit the foundry order book, and revenue follows at the wafer-out burn rate.
+        // Metzler inventory cycle: distributor and OEM chip overhangs are worked off before wafer starts resume.
+        $inventoryCycleShift = -$macroState->inventoryStockGapEma * self::INVENTORY_CYCLE_SENSITIVITY;
+        $foundryOrderMultiplier = max(0.0, 1.0 + ($foundryZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $utilizationMultiplier + $inventoryCycleShift);
         if ($designZ < self::EXPORT_BAN_Z_THRESHOLD) {
             $designRevenue *= (1.0 - self::EXPORT_BAN_DESIGN_HAIRCUT);
-            $foundryRevenue *= (1.0 + self::EXPORT_BAN_FOUNDRY_BOOST);
+            $foundryOrderMultiplier *= (1.0 + self::EXPORT_BAN_FOUNDRY_BOOST);
             $eventType = ShockEvent::GEOPOLITICAL_EXPORT_BAN;
         }
+        $foundryBook = $streams->recognizeBacklog('foundry', $expectedRevenue * $foundryWeight, $foundryOrderMultiplier, self::FOUNDRY_BACKLOG_BURN_RATE);
+        $foundryRevenue = $foundryBook['revenue'];
 
         $streamRevenues = [
             'foundry' => $foundryRevenue,
@@ -249,6 +269,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+                    kpis: ['book_to_bill' => $foundryBook['book_to_bill'], 'backlog_quarters' => $foundryBook['backlog_quarters']],
         );
     }
 
@@ -271,20 +292,6 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         return self::FAB_REVERSION_SPEED;
     }
 
-    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
-    {
-        // Semiconductor foundries face severe capital cycles and high technological obsolescence risks.
-        // Their optimal capital structure is lean on debt. They should only recapitalize under extreme
-        // WACC arbitrage (Ke > Kd + 3.0%) and extraordinary cash flow safety (ICR > 15.0).
-        if ($costOfEquity <= ($effectiveCostOfDebt + self::WACC_ARBITRAGE_THRESHOLD)) {
-            return false;
-        }
-        if ($interestCoverage < self::MIN_RECAP_ICR_FLOOR) {
-            return false;
-        }
-        return $currentDebtRatio < ($targetDebtTolerance * self::UNDERLEVERAGED_DEBT_RATIO);
-    }
-
     public function getWorkingCapitalIntensity(Stock $stock): float
     {
         return 0.18; // High wafer fabrication lead time & finished goods inventory holding
@@ -293,25 +300,6 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     public function getSeasonalityFactors(): array
     {
         return [0.90, 0.95, 1.05, 1.10]; // H2 consumer electronics ramps and Q4 corporate budget flush
-    }
-
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
-    {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
-
-        if ($reinvestmentRatio < 1.0) {
-            $decayRate = self::DEPRECIATION_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            $modGain = self::MODERNIZATION_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
     }
 
     /**
@@ -327,6 +315,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'industrial_metals_index_ema',
+            'inventory_stock_gap_ema',
             'manufacturing_pmi_ema',
             'output_gap_ema',
             'producer_price_inflation_ema',

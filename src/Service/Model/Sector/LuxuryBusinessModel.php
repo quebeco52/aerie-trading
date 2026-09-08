@@ -23,6 +23,10 @@ use App\Service\Macro\MacroEngine;
  */
 class LuxuryBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Flagship boutiques on prime retail streets are leased on long terms. */
+    public const LEASE_LIABILITY_INTENSITY = 0.45;
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.50;
     public const BASE_COVERAGE_ERROR = 0.05;
@@ -124,7 +128,7 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         $accessibleWeight = $params[ModelParam::AccessibleLuxuryWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -138,7 +142,7 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         // Independent stream Z-scores with AR(1) persistence
         $hauteZ      = $streams->generateZ('haute_couture', 0.40); // UHNW leather goods / couture demand
         $accessibleZ = $streams->generateZ('accessible_luxury', 0.15); // Fragrance & cosmetics retail volume
-        $eventZ      = $streams->generateZ('event', 0.05);
+        $eventZ      = $streams->generateExogenousZ('event', 0.05);
 
         $hauteRevenue      = $expectedRevenue * $hauteWeight * (1.0 + ($hauteZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
         $accessibleRevenue = $expectedRevenue * $accessibleWeight * (1.0 + ($accessibleZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
@@ -209,25 +213,16 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         return [0.85, 0.90, 0.95, 1.30]; // Q4 holiday gift & festive collection surge
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /** Boutique craftsmanship decay toward accessible apparel floor */
+    public function getDepreciationDecayRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
+        return self::BOUTIQUE_CRAFT_DECAY_RATE;
+    }
 
-        if ($reinvestmentRatio < 1.0) {
-            // Boutique craftsmanship decay toward accessible apparel floor
-            $decayRate = self::BOUTIQUE_CRAFT_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            // Heritage exclusivity overinvestment expands Veblen pricing cachet
-            $modGain = self::HERITAGE_EXCLUSIVITY_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+    /** Heritage exclusivity overinvestment expands Veblen pricing cachet */
+    public function getModernizationGainRate(): float
+    {
+        return self::HERITAGE_EXCLUSIVITY_GAIN_RATE;
     }
 
     /**

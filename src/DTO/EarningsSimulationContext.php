@@ -33,6 +33,9 @@ class EarningsSimulationContext
     public float $seasonallyAdjustedRevenue = 0.0;
     public float $seasonallyAdjustedEbit = 0.0;
     public float $structuralOperatingMargin = 0.0;
+    /** Calendar quarter (0-3) this report covers; drives seasonality. */
+    public int $calendarQuarter = 0;
+    /** Fiscal quarter (0-3) after the ticker's fiscal-year offset; drives annual events like the impairment test. */
     public int $fiscalQuarter = 0;
     public int $tickCount = 0;
     public int $ticksPerYear = 252;
@@ -62,6 +65,22 @@ class EarningsSimulationContext
     public ?string $eventType = null;
     public array $eventContext = [];
     public array $streamRevenue = [];
+    /** Mandatory CapEx committed by the sector physics this quarter (spectrum, grid rebuild), in dollars. */
+    public float $scheduledCapex = 0.0;
+    /** Quarterly stock-based compensation (ASC 718): non-cash expense inside the cost base, settled in shares. */
+    public float $stockCompensation = 0.0;
+    /** Goodwill written down this quarter under the annual impairment test (ASC 350), non-cash. */
+    public float $goodwillImpairment = 0.0;
+    /** Quarterly net cash from operations (net income + D&A - working capital build). */
+    public float $operatingCashFlow = 0.0;
+    /** Quarterly net cash from investing (negative = net investment). */
+    public float $investingCashFlow = 0.0;
+    /** Quarterly net cash from financing (positive = net capital raised). */
+    public float $financingCashFlow = 0.0;
+    /** Dickinson life-cycle stage classified from this quarter's cash-flow signs. */
+    public ?\App\Data\LifecycleStage $lifecycleStage = null;
+    /** @var array<string, float> Reported operating KPIs emitted by the sector physics. */
+    public array $kpis = [];
 
     // Interest & Depreciation
     public float $expectedInterestExpense = 0.0;

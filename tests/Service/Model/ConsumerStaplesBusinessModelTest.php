@@ -88,8 +88,9 @@ class ConsumerStaplesBusinessModelTest extends TestCase
         $shortageMock = $this->getMockBuilder(MathUtility::class)
             ->onlyMethods(['generateStandardNormal'])
             ->getMock();
+        // sequence: firmFactor=0, brandedZ=0, volumeZ idio=-2.5 (composite -2.0), eventZ=0, ...
         $shortageMock->method('generateStandardNormal')
-            ->willReturnOnConsecutiveCalls(0.0, -2.0, 0.0, 0.0, 0.0);
+            ->willReturnOnConsecutiveCalls(0.0, 0.0, -2.5, 0.0, 0.0, 0.0);
 
         $shortageResult = $model->computeActualFinancials(
             $stock,
@@ -106,7 +107,7 @@ class ConsumerStaplesBusinessModelTest extends TestCase
             ->onlyMethods(['generateStandardNormal'])
             ->getMock();
         $bumperMock->method('generateStandardNormal')
-            ->willReturnOnConsecutiveCalls(0.0, 2.0, 0.0, 0.0, 0.0);
+            ->willReturnOnConsecutiveCalls(0.0, 0.0, 2.5, 0.0, 0.0, 0.0);
 
         $bumperResult = $model->computeActualFinancials(
             $stock,
@@ -125,7 +126,10 @@ class ConsumerStaplesBusinessModelTest extends TestCase
     public function testPackagingAndEnergyLogisticsPenaltyWithHedging(): void
     {
         $model = new ConsumerStaplesBusinessModel();
-        $mathUtility = new MathUtility();
+        // Zeroed draws: the comparison must isolate the hedge, not harvest or brand noise.
+        $mathUtility = $this->createStub(MathUtility::class);
+        $mathUtility->method('generatePersistentZ')->willReturn(0.0);
+        $mathUtility->method('generateStandardNormal')->willReturn(0.0);
 
         // Stock without commodity hedging
         $unhedgedStock = new Stock();
@@ -137,7 +141,8 @@ class ConsumerStaplesBusinessModelTest extends TestCase
         $hedgedStock->setTicker('PINT');
         $hedgedStock->setBeta('1.0');
 
-        $spikeMacro = new MacroStateDTO(inflationEma: 0.02, energyPriceIndexEma: 150.0); // +50% energy spike
+        // Packaging and freight costs read the lagged energy cost-push channel, not the spot index.
+        $spikeMacro = new MacroStateDTO(inflationEma: 0.02, energyCostPushLag: 0.10);
 
         $unhedgedResult = $model->computeActualFinancials(
             $unhedgedStock,
@@ -179,7 +184,7 @@ class ConsumerStaplesBusinessModelTest extends TestCase
         $mathRecall = $this->getMockBuilder(MathUtility::class)
             ->onlyMethods(['generateStandardNormal'])
             ->getMock();
-        $mathRecall->method('generateStandardNormal')->willReturnOnConsecutiveCalls(0.0, 0.0, -3.0, 0.0, 0.0);
+        $mathRecall->method('generateStandardNormal')->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, -3.0, 0.0, 0.0);
 
         $recallResult = $model->computeActualFinancials(
             $stock,
@@ -198,7 +203,7 @@ class ConsumerStaplesBusinessModelTest extends TestCase
         $mathFine = $this->getMockBuilder(MathUtility::class)
             ->onlyMethods(['generateStandardNormal'])
             ->getMock();
-        $mathFine->method('generateStandardNormal')->willReturnOnConsecutiveCalls(0.0, 0.0, -2.2, 0.0, 0.0);
+        $mathFine->method('generateStandardNormal')->willReturnOnConsecutiveCalls(0.0, 0.0, 0.0, -2.2, 0.0, 0.0);
 
         $fineResult = $model->computeActualFinancials(
             $stock,

@@ -27,6 +27,10 @@ use App\Service\Math\MathUtility;
  */
 class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Ground leases and OpCo/PropCo structures. */
+    public const LEASE_LIABILITY_INTENSITY = 0.25;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility from monthly Nevada / Macau gaming control board filings. */
     public const BASE_COVERAGE_VISIBILITY = 0.70;
@@ -152,7 +156,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         $targetWeights = [
             'gaming'     => $params[ModelParam::GamingRevenueWeight],
@@ -171,7 +175,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
 
         $gamingZ    = $streams->generateZ('gaming', 0.15); // Table hold luck (near i.i.d.)
         $nonGamingZ = $streams->generateZ('non_gaming', 0.35); // Hotel occupancy & convention backlog
-        $eventZ     = $streams->generateZ('event', 0.10);
+        $eventZ     = $streams->generateExogenousZ('event', 0.10);
 
         // --- Tail Risk Events (Symmetric Hold Variance) ---
         $whaleMultiplier = 1.0;
@@ -294,23 +298,16 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /** Under-investment below replacement CapEx erodes operating margin toward the sector floor. */
+    public function getDepreciationDecayRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
+        return self::RESORT_AGING_DECAY_RATE;
+    }
 
-        if ($reinvestmentRatio < 1.0) {
-            $decayRate = self::RESORT_AGING_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            $modGain = self::RESORT_MODERNIZATION_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+    /** Over-investment above replacement CapEx compounds margin toward the sector ceiling. */
+    public function getModernizationGainRate(): float
+    {
+        return self::RESORT_MODERNIZATION_GAIN_RATE;
     }
 
     /**
@@ -321,7 +318,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
             'commercial_property_index_ema',
             'consumer_sentiment_index_ema',
             'energy_cost_push_lag',
@@ -329,6 +326,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
             'inflation_ema',
             'output_gap_ema',
             'residential_property_index_ema',
-        ]));
+            'tips_breakeven_ema',
+        ];
     }
 }

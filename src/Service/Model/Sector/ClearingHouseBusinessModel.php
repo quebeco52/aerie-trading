@@ -183,7 +183,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         $params = $this->resolveModelParameters($stock, [
             ModelParam::ClearingFeeWeight->value      => 0.50,
@@ -240,7 +240,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // The CCP Default Waterfall (Catastrophic Tail Risk)
-        $defaultZ = $streams->generateZ('default', 0.05);
+        $defaultZ = $streams->generateExogenousZ('default', 0.05);
 
         // Under the Default Waterfall, routine member defaults ($defaultZ >= CATASTROPHE_Z_THRESHOLD) are fully absorbed
         // by the defaulting member's posted Initial Margin and Guaranty Fund contribution ($0 loss to CCP equity).
@@ -471,7 +471,6 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
             'policy_rate_ema',
             'yield_10y_ema',
             'yield_2y_ema',
-            'yield_5y_ema',
         ];
     }
 }

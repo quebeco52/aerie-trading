@@ -23,6 +23,10 @@ use App\Service\Math\MathUtility;
  */
 class FinancialDataBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Balance Sheet Realism ---
+    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Data and platform engineering paid partly in equity. */
+    public const STOCK_COMPENSATION_INTENSITY = 0.04;
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.80;
     public const BASE_COVERAGE_ERROR = 0.10;
@@ -101,7 +105,7 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         $transactionWeight  = $params[ModelParam::TransactionRevenueWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -163,36 +167,16 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         return self::MONOPOLY_REVERSION_SPEED; // High switching costs and data monopoly moat
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /** Tech debt & feed latency decay toward software baseline */
+    public function getDepreciationDecayRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
-
-        if ($reinvestmentRatio < 1.0) {
-            // Tech debt & feed latency decay toward software baseline
-            $decayRate = self::PLATFORM_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            // Platform modernization expands data monopoly margin ceiling
-            $modGain = self::DATA_MONOPOLY_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+        return self::PLATFORM_DECAY_RATE;
     }
 
-    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
+    /** Platform modernization expands data monopoly margin ceiling */
+    public function getModernizationGainRate(): float
     {
-        if ($costOfEquity <= ($effectiveCostOfDebt + self::WACC_ARBITRAGE_THRESHOLD)) {
-            return false;
-        }
-        if ($interestCoverage < self::MIN_RECAP_ICR_FLOOR) {
-            return false;
-        }
-        return $currentDebtRatio < ($targetDebtTolerance * self::UNDERLEVERAGED_DEBT_RATIO);
+        return self::DATA_MONOPOLY_GAIN_RATE;
     }
 
     /**
@@ -205,9 +189,11 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     {
         return [
             'deal_activity_index_ema',
+            'exchange_rate_index_ema',
             'macro_credit_spread_ema',
             'market_volatility_ema',
             'output_gap_ema',
+            'tips_breakeven_ema',
         ];
     }
 }

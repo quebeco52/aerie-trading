@@ -155,6 +155,11 @@ trait FinancialPhysicsTrait
         return 0.80; // Financials heavily rely on floating rate wholesale debt/deposits
     }
 
+    public function getDebtMaturityRolloverRate(): float
+    {
+        return \App\Service\Math\FinancialConstants::DEFAULT_QUARTERLY_DEBT_ROLLOVER;
+    }
+
     public function getDeleveragingEvaluationDebt(float $totalDebt, float $wholesaleDebt): float
     {
         return $wholesaleDebt;

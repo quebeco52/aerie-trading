@@ -79,7 +79,7 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         // Counter-Cyclical Credit Spread Trigger
         $creditSpread = ($macroState->macroCreditSpread !== MacroEngine::BASE_CREDIT_SPREAD)
@@ -201,7 +201,10 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
             'high_yield_credit_spread_ema',
             'macro_credit_spread',
             'macro_credit_spread_ema',
+            'market_volatility_ema',
             'output_gap_ema',
+            'policy_rate_ema',
+            'yield_10y_ema',
         ];
     }
 }

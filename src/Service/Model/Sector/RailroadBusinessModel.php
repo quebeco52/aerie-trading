@@ -28,6 +28,24 @@ use App\Service\Event\ShockEvent;
  */
 class RailroadBusinessModel extends StandardCorporateBusinessModel
 {
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: harvest grain carloads in the second half, winter weather in Q1.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [0.95, 1.00, 1.02, 1.03];
+    }
+
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Leased locomotives and rolling stock. */
+    public const LEASE_LIABILITY_INTENSITY = 0.10;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Crew and maintenance-of-way payroll shares overhead with track, locomotive and fuel costs. */
+    public const FIXED_COST_LABOR_SHARE = 0.45;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for Class 1 railroad analysts. */
     public const BASE_COVERAGE_VISIBILITY = 0.60;
@@ -95,7 +113,7 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
         $industrialWeight = $params[ModelParam::IndustrialCarloadsWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
         $beta     = abs((float) $stock->getBeta());
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
@@ -164,25 +182,16 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /** Track slow orders & locomotive breakdown drag toward floor */
+    public function getDepreciationDecayRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
+        return self::TRACK_AGING_DECAY_RATE;
+    }
 
-        if ($reinvestmentRatio < 1.0) {
-            // Track slow orders & locomotive breakdown drag toward floor
-            $decayRate = self::TRACK_AGING_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            // Precision Scheduled Railroading (PSR) efficiency expands margin ceiling
-            $modGain = self::PSR_EFFICIENCY_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+    /** Precision Scheduled Railroading (PSR) efficiency expands margin ceiling */
+    public function getModernizationGainRate(): float
+    {
+        return self::PSR_EFFICIENCY_GAIN_RATE;
     }
 
     /**
@@ -193,13 +202,15 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
             'agricultural_commodity_index_ema',
             'energy_cost_push_lag',
+            'exchange_rate_index_ema',
             'freight_rate_index_ema',
             'manufacturing_pmi_ema',
             'output_gap_ema',
+            'tips_breakeven_ema',
             'trade_balance_to_gdp_ema',
-        ]));
+        ];
     }
 }

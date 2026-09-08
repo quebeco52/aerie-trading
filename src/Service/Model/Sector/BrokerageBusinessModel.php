@@ -24,6 +24,10 @@ use App\Service\Math\FinancialConstants;
  */
 class BrokerageBusinessModel extends BaseFinancialBusinessModel
 {
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Sales and trading compensation is the largest overhead line of a brokerage. */
+    public const FIXED_COST_LABOR_SHARE = 0.60;
+
 
     // --- Loss Provisions & Analyst Coverage ---
     /** Loss provision z-factor for margin credit defaults. */
@@ -126,7 +130,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         $advisoryWeight = $params[ModelParam::AdvisoryRevenueWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([

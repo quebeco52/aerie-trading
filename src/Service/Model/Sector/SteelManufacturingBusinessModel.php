@@ -26,6 +26,10 @@ use App\Service\Event\ShockEvent;
  */
 class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Mill labor shares overhead with furnace energy, refractories and maintenance. */
+    public const FIXED_COST_LABOR_SHARE = 0.40;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for industrial steel analysts. */
     public const BASE_COVERAGE_VISIBILITY = 0.50;
@@ -112,7 +116,7 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $pricingPower   = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
         $beta     = abs((float) $stock->getBeta());
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
@@ -191,25 +195,16 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
             : $baseConsensus;
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /** Blast furnace wear & refractory thermal degradation toward floor */
+    public function getDepreciationDecayRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
+        return self::BLAST_FURNACE_DECAY_RATE;
+    }
 
-        if ($reinvestmentRatio < 1.0) {
-            // Blast furnace wear & refractory thermal degradation toward floor
-            $decayRate = self::BLAST_FURNACE_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            // EAF efficiency & automated rolling mill modernization expands margin ceiling
-            $modGain = self::EAF_MODERNIZATION_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+    /** EAF efficiency & automated rolling mill modernization expands margin ceiling */
+    public function getModernizationGainRate(): float
+    {
+        return self::EAF_MODERNIZATION_GAIN_RATE;
     }
 
     /**
@@ -220,14 +215,16 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
             'capacity_utilization_rate_ema',
             'energy_cost_push_lag',
+            'exchange_rate_index_ema',
             'freight_rate_index_ema',
             'industrial_metals_index_ema',
             'manufacturing_pmi_ema',
             'output_gap_ema',
             'producer_price_inflation_ema',
-        ]));
+            'tips_breakeven_ema',
+        ];
     }
 }

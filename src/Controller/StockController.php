@@ -84,6 +84,8 @@ class StockController extends AbstractController
         $businessModel = 'none';
         $investedCapital = 0.0;
         $analystTargets = null;
+        $lifecycleStage = null;
+        $dividendYield = 0.0;
 
         if (!$isEtf) {
             $isBankrupt = $asset->isBankrupt();
@@ -100,6 +102,16 @@ class StockController extends AbstractController
             $investedCapital = $isBankrupt ? 0.0 : (float) $asset->getInvestedCapital();
 
             $marketShare = $isBankrupt ? 0.0 : min(0.9999, $corporateMetrics->calculateMarketShare($evaluationCapital, $nominalGdpIndex, $samRatio));
+
+            // Dickinson (2011) stage stored by the last quarterly report; null until the first report lands.
+            $lifecycleStage = $asset->getLifecycleStage();
+
+            // lastDividend is the quarterly per-share payment (Lintner step each report), so the yield annualises it.
+            $lastDividend = (float) $asset->getLastDividend();
+            $priceForYield = (float) $asset->getPrice();
+            $dividendYield = (!$isBankrupt && $priceForYield > 0.0 && $lastDividend > 0.0)
+                ? ($lastDividend * 4.0) / $priceForYield
+                : 0.0;
 
             if (!$isBankrupt) {
                 $currentPrice = (float) $asset->getPrice();
@@ -321,6 +333,9 @@ class StockController extends AbstractController
             'sharesMap' => $sharesMap,
             'components' => $components,
             'analystTargets' => $analystTargets,
+            'lifecycleStage' => $lifecycleStage,
+            'lifecycleStages' => \App\Data\LifecycleStage::cases(),
+            'dividendYield' => $dividendYield,
         ]);
     }
 

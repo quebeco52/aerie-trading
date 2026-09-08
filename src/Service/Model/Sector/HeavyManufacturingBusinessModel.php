@@ -23,6 +23,20 @@ use App\Service\Macro\MacroEngine;
  */
 class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Inventory Cycle ---
+    /** Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking, shortfalls restocking. Dealer and fleet inventories gate OEM equipment orders. */
+    public const INVENTORY_CYCLE_SENSITIVITY = 0.80;
+
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: spring construction and farm machinery deliveries.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [0.96, 1.04, 1.00, 1.00];
+    }
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.30;
     public const BASE_COVERAGE_ERROR = 0.08;
@@ -47,8 +61,8 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const AFTERMARKET_MRO_WEIGHT = 0.35;
 
     // --- Backlog & Variance Physics ---
-    /** Fraction of OEM revenue shocks absorbed by multi-quarter order backlogs. */
-    public const BACKLOG_DAMPING_FACTOR = 0.50;
+    /** Fraction of the OEM order backlog (opening backlog plus new orders) executed and recognized each quarter (~1.9 quarters of coverage). */
+    public const OEM_BACKLOG_BURN_RATE = 0.35;
     /** Volatility multiplier for OEM capital equipment sales shocks. */
     public const OEM_VARIANCE_SCALAR = 0.40;
     /** Volatility multiplier for defensive aftermarket MRO consumables and repairs. */
@@ -104,7 +118,7 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         $inflationMultiplier = 2.0 - ($pricingPower * 2.0);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -119,13 +133,18 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         $oemZ = $streams->generateZ('oem_equipment', 0.20);
         $mroZ = $streams->generateZ('aftermarket_mro', 0.40);
 
-        $dampedOemShock = ($oemZ * ($baselineVol * self::OEM_VARIANCE_SCALAR)) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
-        $mroShock       = $mroZ * ($baselineVol * self::MRO_VARIANCE_SCALAR);
+        $mroShock = $mroZ * ($baselineVol * self::MRO_VARIANCE_SCALAR);
 
         $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         $overhangDrag = $macroState->capitalStockOverhangEma * self::CAPITAL_OVERHANG_SCALAR;
 
-        $oemRevenue = max(0.0, $expectedRevenue * $oemWeight * (1.0 + $dampedOemShock - ($fxShift * 0.15) - $overhangDrag));
+        // OEM equipment is booked into a multi-quarter order backlog and recognized over time: a demand shock
+        // hits orders in full but reaches revenue only at the backlog burn rate, and the rest persists.
+        // Metzler inventory cycle: dealer lots and fleet stocks are drawn down before new OEM orders are placed.
+        $inventoryCycleShift = -$macroState->inventoryStockGapEma * self::INVENTORY_CYCLE_SENSITIVITY;
+        $oemOrderMultiplier = max(0.0, 1.0 + ($oemZ * ($baselineVol * self::OEM_VARIANCE_SCALAR)) - ($fxShift * 0.15) - $overhangDrag + $inventoryCycleShift);
+        $oemBook = $streams->recognizeBacklog('oem_equipment', $expectedRevenue * $oemWeight, $oemOrderMultiplier, self::OEM_BACKLOG_BURN_RATE);
+        $oemRevenue = $oemBook['revenue'];
         $mroRevenue = max(0.0, $expectedRevenue * $mroWeight * (1.0 + $mroShock));
         $streamRevenues = [
             'oem_equipment'   => $oemRevenue,
@@ -175,7 +194,7 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         $clampedMargin = $this->clampMargin($effectiveMargin + $inflationPenalty + $cuMarginAdjustment + $ppiCostDrag);
 
         $primaryShockZ = $streams->resolveDominantShockZ([$oemZ, $mroZ]);
-        $observableShockZ = ($oemZ * $oemWeight * self::OEM_VARIANCE_SCALAR * (1.0 - self::BACKLOG_DAMPING_FACTOR)) +
+        $observableShockZ = ($oemZ * $oemWeight * self::OEM_VARIANCE_SCALAR * self::OEM_BACKLOG_BURN_RATE) +
             ($mroZ * $mroWeight * self::MRO_VARIANCE_SCALAR);
         $observableShockZ *= $baselineVol;
 
@@ -187,6 +206,7 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
             eventType: null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+                    kpis: ['book_to_bill' => $oemBook['book_to_bill'], 'backlog_quarters' => $oemBook['backlog_quarters']],
         );
     }
 
@@ -210,17 +230,19 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
             'capacity_utilization_rate_ema',
             'capital_stock_overhang_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'freight_rate_index_ema',
             'industrial_metals_index_ema',
+            'inventory_stock_gap_ema',
             'manufacturing_pmi_ema',
             'output_gap_ema',
             'producer_price_inflation_ema',
             'supply_chain_pressure_index_ema',
-        ]));
+            'tips_breakeven_ema',
+        ];
     }
 }

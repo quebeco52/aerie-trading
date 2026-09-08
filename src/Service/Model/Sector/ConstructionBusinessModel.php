@@ -39,8 +39,10 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_ERROR = 0.08;
 
     // --- Backlog & Order Book ---
-    /** Fraction of revenue shock absorbed by multi-year order backlog (1.0 = fully absorbed). */
-    public const BACKLOG_DAMPING_FACTOR = 0.75;
+    /** Fraction of the civil infrastructure backlog executed and recognized each quarter (multi-year public works, ~4 quarters of coverage). */
+    public const CIVIL_BACKLOG_BURN_RATE = 0.20;
+    /** Fraction of the commercial EPC backlog executed and recognized each quarter (~3 quarters of coverage). */
+    public const COMMERCIAL_BACKLOG_BURN_RATE = 0.25;
 
     // --- Default Tri-Stream Weights ---
     /** Baseline revenue share from public/sovereign civil infrastructure mega-projects. */
@@ -91,6 +93,12 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
 
     /** Variable margin penalty from project delays and contract write-downs. */
     public const COST_OVERRUN_PENALTY = 0.06;
+    /** Regime key for a delayed fixed-price project that keeps absorbing overrun costs until completion. */
+    public const REGIME_PROJECT_OVERRUN = 'project_overrun';
+    /** Quarterly probability the delayed project reaches completion (~3 quarter expected slip). */
+    public const PROJECT_OVERRUN_EXIT_HAZARD = 0.33;
+    /** Ongoing quarterly overrun cost (idle crews, liquidated damages) while the delayed project persists. */
+    public const PROJECT_OVERRUN_ONGOING_PENALTY = 0.03;
 
     /** Z-score threshold for winning a landmark sovereign infrastructure award. */
     public const MEGA_PROJECT_Z_SCORE = 2.20;
@@ -157,7 +165,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $pricingPower      = $params[ModelParam::PricingPowerIndex];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new StreamContext($momentum, $mathUtility);
+        $streams = $this->createStreamContext($momentum, $mathUtility);
         $beta = abs((float) $stock->getBeta());
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
@@ -175,9 +183,9 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $civilZ       = $streams->generateZ('civil_infrastructure', 0.40);
         $commercialZ  = $streams->generateZ('commercial_epc', 0.20);
         $maintenanceZ = $streams->generateZ('facilities_maintenance', 0.50);
-        $eventZ       = $streams->generateZ('event', 0.10);
+        $eventZ       = $streams->generateExogenousZ('event', 0.10);
 
-        // --- Macro Sensitivities (Damped by Order Backlog) ---
+        // --- Macro Sensitivities (hit ORDERS in full; the backlog below cushions recognized revenue) ---
         $outputGap = $macroState->outputGapEma;
         $policyRate = $macroState->policyRateEma;
         $residentialShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
@@ -185,32 +193,49 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $housingStartsShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_SENSITIVITY);
         $sloosDrag = max(0.0, $macroState->sloosTighteningIndexEma) * self::SLOOS_CREDIT_TIGHTENING_SCALAR;
 
-        $commercialMacroBoost = (($outputGap * 1.5 * $beta) + ($commercialPropertyShift * 0.30) + ($residentialShift * 0.20) + $housingStartsShift) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
-        $commercialCreditDrag = (max(0.0, ($policyRate - $macroState->naturalRateEma) * 2.0 * $beta) + $sloosDrag) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
+        $commercialMacroBoost = ($outputGap * 1.5 * $beta) + ($commercialPropertyShift * 0.30) + ($residentialShift * 0.20) + $housingStartsShift;
+        $commercialCreditDrag = max(0.0, ($policyRate - $macroState->naturalRateEma) * 2.0 * $beta) + $sloosDrag;
         $maintenanceMacroBoost = ($outputGap * 0.3 * $beta);
         $govSpendShift = ($macroState->governmentSpendingIndexEma - 100.0) / 100.0;
 
         // --- Tail Risk Events ---
+        // A slipped fixed-price project books its forward loss on the onset quarter and then bleeds idle
+        // crew and liquidated-damage costs every quarter until it finally completes.
+        $overrunElapsed = $streams->evolveRegime(self::REGIME_PROJECT_OVERRUN, 0.0, self::PROJECT_OVERRUN_EXIT_HAZARD);
         $dealMultiplier = 1.0;
         $eventType = null;
-        $costOverrunDrag = 0.0;
 
         if ($eventZ > self::MEGA_PROJECT_Z_SCORE) {
             $dealMultiplier = self::MEGA_PROJECT_MULT;
-            $eventType = ShockEvent::INFRASTRUCTURE_BILL_WIN ?? 'mega_project_win';
-        } elseif ($eventZ < self::COST_OVERRUN_Z_SCORE) {
-            $costOverrunDrag = self::COST_OVERRUN_PENALTY;
-            $eventType = ShockEvent::PROJECT_DELAY ?? 'cost_overrun';
+            $eventType = ShockEvent::INFRASTRUCTURE_BILL_WIN;
+        } elseif ($eventZ < self::COST_OVERRUN_Z_SCORE && $overrunElapsed === 0) {
+            $overrunElapsed = $streams->startRegime(self::REGIME_PROJECT_OVERRUN);
+            $eventType = ShockEvent::PROJECT_DELAY;
         }
 
+        $costOverrunDrag = match (true) {
+            $overrunElapsed === 1 => self::COST_OVERRUN_PENALTY,
+            $overrunElapsed > 1   => self::PROJECT_OVERRUN_ONGOING_PENALTY,
+            default               => 0.0,
+        };
+
         // --- Tri-Stream Revenue Calculation ---
-        $civilShock = $civilZ * ($baselineVol * self::CIVIL_VARIANCE_SCALAR) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
-        $commercialShock = $commercialZ * ($baselineVol * self::COMMERCIAL_EPC_VARIANCE_SCALAR) * (1.0 - self::BACKLOG_DAMPING_FACTOR);
+        // Civil and commercial awards enter multi-quarter backlogs and are recognized on percentage of
+        // completion; facilities maintenance is a run-rate service recognized as delivered.
+        $civilShock = $civilZ * ($baselineVol * self::CIVIL_VARIANCE_SCALAR);
+        $commercialShock = $commercialZ * ($baselineVol * self::COMMERCIAL_EPC_VARIANCE_SCALAR);
         $maintenanceShock = $maintenanceZ * ($baselineVol * self::FACILITIES_MAINTENANCE_VARIANCE_SCALAR);
 
-        $civilRevenue = max(0.0, $expectedRevenue * $civilWeight * (1.0 + $civilShock + ($govSpendShift * 0.30)) * $dealMultiplier);
-        $commercialRevenue = max(0.0, $expectedRevenue * $commercialWeight * (1.0 + $commercialShock + $commercialMacroBoost - $commercialCreditDrag));
+        $civilBook = $streams->recognizeBacklog('civil_infrastructure', $expectedRevenue * $civilWeight, max(0.0, (1.0 + $civilShock + ($govSpendShift * 0.30)) * $dealMultiplier), self::CIVIL_BACKLOG_BURN_RATE);
+        $commercialBook = $streams->recognizeBacklog('commercial_epc', $expectedRevenue * $commercialWeight, max(0.0, 1.0 + $commercialShock + $commercialMacroBoost - $commercialCreditDrag), self::COMMERCIAL_BACKLOG_BURN_RATE);
+
+        $civilRevenue = $civilBook['revenue'];
+        $commercialRevenue = $commercialBook['revenue'];
         $maintenanceRevenue = max(0.0, $expectedRevenue * $maintenanceWeight * (1.0 + $maintenanceShock + $maintenanceMacroBoost));
+
+        $backlogOrders = $civilBook['orders'] + $commercialBook['orders'];
+        $backlogRevenue = $civilRevenue + $commercialRevenue;
+        $backlogQuarters = ($civilBook['backlog'] + $commercialBook['backlog']) / max(1.0, $expectedRevenue * ($civilWeight + $commercialWeight));
 
         $streamRevenues = [
             'civil_infrastructure'   => $civilRevenue,
@@ -257,6 +282,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+                    kpis: ['book_to_bill' => $backlogRevenue > 0.0 ? $backlogOrders / $backlogRevenue : 1.0, 'backlog_quarters' => $backlogQuarters],
         );
     }
 
@@ -268,9 +294,10 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
             'commercial_property_index_ema',
             'energy_cost_push_lag',
+            'exchange_rate_index_ema',
             'government_spending_index_ema',
             'housing_starts_index_ema',
             'industrial_metals_index_ema',
@@ -281,6 +308,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
             'producer_price_inflation',
             'residential_property_index_ema',
             'sloos_tightening_index_ema',
-        ]));
+            'tips_breakeven_ema',
+        ];
     }
 }

@@ -23,6 +23,20 @@ use App\Service\Macro\MacroEngine;
  */
 class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
 {
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: holiday and year-end promotional volumes.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [0.92, 1.00, 0.98, 1.10];
+    }
+
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Leased plants and distribution warehouses. */
+    public const LEASE_LIABILITY_INTENSITY = 0.10;
+
     // --- Dual-Stream Architecture ---
     /** Baseline fraction of revenue derived from high-margin commercial B2B precision tooling. */
     public const COMMERCIAL_WEIGHT = 0.60;
@@ -105,7 +119,7 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         $consumerWeight   = $params[ModelParam::ConsumerWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -119,7 +133,7 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         // Commercial is highly sticky, Consumer is volatile
         $commercialZ = $streams->generateZ('commercial', 0.02);
         $consumerZ   = $streams->generateZ('consumer', 0.30);
-        $eventZ      = $streams->generateZ('event', 0.10);
+        $eventZ      = $streams->generateExogenousZ('event', 0.10);
 
         $standardParams = $this->resolveModelParameters($stock, [ModelParam::PricingPowerIndex->value => 0.5]);
         $pricingPower = max(0.0, min(1.0, $standardParams[ModelParam::PricingPowerIndex]));
@@ -221,25 +235,16 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /** Precision tooling tech debt and loss of manufacturing edge */
+    public function getDepreciationDecayRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
+        return self::PRECISION_TOOLING_DECAY_RATE;
+    }
 
-        if ($reinvestmentRatio < 1.0) {
-            // Precision tooling tech debt and loss of manufacturing edge
-            $decayRate = self::PRECISION_TOOLING_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            // Investment in next-gen CNC and R&D automation expands margin
-            $modGain = self::AUTOMATION_RND_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+    /** Investment in next-gen CNC and R&D automation expands margin */
+    public function getModernizationGainRate(): float
+    {
+        return self::AUTOMATION_RND_GAIN_RATE;
     }
 
     /**
@@ -250,7 +255,7 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
             'consumer_sentiment_index_ema',
             'exchange_rate_index_ema',
             'housing_starts_index_ema',
@@ -259,6 +264,7 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
             'manufacturing_pmi_ema',
             'output_gap_ema',
             'producer_price_inflation',
-        ]));
+            'tips_breakeven_ema',
+        ];
     }
 }

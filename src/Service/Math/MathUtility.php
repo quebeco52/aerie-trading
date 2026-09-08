@@ -133,11 +133,23 @@ class MathUtility
      *
      * @param float $previousZ The previous quarter's realized Z-score (z_{t-1}).
      * @param float $phi       The autoregressive persistence coefficient (0 = i.i.d., 1 = random walk).
+     * @param float|null $commonInnovation Optional firm-wide N(0,1) innovation shared by every stream this period.
+     * @param float $commonLoading  One-factor loading rho in [0, 1] on the common innovation (0 = independent).
      * @return float The new Z-score z_t.
      */
-    public function generatePersistentZ(float $previousZ, float $phi): float
+    public function generatePersistentZ(float $previousZ, float $phi, ?float $commonInnovation = null, float $commonLoading = 0.0): float
     {
-        $innovation = $this->generateStandardNormal();
+        $idiosyncratic = $this->generateStandardNormal();
+        $innovation = $idiosyncratic;
+
+        if ($commonInnovation !== null && $commonLoading > 0.0) {
+            // One-factor model (Sharpe 1963 single-index form): e_t = rho * F_t + sqrt(1 - rho^2) * u_t
+            // keeps the innovation at unit variance while two streams with loadings rho_i, rho_j
+            // share innovation correlation rho_i * rho_j.
+            $loading = min(1.0, $commonLoading);
+            $innovation = ($loading * $commonInnovation) + (sqrt(max(0.0, 1.0 - ($loading * $loading))) * $idiosyncratic);
+        }
+
         $innovationScale = sqrt(max(0.0, 1.0 - ($phi * $phi)));
 
         return ($phi * $previousZ) + ($innovationScale * $innovation);

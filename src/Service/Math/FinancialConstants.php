@@ -205,7 +205,27 @@ class FinancialConstants
     /** Maximum market cap percentage (15%) a fully saturated firm can repurchase in a single quarter. */
     public const MAX_REGULATORY_SPEND_SATURATED = 0.15;
 
+    // --- Industry Exit & Consolidation ---
+    /** Share of a failed rival's addressable market that surviving peers in the same industry recapture; the rest leaks to substitutes or is destroyed. */
+    public const MARKET_EXIT_RECAPTURE_FRACTION = 0.70;
+
+    // --- Balance Sheet Realism ---
+    /** Default capitalized operating lease liability (IFRS 16 / ASC 842) as a fraction of annual revenue. */
+    public const DEFAULT_LEASE_LIABILITY_INTENSITY = 0.05;
+    /** Default stock-based compensation (ASC 718) as a fraction of revenue: non-cash expense, real dilution. */
+    public const DEFAULT_STOCK_COMPENSATION_INTENSITY = 0.01;
+    /** Goodwill impairment smaller than this fraction of the goodwill balance is immaterial and not booked. */
+    public const MIN_GOODWILL_IMPAIRMENT_FRACTION = 0.01;
+
+    // --- Labor Intensity ---
+    /** Default labor share of the fixed cost base (salaried staff, SG&A payroll) exposed to the Beveridge wage squeeze. */
+    public const DEFAULT_FIXED_COST_LABOR_SHARE = 0.65;
+
     // --- Debt Physics ---
+    /** Fallback weighted average cost of capital used as the investment hurdle when no live debt health exists. */
+    public const DEFAULT_WACC_FALLBACK = 0.08;
+    /** Fraction of fixed-rate debt that matures and reprices at market each quarter (5-year average tenor). */
+    public const DEFAULT_QUARTERLY_DEBT_ROLLOVER = 0.05;
     /** Base quarterly probability of evaluating balance sheet debt expansion. */
     public const DEBT_EXPANSION_BASE_PROB = 0.40;
     /** Sensitivity scaling debt issuance probability when ROIC exceeds WACC. */

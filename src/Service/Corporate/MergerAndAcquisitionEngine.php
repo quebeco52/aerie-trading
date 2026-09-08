@@ -365,13 +365,13 @@ class MergerAndAcquisitionEngine
 
         $ctx->synergyMultiplier = $this->mathUtility->calculateLogNormalSynergy($mu, $sigma);
 
+        // Purchase accounting (ASC 805): the deal creates no day-one equity. Cash and debt deals swap cash for
+        // net assets plus goodwill; stock deals add the shares issued to equity. Expected synergies only
+        // reach the books as they are earned, through the blended ROIC below; the market prices them at once.
         $equityAddedByStock = $ctx->config['use_stock'] ? $ctx->purchasePrice : 0.0;
         $ctx->synergyValueCreation = $ctx->purchasePrice * ($ctx->synergyMultiplier - 1.0);
-        $ctx->newEquity = $ctx->equity + $equityAddedByStock + $ctx->synergyValueCreation;
+        $ctx->newEquity = $ctx->equity + $equityAddedByStock;
         $stock->setTotalEquity((string) max(10.0, $ctx->newEquity));
-
-        $currentRetained = (float) $stock->getRetainedEarnings();
-        $stock->setRetainedEarnings((string) ($currentRetained + $ctx->synergyValueCreation));
 
         $oldOperatingMargin = (float) $stock->getOperatingMargin();
         $oldInvestedCapital = $stock->getInvestedCapital();
@@ -386,6 +386,13 @@ class MergerAndAcquisitionEngine
         $totalNewCapital = max(1.0, $oldCapitalBase + $ctx->purchasePrice);
         
         $ctx->strategy->blendAcquisitionDNA($stock, $oldCapitalBase, $ctx->purchasePrice, $effectiveTargetRoic, $totalNewCapital);
+
+        // Goodwill is the premium over the fair value of net identifiable assets. At a no-growth justified
+        // price-to-book of ROIC / hurdle (residual income identity), net assets acquired are the purchase
+        // price scaled by hurdle / ROIC and the remainder is goodwill, tested annually for impairment.
+        $netAssetsAcquired = $ctx->purchasePrice * min(1.0, max(0.01, $ctx->hurdleRate) / max(0.01, $effectiveTargetRoic));
+        $ctx->goodwillRecorded = max(0.0, $ctx->purchasePrice - $netAssetsAcquired);
+        $stock->setGoodwill((string) ((float) $stock->getGoodwill() + $ctx->goodwillRecorded));
         
         $blendedMargin = (($oldCapitalBase * $oldOperatingMargin) + ($ctx->purchasePrice * $targetMargin)) / $totalNewCapital;
         $stock->setOperatingMargin((string) max(0.01, $blendedMargin * (1.0 - self::MA_INDIGESTION_PENALTY)));
@@ -394,6 +401,14 @@ class MergerAndAcquisitionEngine
         $acquiredRevenue = $acquiredOperatingIncome / max(0.01, $targetMargin);
         $currentRevenue = (float) $stock->getTotalRevenue();
         $stock->setTotalRevenue((string) ($currentRevenue + $acquiredRevenue));
+
+        // The acquired capital keeps generating the revenue booked above, so the target's revenue per dollar of
+        // capital joins the acquirer's structural turnover capital-weighted (null until the engine seeds it).
+        $acquirerTurnover = $stock->getAssetTurnover();
+        if ($acquirerTurnover !== null) {
+            $blendedTurnover = (($oldCapitalBase * (float) $acquirerTurnover) + $acquiredRevenue) / $totalNewCapital;
+            $stock->setAssetTurnover((string) max(0.01, $blendedTurnover));
+        }
 
         $newInterestExpense = 0.0;
         if ($ctx->debtIssued > 0) {
@@ -481,6 +496,10 @@ class MergerAndAcquisitionEngine
         $ctx->evaSpread = $ctx->currentReturn - $ctx->hurdleRate;
 
         $ctx->isDistressed = $ctx->evaSpread < self::DIV_DISTRESS_EVA_THRESHOLD || $ctx->currentReturn < self::DIV_DISTRESS_RETURN_FLOOR;
+        // Life-cycle pressure (Dickinson 2011): shake-out and decline stage firms shed assets to fund operations.
+        if ($stock->getLifecycleStage()?->isShedding() === true) {
+            $ctx->isDistressed = true;
+        }
         $ctx->isDying = $ctx->currentReturn < self::DIV_DYING_RETURN_THRESHOLD || $ctx->evaSpread < self::DIV_DYING_EVA_THRESHOLD;
 
         $ctx->treasury = (float) $stock->getCorporateTreasury();

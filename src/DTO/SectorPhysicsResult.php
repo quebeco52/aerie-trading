@@ -20,6 +20,11 @@ readonly class SectorPhysicsResult
      * @param bool|null            $isPublicEvent     For event-conditional models: true when a binary public event fired.
      * @param array<string, float> $streamZ           Dictionary of individual AR(1) stream Z-scores to persist.
      * @param array<string, float> $streamRevenue     Dictionary of absolute dollar revenue generated per stream.
+     * @param float                $scheduledCapex    Mandatory quarterly CapEx the physics itself commits (spectrum
+     *                                                auctions, grid rebuilds, plant turnarounds); it is deducted from
+     *                                                FCF and queued as construction-in-progress by the engine.
+     * @param array<string, float> $kpis              Reported operating KPIs analysts track beyond revenue and EPS
+     *                                                (book_to_bill, backlog_quarters, subscriber_index, churn...).
      */
     public function __construct(
         public float $actualRevenue,
@@ -31,6 +36,8 @@ readonly class SectorPhysicsResult
         public ?bool $isPublicEvent = null,
         public array $streamZ = [],
         public array $streamRevenue = [],
+        public float $scheduledCapex = 0.0,
+        public array $kpis = [],
     ) {
     }
 }

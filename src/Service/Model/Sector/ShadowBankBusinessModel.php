@@ -226,7 +226,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         $params = $this->resolveModelParameters($stock, [
             ModelParam::MortgageOriginationWeight->value => 0.60,
@@ -245,7 +245,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         // Independent stream Z-scores
         $originationZ = $streams->generateZ('origination_fees', 0.20);
         $lendingZ     = $streams->generateZ('direct_lending', 0.45);
-        $creditZ      = $streams->generateZ('credit', 0.25);
+        $creditZ      = $streams->generateExogenousZ('credit', 0.25);
 
         // 1. Mortgage Origination Volume Channel:
         // Spiking 30Y mortgage rates destroy refinancing demand and freeze home purchases.
@@ -357,6 +357,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             'commercial_property_index_ema',
             'corporate_default_rate_ema',
             'housing_starts_index_ema',
+            'inflation_ema',
             'interbank_liquidity_spread_ema',
             'macro_credit_spread_ema',
             'money_supply_growth_ema',
@@ -367,7 +368,6 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             'retail_default_rate_ema',
             'sloos_tightening_index_ema',
             'yield_30y_ema',
-            'yield_5y_ema',
         ];
     }
 }

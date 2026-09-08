@@ -26,6 +26,10 @@ use App\Service\Event\ShockEvent;
  */
 class LogisticsBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Fulfilment centres, cross-docks and truck fleets are largely leased. */
+    public const LEASE_LIABILITY_INTENSITY = 0.40;
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.50;
     public const BASE_COVERAGE_ERROR = 0.08;
@@ -119,7 +123,7 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
         $whWeight    = $params[ModelParam::Warehousing3plWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([

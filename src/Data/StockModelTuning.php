@@ -298,6 +298,9 @@ class StockModelTuning
             ModelParam::SpotPriceWeight->value         => 0.50, // Heavy unhedged spot oil & gas price exposure
             ModelParam::RefiningSpreadWeight->value    => 0.00,
             ModelParam::SpotPriceSensitivity->value    => 0.85, // Aggressive unhedged price-taker
+            ModelParam::EnergyPriceExposure->value     => 1.00, // Pure crude & gas price exposure
+            ModelParam::IndustrialMetalsExposure->value => 0.00,
+            ModelParam::AgriculturalExposure->value    => 0.00,
         ],
 
         // --- Cascade Refining & Marketing (CASC) ---
@@ -307,6 +310,9 @@ class StockModelTuning
             ModelParam::SpotPriceWeight->value         => 0.15, // Strategic physical crude storage inventory
             ModelParam::RefiningSpreadWeight->value    => 0.60, // Algorithmic crack spread arbitrage (gasoline/diesel/jet fuel)
             ModelParam::SpotPriceSensitivity->value    => 0.30, // Heavily hedged physical inventory
+            ModelParam::EnergyPriceExposure->value     => 1.00, // Crude storage inventory marked to the energy complex
+            ModelParam::IndustrialMetalsExposure->value => 0.00,
+            ModelParam::AgriculturalExposure->value    => 0.00,
         ],
 
         // --- Condor Extraction (CNDR) ---
@@ -316,6 +322,9 @@ class StockModelTuning
             ModelParam::SpotPriceWeight->value         => 0.40, // Base metal / rare earth spot price super-cycle exposure
             ModelParam::RefiningSpreadWeight->value    => 0.00,
             ModelParam::SpotPriceSensitivity->value    => 0.70, // Semi-hedged sovereign concessions
+            ModelParam::EnergyPriceExposure->value     => 0.00,
+            ModelParam::IndustrialMetalsExposure->value => 1.00, // Base metals & rare earths priced off the metals complex
+            ModelParam::AgriculturalExposure->value    => 0.00,
         ],
 
         // =====================================================================

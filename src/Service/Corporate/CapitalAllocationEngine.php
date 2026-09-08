@@ -156,6 +156,13 @@ class CapitalAllocationEngine
         $saturationSeverity = $this->corporateMetrics->calculateSaturationSeverity($saturationPenalty, $trueReturn);
         $effectiveTargetPayout = $this->corporateMetrics->calculateLifeCyclePayoutRatio($targetPayout, $saturationSeverity);
 
+        // Life-cycle gate (Dickinson 2011): a pre-profit firm funding itself with outside capital does not
+        // initiate distributions; every dollar goes back into the business until operations turn cash positive.
+        $lastStage = $stock->getLifecycleStage();
+        if ($lastStage !== null && !$lastStage->initiatesDistributions()) {
+            $effectiveTargetPayout = 0.0;
+        }
+
         $sustainableBase = $ctx->strategy->getSustainableDividendBase($stock, $ctx->quarterlyEps, $ctx->investedCapital, $depRate);
         if ($sustainableBase <= 0.0 && $ctx->quarterlyFcfPerShare > 0.0) {
             $sustainableBase = min($ctx->quarterlyFcfPerShare, $lastDividend / max(0.01, $effectiveTargetPayout));

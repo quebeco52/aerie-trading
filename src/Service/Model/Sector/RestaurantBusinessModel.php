@@ -27,6 +27,14 @@ use App\Service\Macro\MacroEngine;
  */
 class RestaurantBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Franchisor real estate and store leases are the largest obligation on a restaurant balance sheet. */
+    public const LEASE_LIABILITY_INTENSITY = 0.60;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Store-level crew wages sit in variable cost; only management and support payroll is fixed overhead. */
+    public const FIXED_COST_LABOR_SHARE = 0.50;
+
     // --- Tri-Stream Architecture ---
     /** Baseline fraction of revenue derived from company-owned store operations. */
     public const CORPORATE_WEIGHT       = 0.50;
@@ -55,7 +63,18 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
 
     // --- Tail Risk & Shock Events ---
     public const FOOD_SAFETY_SCANDAL_Z_SCORE = -2.20;
+    /** Onset-quarter variable cost hit from inventory write-offs, closures and crisis response. */
     public const FOOD_SAFETY_SCANDAL_PENALTY = 0.08;
+    /** Regime key for the multi-quarter guest-traffic recovery that follows a food-safety scandal. */
+    public const REGIME_FOOD_SAFETY_RECOVERY = 'food_safety_recovery';
+    /** Quarterly probability the scandal drops out of guest memory (~7 quarter expected recovery). */
+    public const FOOD_SAFETY_RECOVERY_EXIT_HAZARD = 0.15;
+    /** Share of company-store traffic lost in the scandal quarter. */
+    public const FOOD_SAFETY_TRAFFIC_LOSS = 0.15;
+    /** Quarterly geometric rate at which lost guests return (half-life ~2 quarters). */
+    public const FOOD_SAFETY_TRAFFIC_RECOVERY_RATE = 0.35;
+    /** Ongoing quarterly cost of food-safety audits and win-back marketing during the recovery. */
+    public const FOOD_SAFETY_REMEDIATION_PENALTY = 0.02;
     public const VIRAL_MENU_ITEM_Z_SCORE     = 2.40;
     public const VIRAL_MENU_ITEM_MULT        = 1.15;
 
@@ -108,7 +127,7 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         $pricingPower    = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -125,20 +144,31 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         $corporateZ = $streams->generateZ('company_operated_stores', 0.10);
         $franchiseZ = $streams->generateZ('franchise_royalties', 0.20);
         $leaseZ     = $streams->generateZ('franchise_real_estate_leases', 0.50);
-        $eventZ     = $streams->generateZ('event', 0.10);
+        $eventZ     = $streams->generateExogenousZ('event', 0.10);
 
         // Tail Risk Events
+        // A food-safety scandal is a one-quarter write-off followed by a multi-quarter traffic recovery:
+        // lost guests return geometrically while audits and win-back marketing keep costs elevated.
+        $recoveryElapsed = $streams->evolveRegime(self::REGIME_FOOD_SAFETY_RECOVERY, 0.0, self::FOOD_SAFETY_RECOVERY_EXIT_HAZARD);
         $viralMultiplier = 1.0;
         $eventType = null;
         $foodSafetyPenalty = 0.0;
 
-        if ($eventZ < self::FOOD_SAFETY_SCANDAL_Z_SCORE) {
+        if ($eventZ < self::FOOD_SAFETY_SCANDAL_Z_SCORE && $recoveryElapsed === 0) {
+            $recoveryElapsed = $streams->startRegime(self::REGIME_FOOD_SAFETY_RECOVERY);
             $foodSafetyPenalty = self::FOOD_SAFETY_SCANDAL_PENALTY;
             $eventType = ShockEvent::PRODUCT_RECALL;
-            $viralMultiplier = 0.85; // Severe traffic drop
         } elseif ($eventZ > self::VIRAL_MENU_ITEM_Z_SCORE) {
             $viralMultiplier = self::VIRAL_MENU_ITEM_MULT;
             $eventType = ShockEvent::VIRAL_GROWTH;
+        }
+
+        if ($recoveryElapsed > 0) {
+            $trafficLoss = self::FOOD_SAFETY_TRAFFIC_LOSS * exp(-self::FOOD_SAFETY_TRAFFIC_RECOVERY_RATE * ($recoveryElapsed - 1));
+            $viralMultiplier *= (1.0 - $trafficLoss);
+            if ($recoveryElapsed > 1) {
+                $foodSafetyPenalty += self::FOOD_SAFETY_REMEDIATION_PENALTY;
+            }
         }
 
         // CPI Escalator on franchise real estate rents
@@ -229,23 +259,16 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /** Under-investment below replacement CapEx erodes operating margin toward the sector floor. */
+    public function getDepreciationDecayRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
+        return self::STORE_AGING_DECAY_RATE;
+    }
 
-        if ($reinvestmentRatio < 1.0) {
-            $decayRate = self::STORE_AGING_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            $modGain = self::DIGITAL_KIOSK_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+    /** Over-investment above replacement CapEx compounds margin toward the sector ceiling. */
+    public function getModernizationGainRate(): float
+    {
+        return self::DIGITAL_KIOSK_GAIN_RATE;
     }
 
     /**

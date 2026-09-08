@@ -25,6 +25,10 @@ use App\Service\Math\FinancialConstants;
  */
 class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 {
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Branch and back-office payroll is the largest non-interest expense of a bank. */
+    public const FIXED_COST_LABOR_SHARE = 0.60;
+
     // --- Model Thresholds ---
     /** Minimum Interest Coverage Ratio (ICR) required before distress. */
     public const THRESHOLD_MIN_ICR = 1.05;
@@ -440,7 +444,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $inversionSensitivity = $params[ModelParam::NimInversionSensitivity];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         $targetWeights = [
             'net_interest_income' => $params[ModelParam::NiiRevenueWeight],
@@ -460,7 +464,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         // Independent stream Z-scores with AR(1) persistence
         $revenueZ = $streams->generateZ('net_interest_income', self::STREAM_Z_PERSISTENCE_NII); // NII loan origination volume
         $feeZ     = $streams->generateZ('fee_income', self::STREAM_Z_PERSISTENCE_FEE); // Non-interest custodial / payment fee volume
-        $defaultZ = $streams->generateZ('default', self::STREAM_Z_PERSISTENCE_FEE); // Idiosyncratic credit default
+        $defaultZ = $streams->generateExogenousZ('default', self::STREAM_Z_PERSISTENCE_FEE); // Idiosyncratic credit default
 
         $outputGap = $macroState->outputGapEma;
 
@@ -890,7 +894,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             'sloos_tightening_index_ema',
             'yield_10y_ema',
             'yield_2y_ema',
-            'yield_5y_ema',
         ];
     }
 }

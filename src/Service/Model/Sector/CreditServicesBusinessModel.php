@@ -160,7 +160,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $ceclSensitivity = $params[ModelParam::CeclSpreadSensitivity];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -174,7 +174,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         // Independent stream Z-scores with AR(1) persistence
         $lendingZ = $streams->generateZ('lending', 0.25); // Revolving credit loan origination volume
         $swipeZ   = $streams->generateZ('swipe', 0.25); // Payment gateway transaction swipe volume
-        $defaultZ = $streams->generateZ('default', 0.20); // Consumer credit default Z-score
+        $defaultZ = $streams->generateExogenousZ('default', 0.20); // Consumer credit default Z-score
 
         // Inflation Bonus (Interchange Swipe Fees):
         // Swipe fees (Visa/MC network) are a percentage of transaction value — higher prices = higher revenue.
@@ -434,6 +434,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             'inflation_ema',
             'interbank_liquidity_spread_ema',
             'macro_credit_spread_ema',
+            'output_gap_ema',
             'policy_rate_ema',
             'recession_probability_ema',
             'retail_default_rate_ema',
@@ -441,7 +442,6 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             'unemployment_rate_ema',
             'yield_10y_ema',
             'yield_2y_ema',
-            'yield_5y_ema',
         ];
     }
 }

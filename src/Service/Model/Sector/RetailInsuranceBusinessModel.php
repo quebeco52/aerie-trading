@@ -56,7 +56,7 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         $catScalar    = $params[ModelParam::CatastropheLossScalar];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -70,7 +70,7 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         // Independent stream Z-scores
         $pcZ    = $streams->generateZ('property_casualty_premiums', 0.25);
         $lifeZ  = $streams->generateZ('life_insurance_premiums', 0.50);
-        $claimZ = $streams->generateZ('claim', 0.05);
+        $claimZ = $streams->generateExogenousZ('claim', 0.05);
 
         // Life & Annuities spreads benefit from a steep yield curve (spread over guaranteed crediting rates)
         $yield10y = $macroState->yield10yEma;
@@ -149,12 +149,10 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
-            'commercial_property_index_ema',
             'inflation_ema',
             'market_volatility_ema',
             'output_gap_ema',
             'policy_rate_ema',
-            'residential_property_index_ema',
             'yield_10y_ema',
         ];
     }

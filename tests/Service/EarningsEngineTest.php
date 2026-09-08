@@ -641,19 +641,25 @@ class EarningsEngineTest extends TestCase
         // Q1 (fiscal quarter 0, seasonal factor 0.85)
         $q1Tick = $reportingTick;
         $this->engine->calculate($stock, $macro, $q1Tick, 252);
-        $q1Revenue = (float) $stock->getTotalRevenue();
+        $q1Revenue = (float) $stock->getPreviousRevenue(); // reported quarterly revenue, annualized
+        $q1RunRate = (float) $stock->getTotalRevenue();    // seasonally adjusted annual rate
 
         // Q4 (fiscal quarter 3, seasonal factor 1.35)
         $q4Tick = (3 * $ticksPerQuarter) + $reportingTick;
         $this->engine->calculate($stock, $macro, $q4Tick, 252);
-        $q4Revenue = (float) $stock->getTotalRevenue();
+        $q4Revenue = (float) $stock->getPreviousRevenue();
+        $q4RunRate = (float) $stock->getTotalRevenue();
 
-        // Peak holiday Q4 revenue must significantly exceed trough Q1 revenue
+        // Peak holiday Q4 reported revenue must significantly exceed trough Q1 reported revenue
         $this->assertGreaterThan(
-            $q1Revenue,
+            $q1Revenue * 1.30,
             $q4Revenue,
             'Seasonal holiday quarter (Q4) revenue must exceed off-peak quarter (Q1) for Internet Retail.'
         );
+
+        // ...while the seasonally adjusted run-rate is the same structural capacity in both quarters: the
+        // season is not mistaken for a change in the business.
+        $this->assertEqualsWithDelta($q1RunRate, $q4RunRate, $q1RunRate * 0.01, 'SAAR must not carry seasonal swings');
     }
 
     public function testCapacityUtilizationOvertimeConvexityAndClamping(): void

@@ -94,6 +94,15 @@ class CorporateMetrics
         return max(0.0, $baseReturn * pow($capitalScale, -$effectiveElasticity));
     }
 
+    /**
+     * Capitalized operating lease liability under IFRS 16 / ASC 842, approximated as a sector-specific
+     * multiple of annual revenue. Debt-like for leverage and solvency; the rent itself stays in fixed costs.
+     */
+    public function calculateLeaseLiability(float $annualRevenue, float $leaseIntensity): float
+    {
+        return max(0.0, $annualRevenue) * max(0.0, $leaseIntensity);
+    }
+
     public function calculateInterestCoverageRatio(float $ebit, float $interestExpense): float
     {
         if ($interestExpense <= 0.0) {

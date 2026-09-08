@@ -32,6 +32,16 @@ use App\Service\Math\MathUtility;
  */
 class ConglomerateBusinessModel extends StandardCorporateBusinessModel
 {
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: industrial spring deliveries and year-end shipments.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [0.96, 1.02, 1.00, 1.02];
+    }
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for multi-industry conglomerates with complex multi-segment reporting. */
     public const BASE_COVERAGE_VISIBILITY = 0.35;
@@ -185,7 +195,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new StreamContext($momentum, $mathUtility);
+        $streams = $this->createStreamContext($momentum, $mathUtility);
         $beta = max(self::MIN_CYCLICAL_BETA_FLOOR, abs((float) $stock->getBeta()));
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
@@ -203,7 +213,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         $industrialZ = $streams->generateZ('industrial_manufacturing', 0.25);
         $defensiveZ  = $streams->generateZ('defensive_staples', 0.45);
         $floatZ      = $streams->generateZ('financial_investments', 0.15);
-        $eventZ      = $streams->generateZ('event', 0.10);
+        $eventZ      = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Sensitivities ---
         $outputGap = $macroState->outputGapEma;
@@ -325,15 +335,16 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
             'corporate_default_rate_ema',
             'deal_activity_index_ema',
+            'exchange_rate_index_ema',
             'macro_credit_spread',
             'macro_credit_spread_ema',
             'manufacturing_pmi_ema',
             'output_gap_ema',
             'producer_price_inflation_ema',
             'tips_breakeven_ema',
-        ]));
+        ];
     }
 }

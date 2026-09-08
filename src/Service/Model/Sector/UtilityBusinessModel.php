@@ -26,6 +26,14 @@ use App\Service\Macro\MacroEngine;
  */
 class UtilityBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Rate-base assets are owned; leases are immaterial. */
+    public const LEASE_LIABILITY_INTENSITY = 0.03;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Rate-base assets, fuel and purchased power dominate utility overhead; field crews are a minority. */
+    public const FIXED_COST_LABOR_SHARE = 0.35;
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.20;
     public const BASE_COVERAGE_ERROR = 0.05;
@@ -80,10 +88,18 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     public const GRID_FAILURE_Z_SCORE       = -2.50;
     /** Variable cost penalty applied to fund massive environmental liabilities or emergency grid repairs. */
     public const GRID_FAILURE_PENALTY       = 0.15;
-    /** Sensitivity of utility margins to 10Y Treasury yields (debt refinancing friction). */
-    public const REFINANCING_WALL_DRAG      = 0.20;
-    /** Fallback safe 10Y yield before refinancing drag kicks in. */
-    public const DEFAULT_10Y_YIELD_FALLBACK = 0.04;
+    /** Regime key for the multi-year liability, litigation and rebuild period after a grid failure or wildfire. */
+    public const REGIME_INFRASTRUCTURE_LIABILITY = 'infrastructure_liability';
+    /** Quarterly probability the liability overhang is settled (~8 quarter expected duration). */
+    public const INFRASTRUCTURE_LIABILITY_EXIT_HAZARD = 0.125;
+    /** Ongoing quarterly claims, litigation and hardening cost while the liability regime persists. */
+    public const INFRASTRUCTURE_LIABILITY_ONGOING_PENALTY = 0.04;
+    /** Quarterly system-hardening and rebuild CapEx as a fraction of annual revenue while the liability regime persists. */
+    public const GRID_HARDENING_CAPEX_RATIO = 0.03;
+
+    // --- Bond Proxy Capital Structure ---
+    /** Quarterly share of the fixed-rate bond stock that matures and reprices (~12-year average tenor of first mortgage bonds). */
+    public const DEBT_MATURITY_ROLLOVER_RATE = 0.02;
 
     // --- Capital Reinvestment & Asset Depreciation Physics ---
     public const REGULATED_REVERSION_SPEED    = 2.0;
@@ -93,7 +109,8 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     public const MAX_OPERATING_MARGIN_CEILING = 0.30;
 
     // --- Rate-Base CapEx & Capital Structure Rails ---
-    public const UTILITY_CAPEX_BURN_DISCOUNT  = 0.92;
+    /** Valuation discount on the earnings multiple while rate-base T&D expansion CapEx keeps FCF negative. */
+    public const NEGATIVE_FCF_VAL_DISCOUNT    = 0.92;
     public const MIN_RECAP_ICR_FLOOR          = 2.5;
     public const WACC_ARBITRAGE_THRESHOLD     = 0.01;
     public const UNDERLEVERAGED_DEBT_RATIO    = 0.70;
@@ -126,7 +143,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $unregulatedWeight = $params[ModelParam::UnregulatedMerchantWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams = $this->createStreamContext($momentum, $mathUtility);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -140,7 +157,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         // Independent stream Z-scores
         $weatherZ     = $streams->generateZ('regulated_weather_load', 0.05); // Weather is random, low persistence
         $unregulatedZ = $streams->generateZ('unregulated_merchant', 0.20); // Merchant wholesale electricity trading
-        $eventZ       = $streams->generateZ('event', 0.10); // Infrastructure tail risks
+        $eventZ       = $streams->generateExogenousZ('event', 0.10); // Infrastructure tail risks
 
         // --- Clamped Revenue Streams ---
         // Weather deviations drive regulated volume. High Z = Heatwaves/Freezes (high load). Low Z = Mild weather (low load).
@@ -156,13 +173,23 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // --- Event Tail Risks (Grid Failure) ---
+        // A wildfire or grid collapse is an onset-quarter emergency charge followed by years of claims,
+        // litigation and system hardening (the PG&E pattern) until the liability regime is settled.
+        $liabilityElapsed = $streams->evolveRegime(self::REGIME_INFRASTRUCTURE_LIABILITY, 0.0, self::INFRASTRUCTURE_LIABILITY_EXIT_HAZARD);
         $eventType = null;
         $disasterPenalty = 0.0;
 
-        if ($eventZ < self::GRID_FAILURE_Z_SCORE) {
-            $eventType = ShockEvent::INFRASTRUCTURE_FAILURE ?? 'grid_failure_liability';
+        if ($eventZ < self::GRID_FAILURE_Z_SCORE && $liabilityElapsed === 0) {
+            $liabilityElapsed = $streams->startRegime(self::REGIME_INFRASTRUCTURE_LIABILITY);
+            $eventType = ShockEvent::INFRASTRUCTURE_FAILURE;
             $disasterPenalty = self::GRID_FAILURE_PENALTY;
+        } elseif ($liabilityElapsed > 1) {
+            $disasterPenalty = self::INFRASTRUCTURE_LIABILITY_ONGOING_PENALTY;
         }
+
+        // Rebuilding and hardening the damaged system is mandatory rate-base CapEx for as long as the
+        // liability regime runs; it is queued as construction-in-progress and burns FCF now.
+        $scheduledCapex = $liabilityElapsed > 0 ? $expectedRevenue * 4.0 * self::GRID_HARDENING_CAPEX_RATIO : 0.0;
 
         // --- Regulatory Lag & Input Costs ---
         $inflation = $macroState->inflationEma;
@@ -179,14 +206,10 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $energyShift = max(0.0, $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
         $sparkSpreadCrush = $energyShift * 0.20 * $unregulatedWeight;
 
-        // --- Refinancing Wall Drag (Bond Proxies) ---
-        // Utilities hold massive debt. As 10Y yields rise, their refinancing costs organically erode operating margins.
-        $yield10y = $macroState->yield10yEma;
-        $refinancingDrag = max(0.0, ($yield10y - self::DEFAULT_10Y_YIELD_FALLBACK) * self::REFINANCING_WALL_DRAG);
-
         // --- Margin Aggregation ---
-        // Apply all structurally driven cost penalties directly to the baseline margin
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $regulatoryLagPenalty + $sparkSpreadCrush + $disasterPenalty + $refinancingDrag);
+        // Apply all structurally driven operating cost penalties to the baseline margin. The rate-base debt
+        // load reaches earnings through DebtEngine's maturity wall (getDebtMaturityRolloverRate), below EBIT.
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $regulatoryLagPenalty + $sparkSpreadCrush + $disasterPenalty);
 
         // Primary shock is whichever stream deviated the most, overridden by tail events
         $primaryShockZ = $streams->resolveDominantShockZ([$unregulatedZ, $weatherZ], $eventZ);
@@ -205,6 +228,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+            scheduledCapex: $scheduledCapex,
         );
     }
 
@@ -213,45 +237,13 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         return self::REGULATED_REVERSION_SPEED;
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /**
+     * Bond proxy: regulated utilities issue 10 to 30 year first mortgage bonds, so the fixed-rate book
+     * reprices very slowly. A rate shock reaches interest expense over a decade rather than a year.
+     */
+    public function getDebtMaturityRolloverRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
-
-        if ($reinvestmentRatio < 1.0) {
-            $decayRate = self::DEPRECIATION_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            $modGain = self::MODERNIZATION_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
-    }
-
-    public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float
-    {
-        if ($fcfPerShare !== null && $fcfPerShare > 0.0) {
-            $multiplier = $mathUtility->calculateDcfMultiplier($liveWacc, self::DCF_TERMINAL_GROWTH_RATE);
-            $annualFcf = $fcfPerShare;
-            $dcfFairValue = min(max(0.01, $annualFcf * $multiplier), $peFairValue * self::MAX_DCF_TO_PE_CAP_MULT);
-            return ($peFairValue + $dcfFairValue) / 2.0;
-        }
-        return $fcfPerShare !== null ? max($revenueFloorValue, $peFairValue * self::UTILITY_CAPEX_BURN_DISCOUNT) : max($revenueFloorValue, $peFairValue);
-    }
-
-    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
-    {
-        if ($costOfEquity <= ($effectiveCostOfDebt + self::WACC_ARBITRAGE_THRESHOLD)) {
-            return false;
-        }
-        if ($interestCoverage < self::MIN_RECAP_ICR_FLOOR) {
-            return false;
-        }
-        return $currentDebtRatio < ($targetDebtTolerance * self::UNDERLEVERAGED_DEBT_RATIO);
+        return self::DEBT_MATURITY_ROLLOVER_RATE;
     }
 
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float
@@ -271,12 +263,12 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
             'energy_cost_push_lag',
+            'exchange_rate_index_ema',
             'inflation_ema',
             'output_gap_ema',
             'tips_breakeven_ema',
-            'yield_10y_ema',
-        ]));
+        ];
     }
 }

@@ -382,7 +382,7 @@ class BiotechBusinessModelTest extends TestCase
             $mathUtility
         );
 
-        $expected = max(50.0, 100.0 * BiotechBusinessModel::BIOTECH_RESEARCH_BURN_DISCOUNT);
+        $expected = max(50.0, 100.0 * BiotechBusinessModel::NEGATIVE_FCF_VAL_DISCOUNT);
         $this->assertEquals($expected, $fairValue);
     }
 

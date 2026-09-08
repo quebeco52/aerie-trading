@@ -32,6 +32,21 @@
 {% endblock %}
 
 {% block body %}
+	{# Life-cycle stage tones (Dickinson 2011): reused by the hero badge and the Company & Sector card. #}
+	{% set stageTone = {
+		'introduction': 'bg-primary/10 text-primary border-primary/25',
+		'growth': 'bg-secondary/10 text-secondary border-secondary/25',
+		'mature': 'bg-surface-container-highest text-on-surface border-outline-variant/40',
+		'shake_out': 'bg-tertiary/10 text-tertiary border-tertiary/25',
+		'decline': 'bg-tertiary/20 text-tertiary border-tertiary/40',
+	} %}
+	{% set stageBar = {
+		'introduction': 'bg-primary',
+		'growth': 'bg-secondary',
+		'mature': 'bg-on-surface',
+		'shake_out': 'bg-tertiary/60',
+		'decline': 'bg-tertiary',
+	} %}
 
 	<div
 		class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-5 w-full space-y-5">
@@ -57,6 +72,12 @@
 								{{ _self.tooltip(bmDesc, 'left', 'w-72', 'bottom') }}
 							</span>
 
+							{% if lifecycleStage is not null and not asset.isBankrupt %}
+								<span class="group relative cursor-help inline-flex items-center rounded border px-2 py-0.5 text-xs font-bold uppercase tracking-wide {{ stageTone[lifecycleStage.value] }} focus-visible:outline-none" tabindex="0" id="lifecycle-badge">
+									<span class="border-b border-dotted border-current/60 pb-0.5">{{ lifecycleStage.label }}</span>
+									{{ _self.tooltip('Corporate life-cycle stage (Dickinson 2011), read from the cash-flow signs in the last quarterly report. ' ~ lifecycleStage.description ~ ' Pattern CFO / CFI / CFF: ' ~ lifecycleStage.cashFlowSignature ~ '.', 'left', 'w-80', 'bottom') }}
+								</span>
+							{% endif %}
 							{% if not isEtf and asset.isBankrupt %}
 								<span class="inline-flex items-center rounded bg-tertiary/10 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-tertiary border border-tertiary/25">
 									BANKRUPT / DELISTED
@@ -385,6 +406,10 @@
 										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-eps">${{ asset.earningsPerShare|number_format(2) }}</dd>
 									</div>
 									<div class="py-2 flex justify-between items-center">
+										<dt class="text-sm font-semibold text-on-surface-variant">Dividend Yield</dt>
+										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-div-yield">{{ dividendYield > 0 ? (dividendYield * 100)|number_format(2) ~ '%' : '-' }}</dd>
+									</div>
+									<div class="py-2 flex justify-between items-center">
 										<dt class="text-sm font-semibold text-on-surface-variant">Volatility</dt>
 										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-volatility">{{ ((asset.currentVolatility is not null ? asset.currentVolatility : asset.volatility) * 100)|number_format(2) }}%</dd>
 									</div>
@@ -413,9 +438,16 @@
 									{% if asset.creditRating is defined %}
 										<div class="py-2 flex justify-between items-center">
 											<dt class="text-sm font-semibold text-on-surface-variant">Credit Rating</dt>
-											<dd class="font-bold text-primary font-mono" id="stat-credit-rating">{{ asset.creditRating }}</dd>
+											<dd class="font-bold text-primary font-mono" id="stat-credit-rating">{{ asset.creditRating }} <span class="text-on-surface-variant font-normal text-[11px]">+{{ (asset.creditSpread * 10000)|number_format(0) }} bps</span></dd>
 										</div>
 									{% endif %}
+									<div class="py-2 flex justify-between items-center">
+										<dt class="group relative cursor-help text-sm font-semibold text-on-surface-variant" tabindex="0">
+											<span class="border-b border-dotted border-on-surface-variant/70 pb-0.5">Accruals / Assets</span>
+											{{ _self.tooltip('Sloan (1996) accruals ratio: (net income − free cash flow) / total assets, annualised. Cash-backed earnings sit near zero; a high positive reading means reported profit is running ahead of cash and tends to reverse.', 'left', 'w-72') }}
+										</dt>
+										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-accruals">{{ asset.accrualsRatio is null ? '-' : ((asset.accrualsRatio >= 0 ? '+' : '') ~ (asset.accrualsRatio * 100)|number_format(2) ~ '%') }}</dd>
+									</div>
 								</dl>
 							</div>
 						{% endif %}
@@ -1887,6 +1919,45 @@
 						</div>
 					</div>
 
+					{# Corporate Life-Cycle (Dickinson 2011) #}
+					<div class="bg-surface-container-low rounded-lg p-6 border border-outline-variant/15 hover:border-outline-variant/30 transition-all" id="lifecycle-card">
+						<div class="flex items-start justify-between gap-3 mb-4">
+							<div>
+								<h3 class="text-sm font-semibold text-primary">Corporate Life-Cycle</h3>
+								<p class="text-xs text-on-surface-variant mt-1">Classified each quarter from the signs of operating, investing and financing cash flow (Dickinson 2011).</p>
+							</div>
+							{% if lifecycleStage is not null and not asset.isBankrupt %}
+								<span class="shrink-0 inline-flex items-center rounded border px-2 py-0.5 text-xs font-bold uppercase tracking-wide {{ stageTone[lifecycleStage.value] }}">{{ lifecycleStage.label }}</span>
+							{% endif %}
+						</div>
+
+						<ol class="grid grid-cols-5 gap-2" aria-label="Life-cycle stages">
+							{% for stage in lifecycleStages %}
+								{% set isCurrent = lifecycleStage is not null and not asset.isBankrupt and stage.value == lifecycleStage.value %}
+								<li class="flex flex-col gap-2 min-w-0" {% if isCurrent %}aria-current="step"{% endif %}>
+									<span class="h-1.5 rounded-full {{ isCurrent ? stageBar[stage.value] : 'bg-surface-container-highest' }}"></span>
+									<span class="text-[11px] uppercase tracking-wide font-semibold truncate {{ isCurrent ? 'text-on-surface' : 'text-on-surface-variant/60' }}">{{ stage.label }}</span>
+									<span class="hidden sm:block text-[11px] font-mono tabular-nums whitespace-nowrap {{ isCurrent ? 'text-on-surface-variant' : 'text-on-surface-variant/40' }}">{{ stage.cashFlowSignature }}</span>
+								</li>
+							{% endfor %}
+						</ol>
+						<p class="hidden sm:block mt-2 text-[10px] uppercase tracking-wide text-on-surface-variant/50">Sign pattern: operating / investing / financing cash flow</p>
+
+						<div class="mt-4 pt-4 border-t border-outline-variant/15 text-xs text-on-surface-variant leading-relaxed">
+							{% if asset.isBankrupt %}
+								Delisted. Life-cycle classification stopped with the last filed report.
+							{% elseif lifecycleStage is null %}
+								Not yet classified. The stage is assigned with the first quarterly report.
+							{% else %}
+								<span class="text-on-surface font-semibold">{{ lifecycleStage.label }}.</span> {{ lifecycleStage.description }}
+								{% if not lifecycleStage.initiatesDistributions %}
+									<span class="block mt-1">Dividends are withheld at this stage: every dollar is reinvested until operations turn cash positive.</span>
+								{% elseif lifecycleStage.isShedding %}
+									<span class="block mt-1">Management is under pressure to divest: shake-out and decline firms sell assets to fund operations.</span>
+								{% endif %}
+							{% endif %}
+						</div>
+					</div>
 					{# Sector Peer Comparison Table #}
 					<div class="bg-surface-container-low rounded-lg border border-outline-variant/15 overflow-hidden p-6 hover:border-outline-variant/30 transition-all">
 						<h3 class="text-sm font-semibold text-on-surface mb-3">

@@ -23,11 +23,12 @@ class FinancialDataBusinessModelTest extends TestCase
             ->onlyMethods(['generateStandardNormal'])
             ->getMock();
         // Sequence of generateStandardNormal calls:
-        // 1. subscriptionZ = 0.0
-        // 2. transactionZ = 2.0 (Boom in debt issuance & credit rating mandates)
-        $mathUtilityMock->expects($this->exactly(2))
+        // 1. firm-wide demand innovation = 0.0
+        // 2. subscriptionZ = 0.0
+        // 3. transactionZ idiosyncratic = 2.5 (composite 2.0: boom in debt issuance & rating mandates)
+        $mathUtilityMock->expects($this->exactly(3))
             ->method('generateStandardNormal')
-            ->willReturnOnConsecutiveCalls(0.0, 2.0);
+            ->willReturnOnConsecutiveCalls(0.0, 0.0, 2.5);
 
         $macroState = \App\DTO\MacroStateDTO::fromArray([]);
         $result = $model->computeActualFinancials(

@@ -6,8 +6,10 @@ namespace App\Tests\DTO;
 
 use App\DTO\StreamContext;
 use App\Service\Math\MathUtility;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class StreamContextTest extends TestCase
 {
     private MathUtility $mathUtility;
@@ -255,4 +257,86 @@ class StreamContextTest extends TestCase
         $this->assertSame(1.5, $context->resolveDominantShockZ([], 1.5));
         $this->assertSame(0.0, $context->resolveDominantShockZ([]));
     }
+    public function testEvolveRegimeStartsOnOnsetHazardAndCountsQuarters(): void
+    {
+        $math = $this->createStub(MathUtility::class);
+        $math->method('checkProbability')->willReturnCallback(fn (float $p): bool => $p >= 0.5);
+
+        // Inactive with a certain onset: the regime starts this quarter.
+        $context = new StreamContext([], $math);
+        $this->assertSame(1, $context->evolveRegime('strike', 1.0, 0.0));
+        $this->assertSame(1, $context->getRegimeElapsed('strike'));
+        $this->assertSame(1.0, $context->getStreamZ()[StreamContext::REGIME_STATE_PREFIX . 'strike']);
+
+        // Active with no exit: the clock advances.
+        $next = new StreamContext($context->getStreamZ(), $math);
+        $this->assertSame(2, $next->evolveRegime('strike', 0.0, 0.0));
+
+        // Active with a certain exit: the regime ends and the clock resets.
+        $ended = new StreamContext($next->getStreamZ(), $math);
+        $this->assertSame(0, $ended->evolveRegime('strike', 0.0, 1.0));
+        $this->assertSame(0.0, $ended->getStreamZ()[StreamContext::REGIME_STATE_PREFIX . 'strike']);
+    }
+
+    public function testStartRegimeForcesOnsetAndIsIdempotentWhileActive(): void
+    {
+        $math = $this->createStub(MathUtility::class);
+        $math->method('checkProbability')->willReturn(false);
+
+        $context = new StreamContext([], $math);
+        $this->assertSame(0, $context->evolveRegime('price_war', 0.0, 0.25));
+        $this->assertSame(1, $context->startRegime('price_war'));
+
+        $next = new StreamContext($context->getStreamZ(), $math);
+        $this->assertSame(2, $next->evolveRegime('price_war', 0.0, 0.25));
+        $this->assertSame(2, $next->startRegime('price_war'), 'startRegime must not reset an active clock');
+    }
+
+    public function testGenerateZLoadsStreamsOnTheSharedFirmInnovation(): void
+    {
+        // One-factor model: with the firm innovation pinned at +1 and idiosyncratic draws at 0,
+        // every loaded stream returns rho * F and exogenous streams stay at zero.
+        $math = $this->getMockBuilder(MathUtility::class)->onlyMethods(['generateStandardNormal'])->getMock();
+        $math->method('generateStandardNormal')->willReturnOnConsecutiveCalls(1.0, 0.0, 0.0, 0.0, 0.0);
+
+        $context = new StreamContext([], $math, 0.60);
+        $this->assertEqualsWithDelta(0.60, $context->generateZ('sales', 0.0), 1e-9);
+        $this->assertEqualsWithDelta(0.60, $context->generateZ('services', 0.0), 1e-9);
+        $this->assertEqualsWithDelta(0.0, $context->generateExogenousZ('event', 0.0), 1e-9);
+        $this->assertEqualsWithDelta(0.30, $context->generateZ('niche', 0.0, 0.30), 1e-9);
+    }
+
+    public function testRecognizeBacklogSeedsAtSteadyStateAndDampsOrderShocks(): void
+    {
+        $math = new MathUtility();
+
+        // First use seeds the backlog at steady state: flat orders recognize exactly expected revenue.
+        $flat = (new StreamContext([], $math))->recognizeBacklog('oem', 1000.0, 1.0, 0.25);
+        $this->assertEqualsWithDelta(1000.0, $flat['revenue'], 1e-9);
+        $this->assertEqualsWithDelta(3.0, $flat['backlog_quarters'], 1e-9);
+        $this->assertEqualsWithDelta(1.0, $flat['book_to_bill'], 1e-9);
+
+        // A +20% order shock reaches revenue only at the 25% burn rate; the rest is booked into the backlog.
+        $shocked = new StreamContext([], $math);
+        $shock = $shocked->recognizeBacklog('oem', 1000.0, 1.2, 0.25);
+        $this->assertEqualsWithDelta(1050.0, $shock['revenue'], 1e-9);
+        $this->assertEqualsWithDelta(3.15, $shock['backlog_quarters'], 1e-9);
+        $this->assertEqualsWithDelta(1200.0 / 1050.0, $shock['book_to_bill'], 1e-9);
+
+        // The booked orders persist: the next quarter recognizes above run-rate on flat intake.
+        $next = (new StreamContext($shocked->getStreamZ(), $math))->recognizeBacklog('oem', 1000.0, 1.0, 0.25);
+        $this->assertEqualsWithDelta(1037.5, $next['revenue'], 1e-9);
+        $this->assertLessThan(1.0, $next['book_to_bill']);
+    }
+
+    public function testRecognizeBacklogIsCappedAndPersistedUnderItsOwnPrefix(): void
+    {
+        $math = new MathUtility();
+        $context = new StreamContext([StreamContext::BACKLOG_STATE_PREFIX . 'oem' => 50.0], $math);
+        $book = $context->recognizeBacklog('oem', 1000.0, 1.0, 0.25);
+
+        $this->assertLessThanOrEqual(StreamContext::MAX_BACKLOG_QUARTERS, $book['backlog_quarters']);
+        $this->assertArrayHasKey(StreamContext::BACKLOG_STATE_PREFIX . 'oem', $context->getStreamZ());
+    }
+
 }

@@ -44,6 +44,10 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     /** Weight given to TTM ROIC when blending with historical baseline ROIC. */
     public const TTM_ROIC_WEIGHT      = 0.50;
 
+    // --- Firm-Level Common Factor ---
+    /** One-factor loading of each revenue stream on the firm-wide demand innovation (rho^2 = 36% shared variance). */
+    public const FIRM_FACTOR_LOADING = 0.60;
+
     // --- Pricing Power & Macro Physics ---
     /** Minimum beta floor applied when calculating pricing power resistance to inflation. */
     public const MIN_BETA_PRICING_POWER_FLOOR = 0.50;
@@ -219,37 +223,6 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
         $wholesaleRate = $debt > 0 ? ($interestExpense / $debt) : $currentMarketFixedRate;
 
         return ['interest_expense' => $interestExpense, 'wholesale_rate' => $wholesaleRate];
-    }
-
-    public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float
-    {
-        if ($fcfPerShare !== null && $fcfPerShare > 0.0) {
-            $multiplier = $mathUtility->calculateDcfMultiplier($liveWacc, self::DCF_TERMINAL_GROWTH_RATE);
-            $annualFcf = $fcfPerShare;
-            // Cap the DCF so a temporary lack of CapEx doesn't cause an infinite perpetual valuation.
-            $dcfFairValue = min(max(0.01, $annualFcf * $multiplier), $peFairValue * self::MAX_DCF_TO_PE_CAP_MULT);
-            return ($peFairValue + $dcfFairValue) / 2.0;
-        }
-        return $fcfPerShare !== null ? max($revenueFloorValue, $peFairValue) * self::NEGATIVE_FCF_VAL_DISCOUNT : max($revenueFloorValue, $peFairValue);
-    }
-
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
-    {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
-
-        if ($reinvestmentRatio < 1.0) {
-            $decayRate = self::DEPRECIATION_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            $modGain = self::MODERNIZATION_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
     }
 
     /**

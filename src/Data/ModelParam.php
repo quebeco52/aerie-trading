@@ -36,6 +36,10 @@ enum ModelParam: string
     case TreatyReinsuranceWeight = 'treaty_reinsurance_weight';
     case CatBondSpreadWeight = 'cat_bond_spread_weight';
 
+    // --- Reporting Calendar ---
+    /** Calendar quarter index (0-3) in which the fiscal year begins; 0 = calendar year. */
+    case FiscalYearStartQuarter = 'fiscal_year_start_quarter';
+
     // --- Analyst Coverage Visibility ---
     case BaseVisibility = 'base_visibility';
     case CoverageError = 'coverage_error';
@@ -91,6 +95,9 @@ enum ModelParam: string
     case ExtractionRevenueWeight = 'extraction_revenue_weight';
     case SpotPriceWeight = 'spot_price_weight';
     case RefiningSpreadWeight = 'refining_spread_weight';
+    case EnergyPriceExposure = 'energy_price_exposure';
+    case IndustrialMetalsExposure = 'industrial_metals_exposure';
+    case AgriculturalExposure = 'agricultural_exposure';
     case OemEquipmentWeight = 'oem_equipment_weight';
     case AftermarketMroWeight = 'aftermarket_mro_weight';
     case ContractOemWeight = 'contract_oem_weight';

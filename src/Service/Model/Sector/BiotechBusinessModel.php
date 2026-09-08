@@ -38,6 +38,10 @@ use App\Service\Math\MathUtility;
  */
 class BiotechBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Balance Sheet Realism ---
+    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Clinical-stage science teams are paid heavily in equity. */
+    public const STOCK_COMPENSATION_INTENSITY = 0.10;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for routine biotech pipeline drug progress. */
     public const BASE_COVERAGE_VISIBILITY = 0.20;
@@ -159,8 +163,8 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public const GENERIC_SECULAR_GROWTH_RATE  = 0.010;
 
     // --- R&D Pipeline Valuation Rails ---
-    /** Valuation discount applied when FCF is negative due to heavy clinical trial funding. */
-    public const BIOTECH_RESEARCH_BURN_DISCOUNT = 0.88;
+    /** Valuation discount on the earnings multiple while clinical trial funding keeps FCF negative. */
+    public const NEGATIVE_FCF_VAL_DISCOUNT = 0.88;
 
     public function getReversionSpeed(): float
     {
@@ -220,7 +224,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         ]);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -382,62 +386,38 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         return self::PATENT_REVERSION_SPEED;
     }
 
-    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool
-    {
-        // Biotech firms face binary R&D clinical trial outcomes and carry high financial distress costs.
-        // Their optimal capital structure is near zero debt. They should only recapitalize under extreme
-        // WACC arbitrage (Ke > Kd + 3.0%) and extraordinary cash flow safety (ICR > 15.0).
-        if ($costOfEquity <= ($effectiveCostOfDebt + self::WACC_ARBITRAGE_THRESHOLD)) {
-            return false;
-        }
-        if ($interestCoverage < self::MIN_RECAP_ICR_FLOOR) {
-            return false;
-        }
-        return $currentDebtRatio < ($targetDebtTolerance * self::UNDERLEVERAGED_DEBT_RATIO);
-    }
-
     public function getWorkingCapitalIntensity(Stock $stock): float
     {
         return 0.10; // Clinical drug inventory and specialized biologic materials buffer
     }
 
+    /**
+     * Carries R&D replacement intensity into the next quarter's pivotal readout hazard (a portfolio starved
+     * of research funding stops generating late-stage readouts), then applies the shared reinvestment physics:
+     * patent-cliff amortization on under-investment, blockbuster pipeline expansion on over-investment.
+     */
     public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
-        $marginCeiling = $this->resolveMarginCeiling($stock);
-
-        // Carry R&D replacement intensity into the next quarter's pivotal readout hazard: a portfolio
-        // starved of research funding stops generating late-stage readouts.
         $this->persistState($stock, self::STATE_RND_REPLACEMENT_RATIO, max(0.0, $reinvestmentRatio));
-
-        if ($reinvestmentRatio < 1.0) {
-            // Patent Cliff Amortization: underinvestment causes patents to expire without replacement
-            $decayRate = self::PATENT_CLIFF_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0 && $currentMargin < $marginCeiling) {
-            // Blockbuster Pipeline Expansion: R&D overinvestment creates proprietary biologic monopolies.
-            // A portfolio with no exclusivity left cannot earn monopoly margins no matter what it spends.
-            $modGain = self::BLOCKBUSTER_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                $marginCeiling,
-                $currentMargin + (($marginCeiling - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+        parent::applyAssetDepreciationDecay($stock, $reinvestmentRatio, $dt);
     }
 
-    public function calculateEarningsValue(float $revenueFloorValue, float $peFairValue, ?float $fcfPerShare, float $liveWacc, MathUtility $mathUtility): float
+    /** Patent cliff amortization: under-investment lets patents expire without replacement. */
+    public function getDepreciationDecayRate(): float
     {
-        if ($fcfPerShare !== null && $fcfPerShare > 0.0) {
-            $multiplier = $mathUtility->calculateDcfMultiplier($liveWacc, self::DCF_TERMINAL_GROWTH_RATE);
-            $annualFcf = $fcfPerShare;
-            $dcfFairValue = min(max(0.01, $annualFcf * $multiplier), $peFairValue * self::MAX_DCF_TO_PE_CAP_MULT);
-            return ($peFairValue + $dcfFairValue) / 2.0;
-        }
-        // During clinical R&D cash burn cycles, value biotech firms on their clinical revenue pipeline
-        return $fcfPerShare !== null ? max($revenueFloorValue, $peFairValue * self::BIOTECH_RESEARCH_BURN_DISCOUNT) : max($revenueFloorValue, $peFairValue);
+        return self::PATENT_CLIFF_DECAY_RATE;
+    }
+
+    /** Blockbuster pipeline expansion: R&D over-investment creates proprietary biologic monopolies. */
+    public function getModernizationGainRate(): float
+    {
+        return self::BLOCKBUSTER_GAIN_RATE;
+    }
+
+    /** A portfolio with no exclusivity left cannot earn monopoly margins no matter what it spends. */
+    public function getMaxOperatingMarginCeiling(Stock $stock): float
+    {
+        return $this->resolveMarginCeiling($stock);
     }
 
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float

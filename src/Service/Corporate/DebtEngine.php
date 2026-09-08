@@ -12,10 +12,6 @@ use App\Service\Math\MathUtility;
 
 class DebtEngine
 {
-    // --- Maturity Wall ---
-    /** 5% of old debt expires every quarter (5-year average maturity). */
-    private const QUARTERLY_DEBT_TURNOVER = 0.05;
-
     // --- Debt Analysis ---
     /** 300 bps spread is severe threshold for arbitrage hurdle. */
     private const ARBITRAGE_HURDLE = 0.030;
@@ -233,7 +229,8 @@ class DebtEngine
         $historicalRate = (float) $stock->getHistoricalFixedRate();
 
         if ($advanceMaturity) {
-            $turnover = self::QUARTERLY_DEBT_TURNOVER;
+            // Maturity wall: the business model sets how fast the fixed-rate book rolls to market.
+            $turnover = $strategy->getDebtMaturityRolloverRate();
             if ($currentMarketFixedRate < ($historicalRate - self::RATE_REFINANCE_THRESHOLD)) {
                 $turnover = self::ACCELERATED_DEBT_TURNOVER;
             }
@@ -414,7 +411,10 @@ class DebtEngine
         // Macro-Economic Leverage Tolerance
         $macroDebtTolerance = $equityLimit;
 
-        $currentDebtRatio = $currentDebt / max(1.0, $equity);
+        // Capitalized operating leases (IFRS 16 / ASC 842) are debt-like obligations for leverage purposes;
+        // their rent is already inside fixed costs, so they add no interest here.
+        $leaseLiability = $this->corporateMetrics->calculateLeaseLiability($debtMetrics->revenue, $strategy->getLeaseIntensity());
+        $currentDebtRatio = ($currentDebt + $leaseLiability) / max(1.0, $equity);
         $isUnderLeveraged = $strategy->isUnderLeveraged(
             $currentDebtRatio,
             $macroDebtTolerance,
@@ -462,18 +462,21 @@ class DebtEngine
     public function calculateAltmanZScore(Stock $stock, float $ebit, float $revenue, float $currentPrice): array
     {
         $equity = (float) $stock->getTotalEquity();
-        $debt = (float) $stock->getTotalDebt();
         $treasury = (float) $stock->getCorporateTreasury();
         $retainedEarnings = (float) $stock->getRetainedEarnings();
         $shares = max(1.0, (float) $stock->getSharesOutstanding());
 
-        // Accounting Proxy: Assets = Liabilities + Equity
-        $totalAssets = max(1.0, $equity + $debt);
-        $marketCap = $currentPrice * $shares;
-
         $industry = $stock->getIndustry() ?: 'General';
         $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+
+        // IFRS 16 / ASC 842: the capitalized lease liability sits with debt and the right-of-use asset with assets.
+        $leaseLiability = $this->corporateMetrics->calculateLeaseLiability($revenue, $strategy->getLeaseIntensity());
+        $debt = (float) $stock->getTotalDebt() + $leaseLiability;
+
+        // Accounting Proxy: Assets = Liabilities + Equity
+        $totalAssets = max(1.0, $equity + $debt);
+        $marketCap = $currentPrice * $shares;
 
         if ($strategy->requiresAlternativeZScore()) {
             $capitalRatio = $equity / $totalAssets;

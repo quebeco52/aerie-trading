@@ -25,6 +25,14 @@ use App\Service\Macro\MacroEngine;
  */
 class ShippingBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Chartered-in vessels are leases in all but name. */
+    public const LEASE_LIABILITY_INTENSITY = 0.35;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Vessel depreciation, bunker fuel and port charges dominate; crew wages are a minority of overhead. */
+    public const FIXED_COST_LABOR_SHARE = 0.30;
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.75;
     public const BASE_COVERAGE_ERROR = 0.10;
@@ -86,6 +94,20 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     // --- Event Lore Thresholds ---
     /** Positive z-score threshold required during trade booms to trigger port congestion lore. */
     public const LORE_CONGESTION_Z_SCORE   = 1.50;
+    /** Fraction of the contracted charter backlog delivered each quarter (multi-year time charters, ~2.3 quarters of coverage). */
+    public const CONTRACT_BACKLOG_BURN_RATE = 0.30;
+    /** Regime key for a port-congestion super-cycle that keeps spot rates elevated until berths clear. */
+    public const REGIME_PORT_CONGESTION = 'port_congestion';
+    /** Quarterly probability the port backlog clears (~3 quarter expected congestion). */
+    public const PORT_CONGESTION_EXIT_HAZARD = 0.33;
+    /** Spot rate uplift while congestion ties up effective fleet capacity. */
+    public const PORT_CONGESTION_SPOT_RATE_BOOST = 0.15;
+    /** Regime key for a newbuild capacity glut that depresses spot rates until tonnage is absorbed. */
+    public const REGIME_CAPACITY_GLUT = 'capacity_glut';
+    /** Quarterly probability the tonnage overhang is absorbed by scrapping and trade growth (~5 quarters). */
+    public const CAPACITY_GLUT_EXIT_HAZARD = 0.20;
+    /** Spot rate drag while surplus tonnage chases cargo. */
+    public const CAPACITY_GLUT_SPOT_RATE_DRAG = 0.10;
     /** Negative z-score threshold required during trade gluts to trigger operating loss lore. */
     public const LORE_GLUT_Z_SCORE         = -1.50;
 
@@ -132,7 +154,7 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         $contractWeight = $params[ModelParam::ContractCharterWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -158,14 +180,29 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         $spotRateMultiplier = ($outputGap * self::CONTINUOUS_SPOT_RATE_SCALAR) + ($freightShift * 0.50) + ($metalsShift * 0.15) + $tradeShift + ($gscpiShift * self::GSCPI_FREIGHT_BOOST_SCALAR);
         $eventType = null;
 
-        if (($outputGap > self::SPOT_BOOM_GAP_THRESHOLD || $gscpiShift > 1.0) && $spotZ > self::LORE_CONGESTION_Z_SCORE) {
+        // Congestion and glut are regimes, not blips: berths take quarters to clear and a newbuild
+        // overhang takes years of scrapping and trade growth to absorb.
+        $congestionElapsed = $streams->evolveRegime(self::REGIME_PORT_CONGESTION, 0.0, self::PORT_CONGESTION_EXIT_HAZARD);
+        $glutElapsed       = $streams->evolveRegime(self::REGIME_CAPACITY_GLUT, 0.0, self::CAPACITY_GLUT_EXIT_HAZARD);
+
+        if (($outputGap > self::SPOT_BOOM_GAP_THRESHOLD || $gscpiShift > 1.0) && $spotZ > self::LORE_CONGESTION_Z_SCORE && $congestionElapsed === 0 && $glutElapsed === 0) {
+            $congestionElapsed = $streams->startRegime(self::REGIME_PORT_CONGESTION);
             $eventType = ShockEvent::SHIPPING_PORT_CONGESTION;
-        } elseif ($outputGap < self::SPOT_GLUT_GAP_THRESHOLD && $spotZ < self::LORE_GLUT_Z_SCORE) {
+        } elseif ($outputGap < self::SPOT_GLUT_GAP_THRESHOLD && $spotZ < self::LORE_GLUT_Z_SCORE && $glutElapsed === 0 && $congestionElapsed === 0) {
+            $glutElapsed = $streams->startRegime(self::REGIME_CAPACITY_GLUT);
             $eventType = ShockEvent::SHIPPING_CAPACITY_GLUT;
         }
 
+        if ($congestionElapsed > 0) {
+            $spotRateMultiplier += self::PORT_CONGESTION_SPOT_RATE_BOOST;
+        } elseif ($glutElapsed > 0) {
+            $spotRateMultiplier -= self::CAPACITY_GLUT_SPOT_RATE_DRAG;
+        }
+
         $spotRevenue     = max(0.0, $expectedRevenue * $spotWeight * (1.0 + ($spotZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $spotRateMultiplier));
-        $contractRevenue = max(0.0, $expectedRevenue * $contractWeight * (1.0 + ($contractZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) - ($fxShift * 0.10)));
+        // Time charters are fixed into a multi-quarter contract backlog and recognized as voyages complete.
+        $contractBook = $streams->recognizeBacklog('contract', $expectedRevenue * $contractWeight, max(0.0, 1.0 + ($contractZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) - ($fxShift * 0.10)), self::CONTRACT_BACKLOG_BURN_RATE);
+        $contractRevenue = $contractBook['revenue'];
 
         $streamRevenues = [
             'spot'     => $spotRevenue,
@@ -204,6 +241,7 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+                    kpis: ['contract_book_to_bill' => $contractBook['book_to_bill'], 'contract_backlog_quarters' => $contractBook['backlog_quarters']],
         );
     }
 
@@ -213,25 +251,16 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         return self::SPOT_REVERSION_SPEED;
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /** Vessel aging & bunker fuel drag toward floor */
+    public function getDepreciationDecayRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
+        return self::VESSEL_AGING_DECAY_RATE;
+    }
 
-        if ($reinvestmentRatio < 1.0) {
-            // Vessel aging & bunker fuel drag toward floor
-            $decayRate = self::VESSEL_AGING_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            // Eco-fleet modernization expands margin ceiling
-            $modGain = self::ECO_FLEET_MODERNIZATION_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+    /** Eco-fleet modernization expands margin ceiling */
+    public function getModernizationGainRate(): float
+    {
+        return self::ECO_FLEET_MODERNIZATION_RATE;
     }
 
     public function calculateFairValue(float $earningsValue, float $pbFairValue, float $normalizedEps, float $dividendSupportValue = 0.0): float

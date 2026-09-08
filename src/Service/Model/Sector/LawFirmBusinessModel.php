@@ -31,6 +31,24 @@ use App\Service\Math\MathUtility;
  */
 class LawFirmBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Services Pricing ---
+    /** Pass-through of supercore (core services ex-housing) inflation into fee and rate pricing. Billing rates track professional services inflation almost one for one. */
+    public const SERVICES_INFLATION_PASS_THROUGH = 0.90;
+
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 billing and collections push before partner distributions.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [0.95, 1.00, 0.95, 1.10];
+    }
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Partner and associate compensation is nearly the entire overhead of a law firm. */
+    public const FIXED_COST_LABOR_SHARE = 0.85;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for elite private partnerships and legal firms. */
     public const BASE_COVERAGE_VISIBILITY = 0.20;
@@ -125,7 +143,8 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
 
         // Nullify global generic demand shifts; cyclicality is handled per-stream.
         $physics['macro_demand_shift'] = 0.0;
-        $physics['pricing_power_multiplier'] = 1.0;
+        // Fees and reimbursement rates price off services inflation (supercore), not goods breakevens.
+        $physics['pricing_power_multiplier'] = 1.0 + ($macroState->supercoreInflationEma * self::SERVICES_INFLATION_PASS_THROUGH);
 
         return $physics;
     }
@@ -152,7 +171,7 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
         $pricingPower        = $params[ModelParam::PricingPowerIndex];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new StreamContext($momentum, $mathUtility);
+        $streams = $this->createStreamContext($momentum, $mathUtility);
         $beta = abs((float) $stock->getBeta());
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
@@ -170,7 +189,7 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
         $retainerZ      = $streams->generateZ('corporate_retainers', 0.40);
         $litigationZ    = $streams->generateZ('litigation_settlements', 0.10);
         $restructuringZ = $streams->generateZ('restructuring_advisory', 0.30);
-        $eventZ         = $streams->generateZ('event', 0.10);
+        $eventZ         = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Sensitivities & Restructuring Surge ---
         $outputGap = $macroState->outputGapEma;
@@ -256,13 +275,16 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
             'corporate_default_rate_ema',
             'deal_activity_index_ema',
+            'exchange_rate_index_ema',
             'inflation_ema',
             'macro_credit_spread',
             'macro_credit_spread_ema',
             'output_gap_ema',
-        ]));
+            'supercore_inflation_ema',
+            'tips_breakeven_ema',
+        ];
     }
 }

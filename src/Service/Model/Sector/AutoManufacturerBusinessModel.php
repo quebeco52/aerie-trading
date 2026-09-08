@@ -33,6 +33,16 @@ use App\Service\Math\MathUtility;
  */
 class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
 {
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: spring selling season and model-year launches; weak Q1.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [0.95, 1.03, 1.00, 1.02];
+    }
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for automakers via monthly dealership channel registration data. */
     public const BASE_COVERAGE_VISIBILITY = 0.40;
@@ -201,7 +211,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $pricingPower   = $params[ModelParam::PricingPowerIndex];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new StreamContext($momentum, $mathUtility);
+        $streams = $this->createStreamContext($momentum, $mathUtility);
         $beta = abs((float) $stock->getBeta());
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
@@ -219,7 +229,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $salesZ    = $streams->generateZ('mass_market_sales', 0.25);
         $apexZ     = $streams->generateZ('apex_luxury', 0.35);
         $softwareZ = $streams->generateZ('software_telematics', 0.40);
-        $eventZ    = $streams->generateZ('event', 0.10);
+        $eventZ    = $streams->generateExogenousZ('event', 0.10);
 
         // --- Tail Risk & Labor Events ---
         $eventType = null;
@@ -347,25 +357,27 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
             'capacity_utilization_rate_ema',
             'consumer_sentiment_index_ema',
             'corporate_default_rate_ema',
             'energy_cost_push_lag',
-            'equity_risk_premium',
             'exchange_rate_index_ema',
             'freight_rate_index_ema',
             'industrial_metals_index_ema',
             'inflation_ema',
             'macro_credit_spread',
+            'manufacturing_pmi_ema',
+            'output_gap_ema',
             'policy_rate_ema',
             'producer_price_inflation',
             'qe_active',
             'qe_intensity',
             'retail_default_rate_ema',
             'supply_chain_pressure_index_ema',
+            'tips_breakeven_ema',
             'yield_10y_ema',
             'yield_2y_ema',
-        ]));
+        ];
     }
 }

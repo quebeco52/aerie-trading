@@ -25,6 +25,24 @@ use App\Service\Event\ShockEvent;
  */
 class InvestmentBankBusinessModel extends BrokerageBusinessModel
 {
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 deal-closing surge before year end; summer lull.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [0.95, 1.00, 0.95, 1.10];
+    }
+
+    // --- Balance Sheet Realism ---
+    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Deferred banker compensation is settled in restricted stock. */
+    public const STOCK_COMPENSATION_INTENSITY = 0.06;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Banker and trader compensation is the dominant overhead line of an investment bank. */
+    public const FIXED_COST_LABOR_SHARE = 0.70;
+
     // --- Dual-Desk Revenue Architecture ---
     /** Baseline revenue share allocated to advisory, M&A mandates, and capital markets underwriting. */
     public const ADVISORY_REVENUE_WEIGHT    = 0.40;
@@ -289,7 +307,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         $vixScalar        = $params[ModelParam::VixArbitrageScalar];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         $targetWeights = [
             'advisory' => $params[ModelParam::AdvisoryRevenueWeight],
@@ -309,7 +327,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         // Independent stream Z-scores with AR(1) persistence
         $advisoryZ = $streams->generateZ('advisory', 0.40);
         $tradingZ  = $streams->generateZ('trading', 0.15);
-        $eventZ    = $streams->generateZ('event', 0.05);
+        $eventZ    = $streams->generateExogenousZ('event', 0.05);
 
         // --- M&A, DCM, and ECM Elasticity (Cost of Capital & Macro Channel) ---
         $erpGap = MacroEngine::BASE_EQUITY_RISK_PREMIUM - $macroState->equityRiskPremium;
@@ -498,6 +516,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             'corporate_default_rate_ema',
             'deal_activity_index_ema',
             'high_yield_credit_spread_ema',
+            'interbank_liquidity_spread_ema',
             'macro_credit_spread_ema',
             'market_volatility_ema',
             'money_supply_growth_ema',

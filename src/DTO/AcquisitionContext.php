@@ -77,6 +77,8 @@ class AcquisitionContext
     // Synergy & Accounting
     public float $synergyMultiplier = 1.0;
     public float $synergyValueCreation = 0.0;
+    /** Goodwill recognized on this deal (purchase price above the fair value of net identifiable assets). */
+    public float $goodwillRecorded = 0.0;
     public float $newEquity = 0.0;
     
     public float $eventShock = 0.0;

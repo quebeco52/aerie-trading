@@ -244,7 +244,10 @@ class DistrictConduitTopologyTest extends TestCase
      * Regression guard for Glasswater Row: the 14 financial models' derived conduits, captured at
      * the moment CONDUITS (the old hand-maintained table) was replaced by this derivation, so any
      * future change to a financial model's declared fields that shifts its topology is visible in
-     * a failing assertion rather than a silent diff.
+     * a failing assertion rather than a silent diff. Re-baselined when declarations were synced to
+     * the fields each model's own operating code reads (BusinessModelMacroFieldDeclarationTest):
+     * distressed debt gained the rate and exchange edges its float income reads, and the two
+     * insurers lost a land-registry edge their physics never read.
      */
     public static function financialModelConduitProvider(): array
     {
@@ -258,10 +261,10 @@ class DistrictConduitTopologyTest extends TestCase
             'asset_manager' => ['asset_manager', ['rate-council', 'exchange-floor']],
             'private_equity' => ['private_equity', ['rate-council', 'credit-registry', 'exchange-floor']],
             'hedge_fund' => ['hedge_fund', ['rate-council', 'credit-registry', 'exchange-floor']],
-            'distressed_debt' => ['distressed_debt', ['credit-registry']],
+            'distressed_debt' => ['distressed_debt', ['rate-council', 'credit-registry', 'exchange-floor']],
             'insurance' => ['insurance', ['rate-council', 'exchange-floor', 'land-registry']],
-            'reinsurance' => ['reinsurance', ['rate-council', 'exchange-floor', 'land-registry']],
-            'retail_insurance' => ['retail_insurance', ['rate-council', 'exchange-floor', 'land-registry']],
+            'reinsurance' => ['reinsurance', ['rate-council', 'exchange-floor']],
+            'retail_insurance' => ['retail_insurance', ['rate-council', 'exchange-floor']],
             'financial_data' => ['financial_data', ['credit-registry', 'exchange-floor']],
         ];
     }

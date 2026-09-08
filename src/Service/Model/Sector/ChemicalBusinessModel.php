@@ -27,6 +27,20 @@ use App\Service\Math\MathUtility;
  */
 class ChemicalBusinessModel extends StandardCorporateBusinessModel
 {
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q2 planting season for agrochemicals.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [1.00, 1.08, 0.95, 0.97];
+    }
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Plant operations are capital and feedstock intensive; payroll is a minority of overhead. */
+    public const FIXED_COST_LABOR_SHARE = 0.35;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for chemical sector analysts tracking feedstock crack spreads. */
     public const BASE_COVERAGE_VISIBILITY = 0.40;
@@ -227,7 +241,7 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
 
         $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new StreamContext($momentum, $mathUtility);
+        $streams = $this->createStreamContext($momentum, $mathUtility);
 
         // Active stream weights with dynamic drift
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -338,26 +352,16 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /** Physical corrosion and deferred maintenance downtime create margin decay */
+    public function getDepreciationDecayRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
+        return self::PLANT_DECAY_RATE;
+    }
 
-        if ($reinvestmentRatio < 1.0) {
-            // Physical corrosion and deferred maintenance downtime create margin decay
-            $underinvestment = 1.0 - $reinvestmentRatio;
-            $decay = self::PLANT_DECAY_RATE * $underinvestment * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decay));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            // Modernization and continuous flow chemical synthesis expansion
-            $modGain = self::PLANT_MODERNIZATION_GAIN * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+    /** Modernization and continuous flow chemical synthesis expansion */
+    public function getModernizationGainRate(): float
+    {
+        return self::PLANT_MODERNIZATION_GAIN;
     }
 
     /**

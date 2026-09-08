@@ -28,6 +28,16 @@ use App\Service\Macro\MacroEngine;
  */
 class WasteManagementBusinessModel extends StandardCorporateBusinessModel
 {
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: spring and summer construction and yard volumes.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [0.94, 1.03, 1.05, 0.98];
+    }
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.50; // High visibility due to steady municipal contracts
     public const BASE_COVERAGE_ERROR = 0.05;
@@ -116,7 +126,7 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         $recyclingWeight   = $params[ModelParam::RecyclingWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams = $this->createStreamContext($momentum, $mathUtility);
         $beta = abs((float) $stock->getBeta());
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
@@ -134,7 +144,7 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         $residentialZ = $streams->generateZ('residential_collection', 0.40);
         $commercialZ  = $streams->generateZ('commercial_disposal', 0.20);
         $recyclingZ   = $streams->generateZ('recycling_and_rng', 0.10);
-        $eventZ       = $streams->generateZ('event', 0.05);
+        $eventZ       = $streams->generateExogenousZ('event', 0.05);
 
         // --- Macro Demand & Pricing Sensitivities ---
         $housingWasteShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_WASTE_SENSITIVITY);
@@ -200,25 +210,16 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /** Fleet aging (maintenance costs spike) and landfill airspace depletion */
+    public function getDepreciationDecayRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
+        return self::FLEET_AGING_DECAY_RATE;
+    }
 
-        if ($reinvestmentRatio < 1.0) {
-            // Fleet aging (maintenance costs spike) and landfill airspace depletion
-            $decayRate = self::FLEET_AGING_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            // Fleet automation, transition to cheaper CNG/EV trucks, and RNG gas capture facility builds
-            $modGain = self::AUTOMATION_RNG_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+    /** Fleet automation, transition to cheaper CNG/EV trucks, and RNG gas capture facility builds */
+    public function getModernizationGainRate(): float
+    {
+        return self::AUTOMATION_RNG_GAIN_RATE;
     }
 
     /**
@@ -229,13 +230,14 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
             'energy_cost_push_lag',
+            'exchange_rate_index_ema',
             'housing_starts_index_ema',
             'industrial_metals_index_ema',
             'inflation_ema',
             'output_gap_ema',
             'tips_breakeven_ema',
-        ]));
+        ];
     }
 }

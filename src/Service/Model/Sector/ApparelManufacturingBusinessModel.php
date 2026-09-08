@@ -31,6 +31,14 @@ use App\Service\Math\MathUtility;
  */
 class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Inventory Cycle ---
+    /** Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking, shortfalls restocking. Retailer inventory-to-sales ratios gate wholesale reorders. */
+    public const INVENTORY_CYCLE_SENSITIVITY = 0.50;
+
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Direct-to-consumer store leases. */
+    public const LEASE_LIABILITY_INTENSITY = 0.30;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for apparel manufacturing analysts. */
     public const BASE_COVERAGE_VISIBILITY = 0.35;
@@ -241,7 +249,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $inflationMultiplier = 2.0 - ($pricingPower * 2.0);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -258,7 +266,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $dtcZ       = $streams->generateZ('dtc_retail', 0.25);
         $wholesaleZ = $streams->generateZ('wholesale_channel', 0.30);
         $contractZ  = $streams->generateZ('contract_textile_supply', 0.40);
-        $eventZ     = $streams->generateZ('event', 0.10);
+        $eventZ     = $streams->generateExogenousZ('event', 0.10);
 
         // --- Tail Risk Events ---
         $revenueMultiplier = 1.0;
@@ -286,7 +294,9 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $bullwhipPenalty = $mathUtility->calculateConvexPenalty($outputGapContraction, self::BULLWHIP_CONVEXITY, self::BULLWHIP_PENALTY_SCALAR);
 
         $dtcShock       = $dtcZ * ($baselineVol * self::DTC_RETAIL_VARIANCE);
-        $wholesaleShock = ($wholesaleZ * ($baselineVol * self::WHOLESALE_CHANNEL_VARIANCE)) - $bullwhipPenalty;
+        // Metzler inventory cycle: retailers with elevated inventory-to-sales ratios cut wholesale reorders.
+        $inventoryCycleShift = -$macroState->inventoryStockGapEma * self::INVENTORY_CYCLE_SENSITIVITY;
+        $wholesaleShock = ($wholesaleZ * ($baselineVol * self::WHOLESALE_CHANNEL_VARIANCE)) - $bullwhipPenalty + $inventoryCycleShift;
         $contractShock  = ($contractZ * ($baselineVol * self::CONTRACT_TEXTILE_VARIANCE)) + $contractFxBonus + $tradeShift;
 
         $dtcRevenue       = max(0.0, $expectedRevenue * $dtcWeight * (1.0 + $dtcShock) * $revenueMultiplier * $brandSurgeMultiplier);
@@ -351,25 +361,16 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /** Rapid obsolescence of specialized cutting, sewing, and weaving equipment */
+    public function getDepreciationDecayRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
+        return self::PLANT_DECAY_RATE;
+    }
 
-        if ($reinvestmentRatio < 1.0) {
-            // Rapid obsolescence of specialized cutting, sewing, and weaving equipment
-            $decayRate = self::PLANT_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            // Modernization and automated weaving/cutting infrastructure expand unit cost advantage
-            $modGain = self::PLANT_MODERNIZATION_GAIN * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+    /** Modernization and automated weaving/cutting infrastructure expand unit cost advantage */
+    public function getModernizationGainRate(): float
+    {
+        return self::PLANT_MODERNIZATION_GAIN;
     }
 
     /**
@@ -386,6 +387,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'freight_rate_index_ema',
+            'inventory_stock_gap_ema',
             'output_gap_ema',
             'producer_price_inflation',
             'tips_breakeven_ema',

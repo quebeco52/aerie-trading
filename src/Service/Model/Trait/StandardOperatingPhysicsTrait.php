@@ -79,12 +79,98 @@ trait StandardOperatingPhysicsTrait
         return 0.10;
     }
 
+    public function getLeaseIntensity(): float
+    {
+        return defined('static::LEASE_LIABILITY_INTENSITY')
+            ? (float) static::LEASE_LIABILITY_INTENSITY
+            : FinancialConstants::DEFAULT_LEASE_LIABILITY_INTENSITY;
+    }
+
+    public function getStockCompensationIntensity(): float
+    {
+        return defined('static::STOCK_COMPENSATION_INTENSITY')
+            ? (float) static::STOCK_COMPENSATION_INTENSITY
+            : FinancialConstants::DEFAULT_STOCK_COMPENSATION_INTENSITY;
+    }
+
+    public function getFiscalYearStartQuarter(Stock $stock): int
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::FiscalYearStartQuarter->value => 0.0,
+        ]);
+
+        return ((int) round($params[ModelParam::FiscalYearStartQuarter]) % 4 + 4) % 4;
+    }
+
+    public function getLaborCostShare(): float
+    {
+        return defined('static::FIXED_COST_LABOR_SHARE')
+            ? (float) static::FIXED_COST_LABOR_SHARE
+            : FinancialConstants::DEFAULT_FIXED_COST_LABOR_SHARE;
+    }
+
     public function getCapExCompletionRate(Stock $stock): float
     {
         return 0.33;
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void {}
+    /**
+     * Asset reinvestment physics shared by every sector model. Under-investment below replacement CapEx
+     * (reinvestmentRatio < 1) decays operating margin toward the sector floor; over-investment compounds
+     * logarithmically toward the sector ceiling (diminishing returns to modernization). Sector models tune
+     * the four hooks below, or simply define the canonical constants DEPRECIATION_DECAY_RATE,
+     * MODERNIZATION_GAIN_RATE, MIN_OPERATING_MARGIN_FLOOR and MAX_OPERATING_MARGIN_CEILING. Models with no
+     * decay physics at all (financial balance sheets) are a no-op.
+     */
+    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    {
+        $decayRate = $this->getDepreciationDecayRate();
+        $gainRate  = $this->getModernizationGainRate();
+        if ($decayRate <= 0.0 && $gainRate <= 0.0) {
+            return;
+        }
+
+        $timeScale = $dt / 0.25;
+        $currentMargin = (float) $stock->getOperatingMargin();
+
+        if ($reinvestmentRatio < 1.0) {
+            $decay = $decayRate * (1.0 - $reinvestmentRatio) * $timeScale;
+            $updatedMargin = max($this->getMinOperatingMarginFloor(), $currentMargin - ($currentMargin * $decay));
+            $stock->setOperatingMargin((string) $updatedMargin);
+        } elseif ($reinvestmentRatio > 1.0) {
+            $ceiling = $this->getMaxOperatingMarginCeiling($stock);
+            if ($currentMargin >= $ceiling) {
+                return; // Already at or above the structural ceiling: modernization cannot add margin.
+            }
+            $modGain = $gainRate * log($reinvestmentRatio) * $timeScale;
+            $updatedMargin = min($ceiling, $currentMargin + (($ceiling - $currentMargin) * $modGain));
+            $stock->setOperatingMargin((string) $updatedMargin);
+        }
+    }
+
+    /** Quarterly operating margin decay rate per unit of under-investment below replacement CapEx. */
+    public function getDepreciationDecayRate(): float
+    {
+        return defined('static::DEPRECIATION_DECAY_RATE') ? (float) static::DEPRECIATION_DECAY_RATE : 0.0;
+    }
+
+    /** Quarterly margin gain scalar per unit of logarithmic over-investment above replacement CapEx. */
+    public function getModernizationGainRate(): float
+    {
+        return defined('static::MODERNIZATION_GAIN_RATE') ? (float) static::MODERNIZATION_GAIN_RATE : 0.0;
+    }
+
+    /** Structural operating margin floor reached under sustained under-investment. */
+    public function getMinOperatingMarginFloor(): float
+    {
+        return defined('static::MIN_OPERATING_MARGIN_FLOOR') ? (float) static::MIN_OPERATING_MARGIN_FLOOR : 0.01;
+    }
+
+    /** Structural operating margin ceiling that modernization converges toward. */
+    public function getMaxOperatingMarginCeiling(Stock $stock): float
+    {
+        return defined('static::MAX_OPERATING_MARGIN_CEILING') ? (float) static::MAX_OPERATING_MARGIN_CEILING : 1.0;
+    }
 
     public function getMarginReversionSpeed(): float
     {
@@ -116,6 +202,8 @@ trait StandardOperatingPhysicsTrait
             isPublicEvent: $physics->isPublicEvent,
             streamZ: $physics->streamZ,
             streamRevenue: $physics->streamRevenue,
+            scheduledCapex: $physics->scheduledCapex,
+            kpis: $physics->kpis,
         );
     }
 

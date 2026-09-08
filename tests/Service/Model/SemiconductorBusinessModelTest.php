@@ -9,6 +9,7 @@ use App\Service\Math\MathUtility;
 use App\Entity\Stock;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use App\DTO\MacroStateDTO;
 use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
@@ -173,4 +174,27 @@ class SemiconductorBusinessModelTest extends TestCase
 
         $this->assertGreaterThan($resultNormal->streamRevenue['foundry'], $resultBoom->streamRevenue['foundry'], 'Elevated industrial capacity utilization must expand foundry throughput.');
     }
+    public function testChannelInventoryOverhangCutsWaferOrdersAndShortfallRestocks(): void
+    {
+        $model = new SemiconductorBusinessModel();
+        $run = function (float $inventoryGap) use ($model) {
+            $stock = new Stock();
+            $stock->setTicker('FAB');
+            $stock->setBeta('1.2');
+            $math = $this->createStub(MathUtility::class);
+            $math->method('generatePersistentZ')->willReturn(0.0);
+            return $model->computeActualFinancials($stock, 100_000_000.0, 0.40, 20_000_000.0, 0.0, new MacroStateDTO(inventoryStockGapEma: $inventoryGap), $math);
+        };
+
+        $neutral = $run(0.0);
+        $overhang = $run(0.10);   // distributors sit on excess chips: destocking
+        $shortfall = $run(-0.10); // channel is empty: restocking
+
+        // Orders move first; recognized foundry revenue follows at the wafer-out burn rate.
+        $this->assertLessThan($neutral->kpis['book_to_bill'], $overhang->kpis['book_to_bill']);
+        $this->assertGreaterThan($neutral->kpis['book_to_bill'], $shortfall->kpis['book_to_bill']);
+        $this->assertLessThan($neutral->streamRevenue['foundry'], $overhang->streamRevenue['foundry']);
+        $this->assertGreaterThan($neutral->streamRevenue['foundry'], $shortfall->streamRevenue['foundry']);
+    }
+
 }

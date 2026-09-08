@@ -256,6 +256,14 @@ class Stock
     private string $roicTtm = '0.0000';
 
     /**
+     * @var string|null Annual capital turnover (revenue / invested capital), the DuPont component fixing how much
+     *                  revenue a dollar of physical capital can generate. Seeded once from baseline ROIC and margin,
+     *                  then held structural; null until the first earnings report seeds it.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $assetTurnover = null;
+
+    /**
      * @var string The dynamic, current Return on Equity.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, options: ['default' => '0.0000'])]
@@ -296,6 +304,10 @@ class Stock
 
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $industry = null;
+
+    /** Dickinson (2011) life-cycle stage classified from last quarter's cash-flow signs (App\Data\LifecycleStage value). */
+    #[ORM\Column(length: 16, nullable: true)]
+    private ?string $lifecycleStage = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 2, nullable: true)]
     private ?string $customerDeposits = '0.00';
@@ -532,6 +544,18 @@ class Stock
     {
         return $this->systemicImportance;
     }
+    public function getLifecycleStage(): ?\App\Data\LifecycleStage
+    {
+        return $this->lifecycleStage !== null ? \App\Data\LifecycleStage::tryFrom($this->lifecycleStage) : null;
+    }
+
+    public function setLifecycleStage(?\App\Data\LifecycleStage $stage): static
+    {
+        $this->lifecycleStage = $stage?->value;
+
+        return $this;
+    }
+
     public function setSystemicImportance(string $systemicImportance): static
     {
         $this->systemicImportance = $systemicImportance;
@@ -1000,6 +1024,17 @@ class Stock
     public function getRoicTtm(): string
     {
         return $this->roicTtm;
+    }
+
+    public function getAssetTurnover(): ?string
+    {
+        return $this->assetTurnover;
+    }
+
+    public function setAssetTurnover(?string $assetTurnover): static
+    {
+        $this->assetTurnover = $assetTurnover !== null ? self::cleanBcStr($assetTurnover, 4) : null;
+        return $this;
     }
 
     public function setRoicTtm(string $roicTtm): self

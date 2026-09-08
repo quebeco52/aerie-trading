@@ -70,7 +70,7 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         $catScalar     = $params[ModelParam::CatastropheLossScalar];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -84,7 +84,7 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         // Independent stream Z-scores
         $treatyZ  = $streams->generateZ('treaty_reinsurance', 0.30);
         $catBondZ = $streams->generateZ('catastrophe_bonds', 0.15);
-        $claimZ   = $streams->generateZ('claim', 0.05);
+        $claimZ   = $streams->generateExogenousZ('claim', 0.05);
 
         // Catastrophe Risk Beta & Combined Ratio Shock
         $frequencyBeta = self::CATASTROPHE_Z_THRESHOLD / min(-0.1, $catThreshold);
@@ -168,12 +168,10 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
-            'commercial_property_index_ema',
             'inflation_ema',
             'market_volatility_ema',
             'output_gap_ema',
             'policy_rate_ema',
-            'residential_property_index_ema',
             'yield_10y_ema',
         ];
     }

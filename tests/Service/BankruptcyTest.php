@@ -262,4 +262,43 @@ class BankruptcyTest extends TestCase
         $this->assertEquals(1000000.0, $resultZero['shares']);
         $this->assertNull($resultZero['event']);
     }
+    public function testSurvivingPeersAbsorbAFailedRivalsAddressableMarket(): void
+    {
+        $build = function (string $ticker, string $sam, string $industry = 'Airlines'): Stock {
+            $stock = new Stock();
+            $stock->setTicker($ticker);
+            $stock->setName($ticker . ' Corp');
+            $stock->setIndustry($industry);
+            $stock->setPrice('10.00');
+            $stock->setSharesOutstanding('1000000');
+            $stock->setOperatingMargin('0.10');
+            $stock->setTotalRevenue('1000000');
+            $stock->setSamRatio($sam);
+            return $stock;
+        };
+        $failed = $build('DEAD', '1.00');
+        $bigPeer = $build('BIG', '1.00');
+        $smallPeer = $build('SMALL', '0.50');
+        $otherIndustry = $build('RAIL', '1.00', 'Railroads');
+
+        // Only the failed carrier is insolvent; every peer survives.
+        $this->debtEngineMock->method('calculateAltmanZScore')->willReturnCallback(
+            static fn (Stock $stock): array => ['z_score' => $stock->getTicker() === 'DEAD' ? -1.5 : 5.0, 'zone' => 'Safe', 'is_bankrupt' => $stock->getTicker() === 'DEAD']
+        );
+        $this->entityManagerMock->method('getRepository')->willReturn($this->tradeOrderRepoMock);
+        $this->tradeOrderRepoMock->method('findBy')->willReturn([]);
+        $this->marketEventMock->method('publish')->willReturn(['type' => 'BANKRUPTCY']);
+
+        $operator = new MarketOperator($this->entityManagerMock, $this->loggerMock, $this->marketEventMock, $this->debtEngineMock, $this->mathUtilityMock);
+        $operator->enforceMarketStability([$failed, $bigPeer, $smallPeer, $otherIndustry], new MacroStateDTO());
+
+        $this->assertTrue($failed->isBankrupt());
+        // 70% of the failed carrier's addressable market is recaptured, split 2:1 by the peers' own size.
+        $recaptured = 1.00 * \App\Service\Math\FinancialConstants::MARKET_EXIT_RECAPTURE_FRACTION;
+        $this->assertEqualsWithDelta(1.00 + ($recaptured * (1.0 / 1.5)), (float) $bigPeer->getSamRatio(), 1e-6);
+        $this->assertEqualsWithDelta(0.50 + ($recaptured * (0.5 / 1.5)), (float) $smallPeer->getSamRatio(), 1e-6);
+        $this->assertEqualsWithDelta(1.00, (float) $otherIndustry->getSamRatio(), 1e-9, 'other industries gain nothing');
+        $this->assertEqualsWithDelta(1.00, (float) $failed->getSamRatio(), 1e-9, 'the failed firm keeps its frozen record');
+    }
+
 }

@@ -27,6 +27,14 @@ use App\Service\Math\MathUtility;
  */
 class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Inventory Cycle ---
+    /** Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking, shortfalls restocking. Grocery and distributor stock levels only modestly gate replenishment volumes. */
+    public const INVENTORY_CYCLE_SENSITIVITY = 0.30;
+
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Store and distribution-centre leases behind grocery and discount formats. */
+    public const LEASE_LIABILITY_INTENSITY = 0.30;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for consumer staples analysts. */
     public const BASE_COVERAGE_VISIBILITY = 0.30;
@@ -191,7 +199,7 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         $rawLandWeight      = $params[ModelParam::LandSpeculationWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         $targetWeights = [
             'branded' => $params[ModelParam::BrandedStaplesWeight],
@@ -215,10 +223,12 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         // Independent stream Z-scores with AR(1) persistence
         $brandedZ = $streams->generateZ('branded', 0.15);
         $volumeZ  = $streams->generateZ('volume', 0.15);
-        $eventZ   = $streams->generateZ('event', 0.05);
+        $eventZ   = $streams->generateExogenousZ('event', 0.05);
 
         $brandedRevenue = max(0.0, $expectedRevenue * $brandedWeight * (1.0 + ($brandedZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
-        $volumeRevenue  = max(0.0, $expectedRevenue * $volumeWeight * (1.0 + ($volumeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
+        // Metzler inventory cycle: distributor stock overhangs modestly delay replenishment of volume lines.
+        $inventoryCycleShift = -$macroState->inventoryStockGapEma * self::INVENTORY_CYCLE_SENSITIVITY;
+        $volumeRevenue  = max(0.0, $expectedRevenue * $volumeWeight * (1.0 + ($volumeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $inventoryCycleShift));
 
         // Tail Risk: Product Recalls and Health Regulations
         $eventType = null;
@@ -305,25 +315,16 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         );
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
+    /** Brand equity erosion toward private-label floor */
+    public function getDepreciationDecayRate(): float
     {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
+        return self::BRAND_EQUITY_DECAY_RATE;
+    }
 
-        if ($reinvestmentRatio < 1.0) {
-            // Brand equity erosion toward private-label floor
-            $decayRate = self::BRAND_EQUITY_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            // Brand marketing super-cycle expands pricing power
-            $modGain = self::BRAND_MARKETING_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
+    /** Brand marketing super-cycle expands pricing power */
+    public function getModernizationGainRate(): float
+    {
+        return self::BRAND_MARKETING_GAIN_RATE;
     }
 
     /**
@@ -340,6 +341,7 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
             'exchange_rate_index_ema',
             'freight_rate_index_ema',
             'inflation_ema',
+            'inventory_stock_gap_ema',
             'output_gap_ema',
             'producer_price_inflation_ema',
             'tips_breakeven_ema',

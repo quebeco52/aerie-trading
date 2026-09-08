@@ -31,6 +31,28 @@ use App\Service\Math\MathUtility;
  */
 class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Services Pricing ---
+    /** Pass-through of supercore (core services ex-housing) inflation into fee and rate pricing. Reimbursement follows medical services inflation, capped by payer contracts. */
+    public const SERVICES_INFLATION_PASS_THROUGH = 0.60;
+
+    /**
+     * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q1 flu season admissions.
+     *
+     * @return array<int, float>
+     */
+    public function getSeasonalityFactors(): array
+    {
+        return [1.06, 0.98, 0.96, 1.00];
+    }
+
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Hospital campuses and clinics under long-term leases. */
+    public const LEASE_LIABILITY_INTENSITY = 0.30;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Nursing and clinical staff payroll dominates hospital overhead. */
+    public const FIXED_COST_LABOR_SHARE = 0.70;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for hospital networks with steady public reporting. */
     public const BASE_COVERAGE_VISIBILITY = 0.35;
@@ -113,7 +135,8 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
 
         // Nullify generic demand shifts to calculate healthcare macro physics discretely per stream.
         $physics['macro_demand_shift'] = 0.0;
-        $physics['pricing_power_multiplier'] = 1.0;
+        // Fees and reimbursement rates price off services inflation (supercore), not goods breakevens.
+        $physics['pricing_power_multiplier'] = 1.0 + ($macroState->supercoreInflationEma * self::SERVICES_INFLATION_PASS_THROUGH);
 
         return $physics;
     }
@@ -140,7 +163,7 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         $pricingPower     = $params[ModelParam::PricingPowerIndex];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = new StreamContext($momentum, $mathUtility);
+        $streams = $this->createStreamContext($momentum, $mathUtility);
         $beta = abs((float) $stock->getBeta());
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
@@ -158,7 +181,7 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         $inpatientZ  = $streams->generateZ('inpatient_care', 0.35);
         $outpatientZ = $streams->generateZ('elective_outpatient', 0.25);
         $arbitrageZ  = $streams->generateZ('insurance_arbitrage', 0.40);
-        $eventZ      = $streams->generateZ('event', 0.10);
+        $eventZ      = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Demand Sensitivities ---
         $outputGap = $macroState->outputGapEma;
@@ -239,10 +262,13 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
+            'exchange_rate_index_ema',
             'government_spending_index_ema',
             'inflation_ema',
             'output_gap_ema',
-        ]));
+            'supercore_inflation_ema',
+            'tips_breakeven_ema',
+        ];
     }
 }

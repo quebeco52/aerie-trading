@@ -18,6 +18,14 @@ use App\Service\Macro\MacroEngine;
  */
 class ReitBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Balance Sheet Realism ---
+    /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). The REIT is the lessor, not the lessee. */
+    public const LEASE_LIABILITY_INTENSITY = 0.00;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Property operating costs, taxes and depreciation dominate; leasing staff is a small overhead line. */
+    public const FIXED_COST_LABOR_SHARE = 0.25;
+
     // --- Analyst Visibility & Error ---
     /** Base analyst visibility into predictable contracted commercial real estate cash flows. */
     public const BASE_COVERAGE_VISIBILITY = 0.70;
@@ -38,8 +46,6 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     // --- Cap Rate & Portfolio Turnover Rails ---
     /** Fraction of property portfolio acquired/divested per quarter adjusting baseline cap rate. */
     public const PORTFOLIO_TURNOVER_RATE    = 0.025;
-    /** Fallback benchmark 10-year Treasury yield when macro state yield is unavailable. */
-    public const DEFAULT_10Y_YIELD_FALLBACK = 0.04;
     /** Absolute maximum cap rate clamp floor to prevent unrealistically high property yields. */
     public const MAX_CAP_RATE_CLAMP         = 0.15;
     /** Maximum spread buffer above 10-year Treasury yield allowed for market cap rates. */
@@ -93,8 +99,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public const LEASING_BONUS_SCALE            = 0.015;
     /** Sensitivity of market cap rates to macroeconomic credit spread fluctuations. */
     public const CAP_RATE_SPREAD_SENSITIVITY    = 1.20;
-    /** Operating margin drag per 100bps of 10-year Treasury yield above default fallback. */
-    public const REFINANCING_WALL_DRAG          = 0.25;
+    /** Quarterly share of the fixed-rate bond stock that matures and reprices (~7-year average unsecured tenor). */
+    public const DEBT_MATURITY_ROLLOVER_RATE    = 0.035;
     /** Minimum operating efficiency ratio (operating revenue / fixed costs) floor. */
     public const MIN_EFFICIENCY_RATIO           = 0.35;
     /** Upper clamp for realized variable margin. */
@@ -213,7 +219,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $rawLongevityWeight      = $params[ModelParam::LongevityBondYieldWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new \App\DTO\StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         $targetWeights = [
             'lease'       => $params[ModelParam::StickyLeaseWeight],
@@ -284,7 +290,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // --- Margin Penalties ---
-        $tenantDefaultZ = $streams->generateZ('tenant_default', 0.20);
+        $tenantDefaultZ = $streams->generateExogenousZ('tenant_default', 0.20);
         $vacancyShock = $tenantDefaultZ < self::VACANCY_Z_THRESHOLD
             ? abs($tenantDefaultZ) * self::VACANCY_LOSS_SCALAR
             : ($tenantDefaultZ > self::BENIGN_LEASING_Z_FLOOR
@@ -295,11 +301,10 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $retailDefaultShift = max(0.0, ($macroState->retailDefaultRateEma - MacroEngine::RETAIL_DEFAULT_BASELINE) / MacroEngine::RETAIL_DEFAULT_BASELINE);
         $macroTenantDefaultDrag = ($corpDefaultShift * self::CORP_DEFAULT_VACANCY_SCALAR) + ($retailDefaultShift * self::RETAIL_DEFAULT_VACANCY_SCALAR);
 
-        $yield10y = $macroState->yield10yEma;
-        $refinancingDrag = max(0.0, ($yield10y - self::DEFAULT_10Y_YIELD_FALLBACK) * self::REFINANCING_WALL_DRAG);
-
+        // Mortgage and unsecured note costs reach FFO through DebtEngine's maturity wall
+        // (getDebtMaturityRolloverRate), below NOI. They are not a property operating cost.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $vacancyShock + $macroTenantDefaultDrag + $refinancingDrag, $minVariableMargin);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $vacancyShock + $macroTenantDefaultDrag, $minVariableMargin);
 
         $eventType = null;
         if ($tenantDefaultZ < self::LORE_ANCHOR_BANKRUPTCY_Z) {
@@ -436,24 +441,6 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         return self::LEASE_REVERSION_SPEED;
     }
 
-    public function applyAssetDepreciationDecay(Stock $stock, float $reinvestmentRatio, float $dt): void
-    {
-        $timeScale = $dt / 0.25;
-        $currentMargin = (float) $stock->getOperatingMargin();
-
-        if ($reinvestmentRatio < 1.0) {
-            $decayRate = self::DEPRECIATION_DECAY_RATE * (1.0 - $reinvestmentRatio) * $timeScale;
-            $updatedMargin = max(self::MIN_OPERATING_MARGIN_FLOOR, $currentMargin - ($currentMargin * $decayRate));
-            $stock->setOperatingMargin((string) $updatedMargin);
-        } elseif ($reinvestmentRatio > 1.0) {
-            $modGain = self::MODERNIZATION_GAIN_RATE * log($reinvestmentRatio) * $timeScale;
-            $updatedMargin = min(
-                self::MAX_OPERATING_MARGIN_CEILING,
-                $currentMargin + ((self::MAX_OPERATING_MARGIN_CEILING - $currentMargin) * $modGain)
-            );
-            $stock->setOperatingMargin((string) $updatedMargin);
-        }
-    }
     public function requiresAlternativeZScore(): bool
     {
         return true;
@@ -465,6 +452,15 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
+     * Bond proxy: REITs ladder unsecured notes and mortgages over roughly seven years, so only a small
+     * slice of the fixed-rate book reprices each quarter and rate shocks reach FFO with a lag.
+     */
+    public function getDebtMaturityRolloverRate(): float
+    {
+        return self::DEBT_MATURITY_ROLLOVER_RATE;
+    }
+
+    /**
      * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
      * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
      *
@@ -472,15 +468,16 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return array_unique(array_merge(parent::getOperatingMacroFields(), [
+        return [
             'commercial_property_index_ema',
             'corporate_default_rate_ema',
+            'exchange_rate_index_ema',
             'housing_starts_index_ema',
             'inflation_ema',
             'output_gap_ema',
             'residential_property_index_ema',
             'retail_default_rate_ema',
-            'yield_10y_ema',
-        ]));
+            'tips_breakeven_ema',
+        ];
     }
 }

@@ -28,6 +28,14 @@ use App\Service\Math\MathUtility;
  */
 class HedgeFundBusinessModel extends AssetManagementBusinessModel
 {
+    // --- Balance Sheet Realism ---
+    /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Investment team deferrals settle in fund and manager equity. */
+    public const STOCK_COMPENSATION_INTENSITY = 0.05;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Investment team compensation dominates hedge fund overhead. */
+    public const FIXED_COST_LABOR_SHARE = 0.70;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for hedge funds is extremely low due to black-box opacity. */
     public const BASE_COVERAGE_VISIBILITY = 0.15;
@@ -270,7 +278,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         ]);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = new StreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -499,9 +507,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
             'market_volatility_ema',
             'money_supply_growth_ema',
             'output_gap_ema',
-            'policy_rate_ema',
             'yield_10y_ema',
-            'yield_5y_ema',
         ];
     }
 }
