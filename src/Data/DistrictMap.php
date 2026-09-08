@@ -138,10 +138,18 @@ class DistrictMap
      * narrowed by more than this shrank.
      */
     public const MAX_FACADE_HEIGHT = 620.0;
-    /** Log10 market capitalisation floor (~$32B) mapped to MIN_FACADE_HEIGHT. */
-    public const MARKET_CAP_LOG_FLOOR = 10.5;
-    /** Log10 market capitalisation ceiling (~$3.2T) mapped to MAX_FACADE_HEIGHT. */
-    public const MARKET_CAP_LOG_CEILING = 13.5;
+    /** Log10 market capitalisation floor (~$63B) mapped to MIN_FACADE_HEIGHT. */
+    public const MARKET_CAP_LOG_FLOOR = 10.8;
+    /**
+     * Log10 market capitalisation ceiling (~$32T) mapped to MAX_FACADE_HEIGHT.
+     *
+     * Floor and ceiling are not a clamp — they anchor a logistic, so they must bracket the listed
+     * universe *wider* than it actually spans or the roster lands in the curve's flat tail and
+     * stops differentiating. The pair below centres the steep region on ~$4.5T: with a top-30
+     * street whose largest tenants run to $10T-$15T, that keeps ~40 units between them rather
+     * than the ~13 the previous $32B-$32T window left.
+     */
+    public const MARKET_CAP_LOG_CEILING = 14.5;
     /** Normalised facade value the log floor/ceiling map to (edges approach but never hit the envelope ends). */
     public const MARKET_CAP_LOG_EDGE_TOLERANCE = 0.02;
     /**
@@ -162,15 +170,22 @@ class DistrictMap
      * the facades use, so a rule can never disagree with the buildings beside it — and because a
      * cap maps to a *height*, every row carries its own set at its own y.
      *
-     * Four lines, not more: above ~$2T the log compression puts successive round numbers within a
-     * few units of each other ($3T and $5T land 45 units apart), which would crowd rather than
-     * inform.
+     * Six lines spanning $100B to $10T: every consecutive pair sits at least ~44 units apart on
+     * the current envelope, so none of them crowd, and the top of the skyline stays referenced.
+     * Ending at $2T (as this did while the envelope was centred on $1T) left the tallest rules
+     * two thirds of the way down a $10T facade, with the whole upper half unlabelled.
+     *
+     * Every entry must sit strictly inside MARKET_CAP_LOG_FLOOR..MARKET_CAP_LOG_CEILING, or the
+     * rule pins to an envelope bound and stops agreeing with the facades beside it — see
+     * DistrictMapTest::testGridlineCapsFallInsideTheFacadeEnvelope().
      */
     public const MARKET_CAP_GRIDLINES = [
         '$100B' => 1.0e11,
         '$500B' => 5.0e11,
         '$1T' => 1.0e12,
         '$2T' => 2.0e12,
+        '$5T' => 5.0e12,
+        '$10T' => 1.0e13,
     ];
     /** Font size in user units of a gridline's gutter label — see FRONTAGE_GUTTER for the width this implies. */
     public const GRIDLINE_LABEL_SIZE = 32;

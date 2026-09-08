@@ -84,9 +84,13 @@ class DistrictMapBuilderTest extends TestCase
         $vast = $this->builder->calculateFacadeHeight(1.0e18);
 
         // The logistic curve only asymptotically approaches its bounds — even at 1e18 market cap
-        // it lands a fraction of a unit short of MAX_FACADE_HEIGHT, never exactly on it.
-        $this->assertEqualsWithDelta(DistrictMap::MIN_FACADE_HEIGHT, $tiny, 1.0e-3);
-        $this->assertEqualsWithDelta(DistrictMap::MAX_FACADE_HEIGHT, $vast, 1.0e-3);
+        // it lands a fraction of a unit short of MAX_FACADE_HEIGHT, never exactly on it, and how
+        // short depends on the floor/ceiling span. So assert the bound is approached and never
+        // crossed rather than a fixed delta, which would break on every retune of the window.
+        $this->assertGreaterThanOrEqual(DistrictMap::MIN_FACADE_HEIGHT, $tiny);
+        $this->assertLessThan(DistrictMap::MIN_FACADE_HEIGHT + 1.0, $tiny);
+        $this->assertLessThanOrEqual(DistrictMap::MAX_FACADE_HEIGHT, $vast);
+        $this->assertGreaterThan(DistrictMap::MAX_FACADE_HEIGHT - 1.0, $vast);
     }
 
     public function testFacadeHeightRisesMonotonicallyWithMarketCap(): void
@@ -97,6 +101,43 @@ class DistrictMapBuilderTest extends TestCase
 
         $this->assertGreaterThan($small, $medium);
         $this->assertGreaterThan($medium, $large);
+    }
+
+    /**
+     * The envelope exists to make cap legible as height, so the largest tenants a long-running
+     * market produces must still read apart. A $10T and a $15T facade previously differed by
+     * ~13 units out of 530 — visually identical — because the logistic window was centred on
+     * $1T and both sat in its flat tail.
+     */
+    public function testTheLargestTenantsStillReadApart(): void
+    {
+        $ten = $this->builder->calculateFacadeHeight(1.0e13);
+        $fifteen = $this->builder->calculateFacadeHeight(1.5e13);
+
+        $this->assertGreaterThan(30.0, $fifteen - $ten);
+        // And both stay clear of the ceiling, so an even larger tenant has somewhere left to go.
+        $this->assertLessThan(DistrictMap::MAX_FACADE_HEIGHT - 100.0, $fifteen);
+    }
+
+    /**
+     * A gridline crowded against its neighbour informs less than no gridline at all — the labels
+     * are printed at GRIDLINE_LABEL_SIZE, so consecutive rules must clear that.
+     */
+    public function testGridlinesOnARowNeverCrowdEachOther(): void
+    {
+        $ys = [];
+        foreach ($this->builder->buildGridlines(1) as $line) {
+            $ys[] = $line['y'];
+        }
+        sort($ys);
+
+        for ($i = 1; $i < count($ys); $i++) {
+            $this->assertGreaterThan(
+                (float) DistrictMap::GRIDLINE_LABEL_SIZE,
+                $ys[$i] - $ys[$i - 1],
+                'Consecutive gridline labels would overlap in the gutter'
+            );
+        }
     }
 
     public function testFacadesStandOnTheirOwnRowsGroundLine(): void
