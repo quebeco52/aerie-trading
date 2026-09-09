@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service\Model;
 
 use App\DTO\MacroStateDTO;
+use App\Service\Macro\MacroEngine;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
@@ -144,9 +145,9 @@ class DistressedDebtBusinessModelTest extends TestCase
 
         $calmMacro = new MacroStateDTO(
             outputGapEma: 0.0,
-            macroCreditSpread: 0.02,
-            macroCreditSpreadEma: 0.02,
-            highYieldCreditSpreadEma: 0.048, // Baseline 480 bps
+            macroCreditSpread: MacroEngine::BASE_CREDIT_SPREAD,
+            macroCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD,
+            highYieldCreditSpreadEma: MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER, // Baseline HY
             corporateDefaultRateEma: 0.020   // Baseline 2.0%
         );
 

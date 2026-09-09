@@ -100,6 +100,8 @@ class MacroAggregateSubsystem
         $realRate = $borrowingPolicy - $state->inflation;
 
         $neutral5yDurationScale = MathUtility::calculateTermPremiumDurationScale(5.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        // The neutral benchmark is structural: a high-premium era really does tighten business borrowing, and it is
+        // the central bank's long-rate offset in the Taylor rule (Bernanke 2006) that leans against it, not the IS curve.
         $neutral5yYield = $naturalRate + MacroEngine::TARGET_INFLATION + (MacroEngine::NS_BASE_TERM_PREMIUM * $neutral5yDurationScale);
 
         $neutralBorrowingPolicy = (MacroEngine::BORROWING_POLICY_WEIGHT * ($naturalRate + MacroEngine::TARGET_INFLATION))
@@ -116,7 +118,11 @@ class MacroAggregateSubsystem
 
         $momentum = MacroEngine::KALDOR_MOMENTUM * $y;
         $cubicConstraint = MacroEngine::KALDOR_CAPACITY * pow($y, 3);
-        $fiscalStimulus = MacroEngine::KALDOR_FISCAL_MULTIPLIER * (MacroEngine::TARGET_CORPORATE_TAX_RATE - $state->corporateTaxRate);
+        // Fiscal impulse: tax-smoothing stabilizer plus discretionary appropriations above the peacetime baseline
+        // (Blanchard-Perotti 2002 spending multiplier scaled by the public share of output).
+        $spendingShift = ($state->governmentSpendingIndexEma / MacroEngine::GOVT_SPENDING_BASELINE) - 1.0;
+        $fiscalStimulus = (MacroEngine::KALDOR_FISCAL_MULTIPLIER * (MacroEngine::TARGET_CORPORATE_TAX_RATE - $state->corporateTaxRate))
+            + (MacroEngine::KALDOR_GOVT_SPENDING_MULTIPLIER * $spendingShift);
         $capitalDrag = MacroEngine::KALDOR_CAPITAL_DRAG * $state->capitalStockOverhang;
 
         $housingWealthEffect = (($state->residentialPropertyIndexEma / MacroEngine::RESIDENTIAL_BASELINE) - 1.0) * MacroEngine::KALDOR_WEALTH_EFFECT_ELASTICITY;
@@ -221,7 +227,8 @@ class MacroAggregateSubsystem
             lagTimeConstant: MacroEngine::ENERGY_COST_PUSH_LAG_YEARS
         );
 
-        $rawAgriCostPush = max(0.0, ($state->agriculturalCommodityIndex / MacroEngine::AGRI_BASELINE) - 1.0) * MacroEngine::AGRI_COST_PUSH_TRANSMISSION;
+        // Symmetric like the energy channel: a farm-price collapse is a food-CPI dividend, not a no-op
+        $rawAgriCostPush = (($state->agriculturalCommodityIndex / MacroEngine::AGRI_BASELINE) - 1.0) * MacroEngine::AGRI_COST_PUSH_TRANSMISSION;
         $state->agriCostPushLag = $this->mathUtility->calculateDistributedLag(
             currentLaggedValue: $state->agriCostPushLag,
             targetValue: $rawAgriCostPush,

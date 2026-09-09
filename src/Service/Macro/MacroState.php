@@ -91,6 +91,10 @@ class MacroState
     public float $termPremium10yEma = 0.0125;
     public float $riskNeutral10y = 0.0250;
     public float $riskNeutral10yEma = 0.0250;
+    public float $termPremiumShock = 0.0;
+    public float $termPremiumRegime = MacroEngine::NS_BASE_TERM_PREMIUM;
+    public float $perceivedNeutralRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+    public float $restrictiveDuration = 0.0;
 
     public bool $qeActive = false;
     public float $qeIntensity = 0.0;
@@ -277,6 +281,10 @@ class MacroState
         $state->termPremium10yEma = (float) ($data['term_premium_10y_ema'] ?? $state->termPremium10y);
         $state->riskNeutral10y = (float) ($data['risk_neutral_10y'] ?? 0.0250);
         $state->riskNeutral10yEma = (float) ($data['risk_neutral_10y_ema'] ?? $state->riskNeutral10y);
+        $state->termPremiumShock = (float) ($data['term_premium_shock'] ?? 0.0);
+        $state->termPremiumRegime = (float) ($data['term_premium_regime'] ?? MacroEngine::NS_BASE_TERM_PREMIUM);
+        $state->perceivedNeutralRate = (float) ($data['perceived_neutral_rate'] ?? (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION));
+        $state->restrictiveDuration = (float) ($data['restrictive_duration'] ?? 0.0);
 
         $state->balanceSheetIntensity = (float) ($data['balance_sheet_intensity'] ?? ($data['qe_intensity'] ?? 0.0));
         $state->balanceSheetHoldTimer = (float) ($data['balance_sheet_hold_timer'] ?? 0.0);
@@ -449,6 +457,10 @@ class MacroState
             'term_premium_10y_ema' => $this->termPremium10yEma,
             'risk_neutral_10y' => $this->riskNeutral10y,
             'risk_neutral_10y_ema' => $this->riskNeutral10yEma,
+            'term_premium_shock' => $this->termPremiumShock,
+            'term_premium_regime' => $this->termPremiumRegime,
+            'perceived_neutral_rate' => $this->perceivedNeutralRate,
+            'restrictive_duration' => $this->restrictiveDuration,
             'balance_sheet_intensity' => $this->balanceSheetIntensity,
             'balance_sheet_hold_timer' => $this->balanceSheetHoldTimer,
             'qe_active' => $this->qeActive,

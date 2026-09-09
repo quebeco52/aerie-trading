@@ -57,6 +57,8 @@ class MacroEngine
     public const KALDOR_CREDIT_FRICTION_DRAG = 0.25;
     /** Countercyclical fiscal stimulus multiplier from corporate tax rate cuts. */
     public const KALDOR_FISCAL_MULTIPLIER = 0.50;
+    /** Demand impulse per unit of public spending above baseline (~20% GDP share x unit multiplier): +10% spending adds ~1pp/yr to the gap drift. */
+    public const KALDOR_GOVT_SPENDING_MULTIPLIER = 0.10;
     /** Sensitivity of the output gap to physical capital stock overhang (excess capacity drags down growth). */
     public const KALDOR_CAPITAL_DRAG = 0.15;
     /** Elasticity of aggregate demand to household wealth deviations (Modigliani Wealth Effect). */
@@ -93,8 +95,8 @@ class MacroEngine
     public const NATURAL_UNEMPLOYMENT = 0.04;
     /** Structural baseline job vacancies rate. */
     public const NATURAL_JOB_VACANCIES = 0.045;
-    /** Asymptotic frictional lower bound on unemployment during extreme economic expansions. */
-    public const MIN_FRICTIONAL_UNEMPLOYMENT = 0.020;
+    /** Asymptotic frictional lower bound on unemployment (3.2%): search friction keeps even a red-hot economy above ~3%. */
+    public const MIN_FRICTIONAL_UNEMPLOYMENT = 0.032;
     /** Structural Beveridge curve equilibrium constant (k = Natural Unemployment * Natural Vacancies). */
     public const BEVERIDGE_CURVE_CONSTANT = 0.0018;
     /** Structural equilibrium labor market tightness (theta* vacancy-to-unemployment ratio). */
@@ -135,8 +137,8 @@ class MacroEngine
     public const ENERGY_JUMP_MEAN = 0.20;
     /** Volatility of energy jump shock magnitude. */
     public const ENERGY_JUMP_VOL = 0.10;
-    /** Cost-push transmission coefficient passing energy price spikes into headline inflation. */
-    public const ENERGY_COST_PUSH_TRANSMISSION = 0.010;
+    /** Headline inflation per unit energy shock (~7% CPI weight at ~35% retail pass-through): +60% energy adds ~1.5pp. */
+    public const ENERGY_COST_PUSH_TRANSMISSION = 0.025;
 
     // --- Theory of Storage & Commodity Buffer Stocks (Working 1949, Litzenberger-Rabinowitz 1995) ---
     /** Baseline physical commodity inventory index (neutral buffer stock). */
@@ -195,6 +197,8 @@ class MacroEngine
     public const TAYLOR_INFLATION_CORE_WEIGHT = 0.70;
     /** Bernanke (2015) blend: weight on forward inflation expectations (TIPS breakeven) in the Taylor Rule inflation measure. */
     public const TAYLOR_INFLATION_ANCHOR_WEIGHT = 0.30;
+    /** Bernanke (2006) / Rudebusch-Sack-Swanson (2007) long-rate offset: the central bank leans against the part of the ten-year it does not set (term premium away from baseline, the market's drifted view of neutral). FRB/US puts a 100bps term premium move at roughly 50bps of policy; without it a high-premium era is a decade-long slump. */
+    public const TAYLOR_LONG_RATE_OFFSET = 0.50;
     /** Evans Rule forward guidance: Unemployment threshold required before lifting off from ZLB. */
     public const EVANS_RULE_UNEMPLOYMENT = 0.050;
     /** Evans Rule forward guidance: Maximum inflation ceiling tolerated while holding rates at ZLB. */
@@ -245,14 +249,20 @@ class MacroEngine
     public const TERM_PREMIUM_DURATION_HORIZON_YEARS = 10.0;
     /** Weight on the central bank target in the ten-year inflation expectation that anchors the curve's long end. Well-anchored expectations (surveys barely move) are what let the policy rate swing against a steady long end and invert the curve; a level that tracked the current breakeven would follow the short end up and never invert. */
     public const LONG_RUN_INFLATION_ANCHOR_WEIGHT = 0.75;
+    /** Kozicki-Tinsley (2001) shifting endpoint: weight on the market's adaptive long-run policy rate in the curve's anchor, against the model-consistent r* plus expected inflation. A decade at 5% lifts the anchor so the curve flattens like 1995-1999 instead of staying inverted; a decade at the floor drags the ten-year toward the 2% of 2012-2016. */
+    public const KOZICKI_TINSLEY_ENDPOINT_WEIGHT = 0.50;
+    /** Speed at which the perceived long-run policy rate learns from the realized rate (half-life ~5 years): slow enough that a two-year hiking cycle still inverts the curve, fast enough that a decade-long era reprices the long end, the slow adaptive expectations of Kozicki-Tinsley. */
+    public const KOZICKI_TINSLEY_ADAPTATION_SPEED = 0.14;
     /** Flight-to-safety sensitivity: recessions compress term premium via safe-haven demand (Campbell et al. 2017). */
     public const NS_GAP_TERM_PREMIUM_SCALE = 0.05;
     /** Diebold-Li (2006) curvature sensitivity to central bank target-policy rate gap (forward guidance channel). */
     public const SVENSSON_CURVATURE1_TARGET_SCALE = 0.85;
     /** Cyclical curvature sensitivity to output gap (positive gap leads to steeper belly). */
     public const SVENSSON_CURVATURE1_GAP_SCALE = 0.15;
-    /** Primary Nelson-Siegel decay parameter: Diebold-Li (2006) 0.0609 per month, so the curvature hump sits at 2.5 years and forward guidance moves the 2Y against the 10Y. */
+    /** Curvature decay: Diebold-Li (2006) 0.0609 per month, so the forward-guidance hump sits at 2.5 years and moves the 2Y against the 10Y. */
     public const SVENSSON_LAMBDA_1 = 0.73;
+    /** Bliss (1997) slope decay: how fast the market expects the policy rate to return to neutral (half-life ~2.3 years, one cycle). Loads the 2Y 0.75 and the 10Y 0.32 on the policy gap, the empirical betas; Diebold-Li's 0.73 would give the 10Y only 0.14. */
+    public const SVENSSON_SLOPE_LAMBDA = 0.30;
     /** Secondary Svensson decay parameter governing the long-term hump. */
     public const SVENSSON_LAMBDA_2 = 0.15;
     /** Sensitivity of secondary curvature (beta3) to quantitative tightening and long-term fiscal deficits. */
@@ -263,12 +273,30 @@ class MacroEngine
     public const TERM_PREMIUM_IRP_EXPECTATION_SCALE = 0.20;
     /** Safe-haven flight to safety: financial market panic compresses sovereign term premium (Campbell et al. 2020). */
     public const FLIGHT_TO_SAFETY_SENSITIVITY = 0.015;
-    /** Restrictive monetary policy stance term premium compression sensitivity (ACM 2013): the premium is squeezed toward zero as the stance tightens, gone at ~180bps above neutral, which is what lets a hiking cycle invert the curve the way 2000, 2006 and 2023 did. */
-    public const TERM_PREMIUM_TIGHTENING_COMPRESSION = 0.70;
-    /** Annual attenuation speed at which persistent tightening compression decays back toward structural term premium. */
-    public const TERM_PREMIUM_COMPRESSION_DECAY_RATE = 0.50;
+    /** Restrictive stance term premium compression (ACM 2013): the premium is squeezed as the stance tightens, matching the near-zero ACM premium of 2023. With the Bliss slope decay the inversion itself comes from expected cuts, so this only needs to trim, not erase. */
+    public const TERM_PREMIUM_TIGHTENING_COMPRESSION = 0.45;
+    /** Annual attenuation speed at which tightening compression fades over a long restrictive phase (half-life ~2.8 years, so a normal two-year peak keeps most of it), as the market accepts higher-for-longer and demands the full premium again. Keyed to the restrictive-stance clock, not the sign of the slope, so a flat curve cannot keep resetting it. */
+    public const TERM_PREMIUM_COMPRESSION_DECAY_RATE = 0.25;
+    /** Speed at which the restrictive-stance clock unwinds once policy is back at or below neutral (half-life ~4 months). */
+    public const RESTRICTIVE_DURATION_UNWIND_RATE = 2.0;
     /** Floor on the ten-year term premium (-75bps): ACM ran between -50 and -100bps from 2016 to 2021, so flight to safety and QE may push the long end below the expected policy path. */
     public const MIN_TERM_PREMIUM_10Y = -0.0075;
+
+    // --- Term Premium Dynamics (ACM 2013 persistence, Campbell-Pflueger-Viceira 2020 regimes) ---
+    /** Mean reversion of transitory term premium shocks (half-life ~8 months): ACM show the premium is persistent but not permanent. */
+    public const TERM_PREMIUM_SHOCK_KAPPA = 1.0;
+    /** Annual volatility of transitory term premium shocks: a stationary spread of ~55bps and ~35bps quarterly moves, so a taper tantrum is a two-sigma quarter. */
+    public const TERM_PREMIUM_SHOCK_SIGMA = 0.0090;
+    /** Cap on the transitory shock (200bps either way), the largest ACM swing on record. */
+    public const TERM_PREMIUM_SHOCK_CAP = 0.02;
+    /** Mean reversion of the structural term premium regime (half-life ~8 years): eras such as the 1990s at 2% and the 2010s near zero, set by the bond-stock correlation. */
+    public const TERM_PREMIUM_REGIME_KAPPA = 0.087;
+    /** Annual volatility of the structural regime: a stationary spread of ~50bps around the baseline. */
+    public const TERM_PREMIUM_REGIME_SIGMA = 0.0021;
+    /** Floor of the structural term premium regime (the 2010s era). */
+    public const MIN_TERM_PREMIUM_REGIME = 0.0;
+    /** Ceiling of the structural term premium regime (the early 1990s era). */
+    public const MAX_TERM_PREMIUM_REGIME = 0.025;
 
     // --- Preferred-Habitat Duration Extraction (Vayanos-Vila 2021) ---
     /** Sensitivity of duration-weighted term premium extraction to central bank balance sheet intensity. */
@@ -287,8 +315,8 @@ class MacroEngine
     // --- Distributed Lag Transmission Constants ---
     /** Characteristic half-life time constant in years for energy cost-push pass-through into core inflation. */
     public const ENERGY_COST_PUSH_LAG_YEARS = 0.50;
-    /** Cost-push transmission coefficient passing agricultural price spikes into headline inflation. */
-    public const AGRI_COST_PUSH_TRANSMISSION = 0.005;
+    /** Headline inflation per unit farm-price shock (~13% food CPI weight at ~15% pass-through), symmetric in both directions. */
+    public const AGRI_COST_PUSH_TRANSMISSION = 0.020;
     /** Characteristic half-life in years for food cost-push pass-through into core inflation. */
     public const AGRI_COST_PUSH_LAG_YEARS = 0.75;
 
@@ -329,24 +357,24 @@ class MacroEngine
     // --- Merton Structural Corporate Credit Spreads (Merton 1974) ---
     /** IG spread widening per unit of interbank stress. In 2008 a +430 bps TED move coincided with +450 bps of IG OAS, so ~1.0 is the empirical ceiling. */
     public const INTERBANK_CREDIT_CONTAGION_SENSITIVITY = 1.0;
-    /** Baseline investment-grade corporate credit spread over risk-free rate. */
-    public const BASE_CREDIT_SPREAD = 0.020;
-    /** Sensitivity of corporate credit spreads to GDP contraction (leverage & distance-to-default channel). */
-    public const MERTON_LEVERAGE_SENSITIVITY = 2.5;
-    /** Sensitivity of corporate credit spreads to excess macroeconomic equity volatility. */
-    public const MERTON_VOL_SENSITIVITY = 0.15;
+    /** Through-the-cycle investment-grade spread (130 bps), the long-run median of IG OAS. */
+    public const BASE_CREDIT_SPREAD = 0.013;
+    /** Log-elasticity of the IG spread to the output gap (distance-to-default): a -3% gap widens IG ~1.35x, a +3% gap tightens it to ~0.74x. */
+    public const MERTON_LEVERAGE_SENSITIVITY = 10.0;
+    /** IG spread widening per unit of equity volatility above the threshold (vol as a fraction): 30% vol adds ~180 bps, 45% vol ~360 bps. */
+    public const MERTON_VOL_SENSITIVITY = 0.12;
     /** Floor on the investment-grade spread (80 bps), the tightest IG OAS of the 2000s cycle. */
     public const MIN_CREDIT_SPREAD = 0.008;
     /** Cap on the investment-grade spread (650 bps): ICE BofA US Corporate OAS peaked near 620 bps in Dec 2008. */
     public const MAX_CREDIT_SPREAD = 0.065;
-    /** Macroeconomic volatility threshold above which excess volatility widens corporate credit spreads. */
-    public const CREDIT_SPREAD_EXCESS_VOL_THRESHOLD = 0.20;
+    /** Equity volatility level at which the vol premium on credit starts (the calm-market vol anchor). */
+    public const CREDIT_SPREAD_EXCESS_VOL_THRESHOLD = 0.15;
 
     // --- Dual-Tranche Corporate Credit Spreads & Rating Migration (Jarrow-Lando-Turnbull 1997) ---
-    /** Baseline multiple of speculative high-yield credit spread over investment-grade spread. */
-    public const HY_BASE_SPREAD_MULTIPLIER = 2.4;
-    /** Non-linear sensitivity of high-yield spread to fallen angel downgrade cliff during contractions. */
-    public const FALLEN_ANGEL_CLIFF_SENSITIVITY = 8.0;
+    /** Baseline multiple of HY over IG spread (~3.3x): 130 bps IG pairs with ~430 bps HY through the cycle. */
+    public const HY_BASE_SPREAD_MULTIPLIER = 3.3;
+    /** Log-sensitivity of the HY/IG ratio to contraction depth: a -4% gap lifts the ratio ~1.27x, matching the ~4x HY/IG seen at 2008-type troughs. */
+    public const FALLEN_ANGEL_CLIFF_SENSITIVITY = 6.0;
     /** Floor multiple of HY over IG spread; HY never trades inside 1.5x IG even at the tightest point of the cycle. */
     public const HY_MIN_SPREAD_MULTIPLIER = 1.5;
     /** Statutory ceiling cap for aggregate high-yield corporate credit spread. */
@@ -445,12 +473,12 @@ class MacroEngine
     // --- GOVERNMENT SPENDING & FISCAL APPROPRIATIONS ---
     /** Baseline government spending index (neutral peacetime budget). */
     public const GOVT_SPENDING_BASELINE = 100.0;
-    /** Counter-cyclical fiscal multiplier: spending rises when output gap contracts. */
-    public const GOVT_COUNTERCYCLICAL_SENSITIVITY = 80.0;
+    /** Counter-cyclical appropriation response: a -3% output gap lifts the spending index ~6 points (discretionary stimulus plus stabilizers). */
+    public const GOVT_COUNTERCYCLICAL_SENSITIVITY = 200.0;
     /** Mean-reversion speed of government spending toward structural baseline. */
     public const GOVT_SPENDING_MEAN_REVERSION = 0.30;
-    /** Stochastic volatility of annual budget appropriation fluctuations. */
-    public const GOVT_SPENDING_VOLATILITY = 0.06;
+    /** Stochastic volatility of annual budget appropriations, kept below the countercyclical swing so the cycle drives spending. */
+    public const GOVT_SPENDING_VOLATILITY = 0.03;
     /** Poisson intensity of major geopolitical events triggering spending surges. */
     public const GEOPOLITICAL_JUMP_PROBABILITY = 0.08;
     /** Mean log-return magnitude of a geopolitical spending surge. */
@@ -471,8 +499,8 @@ class MacroEngine
     public const CRE_RENT_GROWTH_ELASTICITY = 0.80;
     /** Mean-reversion speed of commercial property values toward fundamental equilibrium. */
     public const CRE_MEAN_REVERSION = 0.25;
-    /** Stochastic volatility of commercial property valuations. */
-    public const CRE_VOLATILITY = 0.10;
+    /** Stochastic volatility of commercial property valuations (stationary noise ~7% so cap rates, not noise, drive the cycle). */
+    public const CRE_VOLATILITY = 0.05;
     /** Minimum cap rate floor to prevent division instability in extreme rate environments. */
     public const CRE_MIN_CAP_RATE = 0.03;
 
@@ -533,12 +561,13 @@ class MacroEngine
     // --- JORGENSON USER COST RESIDENTIAL REAL ESTATE ---
     /** Baseline residential property index value (neutral home affordability). */
     public const RESIDENTIAL_BASELINE = 100.0;
-    /** Structural mortgage spread above 30Y Treasury yield for prime residential mortgages. */
-    public const RESIDENTIAL_MORTGAGE_SPREAD = 0.018;
+    /** Prime 30Y fixed mortgage spread over the 10Y sovereign (~170 bps): prepayment duration prices mortgages off the ten-year, not the thirty. */
+    public const RESIDENTIAL_MORTGAGE_SPREAD = 0.017;
     /** Structural property tax, insurance, and maintenance depreciation rate. */
     public const RESIDENTIAL_DEPRECIATION_TAX_RATE = 0.025;
-    /** Baseline equilibrium user cost of housing capital. */
-    public const RESIDENTIAL_NEUTRAL_USER_COST = 0.0778;
+    /** Equilibrium user cost of housing: neutral 10Y (r* + target + base premium) + mortgage spread + carry costs - target inflation. */
+    public const RESIDENTIAL_NEUTRAL_USER_COST = self::BASE_NATURAL_RATE + self::TARGET_INFLATION + self::NS_BASE_TERM_PREMIUM
+        + self::RESIDENTIAL_MORTGAGE_SPREAD + self::RESIDENTIAL_DEPRECIATION_TAX_RATE - self::TARGET_INFLATION;
     /** Sensitivity of housing demand to unemployment rate shocks (foreclosure and affordability drag). */
     public const RESIDENTIAL_UNEMPLOYMENT_SENSITIVITY = 5.0;
     /** Elasticity of residential housing purchasing power to real macroeconomic income and GDP growth. */
@@ -549,8 +578,8 @@ class MacroEngine
     public const RESIDENTIAL_MAX_LABOR_FACTOR = 1.80;
     /** Mean-reversion speed of residential property valuations toward fundamental user-cost equilibrium. */
     public const RESIDENTIAL_MEAN_REVERSION = 0.15;
-    /** Stochastic volatility of residential home prices. */
-    public const RESIDENTIAL_VOLATILITY = 0.06;
+    /** Stochastic volatility of residential home prices (stationary noise ~5% so the user-cost channel dominates). */
+    public const RESIDENTIAL_VOLATILITY = 0.03;
     /** Structural lower floor for the residential property index value. */
     public const RESIDENTIAL_MIN_INDEX = 30.0;
     /** Structural upper ceiling for the residential property index value. */
@@ -567,8 +596,8 @@ class MacroEngine
     public const INTERBANK_MIN_SPREAD = 0.0001;
     /** Cap on the interbank spread (500 bps): the TED spread's all-time high was 457 bps on 10 Oct 2008. */
     public const INTERBANK_MAX_SPREAD = 0.05;
-    /** Sensitivity coupling wholesale interbank lending spread to corporate credit stress. */
-    public const INTERBANK_CREDIT_COUPLING = 0.20;
+    /** Share of excess IG spread that lifts the interbank spread's mean (~0.5): a 470 bps IG blowout pulls TED toward ~250 bps, a mild recession toward ~110. */
+    public const INTERBANK_CREDIT_COUPLING = 0.50;
     /** Poisson intensity of severe interbank credit freeze/panic events. */
     public const INTERBANK_JUMP_PROBABILITY = 0.05;
     /** Mean log-size of a panic jump: median 2.7x (1.65x to 4.5x at one sigma), so a 2008-scale 5x freeze is the tail, not the norm. */
@@ -623,22 +652,22 @@ class MacroEngine
     public const FCI_VOLATILITY_WEIGHT = 0.15;
     /** Weight on bank lending standards (SLOOS net tightening) in the composite FCI. */
     public const FCI_SLOOS_WEIGHT = 0.10;
-    /** Historical mean benchmark for investment-grade credit spreads in Chicago Fed NFCI normalization. */
-    public const FCI_CREDIT_MEAN = 0.022;
+    /** Neutral IG credit spread for FCI normalization, tied to the model's own through-the-cycle spread. */
+    public const FCI_CREDIT_MEAN = self::BASE_CREDIT_SPREAD;
     /** Historical standard deviation for investment-grade credit spreads in FCI normalization. */
     public const FCI_CREDIT_STD = 0.008;
-    /** Historical mean benchmark for equity risk premium in FCI normalization. */
-    public const FCI_ERP_MEAN = 0.050;
+    /** Neutral equity risk premium for FCI normalization, tied to the model's habit-formation baseline. */
+    public const FCI_ERP_MEAN = self::BASE_EQUITY_RISK_PREMIUM;
     /** Historical standard deviation for equity risk premium in FCI normalization. */
     public const FCI_ERP_STD = 0.015;
     /** Historical standard deviation for currency index deviations in FCI normalization. */
     public const FCI_FX_STD = 10.0;
-    /** Historical mean structural yield curve slope (10Y minus policy rate) in FCI normalization. */
-    public const FCI_SLOPE_MEAN = 0.010;
+    /** Neutral 10Y-minus-policy slope for FCI normalization: with policy at neutral the slope is the base ten-year premium. */
+    public const FCI_SLOPE_MEAN = self::NS_BASE_TERM_PREMIUM;
     /** Historical standard deviation for yield curve slope in FCI normalization. */
     public const FCI_SLOPE_STD = 0.012;
-    /** Historical mean benchmark for equity market volatility in FCI normalization. */
-    public const FCI_VOL_MEAN = 0.18;
+    /** Neutral equity volatility for FCI normalization, tied to the model's calm-market vol anchor. */
+    public const FCI_VOL_MEAN = self::MACRO_VOL_BASE_ANCHOR;
     /** Historical standard deviation for equity market volatility in FCI normalization. */
     public const FCI_VOL_STD = 0.06;
     /** Historical mean benchmark for SLOOS net tightening index in FCI normalization. */
@@ -651,8 +680,8 @@ class MacroEngine
     // --- Federal Reserve G.17 Industrial Capacity Utilization Index ---
     /** Baseline long-run historical capacity utilization rate (~78.5%). */
     public const CU_BASELINE = 0.785;
-    /** Sensitivity of capacity utilization to macroeconomic output gap. */
-    public const CU_GAP_SENSITIVITY = 0.85;
+    /** Capacity utilization per unit output gap (~1.9): a -6% gap takes CU from 78.5% to ~67%, a +3% gap to ~84%. */
+    public const CU_GAP_SENSITIVITY = 1.9;
     /** Sensitivity of capacity utilization to accumulated physical capital stock overhang. */
     public const CU_OVERHANG_SENSITIVITY = 0.40;
 
@@ -661,8 +690,8 @@ class MacroEngine
     public const RECESSION_PROBIT_BETA_0 = -0.55;
     /** Probit sensitivity to sovereign yield curve slope (10Y minus policy rate). */
     public const RECESSION_PROBIT_BETA_SLOPE = -80.0;
-    /** Probit sensitivity to term premium compression. */
-    public const RECESSION_PROBIT_BETA_TP = -20.0;
+    /** Adds back half the term premium so the probit reads the expectations component (slope minus premium), not premium-driven steepness (Rosenberg & Maurer 2008). */
+    public const RECESSION_PROBIT_BETA_TP = 40.0;
     /** Probit sensitivity to financial conditions tightening. */
     public const RECESSION_PROBIT_BETA_FCI = 0.35;
 
@@ -673,10 +702,10 @@ class MacroEngine
     public const CORPORATE_DEFAULT_RHO = 0.20;
     /** Sensitivity of corporate credit Z-score to macroeconomic output gap. */
     public const CORPORATE_DEFAULT_GAP_SENSITIVITY = 25.0;
-    /** Sensitivity of corporate credit Z-score to high-yield credit spread widening. */
-    public const CORPORATE_DEFAULT_SPREAD_SENSITIVITY = 40.0;
-    /** Sensitivity of corporate credit Z-score to banking credit standards tightening (SLOOS). */
-    public const CORPORATE_DEFAULT_SLOOS_SENSITIVITY = 2.0;
+    /** Corporate credit Z per unit of excess HY spread (~5): a 2,000 bps blowout with a -4% gap and 80% SLOOS yields a ~13% default rate. */
+    public const CORPORATE_DEFAULT_SPREAD_SENSITIVITY = 5.0;
+    /** Corporate credit Z per unit of SLOOS net tightening (~1): a 35% credit crunch adds ~0.35 to the systemic factor. */
+    public const CORPORATE_DEFAULT_SLOOS_SENSITIVITY = 1.0;
 
     // --- Federal Reserve Senior Loan Officer Opinion Survey (SLOOS) ---
     /** Mean-reversion speed (kappa) of bank lending standards toward fundamental target. */
@@ -711,8 +740,8 @@ class MacroEngine
     // --- ISM Manufacturing Purchasing Managers' Index (PMI) ---
     /** Neutral diffusion baseline for ISM manufacturing PMI (50.0 = neutral growth). */
     public const PMI_BASELINE = 50.0;
-    /** Sensitivity of manufacturing PMI to Federal Reserve industrial capacity utilization deviations. */
-    public const PMI_CU_SENSITIVITY = 45.0;
+    /** PMI points per unit CU deviation (~1.4 per pp): CU at 67% maps to a mid-30s PMI, CU at 84% to ~58. */
+    public const PMI_CU_SENSITIVITY = 140.0;
     /** Sensitivity of manufacturing PMI to macroeconomic output gap momentum. */
     public const PMI_MOMENTUM_SENSITIVITY = 120.0;
     /** Sensitivity of manufacturing PMI to Metzler inventory restocking demand (shortfall stimulates new orders). */
@@ -926,7 +955,11 @@ class MacroEngine
         $state->qtIntensity = $balanceSheetData['new_qt_intensity'];
         $state->qtActive = $state->qtIntensity > self::BALANCE_SHEET_ACTIVE_THRESHOLD;
 
-        // 7. Sovereign Yield Curve & Term Structure Decomposition
+        // 7. Market Expectations: term premium dynamics, the shifting long-run endpoint and the restrictive-stance clock
+        $this->monetarySubsystem->updateTermPremiumDynamics($state, $dt);
+        $this->monetarySubsystem->updateMarketExpectations($state, $dt);
+
+        // 8. Sovereign Yield Curve & Term Structure Decomposition
         $yieldData = $this->monetarySubsystem->calculateYieldCurve($state, self::TARGET_INFLATION, $state->naturalRate);
 
         $state->yield2y = $yieldData['yield_2y'];

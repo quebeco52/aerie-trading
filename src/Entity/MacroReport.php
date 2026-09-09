@@ -211,6 +211,18 @@ class MacroReport
     private ?string $riskNeutral10yEma = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $termPremiumShock = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $termPremiumRegime = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $perceivedNeutralRate = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $restrictiveDuration = null;
+
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
     private ?string $balanceSheetIntensity = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
@@ -524,6 +536,18 @@ class MacroReport
 
     public function getRiskNeutral10yEma(): ?string { return $this->riskNeutral10yEma; }
     public function setRiskNeutral10yEma(?string $riskNeutral10yEma): self { $this->riskNeutral10yEma = $riskNeutral10yEma; return $this; }
+
+    public function getTermPremiumShock(): ?string { return $this->termPremiumShock; }
+    public function setTermPremiumShock(?string $termPremiumShock): self { $this->termPremiumShock = $termPremiumShock; return $this; }
+
+    public function getTermPremiumRegime(): ?string { return $this->termPremiumRegime; }
+    public function setTermPremiumRegime(?string $termPremiumRegime): self { $this->termPremiumRegime = $termPremiumRegime; return $this; }
+
+    public function getPerceivedNeutralRate(): ?string { return $this->perceivedNeutralRate; }
+    public function setPerceivedNeutralRate(?string $perceivedNeutralRate): self { $this->perceivedNeutralRate = $perceivedNeutralRate; return $this; }
+
+    public function getRestrictiveDuration(): ?string { return $this->restrictiveDuration; }
+    public function setRestrictiveDuration(?string $restrictiveDuration): self { $this->restrictiveDuration = $restrictiveDuration; return $this; }
 
     public function getBalanceSheetIntensity(): ?string { return $this->balanceSheetIntensity; }
     public function setBalanceSheetIntensity(?string $balanceSheetIntensity): self { $this->balanceSheetIntensity = $balanceSheetIntensity; return $this; }

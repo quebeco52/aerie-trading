@@ -112,8 +112,8 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Drag on auto loans during negative consumer sentiment regimes. */
     public const MACRO_DEFAULT_SCALAR = 0.25;
 
-    /** Baseline credit spread above which CECL forward provisioning accelerates. */
-    public const CECL_BASELINE_CREDIT_SPREAD = 0.02;
+    /** Baseline credit spread above which CECL forward provisioning accelerates, the macro through-the-cycle IG spread. */
+    public const CECL_BASELINE_CREDIT_SPREAD = MacroEngine::BASE_CREDIT_SPREAD;
 
     // --- Interest Rate & Sentiment Sensitivity ---
     /** Neutral policy rate (~3.0%). Rates above this destroy consumer auto financing demand. */

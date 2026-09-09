@@ -52,8 +52,8 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     public const TRADING_VARIANCE_SCALAR    = 0.35;
 
     // --- Deal Flow Cost of Capital & Macro Elasticity ---
-    /** Baseline macro credit spread (~200bps). Spreads below this stimulate DCM debt syndication. */
-    public const DEAL_BASELINE_CREDIT_SPREAD = 0.020;
+    /** Baseline macro credit spread (through-the-cycle IG). Spreads below this stimulate DCM debt syndication. */
+    public const DEAL_BASELINE_CREDIT_SPREAD = MacroEngine::BASE_CREDIT_SPREAD;
     /** Neutral 5Y-over-policy term structure slope (~80bps: the five-year share of the term premium plus the usual policy discount). DCM stimulus is measured as deviation from this. */
     public const DCM_NEUTRAL_CURVE_SLOPE     = 0.008;
     /** Sensitivity of M&A deal flow to corporate expansion (output gap). */
@@ -82,8 +82,8 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     public const IPO_FREEZE_PENALTY             = 2.00;
 
     // --- Leveraged Finance (LevFin) & Hung Bridge Loan Write-Downs ---
-    /** Baseline high-yield credit spread (~480bps) above which underwriting bridge loans risk hung syndication. */
-    public const HY_BRIDGE_SPREAD_BASELINE      = 0.048;
+    /** Baseline high-yield credit spread (macro IG baseline x HY multiple) above which underwriting bridge loans risk hung syndication. */
+    public const HY_BRIDGE_SPREAD_BASELINE      = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
     /** Variable cost margin penalty scalar per unit of high-yield spread widening from hung debt markdowns. */
     public const HUNG_DEBT_WRITEDOWN_SCALAR     = 1.50;
 

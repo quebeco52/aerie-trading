@@ -146,7 +146,8 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
 
         let rawY30 = report.yield30y_ema || report.yield30yEma;
         let y30 = rawY30 ? parseFloat(rawY30) * 100 : null;
-        let mortgageRate = y30 !== null ? y30 + 1.80 : null; // 180 bps prime residential lending spread
+        // Mirrors MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD: 30Y fixed mortgages price off the 10Y (prepayment duration) + 170 bps
+        let mortgageRate = y10 !== null && !isNaN(y10) ? y10 + 1.70 : null;
         mortgageYieldData.push(mortgageRate);
 
         let creditSpread = report.macro_credit_spread_ema || report.macroCreditSpreadEma;
@@ -164,7 +165,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         yield30yData.push(y30);
 
         spread2s10sData.push((y10 !== null && y2 !== null) ? y10 - y2 : null);
-        spread30yData.push((mortgageRate !== null && pr !== null) ? mortgageRate - pr : null);
+        spread30yData.push((mortgageRate !== null && y10 !== null && !isNaN(y10)) ? mortgageRate - y10 : null);
 
         erpData.push(parseFloat(report.equity_risk_premium) * 100);
         volData.push(parseFloat(report.market_volatility) * 100);
@@ -233,11 +234,13 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         foodLagPctData.push(parseFloat(rawAgriLag) * 100);
 
         let rawEnergy = parseFloat(report.energy_price_index_ema || report.energy_price_index || 100.0);
-        let energyDragBps = ((rawEnergy - 100.0) / 100.0) * 0.03 * 10000;
+        // Mirrors MacroEngine::ENERGY_COST_PUSH_TRANSMISSION (headline inflation per unit energy shock)
+        let energyDragBps = ((rawEnergy - 100.0) / 100.0) * 0.025 * 10000;
         energySupplyDragData.push(energyDragBps);
 
         let rawFreight = parseFloat(report.freight_rate_index_ema || report.freight_rate_index || 100.0);
-        let freightDragBps = ((rawFreight - 100.0) / 100.0) * 0.01 * 10000;
+        // Mirrors MacroEngine::CORE_GOODS_FREIGHT_SENSITIVITY x INFLATION_WEIGHT_GOODS (headline share of the core-goods freight push)
+        let freightDragBps = ((rawFreight - 100.0) / 100.0) * 0.015 * 0.25 * 10000;
         freightSupplyDragData.push(freightDragBps);
 
         // Economic Growth Momentum & Solow-Swan Productivity Decomposition
@@ -245,15 +248,19 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         let currentTfp = parseFloat(report.total_factor_productivity_index_ema ?? report.total_factor_productivity_index ?? report.totalFactorProductivityIndexEma ?? report.totalFactorProductivityIndex ?? 100.0);
         let currentGap = parseFloat(report.output_gap_ema ?? report.output_gap ?? 0.0) * 100;
 
-        let prevTfp = index > 0
-            ? parseFloat(slicedReports[index - 1].total_factor_productivity_index_ema ?? slicedReports[index - 1].total_factor_productivity_index ?? slicedReports[index - 1].totalFactorProductivityIndexEma ?? slicedReports[index - 1].totalFactorProductivityIndex ?? currentTfp)
-            : currentTfp / Math.exp(0.015 * 0.25);
+        // TFP trend growth is measured over a trailing year: annualizing a single quarter's log-difference of a
+        // diffusion with 2.2%/sqrt(yr) volatility prints +/-4% noise every tick and swamps the business cycle.
+        const tfpLookback = Math.min(4, index);
+        let prevTfp = tfpLookback > 0
+            ? parseFloat(slicedReports[index - tfpLookback].total_factor_productivity_index_ema ?? slicedReports[index - tfpLookback].total_factor_productivity_index ?? slicedReports[index - tfpLookback].totalFactorProductivityIndexEma ?? slicedReports[index - tfpLookback].totalFactorProductivityIndex ?? currentTfp)
+            : currentTfp / Math.exp(0.015);
+        const tfpSpanYears = tfpLookback > 0 ? tfpLookback * 0.25 : 1.0;
         let prevGap = index > 0
             ? parseFloat(slicedReports[index - 1].output_gap_ema ?? slicedReports[index - 1].output_gap ?? currentGap) * 100
             : currentGap;
 
-        // Annualized TFP productivity growth rate (%) - allowing negative values during recessions
-        let tfpGrowth = Math.max(-6.0, Math.min(8.0, (Math.log(Math.max(1.0, currentTfp) / Math.max(1.0, prevTfp)) / 0.25) * 100));
+        // Trailing-year TFP productivity growth rate (%) - allowing negative values during recessions
+        let tfpGrowth = Math.max(-6.0, Math.min(8.0, (Math.log(Math.max(1.0, currentTfp) / Math.max(1.0, prevTfp)) / tfpSpanYears) * 100));
 
         // Solow-Swan Real Potential GDP Growth (%): Structural Labor (0.5%) + TFP Growth
         let potentialGrowth = 0.50 + tfpGrowth;
@@ -618,7 +625,7 @@ function renderMacroMortgageChart(labels, policyRateData, yield30yData, spread30
                 },
                 {
                     type: 'bar',
-                    label: 'Mortgage Spread (30Y-PR)',
+                    label: 'Mortgage Spread (30Y Mtg - 10Y)',
                     data: spread30yData,
                     backgroundColor: spread30yData.map(val => val !== null && val < 0 ? 'rgba(255, 179, 173, 0.4)' : 'rgba(251, 113, 133, 0.4)'),
                     borderRadius: 3,

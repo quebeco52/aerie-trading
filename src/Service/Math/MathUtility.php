@@ -640,19 +640,6 @@ class MathUtility
     }
 
     /**
-     * Calculates the yield for a given maturity using the Nelson-Siegel-Svensson (1994) curve model.
-     * Extends Nelson-Siegel with a second curvature (hump) parameter to model more complex term structures.
-     *
-     * @param float $level      The long-term asymptotic yield level (beta0).
-     * @param float $slope      The short-term yield component (beta1).
-     * @param float $curvature1 The primary medium-term hump component (beta2).
-     * @param float $curvature2 The secondary long-term hump component (beta3).
-     * @param float $tau        The maturity in years (e.g., 10.0 for the 10-year yield).
-     * @param float $lambda1    The first decay parameter governing the location of the primary hump.
-     * @param float $lambda2    The second decay parameter governing the location of the secondary hump.
-     * @return float The calculated yield for the specified maturity.
-     */
-    /**
      * Term premium duration scale (Adrian, Crump & Moench 2013): the compensation investors demand for
      * bearing duration rises with maturity and saturates, so a two-year note carries only a fraction of the
      * premium a ten-year bond does. Normalized to 1.0 at the ten-year point, where the benchmark premium is
@@ -665,6 +652,22 @@ class MathUtility
         return (1.0 - exp(-max(0.0, $tau) / $horizon)) / (1.0 - exp(-10.0 / $horizon));
     }
 
+    /**
+     * Nelson-Siegel-Svensson (1994) zero-coupon yield with the Bliss (1997) extension: the slope factor may
+     * decay at its own rate, separate from the primary curvature. When the level and slope are pinned to
+     * economics rather than fitted, the slope decay is the market's belief about how fast the policy rate
+     * returns to neutral (a Vasicek expectations-hypothesis loading), while the curvature decay sets where
+     * the forward-guidance hump sits. Diebold-Li's single decay cannot serve both roles at once.
+     *
+     * @param float      $level       The long-term asymptotic yield level (beta0).
+     * @param float      $slope       The short-rate component (beta1), policy rate minus level.
+     * @param float      $curvature1  The primary medium-term hump component (beta2).
+     * @param float      $curvature2  The secondary long-term hump component (beta3).
+     * @param float      $tau         The maturity in years.
+     * @param float      $lambda1     Decay of the primary hump (and of the slope when no slope decay is given).
+     * @param float      $lambda2     Decay of the secondary hump.
+     * @param float|null $slopeLambda Bliss (1997) slope decay; null reproduces the plain Svensson form.
+     */
     public function calculateSvenssonYield(
         float $level,
         float $slope,
@@ -672,14 +675,17 @@ class MathUtility
         float $curvature2,
         float $tau,
         float $lambda1 = 0.5,
-        float $lambda2 = 0.15
+        float $lambda2 = 0.15,
+        ?float $slopeLambda = null
     ): float {
         if ($tau <= 0.0) {
             return $level + $slope;
         }
 
-        $term1 = (1.0 - exp(-$lambda1 * $tau)) / ($lambda1 * $tau);
-        $term2 = $term1 - exp(-$lambda1 * $tau);
+        $slopeDecay = $slopeLambda ?? $lambda1;
+        $term1 = (1.0 - exp(-$slopeDecay * $tau)) / ($slopeDecay * $tau);
+        $curvatureLoad = (1.0 - exp(-$lambda1 * $tau)) / ($lambda1 * $tau);
+        $term2 = $curvatureLoad - exp(-$lambda1 * $tau);
 
         $term3 = (1.0 - exp(-$lambda2 * $tau)) / ($lambda2 * $tau);
         $term4 = $term3 - exp(-$lambda2 * $tau);
@@ -1595,10 +1601,10 @@ class MathUtility
         float $slope,
         float $termPremium,
         float $fci,
-        float $beta0 = -0.55,
-        float $betaSlope = -80.0,
-        float $betaTp = -20.0,
-        float $betaFci = 0.35
+        float $beta0 = MacroEngine::RECESSION_PROBIT_BETA_0,
+        float $betaSlope = MacroEngine::RECESSION_PROBIT_BETA_SLOPE,
+        float $betaTp = MacroEngine::RECESSION_PROBIT_BETA_TP,
+        float $betaFci = MacroEngine::RECESSION_PROBIT_BETA_FCI
     ): float {
         $probitIndex = $beta0 + ($betaSlope * $slope) + ($betaTp * $termPremium) + ($betaFci * $fci);
         $probability = $this->calculateNormalCDF($probitIndex);
@@ -1622,9 +1628,9 @@ class MathUtility
     public function calculateCapacityUtilization(
         float $outputGap,
         float $capitalStockOverhang,
-        float $baselineCu = 0.785,
-        float $gapSensitivity = 0.85,
-        float $overhangSensitivity = 0.40
+        float $baselineCu = MacroEngine::CU_BASELINE,
+        float $gapSensitivity = MacroEngine::CU_GAP_SENSITIVITY,
+        float $overhangSensitivity = MacroEngine::CU_OVERHANG_SENSITIVITY
     ): float {
         $rawCu = $baselineCu + ($gapSensitivity * $outputGap) - ($overhangSensitivity * $capitalStockOverhang);
         return max(0.60, min(0.92, $rawCu));
@@ -1786,9 +1792,9 @@ class MathUtility
         float $kappa = 1.60,
         float $sigma = 0.15
     ): float {
-        $erpExcess = ($equityRiskPremium - 0.045) / 0.015;
-        $hyExcess = ($hyCreditSpread - 0.048) / 0.020;
-        $volExcess = ($marketVolatility - 0.15) / 0.06;
+        $erpExcess = ($equityRiskPremium - MacroEngine::BASE_EQUITY_RISK_PREMIUM) / 0.015;
+        $hyExcess = ($hyCreditSpread - (MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER)) / 0.020;
+        $volExcess = ($marketVolatility - MacroEngine::MACRO_VOL_BASE_ANCHOR) / 0.06;
 
         $stressExponent = - (0.35 * $erpExcess + 0.45 * $hyExcess + 0.20 * $volExcess);
         $targetIndex = 100.0 * exp(max(-2.0, min(1.5, $stressExponent)));

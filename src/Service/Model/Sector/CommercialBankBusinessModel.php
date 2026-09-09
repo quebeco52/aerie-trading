@@ -94,8 +94,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const LGD_BASELINE                  = 0.45;
 
     // --- CECL Forward Provisioning (Credit Spread Channel) ---
-    /** Baseline investment-grade corporate credit spread (~200bps). Widening above this triggers proactive reserve builds. */
-    public const CECL_BASELINE_CREDIT_SPREAD   = 0.020;
+    /** Baseline investment-grade corporate credit spread (macro through-the-cycle IG). Widening above this triggers proactive reserve builds. */
+    public const CECL_BASELINE_CREDIT_SPREAD   = MacroEngine::BASE_CREDIT_SPREAD;
     /** Variable cost add-on per unit of spread widening above baseline. +100bps widening = +8% cost add-on. */
     public const CECL_SPREAD_SENSITIVITY       = 0.80;
     /** Baseline 12-month forward recession probability (~15%). Increases above this trigger CECL lifetime reserve builds. */

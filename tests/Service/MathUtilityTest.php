@@ -3,6 +3,7 @@
 namespace App\Tests\Service;
 
 use App\Service\Math\FinancialConstants;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\TestCase;
 
@@ -534,9 +535,9 @@ class MathUtilityTest extends TestCase
         // Normal neutral baseline conditions
         $neutralIntensity = $this->mathUtility->calculateDynamicWorkingCapitalIntensity(
             baselineIntensity: $baseIntensity,
-            creditSpread: 0.02,
+            creditSpread: MacroEngine::BASE_CREDIT_SPREAD,
             capacityUtilization: 1.0,
-            interbankLiquiditySpread: 0.0015
+            interbankLiquiditySpread: MacroEngine::INTERBANK_BASELINE_SPREAD
         );
         $this->assertEqualsWithDelta($baseIntensity, $neutralIntensity, 0.0001, 'Under neutral conditions, intensity should equal baseline.');
 
@@ -557,7 +558,7 @@ class MathUtilityTest extends TestCase
         // Normal neutral baseline conditions
         $neutralIntensity = $this->mathUtility->calculateDynamicWorkingCapitalIntensity(
             baselineIntensity: $negativeFloat,
-            creditSpread: 0.02,
+            creditSpread: MacroEngine::BASE_CREDIT_SPREAD,
             capacityUtilization: 1.0,
             interbankLiquiditySpread: 0.0015
         );
@@ -579,10 +580,10 @@ class MathUtilityTest extends TestCase
     {
         $baseIntensity = 0.15;
 
-        // Roaring boom: tight credit spreads (-50bps), high interbank liquidity (-50bps), 100% capacity utilization
+        // Roaring boom: credit spreads 50 bps inside baseline, high interbank liquidity (-50bps), 100% capacity utilization
         $boomIntensity = $this->mathUtility->calculateDynamicWorkingCapitalIntensity(
             baselineIntensity: $baseIntensity,
-            creditSpread: 0.015,
+            creditSpread: MacroEngine::BASE_CREDIT_SPREAD - 0.005,
             capacityUtilization: 1.0,
             interbankLiquiditySpread: 0.0010
         );
@@ -1383,7 +1384,29 @@ class MathUtilityTest extends TestCase
         // Shift to 80.5 (+2.0 points) -> (2.0 / 100) * 0.40 = 0.008 (+0.8%)
         $this->assertEqualsWithDelta(0.008, $this->mathUtility->calculateCapacityUtilizationShift(80.5, 78.5, 0.40), 0.0001);
     }
+
+    public function testBlissSlopeDecaySeparatesSlopeLoadingFromCurvatureHump(): void
+    {
+        $level = 0.045;
+        $slope = -0.03;
+        $lambda1 = 0.73;
+
+        // With no slope decay given, Bliss collapses to plain Svensson.
+        $plain = $this->mathUtility->calculateSvenssonYield($level, $slope, 0.0, 0.0, 10.0, $lambda1, 0.15);
+        $collapsed = $this->mathUtility->calculateSvenssonYield($level, $slope, 0.0, 0.0, 10.0, $lambda1, 0.15, null);
+        $this->assertEqualsWithDelta($plain, $collapsed, 0.0000001);
+
+        // A slower slope decay keeps more of the short-rate gap alive at ten years: 0.32 versus 0.14 loading.
+        $bliss = $this->mathUtility->calculateSvenssonYield($level, $slope, 0.0, 0.0, 10.0, $lambda1, 0.15, 0.30);
+        $expectedLoad = (1.0 - exp(-3.0)) / 3.0;
+        $this->assertEqualsWithDelta($level + $slope * $expectedLoad, $bliss, 0.0000001, 'Slope must load on its own decay.');
+        $this->assertLessThan($plain, $bliss, 'A negative slope with slower decay pulls the ten-year lower.');
+
+        // The curvature hump is untouched by the slope decay: same yield difference for a curvature shock either way.
+        $humpPlain = $this->mathUtility->calculateSvenssonYield($level, $slope, 0.02, 0.0, 2.5, $lambda1, 0.15)
+            - $this->mathUtility->calculateSvenssonYield($level, $slope, 0.0, 0.0, 2.5, $lambda1, 0.15);
+        $humpBliss = $this->mathUtility->calculateSvenssonYield($level, $slope, 0.02, 0.0, 2.5, $lambda1, 0.15, 0.30)
+            - $this->mathUtility->calculateSvenssonYield($level, $slope, 0.0, 0.0, 2.5, $lambda1, 0.15, 0.30);
+        $this->assertEqualsWithDelta($humpPlain, $humpBliss, 0.0000001, 'Curvature loading must depend only on lambda1.');
+    }
 }
-
-
-

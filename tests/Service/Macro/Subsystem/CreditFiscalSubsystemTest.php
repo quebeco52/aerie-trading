@@ -246,5 +246,62 @@ class CreditFiscalSubsystemTest extends TestCase
         $this->subsystem->calculateSloosCreditStandards($state, 0.25);
         $this->assertGreaterThan(0.05, $state->sloosTighteningIndex, 'Wide credit spreads and recession must trigger net bank tightening.');
     }
-}
 
+
+    public function testCreditSpreadsSpanBoomTightnessToCrisisBlowout(): void
+    {
+        $boom = new MacroState();
+        $boom->outputGapEma = 0.03;
+        $boom->marketVolatilityEma = 0.13;
+        $boom->interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD;
+
+        $crisis = new MacroState();
+        $crisis->outputGapEma = -0.04;
+        $crisis->marketVolatilityEma = 0.35;
+        $crisis->interbankLiquiditySpreadEma = 0.020;
+
+        $this->subsystem->calculateMacroCreditSpread($boom);
+        $this->subsystem->calculateMacroCreditSpread($crisis);
+
+        // Boom: IG inside 110 bps and HY inside 400 bps, the tight end of a developed credit cycle.
+        $this->assertLessThan(0.011, $boom->macroCreditSpread);
+        $this->assertLessThan(0.040, $boom->highYieldCreditSpread);
+
+        // Crisis: IG beyond 400 bps and HY beyond 1,500 bps, a 2008-type blowout rather than a 260 bps wobble.
+        $this->assertGreaterThan(0.040, $crisis->macroCreditSpread);
+        $this->assertGreaterThan(0.150, $crisis->highYieldCreditSpread);
+        $this->assertLessThanOrEqual(MacroEngine::MAX_HY_CREDIT_SPREAD, $crisis->highYieldCreditSpread);
+    }
+
+    public function testInterbankSpreadMeanTracksCreditStress(): void
+    {
+        // With diffusion silenced the CIR process converges on its credit-coupled mean: a wide IG spread must
+        // pull the interbank spread well above baseline, so a credit crisis shows up in TED rather than random jumps.
+        $quiet = new class extends MathUtility {
+            public function generateStandardNormal(): float
+            {
+                return 0.0;
+            }
+
+            public function checkProbability(float $probability): bool
+            {
+                return false;
+            }
+        };
+        $subsystem = new CreditFiscalSubsystem($quiet);
+
+        $state = new MacroState();
+        $state->macroCreditSpread = MacroEngine::BASE_CREDIT_SPREAD + 0.030;
+        $state->macroCreditSpreadEma = $state->macroCreditSpread;
+        $state->marketVolatilityEma = 0.30;
+        $state->interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD;
+
+        for ($i = 0; $i < 40; $i++) {
+            $subsystem->calculateInterbankLiquiditySpread($state, 0.25);
+        }
+
+        $expectedMean = MacroEngine::INTERBANK_BASELINE_SPREAD + (0.030 * MacroEngine::INTERBANK_CREDIT_COUPLING);
+        $this->assertEqualsWithDelta($expectedMean, $state->interbankLiquiditySpread, 0.0005);
+        $this->assertGreaterThan(0.010, $state->interbankLiquiditySpread, 'A 300 bps IG blowout must lift TED past 100 bps.');
+    }
+}

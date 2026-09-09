@@ -120,8 +120,8 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     public const LIQUIDITY_FRICTION_LAMBDA = 0.80;
 
     // --- Prime Broker Debt Gating ---
-    /** Baseline normal macro credit spread (~200bps) for prime brokerage borrowing. */
-    public const BASELINE_PRIME_CREDIT_SPREAD = 0.020;
+    /** Baseline normal macro credit spread for prime brokerage borrowing, the macro through-the-cycle IG spread. */
+    public const BASELINE_PRIME_CREDIT_SPREAD = MacroEngine::BASE_CREDIT_SPREAD;
     /** Scalar multiplying credit spread blowout to determine prime debt gating capacity. */
     public const DEBT_GATE_SPREAD_SCALAR = 10.0;
     /** Multiple compression threshold triggering a freeze on new prime leverage expansion. */

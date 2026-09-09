@@ -223,5 +223,66 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->subsystem->calculateProducerPriceInflation($state, $tfp, $dt);
         $this->assertGreaterThan(MacroEngine::TARGET_INFLATION, $state->producerPriceInflation, 'Upstream commodity surges and supply frictions must drive PPI above CPI target');
     }
-}
 
+    public function testAHighTermPremiumEraTightensBusinessBorrowingAgainstAStructuralNeutral(): void
+    {
+        $baseline = new MacroState();
+        $baseline->outputGap = 0.0;
+        $baseline->outputGapEma = 0.0;
+        $baseline->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $baseline->inflation = MacroEngine::TARGET_INFLATION;
+        $scale5y = \App\Service\Math\MathUtility::calculateTermPremiumDurationScale(5.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        $neutral5y = $baseline->policyRate + MacroEngine::NS_BASE_TERM_PREMIUM * $scale5y;
+
+        $highEra = clone $baseline;
+        $highEra->termPremiumRegime = 0.020;
+        $fiveYearInHighEra = $baseline->policyRate + 0.020 * $scale5y;
+
+        $gapBaseline = $this->subsystem->calculateOutputGap($baseline, $neutral5y, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
+        $gapHighEra = $this->subsystem->calculateOutputGap($highEra, $fiveYearInHighEra, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
+
+        $this->assertLessThan($gapBaseline, $gapHighEra, 'The neutral is structural: a premium era that lifts the five-year is a real tightening of business borrowing, which the Taylor rule long-rate offset, not the IS curve, is there to lean against.');
+    }
+
+
+    public function testGovernmentSpendingAboveBaselineLiftsOutputGapDrift(): void
+    {
+        $baseline = new MacroState();
+        $baseline->outputGap = 0.0;
+        $baseline->outputGapEma = 0.0;
+        $baseline->governmentSpendingIndexEma = MacroEngine::GOVT_SPENDING_BASELINE;
+
+        $stimulus = clone $baseline;
+        $stimulus->governmentSpendingIndexEma = MacroEngine::GOVT_SPENDING_BASELINE * 1.10;
+
+        $gapBaseline = $this->subsystem->calculateOutputGap($baseline, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
+        $gapStimulus = $this->subsystem->calculateOutputGap($stimulus, 0.035, MacroEngine::BASE_NATURAL_RATE, 0.25, 1.0);
+
+        $expectedImpulse = MacroEngine::KALDOR_GOVT_SPENDING_MULTIPLIER * 0.10 * 0.25;
+        $this->assertEqualsWithDelta(
+            $expectedImpulse,
+            $gapStimulus - $gapBaseline,
+            1e-9,
+            'A 10% public spending increase must add the calibrated demand impulse to the output gap drift.'
+        );
+    }
+
+    public function testFarmPriceCollapseLowersFoodCostPushBelowZero(): void
+    {
+        $state = new MacroState();
+        $state->agriculturalCommodityIndex = MacroEngine::AGRI_BASELINE * 0.80;
+        $state->agriCostPushLag = 0.0;
+
+        for ($i = 0; $i < 8; $i++) {
+            $this->subsystem->calculateInflation($state, MacroEngine::TARGET_INFLATION, 1.0, 0.25);
+        }
+
+        $this->assertLessThan(0.0, $state->agriCostPushLag, 'Falling farm prices must pass through as a food-CPI dividend, symmetric to a spike.');
+        $this->assertEqualsWithDelta(
+            -0.20 * MacroEngine::AGRI_COST_PUSH_TRANSMISSION,
+            $state->agriCostPushLag,
+            0.0005,
+            'After two years the distributed lag must have converged to the full symmetric pass-through.'
+        );
+    }
+}

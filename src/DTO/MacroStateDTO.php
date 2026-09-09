@@ -79,6 +79,10 @@ readonly class MacroStateDTO
         public float $termPremium10yEma = 0.0125,
         public float $riskNeutral10y = 0.0250,
         public float $riskNeutral10yEma = 0.0250,
+        public float $termPremiumShock = 0.0,
+        public float $termPremiumRegime = MacroEngine::NS_BASE_TERM_PREMIUM,
+        public float $perceivedNeutralRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION,
+        public float $restrictiveDuration = 0.0,
         public float $marketVolatility = 0.15,
         public float $marketVolatilityEma = 0.15,
         public float $marketZ = 0.0,
@@ -90,8 +94,8 @@ readonly class MacroStateDTO
         public float $sovereignDebtToGdp = MacroEngine::INITIAL_DEBT_TO_GDP,
         public float $sovereignDebtToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP,
         public float $equityRiskPremium = MacroEngine::BASE_EQUITY_RISK_PREMIUM,
-        public float $macroCreditSpread = 0.02,
-        public float $macroCreditSpreadEma = 0.02,
+        public float $macroCreditSpread = MacroEngine::BASE_CREDIT_SPREAD,
+        public float $macroCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD,
         public float $interbankLiquiditySpread = MacroEngine::INTERBANK_BASELINE_SPREAD,
         public float $interbankLiquiditySpreadEma = MacroEngine::INTERBANK_BASELINE_SPREAD,
         public float $totalFactorProductivityIndex = MacroEngine::TFP_BASELINE,
@@ -122,8 +126,8 @@ readonly class MacroStateDTO
         public float $coreGoodsInflationEma = MacroEngine::TARGET_INFLATION,
         public float $cumulativeInflationGap = 0.0,
         public float $cumulativeInflationGapEma = 0.0,
-        public float $highYieldCreditSpread = 0.048,
-        public float $highYieldCreditSpreadEma = 0.048,
+        public float $highYieldCreditSpread = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
+        public float $highYieldCreditSpreadEma = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
         public float $inventoryStockGap = 0.0,
         public float $inventoryStockGapEma = 0.0,
         public float $energyInventoryIndex = MacroEngine::COMMODITY_INVENTORY_BASELINE,
@@ -231,6 +235,10 @@ readonly class MacroStateDTO
         $termPremium10yEma = (float) ($data['term_premium_10y_ema'] ?? $termPremium10y);
         $riskNeutral10y = (float) ($data['risk_neutral_10y'] ?? 0.0250);
         $riskNeutral10yEma = (float) ($data['risk_neutral_10y_ema'] ?? $riskNeutral10y);
+        $termPremiumShock = (float) ($data['term_premium_shock'] ?? 0.0);
+        $termPremiumRegime = (float) ($data['term_premium_regime'] ?? MacroEngine::NS_BASE_TERM_PREMIUM);
+        $perceivedNeutralRate = (float) ($data['perceived_neutral_rate'] ?? (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION));
+        $restrictiveDuration = (float) ($data['restrictive_duration'] ?? 0.0);
 
         $marketVolatility = (float) ($data['market_volatility'] ?? 0.15);
         $marketVolatilityEma = (float) ($data['market_volatility_ema'] ?? $marketVolatility);
@@ -243,7 +251,7 @@ readonly class MacroStateDTO
         $sovereignDebtToGdp = (float) ($data['sovereign_debt_to_gdp'] ?? MacroEngine::INITIAL_DEBT_TO_GDP);
         $sovereignDebtToGdpEma = (float) ($data['sovereign_debt_to_gdp_ema'] ?? $sovereignDebtToGdp);
         $equityRiskPremium = (float) ($data['equity_risk_premium'] ?? MacroEngine::BASE_EQUITY_RISK_PREMIUM);
-        $macroCreditSpread = (float) ($data['macro_credit_spread'] ?? 0.02);
+        $macroCreditSpread = (float) ($data['macro_credit_spread'] ?? MacroEngine::BASE_CREDIT_SPREAD);
         $macroCreditSpreadEma = (float) ($data['macro_credit_spread_ema'] ?? $macroCreditSpread);
         $interbankLiquiditySpread = (float) ($data['interbank_liquidity_spread'] ?? MacroEngine::INTERBANK_BASELINE_SPREAD);
         $interbankLiquiditySpreadEma = (float) ($data['interbank_liquidity_spread_ema'] ?? $interbankLiquiditySpread);
@@ -339,6 +347,10 @@ readonly class MacroStateDTO
             termPremium10yEma: $termPremium10yEma,
             riskNeutral10y: $riskNeutral10y,
             riskNeutral10yEma: $riskNeutral10yEma,
+            termPremiumShock: $termPremiumShock,
+            termPremiumRegime: $termPremiumRegime,
+            perceivedNeutralRate: $perceivedNeutralRate,
+            restrictiveDuration: $restrictiveDuration,
             marketVolatility: $marketVolatility,
             marketVolatilityEma: $marketVolatilityEma,
             marketZ: $marketZ,
@@ -485,6 +497,10 @@ readonly class MacroStateDTO
             termPremium10yEma: $state->termPremium10yEma,
             riskNeutral10y: $state->riskNeutral10y,
             riskNeutral10yEma: $state->riskNeutral10yEma,
+            termPremiumShock: $state->termPremiumShock,
+            termPremiumRegime: $state->termPremiumRegime,
+            perceivedNeutralRate: $state->perceivedNeutralRate,
+            restrictiveDuration: $state->restrictiveDuration,
             marketVolatility: $state->marketVolatility,
             marketVolatilityEma: $state->marketVolatilityEma,
             marketZ: $state->marketZ,
@@ -631,6 +647,10 @@ readonly class MacroStateDTO
             'term_premium_10y_ema' => $this->termPremium10yEma,
             'risk_neutral_10y' => $this->riskNeutral10y,
             'risk_neutral_10y_ema' => $this->riskNeutral10yEma,
+            'term_premium_shock' => $this->termPremiumShock,
+            'term_premium_regime' => $this->termPremiumRegime,
+            'perceived_neutral_rate' => $this->perceivedNeutralRate,
+            'restrictive_duration' => $this->restrictiveDuration,
             'market_volatility' => $this->marketVolatility,
             'market_volatility_ema' => $this->marketVolatilityEma,
             'market_z' => $this->marketZ,

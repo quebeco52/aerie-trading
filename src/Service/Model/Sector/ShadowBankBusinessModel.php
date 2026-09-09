@@ -81,8 +81,8 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     public const MIN_VARIABLE_MARGIN_CLAMP = 0.01;
 
     // --- Private Credit & Corporate Default Physics ---
-    /** Baseline investment-grade credit spread (~200bps) for normal shadow bank portfolio lending. */
-    public const CECL_BASELINE_CREDIT_SPREAD    = 0.020;
+    /** Baseline investment-grade credit spread for normal shadow bank portfolio lending, the macro through-the-cycle IG spread. */
+    public const CECL_BASELINE_CREDIT_SPREAD    = MacroEngine::BASE_CREDIT_SPREAD;
     /** Expansion sensitivity of direct lending origination when commercial banks tighten credit standards (SLOOS). */
     public const SLOOS_PRIVATE_CREDIT_EXPANSION = 0.30;
     /** Weight of corporate speculative default rate surges applied to direct lending portfolio provisions. */

@@ -157,7 +157,7 @@ class TradingEconomicsIndicatorsTest extends TestCase
         $boomState->residentialPropertyIndex = 135.0; // High house prices relative to baseline
         $boomState->industrialMetalsIndex = 100.0;    // Normal replacement costs
         $boomState->wageGrowth = 0.030;
-        $boomState->yield30yEma = 0.035;              // Low 30y mortgage benchmark
+        $boomState->yield10yEma = 0.035;              // Low 10y mortgage benchmark
         $boomState->macroCreditSpread = 0.015;
         $boomState->inflationEma = 0.025;             // Moderate appreciation expectation
         $boomState->sloosTighteningIndexEma = 0.0;
@@ -178,7 +178,7 @@ class TradingEconomicsIndicatorsTest extends TestCase
         $slumpState->residentialPropertyIndex = 80.0;
         $slumpState->industrialMetalsIndex = 140.0; // Costly building materials
         $slumpState->wageGrowth = 0.050;
-        $slumpState->yield30yEma = 0.075;           // 7.5% mortgage rates
+        $slumpState->yield10yEma = 0.075;           // ~9% mortgage rates
         $slumpState->macroCreditSpread = 0.040;
         $slumpState->inflationEma = 0.015;
         $slumpState->sloosTighteningIndexEma = 0.40; // 40% net banks tightening mortgages

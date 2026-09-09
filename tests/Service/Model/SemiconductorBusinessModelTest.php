@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model;
 
+use App\Service\Macro\MacroEngine;
 use App\Service\Model\Sector\SemiconductorBusinessModel;
 use App\Service\Math\MathUtility;
 use App\Entity\Stock;
@@ -116,7 +117,7 @@ class SemiconductorBusinessModelTest extends TestCase
         $macroSpike = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema' => 0.0,
             'energy_price_index_ema' => 120.0,
-            'energy_cost_push_lag' => 0.0020,
+            'energy_cost_push_lag' => 0.20 * MacroEngine::ENERGY_COST_PUSH_TRANSMISSION,
         ]);
 
         $resultSpike = $this->model->computeActualFinancials(

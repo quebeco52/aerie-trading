@@ -44,8 +44,8 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     public const CARRY_LEVERAGE_AMPLIFIER_SCALAR = 0.80;
 
     // --- Cost of Debt & LBO Elasticity ---
-    /** Baseline macro credit spread (~200bps) for normal LBO conditions. */
-    public const LBO_CREDIT_SPREAD_BASELINE = 0.020;
+    /** Baseline macro credit spread for normal LBO conditions, the macro through-the-cycle IG spread. */
+    public const LBO_CREDIT_SPREAD_BASELINE = MacroEngine::BASE_CREDIT_SPREAD;
     /** Baseline policy rate (~4.5%) threshold above which LBO financing becomes distressed. */
     public const LBO_RATE_FREEZE_THRESHOLD  = 0.045;
     /** Elasticity scalar: How LBO multiples compress and exits freeze as total Cost of Debt rises. */

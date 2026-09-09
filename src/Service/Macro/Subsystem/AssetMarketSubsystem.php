@@ -57,13 +57,14 @@ class AssetMarketSubsystem
      *
      * Calculates fundamental home prices from user cost of housing capital (mortgage rate + taxes - expected inflation)
      * and household real disposable income affordability, with sticky physical mean reversion.
+     * The 30Y fixed mortgage is priced off the 10Y sovereign: prepayment shortens its effective duration to ~7 years.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
      */
     public function calculateResidentialPropertyIndex(MacroState $state, float $dt): void
     {
-        $mortgageRate = $state->yield30yEma + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD;
+        $mortgageRate = $state->yield10yEma + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD;
         $userCost = max(0.015, $mortgageRate + MacroEngine::RESIDENTIAL_DEPRECIATION_TAX_RATE - $state->inflationEma);
 
         $excessUnemployment = $state->unemploymentRateEma - $state->nairu;
@@ -226,6 +227,8 @@ class AssetMarketSubsystem
      * Constructs a normalized macroeconomic financial conditions index tracking wholesale credit spreads,
      * equity risk premium, real exchange rate deviations, term structure slope, and equity market volatility:
      *   FCI > 0 indicates restrictive financial conditions; FCI < 0 indicates accommodative conditions.
+     * The weights are loadings on unit-variance components whose stress moves together, so the plain weighted sum is
+     * the composite: a 2008-type credit event reads ~+3 sigma, a mild recession ~+1.4, a boom ~-0.6 (Chicago Fed NFCI ranges).
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
@@ -317,7 +320,7 @@ class AssetMarketSubsystem
         $laborCostRatio = 1.0 + $state->wageGrowth;
         $replacementCostRatio = (0.50 * $metalsCostRatio) + (0.50 * $laborCostRatio);
 
-        $mortgageRate = $state->yield30yEma + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD;
+        $mortgageRate = $state->yield10yEma + MacroEngine::RESIDENTIAL_MORTGAGE_SPREAD;
         $userCost = max(0.015, $mortgageRate + MacroEngine::RESIDENTIAL_DEPRECIATION_TAX_RATE - $state->inflationEma);
 
         $dW = $this->mathUtility->generateStandardNormal();

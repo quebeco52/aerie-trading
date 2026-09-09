@@ -21,7 +21,7 @@ class MonetaryPolicySubsystem
      * Taylor (1993) Monetary Policy Rule with Evans (2012) Forward Guidance.
      *
      * Computes the central bank's nominal policy rate target:
-     *   r_target = r* + pi_blend + alpha_pi * (pi_blend - pi*) + gamma_y * y_gap
+     *   r_target = r* + pi_blend + alpha_pi * (pi_blend - pi*) + gamma_y * y_gap - phi_L * long_rate_gap
      * Under the Evans Rule, locks target at 0% (ZLB) when the central bank is at
      * the lower bound (or unconstrained target <= 0) and unemployment is elevated
      * while inflation remains contained.
@@ -69,10 +69,15 @@ class MonetaryPolicySubsystem
             $gapWeight = MacroEngine::TAYLOR_OUTPUT_GAP_WEIGHT;
         }
 
+        // Bernanke (2006): lean against long-rate moves the policy rate does not set, so a high-premium era or a
+        // market that has repriced neutral is met with easier policy rather than a decade of restrictive conditions.
+        $longRateOffset = MacroEngine::TAYLOR_LONG_RATE_OFFSET * $this->calculateLongRateGap($state, $naturalRate);
+
         $unclampedTarget = $naturalRate + $inflationMeasure
             + MacroEngine::TAYLOR_INFLATION_WEIGHT * ($inflationMeasure - $targetInflation)
             + $gapWeight * $cyclicalGap
-            + $faitOffset;
+            + $faitOffset
+            - $longRateOffset;
 
         // Wu-Xia (2016) / Krippner (2013) Unconstrained Shadow Rate:
         // Incorporates unconventional monetary accommodation (QE balance sheet expansion)
@@ -80,6 +85,36 @@ class MonetaryPolicySubsystem
         $qeShadowAccommodation = $state->qeIntensity * MacroEngine::WU_XIA_QE_SHADOW_SENSITIVITY;
 
         return $unclampedTarget - $qeShadowAccommodation;
+    }
+
+    /**
+     * Long-rate gap the central bank leans against (Bernanke 2006, Curdia-Woodford 2010 spread adjustment).
+     *
+     * The ten-year moves for reasons the policy rate does not set: the term premium drifting from its structural
+     * baseline, and the market's perceived long-run policy rate drifting from the model-consistent endpoint.
+     * Both tighten or loosen financial conditions (mortgages, cap rates, sentiment, business borrowing), so the
+     * rule offsets a share of them. The central bank's own balance sheet is excluded: QE is meant to compress
+     * the premium and the rule must not undo it.
+     *
+     * @param MacroState $state       Current macroeconomic state.
+     * @param float      $naturalRate Dynamic natural real rate of interest (r*).
+     * @return float Deviation of the ten-year from the policy-consistent path, in yield units.
+     */
+    public function calculateLongRateGap(MacroState $state, float $naturalRate): float
+    {
+        $habitatShiftAtTenYears = $this->mathUtility->calculatePreferredHabitatTermPremiumShift(
+            balanceSheetIntensity: $state->balanceSheetIntensity,
+            tau: 10.0,
+            habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY
+        );
+        $premiumDeviation = ($state->termPremium10yEma - $habitatShiftAtTenYears) - MacroEngine::NS_BASE_TERM_PREMIUM;
+
+        $slopeLoad10y = (1.0 - exp(-10.0 * MacroEngine::SVENSSON_SLOPE_LAMBDA)) / (10.0 * MacroEngine::SVENSSON_SLOPE_LAMBDA);
+        $endpointDeviation = MacroEngine::KOZICKI_TINSLEY_ENDPOINT_WEIGHT
+            * ($state->perceivedNeutralRate - ($naturalRate + MacroEngine::TARGET_INFLATION))
+            * (1.0 - $slopeLoad10y);
+
+        return $premiumDeviation + $endpointDeviation;
     }
 
     /**
@@ -214,6 +249,61 @@ class MonetaryPolicySubsystem
     }
 
     /**
+     * Term Premium Dynamics: a two-factor Ornstein-Uhlenbeck decomposition of the structural ten-year premium.
+     *
+     * Adrian, Crump & Moench (2013) show the term premium is highly persistent but mean-reverting, with
+     * transitory swings (the 2013 taper tantrum) riding on slow regime shifts; Campbell, Pflueger & Viceira
+     * (2020) tie those regimes to the bond-stock correlation, from the 2% premia of the early 1990s to the
+     * near-zero and negative premia of the 2010s. The fast factor reverts to zero, the slow factor to the
+     * long-run baseline, and both use the exact OU discretization so the process is tick-rate invariant.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function updateTermPremiumDynamics(MacroState $state, float $dt): void
+    {
+        $factors = $this->mathUtility->calculateTwoFactorOU(
+            chi: $state->termPremiumShock,
+            xi: $state->termPremiumRegime,
+            kappaChi: MacroEngine::TERM_PREMIUM_SHOCK_KAPPA,
+            kappaXi: MacroEngine::TERM_PREMIUM_REGIME_KAPPA,
+            thetaChi: 0.0,
+            thetaXi: MacroEngine::NS_BASE_TERM_PREMIUM,
+            sigChi: MacroEngine::TERM_PREMIUM_SHOCK_SIGMA,
+            sigXi: MacroEngine::TERM_PREMIUM_REGIME_SIGMA,
+            rho: 0.0,
+            dt: $dt
+        );
+
+        $state->termPremiumShock = max(-MacroEngine::TERM_PREMIUM_SHOCK_CAP, min(MacroEngine::TERM_PREMIUM_SHOCK_CAP, $factors['chi']));
+        $state->termPremiumRegime = max(MacroEngine::MIN_TERM_PREMIUM_REGIME, min(MacroEngine::MAX_TERM_PREMIUM_REGIME, $factors['xi']));
+    }
+
+    /**
+     * Kozicki & Tinsley (2001) Shifting Endpoints and the restrictive-stance clock.
+     *
+     * Long-horizon rate expectations are not pinned to the model's r* plus target: the market learns the
+     * long-run policy rate slowly from what the central bank actually does, so a decade of 5% policy raises
+     * the perceived endpoint and a decade at the floor lowers it. Alongside, a clock accumulates time spent
+     * with policy above neutral and unwinds when it is not, so the premium compression of a tightening can
+     * fade with its duration instead of resetting whenever a flat curve crosses zero.
+     *
+     * @param MacroState $state Current macroeconomic state.
+     * @param float      $dt    Time increment in years.
+     */
+    public function updateMarketExpectations(MacroState $state, float $dt): void
+    {
+        $state->perceivedNeutralRate += MacroEngine::KOZICKI_TINSLEY_ADAPTATION_SPEED * ($state->policyRate - $state->perceivedNeutralRate) * $dt;
+
+        $neutralNominalRate = $state->naturalRate + MacroEngine::TARGET_INFLATION;
+        if ($state->policyRate > $neutralNominalRate) {
+            $state->restrictiveDuration += $dt;
+        } else {
+            $state->restrictiveDuration *= exp(-MacroEngine::RESTRICTIVE_DURATION_UNWIND_RATE * $dt);
+        }
+    }
+
+    /**
      * Nelson-Siegel-Svensson (1994) Term Structure & Adrian-Crump-Moench (2013) ACM Decomposition.
      *
      * Fits the full zero-coupon sovereign yield curve (2Y, 5Y, 10Y, 30Y) with Diebold-Li (2006)
@@ -231,9 +321,10 @@ class MonetaryPolicySubsystem
         $flightToSafetyShift = MacroEngine::FLIGHT_TO_SAFETY_SENSITIVITY * max(0.0, $state->marketVolatilityEma - 0.25);
         $cyclicalTermPremium = $state->outputGap * MacroEngine::NS_GAP_TERM_PREMIUM_SCALE;
         $rawTighteningCompression = MacroEngine::TERM_PREMIUM_TIGHTENING_COMPRESSION * max(0.0, $state->policyRate - ($naturalRate + MacroEngine::TARGET_INFLATION));
-        $compressionDecay = exp(-MacroEngine::TERM_PREMIUM_COMPRESSION_DECAY_RATE * $state->inversionDuration);
+        $compressionDecay = exp(-MacroEngine::TERM_PREMIUM_COMPRESSION_DECAY_RATE * $state->restrictiveDuration);
         $restrictiveCompression = $rawTighteningCompression * $compressionDecay;
-        $totalBaseTermPremium = max(MacroEngine::MIN_TERM_PREMIUM_10Y, MacroEngine::NS_BASE_TERM_PREMIUM + $inflationRiskPremium + $cyclicalTermPremium - $flightToSafetyShift - $restrictiveCompression);
+        $structuralTermPremium = $state->termPremiumRegime + $state->termPremiumShock;
+        $totalBaseTermPremium = max(MacroEngine::MIN_TERM_PREMIUM_10Y, $structuralTermPremium + $inflationRiskPremium + $cyclicalTermPremium - $flightToSafetyShift - $restrictiveCompression);
 
         // Long-term asymptotic yield level beta0 (Nelson-Siegel 1987, Diebold-Li 2006): the risk-neutral
         // anchor, r* plus expected inflation over the 10-year horizon (Fisher hypothesis). The term premium is
@@ -242,7 +333,11 @@ class MonetaryPolicySubsystem
         // with maturity (ACM 2013), and that rise is most of what a normal 2s10s slope is made of.
         $expectedInflation10y = (MacroEngine::LONG_RUN_INFLATION_ANCHOR_WEIGHT * MacroEngine::TARGET_INFLATION)
             + ((1.0 - MacroEngine::LONG_RUN_INFLATION_ANCHOR_WEIGHT) * $state->tipsBreakeven);
-        $level = $naturalRate + $expectedInflation10y;
+        // Kozicki-Tinsley (2001): the anchor blends the model-consistent endpoint with the market's slowly
+        // adapting perception of the long-run policy rate, so long regimes reprice the long end.
+        $modelEndpoint = $naturalRate + $expectedInflation10y;
+        $level = ((1.0 - MacroEngine::KOZICKI_TINSLEY_ENDPOINT_WEIGHT) * $modelEndpoint)
+            + (MacroEngine::KOZICKI_TINSLEY_ENDPOINT_WEIGHT * $state->perceivedNeutralRate);
         $nsBeta1 = $state->policyRate - $level;
 
         // Diebold-Li (2006) Curvature beta2: forward monetary tightening/easing expectations
@@ -260,8 +355,9 @@ class MonetaryPolicySubsystem
         $yield10y = $this->calculateSvenssonTenor(10.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $totalBaseTermPremium);
         $yield30y = $this->calculateSvenssonTenor(30.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $totalBaseTermPremium);
 
-        $durationFactor10y = (1.0 - exp(-10.0 * MacroEngine::SVENSSON_LAMBDA_1)) / (10.0 * MacroEngine::SVENSSON_LAMBDA_1);
-        $factor2_10y = $durationFactor10y - exp(-10.0 * MacroEngine::SVENSSON_LAMBDA_1);
+        $durationFactor10y = (1.0 - exp(-10.0 * MacroEngine::SVENSSON_SLOPE_LAMBDA)) / (10.0 * MacroEngine::SVENSSON_SLOPE_LAMBDA);
+        $curvatureLoad10y = (1.0 - exp(-10.0 * MacroEngine::SVENSSON_LAMBDA_1)) / (10.0 * MacroEngine::SVENSSON_LAMBDA_1);
+        $factor2_10y = $curvatureLoad10y - exp(-10.0 * MacroEngine::SVENSSON_LAMBDA_1);
 
         // Adrian, Crump & Moench (2013) Pure Risk-Neutral Rate: Expected path of policy rates under zero term premium.
         // Built on the same ten-year expected-inflation level the fitted curve uses, so the breakeven share of the
@@ -347,7 +443,8 @@ class MonetaryPolicySubsystem
             curvature2: $nsBeta3,
             tau: $t,
             lambda1: MacroEngine::SVENSSON_LAMBDA_1,
-            lambda2: MacroEngine::SVENSSON_LAMBDA_2
+            lambda2: MacroEngine::SVENSSON_LAMBDA_2,
+            slopeLambda: MacroEngine::SVENSSON_SLOPE_LAMBDA
         );
 
         return max(MacroEngine::EFFECTIVE_LOWER_BOUND, $yield + $termPremium + $preferredHabitatShift);

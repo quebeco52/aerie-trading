@@ -106,8 +106,8 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public const MAX_VARIABLE_MARGIN_CLAMP = 0.95;
 
     // --- CECL Forward Provisioning (Credit Spread Channel) ---
-    /** Baseline investment-grade credit spread (~200bps). Widening above this triggers proactive reserve builds. */
-    public const CECL_BASELINE_CREDIT_SPREAD = 0.020;
+    /** Baseline investment-grade credit spread (macro through-the-cycle IG). Widening above this triggers proactive reserve builds. */
+    public const CECL_BASELINE_CREDIT_SPREAD = MacroEngine::BASE_CREDIT_SPREAD;
     /** Variable cost add-on per unit of spread widening. Unsecured credit is 1.5x more sensitive than collateralized bank loans. */
     public const CECL_SPREAD_SENSITIVITY     = 1.50;
     /** Baseline 12-month forward recession probability threshold before proactive CECL reserve builds begin. */

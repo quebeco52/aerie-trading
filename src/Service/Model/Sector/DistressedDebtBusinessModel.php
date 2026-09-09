@@ -50,8 +50,8 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     public const BULL_MARKET_GAP_THRESHOLD      = 0.020;
     /** Revenue contraction multiplier during prolonged bull markets with tight credit spreads. */
     public const BULL_MARKET_REVENUE_DRAG       = -0.10;
-    /** Baseline high-yield credit spread (~480bps) above which distressed turnaround opportunities surge. */
-    public const HY_SPREAD_BLOWOUT_BASELINE     = 0.048;
+    /** Baseline high-yield credit spread (macro IG baseline x HY multiple) above which distressed turnaround opportunities surge. */
+    public const HY_SPREAD_BLOWOUT_BASELINE     = MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER;
     /** Sensitivity multiplier translating excess high-yield credit spreads into turnaround recovery revenue. */
     public const HY_SPREAD_SURGE_SCALAR         = 10.00;
     /** Sensitivity multiplier translating corporate default rate surges into turnaround acquisition opportunities. */
