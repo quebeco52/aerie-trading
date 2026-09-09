@@ -35,6 +35,8 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     // --- Input Cost Basket ---
     /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
     public const INPUT_COST_EXPOSURES = ['ppi' => 0.40, 'metals' => 0.08, 'freight' => 0.04, 'labor' => 0.15, 'energy' => 0.02];
+    /** Boxes are specified on a common component bill and bid against near-identical rivals; component cost moves reach street prices, but little else does. */
+    public const PRICING_POWER_INDEX = 0.45;
 
     // --- Inventory Cycle ---
     /** Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking, shortfalls restocking. Channel inventory whipsaws PC and server shipments hardest. */
@@ -146,9 +148,8 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         $consumerZ   = $streams->generateZ('consumer_hardware', 0.05);
         $eventZ      = $streams->generateExogenousZ('event', 0.10);
 
-        $standardParams = $this->resolveModelParameters($stock, [ModelParam::PricingPowerIndex->value => 0.5]);
-        $pricingPower = max(0.0, min(1.0, $standardParams[ModelParam::PricingPowerIndex]));
-        $macroSensitivityMultiplier = 0.5 + $pricingPower;
+        $pricingPower = $this->resolvePricingPower($stock);
+        $macroSensitivityMultiplier = self::MIN_BETA_PRICING_POWER_FLOOR + $pricingPower;
 
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
 

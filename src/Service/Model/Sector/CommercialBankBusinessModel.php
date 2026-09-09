@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\DTO\InterestExpenseDTO;
+use App\DTO\DebtExpansionAppetiteDTO;
+
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -709,7 +712,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         return max(0.0, min($spendCap, $retainedEarningsThisQuarter));
     }
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): InterestExpenseDTO
     {
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $customerDeposits = (float) $stock->getCustomerDeposits();
@@ -724,7 +727,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $depositRate = max(0.001, $policyRate * $depositBeta);
         $depositInterest = $customerDeposits * $depositRate;
 
-        return ['interest_expense' => $wholesaleInterest + $depositInterest, 'wholesale_rate' => $wholesaleRate];
+        return new InterestExpenseDTO(interestExpense: $wholesaleInterest + $depositInterest, wholesaleRate: $wholesaleRate);
     }
 
 
@@ -803,7 +806,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         }
     }
 
-    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): array
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): DebtExpansionAppetiteDTO
     {
         $depositRatio = $totalDebt > 0.0 ? ($customerDeposits / $totalDebt) : 0.0;
 
@@ -813,19 +816,13 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             $probability = self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT) + (self::WHOLESALE_URGENCY_PROB_BOOST * $shortfallRatio);
             $aggressiveness = self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier) + (self::WHOLESALE_URGENCY_AGGR_BOOST * $shortfallRatio);
 
-            return [
-                'probability' => min(self::DEBT_EXPANSION_PROB_MAX, max(self::DEBT_EXPANSION_PROB_MIN, $probability)),
-                'aggressiveness' => min(self::DEBT_EXPANSION_AGGR_MAX, max(self::DEBT_EXPANSION_AGGR_MIN, $aggressiveness)),
-            ];
+            return new DebtExpansionAppetiteDTO(probability: min(self::DEBT_EXPANSION_PROB_MAX, max(self::DEBT_EXPANSION_PROB_MIN, $probability)), aggressiveness: min(self::DEBT_EXPANSION_AGGR_MAX, max(self::DEBT_EXPANSION_AGGR_MIN, $aggressiveness)));
         }
 
         // Deposit Throttle: When liquid treasury is sufficient and the bank is well-funded by customer deposits,
         // wholesale debt borrowing is throttled down to zero to prevent balance sheet inflation.
         if ($depositRatio >= self::DEPOSIT_THROTTLE_UPPER_BOUND) {
-            return [
-                'probability' => 0.0,
-                'aggressiveness' => 0.0,
-            ];
+            return new DebtExpansionAppetiteDTO(probability: 0.0, aggressiveness: 0.0);
         }
 
         // For banks with lower deposit coverage, scale borrowing capacity smoothly between UPPER and LOWER bounds
@@ -839,10 +836,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             $baseAggr *= $throttleMultiplier;
         }
 
-        return [
-            'probability' => min(self::DEBT_EXPANSION_PROB_MAX, max(self::DEBT_EXPANSION_PROB_MIN, $baseProb)),
-            'aggressiveness' => min(self::DEBT_EXPANSION_AGGR_MAX, max(self::DEBT_EXPANSION_AGGR_MIN, $baseAggr)),
-        ];
+        return new DebtExpansionAppetiteDTO(probability: min(self::DEBT_EXPANSION_PROB_MAX, max(self::DEBT_EXPANSION_PROB_MIN, $baseProb)), aggressiveness: min(self::DEBT_EXPANSION_AGGR_MAX, max(self::DEBT_EXPANSION_AGGR_MIN, $baseAggr)));
     }
 
     public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr, float $costOfEquity, float $effectiveCostOfDebt): bool

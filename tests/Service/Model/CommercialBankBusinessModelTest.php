@@ -555,8 +555,8 @@ class CommercialBankBusinessModelTest extends TestCase
             currentTreasury: $currentTreasury
         );
 
-        $this->assertSame(0.0, $result['probability'], 'Deposit-funded bank with adequate cash must not borrow wholesale debt.');
-        $this->assertSame(0.0, $result['aggressiveness'], 'Aggressiveness must be 0 for deposit-funded bank.');
+        $this->assertSame(0.0, $result->probability, 'Deposit-funded bank with adequate cash must not borrow wholesale debt.');
+        $this->assertSame(0.0, $result->aggressiveness, 'Aggressiveness must be 0 for deposit-funded bank.');
     }
 
     public function testLiquidityShortfallTriggersUrgentWholesaleBorrowing(): void
@@ -575,8 +575,8 @@ class CommercialBankBusinessModelTest extends TestCase
             currentTreasury: $currentTreasury
         );
 
-        $this->assertGreaterThan(0.50, $result['probability'], 'Liquidity shortfall must boost borrowing probability.');
-        $this->assertGreaterThan(0.20, $result['aggressiveness'], 'Liquidity shortfall must boost borrowing aggressiveness.');
+        $this->assertGreaterThan(0.50, $result->probability, 'Liquidity shortfall must boost borrowing probability.');
+        $this->assertGreaterThan(0.20, $result->aggressiveness, 'Liquidity shortfall must boost borrowing aggressiveness.');
     }
 
     public function testUnfundedExpansionCapacityDeductsExcessCash(): void

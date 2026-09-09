@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\DTO\InterestExpenseDTO;
+
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -334,7 +336,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         return $marginInterest + $sweepInterest + $cashInterest;
     }
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): InterestExpenseDTO
     {
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
 
@@ -342,10 +344,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingInterestRate);
         $wholesaleRate = $debt > 0 ? ($interestExpense / $debt) : $currentMarketFixedRate;
 
-        return [
-            'interest_expense' => $interestExpense,
-            'wholesale_rate' => $wholesaleRate
-        ];
+        return new InterestExpenseDTO(interestExpense: $interestExpense, wholesaleRate: $wholesaleRate);
     }
 
     /**

@@ -250,8 +250,8 @@ class TreasuryEngine
                     $ctx->newTreasury
                 );
 
-                $borrowProbability = $aggressionData['probability'];
-                $aggressiveness = $aggressionData['aggressiveness'];
+                $borrowProbability = $aggressionData->probability;
+                $aggressiveness = $aggressionData->aggressiveness;
 
                 if ($isUnderLeveragedForDebt) {
                     $aggressiveness = max($aggressiveness, 0.50);

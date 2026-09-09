@@ -254,8 +254,8 @@ class DebtEngine
         // Customer Deposits & Leverage Physics
         $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
         $expenseMetrics = $strategy->calculateInterestExpenseAndWholesaleRate($stock, $blendedFixedRate, $floatingInterestRate, $currentMarketFixedRate, $policyRate, $equityLimit, $totalEquity, $debt);
-        $interestExpense = $expenseMetrics['interest_expense'];
-        $wholesaleRate = $expenseMetrics['wholesale_rate'];
+        $interestExpense = $expenseMetrics->interestExpense;
+        $wholesaleRate = $expenseMetrics->wholesaleRate;
 
         $trueBlendedRate = $debt > 1.0 ? ($interestExpense / $debt) : 0.0;
 
@@ -306,8 +306,8 @@ class DebtEngine
         $interestExpense = $debtMetrics->interestExpense;
 
         $costMetrics = $strategy->getDebtCostMetrics($debtMetrics, $currentDebt, $wholesaleDebt, $interestExpense);
-        $grossCostOfDebt = $costMetrics['gross_cost_of_debt'];
-        $totalInterestCost = $costMetrics['total_interest_cost'];
+        $grossCostOfDebt = $costMetrics->grossCostOfDebt;
+        $totalInterestCost = $costMetrics->totalInterestCost;
         $evalDebt = max(1.0, $strategy->getDeleveragingEvaluationDebt($currentDebt, $wholesaleDebt));
 
         // 1. DYNAMIC TAX SHIELD (Phantom Tax Shield Fix)

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\DTO\DebtExpansionAppetiteDTO;
+
 use App\Data\ModelParam;
 use App\DTO\DebtHealthDTO;
 use App\DTO\MacroStateDTO;
@@ -469,11 +471,8 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         float $customerDeposits = 0.0,
         float $targetOperatingCash = 0.0,
         float $currentTreasury = 0.0
-    ): array {
-        return [
-            'probability'    => self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT),
-            'aggressiveness' => self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier),
-        ];
+    ): DebtExpansionAppetiteDTO {
+        return new DebtExpansionAppetiteDTO(probability: self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT), aggressiveness: self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier));
     }
 
     public function isUnderLeveraged(

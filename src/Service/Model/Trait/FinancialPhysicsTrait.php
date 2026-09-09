@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Trait;
 
+use App\DTO\InterestExpenseDTO;
+use App\DTO\DebtExpansionAppetiteDTO;
+use App\DTO\DebtCostDTO;
+
 use App\Entity\Stock;
 
 /**
@@ -76,12 +80,9 @@ trait FinancialPhysicsTrait
         return $interestExpense > 0 ? ($ebit / $interestExpense) : ($ebit > 0 ? 999.0 : -999.0);
     }
 
-    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): array
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): DebtExpansionAppetiteDTO
     {
-        return [
-            'probability' => 0.40 + ($spreadMultiplier * 0.50),
-            'aggressiveness' => 0.05 + (0.35 * $spreadMultiplier)
-        ];
+        return new DebtExpansionAppetiteDTO(probability: 0.40 + ($spreadMultiplier * 0.50), aggressiveness: 0.05 + (0.35 * $spreadMultiplier));
     }
 
     public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float
@@ -102,12 +103,12 @@ trait FinancialPhysicsTrait
 
     public function processPassiveLiabilityGrowth(Stock $stock, \App\DTO\MacroStateDTO $macroState, array &$state, \App\Service\Math\MathUtility $mathUtility): void {}
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): InterestExpenseDTO
     {
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingInterestRate);
         $wholesaleRate = $debt > 0 ? ($interestExpense / $debt) : $currentMarketFixedRate;
-        return ['interest_expense' => $interestExpense, 'wholesale_rate' => $wholesaleRate];
+        return new InterestExpenseDTO(interestExpense: $interestExpense, wholesaleRate: $wholesaleRate);
     }
 
     public function getHurdleRate(\App\DTO\DebtHealthDTO $health): float
@@ -262,17 +263,14 @@ trait FinancialPhysicsTrait
         return false;
     }
 
-    public function getDebtCostMetrics(\App\DTO\DebtMetricsDTO $debtMetrics, float $currentDebt, float $wholesaleDebt, float $interestExpense): array
+    public function getDebtCostMetrics(\App\DTO\DebtMetricsDTO $debtMetrics, float $currentDebt, float $wholesaleDebt, float $interestExpense): DebtCostDTO
     {
         // Use the already-computed wholesale rate from the debt metrics DTO.
         // DO NOT divide total interestExpense by wholesaleDebt — that attributes deposit interest to wholesale,
         // inflating cost-of-debt to junk bond levels for deposit-heavy banks.
         $wholesaleRate = $debtMetrics->wholesaleRate;
         $wholesaleInterest = $wholesaleRate * $wholesaleDebt;
-        return [
-            'gross_cost_of_debt' => $wholesaleRate,
-            'total_interest_cost' => $wholesaleInterest
-        ];
+        return new DebtCostDTO(grossCostOfDebt: $wholesaleRate, totalInterestCost: $wholesaleInterest);
     }
 
     public function getNetDebtCapital(float $currentDebt, float $wholesaleDebt, float $treasury): float

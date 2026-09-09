@@ -41,6 +41,8 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
     // --- Services Pricing ---
     /** Elasticity of fee and rate pricing to services (supercore) inflation. Retainer and fee schedules reprice with services inflation. */
     public const PRICING_ELASTICITY = 0.80;
+    /** Holding-company fees face client procurement review and a commoditized media-buying alternative, so wage inflation is largely absorbed rather than billed on. */
+    public const PRICING_POWER_INDEX = 0.35;
     /** Services price off core services inflation ex-housing, not goods breakevens. */
     public const PRICING_INFLATION_BASIS = 'supercore_inflation_ema';
 

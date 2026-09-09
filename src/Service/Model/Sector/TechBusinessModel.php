@@ -36,6 +36,8 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     // --- Input Cost Basket ---
     /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
     public const INPUT_COST_EXPOSURES = ['labor' => 0.60, 'energy' => 0.03, 'ppi' => 0.05];
+    /** Switching costs, data gravity and seat-based contracts let a platform reprice an installed base with little churn. */
+    public const PRICING_POWER_INDEX = 0.75;
 
     /**
      * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 enterprise budget flush and holiday advertising.

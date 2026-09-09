@@ -38,6 +38,12 @@ use App\Service\Math\MathUtility;
  */
 class BiotechBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Firm-Level Common Factor ---
+    /** One-factor loading of each stream on the firm-wide demand innovation (rho^2 = 56%). A concentrated pipeline is one scientific bet: a readout, a label change or a safety signal moves marketed franchise and pipeline together. */
+    public const FIRM_FACTOR_LOADING = 0.75;
+    /** Two-factor loading on the persistent sector demand factor (rho_s^2 = 9%). Prescription demand is set by the molecule and its label, not by the therapeutics cycle. */
+    public const SECTOR_FACTOR_LOADING = 0.30;
+
     // --- Operating Cyclicality & Demand Structure ---
     /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Prescriptions are non-discretionary; therapies rarely substitute. */
     public const OPERATING_CYCLICALITY = 0.60;
@@ -45,6 +51,10 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public const PRICE_ELASTICITY_OF_DEMAND = 0.20;
     /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
     public const INDUSTRY_SUBSTITUTABILITY = 0.20;
+
+    // --- Pricing Power ---
+    /** Exclusivity is administered pricing: a patented therapy on-label has no substitute, so list prices are set rather than met. Generic and specialty archetypes are tuned down per ticker. */
+    public const PRICING_POWER_INDEX = 0.85;
 
     // --- Balance Sheet Realism ---
     /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Clinical-stage science teams are paid heavily in equity. */

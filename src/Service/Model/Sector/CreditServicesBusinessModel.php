@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\DTO\InterestExpenseDTO;
+
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -380,7 +382,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         return $excessCash * $this->calculateCashYield($macroState);
     }
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): InterestExpenseDTO
     {
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $customerDeposits = (float) $stock->getCustomerDeposits(); // High yield savings sweeps
@@ -394,10 +396,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $depositRate = max(0.001, $policyRate * $depositBeta);
         $depositInterest = $customerDeposits * $depositRate;
 
-        return [
-            'interest_expense' => $wholesaleInterest + $depositInterest,
-            'wholesale_rate' => $wholesaleRate
-        ];
+        return new InterestExpenseDTO(interestExpense: $wholesaleInterest + $depositInterest, wholesaleRate: $wholesaleRate);
     }
 
     /** Unsecured consumer credit loses far more through the cycle than a prime bank loan book. */

@@ -3,6 +3,9 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Trait;
 
+use App\DTO\DebtExpansionAppetiteDTO;
+use App\DTO\DebtCostDTO;
+
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
@@ -19,11 +22,8 @@ trait StandardDebtPhysicsTrait
         return $interestExpense > 0 ? ($ebit / $interestExpense) : ($ebit > 0 ? 999.0 : -999.0);
     }
     
-    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): array {
-        return [
-            'probability' => 0.40 + ($spreadMultiplier * 0.50),
-            'aggressiveness' => 0.05 + (0.35 * $spreadMultiplier)
-        ];
+    public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): DebtExpansionAppetiteDTO {
+        return new DebtExpansionAppetiteDTO(probability: 0.40 + ($spreadMultiplier * 0.50), aggressiveness: 0.05 + (0.35 * $spreadMultiplier));
     }
     
     public function getUnfundedExpansionCapacity(float $baseCapacity, float $excessCash): float {
@@ -108,12 +108,9 @@ trait StandardDebtPhysicsTrait
         return $macroDebtTolerance;
     }
     
-    public function getDebtCostMetrics(DebtMetricsDTO $debtMetrics, float $currentDebt, float $wholesaleDebt, float $interestExpense): array {
+    public function getDebtCostMetrics(DebtMetricsDTO $debtMetrics, float $currentDebt, float $wholesaleDebt, float $interestExpense): DebtCostDTO {
         $grossCostOfDebt = $currentDebt > 0 ? ($interestExpense / $currentDebt) : $debtMetrics->currentMarketRate;
-        return [
-            'gross_cost_of_debt' => $grossCostOfDebt,
-            'total_interest_cost' => $interestExpense
-        ];
+        return new DebtCostDTO(grossCostOfDebt: $grossCostOfDebt, totalInterestCost: $interestExpense);
     }
     
     public function getNetDebtCapital(float $currentDebt, float $wholesaleDebt, float $treasury): float {

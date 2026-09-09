@@ -42,6 +42,8 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     public const INPUT_COST_EXPOSURES = ['metals' => 0.10, 'ppi' => 0.20, 'labor' => 0.35, 'energy' => 0.03];
     /** Cost-plus and FMS contracts reprice through FAR escalators within the year; fixed-price EMD never does. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 0.75;
+    /** Cost-plus and FMS work recovers allowable cost by contract; only the fixed-price development share eats an overrun, and fixed-price-heavy primes are tuned down per ticker. */
+    public const PRICING_POWER_INDEX = 0.70;
 
     /**
      * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: federal fiscal year-end obligation flush in September, continuing resolutions in Q4.

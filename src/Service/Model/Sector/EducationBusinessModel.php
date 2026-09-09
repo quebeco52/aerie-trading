@@ -42,6 +42,8 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
     // --- Services Pricing ---
     /** Elasticity of fee and rate pricing to services (supercore) inflation. Tuition follows services inflation with a lag from annual rate setting. */
     public const PRICING_ELASTICITY = 0.70;
+    /** Tuition is administered annually against subsidized, credential-driven demand: sticker increases stick, and the enrolment response is slow. */
+    public const PRICING_POWER_INDEX = 0.70;
     /** Services price off core services inflation ex-housing, not goods breakevens. */
     public const PRICING_INFLATION_BASIS = 'supercore_inflation_ema';
 

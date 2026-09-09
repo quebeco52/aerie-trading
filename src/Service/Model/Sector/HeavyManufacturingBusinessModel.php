@@ -34,6 +34,8 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     // --- Input Cost Basket ---
     /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
     public const INPUT_COST_EXPOSURES = ['energy' => 0.08, 'metals' => 0.25, 'freight' => 0.05, 'ppi' => 0.25, 'labor' => 0.20];
+    /** Engineered equipment carries spec lock-in and steel escalator clauses on long builds, but competes bid-by-bid on new orders. */
+    public const PRICING_POWER_INDEX = 0.55;
 
     // --- Inventory Cycle ---
     /** Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking, shortfalls restocking. Dealer and fleet inventories gate OEM equipment orders. */

@@ -243,6 +243,7 @@ class StockModelTuning
             ModelParam::CloudInfrastructureWeight->value => 0.40,
             ModelParam::AdvertisingCyclicality->value    => 0.22,
             ModelParam::MonopolyAggression->value        => 0.90, // Ruthless data monopoly, high margins, existential regulatory risk
+            ModelParam::PricingPowerIndex->value         => 0.60, // Auction-cleared ad inventory prices itself; only the subscription and cloud books are set by the seller
         ],
 
         // --- Silicon Creek Foundries (SILC) ---
@@ -483,6 +484,7 @@ class StockModelTuning
         'PHIL' => [
             ModelParam::BrandedStaplesWeight->value  => 0.85,
             ModelParam::VolumeCommodityWeight->value => 0.15,
+            ModelParam::PricingPowerIndex->value     => 0.90, // Addictive, habit-formed demand: decades of above-inflation list price increases with minimal volume response
         ],
 
         // --- Lark & Crest Brands (LARK) ---
@@ -509,6 +511,7 @@ class StockModelTuning
             ModelParam::VolumeCommodityWeight->value  => 0.50,
             ModelParam::CommodityTradingWeight->value => 0.15,
             ModelParam::LandSpeculationWeight->value  => 0.15,
+            ModelParam::PricingPowerIndex->value      => 0.30, // Bulk agricultural output clears at the exchange price, not a list price
         ],
 
         // --- Pintail Beverage Group (PINT) ---

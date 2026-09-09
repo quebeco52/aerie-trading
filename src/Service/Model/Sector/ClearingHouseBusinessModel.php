@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\DTO\InterestExpenseDTO;
+
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -308,7 +310,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         return $ownCash * $cashYield;
     }
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): InterestExpenseDTO
     {
         $corporateDebt = (float) $stock->getWholesaleDebt();
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
@@ -319,10 +321,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
 
         // Note: Margin pool custody rebates are pass-through distributions netted against custody yield in calculateInterestIncome.
         // Returning only corporate debt interest ensures ICR and solvency metrics measure true corporate debt servicing capacity.
-        return [
-            'interest_expense' => $corporateInterest,
-            'wholesale_rate' => $wholesaleRate
-        ];
+        return new InterestExpenseDTO(interestExpense: $corporateInterest, wholesaleRate: $wholesaleRate);
     }
 
     public function calculateCashYield(\App\DTO\MacroStateDTO $macroState): float

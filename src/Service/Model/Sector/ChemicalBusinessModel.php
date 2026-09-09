@@ -38,6 +38,8 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     // --- Input Cost Basket ---
     /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
     public const INPUT_COST_EXPOSURES = ['ppi' => 0.15, 'labor' => 0.15, 'freight' => 0.05];
+    /** Base petrochemicals clear at the marginal cracker's cost and take the price they are given; the specialty and agrochemical books carry the formulation power. */
+    public const PRICING_POWER_INDEX = 0.40;
 
     /**
      * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q2 planting season for agrochemicals.
@@ -217,11 +219,6 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::PricingPowerIndex->value => 0.50,
-        ]);
-        $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
-
         $outputGap = $macroState->outputGapEma;
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
         $agriShift = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
@@ -245,10 +242,9 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
             ModelParam::BasePetrochemicalsWeight->value => self::BASE_PETROCHEMICALS_WEIGHT,
             ModelParam::SpecialtyChemicalsWeight->value => self::SPECIALTY_CHEMICALS_WEIGHT,
             ModelParam::AgrochemicalsWeight->value      => self::AGROCHEMICALS_WEIGHT,
-            ModelParam::PricingPowerIndex->value        => 0.50,
         ]);
 
-        $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
+        $pricingPower = $this->resolvePricingPower($stock);
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 

@@ -40,6 +40,8 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     public const INPUT_COST_EXPOSURES = ['agri' => 0.30, 'ppi' => 0.20, 'energy' => 0.06, 'freight' => 0.05, 'labor' => 0.20];
     /** Branded staples recover input moves on the shelf within a couple of quarters. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 0.50;
+    /** Brand equity is shelf-price power: a branded FMCG list price rises with input costs and the volume loss is small. Bulk commodity producers are tuned down per ticker. */
+    public const PRICING_POWER_INDEX = 0.75;
 
     // --- Inventory Cycle ---
     /** Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking, shortfalls restocking. Grocery and distributor stock levels only modestly gate replenishment volumes. */
@@ -176,13 +178,8 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::PricingPowerIndex->value => 0.50,
-        ]);
-        $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
-
         // Modulate elasticity by pricing power: strong brand equity lowers PED further
-        $effectivePed = self::BASELINE_PRICE_ELASTICITY_OF_DEMAND * (1.5 - $pricingPower);
+        $effectivePed = self::BASELINE_PRICE_ELASTICITY_OF_DEMAND * (1.5 - $this->resolvePricingPower($stock));
 
         $beta = $this->getOperatingCyclicality($stock);
         $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
@@ -208,9 +205,8 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
             ModelParam::VolumeCommodityWeight->value  => self::VOLUME_COMMODITY_WEIGHT,
             ModelParam::CommodityTradingWeight->value => 0.00,
             ModelParam::LandSpeculationWeight->value  => 0.00,
-            ModelParam::PricingPowerIndex->value      => 0.50,
         ]);
-        $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
+        $pricingPower = $this->resolvePricingPower($stock);
 
         $rawCommodityWeight = $params[ModelParam::CommodityTradingWeight];
         $rawLandWeight      = $params[ModelParam::LandSpeculationWeight];

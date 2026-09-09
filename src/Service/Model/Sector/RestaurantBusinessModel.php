@@ -38,6 +38,8 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     // --- Input Cost Basket ---
     /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
     public const INPUT_COST_EXPOSURES = ['agri' => 0.30, 'labor' => 0.35, 'energy' => 0.05, 'ppi' => 0.10];
+    /** Menu prices move freely but the diner's next-best meal is one storefront away, so a chain recovers only part of a food or wage move before traffic answers. */
+    public const PRICING_POWER_INDEX = 0.45;
 
     // --- Balance Sheet Realism ---
     /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Franchisor real estate and store leases are the largest obligation on a restaurant balance sheet. */

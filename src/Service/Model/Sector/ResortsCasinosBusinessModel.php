@@ -38,6 +38,8 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     // --- Input Cost Basket ---
     /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
     public const INPUT_COST_EXPOSURES = ['energy' => 0.10, 'agri' => 0.10, 'labor' => 0.40, 'ppi' => 0.05];
+    /** Yield-managed room and table pricing captures a boom, but the whole spend is discretionary and travel substitutes readily. */
+    public const PRICING_POWER_INDEX = 0.55;
 
     // --- Balance Sheet Realism ---
     /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Ground leases and OpCo/PropCo structures. */

@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\DTO\InterestExpenseDTO;
+
 use App\Service\Model\BusinessModelInterface;
 
-use App\Data\ModelParam;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Corporate\EarningsEngine;
@@ -126,11 +127,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::PricingPowerIndex->value => 0.5,
-        ]);
-        $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
-        $macroSensitivityMultiplier = 0.5 + $pricingPower;
+        $macroSensitivityMultiplier = self::MIN_BETA_PRICING_POWER_FLOOR + $this->resolvePricingPower($stock);
 
         $outputGap = $macroState->outputGapEma;
         $beta = $this->getOperatingCyclicality($stock);
@@ -214,10 +211,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
      */
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::PricingPowerIndex->value => 0.5,
-        ]);
-        $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
+        $pricingPower = $this->resolvePricingPower($stock);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
@@ -277,7 +271,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
         return $truePostTaxReturn;
     }
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): array
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $equityLimit, float $totalEquity, float $debt): InterestExpenseDTO
     {
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
 
@@ -286,7 +280,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
         $interestExpense = ($debt * (1.0 - $floatingRatio) * $blendedFixedRate) + ($debt * $floatingRatio * $floatingInterestRate);
         $wholesaleRate = $debt > 0 ? ($interestExpense / $debt) : $currentMarketFixedRate;
 
-        return ['interest_expense' => $interestExpense, 'wholesale_rate' => $wholesaleRate];
+        return new InterestExpenseDTO(interestExpense: $interestExpense, wholesaleRate: $wholesaleRate);
     }
 
     /**

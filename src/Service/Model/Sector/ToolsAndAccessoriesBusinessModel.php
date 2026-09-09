@@ -34,6 +34,8 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
     // --- Input Cost Basket ---
     /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
     public const INPUT_COST_EXPOSURES = ['metals' => 0.20, 'ppi' => 0.25, 'energy' => 0.05, 'labor' => 0.20, 'freight' => 0.03];
+    /** Professional trade brands hold shelf and channel power on a sticky commercial base; the retail secondary market does not. */
+    public const PRICING_POWER_INDEX = 0.65;
 
     /**
      * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: holiday and year-end promotional volumes.
@@ -147,9 +149,8 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         $consumerZ   = $streams->generateZ('consumer', 0.30);
         $eventZ      = $streams->generateExogenousZ('event', 0.10);
 
-        $standardParams = $this->resolveModelParameters($stock, [ModelParam::PricingPowerIndex->value => 0.5]);
-        $pricingPower = max(0.0, min(1.0, $standardParams[ModelParam::PricingPowerIndex]));
-        $macroSensitivityMultiplier = 0.5 + $pricingPower;
+        $pricingPower = $this->resolvePricingPower($stock);
+        $macroSensitivityMultiplier = self::MIN_BETA_PRICING_POWER_FLOOR + $pricingPower;
 
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
         $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;

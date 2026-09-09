@@ -32,6 +32,12 @@ use App\Service\Math\MathUtility;
  */
 class ConglomerateBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Firm-Level Common Factor ---
+    /** One-factor loading of each stream on the firm-wide demand innovation (rho^2 = 12%). Unrelated subsidiaries share management and brand but not customers, so a segment's quarter says little about its siblings. */
+    public const FIRM_FACTOR_LOADING = 0.35;
+    /** Two-factor loading on the persistent demand factor of the holding company's reported sector (rho_s^2 = 6%). A conglomerate spans sectors, so its own sector's cycle explains less of any one segment than it would for a focused peer. */
+    public const SECTOR_FACTOR_LOADING = 0.25;
+
     // --- Operating Cyclicality & Demand Structure ---
     /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Diversified subsidiaries dampen the cycle. */
     public const OPERATING_CYCLICALITY = 0.90;

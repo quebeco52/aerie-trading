@@ -142,11 +142,8 @@ class BusinessModelContractMatrixTest extends TestCase
             debt: 1000000000.0
         );
 
-        $this->assertIsArray($debtCalc);
-        $this->assertArrayHasKey('interest_expense', $debtCalc);
-        $this->assertArrayHasKey('wholesale_rate', $debtCalc);
-        $this->assertTrue(is_finite($debtCalc['interest_expense']));
-        $this->assertTrue(is_finite($debtCalc['wholesale_rate']));
-        $this->assertGreaterThanOrEqual(0.0, $debtCalc['interest_expense']);
+        $this->assertTrue(is_finite($debtCalc->interestExpense));
+        $this->assertTrue(is_finite($debtCalc->wholesaleRate));
+        $this->assertGreaterThanOrEqual(0.0, $debtCalc->interestExpense);
     }
 }
