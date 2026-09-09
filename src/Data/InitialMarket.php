@@ -7,6 +7,7 @@ class InitialMarket
     public const STOCKS = [
         [
             'ticker' => 'LAKE',
+            'management_style' => 'fortress', // Systemic balance-sheet supremacy is maintained by hoarding capital, not distributing it
             'name' => 'Lakebird Bank',
             'sector' => 'Financials',
             'industry' => 'Banks - Diversified',
@@ -65,6 +66,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'HUMM',
+            'management_style' => 'empire_builder', // Ruthless expansion from search into every adjacent digital utility
             'name' => 'Hummingbird Interactive',
             'sector' => 'Information Technology',
             'industry' => 'Internet Content & Information',
@@ -94,6 +96,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'OWLS',
+            'management_style' => 'fortress', // Sits on towering cash for years and refuses to overpay; deploys only in panics
             'name' => 'Owl Capital Partners',
             'sector' => 'Financials',
             'industry' => 'Asset Management',
@@ -558,6 +561,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'PHIL',
+            'management_style' => 'steward', // Declining legacy volumes run for cash and returned as massive dividends
             'name' => 'Pheasant & Morris International',
             'sector' => 'Consumer Staples',
             'industry' => 'Tobacco',
@@ -587,6 +591,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'TRIV',
+            'management_style' => 'empire_builder', // Hundreds of disconnected divisions bolted together is empire building as a strategy
             'name' => 'Three Rivers Manufacturing',
             'sector' => 'Industrials',
             'industry' => 'Conglomerates',

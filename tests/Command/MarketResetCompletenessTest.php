@@ -89,6 +89,31 @@ final class MarketResetCompletenessTest extends TestCase
         ));
     }
 
+    /**
+     * Learned parameters and ledgers must be cleared to NULL, not recomputed by the reset with a
+     * simplified formula.
+     *
+     * structural_variable_margin is the CIR variable-cost process state. Its long-run mean is derived in
+     * EarningsEngine from cash costs AFTER the depreciation carve-out; deriving it here as
+     * (1 - margin) x (1 - fixed_cost_ratio) ignores that carve-out and overstates the cost ratio by a
+     * median 2% and up to 16% on capital-intensive firms, always in the same direction. Leaving it NULL
+     * lets the engine open the process at the mean it actually reverts toward, which is what the seed
+     * path already does.
+     */
+    public function testReSeededParametersAreClearedRatherThanRecomputed(): void
+    {
+        $source = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Command/MarketResetCommand.php');
+        $this->assertSame(1, preg_match('/UPDATE stocks SET(.*?)WHERE ticker = :ticker/s', $source, $statement));
+
+        foreach (['structural_variable_margin', 'inflation_pass_through', 'asset_turnover', 'reported_operating_margin', 'lagged_demand_gap'] as $column) {
+            $this->assertMatchesRegularExpression(
+                '/^\s*' . preg_quote($column, '/') . '\s*=\s*NULL,?\s*$/m',
+                $statement[1],
+                sprintf('"%s" is a parameter the engine re-seeds; the reset must clear it to NULL rather than compute a value for it.', $column)
+            );
+        }
+    }
+
     /** A column listed as preserved must actually still exist, or the exemption is hiding a typo. */
     public function testPreservedColumnsStillExist(): void
     {

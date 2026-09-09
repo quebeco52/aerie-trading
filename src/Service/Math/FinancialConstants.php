@@ -210,6 +210,10 @@ class FinancialConstants
     public const DEFAULT_INPUT_COST_EXPOSURES = ['energy' => 0.05, 'metals' => 0.05, 'agri' => 0.02, 'freight' => 0.03, 'ppi' => 0.35, 'labor' => 0.30];
     /** Default years for the recoverable share of an input move to reach selling prices (Nakamura & Steinsson 2008 price durations). */
     public const DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS = 0.75;
+    /** Stream-state key: lagged relative input cost level of the basket (fraction above baseline). */
+    public const STATE_INPUT_COST_LEVEL = 'state:input_cost_level';
+    /** Stream-state key: lagged share of the input cost level already recovered in selling prices. */
+    public const STATE_INPUT_COST_RECOVERY = 'state:input_cost_recovery';
 
     // --- FX Exposure ---
     /** Base level of the trade-weighted exchange rate index, against which a move is measured as a relative deviation. */
@@ -220,6 +224,22 @@ class FinancialConstants
     // --- Demand Transmission Lag ---
     /** Default years for a move in the output gap to reach a firm's order book: none, for a business that sells at the moment demand appears. */
     public const DEFAULT_DEMAND_LAG_YEARS = 0.0;
+
+    // --- Reported KPIs in Consensus ---
+    /** Share of a disclosed book-to-bill deviation from parity that analysts carry into the next quarter's revenue estimate. Orders convert to revenue, so a disclosed order book is a forecast the market already holds. */
+    public const BOOK_TO_BILL_CONSENSUS_SENSITIVITY = 0.35;
+    /** Bound on the resulting forward revenue tilt, so a single blowout order quarter cannot run the estimate away. */
+    public const MAX_BOOK_TO_BILL_CONSENSUS_TILT = 0.15;
+
+    // --- Earnings Pre-Announcements (Kasznik & Lev 1995) ---
+    /** Share of a quarter before the scheduled report at which management closes the books far enough to know it will miss. */
+    public const PREANNOUNCEMENT_LEAD_RATIO = 0.10;
+    /** Known shortfall, as a fraction of structural quarterly earnings, at which management warns rather than let the market find out on the day. */
+    public const PREANNOUNCEMENT_WARNING_THRESHOLD = 0.20;
+    /** Share of the warned shortfall analysts take out of their estimate, so the report itself lands as a smaller surprise. */
+    public const PREANNOUNCEMENT_CONSENSUS_ABSORPTION = 0.80;
+    /** Price reaction to a warning, as a fraction of the warned shortfall ratio. Warnings are punished on the day they are issued, not on the report. */
+    public const PREANNOUNCEMENT_PRICE_REACTION = 0.35;
 
     // --- Own-Price Demand Response ---
     /** Default own-price elasticity of demand for a producing firm (volume lost per unit of real price increase); mid-range of empirical estimates for differentiated goods. */

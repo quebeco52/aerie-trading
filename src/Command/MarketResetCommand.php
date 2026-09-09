@@ -231,7 +231,6 @@ class MarketResetCommand extends Command
                     wholesale_debt = :wholesale_debt,
                     customer_deposits = :customer_deposits,
                     operating_margin = :margin,
-                    structural_variable_margin = :structural_var_margin,
                     public_float_percentage = :float_pct,
                     total_net_income = :net_income,
                     total_equity = :equity,
@@ -251,6 +250,7 @@ class MarketResetCommand extends Command
                     description = :description,
                     sam_ratio = :sam_ratio,
                     industry = :industry,
+                    management_style = :management_style,
                     earnings_momentum_z = NULL,
                     is_bankrupt = 0,
                     payment_default = 0,
@@ -274,6 +274,14 @@ class MarketResetCommand extends Command
                     asset_turnover = NULL,
                     lifecycle_stage = NULL,
                     inflation_pass_through = NULL,
+                    -- The CIR variable-cost process starts at its own long-run mean, which EarningsEngine
+                    -- derives with the depreciation carve-out applied. Computing it here from margin and
+                    -- fixed-cost ratio alone overstated the cost ratio by a median 2% and up to 16% on
+                    -- capital-intensive names, always in the same direction, so every reset opened those
+                    -- firms on a cost base they were not reverting toward.
+                    structural_variable_margin = NULL,
+                    pre_announced_shortfall = 0.0,
+                    last_book_to_bill = NULL,
                     lagged_demand_gap = NULL,
                     managed_accrual_bank = 0.0000,
                     price_momentum_trend = 0.0,
@@ -303,7 +311,6 @@ class MarketResetCommand extends Command
                     'wholesale_debt' => $stockData['wholesale_debt'] ?? 0.00,
                     'customer_deposits' => $stockData['customer_deposits'] ?? 0.00,
                     'margin' => $stockData['operating_margin'] ?? 0.15,
-                    'structural_var_margin' => (1.0 - ($stockData['operating_margin'] ?? 0.15)) * (1.0 - ($stockData['fixed_cost_ratio'] ?? 0.50)),
                     'float_pct' => $stockData['public_float'] ?? 0.90,
                     'net_income' => $netIncome,
                     'equity' => $stockData['total_equity'] ?? 0.00,
@@ -320,6 +327,7 @@ class MarketResetCommand extends Command
                     'description' => \App\Data\StockInfo::DESCRIPTIONS[$stockData['ticker']] ?? null,
                     'sam_ratio' => $stockData['sam_ratio'] ?? 1.00,
                     'industry' => $stockData['industry'] ?? null,
+                    'management_style' => $stockData['management_style'] ?? null,
                     'ticker' => $stockData['ticker']
                 ]
             );

@@ -94,10 +94,6 @@ trait StandardOperatingPhysicsTrait
     // --- Input Cost Basket ---
     /** Share of an input price shock a firm with full pricing power recovers in its own prices; the rest lands on margin (incomplete pass-through, Gopinath & Itskhoki 2010). */
     public const MAX_INPUT_COST_PASS_THROUGH = 0.80;
-    /** Persisted state key: lagged relative input cost level of the basket (fraction above baseline). */
-    public const STATE_INPUT_COST_LEVEL = 'state:input_cost_level';
-    /** Persisted state key: lagged share of the input cost level already recovered in selling prices. */
-    public const STATE_INPUT_COST_RECOVERY = 'state:input_cost_recovery';
     /** Bound on the signed cost-ratio drag the basket may produce in one quarter. */
     public const MAX_INPUT_COST_DRAG = 0.50;
 
@@ -243,21 +239,21 @@ trait StandardOperatingPhysicsTrait
         // A firm with no cost history starts at baseline prices, so a shock already in the market reaches it
         // through the lags like any other.
         $costLevel = $math->calculateDistributedLag(
-            currentLaggedValue: $streams->getPersistedState(self::STATE_INPUT_COST_LEVEL, 0.0),
+            currentLaggedValue: $streams->getPersistedState(FinancialConstants::STATE_INPUT_COST_LEVEL, 0.0),
             targetValue: $deviation,
             dt: $dt,
             lagTimeConstant: $this->getInputCostLagYears()
         );
         $recoveredShare = max(0.0, min(1.0, $pricingPower)) * self::MAX_INPUT_COST_PASS_THROUGH;
         $recovery = $math->calculateDistributedLag(
-            currentLaggedValue: $streams->getPersistedState(self::STATE_INPUT_COST_RECOVERY, 0.0),
+            currentLaggedValue: $streams->getPersistedState(FinancialConstants::STATE_INPUT_COST_RECOVERY, 0.0),
             targetValue: $costLevel * $recoveredShare,
             dt: $dt,
             lagTimeConstant: $this->getInputPassThroughLagYears()
         );
 
-        $streams->registerState(self::STATE_INPUT_COST_LEVEL, $costLevel);
-        $streams->registerState(self::STATE_INPUT_COST_RECOVERY, $recovery);
+        $streams->registerState(FinancialConstants::STATE_INPUT_COST_LEVEL, $costLevel);
+        $streams->registerState(FinancialConstants::STATE_INPUT_COST_RECOVERY, $recovery);
 
         $drag = max(0.01, $realizedVariableMargin) * ($costLevel - $recovery);
 

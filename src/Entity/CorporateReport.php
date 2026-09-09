@@ -43,6 +43,10 @@ class CorporateReport
     #[ORM\Column(type: 'json', nullable: true)]
     private ?array $streamDetails = null;
 
+    /** @var array<string, float>|null Operating KPIs the firm disclosed alongside the financials (book-to-bill, backlog quarters, subscriber index). */
+    #[ORM\Column(type: 'json', nullable: true)]
+    private ?array $reportedKpis = null;
+
     #[ORM\Column(type: Types::BIGINT, nullable: true)]
     private ?string $shares = null;
 
@@ -414,6 +418,20 @@ class CorporateReport
     public function setStreamDetails(?array $streamDetails): static
     {
         $this->streamDetails = $streamDetails;
+
+        return $this;
+    }
+
+    /** @return array<string, float>|null */
+    public function getReportedKpis(): ?array
+    {
+        return $this->reportedKpis;
+    }
+
+    /** @param array<string, float>|null $reportedKpis */
+    public function setReportedKpis(?array $reportedKpis): static
+    {
+        $this->reportedKpis = $reportedKpis;
 
         return $this;
     }

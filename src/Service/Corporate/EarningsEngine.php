@@ -166,6 +166,79 @@ class EarningsEngine
         return $lagTicks + (abs(crc32($ticker)) % $seasonTicks);
     }
 
+    /**
+     * The tick at which management has closed the books far enough to know the quarter has gone wrong.
+     */
+    public static function resolvePreAnnouncementTick(string $ticker, int $ticksPerYear): int
+    {
+        $ticksPerQuarter = max(1, (int) ($ticksPerYear / 4));
+        $lead = max(1, (int) round($ticksPerQuarter * FinancialConstants::PREANNOUNCEMENT_LEAD_RATIO));
+
+        return max(0, self::resolveReportingTick($ticker, $ticksPerYear) - $lead);
+    }
+
+    /**
+     * Negative earnings pre-announcement (Kasznik & Lev 1995, "To Warn or Not to Warn").
+     *
+     * Firms heading into a large negative surprise disclose it ahead of the report far more often than
+     * firms heading into a large positive one — the asymmetry is the finding, and it is driven by
+     * litigation and reputation risk, not by symmetry of information. Only bad news is warned here.
+     *
+     * What management can honestly know before the close is what the firm is already carrying: the accrual
+     * reversal that prior quarters borrowed and now owe back, and the input cost that has reached the cost
+     * base but not yet the selling price. Both are persisted state, not a peek at draws that have not
+     * happened, so this is genuine foreknowledge rather than a shadow copy of the quarter.
+     *
+     * @return list<array<string, mixed>> the published warning event, or an empty list
+     */
+    public function evaluatePreAnnouncement(Stock $stock, int $tickCount, int $ticksPerYear): array
+    {
+        $ticksPerQuarter = max(1, (int) ($ticksPerYear / 4));
+        if ($stock->isBankrupt() || ($tickCount % $ticksPerQuarter) !== self::resolvePreAnnouncementTick($stock->getTicker(), $ticksPerYear)) {
+            return [];
+        }
+
+        $industry = $stock->getIndustry() ?: 'General';
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+
+        // Owed back to earlier quarters that were papered over.
+        $reversalDue = $stock->getManagedAccrualBank() * FinancialConstants::EARNINGS_MANAGEMENT_REVERSAL_RATE;
+
+        // Costs already in the base that selling prices have not caught up with. Both halves of the lag are
+        // persisted by the input-cost basket, so the squeeze is known before the quarter is closed.
+        $streamState = $stock->getEarningsMomentumZ() ?? [];
+        $costLevel = (float) ($streamState[FinancialConstants::STATE_INPUT_COST_LEVEL] ?? 0.0);
+        $recovered = (float) ($streamState[FinancialConstants::STATE_INPUT_COST_RECOVERY] ?? 0.0);
+        $quarterlyRevenue = max(0.0, (float) $stock->getTotalRevenue()) / 4.0;
+        $costSqueeze = max(0.0, $costLevel - $recovered) * $quarterlyRevenue;
+
+        $knownShortfall = $reversalDue + $costSqueeze;
+        if ($knownShortfall <= 0.0) {
+            return [];
+        }
+
+        $structuralQuarterlyEarnings = max(1.0, abs((float) $stock->getTotalNetIncome()) / 4.0);
+        $shortfallRatio = $knownShortfall / $structuralQuarterlyEarnings;
+
+        if ($shortfallRatio < FinancialConstants::PREANNOUNCEMENT_WARNING_THRESHOLD) {
+            return [];
+        }
+
+        // Analysts cut their number on the warning, so the report that follows is a smaller surprise —
+        // which is exactly why managements warn.
+        $stock->setPreAnnouncedShortfall($knownShortfall * FinancialConstants::PREANNOUNCEMENT_CONSENSUS_ABSORPTION);
+
+        $reaction = -min(0.25, $shortfallRatio * FinancialConstants::PREANNOUNCEMENT_PRICE_REACTION);
+
+        return [$this->marketEvent->publish(
+            $stock,
+            'GUIDANCE',
+            sprintf('Guidance cut: management expects to miss consensus by roughly %d%% on cost and accrual pressure already incurred.', (int) round($shortfallRatio * 100)),
+            $reaction * 100
+        )];
+    }
+
     private function checkReportingEligibility(Stock $stock, int $tickCount, int $ticksPerYear): bool
     {
         $ticksPerQuarter = max(1, (int) ($ticksPerYear / 4));
@@ -558,6 +631,11 @@ class EarningsEngine
         // but it is non-cash (added back to FCF below) and is settled in newly issued shares.
         $ctx->stockCompensation = max(0.0, $ctx->actualRevenue) * $ctx->strategy->getStockCompensationIntensity();
         $ctx->kpis['stock_compensation'] = $ctx->stockCompensation;
+
+        // The order book is a disclosed, forward-looking number: analysts read it off the report and carry
+        // it into next quarter's estimate (see MarketConsensusEngine). Held on the stock so the consensus
+        // formed BEFORE the next report can see what the last one disclosed.
+        $ctx->stock->setLastBookToBill(isset($ctx->kpis['book_to_bill']) ? (float) $ctx->kpis['book_to_bill'] : null);
     }
 
     private function calculateInterestAndRunRates(EarningsSimulationContext $ctx): void
@@ -643,6 +721,12 @@ class EarningsEngine
         $ctx->preTaxIncome = $actualEbt;
         // Reported tax expense is current plus deferred; the cash figure is on the context separately.
         $ctx->taxPaid = $actualEbt - $ctx->actualQuarterlyNetIncome;
+
+        // A warning already moved the market and the estimate: analysts have taken the guided shortfall
+        // out of their number, so the report confirms it rather than delivering it. Cleared here because
+        // the quarter it referred to is the one now being reported.
+        $ctx->expectedQuarterlyNetIncome -= $stock->getPreAnnouncedShortfall();
+        $stock->setPreAnnouncedShortfall(0.0);
 
         $ctx->reportedExpectedNetIncome = $ctx->expectedQuarterlyNetIncome;
         $ctx->reportedActualNetIncome = $ctx->actualQuarterlyNetIncome;
@@ -1345,12 +1429,19 @@ class EarningsEngine
     private function calculateGrowthCapEx(EarningsSimulationContext $ctx, float $cycleCapExModifier, float $maintenanceCapEx, float $deltaNwc): float
     {
         $stock = $ctx->stock;
-        $reinvestmentRate = max(0.0, (float) $stock->getCapexRatio());
+        $style = $stock->getManagementStyle();
+        $reinvestmentRate = max(0.0, (float) $stock->getCapexRatio()) * $style->reinvestmentBias();
         $hurdleRate = $ctx->health instanceof \App\DTO\DebtHealthDTO
             ? $ctx->strategy->getHurdleRate($ctx->health)
             : FinancialConstants::DEFAULT_WACC_FALLBACK;
 
-        if ($reinvestmentRate <= 0.0 || $ctx->baselineRoic < $hurdleRate) {
+        // Jensen (1986): the agency cost of free cash flow is not spending more, it is accepting projects
+        // that do not clear the cost of capital. The style bends the hurdle management applies, so an
+        // empire builder keeps growing through returns a disciplined board would refuse to fund — and the
+        // ROIC reversion downstream then prices exactly that value destruction.
+        $appliedHurdle = $hurdleRate * $style->hurdleBias();
+
+        if ($reinvestmentRate <= 0.0 || $ctx->baselineRoic < $appliedHurdle) {
             return 0.0;
         }
 

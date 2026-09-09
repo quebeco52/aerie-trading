@@ -75,7 +75,23 @@ class MarketConsensusEngine
         $accrualsDiscount = max(0.0, (float) ($stock->getAccrualsRatio() ?? 0.0) * FinancialConstants::ACCRUALS_DECAY_EPS_GROWTH_SENSITIVITY);
         $discountedExpectedRevenue = max(1.0, $expectedRevenue * (1.0 - min(0.25, $accrualsDiscount)));
 
-        $freshEstimate = $discountedExpectedRevenue * (1.0 + $actuals->observableShockZ * $dynamicVisibility);
+        // Reported KPIs feeding consensus: an order-driven firm discloses book-to-bill, and orders above
+        // parity are revenue that has already been won and not yet billed. Analysts do not ignore that —
+        // they carry it into the forward estimate, which is why a semiconductor or capital-goods forecast
+        // moves on the order line before it moves on the revenue line. Without this the backlog conversion
+        // the models already run was invisible to consensus and showed up as a standing surprise.
+        $bookToBill = $stock->getLastBookToBill();
+        $orderBookTilt = $bookToBill !== null && $bookToBill > 0.0
+            ? max(
+                -FinancialConstants::MAX_BOOK_TO_BILL_CONSENSUS_TILT,
+                min(
+                    FinancialConstants::MAX_BOOK_TO_BILL_CONSENSUS_TILT,
+                    ($bookToBill - 1.0) * FinancialConstants::BOOK_TO_BILL_CONSENSUS_SENSITIVITY
+                )
+            )
+            : 0.0;
+
+        $freshEstimate = $discountedExpectedRevenue * (1.0 + $orderBookTilt) * (1.0 + $actuals->observableShockZ * $dynamicVisibility);
 
         // Bayesian Updating: Analysts blend structural baseline capacity / anchored prior with noisy channel signals (fresh estimate)
         $priorVariance = FinancialConstants::BAYESIAN_BASE_PRIOR_VARIANCE 

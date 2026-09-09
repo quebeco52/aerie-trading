@@ -72,6 +72,14 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     // --- Cap Rate & Portfolio Turnover Rails ---
     /** Fraction of property portfolio acquired/divested per quarter adjusting baseline cap rate. */
     public const PORTFOLIO_TURNOVER_RATE    = 0.025;
+
+    // --- Lease Ladder ---
+    /** Weighted average lease term of the rent roll in years. Only the slice expiring each quarter reprices; the rest is contractually fixed. */
+    public const LEASE_WALT_YEARS = 6.0;
+    /** Persisted state key: level of in-place rents relative to the market baseline, carried across quarters as the roll turns over. */
+    public const STATE_IN_PLACE_RENT = 'state:in_place_rent';
+    /** Bound on the mark-to-market gap between in-place and market rents, past which tenants renegotiate or hand back space. */
+    public const MAX_RELEASING_SPREAD = 0.50;
     /** Absolute maximum cap rate clamp floor to prevent unrealistically high property yields. */
     public const MAX_CAP_RATE_CLAMP         = 0.15;
     /** Maximum spread buffer above 10-year Treasury yield allowed for market cap rates. */
@@ -283,7 +291,23 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $resShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
         $blendedPropertyShift = ($creShift * self::CRE_INDEX_WEIGHT) + ($resShift * self::RES_INDEX_WEIGHT);
         $housingSupplyShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_SUPPLY_COMPETITION_SENSITIVITY);
-        $marketLeaseReversion = ($blendedPropertyShift * self::PORTFOLIO_TURNOVER_RATE) - ($housingSupplyShift * 0.03);
+        // --- Lease Ladder ---
+        // A landlord cannot reprice its book. Only the leases expiring this quarter reset to market; the
+        // rest are contractually fixed until their own expiry, which is why a REIT lags the property cycle
+        // in both directions. The in-place level persists, so after a boom rents keep catching up for
+        // years, and after a bust in-place rents sit ABOVE market and grind down as space rolls — the
+        // negative re-leasing spread that does the real damage to a landlord.
+        //
+        // The previous term applied market level x turnover, which never converged: in-place rents could
+        // not catch up to a market that had moved, and never carried where they had got to.
+        $inPlaceRent = $streams->getPersistedState(self::STATE_IN_PLACE_RENT, $blendedPropertyShift);
+        $quarterlyRollover = 1.0 / max(1.0, self::LEASE_WALT_YEARS * 4.0);
+        $releasingSpread = max(-self::MAX_RELEASING_SPREAD, min(self::MAX_RELEASING_SPREAD, $blendedPropertyShift - $inPlaceRent));
+        $rolledInPlaceRent = $inPlaceRent + ($releasingSpread * $quarterlyRollover);
+        $streams->registerState(self::STATE_IN_PLACE_RENT, $rolledInPlaceRent);
+
+        // Only the mark-to-market captured on the expiring slice reaches revenue this quarter.
+        $marketLeaseReversion = ($rolledInPlaceRent - $inPlaceRent) - ($housingSupplyShift * 0.03);
 
         // --- Clamped Revenue Streams ---
         $leaseRevenue       = max(0.0, $expectedRevenue * $leaseWeight * (1.0 + $leaseShock + $rentEscalator + $marketLeaseReversion));
@@ -372,6 +396,13 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
             priceRevenue: $priceRevenue,
+            // The two numbers a real estate analyst reads first: how long the roll is contracted for, and
+            // what the space coming up is worth against what it currently earns.
+            kpis: [
+                'walt_years' => self::LEASE_WALT_YEARS,
+                'releasing_spread' => $releasingSpread,
+                'in_place_rent_index' => $rolledInPlaceRent,
+            ],
         );
     }
 

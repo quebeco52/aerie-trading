@@ -157,6 +157,9 @@ class EarningsReportSubscriber implements EventSubscriberInterface
 
         $streamDetails = $this->buildStreamDetails($ctx, $stock);
         $report->setStreamDetails($streamDetails);
+        // Operating KPIs were assembled every quarter and read by nothing. They are what analysts and
+        // players actually track between the revenue line and the EPS line, so they belong on the report.
+        $report->setReportedKpis($ctx->kpis !== [] ? $ctx->kpis : null);
 
         $this->entityManager->persist($report);
     }

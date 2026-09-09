@@ -362,6 +362,24 @@ class Stock
     private ?float $accrualsRatio = 0.0;
 
     /**
+     * @var float|null Earnings shortfall management has already warned the market about, awaiting the report that confirms it; cleared once reported.
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $preAnnouncedShortfall = null;
+
+    /**
+     * @var string|null Persistent management style biasing payout, reinvestment and the hurdle rate applied to growth (Bertrand & Schoar 2003); null is the balanced default.
+     */
+    #[ORM\Column(type: 'string', length: 32, nullable: true)]
+    private ?string $managementStyle = null;
+
+    /**
+     * @var float|null Book-to-bill disclosed in the last report (orders booked over revenue billed); null when the firm discloses no order book.
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $lastBookToBill = null;
+
+    /**
      * @var float|null Output gap as it has actually reached this firm's order book, behind the macro series by its own transmission lag; null until the first report.
      */
     #[ORM\Column(type: 'float', nullable: true)]
@@ -1045,6 +1063,42 @@ class Stock
     public function setLaggedDemandGap(float $laggedDemandGap): static
     {
         $this->laggedDemandGap = $laggedDemandGap;
+
+        return $this;
+    }
+
+    public function getLastBookToBill(): ?float
+    {
+        return $this->lastBookToBill;
+    }
+
+    public function setLastBookToBill(?float $lastBookToBill): static
+    {
+        $this->lastBookToBill = $lastBookToBill;
+
+        return $this;
+    }
+
+    public function getManagementStyle(): \App\Data\ManagementStyle
+    {
+        return \App\Data\ManagementStyle::tryFromNullable($this->managementStyle);
+    }
+
+    public function setManagementStyle(?\App\Data\ManagementStyle $style): static
+    {
+        $this->managementStyle = $style?->value;
+
+        return $this;
+    }
+
+    public function getPreAnnouncedShortfall(): float
+    {
+        return (float) ($this->preAnnouncedShortfall ?? 0.0);
+    }
+
+    public function setPreAnnouncedShortfall(float $preAnnouncedShortfall): static
+    {
+        $this->preAnnouncedShortfall = $preAnnouncedShortfall;
 
         return $this;
     }
