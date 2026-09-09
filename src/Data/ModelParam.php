@@ -19,6 +19,8 @@ enum ModelParam: string
     case SpotPriceSensitivity = 'spot_price_sensitivity';
     case AdvertisingCyclicality = 'advertising_cyclicality';
     case MonopolyAggression = 'monopoly_aggression';
+    /** Propensity of this management team to steer reported earnings toward consensus with accruals. */
+    case EarningsManagementPropensity = 'earnings_management_propensity';
     case CeclSpreadSensitivity = 'cecl_spread_sensitivity';
     case NimInversionSensitivity = 'nim_inversion_sensitivity';
     case CreditRiskAppetite = 'credit_risk_appetite';

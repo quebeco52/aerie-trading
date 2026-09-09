@@ -121,9 +121,12 @@ class ChemicalBusinessModelTest extends TestCase
             inflationEma: 0.02
         );
 
-        $neutralPhysics = $this->model->getMacroPhysics($stock, $neutralMacro);
-        $boomPhysics = $this->model->getMacroPhysics($stock, $boomMacro);
-        $recessionPhysics = $this->model->getMacroPhysics($stock, $recessionMacro);
+        // Each scenario gets its own firm. Chemical declares a demand transmission lag, so a firm carries
+        // its position in the cycle between calls: running boom and recession through one stock would
+        // measure the lag converging, not the demand shift each macro state implies.
+        $neutralPhysics = $this->model->getMacroPhysics(clone $stock, $neutralMacro);
+        $boomPhysics = $this->model->getMacroPhysics(clone $stock, $boomMacro);
+        $recessionPhysics = $this->model->getMacroPhysics(clone $stock, $recessionMacro);
 
         // Boom demand shift = ((0.05 * 1.60) + (0.30 * 0.60)) * cyclicality * 0.70 = 0.182 * cyclicality
         $cyclicality = ChemicalBusinessModel::OPERATING_CYCLICALITY;

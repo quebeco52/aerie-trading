@@ -108,6 +108,9 @@ class EarningsSimulationContext
     /** Dickinson life-cycle stage classified from this quarter's cash-flow signs. */
     public ?\App\Data\LifecycleStage $lifecycleStage = null;
     /** @var array<string, float> Reported operating KPIs emitted by the sector physics. */
+    /** Net accrual booked this quarter to steer reported earnings toward consensus; negative when a prior quarter's borrowing unwinds. */
+    public float $managedAccrual = 0.0;
+
     public array $kpis = [];
 
     // Interest & Depreciation

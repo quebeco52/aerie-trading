@@ -49,6 +49,10 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Estimators, project managers and equipment supervisors are salaried; trade labor is subcontracted per job and priced into variable cost. */
     public const FIXED_COST_LABOR_SHARE = 0.55;
 
+    // --- Demand Transmission Lag ---
+    /** Years for a move in the output gap to reach the order book. Permits, financing and design run a year or more ahead of a break-ground, so today's backlog was ordered into a different economy. */
+    public const DEMAND_LAG_YEARS = 1.50;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for EPC contractors. */
     public const BASE_COVERAGE_VISIBILITY = 0.40;
@@ -194,7 +198,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $eventZ       = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Sensitivities (hit ORDERS in full; the backlog below cushions recognized revenue) ---
-        $outputGap = $macroState->outputGapEma;
+        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
         $policyRate = $macroState->policyRateEma;
         $residentialShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
         $commercialPropertyShift = ($macroState->commercialPropertyIndexEma - 100.0) / 100.0;

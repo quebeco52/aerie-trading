@@ -54,6 +54,10 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Rate-base assets, fuel and purchased power dominate utility overhead; field crews are a minority. */
     public const FIXED_COST_LABOR_SHARE = 0.35;
 
+    // --- Reporting Incentives ---
+    /** Propensity to steer reported earnings toward consensus with accruals. Cost-of-service regulation puts the books in front of a rate regulator every cycle, and the allowed return caps what a managed beat is even worth. */
+    public const EARNINGS_MANAGEMENT_PROPENSITY = 0.30;
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.20;
     public const BASE_COVERAGE_ERROR = 0.05;
@@ -135,7 +139,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
 
         // Regulated Utilities are virtually immune to economic output gaps (essential service).
         // Only industrial/commercial power load fluctuates slightly with GDP.
-        $outputGap = $macroState->outputGapEma;
+        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
         $beta = $this->getOperatingCyclicality($stock);
         $physics['macro_demand_shift'] = $outputGap * $beta * self::MACRO_DEMAND_SCALAR;
 

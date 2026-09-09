@@ -59,6 +59,10 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Engineering and go-to-market payroll dominates software overhead; talent inflation bites hardest here. */
     public const FIXED_COST_LABOR_SHARE = 0.75;
 
+    // --- Reporting Incentives ---
+    /** Propensity to steer reported earnings toward consensus with accruals. Equity compensation ties management's own wealth to the print, and deferred revenue schedules give them the timing discretion to act on it. */
+    public const EARNINGS_MANAGEMENT_PROPENSITY = 0.60;
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.20;
     public const BASE_COVERAGE_ERROR = 0.05;

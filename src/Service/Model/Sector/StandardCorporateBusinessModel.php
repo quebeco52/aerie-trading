@@ -133,7 +133,7 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     {
         $macroSensitivityMultiplier = self::MIN_BETA_PRICING_POWER_FLOOR + $this->resolvePricingPower($stock);
 
-        $outputGap = $macroState->outputGapEma;
+        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
         $beta = $this->getOperatingCyclicality($stock);
 
         return [

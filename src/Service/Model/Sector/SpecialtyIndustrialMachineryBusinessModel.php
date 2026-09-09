@@ -45,6 +45,10 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     // --- FX Exposure ---
     /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Capital equipment is quoted internationally and competes with European and Japanese builders on price. */
     public const FX_REVENUE_EXPOSURE = 0.10;
+
+    // --- Demand Transmission Lag ---
+    /** Years for a move in the output gap to reach the order book. A capex budget is approved a year before the order is placed and longer before it ships. */
+    public const DEMAND_LAG_YEARS = 1.25;
     /** An installed base tied to consumable and spare-parts revenue prices close to a monopoly on the aftermarket, which is where the margin sits. */
     public const PRICING_POWER_INDEX = 0.70;
 
@@ -177,7 +181,7 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         $overhangDrag = $macroState->capitalStockOverhangEma * self::CAPITAL_OVERHANG_SCALAR;
         $cuEquipmentBoost = MathUtility::calculateCapacityUtilizationShift($macroState->capacityUtilizationRateEma, MacroEngine::CU_BASELINE, self::CU_EQUIPMENT_EXPANSION_SENSITIVITY);
         $pmiEquipmentBoost = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroEngine::PMI_BASELINE, self::PMI_EQUIPMENT_SENSITIVITY);
-        $macroEquipmentBoost = ($macroState->outputGapEma * self::MACRO_GDP_SENSITIVITY * $beta) - $overhangDrag + $cuEquipmentBoost + $pmiEquipmentBoost;
+        $macroEquipmentBoost = ($this->resolveLaggedOutputGap($stock, $macroState) * self::MACRO_GDP_SENSITIVITY * $beta) - $overhangDrag + $cuEquipmentBoost + $pmiEquipmentBoost;
 
         // --- Tail Risk Events ---
         $dealMultiplier = 1.0;

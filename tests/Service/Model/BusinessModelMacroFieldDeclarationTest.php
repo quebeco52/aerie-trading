@@ -29,6 +29,13 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
     /** Valuation-only reads feeding WACC alone, excluded by the interface contract. */
     private const VALUATION_ONLY_FIELDS = ['equity_risk_premium', 'corporate_tax_rate', 'policy_rate'];
 
+    /**
+     * Accessors computed from the state rather than published series. They are not fields any institution
+     * reports, so they are neither declarable nor conduit-drawing — calendarQuarter() is elapsed time over
+     * a quarter, not a macro observation.
+     */
+    private const DERIVED_ACCESSORS = ['calendar_quarter'];
+
     /** Macro field each input-cost basket channel reads (StandardOperatingPhysicsTrait::resolveInputPriceDeviations). */
     private const BASKET_CHANNEL_FIELDS = [
         'energy'  => 'energy_cost_push_lag',
@@ -85,6 +92,13 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
         // (FX_REVENUE_EXPOSURE), so invoking the helper is a genuine coupling to the exchange rate.
         if ($this->invokesHelper($modelClass, 'resolveFxDemandShift(')) {
             $actual[] = 'exchange_rate_index_ema';
+            $actual = array_values(array_unique($actual));
+        }
+
+        // Same for the demand transmission lag: the helper lives in a trait, but a model that reads the
+        // cycle through it is reading the output gap however long the delay it declares.
+        if ($this->invokesHelper($modelClass, 'resolveLaggedOutputGap(')) {
+            $actual[] = 'output_gap_ema';
             $actual = array_values(array_unique($actual));
         }
 
@@ -157,7 +171,7 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
 
         $snake = array_map([$this, 'canonicalKey'], $fields);
 
-        return array_values(array_unique(array_diff($snake, self::VALUATION_ONLY_FIELDS)));
+        return array_values(array_unique(array_diff($snake, self::VALUATION_ONLY_FIELDS, self::DERIVED_ACCESSORS)));
     }
 
     /**

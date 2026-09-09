@@ -44,6 +44,10 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Mill labor shares overhead with furnace energy, refractories and maintenance. */
     public const FIXED_COST_LABOR_SHARE = 0.40;
 
+    // --- Demand Transmission Lag ---
+    /** Years for a move in the output gap to reach the order book. Contracted tonnage and mill scheduling carry the order book well past a turn in demand. */
+    public const DEMAND_LAG_YEARS = 0.75;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for industrial steel analysts. */
     public const BASE_COVERAGE_VISIBILITY = 0.50;
@@ -105,7 +109,7 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
-        $outputGap = $macroState->outputGapEma;
+        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
         $beta = $this->getOperatingCyclicality($stock);
         $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroEngine::PMI_BASELINE, self::PMI_DEMAND_SENSITIVITY);
 

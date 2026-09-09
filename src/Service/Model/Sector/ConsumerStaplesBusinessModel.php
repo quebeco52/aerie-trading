@@ -193,7 +193,7 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
 
         // Inelastic demand lets the shelf price track expected inflation at 1 - PED, reached over the repricing lag.
         return [
-            'macro_demand_shift'       => ($macroState->outputGapEma * $beta * $effectivePed) + $this->resolveFxDemandShift($macroState),
+            'macro_demand_shift'       => ($this->resolveLaggedOutputGap($stock, $macroState) * $beta * $effectivePed) + $this->resolveFxDemandShift($macroState),
             ...$this->resolvePricingMultipliers($stock, $macroState),
         ];
     }

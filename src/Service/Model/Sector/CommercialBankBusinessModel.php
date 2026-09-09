@@ -36,6 +36,14 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Branch and back-office payroll is the largest non-interest expense of a bank. */
     public const FIXED_COST_LABOR_SHARE = 0.60;
 
+    // --- Demand Transmission Lag ---
+    /** Years for a move in the output gap to reach the order book. Credit formation lags activity: loan demand builds after the expansion is underway and drawn balances persist into the downturn. */
+    public const DEMAND_LAG_YEARS = 0.75;
+
+    // --- Reporting Incentives ---
+    /** Propensity to steer reported earnings toward consensus with accruals. The loan loss provision is a judgement call reviewed quarterly, which is why provisioning is the most documented earnings-smoothing lever in banking. */
+    public const EARNINGS_MANAGEMENT_PROPENSITY = 0.65;
+
     // --- Model Thresholds ---
     /** Minimum Interest Coverage Ratio (ICR) required before distress. */
     public const THRESHOLD_MIN_ICR = 1.05;
@@ -427,7 +435,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
-        $outputGap = $macroState->outputGapEma;
+        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
         $beta = $this->getOperatingCyclicality($stock);
 
         return [

@@ -55,6 +55,10 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Plant operations are capital and feedstock intensive; payroll is a minority of overhead. */
     public const FIXED_COST_LABOR_SHARE = 0.35;
 
+    // --- Demand Transmission Lag ---
+    /** Years for a move in the output gap to reach the order book. Offtake contracts and plant scheduling hold volumes steady for a couple of quarters after the cycle turns. */
+    public const DEMAND_LAG_YEARS = 0.50;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for chemical sector analysts tracking feedstock crack spreads. */
     public const BASE_COVERAGE_VISIBILITY = 0.40;
@@ -219,7 +223,7 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
-        $outputGap = $macroState->outputGapEma;
+        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
         $agriShift = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
         $beta = $this->getOperatingCyclicality($stock);

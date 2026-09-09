@@ -362,6 +362,18 @@ class Stock
     private ?float $accrualsRatio = 0.0;
 
     /**
+     * @var float|null Output gap as it has actually reached this firm's order book, behind the macro series by its own transmission lag; null until the first report.
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $laggedDemandGap = null;
+
+    /**
+     * @var float|null Accruals borrowed from future quarters to hit consensus and not yet reversed (Burgstahler & Dichev 1997). Positive = earnings pulled forward and still owed back.
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $managedAccrualBank = 0.0;
+
+    /**
      * @var float|null Seasonally adjusted operating margin actually realized in the last report; null until the first report.
      */
     #[ORM\Column(type: 'float', nullable: true)]
@@ -1010,6 +1022,30 @@ class Stock
     public function setAccrualsRatio(?float $accrualsRatio): static
     {
         $this->accrualsRatio = $accrualsRatio;
+        return $this;
+    }
+
+    public function getManagedAccrualBank(): float
+    {
+        return (float) ($this->managedAccrualBank ?? 0.0);
+    }
+
+    public function setManagedAccrualBank(float $managedAccrualBank): static
+    {
+        $this->managedAccrualBank = $managedAccrualBank;
+
+        return $this;
+    }
+
+    public function getLaggedDemandGap(): ?float
+    {
+        return $this->laggedDemandGap;
+    }
+
+    public function setLaggedDemandGap(float $laggedDemandGap): static
+    {
+        $this->laggedDemandGap = $laggedDemandGap;
+
         return $this;
     }
 

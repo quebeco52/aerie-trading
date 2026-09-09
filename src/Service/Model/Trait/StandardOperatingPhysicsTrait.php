@@ -115,6 +115,45 @@ trait StandardOperatingPhysicsTrait
             : FinancialConstants::DEFAULT_INPUT_COST_EXPOSURES;
     }
 
+    // --- Demand Transmission Lag ---
+    /**
+     * Years for a move in the output gap to reach this firm's order book. A restaurant feels a recession
+     * the week it starts; a machinery builder is still delivering against orders booked before it began,
+     * and only sees the downturn when the next capex budget is set. Zero leaves demand contemporaneous,
+     * which is what a spot business genuinely is.
+     */
+    public function getDemandLagYears(): float
+    {
+        return defined('static::DEMAND_LAG_YEARS')
+            ? (float) static::DEMAND_LAG_YEARS
+            : FinancialConstants::DEFAULT_DEMAND_LAG_YEARS;
+    }
+
+    /**
+     * The output gap as it has actually reached this firm, distributed over its transmission lag.
+     *
+     * The lag state persists on the stock, so a firm carries its own position in the cycle rather than
+     * re-deriving it: mid-downturn a long-lag builder is still working through a boom-era book while a
+     * spot seller is already in the slump. At zero lag the helper returns the macro series untouched.
+     */
+    public function resolveLaggedOutputGap(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $lagYears = $this->getDemandLagYears();
+        if ($lagYears <= 0.0) {
+            return $macroState->outputGapEma;
+        }
+
+        $lagged = MathUtility::getInstance()->calculateDistributedLag(
+            currentLaggedValue: $stock->getLaggedDemandGap() ?? $macroState->outputGapEma,
+            targetValue: $macroState->outputGapEma,
+            dt: \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP,
+            lagTimeConstant: $lagYears
+        );
+        $stock->setLaggedDemandGap($lagged);
+
+        return $lagged;
+    }
+
     // --- FX Exposure ---
     /**
      * Share of revenue whose competitiveness moves with the trade-weighted exchange rate: export sales
@@ -317,6 +356,21 @@ trait StandardOperatingPhysicsTrait
         ]);
 
         return ((int) round($params[ModelParam::FiscalYearStartQuarter]) % 4 + 4) % 4;
+    }
+
+    /**
+     * How hard this management team leans on accruals to land the quarter on consensus. Reporting
+     * incentives are a management property, so the sector constant is a starting point and the ticker
+     * override (ModelParam::EarningsManagementPropensity) is where a specific board's culture lives.
+     */
+    public function getEarningsManagementPropensity(Stock $stock): float
+    {
+        $default = defined('static::EARNINGS_MANAGEMENT_PROPENSITY')
+            ? (float) static::EARNINGS_MANAGEMENT_PROPENSITY
+            : FinancialConstants::DEFAULT_EARNINGS_MANAGEMENT_PROPENSITY;
+        $params = $this->resolveModelParameters($stock, [ModelParam::EarningsManagementPropensity->value => $default]);
+
+        return max(0.0, min(1.0, (float) $params[ModelParam::EarningsManagementPropensity]));
     }
 
     public function getLaborCostShare(): float

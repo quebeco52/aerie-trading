@@ -55,6 +55,10 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Wafers are priced in the trade currency and sold into a global fab and OEM base. */
     public const FX_REVENUE_EXPOSURE = 0.10;
 
+    // --- Demand Transmission Lag ---
+    /** Years for a move in the output gap to reach the order book. Short lead times, but a quarter of booked backlog still separates a demand turn from a shipment. */
+    public const DEMAND_LAG_YEARS = 0.25;
+
         public function getReversionSpeed(): float { return 0.15; }
     public function getMoatSpread(): float { return 0.02; }
     public function getCapExCompletionRate(Stock $stock): float { return 0.125; }
@@ -148,7 +152,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
 
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
-        $outputGap = $macroState->outputGapEma;
+        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
         $beta = $this->getOperatingCyclicality($stock);
 
         // Semiconductors are highly cyclical and levered to global tech capital expenditure cycles

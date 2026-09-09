@@ -42,6 +42,10 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     // --- FX Exposure ---
     /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Heavy equipment is a globally traded good bid against foreign builders on delivered price. */
     public const FX_REVENUE_EXPOSURE = 0.15;
+
+    // --- Demand Transmission Lag ---
+    /** Years for a move in the output gap to reach the order book. Capital equipment is ordered against next year's capacity plan, not this quarter's demand. */
+    public const DEMAND_LAG_YEARS = 1.00;
     /** Engineered equipment carries spec lock-in and steel escalator clauses on long builds, but competes bid-by-bid on new orders. */
     public const PRICING_POWER_INDEX = 0.55;
 
@@ -113,7 +117,7 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         $physics = parent::getMacroPhysics($stock, $macroState);
 
         // Heavy manufacturing is extremely sensitive to the output gap and manufacturing PMI
-        $outputGap = $macroState->outputGapEma;
+        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
         $beta = $this->getOperatingCyclicality($stock);
         $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroEngine::PMI_BASELINE, self::PMI_DEMAND_SENSITIVITY);
 

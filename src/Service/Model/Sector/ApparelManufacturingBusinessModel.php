@@ -51,6 +51,10 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Design studios, brand marketing and merchandising are the overhead; cutting and sewing sits in variable cost, largely under contract. */
     public const FIXED_COST_LABOR_SHARE = 0.60;
 
+    // --- Demand Transmission Lag ---
+    /** Years for a move in the output gap to reach the order book. Wholesale orders are placed two seasons ahead against a buying calendar, not against current demand. */
+    public const DEMAND_LAG_YEARS = 0.50;
+
     // --- Inventory Cycle ---
     /** Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking, shortfalls restocking. Retailer inventory-to-sales ratios gate wholesale reorders. */
     public const INVENTORY_CYCLE_SENSITIVITY = 0.50;
@@ -225,7 +229,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         ]);
         $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
 
-        $outputGap = $macroState->outputGapEma;
+        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
         $beta = $this->getOperatingCyclicality($stock);
 

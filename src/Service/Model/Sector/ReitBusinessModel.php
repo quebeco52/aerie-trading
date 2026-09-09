@@ -48,6 +48,10 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Property operating costs, taxes and depreciation dominate; leasing staff is a small overhead line. */
     public const FIXED_COST_LABOR_SHARE = 0.25;
 
+    // --- Demand Transmission Lag ---
+    /** Years for a move in the output gap to reach the order book. Rent rolls turn over on multi-year leases: a downturn reaches a landlord only as space comes up for renewal. */
+    public const DEMAND_LAG_YEARS = 1.50;
+
     // --- Analyst Visibility & Error ---
     /** Base analyst visibility into predictable contracted commercial real estate cash flows. */
     public const BASE_COVERAGE_VISIBILITY = 0.70;
@@ -223,7 +227,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $physics['pricing_power_multiplier'] = 1.0;
         // Inflation is carried inside this model's own stream physics: neither price nor cost base inflates at the engine level.
         $physics['input_cost_multiplier'] = 1.0;
-        $outputGap = $macroState->outputGapEma;
+        $outputGap = $this->resolveLaggedOutputGap($stock, $macroState);
         $beta = $this->getOperatingCyclicality($stock);
         // REITs hold domestic real estate with sticky contracted leases; scale output gap demand shift appropriately
         $physics['macro_demand_shift'] = $outputGap * self::MACRO_DEMAND_SCALAR * $beta;

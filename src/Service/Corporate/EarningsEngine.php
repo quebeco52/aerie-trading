@@ -145,6 +145,7 @@ class EarningsEngine
         $this->rollForwardCreditLossAllowance($ctx);
         $this->calculateInterestAndRunRates($ctx);
         $this->reconcileTaxesAndNetIncome($ctx);
+        $this->manageReportedEarnings($ctx);
         $this->calculateEPSAndSurprise($ctx);
         $this->calculateFreeCashFlow($ctx);
         $this->executePriceAndVolatilityShocks($ctx);
@@ -706,6 +707,74 @@ class EarningsEngine
         $ctx->reportedActualNetIncome -= $impairment;
     }
 
+    /**
+     * Steers the headline toward consensus with accruals, and pays back what earlier quarters borrowed.
+     *
+     * Burgstahler & Dichev (1997) found reported earnings are not smoothly distributed: there is a hole
+     * just below zero and just below the prior year's figure, and a spike just above, because management
+     * closes small shortfalls rather than print a miss. Degeorge, Patel & Zeckhauser (1999) add the
+     * analyst forecast as the third threshold, which is the one modelled here.
+     *
+     * Only SMALL gaps get closed. Accruals are a timing reclassification — revenue recognized a quarter
+     * early, a provision left light — so there is a limit to what they can cover, and a firm facing a
+     * genuine collapse takes the miss. What is borrowed accumulates in a bank that unwinds against future
+     * quarters (Dechow & Dichev 2002): every managed beat is a debt against a later print.
+     *
+     * The entry moves REPORTED earnings only. Cash is untouched, and the economic figures (net income
+     * driving ROIC, equity and free cash flow) stay on the true number — which is precisely why the
+     * Sloan (1996) accruals anomaly already wired into MarketConsensusEngine can punish it: the gap
+     * between what a firm reports and the cash it produced is the whole signal.
+     */
+    private function manageReportedEarnings(EarningsSimulationContext $ctx): void
+    {
+        $stock = $ctx->stock;
+        $propensity = $ctx->strategy->getEarningsManagementPropensity($stock);
+        $bank = $stock->getManagedAccrualBank();
+
+        // Last quarter's borrowing comes due first: the reversal is booked before management looks at the
+        // gap, so a firm that papered over one quarter starts the next one in a hole.
+        $reversal = $bank * FinancialConstants::EARNINGS_MANAGEMENT_REVERSAL_RATE;
+        $bank -= $reversal;
+        $ctx->managedAccrual = -$reversal;
+
+        $consensus = $ctx->reportedExpectedNetIncome;
+        $shortfall = $consensus - ($ctx->reportedActualNetIncome + $ctx->managedAccrual);
+
+        if ($propensity > 0.0 && $shortfall > 0.0 && abs($consensus) > 0.0) {
+            // Only a near miss is worth closing: past this the accrual needed is too large to book and
+            // too large to unwind, so the quarter is reported as it happened.
+            $reachableGap = abs($consensus) * FinancialConstants::EARNINGS_MANAGEMENT_MAX_GAP;
+
+            if ($shortfall <= $reachableGap) {
+                // Land just above the line rather than exactly on it: an exact match is the one outcome
+                // that never occurs in real reported distributions.
+                $target = $shortfall + (abs($consensus) * FinancialConstants::EARNINGS_MANAGEMENT_BEAT_CUSHION);
+                $headroom = max(0.0, ($this->resolveTotalAssets($ctx) * FinancialConstants::EARNINGS_MANAGEMENT_MAX_BANK_RATIO) - $bank);
+                $borrowed = min($target * $propensity, $headroom);
+
+                $ctx->managedAccrual += $borrowed;
+                $bank += $borrowed;
+            }
+        }
+
+        $stock->setManagedAccrualBank(max(0.0, $bank));
+        $ctx->reportedActualNetIncome += $ctx->managedAccrual;
+    }
+
+    /**
+     * Total assets from the balance sheet where one is open. Until a firm's first ledger exists, equity
+     * plus funding is total assets by identity.
+     */
+    private function resolveTotalAssets(EarningsSimulationContext $ctx): float
+    {
+        $stock = $ctx->stock;
+        $totalAssets = $stock->hasBalanceSheetLedger()
+            ? $stock->getTotalAssets($this->corporateMetrics->calculateLeaseLiability((float) $stock->getTotalRevenue(), $ctx->strategy->getLeaseIntensity()))
+            : (float) $stock->getTotalEquity() + (float) $stock->getTotalDebt();
+
+        return max(FinancialConstants::MIN_OPERATING_BASE_CASH, $totalAssets);
+    }
+
     private function calculateEPSAndSurprise(EarningsSimulationContext $ctx): void
     {
         $stock = $ctx->stock;
@@ -930,11 +999,11 @@ class EarningsEngine
         // what the anomaly is about. Now that operating cash flow is a real statement line it is used
         // directly, and total assets come from the balance sheet where one exists. Until a firm's first
         // ledger is open, equity plus funding is total assets by identity.
-        $totalAssets = $stock->hasBalanceSheetLedger()
-            ? $stock->getTotalAssets($this->corporateMetrics->calculateLeaseLiability((float) $stock->getTotalRevenue(), $ctx->strategy->getLeaseIntensity()))
-            : (float) $stock->getTotalEquity() + (float) $stock->getTotalDebt();
-        $totalAssets = max(FinancialConstants::MIN_OPERATING_BASE_CASH, $totalAssets);
-        $quarterlyAccruals = $ctx->actualQuarterlyNetIncome - $ctx->operatingCashFlow;
+        $totalAssets = $this->resolveTotalAssets($ctx);
+        // Sloan measures REPORTED earnings against operating cash, so the managed entry belongs in the
+        // numerator: steering the headline with accruals is exactly the low-quality earnings the anomaly
+        // detects, and it prices itself through the consensus discount without any further wiring.
+        $quarterlyAccruals = ($ctx->actualQuarterlyNetIncome + $ctx->managedAccrual) - $ctx->operatingCashFlow;
         $accrualsRatio = ($quarterlyAccruals * 4.0) / $totalAssets;
         $stock->setAccrualsRatio($accrualsRatio);
     }

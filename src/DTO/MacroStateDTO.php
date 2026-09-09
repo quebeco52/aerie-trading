@@ -433,6 +433,16 @@ readonly class MacroStateDTO
     /**
      * Creates a MacroStateDTO from a MacroState entity/model object.
      */
+    /**
+     * Calendar quarter index [0..3] implied by elapsed simulation time. Derived rather than published:
+     * it is not a macro series any institution reports, so it draws no district conduit. Matches the
+     * quarter EarningsEngine derives from the tick counter, both being elapsed time over a quarter.
+     */
+    public function calendarQuarter(): int
+    {
+        return ((int) floor($this->totalTime * 4.0) % 4 + 4) % 4;
+    }
+
     public static function fromMacroState(MacroState $state): self
     {
         return new self(

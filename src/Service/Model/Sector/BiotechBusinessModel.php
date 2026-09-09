@@ -62,6 +62,10 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Research scientists, clinical operations and the specialty salesforce are the overhead; a biotech is a payroll with a patent estate. */
     public const FIXED_COST_LABOR_SHARE = 0.75;
 
+    // --- Reporting Incentives ---
+    /** Propensity to steer reported earnings toward consensus with accruals. Little marketed revenue to shift and milestone income is contractually dated, so there is not much to reclassify even when the incentive is there. */
+    public const EARNINGS_MANAGEMENT_PROPENSITY = 0.25;
+
     // --- Pricing Power ---
     /** Exclusivity is administered pricing: a patented therapy on-label has no substitute, so list prices are set rather than met. Generic and specialty archetypes are tuned down per ticker. */
     public const PRICING_POWER_INDEX = 0.85;

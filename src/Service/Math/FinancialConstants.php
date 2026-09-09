@@ -217,6 +217,10 @@ class FinancialConstants
     /** Default share of revenue exposed to the exchange rate: a mostly domestic firm meeting a little imported competition. */
     public const DEFAULT_FX_REVENUE_EXPOSURE = 0.05;
 
+    // --- Demand Transmission Lag ---
+    /** Default years for a move in the output gap to reach a firm's order book: none, for a business that sells at the moment demand appears. */
+    public const DEFAULT_DEMAND_LAG_YEARS = 0.0;
+
     // --- Own-Price Demand Response ---
     /** Default own-price elasticity of demand for a producing firm (volume lost per unit of real price increase); mid-range of empirical estimates for differentiated goods. */
     public const DEFAULT_PRICE_ELASTICITY_OF_DEMAND = 0.50;
@@ -308,6 +312,18 @@ class FinancialConstants
     public const ACCRUALS_ANOMALY_PE_PENALTY_SCALE = 8.0;
     /** Analyst EPS growth forecast mean-reversion discount for low-quality non-cash earnings. */
     public const ACCRUALS_DECAY_EPS_GROWTH_SENSITIVITY = 0.50;
+
+    // --- Earnings Management (Burgstahler & Dichev 1997) ---
+    /** Largest shortfall against consensus, as a fraction of the consensus figure, that management will close with accruals; a wider miss is taken rather than papered over. */
+    public const EARNINGS_MANAGEMENT_MAX_GAP = 0.05;
+    /** Cap on the accumulated managed-accrual balance as a fraction of total assets: past this the reversal is too large to keep hiding. */
+    public const EARNINGS_MANAGEMENT_MAX_BANK_RATIO = 0.02;
+    /** Quarterly fraction of the borrowed balance that unwinds back into reported earnings (Dechow & Dichev 2002 accrual reversal). */
+    public const EARNINGS_MANAGEMENT_REVERSAL_RATE = 0.25;
+    /** Cushion above consensus a managed quarter aims for, so it prints as a small beat rather than an implausibly exact match. */
+    public const EARNINGS_MANAGEMENT_BEAT_CUSHION = 0.002;
+    /** Default propensity to manage reported earnings toward consensus (0 = never, 1 = closes every gap it can reach). */
+    public const DEFAULT_EARNINGS_MANAGEMENT_PROPENSITY = 0.50;
 
     // --- CapEx & Construction in Progress (CIP) ---
     /** Maximum fraction of physical/invested capital that can be deferred as unplaced Construction in Progress (25%). */

@@ -62,7 +62,16 @@ interface OperatingStrategyInterface
      */
     public function getLaborCostShare(): float;
 
+    /** Propensity of this sector's management to steer reported earnings toward consensus with accruals (EARNINGS_MANAGEMENT_PROPENSITY). */
+    public function getEarningsManagementPropensity(Stock $stock): float;
+
     /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate (FX_REVENUE_EXPOSURE). */
+    /** Years for a move in the output gap to reach this firm's order book (DEMAND_LAG_YEARS). */
+    public function getDemandLagYears(): float;
+
+    /** The output gap as it has actually reached the firm, distributed over its transmission lag. */
+    public function resolveLaggedOutputGap(Stock $stock, MacroStateDTO $macroState): float;
+
     public function getFxRevenueExposure(): float;
 
     /** Signed demand shift from the trade-weighted exchange rate, at the model's exposure or a channel-level override. */

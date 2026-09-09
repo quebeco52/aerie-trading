@@ -170,7 +170,7 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         $physics['pricing_power_multiplier'] = 1.0;
         // Inflation is carried inside this model's own stream physics: neither price nor cost base inflates at the engine level.
         $physics['input_cost_multiplier'] = 1.0;
-        $physics['macro_demand_shift'] = $macroState->outputGapEma * self::MACRO_DEMAND_BETA_SCALAR * $this->getOperatingCyclicality($stock);
+        $physics['macro_demand_shift'] = $this->resolveLaggedOutputGap($stock, $macroState) * self::MACRO_DEMAND_BETA_SCALAR * $this->getOperatingCyclicality($stock);
 
         return $physics;
     }

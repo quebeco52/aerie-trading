@@ -274,6 +274,9 @@ class MarketResetCommand extends Command
                     asset_turnover = NULL,
                     lifecycle_stage = NULL,
                     inflation_pass_through = NULL,
+                    lagged_demand_gap = NULL,
+                    managed_accrual_bank = 0.0000,
+                    price_momentum_trend = 0.0,
                     reported_operating_margin = NULL,
                     quarterly_net_income_history = NULL,
                     earnings_surprise_history = NULL
