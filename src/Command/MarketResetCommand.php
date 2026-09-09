@@ -269,6 +269,8 @@ class MarketResetCommand extends Command
                     ppe_vintage_deflator = NULL,
                     ppe_tax_basis = NULL,
                     deferred_tax_liability = 0.0000,
+                    earning_assets = NULL,
+                    credit_loss_allowance = 0.0000,
                     asset_turnover = NULL,
                     lifecycle_stage = NULL,
                     inflation_pass_through = NULL,

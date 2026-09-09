@@ -1102,6 +1102,43 @@ class EarningsEngineTest extends TestCase
         $this->assertLessThan($equityBefore, (float) $q4->getTotalEquity(), 'the write-down is charged against equity');
     }
 
+    /**
+     * The charge is not floored: goodwill leaves the asset side, so the equity that carried it has to leave
+     * the other side by the same amount, even when that takes book equity below zero. A floor would have
+     * kept equity positive and left the balance sheet out by the difference.
+     */
+    public function testGoodwillImpairmentCanTakeBookEquityBelowZeroAndTheSheetStillBalances(): void
+    {
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, equityRiskPremium: 0.05);
+        $ticksPerQuarter = 63;
+
+        // Thin equity under a large goodwill balance: the annual test writes off more than the book is worth.
+        // Debt keeps invested capital large enough that the seeded plant is real rather than the floor.
+        $stock = $this->buildMatureIndustrial('NEGQ');
+        $stock->setTotalEquity('3000000000');
+        $stock->setWholesaleDebt('40000000000');
+        $stock->setCorporateTreasury('5000000000');
+        $stock->setGoodwill('5000000000');
+        $stock->setOperatingMargin('0.03');
+        $stock->setBaselineRoic('0.02');
+        $stock->setRoicTtm('0.02');
+        $stock->setLifecycleStage(LifecycleStage::Mature);
+
+        $q4Tick = (EarningsEngine::FISCAL_YEAR_END_QUARTER * $ticksPerQuarter) + EarningsEngine::resolveReportingTick('NEGQ', 252);
+        $this->earningsEngine->calculate($stock, $macroState, $q4Tick);
+
+        $impairment = 5_000_000_000.0 - (float) $stock->getGoodwill();
+        $this->assertGreaterThan(3_000_000_000.0, $impairment, 'the fixture must impair more than its book equity');
+        $this->assertLessThan(0.0, (float) $stock->getTotalEquity(), 'book equity goes negative rather than being floored');
+
+        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS['Auto Manufacturers']['business_model'] ?? 'none';
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
+        $lease = (new CorporateMetrics())->calculateLeaseLiability((float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity());
+        $assets = $stock->getTotalAssets($lease);
+        $claims = $stock->getTotalLiabilities($lease) + (float) $stock->getTotalEquity();
+        $this->assertEqualsWithDelta($assets, $claims, max(1.0, $assets * 1e-6), 'the balance sheet still balances after the write-off');
+    }
+
     public function testRevenueCapacityIsAnchoredToStructuralTurnoverNotTrailingRoic(): void
     {
         $macroState = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04);
@@ -1331,4 +1368,135 @@ class EarningsEngineTest extends TestCase
         return \App\Data\Sectors::getBusinessModelStrategy($businessModel)->getMacroPhysics($stock, $macroState)['pricing_power_multiplier'];
     }
 
+    /**
+     * A bank's first report opens the earning-asset ledger: the loan book is a balance from then on, with an
+     * allowance for the losses already expected sitting against it, and the quarter's provision, charge-offs
+     * and originations are all real entries. Expansion cash goes onto the book, never into construction,
+     * and the sheet balances to the dollar with every deposit, borrowing and share claimed.
+     */
+    public function testBankOpensAnEarningAssetLedgerAndItsBalanceSheetBalances(): void
+    {
+        $macroState = new MacroStateDTO(
+            corporateTaxRate: 0.21, policyRate: 0.04, policyRateEma: 0.04, yield2yEma: 0.04, yield5yEma: 0.042,
+            yield10yEma: 0.045, equityRiskPremium: 0.05, nominalGdpIndex: 1.0, macroCreditSpreadEma: 0.015
+        );
+
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+
+        $stock = new Stock();
+        $stock->setTicker('LEND');
+        $stock->setIndustry('Banks - Diversified');
+        $stock->setEarningsPerShare('2.50');
+        $stock->setSharesOutstanding('1000000000');
+        $stock->setPrice('50.00');
+        $stock->setVolatility('0.15');
+        $stock->setCurrentVolatility('0.15');
+        $stock->setBeta('1.0');
+        $stock->setTotalEquity('40000000000');
+        $stock->setWholesaleDebt('10000000000');
+        $stock->setCustomerDeposits('300000000000');
+        $stock->setCorporateTreasury('5000000000');
+        $stock->setRetainedEarnings('10000000000');
+        $stock->setBaselineRoe('0.12');
+        $stock->setRoeTtm('0.12');
+        $stock->setOperatingMargin('0.35');
+        $stock->setTargetPayoutRatio('0.30');
+        $stock->setDividendSpeed('0.20');
+        $stock->setDepreciationRate('0.02');
+        $this->assertFalse($stock->hasEarningAssetLedger());
+
+        mt_srand(20260909);
+        $engine->calculate($stock, $macroState, EarningsEngine::resolveReportingTick('LEND', 252));
+        $this->assertNotNull($captured);
+
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy('commercial_bank');
+        $this->assertTrue($stock->hasEarningAssetLedger(), 'the first report opens the loan book');
+        $this->assertNull($stock->getGrossPpe(), 'a bank never opens a plant ledger');
+        $this->assertEqualsWithDelta(0.0, (float) $stock->getCipBalance(), 1.0, 'loans are originated, not queued as construction');
+
+        $book = (float) $stock->getEarningAssets();
+        $allowance = (float) $stock->getCreditLossAllowance();
+        $lifetimeRate = $strategy->getThroughTheCycleCreditLossRate() * $strategy->getCreditLossHorizonYears();
+        $this->assertGreaterThan(300_000_000_000.0, $book, 'the book is the funding deployed away from cash');
+        $this->assertGreaterThan(0.0, $lifetimeRate);
+        $this->assertEqualsWithDelta($lifetimeRate, $allowance / $book, $lifetimeRate * 0.25, 'the allowance opens at its lifetime target and stays near it');
+
+        // The quarter's credit entries: the through-the-cycle charge alone is a positive provision, and
+        // what went bad is the conditional loss on the book, never more than the book.
+        $this->assertGreaterThan(0.0, $captured->creditLossProvision);
+        $this->assertGreaterThanOrEqual(0.0, $captured->netChargeOffs);
+        $this->assertLessThan($book, $captured->netChargeOffs);
+        $this->assertTrue(is_finite($captured->netLoanOriginations));
+
+        $lease = (new CorporateMetrics())->calculateLeaseLiability((float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity());
+        $assets = $stock->getTotalAssets($lease);
+        $claims = $stock->getTotalLiabilities($lease) + (float) $stock->getTotalEquity();
+        $this->assertEqualsWithDelta($assets, $claims, max(1.0, $assets * 1e-6), 'a bank balance sheet balances');
+
+        // The three cash flow sections still sum to the cash that moved, deposits included.
+        $this->assertEqualsWithDelta(
+            (float) $stock->getCorporateTreasury() - 5_000_000_000.0,
+            $captured->operatingCashFlow + $captured->investingCashFlow + $captured->financingCashFlow,
+            max(1.0, abs($assets) * 1e-6),
+            'operating, investing and financing flows reconcile to the change in cash'
+        );
+    }
+
+    /**
+     * A lender whose credit physics is a margin shock reports no dollar charge-offs. Its allowance must still
+     * hold at the lifetime target rather than ratchet up on a charge nothing consumes, and the provision it
+     * reports is the through-the-cycle loss on its book.
+     */
+    public function testCardLenderAllowanceHoldsAtItsLifetimeTargetWithoutDollarChargeOffs(): void
+    {
+        $macroState = new MacroStateDTO(
+            corporateTaxRate: 0.21, policyRate: 0.04, policyRateEma: 0.04, yield2yEma: 0.04, yield5yEma: 0.042,
+            yield10yEma: 0.045, equityRiskPremium: 0.05, nominalGdpIndex: 1.0, macroCreditSpreadEma: 0.015
+        );
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher);
+
+        $stock = new Stock();
+        $stock->setTicker('CARD');
+        $stock->setIndustry('Credit Services');
+        $stock->setEarningsPerShare('2.50');
+        $stock->setSharesOutstanding('1000000000');
+        $stock->setPrice('50.00');
+        $stock->setVolatility('0.15');
+        $stock->setCurrentVolatility('0.15');
+        $stock->setBeta('1.0');
+        $stock->setTotalEquity('120000000000');
+        $stock->setWholesaleDebt('48000000000');
+        $stock->setCustomerDeposits('850000000000');
+        $stock->setCorporateTreasury('90000000000');
+        $stock->setRetainedEarnings('60000000000');
+        $stock->setBaselineRoe('0.25');
+        $stock->setRoeTtm('0.25');
+        $stock->setOperatingMargin('0.35');
+        $stock->setTargetPayoutRatio('0.30');
+        $stock->setDividendSpeed('0.20');
+        $stock->setDepreciationRate('0.05');
+
+        $strategy = \App\Data\Sectors::getBusinessModelStrategy('credit_services');
+        $lifetimeRate = $strategy->getThroughTheCycleCreditLossRate() * $strategy->getCreditLossHorizonYears();
+
+        mt_srand(20260909);
+        for ($quarter = 1; $quarter <= 4; $quarter++) {
+            $engine->calculate($stock, $macroState, (($quarter - 1) * 63) + EarningsEngine::resolveReportingTick('CARD', 252));
+            $this->assertNotNull($captured);
+            $book = (float) $stock->getEarningAssets();
+            $this->assertEqualsWithDelta($lifetimeRate, (float) $stock->getCreditLossAllowance() / $book, $lifetimeRate * 0.10, "allowance drifted from target in Q{$quarter}");
+            $this->assertEqualsWithDelta($captured->netChargeOffs, $strategy->getThroughTheCycleCreditLossRate() / 4.0 * ($book + $captured->netChargeOffs), $captured->netChargeOffs * 0.05, 'realized losses run at the through-the-cycle rate');
+        }
+        $this->assertGreaterThan(0.04, $lifetimeRate, 'a card book reserves several percent of receivables');
+    }
 }

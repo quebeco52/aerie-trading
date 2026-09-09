@@ -38,6 +38,10 @@ readonly class SectorPhysicsResult
         public array $streamRevenue = [],
         public float $scheduledCapex = 0.0,
         public array $kpis = [],
+        /** Dollar provision for credit losses the physics charged this quarter beyond the through-the-cycle loss already in the cost base (negative for a reserve release). */
+        public float $creditLossProvision = 0.0,
+        /** Dollar loans and securities that went bad this quarter and are written off against the allowance. */
+        public float $netChargeOffs = 0.0,
     ) {
     }
 }

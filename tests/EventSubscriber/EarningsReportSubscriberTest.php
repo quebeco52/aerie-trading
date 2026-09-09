@@ -298,10 +298,11 @@ class EarningsReportSubscriberTest extends TestCase
     }
 
     /**
-     * A bank's loan book is not modelled as an asset ledger, so its report must not claim a total-assets
-     * figure: publishing one would show a sheet out by the whole deposit base. Liabilities are real either way.
+     * Before its first report opens the earning-asset ledger, a bank has no asset side to state, so its report
+     * must not claim a total-assets figure: publishing a proxy would show a sheet out by the whole deposit
+     * base. Liabilities are real either way.
      */
-    public function testBalanceSheetBusinessReportsNoAssetSide(): void
+    public function testBalanceSheetBusinessReportsNoAssetSideBeforeItsLedgerIsOpen(): void
     {
         $stock = new Stock();
         $stock->setTicker('BNKR');
@@ -329,10 +330,62 @@ class EarningsReportSubscriberTest extends TestCase
 
         $this->subscriber->onEarningsReported(new EarningsReportedEvent($ctx));
 
-        $this->assertNull($persisted->getTotalAssets(), 'no asset side is modelled for a bank');
+        $this->assertNull($persisted->getTotalAssets(), 'no asset side exists until the ledger is seeded');
         $this->assertNull($persisted->getAssetAge());
+        $this->assertNull($persisted->getEarningAssets());
         $this->assertGreaterThan(300000000.0, (float) $persisted->getTotalLiabilities(), 'deposits are a real liability');
         $this->assertNotNull($persisted->getOperatingCashFlow(), 'the cash flow statement is still reported');
+    }
+
+    /**
+     * Once the ledger is open a lender's report carries its own sheet: the book net of the allowance is the
+     * asset side, deposits are stated on their own, and the margin the book earned is struck on it.
+     */
+    public function testLenderReportsItsBookAsTheAssetSide(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('BNKL');
+        $stock->setIndustry('Banks - Diversified');
+        $stock->setSharesOutstanding('10000000');
+        $stock->setTotalRevenue('40000000.0000');
+        $stock->setWholesaleDebt('10000000.0000');
+        $stock->setCustomerDeposits('300000000.00');
+        $stock->setCorporateTreasury('5000000.0000');
+        $stock->setEarningAssets('360000000.0000');
+        $stock->setCreditLossAllowance('6000000.0000');
+        $stock->setTotalEquity((string) ($stock->getTotalAssets() - $stock->getTotalLiabilities()));
+
+        $strategy = $this->createMock(BusinessModelInterface::class);
+        $strategy->method('getLeaseIntensity')->willReturn(0.0);
+        $strategy->method('isFinancial')->willReturn(true);
+
+        $ctx = new EarningsSimulationContext(stock: $stock, macroState: new MacroStateDTO(), strategy: $strategy, businessModel: 'commercial_bank');
+        $ctx->actualRevenue = 10000000.0;
+        $ctx->streamRevenue = ['net_interest_income' => 8000000.0, 'fee_income' => 2000000.0];
+        $ctx->operatingCashFlow = 1000000.0;
+        $ctx->creditLossProvision = 700000.0;
+        $ctx->netChargeOffs = 500000.0;
+        $ctx->netLoanOriginations = 3000000.0;
+        $ctx->debtMetrics = new \App\DTO\DebtMetricsDTO(4000000.0, 0.04, 0.04, 0.01, 0.04, 0.04, 1.0, 1.0, 0.0, 1.0);
+
+        $this->reportRepository->method('findOneBy')->willReturn(null);
+        $persisted = null;
+        $this->entityManager->expects($this->once())->method('persist')->willReturnCallback(function ($r) use (&$persisted) { $persisted = $r; });
+
+        $this->subscriber->onEarningsReported(new EarningsReportedEvent($ctx));
+
+        $this->assertEqualsWithDelta(5000000.0 + 360000000.0 - 6000000.0, (float) $persisted->getTotalAssets(), 0.01, 'cash plus the book net of the allowance');
+        $this->assertNull($persisted->getAssetAge(), 'no plant, no plant age');
+        $this->assertEqualsWithDelta(360000000.0, (float) $persisted->getEarningAssets(), 0.01);
+        $this->assertEqualsWithDelta(6000000.0, (float) $persisted->getCreditLossAllowance(), 0.01);
+        $this->assertEqualsWithDelta(700000.0, (float) $persisted->getCreditLossProvision(), 0.01);
+        $this->assertEqualsWithDelta(500000.0, (float) $persisted->getNetChargeOffs(), 0.01);
+        $this->assertEqualsWithDelta(3000000.0, (float) $persisted->getNetLoanOriginations(), 0.01);
+        $this->assertEqualsWithDelta(300000000.0, (float) $persisted->getCustomerDeposits(), 0.01);
+        $this->assertNull($persisted->getCet1Ratio(), 'only a real bank model can state a capital ratio');
+        // (8.0M of interest earned - 1.0M of interest paid this quarter) / 354M net book, annualized.
+        $this->assertEqualsWithDelta(((8000000.0 - 1000000.0) / 354000000.0) * 4.0, (float) $persisted->getNetInterestMargin(), 1e-4);
+        $this->assertEqualsWithDelta((float) $persisted->getTotalAssets(), (float) $persisted->getTotalLiabilities() + (float) $persisted->getEquity(), 0.01, 'the statement balances');
     }
 
     public function testBuildsCommercialBankStreamDetails(): void

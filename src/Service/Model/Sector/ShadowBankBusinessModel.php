@@ -52,6 +52,12 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     /** Hard ceiling on gross asset yield to prevent reverse-engineered revenue hyperinflation. */
     public const MAX_GROSS_ASSET_YIELD    = 0.50;
 
+    // --- Credit Losses (ASC 326) ---
+    /** Through-the-cycle annual loss on the blended book: mortgages lose a few tens of basis points, direct lending about a point. */
+    public const PORTFOLIO_CHARGE_OFF_RATE = 0.005;
+    /** Years of expected loss the allowance covers: mortgages prepay and middle-market loans mature well inside their contractual terms. */
+    public const CECL_LIFETIME_HORIZON_YEARS = 3.0;
+
     // --- Revenue & Default Shock Physics ---
     /** Volatility multiplier for top-line revenue shocks in non-bank lending markets. */
     public const REVENUE_VARIANCE_SCALAR = 0.20;
@@ -112,6 +118,16 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
 
     // --- Analyst Visibility & Error ---
     // Moved to getCoverageProfile() — see MarketConsensusEngine.
+
+    public function getThroughTheCycleCreditLossRate(): float
+    {
+        return self::PORTFOLIO_CHARGE_OFF_RATE;
+    }
+
+    public function getCreditLossHorizonYears(): float
+    {
+        return self::CECL_LIFETIME_HORIZON_YEARS;
+    }
 
     public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float
     {

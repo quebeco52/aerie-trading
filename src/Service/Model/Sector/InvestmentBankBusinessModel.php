@@ -54,8 +54,8 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
     // --- Deal Flow Cost of Capital & Macro Elasticity ---
     /** Baseline macro credit spread (~200bps). Spreads below this stimulate DCM debt syndication. */
     public const DEAL_BASELINE_CREDIT_SPREAD = 0.020;
-    /** Neutral 5Y-over-policy term structure slope (~250bps). DCM stimulus is measured as deviation from this. */
-    public const DCM_NEUTRAL_CURVE_SLOPE     = 0.025;
+    /** Neutral 5Y-over-policy term structure slope (~80bps: the five-year share of the term premium plus the usual policy discount). DCM stimulus is measured as deviation from this. */
+    public const DCM_NEUTRAL_CURVE_SLOPE     = 0.008;
     /** Sensitivity of M&A deal flow to corporate expansion (output gap). */
     public const MNA_OUTPUT_GAP_ELASTICITY   = 3.00;
     /** Sensitivity of M&A deal flow to Equity Risk Premium (ERP) cost of capital changes. */

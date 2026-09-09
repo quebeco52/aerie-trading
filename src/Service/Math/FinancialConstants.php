@@ -321,6 +321,14 @@ class FinancialConstants
     /** Floor on the cash share of the structural cost base once depreciation is carved out as its own expense line. */
     public const MIN_CASH_COST_SHARE = 0.40;
 
+    // --- Earning Asset Ledger (Financials) ---
+    /** Haircut taken when earning assets are sold in a hurry to meet withdrawals or a maturity: securities marked below par, loans sold at a discount. */
+    public const EARNING_ASSET_FIRE_SALE_HAIRCUT = 0.05;
+    /** Largest share of the earning-asset book that can be sold in one quarter; the rest is illiquid loans nobody bids for on the day. */
+    public const MAX_QUARTERLY_ASSET_LIQUIDATION_RATIO = 0.25;
+    /** Share of the gap between the credit-loss allowance and its lifetime target closed each quarter, in either direction, so a build or release is a path and not a cliff. */
+    public const CREDIT_ALLOWANCE_CONVERGENCE_RATIO = 0.25;
+
     // --- Equity Issuance & TAM Scaling Limits ---
     /** Maximum fraction of market capitalization that can be raised in a distressed emergency equity offering (25%). */
     public const MAX_EMERGENCY_EQUITY_RAISE_RATIO = 0.25;

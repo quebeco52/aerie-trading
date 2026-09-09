@@ -99,6 +99,9 @@ class CapitalAllocationEngine
             'equity_raised' => $ctx->equityRaised,
             'bank_apy' => $ctx->bankApy,
             'organic_capex' => $ctx->organicCapex,
+            'loan_originations' => $ctx->loanOriginations,
+            'asset_sale_proceeds' => $ctx->assetSaleProceeds,
+            'asset_sale_loss' => $ctx->assetSaleLoss,
             'events' => $ctx->events
         ];
     }

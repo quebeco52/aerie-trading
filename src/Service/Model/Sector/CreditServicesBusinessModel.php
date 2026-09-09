@@ -77,6 +77,12 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     /** Spread over macro policy rate used to determine floating APR gross yield ceiling. */
     public const POLICY_APR_SPREAD        = 0.35;
 
+    // --- Credit Losses (ASC 326) ---
+    /** Through-the-cycle annual net charge-off rate on unsecured card receivables (US card industry long-run average ~3.5%). */
+    public const CARD_CHARGE_OFF_RATE = 0.035;
+    /** Years of expected loss the allowance covers: revolving balances turn over in well under two years. */
+    public const CECL_LIFETIME_HORIZON_YEARS = 1.5;
+
     // --- Revenue & Default Shock Physics ---
     /** Volatility multiplier for top-line revenue shocks in transaction swipe markets. */
     public const REVENUE_VARIANCE_SCALAR   = 0.20;
@@ -385,6 +391,17 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             'interest_expense' => $wholesaleInterest + $depositInterest,
             'wholesale_rate' => $wholesaleRate
         ];
+    }
+
+    /** Unsecured consumer credit loses far more through the cycle than a prime bank loan book. */
+    public function getThroughTheCycleCreditLossRate(): float
+    {
+        return self::CARD_CHARGE_OFF_RATE;
+    }
+
+    public function getCreditLossHorizonYears(): float
+    {
+        return self::CECL_LIFETIME_HORIZON_YEARS;
     }
 
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float

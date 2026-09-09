@@ -390,5 +390,52 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->subsystem->calculateMoneySupplyGrowth($stateQe, $dt, $tfp);
         $this->assertGreaterThan($neutralGrowth, $stateQe->moneySupplyGrowth, 'QE and bank lending expansion must accelerate broad money growth');
     }
-}
 
+    /**
+     * A neutral stance (policy at r* plus target, no hikes or cuts priced, no gap) still slopes up, because
+     * the term premium rises with duration: the ten-year point carries the whole benchmark premium and the
+     * two-year note under a third of it. That difference is what a normal 2s10s slope is made of. Folding
+     * the premium into the curve level, as before, handed the two-year the full premium and left the neutral
+     * curve almost flat.
+     */
+    public function testTermPremiumRisesWithDurationSoTheNeutralCurveSlopesUp(): void
+    {
+        $state = new MacroState();
+        $state->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION;
+        $state->targetRate = $state->policyRate;
+        $state->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+        $state->outputGap = 0.0;
+        $state->marketVolatilityEma = 0.15;
+
+        $curve = $this->subsystem->calculateYieldCurve($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+
+        $scale2y = MathUtility::calculateTermPremiumDurationScale(2.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        $scale30y = MathUtility::calculateTermPremiumDurationScale(30.0, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        $this->assertLessThan(0.35, $scale2y, 'the two-year note carries under a third of the ten-year premium');
+        $this->assertGreaterThan(1.0, $scale30y, 'the thirty-year bond carries more than the ten-year');
+
+        $expectedSpread = MacroEngine::NS_BASE_TERM_PREMIUM * (1.0 - $scale2y);
+        $this->assertEqualsWithDelta($expectedSpread, $curve['yield_10y'] - $curve['yield_2y'], 0.0010, 'the neutral 2s10s slope is the premium the ten-year earns over the two-year');
+        $this->assertEqualsWithDelta(MacroEngine::NS_BASE_TERM_PREMIUM, $curve['yield_10y'] - $state->policyRate, 0.0010, 'at neutral the ten-year sits one term premium over the policy rate');
+        $this->assertGreaterThan($curve['yield_10y'], $curve['yield_30y'], 'the long end keeps rising');
+    }
+
+    /**
+     * A restrictive stance inverts the curve through two channels at once: the two-year prices the cuts
+     * that follow, and the premium is compressed toward nothing while policy sits well above neutral.
+     */
+    public function testRestrictiveStanceInvertsTheCurve(): void
+    {
+        $state = new MacroState();
+        $state->policyRate = MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION + 0.020; // 200bps above neutral
+        $state->targetRate = $state->policyRate - 0.010; // cuts ahead
+        $state->tipsBreakeven = 0.025;
+        $state->outputGap = 0.005;
+        $state->marketVolatilityEma = 0.15;
+
+        $curve = $this->subsystem->calculateYieldCurve($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+
+        $this->assertLessThan($state->policyRate, $curve['yield_2y'], 'the two-year prices the cuts ahead');
+        $this->assertLessThan(-0.0025, $curve['yield_10y'] - $curve['yield_2y'], 'the curve inverts by a meaningful margin');
+    }
+}

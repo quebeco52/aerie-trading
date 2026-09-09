@@ -1831,11 +1831,15 @@ function renderFinancialStatements(latest) {
     if (!latest) return;
 
     const num = (k) => parseFloat(latest[k] || 0);
-    const hasCashFlow = latest.operating_cash_flow !== null && latest.operating_cash_flow !== undefined;
-    // A balance-sheet business (bank, insurer, broker) has no modelled asset side: its loan book is not a
-    // ledger here, so the report carries no total-assets figure and the sheet is not drawn for it.
-    const hasAssetSide = latest.total_assets !== null && latest.total_assets !== undefined && num('total_assets') > 0;
+    const present = (k) => latest[k] !== null && latest[k] !== undefined;
+    const hasCashFlow = present('operating_cash_flow');
+    // The asset side exists once a ledger is open: plant and a trade cycle for an operating company, loans
+    // and securities for a balance-sheet business. A report from before the first ledger has no total.
+    const hasAssetSide = present('total_assets') && num('total_assets') > 0;
     const totalAssets = num('total_assets');
+    // A lender's sheet is drawn in its own shape: the book, the losses expected on it, and the deposits
+    // that fund it, rather than plant and inventory it does not have.
+    const isLender = present('earning_assets') && num('earning_assets') > 0;
 
     // A report written before these columns existed has nothing to show; leave the panel hidden.
     const panel = document.getElementById('financial-statements-panel');
@@ -1847,7 +1851,23 @@ function renderFinancialStatements(latest) {
     const sheetNote = document.getElementById('balance-sheet-unavailable');
     if (sheetNote) sheetNote.classList.toggle('hidden', hasAssetSide);
 
-    if (hasAssetSide) renderStatementRows('balance-sheet-rows', [
+    if (hasAssetSide && isLender) renderStatementRows('balance-sheet-rows', [
+        { label: 'Cash & reserves', value: num('treasury'), indent: true },
+        { label: 'Loans & securities', value: num('earning_assets'), indent: true },
+        { label: 'Allowance for credit losses', value: -num('credit_loss_allowance'), signed: true, indent: true },
+        { label: 'Goodwill', value: num('goodwill'), indent: true },
+        { label: 'Right-of-use asset', value: num('lease_liability'), indent: true },
+        { divider: true },
+        { label: 'Total assets', value: totalAssets, total: true },
+        { divider: true },
+        { label: 'Customer deposits', value: num('customer_deposits'), indent: true },
+        { label: 'Wholesale debt', value: num('total_debt') - num('customer_deposits'), indent: true },
+        { label: 'Lease liability', value: num('lease_liability'), indent: true },
+        { divider: true },
+        { label: 'Total liabilities', value: num('total_liabilities'), total: true },
+        { label: 'Shareholders equity', value: num('equity'), total: true },
+    ]);
+    else if (hasAssetSide) renderStatementRows('balance-sheet-rows', [
         { label: 'Cash & equivalents', value: num('treasury'), indent: true },
         { label: 'Receivables, net', value: num('receivables'), indent: true },
         { label: 'Inventory', value: num('inventory'), indent: true },
@@ -1872,8 +1892,20 @@ function renderFinancialStatements(latest) {
         const age = latest.asset_age !== null && latest.asset_age !== undefined ? parseFloat(latest.asset_age) : NaN;
         ageEl.innerText = isFinite(age) ? `${(age * 100).toFixed(0)}% depreciated` : '-';
     }
+    const ageLabelEl = document.getElementById('asset-age-label');
+    if (ageLabelEl) ageLabelEl.innerText = isLender ? 'Reserve ratio' : 'Plant age';
+    if (ageEl && isLender) {
+        const reserveRatio = num('earning_assets') > 0 ? num('credit_loss_allowance') / num('earning_assets') : NaN;
+        ageEl.innerText = isFinite(reserveRatio) ? `${(reserveRatio * 100).toFixed(2)}% of book` : '-';
+    }
 
-    renderStatementRows('cash-flow-rows', [
+    const operatingRows = isLender ? [
+        { label: 'Net income', value: num('net_income'), signed: true, indent: true },
+        { label: 'Depreciation', value: num('depreciation'), indent: true },
+        { label: 'Equity compensation', value: num('stock_compensation'), indent: true },
+        { label: 'Provision for credit losses', value: num('credit_loss_provision'), signed: true, indent: true },
+        { label: 'Goodwill impairment', value: num('goodwill_impairment'), indent: true },
+    ] : [
         { label: 'Net income', value: num('net_income'), signed: true, indent: true },
         { label: 'Depreciation', value: num('depreciation'), indent: true },
         { label: 'Equity compensation', value: num('stock_compensation'), indent: true },
@@ -1881,7 +1913,15 @@ function renderFinancialStatements(latest) {
         { label: 'Inventory writedown', value: num('inventory_write_down'), indent: true },
         { label: 'Credit loss provision', value: num('receivables_provision'), signed: true, indent: true },
         { label: 'Goodwill impairment', value: num('goodwill_impairment'), indent: true },
+    ];
+    const investingRows = isLender ? [
+        { label: 'Net loans originated', value: -num('net_loan_originations'), signed: true, indent: true },
+    ] : [];
+
+    renderStatementRows('cash-flow-rows', [
+        ...operatingRows,
         { divider: true },
+        ...investingRows,
         { label: 'Operating cash flow', value: num('operating_cash_flow'), signed: true, total: true },
         { label: 'Investing cash flow', value: num('investing_cash_flow'), signed: true, total: true },
         { label: 'Financing cash flow', value: num('financing_cash_flow'), signed: true, total: true },

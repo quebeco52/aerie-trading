@@ -127,6 +127,42 @@ class CorporateReport
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
     private ?string $grossPpe = null;
 
+    /** Gross loans, securities and other earning assets of a balance-sheet business at quarter end. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $earningAssets = null;
+
+    /** Allowance for credit losses carried against the earning assets (ASC 326). */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $creditLossAllowance = null;
+
+    /** Provision for credit losses charged to earnings this quarter, net of any reserve release. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $creditLossProvision = null;
+
+    /** Loans written off against the allowance this quarter. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $netChargeOffs = null;
+
+    /** Cash deployed into new earning assets, net of assets sold: the investing flow of a lender. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $netLoanOriginations = null;
+
+    /** Loss realized on earning assets sold below carrying value to meet withdrawals or maturities. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $assetSaleLoss = null;
+
+    /** Customer deposits (or policyholder float) at quarter end, the part of total debt that is not wholesale. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $customerDeposits = null;
+
+    /** Common equity tier 1 ratio, equity over risk-weighted assets, for a regulated bank. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $cet1Ratio = null;
+
+    /** Annualized net interest margin: interest earned less interest paid, over net earning assets. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $netInterestMargin = null;
+
     /** Net book value of property, plant and equipment. */
     #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
     private ?string $netPpe = null;
@@ -853,6 +889,105 @@ class CorporateReport
     public function setAssetAge(?string $assetAge): static
     {
         $this->assetAge = $assetAge;
+        return $this;
+    }
+
+    public function getEarningAssets(): ?string
+    {
+        return $this->earningAssets;
+    }
+
+    public function setEarningAssets(?string $earningAssets): static
+    {
+        $this->earningAssets = $earningAssets;
+        return $this;
+    }
+
+    public function getCreditLossAllowance(): ?string
+    {
+        return $this->creditLossAllowance;
+    }
+
+    public function setCreditLossAllowance(?string $creditLossAllowance): static
+    {
+        $this->creditLossAllowance = $creditLossAllowance;
+        return $this;
+    }
+
+    public function getCreditLossProvision(): ?string
+    {
+        return $this->creditLossProvision;
+    }
+
+    public function setCreditLossProvision(?string $creditLossProvision): static
+    {
+        $this->creditLossProvision = $creditLossProvision;
+        return $this;
+    }
+
+    public function getNetChargeOffs(): ?string
+    {
+        return $this->netChargeOffs;
+    }
+
+    public function setNetChargeOffs(?string $netChargeOffs): static
+    {
+        $this->netChargeOffs = $netChargeOffs;
+        return $this;
+    }
+
+    public function getNetLoanOriginations(): ?string
+    {
+        return $this->netLoanOriginations;
+    }
+
+    public function setNetLoanOriginations(?string $netLoanOriginations): static
+    {
+        $this->netLoanOriginations = $netLoanOriginations;
+        return $this;
+    }
+
+    public function getAssetSaleLoss(): ?string
+    {
+        return $this->assetSaleLoss;
+    }
+
+    public function setAssetSaleLoss(?string $assetSaleLoss): static
+    {
+        $this->assetSaleLoss = $assetSaleLoss;
+        return $this;
+    }
+
+    public function getCustomerDeposits(): ?string
+    {
+        return $this->customerDeposits;
+    }
+
+    public function setCustomerDeposits(?string $customerDeposits): static
+    {
+        $this->customerDeposits = $customerDeposits;
+        return $this;
+    }
+
+    public function getCet1Ratio(): ?string
+    {
+        return $this->cet1Ratio;
+    }
+
+    public function setCet1Ratio(?string $cet1Ratio): static
+    {
+        $this->cet1Ratio = $cet1Ratio;
+        return $this;
+    }
+
+    public function getNetInterestMargin(): ?string
+    {
+        return $this->netInterestMargin;
+    }
+
+    public function setNetInterestMargin(?string $netInterestMargin): static
+    {
+        $this->netInterestMargin = $netInterestMargin;
         return $this;
     }
 }

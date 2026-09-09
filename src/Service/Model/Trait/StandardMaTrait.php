@@ -21,6 +21,10 @@ trait StandardMaTrait
         $acquirer->setBaselineRoic((string) max(0.01, $blendedBaselineRoic));
     }
     
+    /**
+     * Capital-proxy estimate of the book value a divested division takes with it. Only reached for a
+     * balance sheet with no plant ledger; once the ledgers exist the M&A engine reads the actual balances.
+     */
     public function calculateDivestedEquity(Stock $seller, float $divestedFraction, float $currentEquity, float $currentDebt, float $treasury, float $investedCapital, float $lostDebt): float {
         $lostInvestedCapital = $investedCapital * $divestedFraction;
         return $lostInvestedCapital - $lostDebt;

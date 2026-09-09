@@ -48,6 +48,8 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     public const MARGIN_POOL_YIELD_RETENTION_SHARE = 0.15;
 
     // --- VIX & Transaction Volume Bonus ---
+    /** Absolute 2s10s slope at which rates-clearing volumes are normal (~70bps, the neutral curve); a curve steepening or inverting past it brings swap hedging flow. */
+    public const RATES_VOL_NEUTRAL_SLOPE = 0.007;
     /** Baseline VIX threshold above which volatility expands clearing transaction volume. */
     public const VIX_BASELINE_THRESHOLD = 0.20;
     /** Sensitivity scalar translating excess VIX points into direct top-line clearing fee bonuses. */
@@ -215,7 +217,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
 
         // Interest Rate Volatility Bonus. If the yield curve is violently steepening or inverting, IRS clearing volumes spike.
         $yieldCurveSlope = abs($macroState->yield10yEma - $macroState->yield2yEma);
-        $ratesVolBonus = $yieldCurveSlope > 0.005 ? ($yieldCurveSlope - 0.005) * 2.0 : 0.0;
+        $ratesVolBonus = $yieldCurveSlope > self::RATES_VOL_NEUTRAL_SLOPE ? ($yieldCurveSlope - self::RATES_VOL_NEUTRAL_SLOPE) * 2.0 : 0.0;
 
         $totalMacroBonus = $volatilityBonus + $ratesVolBonus;
 
@@ -335,6 +337,12 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     public function calculateOrganicCapexSpend(float $organicSpend, float $debtIssued): float
     {
         return 0.0;
+    }
+
+    /** Only what sits above the fully backed margin pool is invested; the pool itself stays liquid. */
+    public function deploysFundingIntoEarningAssets(): bool
+    {
+        return true;
     }
 
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float

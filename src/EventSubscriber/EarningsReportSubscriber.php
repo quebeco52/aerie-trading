@@ -83,14 +83,36 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $report->setCip($stock->getCipBalance());
         $report->setGoodwill($stock->getGoodwill());
         $report->setLeaseLiability(\App\Service\Math\MathUtility::formatDecimal($leaseLiability, 4));
-        // A balance-sheet business (bank, insurer, broker) keeps no plant or trade ledger, and its loan book
-        // and securities are not modelled as assets at all. Reporting a total-assets figure for it would
-        // publish a sheet that is out by the whole deposit base, so the asset side is left unstated and the
-        // page renders the cash flow statement alone. Liabilities are real either way.
-        $hasAssetSide = $stock->getGrossPpe() !== null;
+        // The asset side exists once a ledger is open: the plant and trade cycle of an operating company, or
+        // the loans and securities of a balance-sheet business. A firm that has never reported has neither,
+        // and its report leaves the total unstated rather than publishing a proxy.
+        $hasAssetSide = $stock->hasBalanceSheetLedger();
         $report->setTotalAssets($hasAssetSide ? \App\Service\Math\MathUtility::formatDecimal($stock->getTotalAssets($leaseLiability), 4) : null);
         $report->setTotalLiabilities(\App\Service\Math\MathUtility::formatDecimal($stock->getTotalLiabilities($leaseLiability), 4));
-        $report->setAssetAge($hasAssetSide ? \App\Service\Math\MathUtility::formatDecimal($stock->getAssetAge(), 4) : null);
+        $report->setAssetAge($stock->getGrossPpe() !== null ? \App\Service\Math\MathUtility::formatDecimal($stock->getAssetAge(), 4) : null);
+
+        // The lender's side of the sheet: the book, the losses expected on it, what went bad, what was
+        // written and what was sold, plus the two ratios a bank is actually judged on.
+        $hasEarningAssets = $stock->hasEarningAssetLedger();
+        $report->setEarningAssets($stock->getEarningAssets());
+        $report->setCreditLossAllowance($hasEarningAssets ? $stock->getCreditLossAllowance() : null);
+        $report->setCreditLossProvision($hasEarningAssets ? \App\Service\Math\MathUtility::formatDecimal($ctx->creditLossProvision, 4) : null);
+        $report->setNetChargeOffs($hasEarningAssets ? \App\Service\Math\MathUtility::formatDecimal($ctx->netChargeOffs, 4) : null);
+        $report->setNetLoanOriginations($hasEarningAssets ? \App\Service\Math\MathUtility::formatDecimal($ctx->netLoanOriginations, 4) : null);
+        $report->setAssetSaleLoss($hasEarningAssets ? \App\Service\Math\MathUtility::formatDecimal($ctx->assetSaleLoss, 4) : null);
+        $report->setCustomerDeposits($ctx->strategy->isFinancial() ? $stock->getCustomerDeposits() : null);
+        $report->setCet1Ratio(
+            $ctx->strategy instanceof \App\Service\Model\Sector\CommercialBankBusinessModel
+                ? \App\Service\Math\MathUtility::formatDecimal($ctx->strategy->calculateCet1Ratio($stock), 4)
+                : null
+        );
+        $netInterestMargin = null;
+        if ($hasEarningAssets && isset($ctx->streamRevenue['net_interest_income']) && $stock->getNetEarningAssets() > 0.0) {
+            // Interest earned less interest paid this quarter, annualized over the book that earned it.
+            $quarterlyInterestExpense = $ctx->debtMetrics instanceof \App\DTO\DebtMetricsDTO ? $ctx->debtMetrics->interestExpense / 4.0 : 0.0;
+            $netInterestMargin = (((float) $ctx->streamRevenue['net_interest_income'] - $quarterlyInterestExpense) / $stock->getNetEarningAssets()) * 4.0;
+        }
+        $report->setNetInterestMargin($netInterestMargin === null ? null : \App\Service\Math\MathUtility::formatDecimal($netInterestMargin, 4));
 
         // Cash flow statement, in the three sections whose signs classify the life-cycle stage.
         $report->setOperatingCashFlow(\App\Service\Math\MathUtility::formatDecimal($ctx->operatingCashFlow, 4));

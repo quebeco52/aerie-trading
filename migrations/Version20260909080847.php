@@ -1,0 +1,38 @@
+<?php
+
+declare(strict_types=1);
+
+namespace DoctrineMigrations;
+
+use Doctrine\DBAL\Schema\Schema;
+use Doctrine\Migrations\AbstractMigration;
+
+/**
+ * Auto-generated Migration: Please modify to your needs!
+ */
+final class Version20260909080847 extends AbstractMigration
+{
+    public function getDescription(): string
+    {
+        return '';
+    }
+
+    public function up(Schema $schema): void
+    {
+        // this up() migration is auto-generated, please modify it to your needs
+        $this->addSql('ALTER TABLE corporate_report ADD earning_assets NUMERIC(20, 4) DEFAULT NULL, ADD credit_loss_allowance NUMERIC(20, 4) DEFAULT NULL, ADD credit_loss_provision NUMERIC(20, 4) DEFAULT NULL, ADD net_charge_offs NUMERIC(20, 4) DEFAULT NULL, ADD net_loan_originations NUMERIC(20, 4) DEFAULT NULL, ADD asset_sale_loss NUMERIC(20, 4) DEFAULT NULL, ADD customer_deposits NUMERIC(20, 4) DEFAULT NULL, ADD cet1_ratio NUMERIC(10, 4) DEFAULT NULL, ADD net_interest_margin NUMERIC(10, 4) DEFAULT NULL, ADD asset_age NUMERIC(6, 4) DEFAULT NULL');
+        $this->addSql('ALTER TABLE stocks ADD earning_assets NUMERIC(20, 4) DEFAULT NULL, ADD credit_loss_allowance NUMERIC(20, 4) DEFAULT \'0.0000\' NOT NULL, CHANGE volatility volatility NUMERIC(5, 4) DEFAULT \'0.02\' NOT NULL, CHANGE jump_vol jump_vol NUMERIC(5, 4) DEFAULT \'0.10\', CHANGE target_payout_ratio target_payout_ratio NUMERIC(5, 4) DEFAULT \'0.30\' NOT NULL, CHANGE dividend_speed dividend_speed NUMERIC(5, 4) DEFAULT \'0.20\' NOT NULL, CHANGE last_dividend last_dividend NUMERIC(10, 4) DEFAULT \'0.00\' NOT NULL, CHANGE baseline_roic baseline_roic NUMERIC(5, 4) DEFAULT \'0.10\' NOT NULL, CHANGE capex_ratio capex_ratio NUMERIC(5, 4) DEFAULT \'0.20\' NOT NULL, CHANGE baseline_roe baseline_roe NUMERIC(5, 4) DEFAULT \'0.10\' NOT NULL');
+    }
+
+    public function down(Schema $schema): void
+    {
+        // this down() migration is auto-generated, please modify it to your needs
+        $this->addSql('ALTER TABLE corporate_report DROP earning_assets, DROP credit_loss_allowance, DROP credit_loss_provision, DROP net_charge_offs, DROP net_loan_originations, DROP asset_sale_loss, DROP customer_deposits, DROP cet1_ratio, DROP net_interest_margin, DROP asset_age');
+        $this->addSql('ALTER TABLE stocks DROP earning_assets, DROP credit_loss_allowance, CHANGE volatility volatility NUMERIC(5, 4) DEFAULT \'0.0200\' NOT NULL, CHANGE jump_vol jump_vol NUMERIC(5, 4) DEFAULT \'0.1000\', CHANGE target_payout_ratio target_payout_ratio NUMERIC(5, 4) DEFAULT \'0.3000\' NOT NULL, CHANGE dividend_speed dividend_speed NUMERIC(5, 4) DEFAULT \'0.2000\' NOT NULL, CHANGE last_dividend last_dividend NUMERIC(10, 4) DEFAULT \'0.0000\' NOT NULL, CHANGE baseline_roic baseline_roic NUMERIC(5, 4) DEFAULT \'0.1000\' NOT NULL, CHANGE baseline_roe baseline_roe NUMERIC(5, 4) DEFAULT \'0.1000\' NOT NULL, CHANGE capex_ratio capex_ratio NUMERIC(5, 4) DEFAULT \'0.2000\' NOT NULL');
+    }
+
+    public function isTransactional(): bool
+    {
+        return false;
+    }
+}

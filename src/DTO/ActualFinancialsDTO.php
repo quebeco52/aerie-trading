@@ -39,5 +39,9 @@ readonly class ActualFinancialsDTO
         public array $streamRevenue = [],
         public float $scheduledCapex = 0.0,
         public array $kpis = [],
+        /** Dollar provision for credit losses charged beyond the through-the-cycle loss in the cost base (negative for a release). */
+        public float $creditLossProvision = 0.0,
+        /** Dollar earning assets that went bad this quarter, written off against the allowance. */
+        public float $netChargeOffs = 0.0,
     ) {}
 }

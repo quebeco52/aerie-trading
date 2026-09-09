@@ -489,6 +489,11 @@ class DebtEngine
         $marketCap = $currentPrice * $shares;
 
         if ($strategy->requiresAlternativeZScore()) {
+            // A bank's capital ratio is struck on the balance sheet it actually carries once the earning-asset
+            // ledger is open: loans net of expected losses, not the funding proxy.
+            if ($stock->hasBalanceSheetLedger()) {
+                $totalAssets = max(1.0, $stock->getTotalAssets($leaseLiability));
+            }
             $capitalRatio = $equity / $totalAssets;
             $zScore = max(-100.0, min(100.0, $capitalRatio * 100.0)); // Convert to percentage points (e.g., 8% capital = 8.0 score)
 

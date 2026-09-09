@@ -140,6 +140,7 @@ class EarningsEngine
         $this->calculateDepreciation($ctx);
         $this->calculateExpectedVsActualFinancials($ctx);
         $this->applyWorkingCapitalCharges($ctx);
+        $this->rollForwardCreditLossAllowance($ctx);
         $this->calculateInterestAndRunRates($ctx);
         $this->reconcileTaxesAndNetIncome($ctx);
         $this->calculateEPSAndSurprise($ctx);
@@ -187,6 +188,29 @@ class EarningsEngine
         $ctx->corporateTaxRate = $ctx->strategy->getEffectiveTaxRate($macroTaxRate);
 
         $this->seedFixedAssetLedgerIfNeeded($ctx);
+        $this->seedEarningAssetLedgerIfNeeded($ctx);
+    }
+
+    /**
+     * Opens the earning-asset ledger for a balance-sheet business on its first report. Until now a bank's
+     * loan book was a plug, equity plus funding less cash, that nothing could impair and no statement could
+     * show. From here it is a balance: originations grow it, charge-offs and fire sales shrink it, and an
+     * allowance for the losses already expected sits against it.
+     */
+    private function seedEarningAssetLedgerIfNeeded(EarningsSimulationContext $ctx): void
+    {
+        $stock = $ctx->stock;
+        if ($stock->hasEarningAssetLedger() || !$ctx->strategy->isFinancial()) {
+            return;
+        }
+
+        $this->corporateMetrics->seedEarningAssetLedger($stock, $this->resolveLifetimeCreditLossRate($ctx));
+    }
+
+    /** Lifetime expected loss rate on gross earning assets: the annual through-the-cycle rate over the CECL horizon. */
+    private function resolveLifetimeCreditLossRate(EarningsSimulationContext $ctx): float
+    {
+        return max(0.0, $ctx->strategy->getThroughTheCycleCreditLossRate()) * max(0.0, $ctx->strategy->getCreditLossHorizonYears());
     }
 
     /**
@@ -488,6 +512,8 @@ class EarningsEngine
         $ctx->streamRevenue = $actuals->streamRevenue;
         $ctx->scheduledCapex = max(0.0, $actuals->scheduledCapex);
         $ctx->kpis = $actuals->kpis;
+        $ctx->creditLossProvision = $actuals->creditLossProvision;
+        $ctx->netChargeOffs = max(0.0, $actuals->netChargeOffs);
 
         // Stock-based compensation (ASC 718) is already inside the operating cost base: it changes no margin,
         // but it is non-cash (added back to FCF below) and is settled in newly issued shares.
@@ -632,8 +658,10 @@ class EarningsEngine
             return;
         }
 
+        // Equity takes the full charge, even below zero: a floor here would leave goodwill written off on the
+        // asset side and the equity that carried it still standing, and the sheet would no longer balance.
         $stock->setGoodwill((string) ($goodwill - $impairment));
-        $stock->setTotalEquity((string) max(10.0, (float) $stock->getTotalEquity() - $impairment));
+        $stock->setTotalEquity((string) ((float) $stock->getTotalEquity() - $impairment));
         $stock->setRetainedEarnings((string) ((float) $stock->getRetainedEarnings() - $impairment));
 
         $ctx->goodwillImpairment = $impairment;
@@ -726,6 +754,12 @@ class EarningsEngine
             // revaluation that simply wrote equity up with no cash and no income behind it.
             $ctx->replacementCostRatio = $this->resolveReplacementCostRatio($ctx);
             $maintenanceCapEx = $ctx->quarterlyDepreciation * $ctx->replacementCostRatio * $cycleCapExModifier * $solvencyFactor;
+            if ($ctx->strategy->isFinancial()) {
+                // A balance-sheet business keeps no plant ledger: what it spends to stand still (branches,
+                // systems) is expensed as it is spent, so the cash out is the depreciation charge and nothing
+                // is capitalized. Any other figure would leave cash without an asset or a charge behind it.
+                $maintenanceCapEx = $ctx->quarterlyDepreciation;
+            }
 
             $currentAnnualizedRevenue = $ctx->actualRevenue / max(0.001, $ctx->dt);
             $priorNwcStr = $stock->getNetWorkingCapital();
@@ -745,8 +779,18 @@ class EarningsEngine
             // 3. Scheduled CapEx: outlays the sector physics itself commits (spectrum licences, grid rebuilds).
             //    Mandatory, so it bypasses the funding gate; a cash shortfall is the treasury's problem. The
             //    asset is not productive on day one, so it is queued as construction-in-progress.
-            if ($ctx->scheduledCapex > 0.0) {
+            $deploysIntoEarningAssets = $ctx->strategy->isFinancial() && $stock->hasEarningAssetLedger();
+            if ($ctx->scheduledCapex > 0.0 && !$deploysIntoEarningAssets) {
                 $this->capExEngine->allocateGrowthCapEx($stock, $ctx->scheduledCapex);
+            }
+
+            // A lender's growth spend is loans made, not plant built: it lands on the earning-asset ledger
+            // the day the cash leaves, with no construction lag. Before the ledger existed this cash simply
+            // vanished from the balance sheet.
+            if ($deploysIntoEarningAssets && ($growthCapEx + $ctx->scheduledCapex) > 0.0) {
+                $deployed = $growthCapEx + $ctx->scheduledCapex;
+                $stock->setEarningAssets((string) ((float) $stock->getEarningAssets() + $deployed));
+                $ctx->netLoanOriginations += $deployed;
             }
 
             $actualCapEx = $maintenanceCapEx + $growthCapEx + $ctx->scheduledCapex;
@@ -755,7 +799,7 @@ class EarningsEngine
             // Inventory writedowns and credit-loss provisions are non-cash, exactly like depreciation and
             // equity compensation: they hit reported earnings but no money moves, so they come back here.
             $fcff = $ctx->actualQuarterlyNetIncome + $ctx->quarterlyDepreciation + $ctx->stockCompensation
-                + $ctx->inventoryWriteDown + $ctx->receivablesProvision + $ctx->deferredTaxExpense
+                + $ctx->inventoryWriteDown + $ctx->receivablesProvision + $ctx->creditLossProvision + $ctx->deferredTaxExpense
                 - $deltaNwc - $actualCapEx;
             $ctx->operatingCashFlow = $fcff + $actualCapEx;
             $ctx->investingCashFlow = -$actualCapEx;
@@ -784,6 +828,7 @@ class EarningsEngine
 
         $currentPrice = (float) $stock->getPrice();
         $debtBeforeAllocation = (float) $stock->getWholesaleDebt();
+        $depositsBeforeAllocation = (float) $stock->getCustomerDeposits();
         $ctx->allocation = $this->capitalAllocationEngine->allocateCapital(
             $stock,
             $ctx->actualAnnualEpsRaw,
@@ -801,13 +846,21 @@ class EarningsEngine
 
         // Cash-flow statement signs classify the life-cycle stage (Dickinson 2011): net investment includes
         // organic expansion, net financing is debt raised plus shares issued net of dividends and buybacks.
+        // For a lender the expansion is loans originated, and assets sold to raise cash come back through
+        // investing at the price they fetched; the loss on them is not cash and goes to equity directly.
+        $assetSaleProceeds = (float) ($ctx->allocation['asset_sale_proceeds'] ?? 0.0);
         $ctx->investingCashFlow -= $organicCapex;
+        $ctx->investingCashFlow += $assetSaleProceeds;
+        $ctx->netLoanOriginations += (float) ($ctx->allocation['loan_originations'] ?? 0.0) - $assetSaleProceeds;
+        $ctx->assetSaleLoss = (float) ($ctx->allocation['asset_sale_loss'] ?? 0.0);
         $sharesDelta = ((float) $ctx->allocation['new_shares']) - $ctx->sharesOutstanding;
         // Every financing flow is booked at the cash that actually moved. Valuing the share count change at
         // the screen price overstated an emergency raise by its discount (shares go out at 90 cents on the
         // dollar) and would have left the cash flow statement failing to reconcile in exactly the quarters
         // a reader most needs it to.
+        // Deposits taken or withdrawn are financing for a bank (ASC 230), the same as notes issued or repaid.
         $ctx->financingCashFlow = ((float) $stock->getWholesaleDebt() - $debtBeforeAllocation)
+            + ((float) $stock->getCustomerDeposits() - $depositsBeforeAllocation)
             + (float) ($ctx->allocation['equity_raised'] ?? 0.0)
             - (float) ($ctx->allocation['total_cash_spent'] ?? 0.0)
             - (float) ($ctx->allocation['total_paid'] ?? 0.0);
@@ -837,9 +890,9 @@ class EarningsEngine
         // used to be measured against free cash flow after capex, which flagged every heavy reinvestor as
         // low-quality earnings and docked its fair-value multiple for building plant — the opposite of
         // what the anomaly is about. Now that operating cash flow is a real statement line it is used
-        // directly, and total assets come from the balance sheet where one exists. A balance-sheet
-        // business keeps no plant ledger, and for it equity plus funding IS total assets by identity.
-        $totalAssets = $stock->getGrossPpe() !== null
+        // directly, and total assets come from the balance sheet where one exists. Until a firm's first
+        // ledger is open, equity plus funding is total assets by identity.
+        $totalAssets = $stock->hasBalanceSheetLedger()
             ? $stock->getTotalAssets($this->corporateMetrics->calculateLeaseLiability((float) $stock->getTotalRevenue(), $ctx->strategy->getLeaseIntensity()))
             : (float) $stock->getTotalEquity() + (float) $stock->getTotalDebt();
         $totalAssets = max(FinancialConstants::MIN_OPERATING_BASE_CASH, $totalAssets);
@@ -985,6 +1038,65 @@ class EarningsEngine
         // forecast them, so expectedEbit is deliberately left untouched.
         $ctx->ebitda -= $totalCharge;
         $ctx->ebit -= $totalCharge;
+    }
+
+    /**
+     * Rolls the allowance for credit losses on the earning-asset book (ASC 326).
+     *
+     * Provision less charge-offs is the roll-forward. The provision recognised this quarter has three parts:
+     * the through-the-cycle loss the stable cost base already carries (the sector physics only ever charged
+     * the EXCESS over it, so the base must be provisioned here or the allowance would drain to nothing at
+     * steady state), the excess the physics did charge to the margin (stress builds, capped releases), and a
+     * level correction that walks the allowance a quarter-step toward its lifetime target. Only the last
+     * part still has to reach earnings here; the first two are already in EBIT.
+     *
+     * Charge-offs are the loans that actually went bad: they leave the gross book and consume the allowance.
+     * A shortfall the allowance cannot cover is an unreserved loss and is charged in full.
+     *
+     * Every part is non-cash. The full provision is added back to operating cash flow below, which is what
+     * keeps cash out of the picture: the book falls by the provision and equity falls by the same amount.
+     */
+    private function rollForwardCreditLossAllowance(EarningsSimulationContext $ctx): void
+    {
+        $stock = $ctx->stock;
+        if (!$stock->hasEarningAssetLedger()) {
+            $ctx->creditLossProvision = 0.0;
+            $ctx->netChargeOffs = 0.0;
+
+            return;
+        }
+
+        $grossBook = (float) $stock->getEarningAssets();
+        $allowance = (float) $stock->getCreditLossAllowance();
+        $throughTheCycleCharge = max(0.0, $ctx->strategy->getThroughTheCycleCreditLossRate()) / 4.0 * $grossBook;
+        $explicitProvision = $ctx->creditLossProvision;
+        // A model whose credit physics is expressed only as a margin shock reports no dollar charge-offs;
+        // its realized losses then run at the through-the-cycle rate, or the allowance would be built every
+        // quarter by a charge nothing ever consumed and released back as income that was never earned.
+        $chargeOffs = min($grossBook, $ctx->netChargeOffs > 0.0 ? $ctx->netChargeOffs : $throughTheCycleCharge);
+
+        $allowance += $throughTheCycleCharge + $explicitProvision - $chargeOffs;
+        $grossBook -= $chargeOffs;
+
+        // Level correction toward the lifetime target, a quarter-step at a time in either direction, so a
+        // recovery releases reserves gradually and a depleted allowance is rebuilt rather than left empty.
+        $target = $grossBook * $this->resolveLifetimeCreditLossRate($ctx);
+        $levelCharge = ($target - max(0.0, $allowance)) * FinancialConstants::CREDIT_ALLOWANCE_CONVERGENCE_RATIO;
+        $allowance += $levelCharge;
+
+        if ($allowance < 0.0) {
+            // Losses ran past the reserve: the uncovered part is charged now, not carried as a negative asset.
+            $levelCharge -= $allowance;
+            $allowance = 0.0;
+        }
+
+        $stock->setEarningAssets((string) max(0.0, $grossBook));
+        $stock->setCreditLossAllowance((string) $allowance);
+
+        $ctx->ebitda -= $levelCharge;
+        $ctx->ebit -= $levelCharge;
+        $ctx->creditLossProvision = $throughTheCycleCharge + $explicitProvision + $levelCharge;
+        $ctx->netChargeOffs = $chargeOffs;
     }
 
     /** Lower-of-cost-or-net-realizable-value writedown on inventory the firm cannot move (ASC 330). */

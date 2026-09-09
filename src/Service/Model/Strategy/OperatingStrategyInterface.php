@@ -97,4 +97,11 @@ interface OperatingStrategyInterface
      * @return array<int, float> Quarterly revenue seasonality multipliers [Q1, Q2, Q3, Q4] summing to 4.0.
      */
     public function getSeasonalityFactors(): array;
+    /**
+     * Annual through-the-cycle expected credit loss on gross earning assets: the charge-off rate the
+     * stable cost base already carries. Zero for any business whose assets are not credit.
+     */
+    public function getThroughTheCycleCreditLossRate(): float;
+    /** Years of expected loss the credit-loss allowance covers (ASC 326 lifetime horizon). */
+    public function getCreditLossHorizonYears(): float;
 }

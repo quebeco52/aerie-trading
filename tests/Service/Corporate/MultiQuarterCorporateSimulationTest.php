@@ -260,9 +260,21 @@ class MultiQuarterCorporateSimulationTest extends TestCase
         for ($quarter = 1; $quarter <= 12; $quarter++) {
             $this->earningsEngine->calculate($stock, $neutralMacro, (($quarter - 1) * $ticksPerQuarter) + $reportingTick, 252);
 
+            $strategy = Sectors::getBusinessModelStrategy($businessModel);
+            $lease = (new CorporateMetrics())->calculateLeaseLiability((float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity());
+
             if (Sectors::isFinancial($businessModel)) {
-                // Financial balance sheets keep no plant ledger at all.
+                // A balance-sheet business keeps no plant ledger; its asset side is the earning-asset book,
+                // which has to be open, finite, and claimed in full by depositors, lenders and shareholders.
                 $this->assertNull($stock->getGrossPpe(), "{$industry} opened a plant ledger it should not have");
+                $this->assertTrue($stock->hasEarningAssetLedger(), "{$industry} never opened its earning-asset ledger");
+                $book = (float) $stock->getEarningAssets();
+                $allowance = (float) $stock->getCreditLossAllowance();
+                $this->assertTrue(is_finite($book), "Earning assets became non-finite in Q{$quarter} for {$industry}");
+                $this->assertGreaterThan(0.0, $book, "The earning-asset book collapsed in Q{$quarter} for {$industry}");
+                $this->assertGreaterThanOrEqual(0.0, $allowance, "The credit-loss allowance went negative in Q{$quarter} for {$industry}");
+                $this->assertLessThanOrEqual($book, $allowance, "The allowance exceeded the book it covers in Q{$quarter} for {$industry}");
+                $this->assertBalanceSheetBalances($stock, $lease, $industry, $quarter);
                 continue;
             }
 
@@ -286,17 +298,21 @@ class MultiQuarterCorporateSimulationTest extends TestCase
             // catches a ledger drifting free of the capital it was carved out of. (A negative-working-capital
             // business legitimately carries more plant than invested capital, because its suppliers fund
             // part of it, which is why a plant-to-capital bound was the wrong invariant here.)
-            $strategy = Sectors::getBusinessModelStrategy($businessModel);
-            $lease = (new CorporateMetrics())->calculateLeaseLiability((float) $stock->getTotalRevenue(), $strategy->getLeaseIntensity());
-            $assets = $stock->getTotalAssets($lease);
-            $claims = $stock->getTotalLiabilities($lease) + (float) $stock->getTotalEquity();
-            $this->assertEqualsWithDelta(
-                $assets,
-                $claims,
-                max(1.0, $assets * 1e-6),
-                "Balance sheet failed to balance in Q{$quarter} for {$industry}"
-            );
+            $this->assertBalanceSheetBalances($stock, $lease, $industry, $quarter);
         }
+    }
+
+    /** Every asset is claimed by a creditor or a shareholder and nothing is left over. */
+    private function assertBalanceSheetBalances(Stock $stock, float $lease, string $industry, int $quarter): void
+    {
+        $assets = $stock->getTotalAssets($lease);
+        $claims = $stock->getTotalLiabilities($lease) + (float) $stock->getTotalEquity();
+        $this->assertEqualsWithDelta(
+            $assets,
+            $claims,
+            max(1.0, $assets * 1e-6),
+            "Balance sheet failed to balance in Q{$quarter} for {$industry}"
+        );
     }
 
     /**

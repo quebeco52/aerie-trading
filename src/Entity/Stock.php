@@ -209,6 +209,21 @@ class Stock
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
     private ?string $ppeVintageDeflator = null;
 
+    /**
+     * @var string|null Gross loans, securities and other earning assets a balance-sheet business (bank,
+     *                  insurer, broker, fund) has deployed its funding into. Null until the ledger is seeded
+     *                  on the first earnings report; a non-financial firm never opens it.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, nullable: true)]
+    private ?string $earningAssets = null;
+
+    /**
+     * @var string Allowance for credit losses on the earning assets (ASC 326): the lifetime loss already
+     *             expected, carried as a contra-asset. Provisions build it and charge-offs consume it.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 4, options: ['default' => '0.0000'])]
+    private string $creditLossAllowance = '0.0000';
+
 
     // CORPORATE POLICY & MARKET PHYSICS
 
@@ -842,6 +857,56 @@ class Stock
         return $this;
     }
 
+    public function getEarningAssets(): ?string
+    {
+        return $this->earningAssets;
+    }
+
+    public function setEarningAssets(?string $earningAssets): self
+    {
+        $this->earningAssets = $earningAssets === null ? null : self::cleanBcStr($earningAssets, 4);
+        return $this;
+    }
+
+    public function getCreditLossAllowance(): string
+    {
+        return $this->creditLossAllowance;
+    }
+
+    public function setCreditLossAllowance(string $creditLossAllowance): self
+    {
+        $this->creditLossAllowance = self::cleanBcStr($creditLossAllowance, 4);
+        return $this;
+    }
+
+    /** Whether the earning-asset ledger a balance-sheet business carries has been opened. */
+    public function hasEarningAssetLedger(): bool
+    {
+        return $this->earningAssets !== null;
+    }
+
+    /**
+     * Whether any asset ledger exists to draw a balance sheet from: the plant ledger of an operating
+     * company or the earning-asset ledger of a financial one. A firm that has never reported has neither.
+     */
+    public function hasBalanceSheetLedger(): bool
+    {
+        return $this->grossPpe !== null || $this->earningAssets !== null;
+    }
+
+    /**
+     * Earning assets net of the credit-loss allowance: the loans and securities the firm expects to
+     * collect on, which is the base its yield is earned on. Zero until the ledger is seeded.
+     */
+    public function getNetEarningAssets(): float
+    {
+        if ($this->earningAssets === null) {
+            return 0.0;
+        }
+
+        return max(0.0, (float) $this->earningAssets - (float) $this->creditLossAllowance);
+    }
+
     /**
      * Net book value of property, plant and equipment: the base depreciation is charged on, and the only
      * asset account CapEx accumulates into. Zero until the ledger is seeded on the first earnings report.
@@ -1215,7 +1280,8 @@ class Stock
 
     /**
      * Total assets, derived from the balance sheet's asset side rather than stored: cash, the trade cycle,
-     * the plant and what is still being built, plus the intangibles an acquisition left behind and the
+     * the plant and what is still being built, the loans and securities a balance-sheet business holds
+     * net of the losses it expects on them, plus the intangibles an acquisition left behind and the
      * right-of-use asset that sits opposite a capitalized lease.
      */
     public function getTotalAssets(float $leaseLiability = 0.0): float
@@ -1224,6 +1290,7 @@ class Stock
             + $this->getNetReceivables()
             + (float) ($this->inventory ?? 0.0)
             + $this->getNetPpe()
+            + $this->getNetEarningAssets()
             + (float) $this->cipBalance
             + (float) $this->goodwill
             + max(0.0, $leaseLiability);

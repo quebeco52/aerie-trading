@@ -72,6 +72,12 @@ class CapitalAllocationContext
 
     // Strategy & Buybacks
     public float $organicCapex = 0.0;
+    /** Expansion cash a balance-sheet business deployed into its earning-asset ledger this quarter. */
+    public float $loanOriginations = 0.0;
+    /** Cash raised by selling earning assets to cover withdrawals or a maturity. */
+    public float $assetSaleProceeds = 0.0;
+    /** Carrying value given up below par on those sales: an other-comprehensive loss charged to equity. */
+    public float $assetSaleLoss = 0.0;
     public ?float $bankApy = null;
     public bool $debtActionTaken = false;
     

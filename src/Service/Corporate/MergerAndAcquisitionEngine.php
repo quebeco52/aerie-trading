@@ -12,6 +12,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Math\CorporateMetrics;
 use App\DTO\AcquisitionContext;
 use App\DTO\DivestitureContext;
+use App\Service\Model\BusinessModelInterface;
 
 /**
  * Service responsible for executing Mergers and Acquisitions.
@@ -60,6 +61,8 @@ class MergerAndAcquisitionEngine
     public const MA_FINANCIAL_EQUITY_CAP = 0.15;
     /** Penalty to margin for indigestion. */
     public const MA_INDIGESTION_PENALTY = 0.10;
+    /** Most of a target's net identifiable assets that can be trade cycle rather than plant. */
+    public const MA_MAX_WORKING_CAPITAL_SHARE = 0.90;
     
     /** Loss given default for financials. */
     public const MA_LGD_FINANCIAL = 0.30;
@@ -371,7 +374,7 @@ class MergerAndAcquisitionEngine
         $equityAddedByStock = $ctx->config['use_stock'] ? $ctx->purchasePrice : 0.0;
         $ctx->synergyValueCreation = $ctx->purchasePrice * ($ctx->synergyMultiplier - 1.0);
         $ctx->newEquity = $ctx->equity + $equityAddedByStock;
-        $stock->setTotalEquity((string) max(10.0, $ctx->newEquity));
+        $stock->setTotalEquity((string) $ctx->newEquity);
 
         $oldOperatingMargin = (float) $stock->getOperatingMargin();
         $oldInvestedCapital = $stock->getInvestedCapital();
@@ -394,16 +397,7 @@ class MergerAndAcquisitionEngine
         $ctx->goodwillRecorded = max(0.0, $ctx->purchasePrice - $netAssetsAcquired);
         $stock->setGoodwill((string) ((float) $stock->getGoodwill() + $ctx->goodwillRecorded));
 
-        // ASC 805 step-up: the identifiable assets acquired come on at fair value, so their gross cost and
-        // book value are the same on day one and they enter the ledger with no accumulated depreciation.
-        // Only the fixed-asset share joins PP&E; the rest of the net assets is the target's working capital,
-        // which is not depreciated. Without this the acquirer's own plant would be all it ever depreciates
-        // while the acquired revenue was booked in full.
-        if ($stock->getGrossPpe() !== null && $netAssetsAcquired > 0.0) {
-            $workingCapitalShare = max(0.0, min(0.90, $ctx->strategy->getWorkingCapitalIntensity($stock)));
-            $acquiredPpe = $netAssetsAcquired * (1.0 - $workingCapitalShare);
-            $stock->setGrossPpe((string) ((float) $stock->getGrossPpe() + $acquiredPpe));
-        }
+        $this->bookAcquiredNetAssets($stock, $ctx->strategy, $netAssetsAcquired);
         
         $blendedMargin = (($oldCapitalBase * $oldOperatingMargin) + ($ctx->purchasePrice * $targetMargin)) / $totalNewCapital;
         $stock->setOperatingMargin((string) max(0.01, $blendedMargin * (1.0 - self::MA_INDIGESTION_PENALTY)));
@@ -430,6 +424,74 @@ class MergerAndAcquisitionEngine
         
         $currentEps = (float) $stock->getEarningsPerShare();
         $stock->setEarningsPerShare((string) ($currentEps + ($trueAcquiredNetIncome / max(1.0, $ctx->shares))));
+    }
+
+    /**
+     * Puts the net identifiable assets acquired onto the ledgers they belong to (ASC 805). The target's trade
+     * cycle joins the acquirer's receivables, inventory and payables in the acquirer's own proportions, with
+     * the credit-loss allowance scaling alongside the receivables it covers. The rest is plant, carried at
+     * fair value with no accumulated depreciation and, as an asset purchase, a tax basis stepped up to that
+     * same cost. Without the plant the acquirer's own assets would be all it ever depreciated while the
+     * acquired revenue was booked in full.
+     *
+     * Every dollar of net assets has to land on an asset account: that is what keeps the cash (or debt, or
+     * shares) that paid for them equal to the goodwill and net assets that came in, so the balance sheet
+     * still balances after the deal. Computing the working-capital share and then not booking it anywhere
+     * shrank the asset side by that share on every cash deal with no claim moving to match.
+     */
+    private function bookAcquiredNetAssets(Stock $stock, BusinessModelInterface $strategy, float $netAssetsAcquired): void
+    {
+        if ($netAssetsAcquired <= 0.0) {
+            return;
+        }
+
+        if ($stock->hasEarningAssetLedger()) {
+            // A lender buys a loan book and the deposits that fund it; the net assets are loans and securities.
+            $stock->setEarningAssets((string) ((float) $stock->getEarningAssets() + $netAssetsAcquired));
+
+            return;
+        }
+
+        if ($stock->getGrossPpe() === null) {
+            return; // No ledger is open yet: the first report seeds the balance sheet from capital as a whole.
+        }
+
+        $acquiredWorkingCapital = 0.0;
+        if ($stock->hasWorkingCapitalLedger()) {
+            $workingCapitalShare = max(0.0, min(self::MA_MAX_WORKING_CAPITAL_SHARE, $strategy->getWorkingCapitalIntensity($stock)));
+            $acquiredWorkingCapital = $netAssetsAcquired * $workingCapitalShare;
+            $this->addWorkingCapital($stock, $acquiredWorkingCapital);
+        }
+
+        $acquiredPpe = $netAssetsAcquired - $acquiredWorkingCapital;
+        $stock->setGrossPpe((string) ((float) $stock->getGrossPpe() + $acquiredPpe));
+        if ($stock->getPpeTaxBasis() !== null) {
+            $stock->setPpeTaxBasis((string) ((float) $stock->getPpeTaxBasis() + $acquiredPpe));
+        }
+    }
+
+    /**
+     * Grows the trade ledger by a given amount of net working capital, keeping the acquirer's mix of
+     * receivables, inventory and payables. A supplier-funded cycle (net working capital at or below zero) has
+     * no positive mix to scale, so the acquired balance is booked as billed sales awaiting collection.
+     */
+    private function addWorkingCapital(Stock $stock, float $amount): void
+    {
+        if ($amount <= 0.0) {
+            return;
+        }
+
+        $currentNetWorkingCapital = (float) $stock->getNetWorkingCapital();
+        if ($currentNetWorkingCapital <= 0.0) {
+            $stock->setReceivables((string) ((float) $stock->getReceivables() + $amount));
+            return;
+        }
+
+        $scale = 1.0 + ($amount / $currentNetWorkingCapital);
+        $stock->setReceivables((string) ((float) $stock->getReceivables() * $scale));
+        $stock->setReceivablesAllowance((string) ((float) $stock->getReceivablesAllowance() * $scale));
+        $stock->setInventory((string) ((float) $stock->getInventory() * $scale));
+        $stock->setPayables((string) ((float) $stock->getPayables() * $scale));
     }
 
     private function finalizeAcquisitionEvent(AcquisitionContext $ctx): array
@@ -585,7 +647,12 @@ class MergerAndAcquisitionEngine
         $ctx->currentDebt = (float) $ctx->seller->getWholesaleDebt();
         $ctx->lostDebt = $ctx->currentDebt * $ctx->divestedFraction;
         
-        $ctx->lostEquity = $ctx->strategy->calculateDivestedEquity($ctx->seller, $ctx->divestedFraction, $ctx->currentEquity, $ctx->currentDebt, $ctx->treasury, $ctx->investedCapital, $ctx->lostDebt);
+        // The book value leaving with the division is what its ledgers actually carry, less the debt the buyer
+        // assumes. Only a balance sheet with no modelled asset side (a bank's loan book) falls back to the
+        // strategy's capital-proxy estimate; anything else would state a gain against assets never retired.
+        $ctx->lostEquity = $ctx->seller->hasBalanceSheetLedger()
+            ? $this->calculateBookValueDisposed($ctx->seller, $ctx->divestedFraction) - $ctx->lostDebt
+            : $ctx->strategy->calculateDivestedEquity($ctx->seller, $ctx->divestedFraction, $ctx->currentEquity, $ctx->currentDebt, $ctx->treasury, $ctx->investedCapital, $ctx->lostDebt);
 
         if ($ctx->normalizedNetIncome > 0) {
             $ctx->salePrice = $ctx->lostNetIncome * $ctx->saleMultiple;
@@ -613,17 +680,14 @@ class MergerAndAcquisitionEngine
         $currentRevenue = (float) $stock->getTotalRevenue();
         $stock->setTotalRevenue((string) max(1.0, $currentRevenue * (1.0 - $ctx->divestedFraction)));
 
-        // The buyer takes the division's plant with it. Gross cost and accumulated depreciation are both
-        // retired pro rata, which leaves the remaining asset base at the same average age as before: selling
-        // a division tells you nothing about how worn the plant you kept is.
-        if ($stock->getGrossPpe() !== null) {
-            $retained = max(0.0, 1.0 - $ctx->divestedFraction);
-            $stock->setGrossPpe((string) ((float) $stock->getGrossPpe() * $retained));
-            $stock->setAccumulatedDepreciation((string) ((float) $stock->getAccumulatedDepreciation() * $retained));
+        if ($stock->hasBalanceSheetLedger()) {
+            $this->retireDivestedLedgers($stock, $ctx->divestedFraction);
         }
 
+        // Equity moves by the gain or loss on sale and nothing else: proceeds in, book value out. No floor,
+        // because a floor would invent equity with no asset behind it and unbalance the sheet.
         $newEquity = $ctx->currentEquity - $ctx->lostEquity + $ctx->salePrice;
-        $stock->setTotalEquity((string) max(10.0, $newEquity));
+        $stock->setTotalEquity((string) $newEquity);
         
         $ctx->gainOnSale = $ctx->salePrice - $ctx->lostEquity;
         $currentRetained = (float) $stock->getRetainedEarnings();
@@ -634,6 +698,67 @@ class MergerAndAcquisitionEngine
             $operatingMargin = (float) $stock->getOperatingMargin();
             $marginBump = $operatingMargin * ($ctx->divestedFraction * self::DIV_DISTRESS_MARGIN_BUMP); 
             $stock->setOperatingMargin((string) ($operatingMargin + $marginBump));
+        }
+    }
+
+    /**
+     * Book value of the assets a divested division takes with it, before the debt the buyer assumes: a pro
+     * rata slice of every operating ledger. Goodwill follows the business it was paid for (ASC 350-20-40-1
+     * allocates it on relative value, which a fraction of the whole approximates), the trade cycle goes net of
+     * its credit-loss allowance and of the payables suppliers are owed, and the deferred tax on the plant's
+     * timing difference is a liability the buyer inherits with the plant.
+     */
+    private function calculateBookValueDisposed(Stock $stock, float $fraction): float
+    {
+        $assets = $stock->getNetPpe()
+            + (float) $stock->getCipBalance()
+            + (float) $stock->getGoodwill()
+            + $stock->getNetReceivables()
+            + (float) ($stock->getInventory() ?? 0.0)
+            + $stock->getNetEarningAssets();
+        $liabilities = (float) ($stock->getPayables() ?? 0.0) + (float) $stock->getDeferredTaxLiability();
+
+        if ($stock->hasEarningAssetLedger()) {
+            // A divested banking division takes its share of the cash reserves and the deposits that fund
+            // it, which is what the financial strategy sheds in shedDivestedLiabilities().
+            $assets += max(0.0, (float) $stock->getCorporateTreasury());
+            $liabilities += (float) $stock->getCustomerDeposits();
+        }
+
+        return ($assets - $liabilities) * $fraction;
+    }
+
+    /**
+     * Retires the divested fraction of every operating ledger, the same slice calculateBookValueDisposed()
+     * valued. Gross cost and accumulated depreciation leave together, which keeps the plant that stays at the
+     * same average age: selling a division tells you nothing about how worn the plant you kept is. The tax
+     * basis and deferred tax go with the plant, goodwill with the business, and the trade balances with the
+     * customers and suppliers who move to the buyer. Cash stays: the proceeds are already in treasury.
+     */
+    private function retireDivestedLedgers(Stock $stock, float $fraction): void
+    {
+        $retained = max(0.0, 1.0 - $fraction);
+
+        if ($stock->hasEarningAssetLedger()) {
+            $stock->setEarningAssets((string) ((float) $stock->getEarningAssets() * $retained));
+            $stock->setCreditLossAllowance((string) ((float) $stock->getCreditLossAllowance() * $retained));
+        }
+        if ($stock->getGrossPpe() !== null) {
+            $stock->setGrossPpe((string) ((float) $stock->getGrossPpe() * $retained));
+            $stock->setAccumulatedDepreciation((string) ((float) $stock->getAccumulatedDepreciation() * $retained));
+        }
+        if ($stock->getPpeTaxBasis() !== null) {
+            $stock->setPpeTaxBasis((string) ((float) $stock->getPpeTaxBasis() * $retained));
+        }
+        $stock->setCipBalance((string) ((float) $stock->getCipBalance() * $retained));
+        $stock->setGoodwill((string) ((float) $stock->getGoodwill() * $retained));
+        $stock->setDeferredTaxLiability((string) ((float) $stock->getDeferredTaxLiability() * $retained));
+
+        if ($stock->hasWorkingCapitalLedger()) {
+            $stock->setReceivables((string) ((float) $stock->getReceivables() * $retained));
+            $stock->setReceivablesAllowance((string) ((float) $stock->getReceivablesAllowance() * $retained));
+            $stock->setInventory((string) ((float) $stock->getInventory() * $retained));
+            $stock->setPayables((string) ((float) $stock->getPayables() * $retained));
         }
     }
 

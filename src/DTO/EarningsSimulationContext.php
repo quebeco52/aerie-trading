@@ -87,6 +87,14 @@ class EarningsSimulationContext
     public float $stockCompensation = 0.0;
     /** Goodwill written down this quarter under the annual impairment test (ASC 350), non-cash. */
     public float $goodwillImpairment = 0.0;
+    /** Provision for credit losses on the earning-asset book charged this quarter, net of any release (financials). */
+    public float $creditLossProvision = 0.0;
+    /** Earning assets written off against the allowance this quarter (financials). */
+    public float $netChargeOffs = 0.0;
+    /** Cash deployed into new earning assets less assets sold (financials). */
+    public float $netLoanOriginations = 0.0;
+    /** Loss realized on earning assets sold below carrying value, booked to equity as other comprehensive loss. */
+    public float $assetSaleLoss = 0.0;
     /** Quarterly net cash from operations (net income + D&A - working capital build). */
     public float $operatingCashFlow = 0.0;
     /** Quarterly net cash from investing (negative = net investment). */

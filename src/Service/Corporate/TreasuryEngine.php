@@ -23,6 +23,10 @@ class TreasuryEngine
     /** Additional variable spend rate (35%) scaled by economic spread (ROIC - WACC). */
     private const VARIABLE_ORGANIC_SPEND_RATE = 0.35;
 
+    // --- Lender Funding Deployment ---
+    /** Cash held above the operating target before a lender treats the rest as deployable funding (same buffer the expansion path uses). */
+    private const LIQUIDITY_BUFFER_MULTIPLIER = 1.20;
+
     // --- Physical Capacity Limits (Growth Speed Limits) ---
     private const FIN_MEGA_HOARDER_GROWTH_LIMIT = 0.35;
     private const FIN_HOARDER_GROWTH_LIMIT = 0.20;
@@ -47,6 +51,10 @@ class TreasuryEngine
     {
         // SYSTEMIC M2 MONEY SUPPLY GROWTH
         $this->processPassiveLiabilityGrowth($ctx);
+
+        // A withdrawal the cash could not cover is met by selling earning assets, at a discount, before the
+        // treasury reaches for borrowing: a run is paid out of the book, and the book takes the loss.
+        $this->liquidateEarningAssetsForCash($ctx, 0.0);
 
         // DEBT MANAGEMENT (MACRO TOLERANCE)
         $this->processDebtExpansion($ctx);
@@ -96,6 +104,12 @@ class TreasuryEngine
         // THE MATURITY WALL (principal actually comes due)
         $this->processDebtMaturities($ctx);
 
+        // A lender short of its operating cash sells from the book before it borrows at penalty rates.
+        $this->liquidateEarningAssetsForCash(
+            $ctx,
+            $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)
+        );
+
         // THE DEBT TRAP (Liquidity Crisis)
         $this->processEmergencyBorrowing($ctx);
 
@@ -111,8 +125,66 @@ class TreasuryEngine
         // THE DELEVERAGING SWEEP (Macro-Driven Cash Management)
         $this->processDeleveragingSweep($ctx, (float) $newEquityStr);
 
+        // Earning assets sold below carrying value this quarter: the discount is a loss the shareholders
+        // bear, taken to equity as other comprehensive loss (the securities were never in earnings) so
+        // the book that shrank and the claims on it move together.
+        if ($ctx->assetSaleLoss > 0.0) {
+            $lossStr = $this->formatBc($ctx->assetSaleLoss);
+            $stock->setTotalEquity(\bcsub($this->formatBc($stock->getTotalEquity()), $lossStr, 4));
+            $stock->setRetainedEarnings(\bcsub($this->formatBc($stock->getRetainedEarnings()), $lossStr, 4));
+        }
+
         // SAVE FINAL TREASURY
         $stock->setCorporateTreasury((string) $ctx->newTreasury);
+    }
+
+    /**
+     * Raises cash by selling earning assets when the balance has fallen below a floor.
+     *
+     * Securities go first and go below par; loans nobody bids for on the day cannot go at all, which is
+     * why only a bounded share of the book can be sold in a quarter. The allowance attached to the slice
+     * sold leaves with it, so the net book falls by exactly the carrying value given up: proceeds come in
+     * as cash and the haircut is the loss. This is the mechanism a deposit run actually works through, and
+     * the reason a solvent bank with a long-dated book can still be sunk by short-dated funding.
+     */
+    private function liquidateEarningAssetsForCash(CapitalAllocationContext $ctx, float $cashFloor): void
+    {
+        $stock = $ctx->stock;
+        if (!$ctx->strategy->isFinancial() || !$stock->hasEarningAssetLedger() || $ctx->newTreasury >= $cashFloor) {
+            return;
+        }
+
+        $grossBook = (float) $stock->getEarningAssets();
+        $allowance = (float) $stock->getCreditLossAllowance();
+        $netBook = max(0.0, $grossBook - $allowance);
+        if ($netBook <= 0.0) {
+            return;
+        }
+
+        $haircut = FinancialConstants::EARNING_ASSET_FIRE_SALE_HAIRCUT;
+        $shortfall = $cashFloor - $ctx->newTreasury;
+        $carryingValueSold = min(
+            $netBook * FinancialConstants::MAX_QUARTERLY_ASSET_LIQUIDATION_RATIO,
+            $shortfall / (1.0 - $haircut)
+        );
+        if ($carryingValueSold <= 0.0) {
+            return;
+        }
+
+        $proceeds = $carryingValueSold * (1.0 - $haircut);
+        $retained = 1.0 - ($carryingValueSold / $netBook);
+        $stock->setEarningAssets((string) ($grossBook * $retained));
+        $stock->setCreditLossAllowance((string) ($allowance * $retained));
+
+        $ctx->newTreasury += $proceeds;
+        $ctx->assetSaleProceeds += $proceeds;
+        $ctx->assetSaleLoss += $carryingValueSold - $proceeds;
+
+        if ($proceeds > 500_000_000.0) {
+            $amtB = number_format($proceeds / 1_000_000_000, 2);
+            $lossB = number_format(($carryingValueSold - $proceeds) / 1_000_000_000, 2);
+            $ctx->events[] = ['description' => "Sold \${$amtB}B of securities and loans below carrying value to meet withdrawals, realizing a \${$lossB}B loss.", 'shock' => -3.0];
+        }
     }
 
     private function processDebtExpansion(CapitalAllocationContext $ctx): void
@@ -211,6 +283,12 @@ class TreasuryEngine
     private function processOrganicCapex(CapitalAllocationContext $ctx): void
     {
         $stock = $ctx->stock;
+        if ($ctx->strategy->isFinancial() && $stock->hasEarningAssetLedger() && $ctx->strategy->deploysFundingIntoEarningAssets()) {
+            $this->deployFundingIntoEarningAssets($ctx);
+
+            return;
+        }
+
         $currentEquity = (float) $stock->getTotalEquity();
         $preBuybackEquity = $currentEquity + $ctx->quarterlyNetIncome + $ctx->stockCompensation - $ctx->totalPaid;
 
@@ -280,7 +358,14 @@ class TreasuryEngine
                 $ctx->organicCapex = $expansionSpend;
                 $ctx->newTreasury -= $expansionSpend;
 
-                $this->capExEngine->allocateGrowthCapEx($stock, $expansionSpend);
+                if ($ctx->strategy->isFinancial() && $stock->hasEarningAssetLedger()) {
+                    // A lender's expansion is loans made, not plant built: the cash goes straight onto the
+                    // earning-asset ledger. Queuing it as construction parked it for a quarter and then dropped it.
+                    $stock->setEarningAssets((string) ((float) $stock->getEarningAssets() + $expansionSpend));
+                    $ctx->loanOriginations += $expansionSpend;
+                } else {
+                    $this->capExEngine->allocateGrowthCapEx($stock, $expansionSpend);
+                }
 
                 if ($expansionSpend > 1_000_000_000.0) {
                     $amtB = number_format($expansionSpend / 1_000_000_000, 2);
@@ -297,6 +382,56 @@ class TreasuryEngine
                     $ctx->events[] = ['description' => "Deployed \${$amtB}B in {$actionText}.", 'shock' => 0.5];
                 }
             }
+        }
+    }
+
+    /**
+     * Lends out the funding a balance-sheet business holds beyond its liquidity target.
+     *
+     * Deposits are not a cash hoard waiting for a project with a positive spread: they are the raw material,
+     * and a bank that leaves them idle is not a cautious bank but one whose loan book is shrinking against
+     * its funding. So unlike physical expansion, which is probabilistic, rate-limited and gated on the
+     * marginal return, deployment here is deterministic and complete every quarter: whatever sits above the
+     * operating cash target goes into loans and securities, with two exceptions. The earnings retained this
+     * quarter stay in cash, because capital return is funded from earnings and not from the deposit base;
+     * and an institution its regulator has already stopped from distributing (capital ratio below the
+     * conservation buffer, or leverage past its limit) cannot add risk-weighted assets either. Before this
+     * the deposit inflow ran through the physical capex path, fired in about half the quarters and then
+     * lent only half the excess, so cash ratcheted up quarter after quarter while the book stood still.
+     */
+    private function deployFundingIntoEarningAssets(CapitalAllocationContext $ctx): void
+    {
+        $stock = $ctx->stock;
+
+        $targetCashReserves = $ctx->strategy->calculateTargetOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt) * self::LIQUIDITY_BUFFER_MULTIPLIER;
+        $excessCash = max(0.0, $ctx->newTreasury - $targetCashReserves);
+        $deployable = max(0.0, $excessCash - max(0.0, $ctx->retainedEarningsThisQuarter));
+        if ($deployable <= 0.0) {
+            return;
+        }
+
+        $regulatoryCap = $ctx->strategy->getRegulatoryDividendCap($stock, $ctx->newTreasury);
+        if ($regulatoryCap !== null && $regulatoryCap <= 0.0) {
+            return; // Capital-constrained: the regulator has the balance sheet frozen, not just the dividend.
+        }
+
+        $stock->setEarningAssets((string) ((float) $stock->getEarningAssets() + $deployable));
+        $ctx->newTreasury -= $deployable;
+        $ctx->organicCapex = $deployable;
+        $ctx->loanOriginations += $deployable;
+
+        if ($deployable > 1_000_000_000.0) {
+            $amtB = number_format($deployable / 1_000_000_000, 2);
+            $actionText = match ($ctx->businessModel) {
+                'commercial_bank', 'credit_services', 'shadow_bank' => 'loan book expansion',
+                'insurance', 'retail_insurance', 'reinsurance' => 'the investment portfolio backing the float',
+                'brokerage', 'investment_bank' => 'trading desk and market-making capacity',
+                'asset_manager', 'private_equity', 'hedge_fund' => 'fund seeding and AUM deployment',
+                'clearing_house' => 'clearing collateral and exchange margin reserves',
+                'distressed_debt' => 'distressed credit and turnaround equity acquisitions',
+                default => 'earning assets'
+            };
+            $ctx->events[] = ['description' => "Deployed \${$amtB}B in {$actionText}.", 'shock' => 0.5];
         }
     }
 

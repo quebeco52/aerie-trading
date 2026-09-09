@@ -174,6 +174,32 @@ class CorporateMetrics
         $stock->setAccumulatedDepreciation((string) ($grossPpe - $netPpe));
     }
 
+    /**
+     * Seeds the earning-asset ledger for a balance-sheet business that has never reported.
+     *
+     * Everything the institution funds and does not hold as cash is deployed in loans and securities, so the
+     * net book is equity plus all funding less idle cash less any goodwill an acquisition left behind: the
+     * accounting identity read backwards, exactly as the plant ledger is seeded. Gross is that net book
+     * grossed up by the lifetime loss already expected on it, so the allowance opens at its target and the
+     * first report does not book a phantom provision to build one (the same lesson the receivables
+     * allowance taught). A fixture whose cash exceeds its funding cannot balance; its book is empty.
+     */
+    public function seedEarningAssetLedger(Stock $stock, float $lifetimeLossRate): void
+    {
+        $netBook = max(
+            0.0,
+            (float) $stock->getTotalEquity()
+            + (float) $stock->getTotalDebt()
+            - max(0.0, (float) $stock->getCorporateTreasury())
+            - max(0.0, (float) $stock->getGoodwill())
+        );
+        $rate = max(0.0, min(0.50, $lifetimeLossRate));
+        $grossBook = $netBook / (1.0 - $rate);
+
+        $stock->setEarningAssets((string) $grossBook);
+        $stock->setCreditLossAllowance((string) ($grossBook - $netBook));
+    }
+
     public function calculateInterestCoverageRatio(float $ebit, float $interestExpense): float
     {
         if ($interestExpense <= 0.0) {

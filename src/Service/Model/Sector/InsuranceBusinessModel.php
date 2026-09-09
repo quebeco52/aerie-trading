@@ -497,6 +497,12 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      * @param float $wholesaleDebt    The wholesale debt balance.
      * @return float The target operating cash to maintain.
      */
+    /** Float above the regulatory surplus buffer is invested, not held. */
+    public function deploysFundingIntoEarningAssets(): bool
+    {
+        return true;
+    }
+
     public function calculateTargetOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
     {
         // Target 100% of Customer Deposits to maintain a strict regulatory surplus buffer.

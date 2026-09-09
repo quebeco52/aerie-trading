@@ -118,11 +118,13 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     // --- Macaulay Duration Gap & IRRBB NIM Physics ---
     /** Weighted average Macaulay duration of bank loan and mortgage assets in years. */
     public const ASSET_DURATION_YEARS          = 4.5;
+    /** Years of expected loss the CECL allowance covers. At the through-the-cycle loss rate this puts the reserve near 1.7% of loans, where large US banks have run since CECL adoption. */
+    public const CECL_LIFETIME_HORIZON_YEARS   = 4.0;
     /** Weighted average Macaulay duration of customer deposit and wholesale liabilities in years. */
     public const LIABILITY_DURATION_YEARS      = 1.5;
     /** Floating-rate asset/liability natural hedge effectiveness dampening duration mismatch exposure. */
     public const FLOATING_HEDGE_EFFICIENCY     = 0.50;
-    /** Break-even NIM floor (~50bps). Steep curve = profit; flat or inverted curve = squeeze. */
+    /** Break-even NIM floor (~50bps): the neutral 2s10s slope (~70bps) less the interbank spread the funding side pays. Steeper = profit; flat or inverted = squeeze. */
     public const NIM_BASE_SPREAD_BUFFER        = 0.005;
     /** Calibrated baseline sensitivity for NIM duration gap exposure before company-specific ALM adjustments. */
     public const NIM_INVERSION_SENSITIVITY     = 10.0;
@@ -328,9 +330,9 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
         $effectiveEquity = max(1.0, $equity);
 
-        // Earning Assets represent the physical capital deployed into loans.
-        // It is Equity + Total Debt, minus cash sitting idle in the Treasury.
-        $earningAssets = max($effectiveEquity, $effectiveEquity + $totalDebt - $treasury);
+        // Earning assets are the loan book the yield is struck on: the ledger once it is open, and before
+        // that the funding deployed away from idle cash.
+        $earningAssets = $this->resolveEarningAssets($stock, $treasury);
         $baselineRoe = max(0.01, (float) $stock->getBaselineRoe());
 
         $ttmRoe = (float) $stock->getRoeTtm();
@@ -499,11 +501,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // Balance sheet loan book (Earning Assets) deployed into credit
-        $equity = (float) $stock->getTotalEquity();
-        $totalDebt = (float) $stock->getTotalDebt();
-        $treasury = (float) $stock->getCorporateTreasury();
-        $effectiveEquity = max(1.0, $equity);
-        $earningAssets = max($effectiveEquity, $effectiveEquity + $totalDebt - $treasury);
+        $earningAssets = $this->resolveEarningAssets($stock);
 
         // Basel II/III Vasicek ASRF Credit Risk Physics:
         // Expected loss on the loan portfolio under macroeconomic credit shock $defaultZ.
@@ -514,6 +512,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         // Convert annual loan loss rate delta to quarterly dollar credit provision shock
         $quarterlyDollarLoss = ($annualLossDelta / self::ANNUALIZATION_FACTOR) * $earningAssets;
         $provisionCostAddon = $quarterlyDollarLoss / max(1.0, $actualRevenue);
+
+        // What actually went bad this quarter: the conditional loss rate on the book. The through-the-cycle
+        // part of it is already inside the stable cost base; only the excess reaches the margin below.
+        $netChargeOffs = max(0.0, $conditionalEl / self::ANNUALIZATION_FACTOR) * $earningAssets;
 
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / self::INDEX_NORMALIZATION_BASE;
         $retailDefaultShift = max(0.0, ($macroState->retailDefaultRateEma - MacroEngine::RETAIL_DEFAULT_BASELINE) / MacroEngine::RETAIL_DEFAULT_BASELINE);
@@ -559,6 +561,9 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         // leaving Non-Interest custodial / wealth / transaction fee income completely insulated.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
         $niiCostAddon = ($lossProvisionShock + $nimSqueeze + $ceclDrag) * $niiWeight;
+        // The credit part of that addon in dollars, so the allowance ledger can be rolled with the same
+        // charge the income statement carried. The curve squeeze is a funding cost, not a credit one.
+        $explicitCreditProvision = ($lossProvisionShock + $ceclDrag) * $niiWeight * $actualRevenue;
         $rawMargin = $realizedVariableMargin + $niiCostAddon;
         $clampedMargin = $this->clampMargin($rawMargin, $minVariableMargin);
 
@@ -583,10 +588,27 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             eventType: $eventType,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+            creditLossProvision: $explicitCreditProvision,
+            netChargeOffs: $netChargeOffs,
         );
     }
 
+    /** Through-the-cycle loss on a prime loan book: long-run default probability at its loss given default. */
+    public function getThroughTheCycleCreditLossRate(): float
+    {
+        return MathUtility::getInstance()->calculateVasicekExpectedLoss(0.0, self::LRA_DEFAULT_RATE, self::ASSET_CORRELATION_RHO, self::LGD_BASELINE);
+    }
 
+    public function getCreditLossHorizonYears(): float
+    {
+        return self::CECL_LIFETIME_HORIZON_YEARS;
+    }
+
+    /** Deposits are the raw material: whatever is not needed as reserves is lent. */
+    public function deploysFundingIntoEarningAssets(): bool
+    {
+        return true;
+    }
 
     /**
      * Banks earn standard money-market yields only on excess liquidity that isn't actively deployed.
@@ -830,9 +852,9 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public function calculateRiskWeightedAssets(Stock $stock, ?float $currentTreasury = null): float
     {
         $treasury = $currentTreasury ?? (float) $stock->getCorporateTreasury();
-        $totalEquity = (float) $stock->getTotalEquity();
-        $totalDebt = (float) $stock->getTotalDebt();
-        $earningAssets = max(0.0, $totalEquity + $totalDebt - $treasury);
+        $earningAssets = $stock->hasEarningAssetLedger()
+            ? $stock->getNetEarningAssets()
+            : max(0.0, (float) $stock->getTotalEquity() + (float) $stock->getTotalDebt() - $treasury);
 
         return ($earningAssets * self::BASEL_RISK_WEIGHT_EARNING_ASSETS) + ($treasury * self::BASEL_RISK_WEIGHT_TREASURY);
     }

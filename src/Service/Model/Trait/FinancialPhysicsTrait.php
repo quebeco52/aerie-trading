@@ -172,6 +172,24 @@ trait FinancialPhysicsTrait
     }
 
     public function isFinancial(): bool { return true; }
+
+    /**
+     * The loans, securities and other assets the institution earns its yield on, net of the losses it
+     * already expects. Read from the earning-asset ledger once it is open; before that (a firm that has
+     * never reported) it is what the funding must have been deployed into: equity plus all funding less
+     * the cash still idle, which is the identity the ledger is seeded from.
+     */
+    public function resolveEarningAssets(Stock $stock, ?float $currentTreasury = null): float
+    {
+        if ($stock->hasEarningAssetLedger()) {
+            return max(1.0, $stock->getNetEarningAssets());
+        }
+
+        $treasury = $currentTreasury ?? (float) $stock->getCorporateTreasury();
+        $effectiveEquity = max(1.0, (float) $stock->getTotalEquity());
+
+        return max($effectiveEquity, $effectiveEquity + (float) $stock->getTotalDebt() - $treasury);
+    }
     public function getMinIcr(): float { return 1.05; }
     public function getBankruptEquityThreshold(): float { return 2.0; }
     public function getDistressEquityThreshold(): float { return 4.0; }

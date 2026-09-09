@@ -171,6 +171,13 @@ class MarketSeedCommand extends Command
                         $stock->getTotalCipAmount(),
                         (float) ($stockData['asset_age_ratio'] ?? \App\Service\Math\FinancialConstants::SEED_ASSET_AGE_RATIO)
                     );
+                } else {
+                    // A balance-sheet business opens its loan book instead, with the allowance already at
+                    // the lifetime loss it expects so the first report books no phantom provision.
+                    \App\Service\Math\CorporateMetrics::getInstance()->seedEarningAssetLedger(
+                        $stock,
+                        $strategy->getThroughTheCycleCreditLossRate() * $strategy->getCreditLossHorizonYears()
+                    );
                 }
 
                 $impliedPricingRoic = $isFinancial 

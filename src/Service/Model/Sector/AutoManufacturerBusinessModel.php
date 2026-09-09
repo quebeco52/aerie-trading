@@ -100,8 +100,8 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     public const SOFTWARE_VARIANCE_SCALAR = 0.12;
 
     // --- Financing Arm & Credit Physics ---
-    /** Break-even Net Interest Margin floor (~50bps). */
-    public const NIM_SPREAD_BUFFER = 0.005;
+    /** Break-even Net Interest Margin floor for the captive finance arm (~70bps, the neutral 2s10s slope). */
+    public const NIM_SPREAD_BUFFER = 0.007;
 
     /** Linear sensitivity to yield curve spread. */
     public const NIM_LINEAR_SENSITIVITY = 1.00;

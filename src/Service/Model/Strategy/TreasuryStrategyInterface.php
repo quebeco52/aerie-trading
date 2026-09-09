@@ -26,4 +26,10 @@ interface TreasuryStrategyInterface
      */
     public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility, ?float $realizedWholesaleRate = null): float;
     public function calculateCashYield(MacroStateDTO $macroState): float;
+    /**
+     * Whether funding held above the liquidity target is lent out every quarter as a matter of course.
+     * True for a balance-sheet lender or float-taker, whose deposits are raw material and not a hoard;
+     * false for a fund, whose uninvested cash is dry powder committed on its own judgement of the cycle.
+     */
+    public function deploysFundingIntoEarningAssets(): bool;
 }

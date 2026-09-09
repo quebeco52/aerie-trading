@@ -369,4 +369,355 @@ class MergerAndAcquisitionEngineTest extends TestCase
 
         $this->assertNull($result);
     }
+
+    // =========================================================================
+    // BALANCE SHEET IDENTITY THROUGH DEALS
+    // =========================================================================
+
+    /**
+     * A cash deal swaps cash for goodwill plus the net assets bought. Every dollar of those net assets must
+     * land on a ledger (trade cycle or plant) or the asset side shrinks with no claim moving to match.
+     */
+    public function testCashAcquisitionKeepsTheBalanceSheetBalancedAndBooksAcquiredWorkingCapital(): void
+    {
+        $stock = $this->buildLedgeredAcquirer('CASH', treasury: 20_000_000_000.0, debt: 1_000_000_000.0, shares: 100_000_000.0);
+        $macroState = new MacroStateDTO(policyRateEma: 0.03, corporateTaxRate: 0.21, yield5yEma: 0.035);
+        $this->primeHealthyDeal(operatingBase: 1_000_000_000.0); // tiny operating base: the treasury is a hoard
+
+        $this->assertBalanced($stock, 'the fixture must open balanced');
+        $treasuryBefore = (float) $stock->getCorporateTreasury();
+        $equityBefore = (float) $stock->getTotalEquity();
+        $debtBefore = (float) $stock->getWholesaleDebt();
+        $receivablesBefore = (float) $stock->getReceivables();
+        $inventoryBefore = (float) $stock->getInventory();
+        $payablesBefore = (float) $stock->getPayables();
+        $workingCapitalBefore = (float) $stock->getNetWorkingCapital();
+        $grossBefore = (float) $stock->getGrossPpe();
+        $taxBasisBefore = (float) $stock->getPpeTaxBasis();
+        $goodwillBefore = (float) $stock->getGoodwill();
+
+        $result = $this->engine->evaluatePrivateAcquisition($stock, $macroState, 1.0);
+        $this->assertIsArray($result);
+        $spent = (float) $result['spent'];
+        $this->assertGreaterThan(0.0, $spent);
+
+        // Paid entirely from cash: no shares, no debt, no day-one equity (ASC 805).
+        $this->assertEqualsWithDelta($treasuryBefore - $spent, (float) $stock->getCorporateTreasury(), 1.0);
+        $this->assertEqualsWithDelta($debtBefore, (float) $stock->getWholesaleDebt(), 1.0);
+        $this->assertEqualsWithDelta($equityBefore, (float) $stock->getTotalEquity(), 1.0);
+
+        // What came in: goodwill, working capital in the acquirer's own mix, and plant at fair value.
+        $goodwillRecorded = (float) $stock->getGoodwill() - $goodwillBefore;
+        $workingCapitalAdded = (float) $stock->getNetWorkingCapital() - $workingCapitalBefore;
+        $plantAdded = (float) $stock->getGrossPpe() - $grossBefore;
+        $this->assertGreaterThan(0.0, $goodwillRecorded);
+        $this->assertGreaterThan(0.0, $workingCapitalAdded, 'the target brought a trade cycle with it');
+        $this->assertGreaterThan(0.0, $plantAdded);
+        $this->assertEqualsWithDelta($spent, $goodwillRecorded + $workingCapitalAdded + $plantAdded, 1.0, 'cash out equals assets in');
+        $this->assertEqualsWithDelta($plantAdded, (float) $stock->getPpeTaxBasis() - $taxBasisBefore, 1.0, 'an asset purchase steps the tax basis up to cost');
+        $this->assertEqualsWithDelta($receivablesBefore / $inventoryBefore, (float) $stock->getReceivables() / (float) $stock->getInventory(), 1e-9, 'the mix is preserved');
+        $this->assertGreaterThan($payablesBefore, (float) $stock->getPayables(), 'the target owed its suppliers too');
+
+        $this->assertBalanced($stock, 'a cash acquisition');
+    }
+
+    public function testStockForStockAcquisitionKeepsTheBalanceSheetBalanced(): void
+    {
+        // Overvalued acquirer: P/E 100 against a fair 15, P/B well above 2, returns above the hurdle.
+        $stock = $this->buildLedgeredAcquirer('PAPR', treasury: 2_000_000_000.0, debt: 1_000_000_000.0, shares: 1_000_000_000.0);
+        $stock->setRoicTtm('0.20');
+        $macroState = new MacroStateDTO(policyRateEma: 0.03, corporateTaxRate: 0.21, yield5yEma: 0.035);
+        $this->primeHealthyDeal(operatingBase: 20_000_000_000.0);
+
+        $treasuryBefore = (float) $stock->getCorporateTreasury();
+        $equityBefore = (float) $stock->getTotalEquity();
+        $sharesBefore = (float) $stock->getSharesOutstanding();
+
+        $result = $this->engine->evaluatePrivateAcquisition($stock, $macroState, 1.0);
+        $this->assertIsArray($result);
+        $spent = (float) $result['spent'];
+        $this->assertGreaterThan(0.0, $spent);
+
+        $this->assertGreaterThan($sharesBefore, (float) $stock->getSharesOutstanding(), 'paid in paper');
+        $this->assertEqualsWithDelta($treasuryBefore, (float) $stock->getCorporateTreasury(), 1.0, 'no cash changed hands');
+        $this->assertEqualsWithDelta($equityBefore + $spent, (float) $stock->getTotalEquity(), 1.0, 'the shares issued are paid-in capital');
+
+        $this->assertBalanced($stock, 'a stock-for-stock acquisition');
+    }
+
+    public function testLeveragedAcquisitionKeepsTheBalanceSheetBalanced(): void
+    {
+        // Cash sits at its operating target, so the deal is funded by borrowing against an under-levered book.
+        $stock = $this->buildLedgeredAcquirer('LEVR', treasury: 1_000_000_000.0, debt: 1_000_000_000.0, shares: 100_000_000.0);
+        $macroState = new MacroStateDTO(policyRateEma: 0.03, corporateTaxRate: 0.21, yield5yEma: 0.035);
+        $this->primeHealthyDeal(operatingBase: 20_000_000_000.0);
+        $this->debtEngineMock->method('issueDebt')->willReturnCallback(
+            static function (Stock $borrower, float $amount): void {
+                $borrower->setWholesaleDebt((string) ((float) $borrower->getWholesaleDebt() + $amount));
+            }
+        );
+
+        $treasuryBefore = (float) $stock->getCorporateTreasury();
+        $equityBefore = (float) $stock->getTotalEquity();
+        $debtBefore = (float) $stock->getWholesaleDebt();
+
+        $result = $this->engine->evaluatePrivateAcquisition($stock, $macroState, 1.0);
+        $this->assertIsArray($result);
+        $spent = (float) $result['spent'];
+        $this->assertGreaterThan(0.0, $spent);
+
+        $cashUsed = $treasuryBefore - (float) $stock->getCorporateTreasury();
+        $debtIssued = (float) $stock->getWholesaleDebt() - $debtBefore;
+        $this->assertGreaterThan(0.0, $debtIssued, 'the deal was levered');
+        $this->assertEqualsWithDelta($spent, $cashUsed + $debtIssued, 1.0, 'funded by cash and new debt only');
+        $this->assertEqualsWithDelta($equityBefore, (float) $stock->getTotalEquity(), 1.0);
+
+        $this->assertBalanced($stock, 'a leveraged acquisition');
+    }
+
+    /**
+     * A divestiture retires a pro rata slice of every ledger and books the difference between the proceeds
+     * and that book value as the gain or loss. A fire sale below book is a real loss charged in full.
+     */
+    public function testDivestitureRetiresEveryLedgerProRataAndKeepsTheBalanceSheetBalanced(): void
+    {
+        $stock = $this->buildLedgeredAcquirer('DIVL', treasury: 1_000_000_000.0, debt: 4_000_000_000.0, shares: 10_000_000.0);
+        $stock->setOperatingMargin('-0.05');
+        $stock->setEarningsPerShare('-0.10');
+        $stock->setTotalNetIncome('-1000000000');
+        $stock->setRoicTtm('0.00');
+        $macroState = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, nominalGdpIndex: 1.0);
+        $this->primeDistressedDivestiture(operatingBase: 10_000_000_000.0, fraction: 0.25);
+
+        $this->assertBalanced($stock, 'the fixture must open balanced');
+        $equityBefore = (float) $stock->getTotalEquity();
+        $treasuryBefore = (float) $stock->getCorporateTreasury();
+        $debtBefore = (float) $stock->getWholesaleDebt();
+        $before = [
+            'grossPpe' => (float) $stock->getGrossPpe(),
+            'accumulated' => (float) $stock->getAccumulatedDepreciation(),
+            'taxBasis' => (float) $stock->getPpeTaxBasis(),
+            'cip' => (float) $stock->getCipBalance(),
+            'goodwill' => (float) $stock->getGoodwill(),
+            'receivables' => (float) $stock->getReceivables(),
+            'allowance' => (float) $stock->getReceivablesAllowance(),
+            'inventory' => (float) $stock->getInventory(),
+            'payables' => (float) $stock->getPayables(),
+            'deferredTax' => (float) $stock->getDeferredTaxLiability(),
+        ];
+        $bookValueDisposed = 0.25 * (
+            $stock->getNetPpe() + $before['cip'] + $before['goodwill'] + $stock->getNetReceivables() + $before['inventory']
+            - $before['payables'] - $before['deferredTax']
+        );
+        $ageBefore = $stock->getAssetAge();
+
+        $result = $this->engine->evaluateCorporateDivestiture($stock, $macroState, 1.0);
+        $this->assertIsArray($result);
+
+        $proceeds = (float) $stock->getCorporateTreasury() - $treasuryBefore;
+        $debtShed = $debtBefore - (float) $stock->getWholesaleDebt();
+        $this->assertGreaterThan(0.0, $proceeds);
+        $this->assertEqualsWithDelta($debtBefore * 0.25, $debtShed, 1.0, 'the buyer assumes its share of the debt');
+
+        $getters = [
+            'grossPpe' => 'getGrossPpe', 'accumulated' => 'getAccumulatedDepreciation', 'taxBasis' => 'getPpeTaxBasis',
+            'cip' => 'getCipBalance', 'goodwill' => 'getGoodwill', 'receivables' => 'getReceivables',
+            'allowance' => 'getReceivablesAllowance', 'inventory' => 'getInventory', 'payables' => 'getPayables',
+            'deferredTax' => 'getDeferredTaxLiability',
+        ];
+        foreach ($getters as $ledger => $getter) {
+            $this->assertEqualsWithDelta($before[$ledger] * 0.75, (float) $stock->{$getter}(), 1.0, "{$ledger} leaves pro rata");
+        }
+        $this->assertEqualsWithDelta($ageBefore, $stock->getAssetAge(), 1e-9, 'the plant that stays is no older or younger');
+
+        // Gain or loss on sale is proceeds less the book value that left, net of the debt the buyer took on.
+        $expectedGain = $proceeds - ($bookValueDisposed - $debtShed);
+        $this->assertEqualsWithDelta($equityBefore + $expectedGain, (float) $stock->getTotalEquity(), 1.0);
+        $this->assertLessThan(0.0, $expectedGain, 'a fire sale at cents on the dollar is a loss, and it is not floored away');
+
+        $this->assertBalanced($stock, 'a divestiture');
+    }
+
+    /**
+     * Opens every ledger on a non-financial balance sheet and derives equity from the identity, so the
+     * fixture starts balanced to the dollar and any drift is the engine's doing.
+     */
+    private function buildLedgeredAcquirer(string $ticker, float $treasury, float $debt, float $shares): Stock
+    {
+        $stock = new Stock();
+        $stock->setTicker($ticker);
+        $stock->setName("{$ticker} Corp");
+        $stock->setIndustry('Technology');
+        $stock->setPrice('100.00');
+        $stock->setSharesOutstanding((string) $shares);
+        $stock->setCorporateTreasury((string) $treasury);
+        $stock->setWholesaleDebt((string) $debt);
+        $stock->setTotalRevenue('20000000000');
+        $stock->setOperatingMargin('0.25');
+        $stock->setRetainedEarnings('5000000000');
+        $stock->setEarningsPerShare('1.00');
+        $stock->setBaselineRoic('0.15');
+        $stock->setRoicTtm('0.15');
+
+        $stock->setReceivables('3000000000');
+        $stock->setReceivablesAllowance('50000000');
+        $stock->setInventory('2000000000');
+        $stock->setPayables('1500000000');
+        $stock->setGrossPpe('12000000000');
+        $stock->setAccumulatedDepreciation('4000000000');
+        $stock->setPpeTaxBasis('6000000000');
+        $stock->setCipBalance('500000000');
+        $stock->setGoodwill('1000000000');
+        $stock->setDeferredTaxLiability('400000000');
+
+        $stock->setTotalEquity((string) ($stock->getTotalAssets() - $stock->getTotalLiabilities()));
+
+        return $stock;
+    }
+
+    private function primeHealthyDeal(float $operatingBase): void
+    {
+        $debtMetrics = new DebtMetricsDTO(
+            interestExpense: 50000000.0,
+            blendedRate: 0.05,
+            historicalFixedRate: 0.05,
+            dynamicSpread: 0.015,
+            currentMarketRate: 0.05,
+            wholesaleRate: 0.05,
+            ebit: 5000000000.0,
+            revenue: 20000000000.0,
+            depreciation: 500000000.0,
+            ebitda: 5500000000.0
+        );
+        $health = new DebtHealthDTO(
+            grossCost: 0.05,
+            effectiveCost: 0.05,
+            cashYield: 0.035,
+            isNegativeCarry: false,
+            isSevereNegativeCarry: false,
+            interestCoverage: 100.0,
+            wantsToPaydownDebt: false,
+            canIssueDebt: true,
+            debtTolerance: 1.5,
+            wacc: 0.06,
+            costOfEquity: 0.08,
+            leveredBeta: 1.0,
+            rawMetrics: $debtMetrics,
+            isLiquidityCrisis: false,
+            isLiquidityWarning: false,
+            isUnderLeveraged: false
+        );
+
+        $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($health);
+        $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn($operatingBase);
+        $this->mathUtilityMock->method('calculateIntrinsicFairValuePE')->willReturn(15.0);
+        $this->mathUtilityMock->method('calculateLogNormalSynergy')->willReturn(1.10);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(true);
+        $this->mathUtilityMock->method('generateUniformBetween')->willReturn(0.80);
+        $this->marketEventPublisherMock->method('publish')->willReturn([]);
+    }
+
+    private function primeDistressedDivestiture(float $operatingBase, float $fraction): void
+    {
+        $debtMetrics = new DebtMetricsDTO(
+            interestExpense: 1000000000.0,
+            blendedRate: 0.05,
+            historicalFixedRate: 0.05,
+            dynamicSpread: 0.02,
+            currentMarketRate: 0.05,
+            wholesaleRate: 0.05,
+            ebit: -1500000000.0,
+            revenue: 20000000000.0,
+            depreciation: 1000000000.0,
+            ebitda: -500000000.0
+        );
+        $health = new DebtHealthDTO(
+            grossCost: 0.05,
+            effectiveCost: 0.05,
+            cashYield: 0.02,
+            isNegativeCarry: false,
+            isSevereNegativeCarry: false,
+            interestCoverage: -1.5,
+            wantsToPaydownDebt: true,
+            canIssueDebt: false,
+            debtTolerance: 1.0,
+            wacc: 0.12,
+            costOfEquity: 0.14,
+            leveredBeta: 1.5,
+            rawMetrics: $debtMetrics,
+            isLiquidityCrisis: true,
+            isLiquidityWarning: false,
+            isUnderLeveraged: false
+        );
+
+        $this->debtEngineMock->method('analyzeDebtHealth')->willReturn($health);
+        $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn($operatingBase);
+        $this->corporateMetricsMock->method('calculateMarketShare')->willReturn(0.10);
+        $this->mathUtilityMock->method('checkProbability')->willReturn(true);
+        // One draw serves both the divested fraction and the fire-sale cents on the dollar.
+        $this->mathUtilityMock->method('generateUniformBetween')->willReturn($fraction);
+        $this->marketEventPublisherMock->method('publish')->willReturn(['event_type' => 'DIVESTITURE']);
+    }
+
+    /** Assets equal liabilities plus equity. The lease is the same figure on both sides, so it is left out. */
+    private function assertBalanced(Stock $stock, string $context): void
+    {
+        $assets = $stock->getTotalAssets();
+        $claims = $stock->getTotalLiabilities() + (float) $stock->getTotalEquity();
+        $this->assertEqualsWithDelta($assets, $claims, max(1.0, abs($assets) * 1e-9), "Balance sheet failed to balance after {$context}");
+    }
+
+    /**
+     * A divested banking division takes its loans, its share of the allowance, its deposits and its cash
+     * reserves with it. The seller's equity moves by the gain or loss against that book value, and the sheet
+     * that remains still balances.
+     */
+    public function testLenderDivestitureShedsBookDepositsAndCashProRataAndBalances(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('DIVB');
+        $stock->setName('Divesting Bank');
+        $stock->setIndustry('Banks - Diversified');
+        $stock->setPrice('20.00');
+        $stock->setSharesOutstanding('1000000000');
+        $stock->setTotalRevenue('4000000000');
+        $stock->setOperatingMargin('-0.05');
+        $stock->setEarningsPerShare('-0.10');
+        $stock->setTotalNetIncome('-1000000000');
+        $stock->setRetainedEarnings('2000000000');
+        $stock->setRoeTtm('0.00');
+        $stock->setBaselineRoe('0.08');
+        $stock->setCorporateTreasury('3000000000');
+        $stock->setCustomerDeposits('40000000000');
+        $stock->setWholesaleDebt('5000000000');
+        $stock->setEarningAssets('50000000000');
+        $stock->setCreditLossAllowance('1000000000');
+        $stock->setTotalEquity((string) ($stock->getTotalAssets() - $stock->getTotalLiabilities()));
+        $this->assertBalanced($stock, 'the fixture must open balanced');
+
+        $macroState = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, nominalGdpIndex: 1.0);
+        // A large operating base keeps $3B of reserves from reading as a cash fortress that would call off the sale.
+        $this->primeDistressedDivestiture(operatingBase: 40_000_000_000.0, fraction: 0.25);
+
+        $equityBefore = (float) $stock->getTotalEquity();
+        $treasuryBefore = (float) $stock->getCorporateTreasury();
+        $bookValueDisposed = 0.25 * ($stock->getNetEarningAssets() + $treasuryBefore - 40_000_000_000.0);
+        $debtShed = 5_000_000_000.0 * 0.25;
+
+        $result = $this->engine->evaluateCorporateDivestiture($stock, $macroState, 1.0);
+        $this->assertIsArray($result);
+
+        $this->assertEqualsWithDelta(50_000_000_000.0 * 0.75, (float) $stock->getEarningAssets(), 1.0, 'the book leaves pro rata');
+        $this->assertEqualsWithDelta(1_000_000_000.0 * 0.75, (float) $stock->getCreditLossAllowance(), 1.0, 'and so does its allowance');
+        $this->assertEqualsWithDelta(40_000_000_000.0 * 0.75, (float) $stock->getCustomerDeposits(), 1.0, 'the deposits that funded it go to the buyer');
+        $this->assertEqualsWithDelta(5_000_000_000.0 * 0.75, (float) $stock->getWholesaleDebt(), 1.0);
+
+        // Cash: the division's reserves left, the proceeds arrived.
+        $proceeds = (float) $stock->getCorporateTreasury() - ($treasuryBefore * 0.75);
+        $this->assertGreaterThan(0.0, $proceeds);
+        $expectedGain = $proceeds - ($bookValueDisposed - $debtShed);
+        $this->assertEqualsWithDelta($equityBefore + $expectedGain, (float) $stock->getTotalEquity(), 1.0, 'equity moves by the gain or loss on the book value sold');
+
+        $this->assertBalanced($stock, 'a lender divestiture');
+    }
 }

@@ -239,28 +239,32 @@ class MacroEngine
     public const WU_XIA_QE_SHADOW_SENSITIVITY = 1.50;
 
     // --- Nelson-Siegel-Svensson Term Structure Dynamics (Svensson 1994) ---
-    /** Baseline structural term premium for long-term Treasury yields (Adrian-Crump-Moench 2013 benchmark). */
-    public const NS_BASE_TERM_PREMIUM = 0.0090;
+    /** Baseline ten-year term premium (Adrian-Crump-Moench 2013: ~115bps average over 1990-2019). Scaled down by duration for shorter tenors; the two-year note carries under a third of it. */
+    public const NS_BASE_TERM_PREMIUM = 0.0115;
+    /** Duration over which the term premium saturates: a two-year note carries under 30% of the ten-year premium, a thirty-year bond half again as much. */
+    public const TERM_PREMIUM_DURATION_HORIZON_YEARS = 10.0;
+    /** Weight on the central bank target in the ten-year inflation expectation that anchors the curve's long end. Well-anchored expectations (surveys barely move) are what let the policy rate swing against a steady long end and invert the curve; a level that tracked the current breakeven would follow the short end up and never invert. */
+    public const LONG_RUN_INFLATION_ANCHOR_WEIGHT = 0.75;
     /** Flight-to-safety sensitivity: recessions compress term premium via safe-haven demand (Campbell et al. 2017). */
     public const NS_GAP_TERM_PREMIUM_SCALE = 0.05;
     /** Diebold-Li (2006) curvature sensitivity to central bank target-policy rate gap (forward guidance channel). */
     public const SVENSSON_CURVATURE1_TARGET_SCALE = 0.85;
     /** Cyclical curvature sensitivity to output gap (positive gap leads to steeper belly). */
     public const SVENSSON_CURVATURE1_GAP_SCALE = 0.15;
-    /** Primary Nelson-Siegel decay parameter governing the medium-term hump. */
-    public const SVENSSON_LAMBDA_1 = 0.42;
+    /** Primary Nelson-Siegel decay parameter: Diebold-Li (2006) 0.0609 per month, so the curvature hump sits at 2.5 years and forward guidance moves the 2Y against the 10Y. */
+    public const SVENSSON_LAMBDA_1 = 0.73;
     /** Secondary Svensson decay parameter governing the long-term hump. */
     public const SVENSSON_LAMBDA_2 = 0.15;
     /** Sensitivity of secondary curvature (beta3) to quantitative tightening and long-term fiscal deficits. */
     public const SVENSSON_CURVATURE2_FISCAL_SCALE = 0.02;
     /** Sensitivity of beta3 secondary curvature to central bank balance sheet (positive QT steepens, negative QE suppresses). */
     public const SVENSSON_CURVATURE2_BS_SCALE = 0.40;
-    /** Wright (2011) IRP: term premium sensitivity to excess inflation expectations above target. */
-    public const TERM_PREMIUM_IRP_EXPECTATION_SCALE = 0.40;
+    /** Wright (2011) IRP: term premium sensitivity to excess inflation expectations above target. Kept modest: the 2022 episode showed breakevens near 3% adding little premium once expectations are anchored. */
+    public const TERM_PREMIUM_IRP_EXPECTATION_SCALE = 0.20;
     /** Safe-haven flight to safety: financial market panic compresses sovereign term premium (Campbell et al. 2020). */
     public const FLIGHT_TO_SAFETY_SENSITIVITY = 0.015;
-    /** Restrictive monetary policy stance term premium compression sensitivity (ACM 2013). */
-    public const TERM_PREMIUM_TIGHTENING_COMPRESSION = 0.15;
+    /** Restrictive monetary policy stance term premium compression sensitivity (ACM 2013): the premium is squeezed toward zero as the stance tightens, gone at ~180bps above neutral, which is what lets a hiking cycle invert the curve the way 2000, 2006 and 2023 did. */
+    public const TERM_PREMIUM_TIGHTENING_COMPRESSION = 0.70;
     /** Annual attenuation speed at which persistent tightening compression decays back toward structural term premium. */
     public const TERM_PREMIUM_COMPRESSION_DECAY_RATE = 0.50;
 

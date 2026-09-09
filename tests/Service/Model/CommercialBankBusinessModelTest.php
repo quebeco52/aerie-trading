@@ -628,4 +628,39 @@ class CommercialBankBusinessModelTest extends TestCase
         $this->assertGreaterThanOrEqual(CommercialBankBusinessModel::ROE_CLAMP_MIN, $roic);
         $this->assertEqualsWithDelta(CommercialBankBusinessModel::ROE_CLAMP_MAX, (float) $stock->getCurrentRoe(), 0.0001);
     }
+
+    /**
+     * Once the earning-asset ledger is open the physics is struck on the book it carries, net of the losses
+     * already reserved, and the quarter's credit entries come back in dollars: what went bad, and what was
+     * charged beyond the through-the-cycle loss the cost base already holds.
+     */
+    public function testCreditLossHooksAndLedgerFeedThePhysics(): void
+    {
+        $expectedTtc = $this->mathUtility->calculateVasicekExpectedLoss(0.0, CommercialBankBusinessModel::LRA_DEFAULT_RATE, CommercialBankBusinessModel::ASSET_CORRELATION_RHO, CommercialBankBusinessModel::LGD_BASELINE);
+        $this->assertEqualsWithDelta($expectedTtc, $this->model->getThroughTheCycleCreditLossRate(), 1e-9);
+        $this->assertGreaterThan(0.0, $expectedTtc);
+        $this->assertEqualsWithDelta(CommercialBankBusinessModel::CECL_LIFETIME_HORIZON_YEARS, $this->model->getCreditLossHorizonYears(), 1e-9);
+
+        $stock = new Stock();
+        $stock->setTicker('LDGR');
+        $stock->setBeta('1.0');
+        $stock->setTotalEquity('5000000000');
+        $stock->setCustomerDeposits('40000000000');
+        $stock->setWholesaleDebt('5000000000');
+        $stock->setCorporateTreasury('2000000000');
+
+        // Before the ledger: the funding proxy. After: the book net of its allowance, whatever cash does.
+        $this->assertEqualsWithDelta(48_000_000_000.0, $this->model->resolveEarningAssets($stock), 1.0);
+        $stock->setEarningAssets('45000000000');
+        $stock->setCreditLossAllowance('900000000');
+        $this->assertEqualsWithDelta(44_100_000_000.0, $this->model->resolveEarningAssets($stock), 1.0);
+        $this->assertEqualsWithDelta(44_100_000_000.0, $this->model->calculateRiskWeightedAssets($stock), 1.0, 'risk weights apply to the book, not the proxy');
+
+        $macro = new MacroStateDTO(outputGapEma: 0.0, policyRateEma: 0.04, yield2yEma: 0.04, yield10yEma: 0.045, macroCreditSpreadEma: 0.02);
+        $result = $this->model->computeActualFinancials($stock, expectedRevenue: 1_000_000_000.0, realizedVariableMargin: 0.50, fixedCosts: 200_000_000.0, baselineVol: 0.10, macroState: $macro, mathUtility: $this->mathUtility);
+
+        $this->assertGreaterThanOrEqual(0.0, $result->netChargeOffs);
+        $this->assertLessThan(44_100_000_000.0 * 0.05, $result->netChargeOffs, 'a quarter of charge-offs is a small fraction of the book');
+        $this->assertTrue(is_finite($result->creditLossProvision));
+    }
 }

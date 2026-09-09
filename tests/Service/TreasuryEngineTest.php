@@ -644,4 +644,137 @@ class TreasuryEngineTest extends TestCase
 
         return $ctx;
     }
+
+    /**
+     * A lender short of operating cash sells from its book at a haircut before it borrows at penalty rates.
+     * The slice sold takes its share of the allowance with it, the proceeds come in as cash, and the discount
+     * is a loss charged to equity: the book shrinks by exactly what the claims on it lose.
+     */
+    public function testLenderShortOfCashSellsEarningAssetsAtAHaircutBeforeBorrowing(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('RUNB');
+        $stock->setIndustry('Banks - Diversified');
+        $stock->setEarningAssets('5000000000.00');
+        $stock->setCreditLossAllowance('100000000.00');
+        $stock->setCustomerDeposits('4000000000.00');
+        $stock->setWholesaleDebt('0.00');
+        $stock->setCorporateTreasury('50000000.00');
+        $stock->setRetainedEarnings('500000000.00');
+        // Equity is the residual of the sheet the fixture opens with, so it starts balanced.
+        $stock->setTotalEquity((string) ($stock->getTotalAssets() - $stock->getTotalLiabilities()));
+        $equityBefore = (float) $stock->getTotalEquity();
+
+        $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0);
+        $ctx->strategy = new CommercialBankBusinessModel();
+        $ctx->businessModel = 'commercial_bank';
+        $ctx->isFinancial = true;
+        $ctx->quarterlyNetIncome = 0.0;
+        $ctx->wholesaleDebt = 0.0;
+        $ctx->customerDeposits = 4_000_000_000.0;
+        $ctx->newTreasury = 50_000_000.0; // well below what a bank of this size has to hold
+
+        $this->debtEngine->expects($this->never())->method('issueDebt');
+        $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
+
+        $engine->finalizeLiquidity($ctx);
+
+        $minOperatingCash = $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, 4_000_000_000.0, 0.0);
+        $this->assertGreaterThan(50_000_000.0, $minOperatingCash, 'the fixture must actually be short');
+        $this->assertGreaterThan(0.0, $ctx->assetSaleProceeds, 'the book was sold down');
+        $this->assertEqualsWithDelta($minOperatingCash, (float) $stock->getCorporateTreasury(), 1.0, 'cash is restored to the operating floor');
+
+        $haircut = \App\Service\Math\FinancialConstants::EARNING_ASSET_FIRE_SALE_HAIRCUT;
+        $this->assertEqualsWithDelta($ctx->assetSaleProceeds * $haircut / (1.0 - $haircut), $ctx->assetSaleLoss, 1.0, 'the loss is the haircut on what was sold');
+        $this->assertLessThan(5_000_000_000.0, (float) $stock->getEarningAssets());
+        $this->assertLessThan(100_000_000.0, (float) $stock->getCreditLossAllowance(), 'the allowance on the slice sold leaves with it');
+        $this->assertEqualsWithDelta($equityBefore - $ctx->assetSaleLoss, (float) $stock->getTotalEquity(), 1.0, 'the loss is charged to equity');
+
+        $assets = $stock->getTotalAssets();
+        $claims = $stock->getTotalLiabilities() + (float) $stock->getTotalEquity();
+        $this->assertEqualsWithDelta($assets, $claims, 1.0, 'the sheet still balances after the fire sale');
+    }
+
+    /**
+     * A lender lends out whatever funding sits above its liquidity target, every quarter and in full, keeping
+     * only this quarter's retained earnings back for capital return. The cash goes onto the earning-asset
+     * ledger directly; nothing is queued as construction. A bank its regulator has frozen lends nothing.
+     */
+    public function testLenderDeploysExcessFundingIntoTheBookEveryQuarter(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('LEND');
+        $stock->setIndustry('Banks - Diversified');
+        $stock->setEarningAssets('2000000000.00');
+        $stock->setCreditLossAllowance('0.00');
+        $stock->setCustomerDeposits('0.00'); // no passive deposit growth in this quarter, so the arithmetic is exact
+        $stock->setWholesaleDebt('0.00');
+        $stock->setCorporateTreasury('500000000.00');
+        $stock->setTotalEquity('2500000000.00');
+
+        $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0);
+        $ctx->strategy = new CommercialBankBusinessModel();
+        $ctx->businessModel = 'commercial_bank';
+        $ctx->isFinancial = true;
+        $ctx->wholesaleDebt = 0.0;
+        $ctx->customerDeposits = 0.0;
+        $ctx->newTreasury = 500_000_000.0;
+        $ctx->operatingBase = 1_000_000_000.0;
+        $ctx->retainedEarningsThisQuarter = 100_000_000.0;
+        $ctx->health = new DebtHealthDTO(
+            grossCost: 0.04, effectiveCost: 0.04, cashYield: 0.03, isNegativeCarry: false, isSevereNegativeCarry: false,
+            interestCoverage: 10.0, wantsToPaydownDebt: false, canIssueDebt: false, debtTolerance: 15.0, wacc: 0.08,
+            costOfEquity: 0.09, leveredBeta: 1.0, rawMetrics: $ctx->health->rawMetrics, isLiquidityCrisis: false,
+            isLiquidityWarning: false, isUnderLeveraged: true
+        );
+
+        $capExEngine = $this->createMock(CapExEngine::class);
+        $capExEngine->expects($this->never())->method('allocateGrowthCapEx');
+        $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $capExEngine, $this->mathUtility);
+
+        $engine->executeCorporateStrategy($ctx);
+
+        // Target cash is 5% of the operating base with no deposits or wholesale debt, held with a 20% buffer:
+        // $60M. Of the $440M above it, $100M of retained earnings stays back, so $340M is lent.
+        $this->assertEqualsWithDelta(340_000_000.0, $ctx->loanOriginations, 1.0);
+        $this->assertEqualsWithDelta(340_000_000.0, $ctx->organicCapex, 1.0, 'the deployment is the quarter\'s investing flow');
+        $this->assertEqualsWithDelta(2_340_000_000.0, (float) $stock->getEarningAssets(), 1.0);
+        $this->assertEqualsWithDelta(160_000_000.0, $ctx->newTreasury, 1.0);
+        $this->assertEqualsWithDelta(0.0, (float) $stock->getCipBalance(), 1.0, 'loans are never construction in progress');
+    }
+
+    public function testCapitalConstrainedLenderKeepsItsFundingInCash(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('THIN');
+        $stock->setIndustry('Banks - Diversified');
+        $stock->setEarningAssets('2000000000.00');
+        $stock->setCustomerDeposits('0.00');
+        $stock->setWholesaleDebt('0.00');
+        $stock->setCorporateTreasury('500000000.00');
+        $stock->setTotalEquity('50000000.00'); // CET1 of 2.5%, far below the conservation buffer
+
+        $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0);
+        $ctx->strategy = new CommercialBankBusinessModel();
+        $ctx->businessModel = 'commercial_bank';
+        $ctx->isFinancial = true;
+        $ctx->wholesaleDebt = 0.0;
+        $ctx->customerDeposits = 0.0;
+        $ctx->newTreasury = 500_000_000.0;
+        $ctx->operatingBase = 1_000_000_000.0;
+        $ctx->retainedEarningsThisQuarter = 0.0;
+        $ctx->health = new DebtHealthDTO(
+            grossCost: 0.04, effectiveCost: 0.04, cashYield: 0.03, isNegativeCarry: false, isSevereNegativeCarry: false,
+            interestCoverage: 10.0, wantsToPaydownDebt: false, canIssueDebt: false, debtTolerance: 15.0, wacc: 0.08,
+            costOfEquity: 0.09, leveredBeta: 1.0, rawMetrics: $ctx->health->rawMetrics, isLiquidityCrisis: false,
+            isLiquidityWarning: false, isUnderLeveraged: false
+        );
+        $engine = new TreasuryEngine($this->corporateMetrics, $this->debtEngine, $this->capExEngine, $this->mathUtility);
+
+        $engine->executeCorporateStrategy($ctx);
+
+        $this->assertEqualsWithDelta(0.0, $ctx->loanOriginations, 1.0, 'a bank below its capital buffer cannot add risk-weighted assets');
+        $this->assertEqualsWithDelta(2_000_000_000.0, (float) $stock->getEarningAssets(), 1.0);
+        $this->assertEqualsWithDelta(500_000_000.0, $ctx->newTreasury, 1.0);
+    }
 }

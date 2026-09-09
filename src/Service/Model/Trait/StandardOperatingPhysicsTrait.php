@@ -79,6 +79,17 @@ trait StandardOperatingPhysicsTrait
         return 0.10;
     }
 
+    /** An operating company's assets are plant and a trade cycle, not credit: nothing to charge off. */
+    public function getThroughTheCycleCreditLossRate(): float
+    {
+        return 0.0;
+    }
+
+    public function getCreditLossHorizonYears(): float
+    {
+        return 1.0;
+    }
+
     /**
      * Derives the cycle's day counts from the intensity a sector model already declares, so none of the
      * existing overrides have to change. A positive cycle splits into receivables and inventory with a
@@ -232,6 +243,8 @@ trait StandardOperatingPhysicsTrait
             streamRevenue: $physics->streamRevenue,
             scheduledCapex: $physics->scheduledCapex,
             kpis: $physics->kpis,
+            creditLossProvision: $physics->creditLossProvision,
+            netChargeOffs: $physics->netChargeOffs,
         );
     }
 

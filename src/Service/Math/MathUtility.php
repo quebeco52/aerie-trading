@@ -652,6 +652,19 @@ class MathUtility
      * @param float $lambda2    The second decay parameter governing the location of the secondary hump.
      * @return float The calculated yield for the specified maturity.
      */
+    /**
+     * Term premium duration scale (Adrian, Crump & Moench 2013): the compensation investors demand for
+     * bearing duration rises with maturity and saturates, so a two-year note carries only a fraction of the
+     * premium a ten-year bond does. Normalized to 1.0 at the ten-year point, where the benchmark premium is
+     * quoted, and 0.0 at zero maturity, where a yield is the policy rate and nothing else.
+     */
+    public static function calculateTermPremiumDurationScale(float $tau, float $horizonYears = 10.0): float
+    {
+        $horizon = max(0.01, $horizonYears);
+
+        return (1.0 - exp(-max(0.0, $tau) / $horizon)) / (1.0 - exp(-10.0 / $horizon));
+    }
+
     public function calculateSvenssonYield(
         float $level,
         float $slope,

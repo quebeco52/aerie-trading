@@ -235,11 +235,14 @@ class MonetaryPolicySubsystem
         $restrictiveCompression = $rawTighteningCompression * $compressionDecay;
         $totalBaseTermPremium = max(0.0, MacroEngine::NS_BASE_TERM_PREMIUM + $inflationRiskPremium + $cyclicalTermPremium - $flightToSafetyShift - $restrictiveCompression);
 
-        // Long-term asymptotic yield level beta0 (Nelson-Siegel 1987, Diebold-Li 2006):
-        // Anchored to expected inflation over the 10-year horizon (Fisher hypothesis) plus term premium
-        $expectedInflation10y = (MacroEngine::TIPS_TARGET_WEIGHT * MacroEngine::TARGET_INFLATION)
-            + ((1.0 - MacroEngine::TIPS_TARGET_WEIGHT) * $state->tipsBreakeven);
-        $level = $naturalRate + $expectedInflation10y + $totalBaseTermPremium;
+        // Long-term asymptotic yield level beta0 (Nelson-Siegel 1987, Diebold-Li 2006): the risk-neutral
+        // anchor, r* plus expected inflation over the 10-year horizon (Fisher hypothesis). The term premium is
+        // NOT part of the level: it is added per tenor below, scaled by duration, because a premium folded
+        // into the level reaches the two-year note in full and flattens the whole curve. Real premia rise
+        // with maturity (ACM 2013), and that rise is most of what a normal 2s10s slope is made of.
+        $expectedInflation10y = (MacroEngine::LONG_RUN_INFLATION_ANCHOR_WEIGHT * MacroEngine::TARGET_INFLATION)
+            + ((1.0 - MacroEngine::LONG_RUN_INFLATION_ANCHOR_WEIGHT) * $state->tipsBreakeven);
+        $level = $naturalRate + $expectedInflation10y;
         $nsBeta1 = $state->policyRate - $level;
 
         // Diebold-Li (2006) Curvature beta2: forward monetary tightening/easing expectations
@@ -252,10 +255,10 @@ class MonetaryPolicySubsystem
         $debtCurvature = $excessDebt * MacroEngine::SOVEREIGN_DEBT_YIELD_SENSITIVITY;
         $nsBeta3 = (MacroEngine::SVENSSON_CURVATURE2_FISCAL_SCALE * $fiscalShift) + $debtCurvature;
 
-        $yield2y  = $this->calculateSvenssonTenor(2.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state);
-        $yield5y  = $this->calculateSvenssonTenor(5.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state);
-        $yield10y = $this->calculateSvenssonTenor(10.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state);
-        $yield30y = $this->calculateSvenssonTenor(30.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state);
+        $yield2y  = $this->calculateSvenssonTenor(2.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $totalBaseTermPremium);
+        $yield5y  = $this->calculateSvenssonTenor(5.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $totalBaseTermPremium);
+        $yield10y = $this->calculateSvenssonTenor(10.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $totalBaseTermPremium);
+        $yield30y = $this->calculateSvenssonTenor(30.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $totalBaseTermPremium);
 
         $durationFactor10y = (1.0 - exp(-10.0 * MacroEngine::SVENSSON_LAMBDA_1)) / (10.0 * MacroEngine::SVENSSON_LAMBDA_1);
         $factor2_10y = $durationFactor10y - exp(-10.0 * MacroEngine::SVENSSON_LAMBDA_1);
@@ -265,7 +268,7 @@ class MonetaryPolicySubsystem
         $riskNeutral10y = ($naturalRate + MacroEngine::TARGET_INFLATION) + ($nsBeta1RiskNeutral * $durationFactor10y) + ($nsBeta2 * $factor2_10y);
         $termPremium10y = $yield10y - $riskNeutral10y;
 
-        $structural10y = $this->calculateSvenssonTenor(10.0, $level, $nsBeta1, $nsBeta2, $debtCurvature, $state);
+        $structural10y = $this->calculateSvenssonTenor(10.0, $level, $nsBeta1, $nsBeta2, $debtCurvature, $state, $totalBaseTermPremium);
 
         return [
             'level' => $level,
@@ -322,7 +325,11 @@ class MonetaryPolicySubsystem
      * @param MacroState $state   Current macroeconomic state.
      * @return float Nominal sovereign yield for the specified tenor.
      */
-    public function calculateSvenssonTenor(float $t, float $level, float $nsBeta1, float $nsBeta2, float $nsBeta3, MacroState $state): float
+    /**
+     * @param float $termPremium10y The ten-year term premium; each tenor carries the share of it its duration
+     *                              earns (ACM 2013), from nothing at zero maturity to half again as much at thirty years.
+     */
+    public function calculateSvenssonTenor(float $t, float $level, float $nsBeta1, float $nsBeta2, float $nsBeta3, MacroState $state, float $termPremium10y = 0.0): float
     {
         // Vayanos & Vila (2021) Preferred-Habitat Model: duration extraction under QE/QT compresses term premium by tenor duration
         $preferredHabitatShift = $this->mathUtility->calculatePreferredHabitatTermPremiumShift(
@@ -330,6 +337,7 @@ class MonetaryPolicySubsystem
             tau: $t,
             habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY
         );
+        $termPremium = $termPremium10y * MathUtility::calculateTermPremiumDurationScale($t, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
 
         $yield = $this->mathUtility->calculateSvenssonYield(
             level: $level,
@@ -341,7 +349,7 @@ class MonetaryPolicySubsystem
             lambda2: MacroEngine::SVENSSON_LAMBDA_2
         );
 
-        return max(MacroEngine::EFFECTIVE_LOWER_BOUND, $yield + $preferredHabitatShift);
+        return max(MacroEngine::EFFECTIVE_LOWER_BOUND, $yield + $termPremium + $preferredHabitatShift);
     }
 
     /**

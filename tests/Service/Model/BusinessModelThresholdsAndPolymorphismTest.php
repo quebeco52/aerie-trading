@@ -69,6 +69,11 @@ class BusinessModelThresholdsAndPolymorphismTest extends TestCase
             $this->assertGreaterThanOrEqual(0.0, $strategy->getMoatSpread());
             $this->assertIsFloat($strategy->getWorkingCapitalIntensity($stock));
             $this->assertGreaterThan(0.0, $strategy->getCapExCompletionRate($stock));
+            // Credit-book hooks: a loss rate is a rate, and the allowance horizon is at least a year.
+            $this->assertGreaterThanOrEqual(0.0, $strategy->getThroughTheCycleCreditLossRate());
+            $this->assertLessThan(0.20, $strategy->getThroughTheCycleCreditLossRate());
+            $this->assertGreaterThanOrEqual(1.0, $strategy->getCreditLossHorizonYears());
+            $this->assertIsBool($strategy->deploysFundingIntoEarningAssets());
 
             // Verify Polymorphic flags and hooks
             $this->assertIsBool($strategy->isFinancial());
@@ -171,5 +176,26 @@ class BusinessModelThresholdsAndPolymorphismTest extends TestCase
 
         // CommercialBank limits by wholesale leverage limit (2.0)
         $this->assertEquals(2.0, $fin->getDeleveragingEvaluationLimit($macroDebtTolerance));
+    }
+
+    /**
+     * Deposit- and float-funded institutions lend out what they do not need as reserves every quarter;
+     * funds keep dry powder and commit it on their own view of the cycle. The hook is what routes the
+     * treasury between those two behaviours, so its answer per model is a contract.
+     */
+    public function testOnlyLendersAndFloatTakersDeployFundingAutomatically(): void
+    {
+        foreach (['commercial_bank', 'credit_services', 'shadow_bank', 'insurance', 'reinsurance', 'retail_insurance', 'clearing_house'] as $model) {
+            $this->assertTrue(Sectors::getBusinessModelStrategy($model)->deploysFundingIntoEarningAssets(), "{$model} lends its funding");
+        }
+        foreach (['hedge_fund', 'private_equity', 'asset_manager', 'investment_bank', 'brokerage', 'distressed_debt', 'none', 'tech'] as $model) {
+            $this->assertFalse(Sectors::getBusinessModelStrategy($model)->deploysFundingIntoEarningAssets(), "{$model} keeps its cash discretionary");
+        }
+
+        // Unsecured card lending loses several times what a prime bank book does; a mortgage book, less.
+        $bank = Sectors::getBusinessModelStrategy('commercial_bank')->getThroughTheCycleCreditLossRate();
+        $this->assertGreaterThan($bank * 4.0, Sectors::getBusinessModelStrategy('credit_services')->getThroughTheCycleCreditLossRate());
+        $this->assertGreaterThan(0.0, Sectors::getBusinessModelStrategy('shadow_bank')->getThroughTheCycleCreditLossRate());
+        $this->assertEqualsWithDelta(0.0, Sectors::getBusinessModelStrategy('hedge_fund')->getThroughTheCycleCreditLossRate(), 1e-12, 'a fund holds positions, not credit');
     }
 }
