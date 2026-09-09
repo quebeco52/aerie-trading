@@ -438,4 +438,62 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertLessThan($state->policyRate, $curve['yield_2y'], 'the two-year prices the cuts ahead');
         $this->assertLessThan(-0.0025, $curve['yield_10y'] - $curve['yield_2y'], 'the curve inverts by a meaningful margin');
     }
+
+    public function testBreakevenShareOfTheLevelLandsInExpectationsNotTermPremium(): void
+    {
+        $anchored = new MacroState();
+        $anchored->policyRate = 0.03;
+        $anchored->targetRate = 0.03;
+        $anchored->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+        $anchored->outputGap = 0.0;
+
+        $unanchored = clone $anchored;
+        $unanchored->tipsBreakeven = MacroEngine::TARGET_INFLATION + 0.02;
+
+        $curveAnchored = $this->subsystem->calculateYieldCurve($anchored, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        $curveUnanchored = $this->subsystem->calculateYieldCurve($unanchored, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+
+        // The only premium channel that reads the breakeven is the Wright (2011) inflation risk premium.
+        $expectedPremiumChange = MacroEngine::TERM_PREMIUM_IRP_EXPECTATION_SCALE * 0.02;
+        $this->assertEqualsWithDelta(
+            $expectedPremiumChange,
+            $curveUnanchored['term_premium_10y'] - $curveAnchored['term_premium_10y'],
+            0.00001,
+            'Higher breakevens must move the term premium by the inflation risk premium only; the level shift belongs to the risk-neutral rate.'
+        );
+
+        $levelShift = (1.0 - MacroEngine::LONG_RUN_INFLATION_ANCHOR_WEIGHT) * 0.02;
+        $this->assertGreaterThan(
+            $curveAnchored['risk_neutral_10y'] + 0.5 * $levelShift,
+            $curveUnanchored['risk_neutral_10y'],
+            'The expected-inflation share of the level must show up in the ACM risk-neutral ten-year rate.'
+        );
+    }
+
+    public function testTermPremiumCanTurnNegativeButNotBelowTheFloor(): void
+    {
+        $state = new MacroState();
+        $state->policyRate = 0.06;
+        $state->targetRate = 0.06;
+        $state->tipsBreakeven = MacroEngine::TARGET_INFLATION;
+        $state->outputGap = -0.03;
+        $state->marketVolatilityEma = 0.60; // panic: flight to safety
+        $state->inversionDuration = 0.0;
+
+        $curve = $this->subsystem->calculateYieldCurve($state, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+
+        $this->assertLessThan(0.0, $curve['term_premium_10y'], 'Restrictive policy plus flight to safety must push the ten-year term premium negative, as ACM shows for 2016-2021.');
+        $this->assertGreaterThanOrEqual(
+            MacroEngine::MIN_TERM_PREMIUM_10Y - 0.00001,
+            $curve['term_premium_10y'],
+            'The term premium must respect the structural floor.'
+        );
+
+        $extreme = clone $state;
+        $extreme->policyRate = 0.12;
+        $extreme->targetRate = 0.12;
+        $extreme->marketVolatilityEma = 1.50;
+        $curveExtreme = $this->subsystem->calculateYieldCurve($extreme, MacroEngine::TARGET_INFLATION, MacroEngine::BASE_NATURAL_RATE);
+        $this->assertEqualsWithDelta(MacroEngine::MIN_TERM_PREMIUM_10Y, $curveExtreme['term_premium_10y'], 0.00001, 'Stacked compression channels bottom out at the floor.');
+    }
 }

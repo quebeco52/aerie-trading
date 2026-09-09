@@ -233,7 +233,7 @@ class MonetaryPolicySubsystem
         $rawTighteningCompression = MacroEngine::TERM_PREMIUM_TIGHTENING_COMPRESSION * max(0.0, $state->policyRate - ($naturalRate + MacroEngine::TARGET_INFLATION));
         $compressionDecay = exp(-MacroEngine::TERM_PREMIUM_COMPRESSION_DECAY_RATE * $state->inversionDuration);
         $restrictiveCompression = $rawTighteningCompression * $compressionDecay;
-        $totalBaseTermPremium = max(0.0, MacroEngine::NS_BASE_TERM_PREMIUM + $inflationRiskPremium + $cyclicalTermPremium - $flightToSafetyShift - $restrictiveCompression);
+        $totalBaseTermPremium = max(MacroEngine::MIN_TERM_PREMIUM_10Y, MacroEngine::NS_BASE_TERM_PREMIUM + $inflationRiskPremium + $cyclicalTermPremium - $flightToSafetyShift - $restrictiveCompression);
 
         // Long-term asymptotic yield level beta0 (Nelson-Siegel 1987, Diebold-Li 2006): the risk-neutral
         // anchor, r* plus expected inflation over the 10-year horizon (Fisher hypothesis). The term premium is
@@ -263,9 +263,10 @@ class MonetaryPolicySubsystem
         $durationFactor10y = (1.0 - exp(-10.0 * MacroEngine::SVENSSON_LAMBDA_1)) / (10.0 * MacroEngine::SVENSSON_LAMBDA_1);
         $factor2_10y = $durationFactor10y - exp(-10.0 * MacroEngine::SVENSSON_LAMBDA_1);
 
-        // Adrian, Crump & Moench (2013) Pure Risk-Neutral Rate: Expected path of policy rates under zero term premium
-        $nsBeta1RiskNeutral = $state->policyRate - ($naturalRate + MacroEngine::TARGET_INFLATION);
-        $riskNeutral10y = ($naturalRate + MacroEngine::TARGET_INFLATION) + ($nsBeta1RiskNeutral * $durationFactor10y) + ($nsBeta2 * $factor2_10y);
+        // Adrian, Crump & Moench (2013) Pure Risk-Neutral Rate: Expected path of policy rates under zero term premium.
+        // Built on the same ten-year expected-inflation level the fitted curve uses, so the breakeven share of the
+        // level lands in the expectations component rather than being misbooked as term premium.
+        $riskNeutral10y = $level + ($nsBeta1 * $durationFactor10y) + ($nsBeta2 * $factor2_10y);
         $termPremium10y = $yield10y - $riskNeutral10y;
 
         $structural10y = $this->calculateSvenssonTenor(10.0, $level, $nsBeta1, $nsBeta2, $debtCurvature, $state, $totalBaseTermPremium);

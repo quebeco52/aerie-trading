@@ -235,8 +235,8 @@ class MacroEngine
     public const EFFECTIVE_LOWER_BOUND = -0.005;
     /** Structural upper bound ceiling for nominal monetary policy target rate. */
     public const POLICY_RATE_CEILING = 0.20;
-    /** Sensitivity of shadow policy rate accommodation to central bank QE balance sheet expansion. */
-    public const WU_XIA_QE_SHADOW_SENSITIVITY = 1.50;
+    /** Shadow-rate accommodation per unit of QE yield suppression: full-scale QE (100bps) reads as a -3% shadow rate, the Wu-Xia trough of 2014. */
+    public const WU_XIA_QE_SHADOW_SENSITIVITY = 3.0;
 
     // --- Nelson-Siegel-Svensson Term Structure Dynamics (Svensson 1994) ---
     /** Baseline ten-year term premium (Adrian-Crump-Moench 2013: ~115bps average over 1990-2019). Scaled down by duration for shorter tenors; the two-year note carries under a third of it. */
@@ -267,6 +267,8 @@ class MacroEngine
     public const TERM_PREMIUM_TIGHTENING_COMPRESSION = 0.70;
     /** Annual attenuation speed at which persistent tightening compression decays back toward structural term premium. */
     public const TERM_PREMIUM_COMPRESSION_DECAY_RATE = 0.50;
+    /** Floor on the ten-year term premium (-75bps): ACM ran between -50 and -100bps from 2016 to 2021, so flight to safety and QE may push the long end below the expected policy path. */
+    public const MIN_TERM_PREMIUM_10Y = -0.0075;
 
     // --- Preferred-Habitat Duration Extraction (Vayanos-Vila 2021) ---
     /** Sensitivity of duration-weighted term premium extraction to central bank balance sheet intensity. */
@@ -391,10 +393,10 @@ class MacroEngine
     public const QE_ACTIVATION_ZLB_THRESHOLD = 0.60;
     /** Negative output gap threshold below which central bank initiates QE bond purchases. */
     public const QE_ACTIVATION_GAP_THRESHOLD = -0.005;
-    /** Maximum yield suppression capacity achieved under full-scale QE. */
-    public const QE_MAX_SUPPRESSION = 0.02;
-    /** Sensitivity multiplier scaling QE bond purchase intensity with recession depth. */
-    public const QE_SEVERITY_MULTIPLIER = 2.0;
+    /** Ten-year yield suppression under full-scale QE (~100bps): Gagnon et al. (2011) and Bonis-Ihrig-Wei (2017) put the whole QE1-QE3 stock near 100bps at its 2013 peak. */
+    public const QE_MAX_SUPPRESSION = 0.01;
+    /** QE dose per unit of negative output gap: full-scale purchases need a ~-2.5% gap with the policy rate at the floor, not a mild slowdown. */
+    public const QE_SEVERITY_MULTIPLIER = 0.40;
     /** Annual ramp speed of central bank balance sheet expansion and contraction. */
     public const BALANCE_SHEET_RAMP_SPEED = 1.0;
     /** Minimum reinvestment hold period (years) after QE ends before QT runoff can begin (Bernanke 2020). */
@@ -778,7 +780,7 @@ class MacroEngine
     /** Baseline structural annual growth rate of M2 money supply matching nominal potential GDP trend. */
     public const M2_BASE_GROWTH = 0.045;
     /** Sensitivity of broad M2 money growth to central bank QE/QT balance sheet operations. */
-    public const M2_QE_SENSITIVITY = 1.20;
+    public const M2_QE_SENSITIVITY = 2.40;
     /** Sensitivity of commercial bank money creation multiplier to lending standards tightening (SLOOS). */
     public const M2_SLOOS_SENSITIVITY = 0.06;
     /** Cyclical credit demand sensitivity scaling M2 money growth with the output gap. */
@@ -832,7 +834,7 @@ class MacroEngine
     /** Sustained inversion duration (years) that historically precedes a downturn and trips the curve alarm. */
     public const SYSTEMIC_INVERSION_ALARM_YEARS = 0.75;
     /** Balance sheet expansion intensity marking an intervention large enough to read as a policy backstop. */
-    public const SYSTEMIC_INTERVENTION_QE_INTENSITY = 0.010;
+    public const SYSTEMIC_INTERVENTION_QE_INTENSITY = 0.005;
     /** Equity risk premium above which capital is being deployed into genuinely distressed valuations. */
     public const SYSTEMIC_DEPLOYMENT_ERP_THRESHOLD = 0.070;
 
