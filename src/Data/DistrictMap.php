@@ -282,19 +282,28 @@ class DistrictMap
     /**
      * MacroStateDTO fields read by a large majority of business models' operating physics (via
      * App\Service\Model\Strategy\OperatingStrategyInterface::getOperatingMacroFields()) —
-     * output_gap_ema (96%), exchange_rate_index_ema (66%), tips_breakeven_ema (66%) and
-     * inflation_ema (57%) of the 47 concrete models, measured against each model's declaration of
-     * the fields its own operating code reads (BusinessModelMacroFieldDeclarationTest keeps those
-     * declarations honest). Excluded from conduit derivation only (they remain published
-     * `fields` and printable readouts) so a field nearly every model shares does not wire every
-     * tenant to the same institution — the same principle CONDUITS already applied by hand to
-     * equityRiskPremium/corporateTaxRate/policyRate feeding WACC alone.
+     * output_gap_ema (96%), tips_breakeven_ema (68%), exchange_rate_index_ema (66%),
+     * energy_cost_push_lag (62%) and producer_price_inflation_ema (62%) of the 47 concrete models,
+     * measured against each model's declaration of the fields its own operating code reads
+     * (BusinessModelMacroFieldDeclarationTest keeps those declarations honest). Excluded from
+     * conduit derivation only (they remain published `fields` and printable readouts) so a field
+     * nearly every model shares does not wire every tenant to the same institution — the same
+     * principle CONDUITS already applied by hand to equityRiskPremium/corporateTaxRate/policyRate
+     * feeding WACC alone.
+     *
+     * The last two joined when the input-cost basket reached Biotech and REIT: energy and wholesale
+     * goods are what every producing firm buys, so leaving them in wired 62% of tenants to the
+     * commodity exchange and the manufactory board respectively. What still distinguishes a tenant
+     * there is genuine metals, agricultural or crack-spread exposure, which is what those conduits
+     * now draw on.
      * See App\Service\District\DistrictConduitResolver.
      */
     public const UBIQUITOUS_MACRO_FIELDS = [
         'output_gap_ema',
         'exchange_rate_index_ema',
         'tips_breakeven_ema',
+        'energy_cost_push_lag',
+        'producer_price_inflation_ema',
     ];
 
     // --- Institution Registry ---

@@ -49,6 +49,10 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     // --- Input Cost Basket ---
     /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
     public const INPUT_COST_EXPOSURES = ['ppi' => 0.20, 'energy' => 0.06, 'metals' => 0.08, 'labor' => 0.25];
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. A blend across unrelated subsidiaries lands near the all-industry middle by construction. */
+    public const FIXED_COST_LABOR_SHARE = 0.55;
     /** Regulated tollbooth escalators and staples list-price resets reprice about once a year. */
     public const PRICE_PASS_THROUGH_LAG_YEARS = 1.00;
 

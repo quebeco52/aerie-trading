@@ -38,6 +38,14 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     // --- Input Cost Basket ---
     /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
     public const INPUT_COST_EXPOSURES = ['energy' => 0.10, 'agri' => 0.10, 'labor' => 0.40, 'ppi' => 0.05];
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. A property has to be staffed to be open: hotel, gaming floor and food service payroll is the overhead of the box. */
+    public const FIXED_COST_LABOR_SHARE = 0.65;
+
+    // --- FX Exposure ---
+    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Inbound tourism is priced in the visitor's currency: a strong home currency prices the destination out. */
+    public const FX_REVENUE_EXPOSURE = 0.15;
     /** Yield-managed room and table pricing captures a boom, but the whole spend is discretionary and travel substitutes readily. */
     public const PRICING_POWER_INDEX = 0.55;
 
@@ -138,8 +146,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
         $beta = $this->getOperatingCyclicality($stock);
 
-        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
-        $physics['macro_demand_shift'] += ($sentimentShift * $beta * self::SENTIMENT_SENSITIVITY_SCALAR) - ($fxShift * 0.15);
+        $physics['macro_demand_shift'] += ($sentimentShift * $beta * self::SENTIMENT_SENSITIVITY_SCALAR) + $this->resolveFxDemandShift($macroState);
 
         return $physics;
     }

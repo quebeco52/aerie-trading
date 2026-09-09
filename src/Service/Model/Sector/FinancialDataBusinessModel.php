@@ -34,6 +34,10 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
     // --- Input Cost Basket ---
     /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
     public const INPUT_COST_EXPOSURES = ['labor' => 0.50];
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Content collection, analytics and platform engineering payroll is nearly the whole cost base of a data franchise. */
+    public const FIXED_COST_LABOR_SHARE = 0.75;
     /** Mandatory terminal and ratings subscriptions reprice on renewal with little pushback. */
     public const PRICING_POWER_INDEX = 0.85;
 

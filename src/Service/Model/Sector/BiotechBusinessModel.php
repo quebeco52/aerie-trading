@@ -52,6 +52,16 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
     public const INDUSTRY_SUBSTITUTABILITY = 0.20;
 
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). Cost of goods is API and fill-finish manufacturing plus the technicians who run it; the science itself is fixed overhead. */
+    public const INPUT_COST_EXPOSURES = ['ppi' => 0.30, 'labor' => 0.25, 'energy' => 0.03];
+    /** Multi-year API supply agreements and validated second sources hold the purchase price steady well past a spot move. */
+    public const INPUT_COST_LAG_YEARS = 1.00;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Research scientists, clinical operations and the specialty salesforce are the overhead; a biotech is a payroll with a patent estate. */
+    public const FIXED_COST_LABOR_SHARE = 0.75;
+
     // --- Pricing Power ---
     /** Exclusivity is administered pricing: a patented therapy on-label has no substitute, so list prices are set rather than met. Generic and specialty archetypes are tuned down per ticker. */
     public const PRICING_POWER_INDEX = 0.85;
@@ -338,7 +348,11 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $patentModifier);
+        // API, fill-finish and technician costs reach the cost base behind long supply agreements and are
+        // recovered on-label at exclusivity pricing.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
+
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $patentModifier + $inputCostDrag);
 
         // Once the erosion window closes, the residual off-patent level becomes the permanent base
         // and the clock is reset to the next franchise's remaining patent life.
@@ -496,6 +510,10 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
      */
     public function getOperatingMacroFields(): array
     {
-        return [];
+        return [
+            'energy_cost_push_lag',
+            'producer_price_inflation_ema',
+            'wage_growth_ema',
+        ];
     }
 }

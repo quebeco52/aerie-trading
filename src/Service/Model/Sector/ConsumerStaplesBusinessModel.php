@@ -40,6 +40,14 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     public const INPUT_COST_EXPOSURES = ['agri' => 0.30, 'ppi' => 0.20, 'energy' => 0.06, 'freight' => 0.05, 'labor' => 0.20];
     /** Branded staples recover input moves on the shelf within a couple of quarters. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 0.50;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Brand marketing and salaried commercial staff are the overhead; plant and packaging costs dominate the variable side. */
+    public const FIXED_COST_LABOR_SHARE = 0.50;
+
+    // --- FX Exposure ---
+    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Staples are made and sold close to the shelf; only a thin import-competing slice reprices with the currency. */
+    public const FX_REVENUE_EXPOSURE = 0.05;
     /** Brand equity is shelf-price power: a branded FMCG list price rises with input costs and the volume loss is small. Bulk commodity producers are tuned down per ticker. */
     public const PRICING_POWER_INDEX = 0.75;
 
@@ -182,11 +190,10 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         $effectivePed = self::BASELINE_PRICE_ELASTICITY_OF_DEMAND * (1.5 - $this->resolvePricingPower($stock));
 
         $beta = $this->getOperatingCyclicality($stock);
-        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
 
         // Inelastic demand lets the shelf price track expected inflation at 1 - PED, reached over the repricing lag.
         return [
-            'macro_demand_shift'       => ($macroState->outputGapEma * $beta * $effectivePed) - ($fxShift * 0.05),
+            'macro_demand_shift'       => ($macroState->outputGapEma * $beta * $effectivePed) + $this->resolveFxDemandShift($macroState),
             ...$this->resolvePricingMultipliers($stock, $macroState),
         ];
     }

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Service\Math\FinancialConstants;
+
 use App\Service\Model\BusinessModelInterface;
 
 use App\Data\ModelParam;
@@ -38,6 +40,14 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     // --- Input Cost Basket ---
     /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
     public const INPUT_COST_EXPOSURES = ['ppi' => 0.45, 'freight' => 0.08, 'labor' => 0.25, 'energy' => 0.03];
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Technology and corporate payroll are fixed while fulfilment labor flexes with order volume. */
+    public const FIXED_COST_LABOR_SHARE = 0.55;
+
+    // --- FX Exposure ---
+    /** Merchandise is bought abroad and sold at home, so the exchange rate reaches this model through landed cost, not demand: a strong domestic currency cheapens the first-party cost of goods. */
+    public const IMPORT_SOURCING_FX_SCALAR = 0.15;
 
     // --- Balance Sheet Realism ---
     /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Fulfilment and data-centre footprints are largely leased. */
@@ -203,8 +213,8 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $fpBaselineCosts = max(0.0, $targetTotalCosts - $tpCosts - $adsCosts);
         $fpVariableMargin = $expectedRevenue * $fpWeight > 0 ? $fpBaselineCosts / ($expectedRevenue * $fpWeight) : $realizedVariableMargin;
         
-        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
-        $fpCostSavings = $fpRevenue * $fxShift * 0.15;
+        $fxShift = ($macroState->exchangeRateIndexEma - FinancialConstants::FX_INDEX_BASE) / FinancialConstants::FX_INDEX_BASE;
+        $fpCostSavings = $fpRevenue * $fxShift * self::IMPORT_SOURCING_FX_SCALAR;
 
         // Re-blend actual costs based on shocked revenue
         $actualVariableCosts = $tpCosts + $adsCosts + ($fpRevenue * $fpVariableMargin) - $fpCostSavings;

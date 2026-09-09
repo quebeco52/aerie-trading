@@ -42,6 +42,14 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     public const INPUT_COST_EXPOSURES = ['metals' => 0.10, 'ppi' => 0.20, 'labor' => 0.35, 'energy' => 0.03];
     /** Cost-plus and FMS contracts reprice through FAR escalators within the year; fixed-price EMD never does. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 0.75;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Cleared engineers on long programs are carried through the contract regardless of volume, which is what makes a defense prime a payroll with a factory attached. */
+    public const FIXED_COST_LABOR_SHARE = 0.70;
+
+    // --- FX Exposure ---
+    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Foreign military sales compete against European and Israeli primes on delivered price; domestic procurement does not. */
+    public const FX_REVENUE_EXPOSURE = 0.15;
     /** Cost-plus and FMS work recovers allowable cost by contract; only the fixed-price development share eats an overrun, and fixed-price-heavy primes are tuned down per ticker. */
     public const PRICING_POWER_INDEX = 0.70;
 
@@ -284,7 +292,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         }
 
         // --- Clamped Revenue Streams ---
-        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         // Input cost basket: titanium and specialty metals, electronics, engineering payroll. Cost-plus and FMS
         // work recovers the move through escalators; the fixed-price development share eats it.
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, 1.0 - $fixedPriceWeight, $realizedVariableMargin);
@@ -296,7 +303,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $fixedPriceBook = $streams->recognizeBacklog('fixed_price_development', $expectedRevenue * $fixedPriceWeight,
             max(0.0, (1.0 + ($fixedPriceZ * $baselineVol * self::FIXED_PRICE_DEV_VARIANCE_SCALAR) + ($govSpendShift * 0.40)) * $fixedPriceMultiplier), self::FIXED_PRICE_BACKLOG_BURN_RATE);
         $fmsBook = $streams->recognizeBacklog('foreign_military_sales', $expectedRevenue * $fmsWeight,
-            max(0.0, (1.0 + ($fmsZ * $baselineVol * self::FMS_VARIANCE_SCALAR) - ($fxShift * 0.15)) * $fmsMultiplier), self::FMS_BACKLOG_BURN_RATE);
+            max(0.0, (1.0 + ($fmsZ * $baselineVol * self::FMS_VARIANCE_SCALAR) + $this->resolveFxDemandShift($macroState)) * $fmsMultiplier), self::FMS_BACKLOG_BURN_RATE);
 
         $costPlusRevenue = $costPlusBook['revenue'];
         $fixedPriceRevenue = $fixedPriceBook['revenue'];

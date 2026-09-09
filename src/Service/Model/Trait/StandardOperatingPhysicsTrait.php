@@ -115,6 +115,32 @@ trait StandardOperatingPhysicsTrait
             : FinancialConstants::DEFAULT_INPUT_COST_EXPOSURES;
     }
 
+    // --- FX Exposure ---
+    /**
+     * Share of revenue whose competitiveness moves with the trade-weighted exchange rate: export sales
+     * translated home, and domestic sales meeting importers who reprice when the currency does. Distinct
+     * from OPERATING_CYCLICALITY, which measures exposure to the output gap: a defensive branded exporter
+     * is barely cyclical and heavily FX-exposed, so multiplying one by the other double-counts.
+     */
+    public function getFxRevenueExposure(): float
+    {
+        return defined('static::FX_REVENUE_EXPOSURE')
+            ? (float) static::FX_REVENUE_EXPOSURE
+            : FinancialConstants::DEFAULT_FX_REVENUE_EXPOSURE;
+    }
+
+    /**
+     * Signed demand shift from the exchange rate. A stronger domestic currency (index above base) prices
+     * exports out of foreign markets and cheapens the importer's shelf price at home, so the shift is
+     * negative on the way up and positive on the way down, scaled by how much revenue is actually exposed.
+     */
+    public function resolveFxDemandShift(MacroStateDTO $macroState, ?float $exposure = null): float
+    {
+        $fxShift = ($macroState->exchangeRateIndexEma - FinancialConstants::FX_INDEX_BASE) / FinancialConstants::FX_INDEX_BASE;
+
+        return -$fxShift * ($exposure ?? $this->getFxRevenueExposure());
+    }
+
     /** Years for spot input moves to reach the cost base (0 = spot buyer; forward hedges and supply contracts lengthen it). */
     public function getInputCostLagYears(): float
     {

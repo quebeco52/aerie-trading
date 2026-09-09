@@ -99,6 +99,14 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
     /** Alloy and carbide supply contracts fix input prices for about a quarter. */
     public const INPUT_COST_LAG_YEARS = 0.25;
 
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Sales, marketing and salaried plant staff are fixed against a metal- and freight-heavy variable bill. */
+    public const FIXED_COST_LABOR_SHARE = 0.50;
+
+    // --- FX Exposure ---
+    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Hand and power tools are sourced and sold across borders against import-competing brands. */
+    public const FX_REVENUE_EXPOSURE = 0.10;
+
         public function getReversionSpeed(): float { return 0.08; }
     public function getMoatSpread(): float { return 0.03; }
 
@@ -153,12 +161,11 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         $macroSensitivityMultiplier = self::MIN_BETA_PRICING_POWER_FLOOR + $pricingPower;
 
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
-        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, sensitivity: self::PMI_COMMERCIAL_SENSITIVITY);
         $housingShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_SENSITIVITY);
 
-        $commercialMacroVolumeShock = ($macroState->outputGapEma * $macroSensitivityMultiplier * $this->getOperatingCyclicality($stock)) - ($fxShift * 0.10) + $pmiShift;
-        $consumerMacroVolumeShock = ($sentimentShift * $macroSensitivityMultiplier * $this->getOperatingCyclicality($stock)) - ($fxShift * 0.10) + $housingShift;
+        $commercialMacroVolumeShock = ($macroState->outputGapEma * $macroSensitivityMultiplier * $this->getOperatingCyclicality($stock)) + $this->resolveFxDemandShift($macroState) + $pmiShift;
+        $consumerMacroVolumeShock = ($sentimentShift * $macroSensitivityMultiplier * $this->getOperatingCyclicality($stock)) + $this->resolveFxDemandShift($macroState) + $housingShift;
 
         // Tail Risk Events
         $cycleMultiplier = 1.0;

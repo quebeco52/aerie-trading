@@ -102,6 +102,16 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     /** Component supply agreements fix bill-of-materials prices for about a quarter before spot moves reach the line. */
     public const INPUT_COST_LAG_YEARS = 0.25;
 
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Product engineering and go-to-market payroll are fixed; assembly is contract-manufactured and moves with volume. */
+    public const FIXED_COST_LABOR_SHARE = 0.55;
+
+    // --- FX Exposure ---
+    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Systems are assembled offshore and bid against imports on a common component bill. */
+    public const FX_REVENUE_EXPOSURE = 0.10;
+    /** Consumer PCs are a landed import competing on retail shelf price, so the consumer book reprices with the currency harder than the enterprise book. */
+    public const CONSUMER_FX_REVENUE_EXPOSURE = 0.15;
+
         public function getReversionSpeed(): float { return 0.25; }
     public function getMoatSpread(): float { return 0.02; }
 
@@ -153,12 +163,11 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
 
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
 
-        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY);
         // Metzler inventory cycle: a channel overhang (positive gap) means distributors destock before reordering.
         $inventoryCycleShift = -$macroState->inventoryStockGapEma * self::INVENTORY_CYCLE_SENSITIVITY;
-        $enterpriseMacroVolumeShock = ($macroState->outputGapEma * $macroSensitivityMultiplier * $this->getOperatingCyclicality($stock)) - ($fxShift * 0.10) + ($tradeShift * 0.50) + $inventoryCycleShift;
-        $consumerMacroVolumeShock = ($sentimentShift * $macroSensitivityMultiplier * $this->getOperatingCyclicality($stock)) - ($fxShift * 0.15) + ($tradeShift * 0.50) + $inventoryCycleShift;
+        $enterpriseMacroVolumeShock = ($macroState->outputGapEma * $macroSensitivityMultiplier * $this->getOperatingCyclicality($stock)) + $this->resolveFxDemandShift($macroState) + ($tradeShift * 0.50) + $inventoryCycleShift;
+        $consumerMacroVolumeShock = ($sentimentShift * $macroSensitivityMultiplier * $this->getOperatingCyclicality($stock)) + $this->resolveFxDemandShift($macroState, self::CONSUMER_FX_REVENUE_EXPOSURE) + ($tradeShift * 0.50) + $inventoryCycleShift;
 
         // Tail Risk Events
         $enterpriseMultiplier = 1.0;

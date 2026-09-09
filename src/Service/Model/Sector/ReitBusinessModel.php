@@ -28,6 +28,14 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
     public const INDUSTRY_SUBSTITUTABILITY = 0.40;
 
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). Property operating expense is utilities, on-site staff and repairs; the share a landlord bears net of tenant recoveries. */
+    public const INPUT_COST_EXPOSURES = ['energy' => 0.20, 'labor' => 0.25, 'ppi' => 0.15];
+    /** Utility contracts and service agreements reprice annually, so a spot move reaches property opex over about a year. */
+    public const INPUT_COST_LAG_YEARS = 0.75;
+    /** Operating-expense recoveries and CAM reconciliations bill tenants in arrears, a year or more behind the cost. */
+    public const INPUT_PASS_THROUGH_LAG_YEARS = 1.00;
+
     // --- Pricing Power ---
     /** In-place leases carry contractual escalators the landlord collects regardless of the market, but re-leasing spreads are set by the submarket, so recovery is high on the stock and weak at the margin. */
     public const PRICING_POWER_INDEX = 0.60;
@@ -322,7 +330,11 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         // Mortgage and unsecured note costs reach FFO through DebtEngine's maturity wall
         // (getDebtMaturityRolloverRate), below NOI. They are not a property operating cost.
         $minVariableMargin = max(0.01, self::MIN_EFFICIENCY_RATIO - ($fixedCosts / max(1.0, $actualRevenue)));
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $vacancyShock + $macroTenantDefaultDrag, $minVariableMargin);
+        // Property operating expense: utilities, on-site payroll and repairs, recovered from tenants through
+        // CAM and opex reconciliations that bill a year in arrears.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
+
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $vacancyShock + $macroTenantDefaultDrag + $inputCostDrag, $minVariableMargin);
 
         $eventType = null;
         if ($tenantDefaultZ < self::LORE_ANCHOR_BANKRUPTCY_Z) {
@@ -489,13 +501,16 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         return [
             'commercial_property_index_ema',
             'corporate_default_rate_ema',
+            'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'housing_starts_index_ema',
             'inflation_ema',
             'output_gap_ema',
+            'producer_price_inflation_ema',
             'residential_property_index_ema',
             'retail_default_rate_ema',
             'tips_breakeven_ema',
+            'wage_growth_ema',
         ];
     }
 }

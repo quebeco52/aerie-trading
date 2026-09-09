@@ -51,6 +51,10 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Fab depreciation, cleanroom energy and materials dominate; engineering payroll is a minority of overhead. */
     public const FIXED_COST_LABOR_SHARE = 0.35;
 
+    // --- FX Exposure ---
+    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Wafers are priced in the trade currency and sold into a global fab and OEM base. */
+    public const FX_REVENUE_EXPOSURE = 0.10;
+
         public function getReversionSpeed(): float { return 0.15; }
     public function getMoatSpread(): float { return 0.02; }
     public function getCapExCompletionRate(Stock $stock): float { return 0.125; }
@@ -148,9 +152,8 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         $beta = $this->getOperatingCyclicality($stock);
 
         // Semiconductors are highly cyclical and levered to global tech capital expenditure cycles
-        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         return [
-            'macro_demand_shift' => ($outputGap * $beta * self::MACRO_DEMAND_SCALAR) - ($fxShift * 0.10),
+            'macro_demand_shift' => ($outputGap * $beta * self::MACRO_DEMAND_SCALAR) + $this->resolveFxDemandShift($macroState),
             ...$this->resolvePricingMultipliers($stock, $macroState),
         ];
     }

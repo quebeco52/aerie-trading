@@ -39,6 +39,10 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
     public const INPUT_COST_EXPOSURES = ['energy' => 0.25, 'labor' => 0.35, 'ppi' => 0.05];
     /** Fuel surcharges on dedicated contracts reprice within a quarter or two. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 0.25;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Terminal management, dispatch and network staff are fixed; line-haul drivers and fuel move with freight volume. */
+    public const FIXED_COST_LABOR_SHARE = 0.55;
     /** Dedicated contracts carry surcharges; spot brokerage does not. */
     public const PRICING_POWER_INDEX = 0.60;
 

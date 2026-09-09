@@ -211,6 +211,12 @@ class FinancialConstants
     /** Default years for the recoverable share of an input move to reach selling prices (Nakamura & Steinsson 2008 price durations). */
     public const DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS = 0.75;
 
+    // --- FX Exposure ---
+    /** Base level of the trade-weighted exchange rate index, against which a move is measured as a relative deviation. */
+    public const FX_INDEX_BASE = 100.0;
+    /** Default share of revenue exposed to the exchange rate: a mostly domestic firm meeting a little imported competition. */
+    public const DEFAULT_FX_REVENUE_EXPOSURE = 0.05;
+
     // --- Own-Price Demand Response ---
     /** Default own-price elasticity of demand for a producing firm (volume lost per unit of real price increase); mid-range of empirical estimates for differentiated goods. */
     public const DEFAULT_PRICE_ELASTICITY_OF_DEMAND = 0.50;

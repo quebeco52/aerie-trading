@@ -34,6 +34,14 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     // --- Input Cost Basket ---
     /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
     public const INPUT_COST_EXPOSURES = ['energy' => 0.08, 'metals' => 0.25, 'freight' => 0.05, 'ppi' => 0.25, 'labor' => 0.20];
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Salaried engineering and plant supervision are fixed; the hourly line and the material bill move with output. */
+    public const FIXED_COST_LABOR_SHARE = 0.50;
+
+    // --- FX Exposure ---
+    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Heavy equipment is a globally traded good bid against foreign builders on delivered price. */
+    public const FX_REVENUE_EXPOSURE = 0.15;
     /** Engineered equipment carries spec lock-in and steel escalator clauses on long builds, but competes bid-by-bid on new orders. */
     public const PRICING_POWER_INDEX = 0.55;
 
@@ -145,14 +153,13 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
 
         $mroShock = $mroZ * ($baselineVol * self::MRO_VARIANCE_SCALAR);
 
-        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         $overhangDrag = $macroState->capitalStockOverhangEma * self::CAPITAL_OVERHANG_SCALAR;
 
         // OEM equipment is booked into a multi-quarter order backlog and recognized over time: a demand shock
         // hits orders in full but reaches revenue only at the backlog burn rate, and the rest persists.
         // Metzler inventory cycle: dealer lots and fleet stocks are drawn down before new OEM orders are placed.
         $inventoryCycleShift = -$macroState->inventoryStockGapEma * self::INVENTORY_CYCLE_SENSITIVITY;
-        $oemOrderMultiplier = max(0.0, 1.0 + ($oemZ * ($baselineVol * self::OEM_VARIANCE_SCALAR)) - ($fxShift * 0.15) - $overhangDrag + $inventoryCycleShift);
+        $oemOrderMultiplier = max(0.0, 1.0 + ($oemZ * ($baselineVol * self::OEM_VARIANCE_SCALAR)) + $this->resolveFxDemandShift($macroState) - $overhangDrag + $inventoryCycleShift);
         $oemBook = $streams->recognizeBacklog('oem_equipment', $expectedRevenue * $oemWeight, $oemOrderMultiplier, self::OEM_BACKLOG_BURN_RATE);
         $oemRevenue = $oemBook['revenue'];
         $mroRevenue = max(0.0, $expectedRevenue * $mroWeight * (1.0 + $mroShock));

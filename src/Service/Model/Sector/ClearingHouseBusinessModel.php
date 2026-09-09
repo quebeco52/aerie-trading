@@ -32,6 +32,10 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Clearing volumes rise in stress; only pool growth follows the cycle. */
     public const OPERATING_CYCLICALITY = 0.80;
 
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. A matching engine is capital, not payroll, but risk, compliance and member-services staff carry the rest of the overhead. */
+    public const FIXED_COST_LABOR_SHARE = 0.55;
+
         public function getMinIcr(): float { return 1.05; }
     public function getBankruptEquityThreshold(): float { return 0.5; }
     public function getDistressEquityThreshold(): float { return 1.25; }

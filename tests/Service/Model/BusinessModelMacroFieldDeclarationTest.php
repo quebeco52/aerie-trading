@@ -81,6 +81,13 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
             $actual = array_values(array_unique($actual));
         }
 
+        // FX is trait code too, but WHETHER a model is exposed at all is a per-model declaration
+        // (FX_REVENUE_EXPOSURE), so invoking the helper is a genuine coupling to the exchange rate.
+        if ($this->invokesHelper($modelClass, 'resolveFxDemandShift(')) {
+            $actual[] = 'exchange_rate_index_ema';
+            $actual = array_values(array_unique($actual));
+        }
+
         if ($this->invokesInputCostBasket($modelClass) && method_exists($model, 'getInputCostExposures')) {
             foreach ($model->getInputCostExposures() as $channel => $share) {
                 if ($share > 0.0 && isset(self::BASKET_CHANNEL_FIELDS[$channel])) {

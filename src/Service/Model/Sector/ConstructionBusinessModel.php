@@ -45,6 +45,10 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
     /** Fixed-price contracts reprice only at the next award: material moves take a year to reach bid prices. */
     public const INPUT_PASS_THROUGH_LAG_YEARS = 1.00;
 
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Estimators, project managers and equipment supervisors are salaried; trade labor is subcontracted per job and priced into variable cost. */
+    public const FIXED_COST_LABOR_SHARE = 0.55;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for EPC contractors. */
     public const BASE_COVERAGE_VISIBILITY = 0.40;

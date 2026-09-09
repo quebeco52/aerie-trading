@@ -34,6 +34,14 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
     // --- Input Cost Basket ---
     /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
     public const INPUT_COST_EXPOSURES = ['labor' => 0.25, 'ppi' => 0.15, 'freight' => 0.03];
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Boutique staffing, atelier artisans and brand marketing are carried through the cycle to protect the brand, not flexed with sales. */
+    public const FIXED_COST_LABOR_SHARE = 0.65;
+
+    // --- FX Exposure ---
+    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Tourist spend and cross-border arbitrage make luxury demand unusually sensitive to the currency. */
+    public const FX_REVENUE_EXPOSURE = 0.15;
     /** Veblen pricing: maisons raise prices one and a half times expected inflation without losing volume. */
     public const PRICING_ELASTICITY = 1.50;
     /** Leather, workshop payroll and logistics are recovered in full through list prices. */
@@ -113,11 +121,10 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
         $beta = $this->getOperatingCyclicality($stock);
 
-        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         $resShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0; // Wealth effect from property
         $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, MacroEngine::M2_BASE_GROWTH, self::M2_LIQUIDITY_SENSITIVITY);
 
-        $blendedMacroShift = ($outputGap * 0.35) + ($sentimentShift * 0.45) + ($resShift * 0.20) + $m2Shift - ($fxShift * 0.15);
+        $blendedMacroShift = ($outputGap * 0.35) + ($sentimentShift * 0.45) + ($resShift * 0.20) + $m2Shift + $this->resolveFxDemandShift($macroState);
 
         // Luxury goods benefit from Veblen pricing power: list prices outrun expected inflation (PRICING_ELASTICITY),
         // and the engine books the gap between price and input cost as margin.

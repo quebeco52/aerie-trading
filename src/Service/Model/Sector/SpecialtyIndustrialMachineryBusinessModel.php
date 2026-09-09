@@ -37,6 +37,14 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
     // --- Input Cost Basket ---
     /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
     public const INPUT_COST_EXPOSURES = ['energy' => 0.06, 'metals' => 0.20, 'freight' => 0.03, 'ppi' => 0.25, 'labor' => 0.25];
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Application engineering and the field service network are carried between order cycles to defend the installed base. */
+    public const FIXED_COST_LABOR_SHARE = 0.55;
+
+    // --- FX Exposure ---
+    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Capital equipment is quoted internationally and competes with European and Japanese builders on price. */
+    public const FX_REVENUE_EXPOSURE = 0.10;
     /** An installed base tied to consumable and spare-parts revenue prices close to a monopoly on the aftermarket, which is where the margin sits. */
     public const PRICING_POWER_INDEX = 0.70;
 
@@ -186,9 +194,8 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
         }
 
         // --- Clamped Stream Revenue Calculation ---
-        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         // Equipment orders enter a multi-quarter backlog and are recognized at the burn rate (percentage of completion).
-        $equipmentOrderMultiplier = max(0.0, (1.0 + ($equipmentZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $macroEquipmentBoost - ($fxShift * 0.10)) * $dealMultiplier);
+        $equipmentOrderMultiplier = max(0.0, (1.0 + ($equipmentZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $macroEquipmentBoost + $this->resolveFxDemandShift($macroState)) * $dealMultiplier);
         $equipmentBook = $streams->recognizeBacklog('equipment_sales', $expectedRevenue * $equipmentWeight, $equipmentOrderMultiplier, self::EQUIPMENT_BACKLOG_BURN_RATE);
         $equipmentRevenue = $equipmentBook['revenue'];
         $servicesRevenue  = max(0.0, $expectedRevenue * $servicesWeight * (1.0 + ($servicesZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * self::SERVICES_VARIANCE_RATIO))));

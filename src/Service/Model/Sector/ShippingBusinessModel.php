@@ -49,6 +49,10 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Vessel depreciation, bunker fuel and port charges dominate; crew wages are a minority of overhead. */
     public const FIXED_COST_LABOR_SHARE = 0.30;
 
+    // --- FX Exposure ---
+    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Charter and spot rates are quoted in the trade currency against globally mobile tonnage. */
+    public const FX_REVENUE_EXPOSURE = 0.10;
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.75;
     public const BASE_COVERAGE_ERROR = 0.10;
@@ -142,13 +146,12 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $outputGap = $macroState->outputGapEma;
-        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY);
         $beta = $this->getOperatingCyclicality($stock);
 
         // Extreme sensitivity to global economic momentum and trade volume
         return [
-            'macro_demand_shift' => ($outputGap * $beta * self::MACRO_DEMAND_SCALAR) - ($fxShift * 0.10) + $tradeShift,
+            'macro_demand_shift' => ($outputGap * $beta * self::MACRO_DEMAND_SCALAR) + $this->resolveFxDemandShift($macroState) + $tradeShift,
             ...$this->resolvePricingMultipliers($stock, $macroState),
         ];
     }
@@ -184,7 +187,6 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         $outputGap = $macroState->outputGapEma;
         $freightShift = ($macroState->freightRateIndexEma - 100.0) / 100.0;
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
-        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY);
         $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma - MacroEngine::GSCPI_BASELINE);
         $spotRateMultiplier = ($outputGap * self::CONTINUOUS_SPOT_RATE_SCALAR) + ($freightShift * 0.50) + ($metalsShift * 0.15) + $tradeShift + ($gscpiShift * self::GSCPI_FREIGHT_BOOST_SCALAR);
@@ -213,7 +215,7 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         // Spot freight rates reprice a fixed fleet's voyages: the rate cycle is price, the ships sail either way.
         $priceRevenue    = $expectedRevenue * $spotWeight * $spotRateMultiplier;
         // Time charters are fixed into a multi-quarter contract backlog and recognized as voyages complete.
-        $contractBook = $streams->recognizeBacklog('contract', $expectedRevenue * $contractWeight, max(0.0, 1.0 + ($contractZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) - ($fxShift * 0.10)), self::CONTRACT_BACKLOG_BURN_RATE);
+        $contractBook = $streams->recognizeBacklog('contract', $expectedRevenue * $contractWeight, max(0.0, 1.0 + ($contractZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $this->resolveFxDemandShift($macroState)), self::CONTRACT_BACKLOG_BURN_RATE);
         $contractRevenue = $contractBook['revenue'];
 
         $streamRevenues = [

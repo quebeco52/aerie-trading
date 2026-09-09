@@ -41,6 +41,10 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
     public const INDUSTRY_SUBSTITUTABILITY = 0.70;
 
+    // --- FX Exposure ---
+    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. Vehicles are the archetypal traded good: half the book is exported or meets a landed import on the same forecourt. */
+    public const FX_REVENUE_EXPOSURE = 0.50;
+
     // --- Input Cost Basket ---
     /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
     public const INPUT_COST_EXPOSURES = ['energy' => 0.05, 'metals' => 0.15, 'freight' => 0.05, 'ppi' => 0.35, 'labor' => 0.20];
@@ -297,10 +301,9 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $salesShock    = $salesZ    * ($baselineVol * self::SALES_VARIANCE_SCALAR);
         $apexShock     = $apexZ     * ($baselineVol * self::APEX_VARIANCE_SCALAR);
         $softwareShock = $softwareZ * ($baselineVol * self::SOFTWARE_VARIANCE_SCALAR);
-        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         $cuShift = MathUtility::calculateCapacityUtilizationShift($macroState->capacityUtilizationRateEma, MacroEngine::CU_BASELINE, self::CAPACITY_UTILIZATION_THROUGHPUT_SCALAR);
 
-        $salesRevenue    = max(0.0, $expectedRevenue * $salesWeight    * (1.0 + $salesShock - ($fxShift * 0.5) + $cuShift) * $salesMultiplier);
+        $salesRevenue    = max(0.0, $expectedRevenue * $salesWeight    * (1.0 + $salesShock + $this->resolveFxDemandShift($macroState) + $cuShift) * $salesMultiplier);
         $apexRevenue     = max(0.0, $expectedRevenue * $apexWeight     * (1.0 + $apexShock + $apexMacroBoost));
         $softwareRevenue = max(0.0, $expectedRevenue * $softwareWeight * (1.0 + $softwareShock));
 

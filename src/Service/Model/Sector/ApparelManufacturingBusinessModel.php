@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Service\Math\FinancialConstants;
+
 use App\Data\ModelParam;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorCoverageProfile;
@@ -44,6 +46,10 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const INPUT_COST_EXPOSURES = ['agri' => 0.15, 'freight' => 0.06, 'energy' => 0.04, 'ppi' => 0.20, 'labor' => 0.25];
     /** Six to nine months of raw inventory and cotton futures: spot fiber and freight moves reach COGS with a lag. */
     public const INPUT_COST_LAG_YEARS = 0.50;
+
+    // --- Labor Intensity ---
+    /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Design studios, brand marketing and merchandising are the overhead; cutting and sewing sits in variable cost, largely under contract. */
+    public const FIXED_COST_LABOR_SHARE = 0.60;
 
     // --- Inventory Cycle ---
     /** Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking, shortfalls restocking. Retailer inventory-to-sales ratios gate wholesale reorders. */
@@ -282,7 +288,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         }
 
         // Currency FX Export Competitiveness & Global Trade: A weaker currency and positive trade balance boost textile exports.
-        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
+        $fxShift = ($macroState->exchangeRateIndexEma - FinancialConstants::FX_INDEX_BASE) / FinancialConstants::FX_INDEX_BASE;
         $contractFxBonus = $fxShift * self::CONTRACT_FX_EXPORT_SCALAR;
         $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY);
 

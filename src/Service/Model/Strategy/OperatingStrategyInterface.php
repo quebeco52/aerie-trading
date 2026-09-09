@@ -61,6 +61,12 @@ interface OperatingStrategyInterface
      * modelled inside each sector's own physics, not here.
      */
     public function getLaborCostShare(): float;
+
+    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate (FX_REVENUE_EXPOSURE). */
+    public function getFxRevenueExposure(): float;
+
+    /** Signed demand shift from the trade-weighted exchange rate, at the model's exposure or a channel-level override. */
+    public function resolveFxDemandShift(MacroStateDTO $macroState, ?float $exposure = null): float;
     /**
      * Capitalized operating lease liabilities (IFRS 16 / ASC 842) as a fraction of annual revenue. Rent is
      * already inside fixed costs, so leases add NO interest; they add debt-like obligations to leverage,

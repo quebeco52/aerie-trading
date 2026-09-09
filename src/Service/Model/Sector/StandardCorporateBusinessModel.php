@@ -48,6 +48,10 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
     /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
     public const INDUSTRY_SUBSTITUTABILITY = 0.50;
 
+    // --- FX Exposure ---
+    /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate. A mostly domestic firm meeting a little imported competition; sector models override. */
+    public const FX_REVENUE_EXPOSURE = 0.05;
+
     // --- ROIC & Target Metrics ---
     /** Weight given to historical baseline ROIC when blending with TTM ROIC. */
     public const BASELINE_ROIC_WEIGHT = 0.50;
@@ -131,10 +135,9 @@ class StandardCorporateBusinessModel implements BusinessModelInterface
 
         $outputGap = $macroState->outputGapEma;
         $beta = $this->getOperatingCyclicality($stock);
-        $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
 
         return [
-            'macro_demand_shift' => ($outputGap * $macroSensitivityMultiplier * $beta) - ($fxShift * 0.05 * $beta),
+            'macro_demand_shift' => ($outputGap * $macroSensitivityMultiplier * $beta) + $this->resolveFxDemandShift($macroState),
             ...$this->resolvePricingMultipliers($stock, $macroState),
         ];
     }

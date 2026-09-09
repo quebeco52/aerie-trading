@@ -98,14 +98,25 @@ class DistrictConduitTopologyTest extends TestCase
             return;
         }
 
-        foreach ($conduits as $institutionId) {
-            $institutionFields = DistrictMap::INSTITUTIONS[$institutionId]['fields'];
-
-            $this->assertNotEmpty(
-                array_intersect($ownFields, $institutionFields),
-                sprintf('"%s" is wired to "%s" but shares none of its non-ubiquitous fields', $businessModel, $institutionId)
-            );
+        // Assert the whole derived set, not just each derived edge: a model may read non-ubiquitous
+        // fields that no institution publishes at all (wage_growth_ema), which leaves it correctly
+        // wired to nothing. Checking only the edges that exist asserts nothing in that case, and
+        // never catches an institution the model should be wired to but is not.
+        $expected = [];
+        foreach (DistrictMap::INSTITUTIONS as $institutionId => $institution) {
+            if (array_intersect($ownFields, $institution['fields']) !== []) {
+                $expected[] = $institutionId;
+            }
         }
+
+        sort($expected);
+        sort($conduits);
+
+        $this->assertSame($expected, $conduits, sprintf(
+            '"%s" derives conduits that drift from its non-ubiquitous fields [%s].',
+            $businessModel,
+            implode(', ', $ownFields)
+        ));
     }
 
     public function testEveryInstitutionFieldExistsOnMacroStateDTO(): void
