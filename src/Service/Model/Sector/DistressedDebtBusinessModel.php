@@ -28,6 +28,10 @@ use App\Service\Macro\MacroEngine;
  */
 class DistressedDebtBusinessModel extends AssetManagementBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Counter-cyclical revenue, but capital raising follows the cycle. */
+    public const OPERATING_CYCLICALITY = 0.90;
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.90;
     public const BASE_COVERAGE_ERROR = 0.05;
@@ -79,7 +83,7 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // Counter-Cyclical Credit Spread Trigger
         $creditSpread = ($macroState->macroCreditSpread !== MacroEngine::BASE_CREDIT_SPREAD)

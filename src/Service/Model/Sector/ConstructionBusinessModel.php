@@ -31,6 +31,20 @@ use App\Service\Math\MathUtility;
  */
 class ConstructionBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Private capex builds are cyclical; public works are not. */
+    public const OPERATING_CYCLICALITY = 1.20;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.60;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.50;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['energy' => 0.10, 'metals' => 0.15, 'freight' => 0.03, 'ppi' => 0.35, 'labor' => 0.25];
+    /** Fixed-price contracts reprice only at the next award: material moves take a year to reach bid prices. */
+    public const INPUT_PASS_THROUGH_LAG_YEARS = 1.00;
+
     // --- Analyst Visibility & Error ---
     /** Base coverage visibility for EPC contractors. */
     public const BASE_COVERAGE_VISIBILITY = 0.40;
@@ -67,16 +81,6 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
     /** Volatility scalar for recurring facilities maintenance services. */
     public const FACILITIES_MAINTENANCE_VARIANCE_SCALAR = 0.10;
 
-    // --- Material Inflation & Cost Squeeze ---
-    /** Base sensitivity of fixed-price contracts to input material inflation (diesel, steel, cement). */
-    public const INFLATION_PENALTY_SCALAR = 1.00;
-
-    /** Energy price index drag scalar for heavy diesel and earthmoving equipment. */
-    public const ENERGY_COST_SCALAR = 0.10;
-
-    /** Maximum mitigation percentage of material cost drag achieved via perfect pricing power. */
-    public const MAX_PRICING_POWER_MITIGATION = 0.60;
-
     // --- Housing Starts, SLOOS & PPI Transmission ---
     /** Sensitivity of commercial and residential construction activity to housing starts shifts. */
     public const HOUSING_STARTS_SENSITIVITY = 0.40;
@@ -84,8 +88,6 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
     /** Drag on construction financing per unit of SLOOS bank lending standard tightening. */
     public const SLOOS_CREDIT_TIGHTENING_SCALAR = 0.30;
 
-    /** Sensitivity of building materials (cement, lumber, structural steel) to wholesale PPI inflation. */
-    public const PPI_CONSTRUCTION_SENSITIVITY = 0.45;
 
     // --- Tail Risk & Shock Events ---
     /** Z-score threshold for catastrophic project delays and liquidated damages. */
@@ -139,6 +141,8 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         // Nullify global generic demand shifts to handle macro cycles discretely per stream.
         $physics['macro_demand_shift'] = 0.0;
         $physics['pricing_power_multiplier'] = 1.0;
+        // Inflation is carried inside this model's own stream physics: neither price nor cost base inflates at the engine level.
+        $physics['input_cost_multiplier'] = 1.0;
 
         return $physics;
     }
@@ -165,8 +169,8 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $pricingPower      = $params[ModelParam::PricingPowerIndex];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = $this->createStreamContext($momentum, $mathUtility);
-        $beta = abs((float) $stock->getBeta());
+        $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
+        $beta = $this->getOperatingCyclicality($stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -247,21 +251,11 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // --- Fixed-Price Contract Margin Squeeze with Cost-Plus Pass-Through ---
-        $inflation = $macroState->inflationEma;
-        $energyShift = max(0.0, $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
+        // Diesel, structural steel, cement and lumber and site payroll reach the job at spot; escalation clauses
+        // (the firm's pricing power) recover part of it, and only at the next award.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
 
-        $baseInflationPenalty = $inflation > MacroEngine::TARGET_INFLATION
-            ? ($inflation - MacroEngine::TARGET_INFLATION) * $beta * self::INFLATION_PENALTY_SCALAR
-            : 0.0;
-
-        $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
-        $ppiCostDrag = MathUtility::calculatePpiCostDrag($macroState->producerPriceInflation, MacroEngine::TARGET_INFLATION, $pricingPower, self::PPI_CONSTRUCTION_SENSITIVITY);
-        $rawMaterialCostDrag = $baseInflationPenalty + ($energyShift * self::ENERGY_COST_SCALAR) + ($metalsShift * self::ENERGY_COST_SCALAR * 1.5) + $ppiCostDrag;
-
-        // Pricing power enables contractual cost-plus escalation clauses, mitigating the fixed-price margin squeeze
-        $effectiveMaterialCostDrag = $rawMaterialCostDrag * (1.0 - ($pricingPower * self::MAX_PRICING_POWER_MITIGATION));
-
-        $rawMargin = $realizedVariableMargin + $effectiveMaterialCostDrag + $costOverrunDrag;
+        $rawMargin = $realizedVariableMargin + $inputCostDrag + $costOverrunDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Determine primary shock driver
@@ -298,17 +292,18 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
             'commercial_property_index_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
+            'freight_rate_index_ema',
             'government_spending_index_ema',
             'housing_starts_index_ema',
             'industrial_metals_index_ema',
-            'inflation_ema',
             'natural_rate_ema',
             'output_gap_ema',
             'policy_rate_ema',
-            'producer_price_inflation',
+            'producer_price_inflation_ema',
             'residential_property_index_ema',
             'sloos_tightening_index_ema',
             'tips_breakeven_ema',
+            'wage_growth_ema',
         ];
     }
 }

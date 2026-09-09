@@ -25,6 +25,10 @@ use App\Service\Math\FinancialConstants;
  */
 class CreditServicesBusinessModel extends CommercialBankBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Unsecured card balances and swipe volumes are consumer-cyclical. */
+    public const OPERATING_CYCLICALITY = 1.20;
+
         public function getMoatSpread(): float { return 0.005; }
     // --- Dual-Stream Credit Services Architecture ---
     /** Baseline fraction of revenue derived from revolving consumer lending interest. */
@@ -166,7 +170,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $ceclSensitivity = $params[ModelParam::CeclSpreadSensitivity];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -185,7 +189,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         // Inflation Bonus (Interchange Swipe Fees):
         // Swipe fees (Visa/MC network) are a percentage of transaction value — higher prices = higher revenue.
         $inflation = $macroState->inflationEma;
-        $inflationBonus = ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta());
+        $inflationBonus = ($inflation - MacroEngine::TARGET_INFLATION) * $this->getOperatingCyclicality($stock);
 
         // Blended dual-stream revenue (Lending vs. Payment Network Interchange)
         // Bank credit tightening (SLOOS) gates unsecured credit card line extensions and origination volume
@@ -195,6 +199,8 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             * (1.0 + ($lendingZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));
         $networkRevenue = max(0.0, $expectedRevenue * $networkWeight
             * (1.0 + ($swipeZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $inflationBonus));
+        // Interchange on a bigger ticket is the same swipe: the inflation bonus is price, not processing volume.
+        $priceRevenue = max(0.0, $expectedRevenue * $networkWeight * $inflationBonus);
         
         $streamRevenues = [
             'lending' => $lendingRevenue,
@@ -282,6 +288,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
             eventType: $eventType,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+            priceRevenue: $priceRevenue,
         );
     }
 

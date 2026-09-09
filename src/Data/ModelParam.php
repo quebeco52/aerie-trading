@@ -12,6 +12,8 @@ enum ModelParam: string
 {
     // --- Pricing Power & Macro Scalars ---
     case PricingPowerIndex = 'pricing_power_index';
+    /** Operating cyclicality: elasticity of the firm's volumes and costs to the macro cycle (replaces equity beta inside operating physics). */
+    case OperatingCyclicality = 'operating_cyclicality';
     case RateSensitivityScalar = 'rate_sensitivity_scalar';
     case VixArbitrageScalar = 'vix_arbitrage_scalar';
     case SpotPriceSensitivity = 'spot_price_sensitivity';

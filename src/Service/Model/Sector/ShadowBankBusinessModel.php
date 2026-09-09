@@ -26,6 +26,10 @@ use App\Service\Math\FinancialConstants;
  */
 class ShadowBankBusinessModel extends CommercialBankBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Wholesale-funded lending expands and contracts with credit conditions. */
+    public const OPERATING_CYCLICALITY = 1.30;
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.50;
     public const BASE_COVERAGE_ERROR = 0.10;
@@ -242,7 +246,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         $params = $this->resolveModelParameters($stock, [
             ModelParam::MortgageOriginationWeight->value => 0.60,

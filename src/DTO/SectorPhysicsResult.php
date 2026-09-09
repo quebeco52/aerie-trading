@@ -42,6 +42,8 @@ readonly class SectorPhysicsResult
         public float $creditLossProvision = 0.0,
         /** Dollar loans and securities that went bad this quarter and are written off against the allowance. */
         public float $netChargeOffs = 0.0,
+        /** Dollars of actual revenue that are pure price above the expected level (escalators, Veblen hikes, spot rates on a fixed fleet). Price carries no variable cost, so the template method applies the cost ratio to volume revenue only. */
+        public float $priceRevenue = 0.0,
     ) {
     }
 }

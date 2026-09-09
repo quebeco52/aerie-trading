@@ -25,6 +25,18 @@ use App\Service\Event\ShockEvent;
  */
 class TechBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Enterprise budgets and ad spend are cyclical; seats churn slowly. */
+    public const OPERATING_CYCLICALITY = 1.20;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.60;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.50;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['labor' => 0.60, 'energy' => 0.03, 'ppi' => 0.05];
+
     /**
      * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 enterprise budget flush and holiday advertising.
      *
@@ -75,13 +87,9 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     /** Fraction of deferred subscription bookings recognized as revenue each quarter (annual contracts, ASC 606 ratable). */
     public const SUBSCRIPTION_RECOGNITION_RATE = 0.25;
 
-    // --- Revenue Volatility & Wage Inflation Rails ---
+    // --- Revenue Volatility ---
     /** Volatility multiplier for top-line revenue shocks reflecting rapid software user scaling and churn. */
     public const REVENUE_VARIANCE_SCALAR   = 0.20;
-    /** Multiplier scaling target inflation to establish wage inflation threshold buffer. */
-    public const WAGE_INFLATION_THRESHOLD  = 2.00;
-    /** Multiplier scaling excess wage inflation with stock beta to compute variable cost penalty. */
-    public const WAGE_INFLATION_SCALAR     = 0.50;
     /** Upper clamp for realized variable margin. */
     public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
     /** Lower clamp for realized variable margin. */
@@ -157,7 +165,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         $regulatorySeverity   = self::REGULATORY_FINE_PENALTY * (0.5 + $aggression);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         $targetWeights = [
             'subscription' => $params[ModelParam::SubscriptionRevenueWeight],
@@ -230,10 +238,9 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // Supply Chain Immunity vs. Continuous Talent Inflation:
-        // Tech companies don't buy steel or oil, they pay for engineers and cloud compute.
-        $inflation = $macroState->inflationEma;
-        $wageInflationPenalty = max(0.0, ($inflation - MacroEngine::TARGET_INFLATION)) * abs((float) $stock->getBeta()) * self::WAGE_INFLATION_SCALAR;
+        // Supply Chain Immunity vs. Continuous Talent Inflation: the basket is almost all variable payroll,
+        // so wage growth above trend is the only input price that reaches the cost base.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
 
         // SaaS ARR Operating Leverage:
         // ARR expansion ($subscriptionZ > 0) creates positive operating leverage due to zero marginal cost of software delivery.
@@ -243,7 +250,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         // & Platform data-harvesting stream ($adWeight), insulating enterprise subscription margins.
         $complianceDrag = $decreeElapsed > 1 ? self::CONSENT_DECREE_COMPLIANCE_PENALTY * (0.5 + $aggression) : 0.0;
         $adCostAddon = ($regulatoryShock + $complianceDrag) * $adWeight;
-        $rawMargin = $realizedVariableMargin + $wageInflationPenalty + $saasOperatingLeverageShift + $adCostAddon - $marginBonus;
+        $rawMargin = $realizedVariableMargin + $inputCostDrag + $saasOperatingLeverageShift + $adCostAddon - $marginBonus;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock Z-score selects the most extreme driver across streams
@@ -298,10 +305,12 @@ class TechBusinessModel extends StandardCorporateBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
+            'energy_cost_push_lag',
             'exchange_rate_index_ema',
-            'inflation_ema',
             'output_gap_ema',
+            'producer_price_inflation_ema',
             'tips_breakeven_ema',
+            'wage_growth_ema',
         ];
     }
 }

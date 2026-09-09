@@ -41,7 +41,11 @@ class StreamContext
     public function __construct(
         private readonly array $previousMomentum,
         private readonly MathUtility $mathUtility,
-        private readonly float $firmFactorLoading = 0.0
+        private readonly float $firmFactorLoading = 0.0,
+        /** This quarter's realized N(0,1) demand factor of the firm's macro sector; null when the macro state carries none. */
+        private readonly ?float $sectorInnovation = null,
+        /** Loading rho_s of every revenue stream on the sector demand factor (rho_s^2 = variance shared with sector peers). */
+        private readonly float $sectorFactorLoading = 0.0
     ) {}
 
     /**
@@ -58,12 +62,24 @@ class StreamContext
      */
     public function generateZ(string $key, float $phi, ?float $commonLoading = null): float
     {
-        $loading = max(0.0, min(1.0, $commonLoading ?? $this->firmFactorLoading));
+        $firmLoading = max(0.0, min(1.0, $commonLoading ?? $this->firmFactorLoading));
         $prevZ = $this->previousMomentum[$key] ?? 0.0;
 
-        $newZ = $loading > 0.0
-            ? $this->mathUtility->generatePersistentZ($prevZ, $phi, $this->getFirmInnovation(), $loading)
-            : $this->mathUtility->generatePersistentZ($prevZ, $phi);
+        // Two-factor model: e_t = rho_s S_t + rho_f F_t + sqrt(1 - rho_s^2 - rho_f^2) u_t. The sector factor
+        // only applies to streams that load on firm demand at all (exogenous draws pass a zero loading), and
+        // only when the macro state actually carries a realization for this firm's sector. The two common
+        // terms are folded into one unit-variance composite so the single-index helper keeps its contract.
+        $sectorLoading = ($firmLoading > 0.0 && $this->sectorInnovation !== null)
+            ? max(0.0, min(1.0, $this->sectorFactorLoading))
+            : 0.0;
+        $compositeLoading = sqrt(min(1.0, ($firmLoading * $firmLoading) + ($sectorLoading * $sectorLoading)));
+
+        if ($compositeLoading > 0.0) {
+            $compositeInnovation = (($firmLoading * $this->getFirmInnovation()) + ($sectorLoading * (float) $this->sectorInnovation)) / $compositeLoading;
+            $newZ = $this->mathUtility->generatePersistentZ($prevZ, $phi, $compositeInnovation, $compositeLoading);
+        } else {
+            $newZ = $this->mathUtility->generatePersistentZ($prevZ, $phi);
+        }
 
         $this->nextZ[$key] = $newZ;
 

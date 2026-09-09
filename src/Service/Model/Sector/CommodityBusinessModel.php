@@ -33,6 +33,20 @@ use App\Service\Math\MathUtility;
  */
 class CommodityBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Price-taker volumes sold into a global pool: peers barely notice a rival barrel. */
+    public const OPERATING_CYCLICALITY = 1.30;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.10;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.15;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['energy' => 0.15, 'metals' => 0.05, 'ppi' => 0.10, 'labor' => 0.20];
+    /** Price takers recover none of their own input inflation through pricing: the market sets the quote. */
+    public const PRICING_POWER_INDEX = 0.00;
+
     /**
      * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: winter heating demand for energy volumes.
      *
@@ -154,7 +168,9 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         $physics = parent::getMacroPhysics($stock, $macroState);
 
         $physics['pricing_power_multiplier'] = 1.0;
-        $physics['macro_demand_shift'] = $macroState->outputGapEma * self::MACRO_DEMAND_BETA_SCALAR * abs((float) $stock->getBeta());
+        // Inflation is carried inside this model's own stream physics: neither price nor cost base inflates at the engine level.
+        $physics['input_cost_multiplier'] = 1.0;
+        $physics['macro_demand_shift'] = $macroState->outputGapEma * self::MACRO_DEMAND_BETA_SCALAR * $this->getOperatingCyclicality($stock);
 
         return $physics;
     }
@@ -179,8 +195,8 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
         ]);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = $this->createStreamContext($momentum, $mathUtility);
-        $beta = abs((float) $stock->getBeta());
+        $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
+        $beta = $this->getOperatingCyclicality($stock);
 
         // --- Dynamic Revenue Mix Drift ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -275,8 +291,12 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
             $ricardianFriction = pow($extractionZ, 2) * self::RICARDIAN_EXTRACTION_FRICTION * $extractionWeight;
         }
 
+        // Lifting and processing costs: diesel and power, consumables, field payroll, bought at spot with no
+        // pricing power to recover them (the commodity itself is the price).
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
+
         // Add frictions to the variable cost ratio (higher ratio = lower profits)
-        $rawMargin = $effectiveMargin + $ricardianFriction + $disasterPenalty;
+        $rawMargin = $effectiveMargin + $ricardianFriction + $disasterPenalty + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         $primaryShockZ = $streams->resolveDominantShockZ([$extractionZ, $spotZ, $refiningZ], $eventZ);
@@ -325,14 +345,17 @@ class CommodityBusinessModel extends StandardCorporateBusinessModel
     {
         return [
             'agricultural_commodity_index_ema',
+            'energy_cost_push_lag',
             'energy_inventory_index_ema',
             'energy_price_index_ema',
             'exchange_rate_index_ema',
             'industrial_metals_index_ema',
             'inflation_ema',
             'output_gap_ema',
+            'producer_price_inflation_ema',
             'refining_crack_spread_ema',
             'tips_breakeven_ema',
+            'wage_growth_ema',
         ];
     }
 }

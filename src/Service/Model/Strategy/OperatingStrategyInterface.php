@@ -104,4 +104,19 @@ interface OperatingStrategyInterface
     public function getThroughTheCycleCreditLossRate(): float;
     /** Years of expected loss the credit-loss allowance covers (ASC 326 lifetime horizon). */
     public function getCreditLossHorizonYears(): float;
+    /**
+     * Fraction of an idiosyncratic revenue gain that is market share taken from same-industry rivals (and,
+     * symmetrically, the fraction of a rival's gain this firm loses). 1.0 is a fixed pie fought over by
+     * substitutes; 0.0 a firm whose volume is sold into a global pool that peers never notice.
+     */
+    public function getIndustrySubstitutability(): float;
+    /** Own-price elasticity of demand applied to real price changes (price growth above expected inflation). */
+    public function getPriceElasticityOfDemand(): float;
+    /**
+     * Operating cyclicality: how strongly the firm's volumes, pricing and input costs respond to the macro
+     * cycle (1.0 = moves one for one with the output gap). This is an operating elasticity declared per
+     * sector and tunable per ticker; equity beta is a market statistic that the pricing engine derives
+     * from it and from leverage, never an input to the operating physics.
+     */
+    public function getOperatingCyclicality(Stock $stock): float;
 }

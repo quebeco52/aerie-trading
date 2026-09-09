@@ -25,6 +25,10 @@ use App\Service\Macro\MacroEngine;
  */
 class RetailInsuranceBusinessModel extends InsuranceBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Personal lines are renewed regardless of the cycle. */
+    public const OPERATING_CYCLICALITY = 0.70;
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.70;
     public const BASE_COVERAGE_ERROR = 0.10;
@@ -56,7 +60,7 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         $catScalar    = $params[ModelParam::CatastropheLossScalar];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([

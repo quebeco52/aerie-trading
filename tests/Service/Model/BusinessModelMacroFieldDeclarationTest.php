@@ -29,6 +29,16 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
     /** Valuation-only reads feeding WACC alone, excluded by the interface contract. */
     private const VALUATION_ONLY_FIELDS = ['equity_risk_premium', 'corporate_tax_rate', 'policy_rate'];
 
+    /** Macro field each input-cost basket channel reads (StandardOperatingPhysicsTrait::resolveInputPriceDeviations). */
+    private const BASKET_CHANNEL_FIELDS = [
+        'energy'  => 'energy_cost_push_lag',
+        'metals'  => 'industrial_metals_index_ema',
+        'agri'    => 'agricultural_commodity_index_ema',
+        'freight' => 'freight_rate_index_ema',
+        'ppi'     => 'producer_price_inflation_ema',
+        'labor'   => 'wage_growth_ema',
+    ];
+
     /**
      * @return array<string, array{class-string<OperatingStrategyInterface>}>
      */
@@ -61,6 +71,24 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
         sort($declared);
 
         $actual = $this->collectOperatingMacroReads($modelClass);
+
+        // The input cost basket is generic trait code, but WHICH markets it reads is declared per model through
+        // INPUT_COST_EXPOSURES, so a model that invokes the basket couples to every channel it has exposure to.
+        // Likewise the pricing pass-through is trait code, but the inflation measure it tracks is declared per
+        // model through PRICING_INFLATION_BASIS.
+        if ($this->invokesHelper($modelClass, 'resolvePricingMultipliers(') && defined($modelClass . '::PRICING_INFLATION_BASIS')) {
+            $actual[] = (string) constant($modelClass . '::PRICING_INFLATION_BASIS');
+            $actual = array_values(array_unique($actual));
+        }
+
+        if ($this->invokesInputCostBasket($modelClass) && method_exists($model, 'getInputCostExposures')) {
+            foreach ($model->getInputCostExposures() as $channel => $share) {
+                if ($share > 0.0 && isset(self::BASKET_CHANNEL_FIELDS[$channel])) {
+                    $actual[] = self::BASKET_CHANNEL_FIELDS[$channel];
+                }
+            }
+            $actual = array_values(array_unique($actual));
+        }
         sort($actual);
 
         $this->assertSame($actual, $declared, sprintf(
@@ -69,6 +97,43 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
             implode(', ', array_diff($actual, $declared)),
             implode(', ', array_diff($declared, $actual))
         ));
+    }
+
+    /**
+     * Whether the model's own operating physics (following parent delegation) calls the shared basket.
+     *
+     * @param class-string $concreteClass
+     */
+    private function invokesInputCostBasket(string $concreteClass): bool
+    {
+        return $this->invokesHelper($concreteClass, 'resolveInputCostDrag(');
+    }
+
+    /**
+     * Whether the model's own operating physics (following parent and helper delegation, traits excluded)
+     * contains a call to the named shared helper.
+     *
+     * @param class-string $concreteClass
+     */
+    private function invokesHelper(string $concreteClass, string $needle): bool
+    {
+        $fields = [];
+        $visited = [];
+        foreach (self::OPERATING_METHODS as $method) {
+            $this->walk($concreteClass, $concreteClass, $method, $fields, $visited);
+        }
+
+        foreach (array_keys($visited) as $key) {
+            [$class, , $method] = explode('::', $key);
+            if (str_contains($class, '\\Trait\\') || !method_exists($class, $method)) {
+                continue;
+            }
+            if (str_contains($this->methodSource(new ReflectionMethod($class, $method)), $needle)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

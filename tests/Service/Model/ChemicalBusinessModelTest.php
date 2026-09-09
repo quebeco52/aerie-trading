@@ -125,11 +125,12 @@ class ChemicalBusinessModelTest extends TestCase
         $boomPhysics = $this->model->getMacroPhysics($stock, $boomMacro);
         $recessionPhysics = $this->model->getMacroPhysics($stock, $recessionMacro);
 
-        // Boom demand shift = ((0.05 * 1.60) + (0.30 * 0.60)) * 1.0 * 0.70 = (0.08 + 0.18) * 0.70 = +0.182
-        $this->assertEqualsWithDelta(0.182, $boomPhysics['macro_demand_shift'], 0.001);
+        // Boom demand shift = ((0.05 * 1.60) + (0.30 * 0.60)) * cyclicality * 0.70 = 0.182 * cyclicality
+        $cyclicality = ChemicalBusinessModel::OPERATING_CYCLICALITY;
+        $this->assertEqualsWithDelta(0.182 * $cyclicality, $boomPhysics['macro_demand_shift'], 0.001);
 
         // Recession demand shift = ((-0.05 * 1.60) + (-0.30 * 0.60)) * 1.0 * 0.70 = (-0.08 - 0.18) * 0.70 = -0.182
-        $this->assertEqualsWithDelta(-0.182, $recessionPhysics['macro_demand_shift'], 0.001);
+        $this->assertEqualsWithDelta(-0.182 * $cyclicality, $recessionPhysics['macro_demand_shift'], 0.001);
     }
 
     public function testAgrochemicalsDrivenByWeatherJumps(): void

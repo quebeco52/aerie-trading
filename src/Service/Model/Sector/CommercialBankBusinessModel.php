@@ -25,6 +25,10 @@ use App\Service\Math\FinancialConstants;
  */
 class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Loan demand and deposit growth track nominal activity. */
+    public const OPERATING_CYCLICALITY = 1.00;
+
     // --- Labor Intensity ---
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Branch and back-office payroll is the largest non-interest expense of a bank. */
     public const FIXED_COST_LABOR_SHARE = 0.60;
@@ -421,7 +425,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         $outputGap = $macroState->outputGapEma;
-        $beta = (float) $stock->getBeta();
+        $beta = $this->getOperatingCyclicality($stock);
 
         return [
             'macro_demand_shift' => $outputGap * $beta * self::MACRO_DEMAND_BETA_SENSITIVITY, // Less demand destruction than physical goods
@@ -446,7 +450,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $inversionSensitivity = $params[ModelParam::NimInversionSensitivity];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         $targetWeights = [
             'net_interest_income' => $params[ModelParam::NiiRevenueWeight],
@@ -775,7 +779,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $yieldFlightPenalty = max(0.0, max(0.0, $policyRate - self::YIELD_FLIGHT_POLICY_RATE_OFFSET) - $state['bank_apy']) * 1.0;
         $systemicGrowthQuarterly = ($inflation + $realGdpGrowth - $yieldFlightPenalty) / self::ANNUALIZATION_FACTOR;
 
-        $betaSensitivity = max(self::LIABILITY_BETA_SENSITIVITY_MIN, min(self::LIABILITY_BETA_SENSITIVITY_MAX, abs((float) $stock->getBeta())));
+        $betaSensitivity = max(self::LIABILITY_BETA_SENSITIVITY_MIN, min(self::LIABILITY_BETA_SENSITIVITY_MAX, $this->getOperatingCyclicality($stock)));
 
         // Competitive advantage relative to market-average deposit beta.
         // A bank paying above the normalization baseline retains and attracts more deposits.

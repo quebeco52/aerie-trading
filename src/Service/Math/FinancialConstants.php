@@ -205,6 +205,22 @@ class FinancialConstants
     /** Maximum market cap percentage (15%) a fully saturated firm can repurchase in a single quarter. */
     public const MAX_REGULATORY_SPEND_SATURATED = 0.15;
 
+    // --- Input Cost Basket ---
+    /** Default shares of the variable cost base bought in tracked input markets for a producing firm; the remainder has no macro index. */
+    public const DEFAULT_INPUT_COST_EXPOSURES = ['energy' => 0.05, 'metals' => 0.05, 'agri' => 0.02, 'freight' => 0.03, 'ppi' => 0.35, 'labor' => 0.30];
+    /** Default years for the recoverable share of an input move to reach selling prices (Nakamura & Steinsson 2008 price durations). */
+    public const DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS = 0.75;
+
+    // --- Own-Price Demand Response ---
+    /** Default own-price elasticity of demand for a producing firm (volume lost per unit of real price increase); mid-range of empirical estimates for differentiated goods. */
+    public const DEFAULT_PRICE_ELASTICITY_OF_DEMAND = 0.50;
+
+    // --- Industry Share Dynamics ---
+    /** Default share of a firm's idiosyncratic revenue gain that is taken from same-industry peers rather than won from a larger market (Berry-style substitution). */
+    public const DEFAULT_INDUSTRY_SUBSTITUTABILITY = 0.50;
+    /** Share of a financial institution's idiosyncratic gain taken from peers: deposits, mandates and AUM move between houses, but much of the swing is market volume. */
+    public const DEFAULT_FINANCIAL_INDUSTRY_SUBSTITUTABILITY = 0.35;
+
     // --- Industry Exit & Consolidation ---
     /** Share of a failed rival's addressable market that surviving peers in the same industry recapture; the rest leaks to substitutes or is destroyed. */
     public const MARKET_EXIT_RECAPTURE_FRACTION = 0.70;
@@ -218,6 +234,8 @@ class FinancialConstants
     public const MIN_GOODWILL_IMPAIRMENT_FRACTION = 0.01;
 
     // --- Labor Intensity ---
+    /** Largest fixed-payroll relief from wage growth running below trend (nominal wages are downward sticky). */
+    public const MAX_WAGE_RELIEF = 0.02;
     /** Default labor share of the fixed cost base (salaried staff, SG&A payroll) exposed to the Beveridge wage squeeze. */
     public const DEFAULT_FIXED_COST_LABOR_SHARE = 0.65;
 

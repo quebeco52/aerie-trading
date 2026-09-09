@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Service\Math\FinancialConstants;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Trait\FinancialPhysicsTrait;
 use App\Service\Model\Trait\StandardBaseModelTrait;
@@ -37,13 +38,20 @@ abstract class BaseFinancialBusinessModel implements BusinessModelInterface
         FinancialPhysicsTrait::allowsPhysicalOrganicCapex insteadof StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::getReturnBasisIncome insteadof StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::getEffectiveReturn insteadof StandardOperatingPhysicsTrait;
+        FinancialPhysicsTrait::getPriceElasticityOfDemand insteadof StandardOperatingPhysicsTrait;
         FinancialPhysicsTrait::getMaxOrganicGrowthSpeed insteadof StandardCapitalAllocationTrait;
         FinancialPhysicsTrait::getRegulatoryDividendCap insteadof StandardCapitalAllocationTrait;
         FinancialPhysicsTrait::checkBuybackRegulatoryLockout insteadof StandardCapitalAllocationTrait;
         FinancialPhysicsTrait::calculateStructuralEps insteadof StandardValuationTrait;
     }
 
+    // --- Industry Share Dynamics ---
+    /** Share of an idiosyncratic gain taken from same-industry peers; funds, mandates and deposits move between houses only in part. */
+    public const INDUSTRY_SUBSTITUTABILITY = FinancialConstants::DEFAULT_FINANCIAL_INDUSTRY_SUBSTITUTABILITY;
+
     // --- Firm-Level Common Factor ---
     /** One-factor loading of fee and spread streams on the institution-wide franchise innovation (rho^2 = 16% shared variance). */
     public const FIRM_FACTOR_LOADING = 0.40;
+    /** Two-factor loading of fee and spread streams on the persistent macro-sector demand factor (rho_s^2 = 12% variance shared with sector peers). */
+    public const SECTOR_FACTOR_LOADING = 0.35;
 }

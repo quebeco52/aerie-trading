@@ -24,6 +24,10 @@ use App\Service\Math\FinancialConstants;
  */
 class BrokerageBusinessModel extends BaseFinancialBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Trading volumes and margin balances swing with the cycle. */
+    public const OPERATING_CYCLICALITY = 1.30;
+
     // --- Labor Intensity ---
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Sales and trading compensation is the largest overhead line of a brokerage. */
     public const FIXED_COST_LABOR_SHARE = 0.60;
@@ -107,7 +111,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     {
         $outputGap = $macroState->outputGapEma;
         $m2Shift = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_RETAIL_TRADING_SENSITIVITY);
-        $beta = (float) $stock->getBeta();
+        $beta = $this->getOperatingCyclicality($stock);
 
         return [
             'macro_demand_shift' => ($outputGap * $beta * self::MACRO_DEMAND_SCALAR) + $m2Shift,
@@ -130,7 +134,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         $advisoryWeight = $params[ModelParam::AdvisoryRevenueWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([

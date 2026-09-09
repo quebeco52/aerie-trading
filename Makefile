@@ -37,28 +37,28 @@ bash:
 	$(EXEC_PHP) bash
 
 test: up
-	$(EXEC_PHP) vendor/bin/phpunit --testsuite Fast
+	$(EXEC_PHP) vendor/bin/phpunit --testsuite Fast --no-progress
 
 test-unit: up
-	$(EXEC_PHP) vendor/bin/phpunit --testsuite Unit
+	$(EXEC_PHP) vendor/bin/phpunit --testsuite Unit --no-progress
 
 test-integration: up
-	$(EXEC_PHP) vendor/bin/phpunit --testsuite Integration
+	$(EXEC_PHP) vendor/bin/phpunit --testsuite Integration --no-progress
 
 test-functional: up
-	$(EXEC_PHP) vendor/bin/phpunit --testsuite Functional
+	$(EXEC_PHP) vendor/bin/phpunit --testsuite Functional --no-progress
 
 test-financial: up
-	$(EXEC_PHP) vendor/bin/phpunit --testsuite Financial
+	$(EXEC_PHP) vendor/bin/phpunit --testsuite Financial --no-progress
 
 test-e2e: up
-	$(EXEC_PHP) vendor/bin/phpunit --testsuite E2E
+	$(EXEC_PHP) vendor/bin/phpunit --testsuite E2E --no-progress
 
 test-all: up
-	$(EXEC_PHP) vendor/bin/phpunit
+	$(EXEC_PHP) vendor/bin/phpunit --no-progress
 
 test-coverage: up
-	$(EXEC_PHP) vendor/bin/phpunit --testsuite Fast --coverage-text
+	$(EXEC_PHP) vendor/bin/phpunit --testsuite Fast --no-progress --coverage-text
 
 phpstan: up
-	$(EXEC_PHP) vendor/bin/phpstan analyse --memory-limit=1G --no-progress $(FILE)
+	$(EXEC_PHP) vendor/bin/phpstan analyse --memory-limit=1G --no-progress --error-format=raw $(FILE)

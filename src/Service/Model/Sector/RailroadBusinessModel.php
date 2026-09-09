@@ -28,6 +28,22 @@ use App\Service\Event\ShockEvent;
  */
 class RailroadBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Carloads track industrial output; captive track networks limit switching. */
+    public const OPERATING_CYCLICALITY = 1.00;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.40;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.20;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['energy' => 0.20, 'labor' => 0.30, 'ppi' => 0.05, 'metals' => 0.03];
+    /** Fuel surcharge programs reprice within a quarter or two of the diesel move. */
+    public const INPUT_PASS_THROUGH_LAG_YEARS = 0.25;
+    /** Captive track networks: nearly all fuel and wage moves are surcharged through. */
+    public const PRICING_POWER_INDEX = 0.80;
+
     /**
      * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: harvest grain carloads in the second half, winter weather in Q1.
      *
@@ -68,9 +84,6 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     /** Idiosyncratic revenue variance scalar for industrial and automotive carloads. */
     public const INDUSTRIAL_VARIANCE_SCALAR = 0.25;
 
-    // --- Fuel Surcharge & Operating Ratio ---
-    /** Variable margin cost drag scalar from diesel fuel price spikes before fuel surcharges take effect. */
-    public const FUEL_SURCHARGE_LAG_PENALTY = 0.06;
 
     // --- Manufacturing PMI & Trade Transmission ---
     /** Sensitivity of industrial carload volumes to manufacturing PMI shifts. */
@@ -113,8 +126,8 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
         $industrialWeight = $params[ModelParam::IndustrialCarloadsWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
-        $beta     = abs((float) $stock->getBeta());
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
+        $beta     = $this->getOperatingCyclicality($stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -155,12 +168,11 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
         $actualRevenue = array_sum($streamRevenues);
         $streams->recordStreamShares($streamRevenues);
 
-        // Diesel fuel surcharge lag: Railroads consume massive quantities of diesel.
-        // Spikes in energy price index create temporary margin compression before fuel surcharges adjust.
-        $energyShift = $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
-        $fuelLagDrag = $energyShift > 0 ? $energyShift * self::FUEL_SURCHARGE_LAG_PENALTY : 0.0;
+        // Diesel fuel surcharge lag: locomotive diesel and crew payroll reach the cost base at spot and are
+        // surcharged through with a lag, so a spike compresses the operating ratio for a quarter or two.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $fuelLagDrag);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $inputCostDrag);
 
         // Max magnitude shock
         $primaryShockZ = $streams->resolveDominantShockZ([$intermodalZ, $bulkZ, $industrialZ]);
@@ -207,10 +219,13 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'freight_rate_index_ema',
+            'industrial_metals_index_ema',
             'manufacturing_pmi_ema',
             'output_gap_ema',
+            'producer_price_inflation_ema',
             'tips_breakeven_ema',
             'trade_balance_to_gdp_ema',
+            'wage_growth_ema',
         ];
     }
 }

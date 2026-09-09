@@ -21,6 +21,10 @@ class MacroEngine
     // --- Central Bank & Structural Constraints ---
     /** The Federal Reserve's long-term annual inflation target. */
     public const TARGET_INFLATION = 0.02;
+
+    // --- Sector Demand Factor ---
+    /** Time constant (years) of the per-sector demand factor read by every firm's earnings physics: an industry upswing or slump persists for about a year rather than resetting each tick. */
+    public const SECTOR_DEMAND_PERSISTENCE_YEARS = 1.0;
     /** The baseline natural real rate of interest (r*) representing neutral monetary policy. */
     public const BASE_NATURAL_RATE = 0.015;
     /** Sensitivity of natural rate r* to annual secular TFP productivity growth deviations from drift. */
@@ -1081,7 +1085,7 @@ class MacroEngine
         $this->monetarySubsystem->calculateRecessionProbability($state);
         $this->assetSubsystem->calculateCapitalMarketsDealIndex($state, $dt);
 
-        $this->updateSectorFactors($state);
+        $this->updateSectorFactors($state, $dt);
         $this->evaluateSystemicEvent($state, $dt);
 
         $this->saveState($state);
@@ -1102,10 +1106,17 @@ class MacroEngine
      * without any memory in its increments. Autocorrelation would only add predictable momentum, which is
      * the market factor's job and is kept small there for the same horizon-stability reason.
      */
-    private function updateSectorFactors(MacroState $state): void
+    private function updateSectorFactors(MacroState $state, float $dt): void
     {
+        // Exact Ornstein-Uhlenbeck step: the persistent demand factor keeps unit stationary variance while
+        // decaying toward zero with time constant SECTOR_DEMAND_PERSISTENCE_YEARS.
+        $decay = exp(-$dt / self::SECTOR_DEMAND_PERSISTENCE_YEARS);
+        $innovationScale = sqrt(max(0.0, 1.0 - ($decay * $decay)));
+
         foreach (array_keys(\App\Data\Sectors::MACRO_SECTORS) as $sector) {
             $state->sectorZ[$sector] = $this->mathUtility->generateStandardNormal();
+            $previous = (float) ($state->sectorDemandZ[$sector] ?? 0.0);
+            $state->sectorDemandZ[$sector] = ($decay * $previous) + ($innovationScale * $this->mathUtility->generateStandardNormal());
         }
     }
 

@@ -31,9 +31,23 @@ use App\Service\Math\MathUtility;
  */
 class LawFirmBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Retainers are sticky; litigation and restructuring are counter-cyclical. */
+    public const OPERATING_CYCLICALITY = 0.80;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.30;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.50;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['labor' => 0.85];
+
     // --- Services Pricing ---
-    /** Pass-through of supercore (core services ex-housing) inflation into fee and rate pricing. Billing rates track professional services inflation almost one for one. */
-    public const SERVICES_INFLATION_PASS_THROUGH = 0.90;
+    /** Elasticity of fee and rate pricing to services (supercore) inflation. Billing rates track professional services inflation almost one for one. */
+    public const PRICING_ELASTICITY = 0.90;
+    /** Services price off core services inflation ex-housing, not goods breakevens. */
+    public const PRICING_INFLATION_BASIS = 'supercore_inflation_ema';
 
     /**
      * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 billing and collections push before partner distributions.
@@ -97,8 +111,8 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
     public const CORPORATE_DEFAULT_RESTRUCTURING_SCALAR = 0.30;
 
     // --- Associate Wage Inflation ---
-    /** Sensitivity of law firm variable margin to legal talent and associate wage inflation. */
-    public const ASSOCIATE_WAGE_INFLATION_SCALAR = 0.60;
+    /** Associate compensation reprices annually with the bonus cycle, faster than menu-cost goods. */
+    public const INPUT_PASS_THROUGH_LAG_YEARS = 0.50;
 
     // --- Tail Risk & Event Physics ---
     /** Positive Z-score threshold indicating a landmark corporate litigation or antitrust victory. */
@@ -143,8 +157,6 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
 
         // Nullify global generic demand shifts; cyclicality is handled per-stream.
         $physics['macro_demand_shift'] = 0.0;
-        // Fees and reimbursement rates price off services inflation (supercore), not goods breakevens.
-        $physics['pricing_power_multiplier'] = 1.0 + ($macroState->supercoreInflationEma * self::SERVICES_INFLATION_PASS_THROUGH);
 
         return $physics;
     }
@@ -171,8 +183,8 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
         $pricingPower        = $params[ModelParam::PricingPowerIndex];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = $this->createStreamContext($momentum, $mathUtility);
-        $beta = abs((float) $stock->getBeta());
+        $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
+        $beta = $this->getOperatingCyclicality($stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -240,11 +252,11 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
         $actualRevenue = array_sum($streamRevenues);
         $streams->recordStreamShares($streamRevenues);
 
-        // Associate Wage Inflation Squeeze (mitigated by pricing power)
-        $excessInflation = max(0.0, $macroState->inflationEma - MacroEngine::TARGET_INFLATION);
-        $wageDrag = $excessInflation * self::ASSOCIATE_WAGE_INFLATION_SCALAR * (1.0 - ($pricingPower * 0.60));
+        // Associate wage inflation: variable payroll follows wage growth above trend and is recovered through
+        // rate-card increases at the firm's pricing power.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
 
-        $rawMargin = $realizedVariableMargin + $wageDrag;
+        $rawMargin = $realizedVariableMargin + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         $primaryShockZ = $streams->resolveDominantShockZ([$retainerZ, $litigationZ, $restructuringZ], $eventZ);
@@ -279,12 +291,12 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
             'corporate_default_rate_ema',
             'deal_activity_index_ema',
             'exchange_rate_index_ema',
-            'inflation_ema',
             'macro_credit_spread',
             'macro_credit_spread_ema',
             'output_gap_ema',
             'supercore_inflation_ema',
             'tips_breakeven_ema',
+            'wage_growth_ema',
         ];
     }
 }

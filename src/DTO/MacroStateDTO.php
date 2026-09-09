@@ -90,6 +90,8 @@ readonly class MacroStateDTO
         public float $marketJumpMultiplier = 1.0,
         /** @var array<string, float> Per-macro-sector shock, keyed by Sectors::MACRO_SECTORS. */
         public array $sectorZ = [],
+        /** @var array<string, float> Persistent per-macro-sector demand factor shared by every firm's earnings physics in the sector. */
+        public array $sectorDemandZ = [],
         public float $corporateTaxRate = MacroEngine::BASE_CORPORATE_TAX_RATE,
         public float $sovereignDebtToGdp = MacroEngine::INITIAL_DEBT_TO_GDP,
         public float $sovereignDebtToGdpEma = MacroEngine::INITIAL_DEBT_TO_GDP,
@@ -246,6 +248,7 @@ readonly class MacroStateDTO
         $marketZLatent = (float) ($data['market_z_latent'] ?? 0.0);
         $marketJumpMultiplier = (float) ($data['market_jump_multiplier'] ?? 1.0);
         $sectorZ = is_array($data['sector_z'] ?? null) ? array_map('floatval', $data['sector_z']) : [];
+        $sectorDemandZ = is_array($data['sector_demand_z'] ?? null) ? array_map('floatval', $data['sector_demand_z']) : [];
 
         $corporateTaxRate = (float) ($data['corporate_tax_rate'] ?? MacroEngine::BASE_CORPORATE_TAX_RATE);
         $sovereignDebtToGdp = (float) ($data['sovereign_debt_to_gdp'] ?? MacroEngine::INITIAL_DEBT_TO_GDP);
@@ -357,6 +360,7 @@ readonly class MacroStateDTO
             marketZLatent: $marketZLatent,
             marketJumpMultiplier: $marketJumpMultiplier,
             sectorZ: $sectorZ,
+            sectorDemandZ: $sectorDemandZ,
             corporateTaxRate: $corporateTaxRate,
             sovereignDebtToGdp: $sovereignDebtToGdp,
             sovereignDebtToGdpEma: $sovereignDebtToGdpEma,
@@ -507,6 +511,7 @@ readonly class MacroStateDTO
             marketZLatent: $state->marketZLatent,
             marketJumpMultiplier: $state->marketJumpMultiplier,
             sectorZ: $state->sectorZ,
+            sectorDemandZ: $state->sectorDemandZ,
             corporateTaxRate: $state->corporateTaxRate,
             sovereignDebtToGdp: $state->sovereignDebtToGdp,
             sovereignDebtToGdpEma: $state->sovereignDebtToGdpEma,
@@ -657,6 +662,7 @@ readonly class MacroStateDTO
             'market_z_latent' => $this->marketZLatent,
             'market_jump_multiplier' => $this->marketJumpMultiplier,
             'sector_z' => $this->sectorZ,
+            'sector_demand_z' => $this->sectorDemandZ,
             'corporate_tax_rate' => $this->corporateTaxRate,
             'sovereign_debt_to_gdp' => $this->sovereignDebtToGdp,
             'sovereign_debt_to_gdp_ema' => $this->sovereignDebtToGdpEma,

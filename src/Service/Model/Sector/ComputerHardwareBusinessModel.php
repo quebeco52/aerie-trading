@@ -24,6 +24,18 @@ use App\Service\Macro\MacroEngine;
  */
 class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Refresh cycles are deferred in downturns; devices substitute readily. */
+    public const OPERATING_CYCLICALITY = 1.30;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 1.00;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.60;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['ppi' => 0.40, 'metals' => 0.08, 'freight' => 0.04, 'labor' => 0.15, 'energy' => 0.02];
+
     // --- Inventory Cycle ---
     /** Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking, shortfalls restocking. Channel inventory whipsaws PC and server shipments hardest. */
     public const INVENTORY_CYCLE_SENSITIVITY = 1.00;
@@ -85,8 +97,8 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     // --- Trade Balance & PPI Transmission ---
     /** Sensitivity of global IT hardware trade flows to merchandise trade balance shifts. */
     public const TRADE_BALANCE_SENSITIVITY = 1.20;
-    /** Sensitivity of electronic hardware BOM (Bill of Materials) cost drag to wholesale PPI. */
-    public const PPI_HARDWARE_COST_SENSITIVITY = 0.35;
+    /** Component supply agreements fix bill-of-materials prices for about a quarter before spot moves reach the line. */
+    public const INPUT_COST_LAG_YEARS = 0.25;
 
         public function getReversionSpeed(): float { return 0.25; }
     public function getMoatSpread(): float { return 0.02; }
@@ -118,7 +130,7 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         $consumerWeight   = $params[ModelParam::ConsumerWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = $this->createStreamContext($momentum, $mathUtility);
+        $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -144,8 +156,8 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY);
         // Metzler inventory cycle: a channel overhang (positive gap) means distributors destock before reordering.
         $inventoryCycleShift = -$macroState->inventoryStockGapEma * self::INVENTORY_CYCLE_SENSITIVITY;
-        $enterpriseMacroVolumeShock = ($macroState->outputGapEma * $macroSensitivityMultiplier * abs((float) $stock->getBeta())) - ($fxShift * 0.10) + ($tradeShift * 0.50) + $inventoryCycleShift;
-        $consumerMacroVolumeShock = ($sentimentShift * $macroSensitivityMultiplier * abs((float) $stock->getBeta())) - ($fxShift * 0.15) + ($tradeShift * 0.50) + $inventoryCycleShift;
+        $enterpriseMacroVolumeShock = ($macroState->outputGapEma * $macroSensitivityMultiplier * $this->getOperatingCyclicality($stock)) - ($fxShift * 0.10) + ($tradeShift * 0.50) + $inventoryCycleShift;
+        $consumerMacroVolumeShock = ($sentimentShift * $macroSensitivityMultiplier * $this->getOperatingCyclicality($stock)) - ($fxShift * 0.15) + ($tradeShift * 0.50) + $inventoryCycleShift;
 
         // Tail Risk Events
         $enterpriseMultiplier = 1.0;
@@ -192,21 +204,15 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         // Apply derived distinct margins to actual shocked revenues
         $actualVariableCosts = ($enterpriseRevenue * self::ENTERPRISE_VARIABLE_COST_RATIO) + ($consumerRevenue * $consumerVariableMargin);
 
-        // Re-implementing Inflation Penalty & PPI Transmission
-        $inflation = $macroState->inflationEma;
-        $inflationMultiplier = 2.0 - ($pricingPower * 2.0);
-        $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
-        $metalsCostDrag = $metalsShift > 0 ? $metalsShift * 0.05 : 0.0; // Modest drag on COGS
-        $ppiCostDrag = MathUtility::calculatePpiCostDrag($macroState->producerPriceInflation, MacroEngine::TARGET_INFLATION, $pricingPower, self::PPI_HARDWARE_COST_SENSITIVITY);
-
-        $baseInflationPenalty = $inflation > MacroEngine::TARGET_INFLATION ? ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0;
-        $inflationPenalty = ($baseInflationPenalty * $inflationMultiplier) + $metalsCostDrag + $ppiCostDrag;
+        // Input cost basket: components and wholesale goods, metals, freight and assembly payroll, recovered
+        // in list prices at the firm's pricing power.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
 
         // Continuous Elasticity
         $elasticityShift = -self::ENTERPRISE_SOFTWARE_ATTACH_ELASTICITY * $enterpriseZ * $enterpriseWeight;
 
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
-        $rawMargin = $effectiveMargin + $shortagePenalty + $inflationPenalty + $elasticityShift;
+        $rawMargin = $effectiveMargin + $shortagePenalty + $inputCostDrag + $elasticityShift;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Blended primary shock for standard model integration
@@ -262,14 +268,16 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
     {
         return [
             'consumer_sentiment_index_ema',
+            'energy_cost_push_lag',
             'exchange_rate_index_ema',
+            'freight_rate_index_ema',
             'industrial_metals_index_ema',
-            'inflation_ema',
             'inventory_stock_gap_ema',
             'output_gap_ema',
-            'producer_price_inflation',
+            'producer_price_inflation_ema',
             'tips_breakeven_ema',
             'trade_balance_to_gdp_ema',
+            'wage_growth_ema',
         ];
     }
 }

@@ -25,6 +25,10 @@ use App\Service\Event\ShockEvent;
  */
 class InvestmentBankBusinessModel extends BrokerageBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Deal flow is among the most cyclical fee pools. */
+    public const OPERATING_CYCLICALITY = 1.40;
+
     /**
      * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 deal-closing surge before year end; summer lull.
      *
@@ -307,7 +311,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
         $vixScalar        = $params[ModelParam::VixArbitrageScalar];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         $targetWeights = [
             'advisory' => $params[ModelParam::AdvisoryRevenueWeight],

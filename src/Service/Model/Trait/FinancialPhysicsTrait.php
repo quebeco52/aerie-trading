@@ -172,6 +172,8 @@ trait FinancialPhysicsTrait
     }
 
     public function isFinancial(): bool { return true; }
+    /** Financial revenue is a yield on a book, not a unit price times a volume: no own-price volume response. */
+    public function getPriceElasticityOfDemand(): float { return 0.0; }
 
     /**
      * The loans, securities and other assets the institution earns its yield on, net of the losses it

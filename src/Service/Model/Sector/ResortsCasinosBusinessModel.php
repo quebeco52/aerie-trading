@@ -27,6 +27,18 @@ use App\Service\Math\MathUtility;
  */
 class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Ultra-discretionary leisure spending. */
+    public const OPERATING_CYCLICALITY = 1.50;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.90;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.60;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['energy' => 0.10, 'agri' => 0.10, 'labor' => 0.40, 'ppi' => 0.05];
+
     // --- Balance Sheet Realism ---
     /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Ground leases and OpCo/PropCo structures. */
     public const LEASE_LIABILITY_INTENSITY = 0.25;
@@ -48,16 +60,10 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     // --- Macro & Sentiment Physics ---
     /** Hard floor on pricing power given the ultra-discretionary nature of leisure travel. */
     public const MIN_BETA_PRICING_POWER_FLOOR = 0.40;
-    /** Base multiplier for inverse pricing power calculations. */
-    public const INFLATION_PRICING_BASE_MULT = 2.0;
     /** Scalar for how aggressively consumer sentiment shifts drive macro demand. */
     public const SENTIMENT_SENSITIVITY_SCALAR = 0.25;
     /** Scalar for how much variable margins compress via promotional comps when sentiment drops. */
     public const PROMOTIONAL_COMP_DRAG_SCALAR = 0.15;
-    /** Sensitivity scalar for F&B and supply chain inflation cost penalties. */
-    public const INFLATION_PENALTY_SCALAR = 0.80;
-    /** Variable margin penalty scalar from 24/7 casino floor power, HVAC, and mega-resort utility costs. */
-    public const ENERGY_UTILITY_DRAG_SCALAR = 0.20;
 
     // --- Revenue Volatility & Stream Physics ---
     /** Volatility multiplier for top-line revenue shocks reflecting gaming hold and tourism swings. */
@@ -128,7 +134,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         $physics = parent::getMacroPhysics($stock, $macroState);
 
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
-        $beta = (float) $stock->getBeta();
+        $beta = $this->getOperatingCyclicality($stock);
 
         $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         $physics['macro_demand_shift'] += ($sentimentShift * $beta * self::SENTIMENT_SENSITIVITY_SCALAR) - ($fxShift * 0.15);
@@ -156,7 +162,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         $targetWeights = [
             'gaming'     => $params[ModelParam::GamingRevenueWeight],
@@ -218,7 +224,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
             $resShift = ($macroState->residentialPropertyIndexEma - 100.0) / 100.0;
             $blendedPropertyShift = ($creShift * 0.70) + ($resShift * 0.30);
             
-            $creDemandShock = ($macroState->outputGapEma * abs((float) $stock->getBeta()) * self::CRE_DEMAND_ELASTICITY) + ($blendedPropertyShift * 0.50);
+            $creDemandShock = ($macroState->outputGapEma * $this->getOperatingCyclicality($stock) * self::CRE_DEMAND_ELASTICITY) + ($blendedPropertyShift * 0.50);
 
             $excessInflation = max(0.0, $macroState->inflationEma - MacroEngine::TARGET_INFLATION);
             $rentEscalator = $excessInflation * self::CRE_RENT_ESCALATOR_CAPTURE;
@@ -239,20 +245,14 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // --- Cost & Margin Physics ---
-        $inflation = $macroState->inflationEma;
-        $inflationMultiplier = self::INFLATION_PRICING_BASE_MULT - ($pricingPower * self::INFLATION_PRICING_BASE_MULT);
-        $baseInflationPenalty = $inflation > MacroEngine::TARGET_INFLATION
-            ? ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR
-            : 0.0;
-        $inflationPenalty = $baseInflationPenalty * $inflationMultiplier;
+        // Resort power and HVAC, food and beverage, hospitality payroll and supplies reach the cost base at
+        // spot; room and menu pricing recovers part of it. Only the physical resort footprint carries them.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
 
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
         $promotionalDrag = $sentimentShift < 0.0
-            ? abs($sentimentShift) * abs((float) $stock->getBeta()) * self::PROMOTIONAL_COMP_DRAG_SCALAR
+            ? abs($sentimentShift) * $this->getOperatingCyclicality($stock) * self::PROMOTIONAL_COMP_DRAG_SCALAR
             : 0.0;
-
-        $energyShift = max(0.0, $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
-        $energyDrag = $energyShift * self::ENERGY_UTILITY_DRAG_SCALAR;
 
         // Structural Margin Blending
         $baseGamingMargin = $realizedVariableMargin / max(0.01, ($gamingWeight + (self::NON_GAMING_COST_INTENSITY * $nonGamingWeight) + $creWeight));
@@ -270,9 +270,9 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
 
         // Energy drag scales strictly against the physical resort operations (gaming + non-gaming)
         $operationalFootprint = $gamingWeight + $nonGamingWeight;
-        $effectiveEnergyDrag = $energyDrag * $operationalFootprint;
+        $effectiveInputCostDrag = $inputCostDrag * $operationalFootprint;
 
-        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $inflationPenalty + $effectiveEnergyDrag;
+        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $effectiveInputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Shock Determination
@@ -319,14 +319,17 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
+            'agricultural_commodity_index_ema',
             'commercial_property_index_ema',
             'consumer_sentiment_index_ema',
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'inflation_ema',
             'output_gap_ema',
+            'producer_price_inflation_ema',
             'residential_property_index_ema',
             'tips_breakeven_ema',
+            'wage_growth_ema',
         ];
     }
 }

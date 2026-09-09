@@ -18,6 +18,14 @@ use App\Service\Macro\MacroEngine;
  */
 class ReitBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Contracted leases lag the cycle. */
+    public const OPERATING_CYCLICALITY = 0.80;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.30;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.40;
+
     // --- Balance Sheet Realism ---
     /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). The REIT is the lessor, not the lessee. */
     public const LEASE_LIABILITY_INTENSITY = 0.00;
@@ -199,8 +207,10 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
         $physics['pricing_power_multiplier'] = 1.0;
+        // Inflation is carried inside this model's own stream physics: neither price nor cost base inflates at the engine level.
+        $physics['input_cost_multiplier'] = 1.0;
         $outputGap = $macroState->outputGapEma;
-        $beta = (float) $stock->getBeta();
+        $beta = $this->getOperatingCyclicality($stock);
         // REITs hold domestic real estate with sticky contracted leases; scale output gap demand shift appropriately
         $physics['macro_demand_shift'] = $outputGap * self::MACRO_DEMAND_SCALAR * $beta;
         return $physics;
@@ -219,7 +229,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $rawLongevityWeight      = $params[ModelParam::LongevityBondYieldWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         $targetWeights = [
             'lease'       => $params[ModelParam::StickyLeaseWeight],
@@ -259,6 +269,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
         // --- Clamped Revenue Streams ---
         $leaseRevenue       = max(0.0, $expectedRevenue * $leaseWeight * (1.0 + $leaseShock + $rentEscalator + $marketLeaseReversion));
+        // Contractual escalators and market rent reversion reprice the same square footage: pure price, no operating cost.
+        $priceRevenue       = max(0.0, $expectedRevenue * $leaseWeight * ($rentEscalator + $marketLeaseReversion));
         $hospitalityRevenue = max(0.0, $expectedRevenue * $hospitalityWeight * (1.0 + $hospitalityShock + ($creShift * 0.25)));
 
         $streamRevenues = [
@@ -337,6 +349,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+            priceRevenue: $priceRevenue,
         );
     }
 

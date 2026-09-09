@@ -108,7 +108,9 @@ class EarningsEngine
         private MathUtility $mathUtility,
         private CorporateMetrics $corporateMetrics,
         private NarrativeEngine $narrativeEngine,
-        private MarketConsensusEngine $marketConsensusEngine
+        private MarketConsensusEngine $marketConsensusEngine,
+        /** Zero-sum industry share ledger; null (unit tests, harnesses) means every firm's gain comes from a larger market. */
+        private ?\App\Service\Corporate\Industry\IndustryShareLedger $industryShareLedger = null
     ) {}
 
     public function calculate(Stock $stock, \App\DTO\MacroStateDTO $macroState, int $tickCount = 0, int $ticksPerYear = 252): ?array
@@ -277,6 +279,27 @@ class EarningsEngine
         $macroPhysics = $strategy->getMacroPhysics($stock, $macroState);
         $macroDemandShift = $macroPhysics['macro_demand_shift'];
         $pricingPowerMultiplier = $macroPhysics['pricing_power_multiplier'];
+        // Input cost level; models that carry inflation inside their own physics leave it at the price level.
+        $inputCostMultiplier = (float) ($macroPhysics['input_cost_multiplier'] ?? $pricingPowerMultiplier);
+
+        // Zero-sum share: rivals' idiosyncratic gains booked since this firm's last report are taken from
+        // its demand in proportion to its size, scaled by how substitutable the industry's output is. The
+        // drain lands in EXPECTED revenue because analysts have already read the rivals' reports.
+        $rivalShareDrain = 0.0;
+        if ($this->industryShareLedger !== null) {
+            $rivalShareDrain = $strategy->getIndustrySubstitutability()
+                * $this->industryShareLedger->resolveRivalShareDrain($stock, $ctx->tickCount, $ctx->ticksPerYear);
+            $macroDemandShift += $rivalShareDrain;
+        }
+        $ctx->rivalShareDrain = $rivalShareDrain;
+
+        // Own-price demand response: only the REAL part of the firm's price change moves volume. The
+        // pricing-power multiplier carries expected inflation for the median firm, so a price setter's
+        // excess pass-through loses some units and a lagging regulated tariff wins some.
+        $realPriceChange = $pricingPowerMultiplier - $inputCostMultiplier;
+        $ownPriceVolumeShift = -$strategy->getPriceElasticityOfDemand() * $realPriceChange;
+        $macroDemandShift += $ownPriceVolumeShift;
+        $ctx->ownPriceVolumeShift = $ownPriceVolumeShift;
 
         $revenueVol = $ctx->baselineVol * self::IDIOSYNCRATIC_REV_VOL_RATIO;
         $z1 = $this->mathUtility->generateStandardNormal();
@@ -324,7 +347,10 @@ class EarningsEngine
         }
 
         $fixedCostRatio = (float) $stock->getFixedCostRatio();
-        $structuralCosts = $ctx->structuralRevenue * (1.0 - $ctx->stableMargin);
+        // The cost base inflates with INPUT prices (expected inflation), not with the firm's own selling
+        // price: a price setter's excess pass-through reaches its margin, a price taker's shortfall squeezes
+        // it. Scaling costs by the pricing-power multiplier gave every firm a fixed margin whatever it charged.
+        $structuralCosts = $ctx->structuralRevenue * ($inputCostMultiplier / max(0.5, $pricingPowerMultiplier)) * (1.0 - $ctx->stableMargin);
 
         // Depreciation becomes its own expense line below EBITDA, so it must be carved OUT of the cash cost
         // base rather than added on top of it. The stock's operatingMargin is its EBIT margin — every seed,
@@ -343,7 +369,9 @@ class EarningsEngine
         // inflates, squeezing margins for firms that cannot pass costs through via pricing power. The share
         // is sector-specific (OperatingStrategyInterface::getLaborCostShare): a law firm feels nearly all
         // of it, a pipeline operator very little.
-        $excessWageGrowth = max(0.0, $macroState->wageGrowth - (MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION));
+        // Signed: wage growth below trend eases payroll just as growth above it inflates it (bounded below so a
+        // deflationary print cannot manufacture a windfall).
+        $excessWageGrowth = max(-FinancialConstants::MAX_WAGE_RELIEF, $macroState->wageGrowth - (MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION));
         $wageInflationFactor = 1.0 + ($strategy->getLaborCostShare() * $excessWageGrowth / max(0.5, $pricingPowerMultiplier));
         $ctx->fixedCosts = $cashStructuralCosts * $fixedCostRatio * $wageInflationFactor;
 
@@ -426,9 +454,9 @@ class EarningsEngine
 
         $kappa = $strategy->getMarginReversionSpeed();
         $outputGap = $ctx->macroState->outputGapEma;
-        $beta = (float) $stock->getBeta();
+        $cyclicality = $strategy->getOperatingCyclicality($stock);
 
-        $cyclicalMarginShift = $outputGap * $beta * self::CYCLICAL_MARGIN_SHIFT_COEFFICIENT;
+        $cyclicalMarginShift = $outputGap * $cyclicality * self::CYCLICAL_MARGIN_SHIFT_COEFFICIENT;
         $dynamicVariableTheta = min(0.99, max(0.01, $ctx->baselineVariableMargin - $cyclicalMarginShift));
 
         $z2 = $this->mathUtility->generateStandardNormal();
@@ -479,6 +507,13 @@ class EarningsEngine
         $ctx->actualRevenue = $actuals->actualRevenue;
         $ctx->actualVariableCosts = $actuals->actualVariableCosts;
 
+        // What this firm just took from (or ceded to) the industry: the idiosyncratic part of the surprise,
+        // since macro and rival effects were already inside expected revenue.
+        if ($this->industryShareLedger !== null && $ctx->expectedRevenue > 0.0) {
+            $idiosyncraticGain = ($ctx->actualRevenue - $ctx->expectedRevenue) / $ctx->expectedRevenue;
+            $this->industryShareLedger->recordIdiosyncraticGain($ctx->stock, $ctx->actualRevenue * 4.0, $idiosyncraticGain, $ctx->tickCount);
+        }
+
         $coverage = $ctx->strategy->getCoverageProfile($ctx->stock);
         $seasonalRatio = $ctx->seasonalFactor / max(0.01, $ctx->priorSeasonalFactor);
         $consensus = $this->marketConsensusEngine->generateConsensus(
@@ -512,6 +547,9 @@ class EarningsEngine
         $ctx->streamRevenue = $actuals->streamRevenue;
         $ctx->scheduledCapex = max(0.0, $actuals->scheduledCapex);
         $ctx->kpis = $actuals->kpis;
+        $ctx->kpis['rival_share_drain'] = $ctx->rivalShareDrain;
+        $ctx->kpis['own_price_volume_shift'] = $ctx->ownPriceVolumeShift;
+        $ctx->kpis['price_revenue'] = $actuals->priceRevenue;
         $ctx->creditLossProvision = $actuals->creditLossProvision;
         $ctx->netChargeOffs = max(0.0, $actuals->netChargeOffs);
 

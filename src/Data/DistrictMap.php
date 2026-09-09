@@ -293,7 +293,6 @@ class DistrictMap
      */
     public const UBIQUITOUS_MACRO_FIELDS = [
         'output_gap_ema',
-        'inflation_ema',
         'exchange_rate_index_ema',
         'tips_breakeven_ema',
     ];

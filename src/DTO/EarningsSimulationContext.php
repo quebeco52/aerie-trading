@@ -83,6 +83,10 @@ class EarningsSimulationContext
     public array $streamRevenue = [];
     /** Mandatory CapEx committed by the sector physics this quarter (spectrum, grid rebuild), in dollars. */
     public float $scheduledCapex = 0.0;
+    /** Fraction of this quarter's demand taken by (negative) or ceded from (positive) same-industry rivals' idiosyncratic gains. */
+    public float $rivalShareDrain = 0.0;
+    /** Volume shift from the firm's own real price change (own-price elasticity times price growth above expected inflation). */
+    public float $ownPriceVolumeShift = 0.0;
     /** Quarterly stock-based compensation (ASC 718): non-cash expense inside the cost base, settled in shares. */
     public float $stockCompensation = 0.0;
     /** Goodwill written down this quarter under the annual impairment test (ASC 350), non-cash. */

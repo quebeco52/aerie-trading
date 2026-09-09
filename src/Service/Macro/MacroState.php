@@ -122,6 +122,8 @@ class MacroState
     public float $marketJumpMultiplier = 1.0;
     /** @var array<string, float> Per-macro-sector shock, keyed by Sectors::MACRO_SECTORS. */
     public array $sectorZ = [];
+    /** @var array<string, float> Persistent per-macro-sector demand factor (OU process, unit variance), keyed by Sectors::MACRO_SECTORS. */
+    public array $sectorDemandZ = [];
     public float $financialConditionsIndex = 0.0;
     public float $financialConditionsIndexEma = 0.0;
 
@@ -311,6 +313,7 @@ class MacroState
         $state->marketZLatent = (float) ($data['market_z_latent'] ?? 0.0);
         $state->marketJumpMultiplier = (float) ($data['market_jump_multiplier'] ?? 1.0);
         $state->sectorZ = is_array($data['sector_z'] ?? null) ? array_map('floatval', $data['sector_z']) : [];
+        $state->sectorDemandZ = is_array($data['sector_demand_z'] ?? null) ? array_map('floatval', $data['sector_demand_z']) : [];
         $state->financialConditionsIndex = (float) ($data['financial_conditions_index'] ?? 0.0);
         $state->financialConditionsIndexEma = (float) ($data['financial_conditions_index_ema'] ?? $state->financialConditionsIndex);
 
@@ -483,6 +486,7 @@ class MacroState
             'market_z_latent' => $this->marketZLatent,
             'market_jump_multiplier' => $this->marketJumpMultiplier,
             'sector_z' => $this->sectorZ,
+            'sector_demand_z' => $this->sectorDemandZ,
             'financial_conditions_index' => $this->financialConditionsIndex,
             'financial_conditions_index_ema' => $this->financialConditionsIndexEma,
             'macro_credit_spread' => $this->macroCreditSpread,

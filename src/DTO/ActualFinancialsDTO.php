@@ -43,5 +43,7 @@ readonly class ActualFinancialsDTO
         public float $creditLossProvision = 0.0,
         /** Dollar earning assets that went bad this quarter, written off against the allowance. */
         public float $netChargeOffs = 0.0,
+        /** Dollars of actual revenue that are pure price above the expected level and carried no variable cost. */
+        public float $priceRevenue = 0.0,
     ) {}
 }

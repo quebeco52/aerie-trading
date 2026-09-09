@@ -23,6 +23,18 @@ use App\Service\Macro\MacroEngine;
  */
 class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Capital equipment orders are among the most cyclical volumes. */
+    public const OPERATING_CYCLICALITY = 1.40;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.70;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.50;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['energy' => 0.08, 'metals' => 0.25, 'freight' => 0.05, 'ppi' => 0.25, 'labor' => 0.20];
+
     // --- Inventory Cycle ---
     /** Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking, shortfalls restocking. Dealer and fleet inventories gate OEM equipment orders. */
     public const INVENTORY_CYCLE_SENSITIVITY = 0.80;
@@ -76,12 +88,9 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     public const CAPITAL_OVERHANG_SCALAR = 0.15;
     /** Sensitivity of OEM heavy equipment orders to manufacturing PMI survey shifts. */
     public const PMI_DEMAND_SENSITIVITY = 0.50;
-    /** Sensitivity of heavy industrial variable margins to wholesale producer price index (PPI) inflation. */
-    public const PPI_COST_DRAG_SENSITIVITY = 0.40;
 
     // --- Revenue & Shock Physics ---
     public const REVENUE_VARIANCE_SCALAR = 0.35; // Volatile sales
-    public const INFLATION_PENALTY_SCALAR = 0.80; // Input costs hit hard
 
     // --- Capacity Utilization & Global Supply Chain Physics ---
     /** Sensitivity of heavy factory fixed overhead absorption and variable margin to capacity utilization deviations. */
@@ -95,7 +104,7 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
 
         // Heavy manufacturing is extremely sensitive to the output gap and manufacturing PMI
         $outputGap = $macroState->outputGapEma;
-        $beta = (float) $stock->getBeta();
+        $beta = $this->getOperatingCyclicality($stock);
         $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, MacroEngine::PMI_BASELINE, self::PMI_DEMAND_SENSITIVITY);
 
         // Amplify the output gap impact with leading ISM manufacturing PMI activity
@@ -115,10 +124,9 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         $oemWeight     = $params[ModelParam::OemEquipmentWeight];
         $mroWeight     = $params[ModelParam::AftermarketMroWeight];
         $pricingPower  = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
-        $inflationMultiplier = 2.0 - ($pricingPower * 2.0);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -166,32 +174,19 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
 
         $actualVariableCosts = ($mroRevenue * self::MRO_VARIABLE_COST_RATIO) + ($oemRevenue * $oemVariableMargin);
 
-        // Supply Chain Energy & Freight Penalty: Heavy industry relies heavily on energy, metals, and transit logistics.
-        $energyShift = $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
-        $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
-        $freightShift = max(0.0, ($macroState->freightRateIndexEma - 100.0) / 100.0);
+        // Input cost basket: energy, metals, freight, wholesale components and shop-floor payroll, recovered in
+        // equipment pricing at the firm's pricing power. Supply chain bottlenecks (expediting, air freight) add on top.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
         $gscpiShift = max(0.0, $macroState->supplyChainPressureIndexEma);
         $gscpiCostDrag = $gscpiShift * self::GSCPI_COST_PENALTY_SCALAR;
-
-        $combinedCommodityDrag = max(0.0, $energyShift + $metalsShift + ($freightShift * 0.30)) + $gscpiCostDrag;
-        $baseInflationPenalty = $combinedCommodityDrag > 0 ? $combinedCommodityDrag * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0;
-        $inflationPenalty = $baseInflationPenalty * $inflationMultiplier;
 
         // Capacity Utilization Overhead Absorption:
         // High industrial capacity utilization improves factory fixed overhead absorption, expanding margins.
         $cuDeviation = ($macroState->capacityUtilizationRateEma - MacroEngine::CU_BASELINE) / 100.0;
         $cuMarginAdjustment = - ($cuDeviation * self::CU_MARGIN_ABSORPTION_SENSITIVITY);
 
-        // Wholesale Producer Price Inflation (PPI) Cost Drag:
-        $ppiCostDrag = MathUtility::calculatePpiCostDrag(
-            $macroState->producerPriceInflationEma,
-            MacroEngine::TARGET_INFLATION,
-            $pricingPower,
-            self::PPI_COST_DRAG_SENSITIVITY
-        );
-
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
-        $clampedMargin = $this->clampMargin($effectiveMargin + $inflationPenalty + $cuMarginAdjustment + $ppiCostDrag);
+        $clampedMargin = $this->clampMargin($effectiveMargin + $inputCostDrag + $gscpiCostDrag + $cuMarginAdjustment);
 
         $primaryShockZ = $streams->resolveDominantShockZ([$oemZ, $mroZ]);
         $observableShockZ = ($oemZ * $oemWeight * self::OEM_VARIANCE_SCALAR * self::OEM_BACKLOG_BURN_RATE) +
@@ -243,6 +238,7 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
             'producer_price_inflation_ema',
             'supply_chain_pressure_index_ema',
             'tips_breakeven_ema',
+            'wage_growth_ema',
         ];
     }
 }

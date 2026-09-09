@@ -103,12 +103,14 @@ class ConstructionBusinessModelTest extends TestCase
         $stockDefault->setTicker('GEN_CONST');
         $stockDefault->setBeta('1.0');
 
-        // High inflation + energy spike
+        // Materials inflation: diesel up 40% (fully transmitted), building-materials PPI running at 6%.
         $macro = new MacroStateDTO(
             outputGapEma: 0.0,
             policyRateEma: 0.03,
             inflationEma: 0.06, // 400bps above 2% target
-            energyPriceIndexEma: 140.0 // 40% energy spike
+            energyPriceIndexEma: 140.0, // 40% energy spike
+            energyCostPushLag: 0.40 * \App\Service\Macro\MacroEngine::ENERGY_COST_PUSH_TRANSMISSION,
+            producerPriceInflationEma: 0.06
         );
 
         $mathMock = $this->createStub(MathUtility::class);

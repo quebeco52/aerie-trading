@@ -23,6 +23,20 @@ use App\Service\Math\MathUtility;
  */
 class FinancialDataBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Subscriptions renew through the cycle; issuance fees are cyclical. */
+    public const OPERATING_CYCLICALITY = 0.90;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.20;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.30;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['labor' => 0.50];
+    /** Mandatory terminal and ratings subscriptions reprice on renewal with little pushback. */
+    public const PRICING_POWER_INDEX = 0.85;
+
     // --- Balance Sheet Realism ---
     /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Data and platform engineering paid partly in equity. */
     public const STOCK_COMPENSATION_INTENSITY = 0.04;
@@ -105,7 +119,7 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         $transactionWeight  = $params[ModelParam::TransactionRevenueWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -124,7 +138,7 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         // Rating issuance mandates (SHRK) surge when corporate debt syndication booms (tight credit spreads + positive output gap).
         // Market data API feeds (TICK) see elevated transaction volume during high-volatility regimes (VIX > 20%).
         $creditSpreadGap = MacroEngine::BASE_CREDIT_SPREAD - $macroState->macroCreditSpreadEma;
-        $dcmIssuanceBoost = ($creditSpreadGap * 2.0) + ($macroState->outputGapEma * 1.5 * abs((float) $stock->getBeta()));
+        $dcmIssuanceBoost = ($creditSpreadGap * 2.0) + ($macroState->outputGapEma * 1.5 * $this->getOperatingCyclicality($stock));
         $vixVolBoost = max(0.0, ($macroState->marketVolatilityEma - 0.20) * 0.50);
         $dealActivityShift = ($macroState->dealActivityIndexEma - MacroEngine::DEAL_ACTIVITY_BASELINE) / MacroEngine::DEAL_ACTIVITY_BASELINE;
         $dealActivityRatingBoost = $dealActivityShift * self::DEAL_ACTIVITY_RATING_SENSITIVITY;
@@ -145,7 +159,9 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         // High transaction/rating volume ($transactionZ) provides strong positive operating leverage because incremental debt ratings have near-zero marginal cost.
         $operatingLeverageShift = -self::TRANSACTION_LEVERAGE_SENSITIVITY * $transactionZ * $transactionWeight;
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $operatingLeverageShift);
+        // Data and platform engineering payroll follows wage growth; subscription repricing recovers most of it.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $operatingLeverageShift + $inputCostDrag);
 
         $primaryShockZ = $streams->resolveDominantShockZ([$transactionZ, $subscriptionZ]);
         $observableShockZ = (($subscriptionZ * $subscriptionWeight + $transactionZ * $transactionWeight) * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))
@@ -194,6 +210,7 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
             'market_volatility_ema',
             'output_gap_ema',
             'tips_breakeven_ema',
+            'wage_growth_ema',
         ];
     }
 }

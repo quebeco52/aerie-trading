@@ -27,9 +27,23 @@ use App\Service\Event\ShockEvent;
  */
 class EducationBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Counter-cyclical enrollment offsets pro-cyclical corporate training. */
+    public const OPERATING_CYCLICALITY = 0.70;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.40;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.50;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['labor' => 0.65];
+
     // --- Services Pricing ---
-    /** Pass-through of supercore (core services ex-housing) inflation into fee and rate pricing. Tuition follows services inflation with a lag from annual rate setting. */
-    public const SERVICES_INFLATION_PASS_THROUGH = 0.70;
+    /** Elasticity of fee and rate pricing to services (supercore) inflation. Tuition follows services inflation with a lag from annual rate setting. */
+    public const PRICING_ELASTICITY = 0.70;
+    /** Services price off core services inflation ex-housing, not goods breakevens. */
+    public const PRICING_INFLATION_BASIS = 'supercore_inflation_ema';
 
     /**
      * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: spring and fall terms; summer trough.
@@ -89,8 +103,6 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
 
-        // Service providers price off services inflation (supercore), not goods or headline breakevens.
-        $physics['pricing_power_multiplier'] = 1.0 + ($macroState->supercoreInflationEma * self::SERVICES_INFLATION_PASS_THROUGH);
 
         return $physics;
     }
@@ -108,8 +120,8 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
         $lmsWeight        = $params[ModelParam::LmsLicensingWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
-        $beta     = abs((float) $stock->getBeta());
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
+        $beta     = $this->getOperatingCyclicality($stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -151,7 +163,9 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
         $actualRevenue = array_sum($streamRevenues);
         $streams->recordStreamShares($streamRevenues);
 
-        $clampedMargin = $this->clampMargin($realizedVariableMargin);
+        // Faculty and instructor payroll follows wage growth; tuition and contract rates recover it on annual resets.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $inputCostDrag);
 
         $primaryShockZ = $streams->resolveDominantShockZ([$enterpriseZ, $tuitionZ, $lmsZ]);
 
@@ -188,6 +202,7 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
             'supercore_inflation_ema',
             'tips_breakeven_ema',
             'unemployment_rate_ema',
+            'wage_growth_ema',
         ];
     }
 }

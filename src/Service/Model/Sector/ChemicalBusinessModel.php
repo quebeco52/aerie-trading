@@ -27,6 +27,18 @@ use App\Service\Math\MathUtility;
  */
 class ChemicalBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Volume follows industrial production; grades substitute within limits. */
+    public const OPERATING_CYCLICALITY = 1.20;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.60;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.50;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['ppi' => 0.15, 'labor' => 0.15, 'freight' => 0.05];
+
     /**
      * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q2 planting season for agrochemicals.
      *
@@ -104,8 +116,6 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     public const AGRI_PASS_THROUGH_SCALAR = 0.60;
     /** Volatility scalar for unhedged spot feedstock crack spread shocks on variable margins. */
     public const FEEDSTOCK_DRAG_SCALAR = 0.30;
-    /** Sensitivity of chemical feedstock and energy processing cost drag to PPI inflation. */
-    public const PPI_FEEDSTOCK_SENSITIVITY = 0.40;
     /** Sensitivity of petrochemical and specialty margins to downstream refining crack spreads. */
     public const CRACK_SPREAD_MARGIN_SENSITIVITY = 0.30;
 
@@ -215,8 +225,7 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
         $outputGap = $macroState->outputGapEma;
         $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
         $agriShift = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
-        $inflation = $macroState->tipsBreakevenEma;
-        $beta = (float) $stock->getBeta();
+        $beta = $this->getOperatingCyclicality($stock);
 
         // Macro demand shift: Driven by industrial demand (output gap + metals + manufacturing PMI) for base chemicals,
         // and agricultural commodities for agrochemicals.
@@ -226,7 +235,7 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
 
         return [
             'macro_demand_shift' => $blendedDemandShift,
-            'pricing_power_multiplier' => 1.0 + ($inflation * max(self::MIN_BETA_PRICING_POWER_FLOOR, $beta) * $pricingPower),
+            ...$this->resolvePricingMultipliers($stock, $macroState),
         ];
     }
 
@@ -241,7 +250,7 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
 
         $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = $this->createStreamContext($momentum, $mathUtility);
+        $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // Active stream weights with dynamic drift
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -320,7 +329,9 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
 
         // Feedstock crack volatility shock & macro transmission
         $feedstockDrag = max(0.0, -$feedstockZ * (self::FEEDSTOCK_DRAG_SCALAR / 10.0) * $baselineVol);
-        $ppiCostDrag = MathUtility::calculatePpiCostDrag($macroState->producerPriceInflation, MacroEngine::TARGET_INFLATION, $pricingPower, self::PPI_FEEDSTOCK_SENSITIVITY);
+        // Non-feedstock inputs (catalysts, packaging, logistics, plant payroll) come through the shared basket;
+        // hydrocarbon feedstock keeps its own asymmetric pass-through above.
+        $ppiCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
         $crackSpreadShift = ($macroState->refiningCrackSpread - MacroEngine::CRACK_SPREAD_BASELINE) / MacroEngine::CRACK_SPREAD_BASELINE;
         $crackSpreadPenalty = max(-0.03, min(0.03, -$crackSpreadShift * self::CRACK_SPREAD_MARGIN_SENSITIVITY * 0.02));
 
@@ -375,12 +386,14 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
         return [
             'agricultural_commodity_index_ema',
             'energy_cost_push_lag',
+            'freight_rate_index_ema',
             'industrial_metals_index_ema',
             'manufacturing_pmi',
             'output_gap_ema',
-            'producer_price_inflation',
+            'producer_price_inflation_ema',
             'refining_crack_spread',
             'tips_breakeven_ema',
+            'wage_growth_ema',
         ];
     }
 }

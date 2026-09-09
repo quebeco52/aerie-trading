@@ -33,5 +33,9 @@ services:
     Redis:
         class: Redis
         factory: ['App\Factory\RedisFactory', 'createConnection']
+
+    # Zero-sum industry share ledger persists in Redis; the in-memory store is for tests and harnesses.
+    App\Service\Corporate\Industry\IndustryShareStoreInterface:
+        alias: App\Service\Corporate\Industry\RedisIndustryShareStore
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

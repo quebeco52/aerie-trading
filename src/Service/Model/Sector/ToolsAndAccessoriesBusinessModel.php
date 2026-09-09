@@ -23,6 +23,18 @@ use App\Service\Macro\MacroEngine;
  */
 class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Industrial tooling and prosumer hardware. */
+    public const OPERATING_CYCLICALITY = 1.00;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.60;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.50;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['metals' => 0.20, 'ppi' => 0.25, 'energy' => 0.05, 'labor' => 0.20, 'freight' => 0.03];
+
     /**
      * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: holiday and year-end promotional volumes.
      *
@@ -82,8 +94,8 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
     public const PMI_COMMERCIAL_SENSITIVITY = 0.40;
     /** Sensitivity of retail and prosumer tool sales to residential housing starts. */
     public const HOUSING_STARTS_SENSITIVITY = 0.35;
-    /** Sensitivity of precision tooling alloy and carbide cost drag to PPI inflation. */
-    public const PPI_TOOLING_COST_SENSITIVITY = 0.30;
+    /** Alloy and carbide supply contracts fix input prices for about a quarter. */
+    public const INPUT_COST_LAG_YEARS = 0.25;
 
         public function getReversionSpeed(): float { return 0.08; }
     public function getMoatSpread(): float { return 0.03; }
@@ -99,7 +111,7 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
 
         // Extremely insulated from typical manufacturing boom/bust, but tied to industrial tooling & construction
         $outputGap = $macroState->outputGapEma;
-        $beta = (float) $stock->getBeta();
+        $beta = $this->getOperatingCyclicality($stock);
         $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, sensitivity: self::PMI_COMMERCIAL_SENSITIVITY);
         $housingShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_SENSITIVITY);
 
@@ -119,7 +131,7 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         $consumerWeight   = $params[ModelParam::ConsumerWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -144,8 +156,8 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         $pmiShift = MathUtility::calculatePmiDemandShift($macroState->manufacturingPmiEma, sensitivity: self::PMI_COMMERCIAL_SENSITIVITY);
         $housingShift = MathUtility::calculateHousingStartsShift($macroState->housingStartsIndexEma, sensitivity: self::HOUSING_STARTS_SENSITIVITY);
 
-        $commercialMacroVolumeShock = ($macroState->outputGapEma * $macroSensitivityMultiplier * abs((float) $stock->getBeta())) - ($fxShift * 0.10) + $pmiShift;
-        $consumerMacroVolumeShock = ($sentimentShift * $macroSensitivityMultiplier * abs((float) $stock->getBeta())) - ($fxShift * 0.10) + $housingShift;
+        $commercialMacroVolumeShock = ($macroState->outputGapEma * $macroSensitivityMultiplier * $this->getOperatingCyclicality($stock)) - ($fxShift * 0.10) + $pmiShift;
+        $consumerMacroVolumeShock = ($sentimentShift * $macroSensitivityMultiplier * $this->getOperatingCyclicality($stock)) - ($fxShift * 0.10) + $housingShift;
 
         // Tail Risk Events
         $cycleMultiplier = 1.0;
@@ -188,20 +200,14 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         // Apply derived distinct margins to actual shocked revenues
         $actualVariableCosts = ($commercialRevenue * self::COMMERCIAL_VARIABLE_COST_RATIO) + ($consumerRevenue * $consumerVariableMargin);
 
-        // Re-implementing Inflation Penalty & PPI Transmission
-        $inflation = $macroState->inflationEma;
-        $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
-        $metalsCostDrag = max(0.0, $metalsShift) * 0.05;
-        $ppiCostDrag = MathUtility::calculatePpiCostDrag($macroState->producerPriceInflation, MacroEngine::TARGET_INFLATION, $pricingPower, self::PPI_TOOLING_COST_SENSITIVITY);
-
-        $inflationMultiplier = 2.0 - ($pricingPower * 2.0);
-        $baseInflationPenalty = ($inflation > MacroEngine::TARGET_INFLATION ? ($inflation - MacroEngine::TARGET_INFLATION) * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR : 0.0) + $metalsCostDrag;
-        $inflationPenalty = ($baseInflationPenalty * $inflationMultiplier) + $ppiCostDrag;
+        // Input cost basket: alloys and carbide, wholesale components, energy and shop-floor payroll,
+        // recovered in list prices at the firm's pricing power.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
 
         // Continuous Elasticity
         $elasticityShift = -self::PRECISION_SCALE_ELASTICITY * $commercialZ * $commercialWeight;
 
-        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $supplyChainPenalty + $inflationPenalty + $elasticityShift;
+        $rawMargin = ($actualVariableCosts / max(1.0, $actualRevenue)) + $supplyChainPenalty + $inputCostDrag + $elasticityShift;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Blended primary shock for standard model integration
@@ -257,14 +263,16 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
     {
         return [
             'consumer_sentiment_index_ema',
+            'energy_cost_push_lag',
             'exchange_rate_index_ema',
+            'freight_rate_index_ema',
             'housing_starts_index_ema',
             'industrial_metals_index_ema',
-            'inflation_ema',
             'manufacturing_pmi_ema',
             'output_gap_ema',
-            'producer_price_inflation',
+            'producer_price_inflation_ema',
             'tips_breakeven_ema',
+            'wage_growth_ema',
         ];
     }
 }

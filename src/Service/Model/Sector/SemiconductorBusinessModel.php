@@ -25,6 +25,20 @@ use App\Service\Macro\MacroEngine;
  */
 class SemiconductorBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Inventory bullwhip makes wafer demand hyper-cyclical. */
+    public const OPERATING_CYCLICALITY = 1.50;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.60;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.40;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['energy' => 0.15, 'metals' => 0.05, 'ppi' => 0.30, 'labor' => 0.15];
+    /** Leading-edge capacity is scarce: wafer pricing recovers most input inflation. */
+    public const PRICING_POWER_INDEX = 0.60;
+
     // --- Inventory Cycle ---
     /** Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking, shortfalls restocking. Distributor and OEM chip inventories drive the wafer order book. */
     public const INVENTORY_CYCLE_SENSITIVITY = 1.00;
@@ -58,10 +72,6 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     // --- Cyclical Demand & Macro Physics ---
     /** Macroeconomic demand shift sensitivity to global tech CapEx cycles. */
     public const MACRO_DEMAND_SCALAR       = 1.50;
-    /** Minimum beta floor applied when calculating inflation pricing power. */
-    public const MIN_PRICING_BETA_FLOOR    = 0.40;
-    /** Multiplier scaling stock beta to determine pricing power responsiveness to inflation. */
-    public const PRICING_BETA_SCALAR       = 0.70;
 
     // --- Fab Utilization Leverage & Cycle Thresholds ---
     /** Volatility multiplier for top-line revenue shocks reflecting chip inventory cycles. */
@@ -84,8 +94,6 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     public const CAPACITY_UTILIZATION_SENSITIVITY = 1.20;
     /** Sensitivity of industrial & automotive semiconductor demand to manufacturing PMI. */
     public const PMI_CHIP_DEMAND_SENSITIVITY = 0.40;
-    /** Sensitivity of cleanroom wafer & chemical input costs to Producer Price Inflation (PPI). */
-    public const PPI_FAB_INPUT_SENSITIVITY = 0.30;
     /** Capacity utilization deviation threshold above baseline triggering fab shortages (~81.5% vs 78.5% baseline). */
     public const BOOM_CAPACITY_UTILIZATION_THRESHOLD = 0.030;
     /** Capacity utilization deviation threshold below baseline triggering fab underutilization (~75.5% vs 78.5% baseline). */
@@ -97,9 +105,6 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     /** Variable margin penalty applied when underinvestment degrades silicon wafer yields. */
     public const WAFER_SCRAP_PENALTY       = 0.08;
 
-    // --- Cleanroom Electricity & Energy Drag ---
-    /** Variable margin penalty scalar applied to physical cleanroom foundry operations during energy/electricity spikes. */
-    public const CLEANROOM_ENERGY_DRAG_SCALAR = 0.35;
 
     /** Upper clamp for realized variable margin. */
     public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
@@ -140,14 +145,13 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $outputGap = $macroState->outputGapEma;
-        $inflation = $macroState->tipsBreakevenEma;
-        $beta = (float) $stock->getBeta();
+        $beta = $this->getOperatingCyclicality($stock);
 
         // Semiconductors are highly cyclical and levered to global tech capital expenditure cycles
         $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         return [
             'macro_demand_shift' => ($outputGap * $beta * self::MACRO_DEMAND_SCALAR) - ($fxShift * 0.10),
-            'pricing_power_multiplier' => 1.0 + ($inflation * max(self::MIN_PRICING_BETA_FLOOR, $beta * self::PRICING_BETA_SCALAR)),
+            ...$this->resolvePricingMultipliers($stock, $macroState),
         ];
     }
 
@@ -162,7 +166,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         $designWeight  = $params[ModelParam::DesignRevenueWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -237,20 +241,11 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
             $yieldModifier = self::WAFER_SCRAP_PENALTY * $foundryWeight; // Scaled by foundry weight
         }
 
-        // Cleanroom Energy & Metals Drag: Fabs consume massive electricity and raw materials
-        $energyShift = max(0.0, $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
-        $metalsShift = max(0.0, ($macroState->industrialMetalsIndexEma - 100.0) / 100.0);
-        $energyDrag = (($energyShift * self::CLEANROOM_ENERGY_DRAG_SCALAR) + ($metalsShift * 0.10)) * $foundryWeight;
+        // Cleanroom electricity, specialty gases and chemicals, raw wafers and fab payroll reach the cost base at
+        // spot; scarce leading-edge capacity recovers most of it in wafer pricing. Fabless IP carries no such cost.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
 
-        // Wholesale silicon wafer and chemical input costs (PPI)
-        $ppiDrag = MathUtility::calculatePpiCostDrag(
-            $macroState->producerPriceInflationEma,
-            MacroEngine::TARGET_INFLATION,
-            0.60,
-            self::PPI_FAB_INPUT_SENSITIVITY
-        ) * $foundryWeight;
-
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $yieldModifier + $energyDrag + $ppiDrag);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $yieldModifier + $inputCostDrag);
 
         $primaryShockZ = $streams->resolveDominantShockZ([$cycleZ, $foundryZ, $designZ]);
         // observableShockZ: foundry and design demand visible via shipment lead times and supply chain checks
@@ -320,6 +315,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
             'output_gap_ema',
             'producer_price_inflation_ema',
             'tips_breakeven_ema',
+            'wage_growth_ema',
         ];
     }
 }

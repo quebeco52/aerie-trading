@@ -27,6 +27,24 @@ use App\Service\Macro\MacroEngine;
  */
 class TelecomBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Subscriptions are defensive; every net add is a rival's loss in a saturated market. */
+    public const OPERATING_CYCLICALITY = 0.60;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.30;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.85;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['labor' => 0.30, 'energy' => 0.08, 'ppi' => 0.15];
+    /** Annual CPI-linked plan hikes with regulatory and churn pushback: about half of expected inflation reaches ARPU. */
+    public const PRICING_ELASTICITY = 0.50;
+    /** Plans reprice once a year. */
+    public const PRICE_PASS_THROUGH_LAG_YEARS = 1.00;
+    /** Wireless carriers hold real pricing power on a captive base; network power and handset costs are partly recovered. */
+    public const PRICING_POWER_INDEX = 0.30;
+
     /**
      * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: Q4 holiday device upgrades and equipment sales.
      *
@@ -131,10 +149,6 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         // People don't cancel their phone plans during a recession, but they do stop buying $1,200 iPhones.
         $physics['macro_demand_shift'] = 0.0;
 
-        // Telecoms generally pass inflation through via annual bill hikes, 
-        // but face mild regulatory/consumer pushback.
-        $inflation = $macroState->tipsBreakevenEma;
-        $physics['pricing_power_multiplier'] = 1.0 + ($inflation * 0.50);
 
         return $physics;
     }
@@ -150,8 +164,8 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         $equipmentWeight    = $params[ModelParam::EquipmentWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = $this->createStreamContext($momentum, $mathUtility);
-        $beta = abs((float) $stock->getBeta());
+        $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
+        $beta = $this->getOperatingCyclicality($stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -224,7 +238,9 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
 
         // Note: the network debt load reaches earnings through DebtEngine's maturity wall (see
         // getDebtMaturityRolloverRate), never as an operating margin drag. Interest sits below EBIT.
-        $rawMargin = $realizedVariableMargin + $priceWarPenalty + $sacDrag;
+        // Network power, handset procurement and field payroll reach the cost base at spot; annual plan hikes recover part of it.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
+        $rawMargin = $realizedVariableMargin + $priceWarPenalty + $sacDrag + $inputCostDrag;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock is whichever stream deviated the most, overridden by tail events
@@ -284,9 +300,12 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
+            'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'output_gap_ema',
+            'producer_price_inflation_ema',
             'tips_breakeven_ema',
+            'wage_growth_ema',
         ];
     }
 }

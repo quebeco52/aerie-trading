@@ -7,6 +7,7 @@ namespace App\Tests\Service\Model;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
+use App\Service\Macro\MacroEngine;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\DefenseContractorBusinessModel;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -206,8 +207,9 @@ class DefenseContractorBusinessModelTest extends TestCase
         // fixedPriceZ = -2.0 (< -1.50 FORWARD_LOSS_Z_SCORE)
         $mathUtilityMock = $this->createMathUtilityMock([0.0, -2.0, 0.0, 0.0]);
 
-        // Inflation running at 4% (2% in excess of 2% target) -> 0.02 * 0.50 = 0.01 fixed-price inflation drag
+        // Engineering wages running 2pts above trend: the fixed-price EMD share cannot recover it, cost-plus can.
         $macroState = $this->createMacroState(inflation: 0.04);
+        $macroState = MacroStateDTO::fromArray(array_merge($macroState->toArray(), ['wage_growth_ema' => 0.055]));
 
         $result = $model->computeActualFinancials(
             $stock,
@@ -220,10 +222,16 @@ class DefenseContractorBusinessModelTest extends TestCase
         );
 
         $this->assertSame(ShockEvent::PROJECT_DELAY, $result->eventType);
-        // Fixed price weight is 0.20 for GRIP.
-        // Expected penalty = (FORWARD_LOSS_PENALTY 0.08 + fixedPriceInflationDrag 0.01) * 0.20 = 0.018
-        // Clamped margin = 0.30 + 0.018 = 0.318
-        $this->assertEqualsWithDelta(0.318, $result->clampedMargin, 0.001);
+        // Fixed price weight is 0.20 for GRIP: forward loss = FORWARD_LOSS_PENALTY 0.08 * 0.20 = 0.016.
+        // Wage basket: labor share 0.35 x 2pts excess = 0.7% of the cost base; 80% of contracts (cost-plus, FMS)
+        // recover 0.80 of it with the repricing lag, so the first-quarter drag is
+        // margin x deviation x (1 - recoveredShare x firstQuarterRecoveryWeight).
+        $deviation = 0.35 * (0.055 - (MacroEngine::TFP_DRIFT + MacroEngine::TARGET_INFLATION));
+        $recoveredShare = 0.80 * DefenseContractorBusinessModel::MAX_INPUT_COST_PASS_THROUGH;
+        $recoveryWeight = 1.0 - exp(-0.25 / DefenseContractorBusinessModel::INPUT_PASS_THROUGH_LAG_YEARS);
+        $wageDrag = 0.30 * $deviation * (1.0 - ($recoveredShare * $recoveryWeight));
+        $this->assertEqualsWithDelta(0.316 + $wageDrag, $result->clampedMargin, 0.001);
+        $this->assertGreaterThan(0.316, $result->clampedMargin);
     }
 
     public function testGeopoliticalConflictSurge(): void

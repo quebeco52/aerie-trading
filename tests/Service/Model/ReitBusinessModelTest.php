@@ -536,8 +536,8 @@ class ReitBusinessModelTest extends TestCase
         // Pricing power multiplier is fixed at 1.0
         $this->assertEquals(1.0, $physics['pricing_power_multiplier']);
 
-        // Macro demand shift = outputGap * 0.25 * beta = 0.02 * 0.25 * 1.2 = 0.006 (no FX drag)
-        $this->assertEqualsWithDelta(0.006, $physics['macro_demand_shift'], 0.0001);
+        // Macro demand shift = outputGap * 0.25 * cyclicality (no FX drag)
+        $this->assertEqualsWithDelta(0.02 * 0.25 * ReitBusinessModel::OPERATING_CYCLICALITY, $physics['macro_demand_shift'], 0.0001);
     }
 
     private function createDebtHealth(float $debtTolerance, float $interestExpense = 0.0): DebtHealthDTO

@@ -6,6 +6,8 @@ namespace App\Tests\Service\Model;
 
 use App\Service\Macro\MacroEngine;
 use App\Service\Model\Sector\SemiconductorBusinessModel;
+use App\Service\Math\FinancialConstants;
+use App\Service\Corporate\EarningsEngine;
 use App\Service\Math\MathUtility;
 use App\Entity\Stock;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -112,8 +114,9 @@ class SemiconductorBusinessModelTest extends TestCase
             mathUtility: $this->mathUtilityMock
         );
 
-        // Elevated energy price = 120.0 (20% energy spike)
-        // energyShift = 0.20 -> energyDrag = 0.20 * 0.35 * 0.85 = 0.0595
+        // Elevated energy price = 120.0 (20% energy spike). Cleanroom power is bought at spot, so the basket
+        // lands 0.20 x energy exposure in the cost base this quarter, and scarce wafer capacity recovers
+        // pricingPower x MAX_INPUT_COST_PASS_THROUGH of it with the pass-through lag.
         $macroSpike = \App\DTO\MacroStateDTO::fromArray([
             'output_gap_ema' => 0.0,
             'energy_price_index_ema' => 120.0,
@@ -132,7 +135,11 @@ class SemiconductorBusinessModelTest extends TestCase
 
         $this->assertGreaterThan($resultBaseline->clampedMargin, $resultSpike->clampedMargin);
         $this->assertLessThan($resultBaseline->ebit, $resultSpike->ebit);
-        $this->assertEqualsWithDelta(359.5, $resultSpike->actualVariableCosts, 0.1);
+        $energyDeviation = 0.20 * SemiconductorBusinessModel::INPUT_COST_EXPOSURES['energy'];
+        $recoveryWeight = 1.0 - exp(-EarningsEngine::QUARTERLY_TIME_STEP / FinancialConstants::DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS);
+        $recovered = SemiconductorBusinessModel::PRICING_POWER_INDEX * SemiconductorBusinessModel::MAX_INPUT_COST_PASS_THROUGH * $recoveryWeight;
+        $expectedDrag = 0.30 * $energyDeviation * (1.0 - $recovered);
+        $this->assertEqualsWithDelta(1000.0 * (0.30 + $expectedDrag), $resultSpike->actualVariableCosts, 0.1);
     }
 
     public function testCapacityUtilizationDrivesFoundryLeverage(): void

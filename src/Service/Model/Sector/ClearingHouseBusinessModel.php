@@ -26,6 +26,10 @@ use App\Service\Math\FinancialConstants;
  */
 class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Clearing volumes rise in stress; only pool growth follows the cycle. */
+    public const OPERATING_CYCLICALITY = 0.80;
+
         public function getMinIcr(): float { return 1.05; }
     public function getBankruptEquityThreshold(): float { return 0.5; }
     public function getDistressEquityThreshold(): float { return 1.25; }
@@ -185,7 +189,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         $params = $this->resolveModelParameters($stock, [
             ModelParam::ClearingFeeWeight->value      => 0.50,

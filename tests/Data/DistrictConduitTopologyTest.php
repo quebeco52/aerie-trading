@@ -247,24 +247,26 @@ class DistrictConduitTopologyTest extends TestCase
      * a failing assertion rather than a silent diff. Re-baselined when declarations were synced to
      * the fields each model's own operating code reads (BusinessModelMacroFieldDeclarationTest):
      * distressed debt gained the rate and exchange edges its float income reads, and the two
-     * insurers lost a land-registry edge their physics never read.
+     * insurers lost a land-registry edge their physics never read. Re-baselined again when inflation_ema left
+     * UBIQUITOUS_MACRO_FIELDS (the input cost basket moved most producers off headline CPI): the five
+     * balance-sheet financials whose float and pool growth still read CPI now draw a statistical-office edge.
      */
     public static function financialModelConduitProvider(): array
     {
         return [
             'commercial_bank' => ['commercial_bank', ['rate-council', 'credit-registry', 'statistical-office', 'land-registry']],
             'credit_services' => ['credit_services', ['rate-council', 'credit-registry', 'statistical-office']],
-            'shadow_bank' => ['shadow_bank', ['rate-council', 'credit-registry', 'land-registry']],
+            'shadow_bank' => ['shadow_bank', ['rate-council', 'credit-registry', 'land-registry', 'statistical-office']],
             'investment_bank' => ['investment_bank', ['rate-council', 'credit-registry', 'exchange-floor']],
             'brokerage' => ['brokerage', ['rate-council', 'credit-registry', 'exchange-floor']],
-            'clearing_house' => ['clearing_house', ['rate-council', 'credit-registry', 'exchange-floor']],
+            'clearing_house' => ['clearing_house', ['rate-council', 'credit-registry', 'exchange-floor', 'statistical-office']],
             'asset_manager' => ['asset_manager', ['rate-council', 'exchange-floor']],
             'private_equity' => ['private_equity', ['rate-council', 'credit-registry', 'exchange-floor']],
             'hedge_fund' => ['hedge_fund', ['rate-council', 'credit-registry', 'exchange-floor']],
             'distressed_debt' => ['distressed_debt', ['rate-council', 'credit-registry', 'exchange-floor']],
-            'insurance' => ['insurance', ['rate-council', 'exchange-floor', 'land-registry']],
-            'reinsurance' => ['reinsurance', ['rate-council', 'exchange-floor']],
-            'retail_insurance' => ['retail_insurance', ['rate-council', 'exchange-floor']],
+            'insurance' => ['insurance', ['rate-council', 'exchange-floor', 'land-registry', 'statistical-office']],
+            'reinsurance' => ['reinsurance', ['rate-council', 'exchange-floor', 'statistical-office']],
+            'retail_insurance' => ['retail_insurance', ['rate-council', 'exchange-floor', 'statistical-office']],
             'financial_data' => ['financial_data', ['credit-registry', 'exchange-floor']],
         ];
     }

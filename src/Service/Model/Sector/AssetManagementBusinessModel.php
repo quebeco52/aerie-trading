@@ -25,6 +25,10 @@ use App\Service\Math\FinancialConstants;
  */
 class AssetManagementBusinessModel extends BaseFinancialBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). AUM and flows amplify the market cycle. */
+    public const OPERATING_CYCLICALITY = 1.20;
+
     // --- Balance Sheet Realism ---
     /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Portfolio manager retention grants settle in stock. */
     public const STOCK_COMPENSATION_INTENSITY = 0.05;
@@ -315,7 +319,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         $perfScalar      = $params[ModelParam::PerformanceFeeScalar];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -333,7 +337,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         // 1. AUM Mark-to-Market Beta & M2 Liquidity Inflows (Base Management Fee Stream):
         // When equity/credit markets rise or fall, or systemic broad money (M2) expands, base AUM fee revenue expands or contracts.
         $outputGap = $macroState->outputGapEma;
-        $aumMarketBeta = $outputGap * abs((float) $stock->getBeta()) * $aumBetaScalar;
+        $aumMarketBeta = $outputGap * $this->getOperatingCyclicality($stock) * $aumBetaScalar;
         $m2InflowBoost = MathUtility::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, sensitivity: self::M2_AUM_INFLOW_SENSITIVITY);
 
         // 2. Asymmetric Performance Fees & Institutional Redemptions (Incentive Fee Stream):

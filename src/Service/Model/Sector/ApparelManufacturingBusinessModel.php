@@ -31,6 +31,20 @@ use App\Service\Math\MathUtility;
  */
 class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Discretionary garments with fashion substitution. */
+    public const OPERATING_CYCLICALITY = 1.20;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 1.00;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.60;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['agri' => 0.15, 'freight' => 0.06, 'energy' => 0.04, 'ppi' => 0.20, 'labor' => 0.25];
+    /** Six to nine months of raw inventory and cotton futures: spot fiber and freight moves reach COGS with a lag. */
+    public const INPUT_COST_LAG_YEARS = 0.50;
+
     // --- Inventory Cycle ---
     /** Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking, shortfalls restocking. Retailer inventory-to-sales ratios gate wholesale reorders. */
     public const INVENTORY_CYCLE_SENSITIVITY = 0.50;
@@ -95,21 +109,9 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     /** Currency depreciation export competitiveness boost on contract textile supply. */
     public const CONTRACT_FX_EXPORT_SCALAR = 0.15;
 
-    // --- Supply Chain & Commodity Input Physics ---
-    /** Input cost sensitivity to agricultural commodity price shifts (raw cotton, wool, cellulose fibers represent ~15% of garment cost). */
-    public const AGRI_COMMODITY_SCALAR = 0.15;
-    /** Input cost sensitivity to global container shipping and freight rate spikes (~6% of delivered garment cost). */
-    public const FREIGHT_RATE_SCALAR = 0.06;
-    /** Input cost sensitivity to industrial textile processing energy costs (~4% of variable cost). */
-    public const ENERGY_INPUT_SCALAR = 0.04;
-    /** Proportion of spot commodity/freight price shocks that immediately pass through to COGS (simulating 6-9 month forward hedging). */
-    public const FORWARD_HEDGE_RATIO = 0.33;
-    /** Overall scaling factor for input inflation penalties on variable operating margins. */
-    public const INFLATION_PENALTY_SCALAR = 0.50;
+    // --- Trade Physics ---
     /** Sensitivity of contract textile export and domestic mill volumes to trade balance shifts. */
     public const TRADE_BALANCE_SENSITIVITY = 1.00;
-    /** Sensitivity of processed fiber, yarn, and dyestuff input costs to wholesale PPI inflation. */
-    public const PPI_TEXTILE_COST_SENSITIVITY = 0.30;
 
     // --- Tail Risk & Shock Thresholds ---
     /** Negative z-score threshold triggering severe agricultural/raw fiber supply chain disruption. */
@@ -219,8 +221,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
 
         $outputGap = $macroState->outputGapEma;
         $sentimentShift = ($macroState->consumerSentimentIndexEma - MacroEngine::SENTIMENT_BASELINE) / 100.0;
-        $inflation = $macroState->tipsBreakevenEma;
-        $beta = (float) $stock->getBeta();
+        $beta = $this->getOperatingCyclicality($stock);
 
         // Hybrid demand physics: Pro-cyclical consumer sentiment + output gap,
         // tempered by counter-cyclical trade-down effect during economic downturns (output gap < 0).
@@ -232,7 +233,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
 
         return [
             'macro_demand_shift' => $blendedDemandShift,
-            'pricing_power_multiplier' => 1.0 + ($inflation * max(self::MIN_BETA_PRICING_POWER_FLOOR, $beta) * $pricingPower),
+            ...$this->resolvePricingMultipliers($stock, $macroState),
         ];
     }
 
@@ -246,10 +247,9 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         ]);
 
         $pricingPower = max(0.0, min(1.0, $params[ModelParam::PricingPowerIndex]));
-        $inflationMultiplier = 2.0 - ($pricingPower * 2.0);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -326,21 +326,14 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
             + ($wholesaleRevenue * $wholesaleCostRatio)
             + ($contractRevenue * $contractCostRatio);
 
-        // --- Commodity & Supply Chain Input Inflation Penalties (with Forward Hedging) ---
-        $agriShift = ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0;
-        $freightShift = max(0.0, ($macroState->freightRateIndexEma - 100.0) / 100.0);
-        $energyShift = $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
-
-        // 3. COGS Forward Hedging: 6-9 months raw inventory & futures dampen immediate spot commodity/freight passthrough
-        // Input cost relief on agricultural commodity deflation expands gross margins.
-        $spotInputDrag = ($agriShift * self::AGRI_COMMODITY_SCALAR) + ($freightShift * self::FREIGHT_RATE_SCALAR) + ($energyShift * self::ENERGY_INPUT_SCALAR);
-        $hedgedInputDrag = $spotInputDrag * self::FORWARD_HEDGE_RATIO;
-        $baseInflationPenalty = $hedgedInputDrag * abs((float) $stock->getBeta()) * self::INFLATION_PENALTY_SCALAR;
-        $ppiCostDrag = MathUtility::calculatePpiCostDrag($macroState->producerPriceInflation, MacroEngine::TARGET_INFLATION, $pricingPower, self::PPI_TEXTILE_COST_SENSITIVITY);
-        $totalInflationPenalty = ($baseInflationPenalty * $inflationMultiplier) + $ppiCostDrag;
+        // --- Commodity & Supply Chain Input Inflation (with Forward Hedging) ---
+        // 3. Raw cotton and wool, container freight, mill energy, processed fiber and sewing payroll reach COGS
+        // through the forward-hedged buying lag and are recovered at retail with the repricing lag. A fiber price
+        // collapse is a gross margin dividend in the same way.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
 
         $effectiveMargin = $actualRevenue > 0 ? ($actualVariableCosts / $actualRevenue) : $realizedVariableMargin;
-        $clampedMargin = $this->clampMargin($effectiveMargin + $totalInflationPenalty);
+        $clampedMargin = $this->clampMargin($effectiveMargin + $inputCostDrag);
 
         // Primary and observable shocks
         $primaryShockZ = $streams->resolveDominantShockZ([$dtcZ, $wholesaleZ, $contractZ], $eventZ);
@@ -389,9 +382,10 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
             'freight_rate_index_ema',
             'inventory_stock_gap_ema',
             'output_gap_ema',
-            'producer_price_inflation',
+            'producer_price_inflation_ema',
             'tips_breakeven_ema',
             'trade_balance_to_gdp_ema',
+            'wage_growth_ema',
         ];
     }
 }

@@ -38,6 +38,14 @@ use App\Service\Math\MathUtility;
  */
 class BiotechBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Prescriptions are non-discretionary; therapies rarely substitute. */
+    public const OPERATING_CYCLICALITY = 0.60;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.20;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.20;
+
     // --- Balance Sheet Realism ---
     /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Clinical-stage science teams are paid heavily in equity. */
     public const STOCK_COMPENSATION_INTENSITY = 0.10;
@@ -224,7 +232,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         ]);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([

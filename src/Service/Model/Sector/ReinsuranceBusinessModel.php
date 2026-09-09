@@ -26,6 +26,10 @@ use App\Service\Event\ShockEvent;
  */
 class ReinsuranceBusinessModel extends InsuranceBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Treaty volume follows primary premiums with a lag. */
+    public const OPERATING_CYCLICALITY = 0.80;
+
     // --- Analyst Visibility & Error ---
     public const BASE_COVERAGE_VISIBILITY = 0.80;
     public const BASE_COVERAGE_ERROR = 0.10;
@@ -70,7 +74,7 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         $catScalar     = $params[ModelParam::CatastropheLossScalar];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([

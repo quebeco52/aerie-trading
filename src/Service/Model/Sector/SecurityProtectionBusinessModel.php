@@ -30,9 +30,25 @@ use App\Service\Macro\MacroEngine;
  */
 class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Guarding contracts are a survival expense. */
+    public const OPERATING_CYCLICALITY = 0.60;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.40;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.50;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['labor' => 0.75, 'energy' => 0.03];
+    /** Cost-plus government work and annual retainer resets recover guard wage moves almost in full. */
+    public const PRICING_POWER_INDEX = 0.85;
+
     // --- Services Pricing ---
-    /** Pass-through of supercore (core services ex-housing) inflation into fee and rate pricing. Contract guard rates pass through services wage inflation. */
-    public const SERVICES_INFLATION_PASS_THROUGH = 0.85;
+    /** Elasticity of fee and rate pricing to services (supercore) inflation. Contract guard rates pass through services wage inflation. */
+    public const PRICING_ELASTICITY = 0.85;
+    /** Services price off core services inflation ex-housing, not goods breakevens. */
+    public const PRICING_INFLATION_BASIS = 'supercore_inflation_ema';
 
     /**
      * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: summer event and site staffing peak.
@@ -124,9 +140,6 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         // allowing each stream to pull directly from its assigned macro variables in calculateSectorPhysics.
         $physics['macro_demand_shift'] = 0.0;
 
-        // PMCs pass guard wage inflation through to corporate and government clients: contract rates track
-        // services (supercore) inflation, not goods breakevens.
-        $physics['pricing_power_multiplier'] = 1.0 + ($macroState->supercoreInflationEma * self::SERVICES_INFLATION_PASS_THROUGH);
 
         return $physics;
     }
@@ -145,8 +158,8 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         $expeditionaryWeight = $params[ModelParam::ExpeditionaryWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = $this->createStreamContext($momentum, $mathUtility);
-        $beta = abs((float) $stock->getBeta());
+        $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
+        $beta = $this->getOperatingCyclicality($stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -225,8 +238,10 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // --- Cost & Margin Physics ---
+        // Guard payroll follows wage growth; contract rates recover most of it (cost-plus government work, annual retainer resets).
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
         // Apply the tactical failure legal penalty directly to the baseline variable margin
-        $rawMargin = $realizedVariableMargin + $tacticalFailurePenalty;
+        $rawMargin = $realizedVariableMargin + $inputCostDrag + $tacticalFailurePenalty;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock is whichever stream deviated the most, overridden by tail events
@@ -260,6 +275,7 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
+            'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'government_spending_index_ema',
             'inflation_ema',
@@ -268,6 +284,7 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
             'output_gap_ema',
             'supercore_inflation_ema',
             'tips_breakeven_ema',
+            'wage_growth_ema',
         ];
     }
 }

@@ -28,6 +28,10 @@ use App\Service\Math\MathUtility;
  */
 class HedgeFundBusinessModel extends AssetManagementBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Levered directional books. */
+    public const OPERATING_CYCLICALITY = 1.50;
+
     // --- Balance Sheet Realism ---
     /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Investment team deferrals settle in fund and manager equity. */
     public const STOCK_COMPENSATION_INTENSITY = 0.05;
@@ -278,7 +282,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         ]);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -298,7 +302,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         $outputGap      = $macroState->outputGapEma;
         $vixEma         = $macroState->marketVolatilityEma;
         $creditSpread   = $macroState->macroCreditSpreadEma;
-        $beta           = (float) $stock->getBeta();
+        $beta           = $this->getOperatingCyclicality($stock);
         $equity         = (float) $stock->getTotalEquity();
         $wholesaleDebt  = (float) $stock->getWholesaleDebt();
         $actualLeverage = $equity > 0 ? ($wholesaleDebt / $equity) : 0.0;

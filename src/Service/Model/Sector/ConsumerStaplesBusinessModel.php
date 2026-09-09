@@ -27,6 +27,20 @@ use App\Service\Math\MathUtility;
  */
 class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Inelastic pantry demand; brands substitute on the shelf. */
+    public const OPERATING_CYCLICALITY = 0.50;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.30;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.60;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['agri' => 0.30, 'ppi' => 0.20, 'energy' => 0.06, 'freight' => 0.05, 'labor' => 0.20];
+    /** Branded staples recover input moves on the shelf within a couple of quarters. */
+    public const INPUT_PASS_THROUGH_LAG_YEARS = 0.50;
+
     // --- Inventory Cycle ---
     /** Order sensitivity to the economy-wide inventory-to-sales gap (Metzler cycle): overhangs trigger destocking, shortfalls restocking. Grocery and distributor stock levels only modestly gate replenishment volumes. */
     public const INVENTORY_CYCLE_SENSITIVITY = 0.30;
@@ -76,14 +90,8 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     public const LAND_SPECULATION_VOL_SCALAR = 0.50;
 
     // --- Cost-Push Inflation & COGS Squeeze ---
-    /** Variable margin cost penalty scalar for agricultural inflation (Producer Price Index proxy). */
-    public const AGRI_INFLATION_COST_SCALAR = 0.015;
-    /** Sensitivity of wholesale input costs to Producer Price Inflation (PPI). */
-    public const PPI_COST_SENSITIVITY = 0.30;
     /** Idiosyncratic agricultural harvest shock sensitivity scalar on variable costs. */
     public const AGRI_HARVEST_SHOCK_SCALAR = 0.010;
-    /** Variable margin cost penalty scalar for energy-driven logistics, freight, and packaging costs. */
-    public const PACKAGING_ENERGY_COST_SCALAR = 0.12;
 
     // --- Weaponized Proof Desk & Commodity Arbitrage Physics ---
     /** Revenue expansion scalar on commodity trading desk when global inflation accelerates. */
@@ -158,6 +166,14 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         return (($brandedWeight * self::BRANDED_NWC_INTENSITY) + ($volumeWeight * self::VOLUME_NWC_INTENSITY)) / $totalWeight;
     }
 
+    /** Shelf prices track expected inflation at 1 - effective price elasticity: brand equity lowers the elasticity. */
+    protected function resolvePricingElasticity(Stock $stock): float
+    {
+        $effectivePed = self::BASELINE_PRICE_ELASTICITY_OF_DEMAND * (1.5 - $this->resolvePricingPower($stock));
+
+        return max(0.0, 1.0 - $effectivePed);
+    }
+
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         $params = $this->resolveModelParameters($stock, [
@@ -168,12 +184,13 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         // Modulate elasticity by pricing power: strong brand equity lowers PED further
         $effectivePed = self::BASELINE_PRICE_ELASTICITY_OF_DEMAND * (1.5 - $pricingPower);
 
-        $beta = abs((float) $stock->getBeta());
+        $beta = $this->getOperatingCyclicality($stock);
         $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
 
+        // Inelastic demand lets the shelf price track expected inflation at 1 - PED, reached over the repricing lag.
         return [
             'macro_demand_shift'       => ($macroState->outputGapEma * $beta * $effectivePed) - ($fxShift * 0.05),
-            'pricing_power_multiplier' => 1.0 + ($macroState->tipsBreakevenEma * (1.0 - $effectivePed)),
+            ...$this->resolvePricingMultipliers($stock, $macroState),
         ];
     }
 
@@ -199,7 +216,7 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         $rawLandWeight      = $params[ModelParam::LandSpeculationWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         $targetWeights = [
             'branded' => $params[ModelParam::BrandedStaplesWeight],
@@ -271,27 +288,11 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // --- Cost-Push Inflation & COGS Squeeze ---
-        $ppiCostDrag = MathUtility::calculatePpiCostDrag(
-            $macroState->producerPriceInflationEma,
-            MacroEngine::TARGET_INFLATION,
-            $pricingPower,
-            self::PPI_COST_SENSITIVITY
-        );
-        $inflationExcess = max(0.0, $macroState->inflationEma - MacroEngine::TARGET_INFLATION);
-        $agriShift = max(0.0, ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0);
-        $agriculturalCostSqueeze = ($inflationExcess * self::AGRI_INFLATION_COST_SCALAR * $volumeWeight)
-            + ($agriShift * 0.15 * $volumeWeight)
-            + ($ppiCostDrag * $volumeWeight)
-            - ($volumeZ * self::AGRI_HARVEST_SHOCK_SCALAR * $volumeWeight);
-
-        // Supply Chain, Freight & Packaging Penalty (Energy & Freight Price Indices)
-        $energyShift = max(0.0, $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION);
-        $freightShift = max(0.0, ($macroState->freightRateIndexEma - 100.0) / 100.0);
-        $beta = abs((float) $stock->getBeta());
-        $rawLogisticsPenalty = ($energyShift * $beta * self::PACKAGING_ENERGY_COST_SCALAR) + ($freightShift * $beta * 0.05);
-
-        // Physical inventory hoarding buffers input costs and mitigates packaging bottlenecks
-        $logisticsPenalty = $rawLogisticsPenalty * (1.0 - min(self::MAX_COMMODITY_HEDGE_MITIGATION, $commodityWeight * self::COMMODITY_HEDGE_MULTIPLIER));
+        // Farm commodities, packaging and freight, plant energy and line payroll reach COGS at spot and are
+        // recovered on the shelf with the repricing lag. A firm running its own commodity desk hedges part of it.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
+        $agriculturalCostSqueeze = -($volumeZ * self::AGRI_HARVEST_SHOCK_SCALAR * $volumeWeight);
+        $logisticsPenalty = $inputCostDrag * (1.0 - min(self::MAX_COMMODITY_HEDGE_MITIGATION, $commodityWeight * self::COMMODITY_HEDGE_MULTIPLIER));
 
         $rawMargin = $realizedVariableMargin + $recallCostPenalty + $agriculturalCostSqueeze + $logisticsPenalty;
         $clampedMargin = $this->clampMargin($rawMargin);
@@ -345,6 +346,7 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
             'output_gap_ema',
             'producer_price_inflation_ema',
             'tips_breakeven_ema',
+            'wage_growth_ema',
         ];
     }
 }

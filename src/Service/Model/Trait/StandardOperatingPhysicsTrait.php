@@ -9,6 +9,7 @@ use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
+use App\DTO\StreamContext;
 use App\Entity\Stock;
 use App\Service\Math\MathUtility;
 use App\Service\Math\FinancialConstants;
@@ -88,6 +89,157 @@ trait StandardOperatingPhysicsTrait
     public function getCreditLossHorizonYears(): float
     {
         return 1.0;
+    }
+
+    // --- Input Cost Basket ---
+    /** Share of an input price shock a firm with full pricing power recovers in its own prices; the rest lands on margin (incomplete pass-through, Gopinath & Itskhoki 2010). */
+    public const MAX_INPUT_COST_PASS_THROUGH = 0.80;
+    /** Persisted state key: lagged relative input cost level of the basket (fraction above baseline). */
+    public const STATE_INPUT_COST_LEVEL = 'state:input_cost_level';
+    /** Persisted state key: lagged share of the input cost level already recovered in selling prices. */
+    public const STATE_INPUT_COST_RECOVERY = 'state:input_cost_recovery';
+    /** Bound on the signed cost-ratio drag the basket may produce in one quarter. */
+    public const MAX_INPUT_COST_DRAG = 0.50;
+
+    /**
+     * Shares of the VARIABLE cost base bought in each tracked input market. Channels: energy, metals, agri,
+     * freight, ppi (wholesale intermediate goods) and labor (variable payroll). Shares need not sum to one;
+     * the remainder is bought at prices no macro index tracks. Sector models declare INPUT_COST_EXPOSURES.
+     *
+     * @return array<string, float>
+     */
+    public function getInputCostExposures(): array
+    {
+        return defined('static::INPUT_COST_EXPOSURES')
+            ? (array) static::INPUT_COST_EXPOSURES
+            : FinancialConstants::DEFAULT_INPUT_COST_EXPOSURES;
+    }
+
+    /** Years for spot input moves to reach the cost base (0 = spot buyer; forward hedges and supply contracts lengthen it). */
+    public function getInputCostLagYears(): float
+    {
+        return defined('static::INPUT_COST_LAG_YEARS') ? (float) static::INPUT_COST_LAG_YEARS : 0.0;
+    }
+
+    /** Years for the recoverable part of an input move to reach selling prices (menu costs, contract repricing, fuel surcharges). */
+    public function getInputPassThroughLagYears(): float
+    {
+        return defined('static::INPUT_PASS_THROUGH_LAG_YEARS')
+            ? (float) static::INPUT_PASS_THROUGH_LAG_YEARS
+            : FinancialConstants::DEFAULT_INPUT_PASS_THROUGH_LAG_YEARS;
+    }
+
+    /**
+     * Signed relative price deviation of each tracked input market from its baseline this quarter.
+     *
+     * @return array<string, float>
+     */
+    public function resolveInputPriceDeviations(MacroStateDTO $macroState): array
+    {
+        return [
+            'energy'  => $macroState->energyCostPushLag / \App\Service\Macro\MacroEngine::ENERGY_COST_PUSH_TRANSMISSION,
+            'metals'  => ($macroState->industrialMetalsIndexEma - 100.0) / 100.0,
+            'agri'    => ($macroState->agriculturalCommodityIndexEma - 100.0) / 100.0,
+            'freight' => ($macroState->freightRateIndexEma - 100.0) / 100.0,
+            'ppi'     => $macroState->producerPriceInflationEma - \App\Service\Macro\MacroEngine::TARGET_INFLATION,
+            'labor'   => $macroState->wageGrowthEma - (\App\Service\Macro\MacroEngine::TFP_DRIFT + \App\Service\Macro\MacroEngine::TARGET_INFLATION),
+        ];
+    }
+
+    /** Exposure-weighted relative input cost deviation of the basket (signed, fraction of the variable cost base). */
+    public function resolveInputCostDeviation(MacroStateDTO $macroState): float
+    {
+        $deviations = $this->resolveInputPriceDeviations($macroState);
+        $weighted = 0.0;
+        foreach ($this->getInputCostExposures() as $channel => $share) {
+            $weighted += max(0.0, (float) $share) * ($deviations[$channel] ?? 0.0);
+        }
+
+        return $weighted;
+    }
+
+    /**
+     * Signed change in the variable cost RATIO from input price moves, net of the share the firm recovers in
+     * its own prices.
+     *
+     * Costs follow the input markets with the buying lag (spot buyers feel a diesel spike this quarter, a
+     * hedged airline next year); recovery follows with the repricing lag (fuel surcharges, menu prices,
+     * contract escalators), scaled by pricing power. The steady-state drag on a permanent shift is
+     * margin x deviation x (1 - recovered share); in transition costs lead prices, which is where the
+     * squeeze on the way up and the windfall on the way down both come from. Both lag states persist in
+     * the stream map so the firm carries its own cost history.
+     */
+    protected function resolveInputCostDrag(Stock $stock, MacroStateDTO $macroState, StreamContext $streams, float $pricingPower, float $realizedVariableMargin): float
+    {
+        $deviation = $this->resolveInputCostDeviation($macroState);
+        $dt = \App\Service\Corporate\EarningsEngine::QUARTERLY_TIME_STEP;
+        $math = MathUtility::getInstance();
+
+        // A firm with no cost history starts at baseline prices, so a shock already in the market reaches it
+        // through the lags like any other.
+        $costLevel = $math->calculateDistributedLag(
+            currentLaggedValue: $streams->getPersistedState(self::STATE_INPUT_COST_LEVEL, 0.0),
+            targetValue: $deviation,
+            dt: $dt,
+            lagTimeConstant: $this->getInputCostLagYears()
+        );
+        $recoveredShare = max(0.0, min(1.0, $pricingPower)) * self::MAX_INPUT_COST_PASS_THROUGH;
+        $recovery = $math->calculateDistributedLag(
+            currentLaggedValue: $streams->getPersistedState(self::STATE_INPUT_COST_RECOVERY, 0.0),
+            targetValue: $costLevel * $recoveredShare,
+            dt: $dt,
+            lagTimeConstant: $this->getInputPassThroughLagYears()
+        );
+
+        $streams->registerState(self::STATE_INPUT_COST_LEVEL, $costLevel);
+        $streams->registerState(self::STATE_INPUT_COST_RECOVERY, $recovery);
+
+        $drag = max(0.01, $realizedVariableMargin) * ($costLevel - $recovery);
+
+        return max(-self::MAX_INPUT_COST_DRAG, min(self::MAX_INPUT_COST_DRAG, $drag));
+    }
+
+    /**
+     * The expected-inflation measure selling prices track, chosen by the model's PRICING_INFLATION_BASIS
+     * constant (goods breakevens by default, core services inflation for services models).
+     */
+    public function resolveExpectedInflationBasis(MacroStateDTO $macroState): float
+    {
+        $basis = defined('static::PRICING_INFLATION_BASIS') ? (string) static::PRICING_INFLATION_BASIS : 'tips_breakeven_ema';
+
+        return match ($basis) {
+            'supercore_inflation_ema' => $macroState->supercoreInflationEma,
+            'inflation_ema'           => $macroState->inflationEma,
+            default                   => $macroState->tipsBreakevenEma,
+        };
+    }
+
+    /** Pricing power index for this stock: ticker override, then the sector's PRICING_POWER_INDEX, then the median 0.5. */
+    protected function resolvePricingPower(Stock $stock): float
+    {
+        $default = defined('static::PRICING_POWER_INDEX') ? (float) static::PRICING_POWER_INDEX : 0.5;
+        $params = $this->resolveModelParameters($stock, [ModelParam::PricingPowerIndex->value => $default]);
+
+        return max(0.0, min(1.0, (float) $params[ModelParam::PricingPowerIndex]));
+    }
+
+    /**
+     * Own-price elasticity of demand: the volume lost per unit of REAL price increase (price growth above
+     * expected inflation). Applied by the engine to the pricing-power multiplier so a price setter's hikes
+     * cost it some volume and a lagging price taker's discounts win some.
+     */
+    public function getPriceElasticityOfDemand(): float
+    {
+        return defined('static::PRICE_ELASTICITY_OF_DEMAND')
+            ? (float) static::PRICE_ELASTICITY_OF_DEMAND
+            : FinancialConstants::DEFAULT_PRICE_ELASTICITY_OF_DEMAND;
+    }
+
+    public function getIndustrySubstitutability(): float
+    {
+        return defined('static::INDUSTRY_SUBSTITUTABILITY')
+            ? (float) static::INDUSTRY_SUBSTITUTABILITY
+            : FinancialConstants::DEFAULT_INDUSTRY_SUBSTITUTABILITY;
     }
 
     /**
@@ -226,7 +378,10 @@ trait StandardOperatingPhysicsTrait
         $physics = $this->calculateSectorPhysics($stock, $expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol, $macroState, $mathUtility);
 
         $clampedMargin = $this->clampMargin($physics->rawVariableMargin);
-        $actualVariableCosts = $physics->actualRevenue * $clampedMargin;
+        // Price is not produced: a rent escalator or a spot-rate spike on a fixed fleet adds revenue without
+        // adding a unit of cost, so the variable cost ratio applies to the volume part of revenue only.
+        $priceRevenue = max(0.0, min($physics->actualRevenue, $physics->priceRevenue));
+        $actualVariableCosts = ($physics->actualRevenue - $priceRevenue) * $clampedMargin;
         $ebit = $physics->actualRevenue - $fixedCosts - $actualVariableCosts;
 
         return new ActualFinancialsDTO(
@@ -245,6 +400,7 @@ trait StandardOperatingPhysicsTrait
             kpis: $physics->kpis,
             creditLossProvision: $physics->creditLossProvision,
             netChargeOffs: $physics->netChargeOffs,
+            priceRevenue: $priceRevenue,
         );
     }
 

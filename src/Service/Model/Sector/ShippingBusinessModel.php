@@ -25,6 +25,22 @@ use App\Service\Macro\MacroEngine;
  */
 class ShippingBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Global trade volume times a fixed fleet; the freight market is worldwide. */
+    public const OPERATING_CYCLICALITY = 1.60;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.30;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.30;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['energy' => 0.35, 'labor' => 0.15, 'ppi' => 0.05];
+    /** Bunker adjustment factors on contracts reprice within a quarter; spot voyages carry the fuel themselves. */
+    public const INPUT_PASS_THROUGH_LAG_YEARS = 0.25;
+    /** Half the book is contracted with bunker clauses, half is spot: bunker moves are half recovered. */
+    public const PRICING_POWER_INDEX = 0.50;
+
     // --- Balance Sheet Realism ---
     /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Chartered-in vessels are leases in all but name. */
     public const LEASE_LIABILITY_INTENSITY = 0.35;
@@ -62,8 +78,6 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     // --- Hyper-Cyclical Spot Rate Physics ---
     /** Macroeconomic demand shift sensitivity to global trade output gaps. */
     public const MACRO_DEMAND_SCALAR       = 1.80;
-    /** Minimum beta floor applied when calculating inflation pricing power. */
-    public const MIN_PRICING_BETA_FLOOR    = 0.50;
     /** Volatility multiplier for top-line revenue shocks driven by maritime freight spot rates. */
     public const REVENUE_VARIANCE_SCALAR   = 0.25;
     /** Positive output gap threshold triggering exponential spot rate boom multipliers. */
@@ -83,9 +97,6 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     /** Spot freight rate surge multiplier per unit of NY Fed global supply chain pressure. */
     public const GSCPI_FREIGHT_BOOST_SCALAR = 0.10;
 
-    // --- Fuel & Bunker Inflation Rails ---
-    /** Variable cost penalty multiplier scaling bunker fuel inflation with stock beta. */
-    public const BUNKER_INFLATION_SCALAR   = 0.80;
     /** Upper clamp for realized variable margin. */
     public const MAX_VARIABLE_MARGIN_CLAMP = 1.50;
     /** Lower clamp for realized variable margin. */
@@ -131,15 +142,14 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $outputGap = $macroState->outputGapEma;
-        $inflation = $macroState->tipsBreakevenEma;
         $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
         $tradeShift = MathUtility::calculateTradeBalanceShift($macroState->tradeBalanceToGdpEma, sensitivity: self::TRADE_BALANCE_SENSITIVITY);
-        $beta = (float) $stock->getBeta();
+        $beta = $this->getOperatingCyclicality($stock);
 
         // Extreme sensitivity to global economic momentum and trade volume
         return [
             'macro_demand_shift' => ($outputGap * $beta * self::MACRO_DEMAND_SCALAR) - ($fxShift * 0.10) + $tradeShift,
-            'pricing_power_multiplier' => 1.0 + ($inflation * max(self::MIN_PRICING_BETA_FLOOR, $beta)),
+            ...$this->resolvePricingMultipliers($stock, $macroState),
         ];
     }
 
@@ -154,7 +164,7 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         $contractWeight = $params[ModelParam::ContractCharterWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -200,6 +210,8 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         }
 
         $spotRevenue     = max(0.0, $expectedRevenue * $spotWeight * (1.0 + ($spotZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) + $spotRateMultiplier));
+        // Spot freight rates reprice a fixed fleet's voyages: the rate cycle is price, the ships sail either way.
+        $priceRevenue    = $expectedRevenue * $spotWeight * $spotRateMultiplier;
         // Time charters are fixed into a multi-quarter contract backlog and recognized as voyages complete.
         $contractBook = $streams->recognizeBacklog('contract', $expectedRevenue * $contractWeight, max(0.0, 1.0 + ($contractZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)) - ($fxShift * 0.10)), self::CONTRACT_BACKLOG_BURN_RATE);
         $contractRevenue = $contractBook['revenue'];
@@ -212,15 +224,9 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
         $actualRevenue = max(0.0, array_sum($streamRevenues));
         $streams->recordStreamShares($streamRevenues);
 
-        // Fuel and Bunker Cost Inflation / Deflation:
-        // Shipping is directly exposed to crude oil and commodity inflation, capturing savings during deflationary/falling fuel regimes.
-        $inflation = $macroState->inflationEma;
-        $energyShift = $macroState->energyCostPushLag / MacroEngine::ENERGY_COST_PUSH_TRANSMISSION;
-
-        $bunkerInflationAdjustment = max(
-            -0.05,
-            min(0.15, (($inflation - MacroEngine::TARGET_INFLATION) + ($energyShift * 0.20)) * abs((float) $stock->getBeta()) * self::BUNKER_INFLATION_SCALAR)
-        );
+        // Fuel and Bunker Cost Inflation / Deflation: bunker is bought at spot and only the contracted half of
+        // the book carries a bunker adjustment factor, so a crude spike squeezes and a crude slump pays a dividend.
+        $bunkerInflationAdjustment = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
 
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $bunkerInflationAdjustment);
 
@@ -242,6 +248,7 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
                     kpis: ['contract_book_to_bill' => $contractBook['book_to_bill'], 'contract_backlog_quarters' => $contractBook['backlog_quarters']],
+            priceRevenue: $priceRevenue,
         );
     }
 
@@ -289,11 +296,12 @@ class ShippingBusinessModel extends StandardCorporateBusinessModel
             'exchange_rate_index_ema',
             'freight_rate_index_ema',
             'industrial_metals_index_ema',
-            'inflation_ema',
             'output_gap_ema',
+            'producer_price_inflation_ema',
             'supply_chain_pressure_index_ema',
             'tips_breakeven_ema',
             'trade_balance_to_gdp_ema',
+            'wage_growth_ema',
         ];
     }
 }

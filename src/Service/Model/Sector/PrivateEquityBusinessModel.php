@@ -25,6 +25,10 @@ use App\Service\Macro\MacroEngine;
  */
 class PrivateEquityBusinessModel extends AssetManagementBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Exit windows and LBO financing open and shut with the cycle. */
+    public const OPERATING_CYCLICALITY = 1.40;
+
     // --- Balance Sheet Realism ---
     /** Stock-based compensation as a fraction of revenue (ASC 718): non-cash, added back to FCF, settled in new shares. Deal team deferrals settle in manager equity. */
     public const STOCK_COMPENSATION_INTENSITY = 0.05;
@@ -271,7 +275,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $rawPrincipalWeight = $params[ModelParam::PrincipalInvestmentsWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams  = $this->createStreamContext($momentum, $mathUtility);
+        $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         $targetWeights = [
             'management_fees'  => $params[ModelParam::ManagementFeeWeight],

@@ -29,6 +29,20 @@ use App\Service\Math\MathUtility;
  */
 class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Appropriations, not GDP, set volume; sole-source programs rarely switch. */
+    public const OPERATING_CYCLICALITY = 0.50;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.10;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.30;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['metals' => 0.10, 'ppi' => 0.20, 'labor' => 0.35, 'energy' => 0.03];
+    /** Cost-plus and FMS contracts reprice through FAR escalators within the year; fixed-price EMD never does. */
+    public const INPUT_PASS_THROUGH_LAG_YEARS = 0.75;
+
     /**
      * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: federal fiscal year-end obligation flush in September, continuing resolutions in Q4.
      *
@@ -90,8 +104,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     public const PROGRAM_OVERRUN_EXIT_HAZARD = 0.17;
     /** Ongoing quarterly reach-forward charge while the fixed-price program remains in overrun. */
     public const FORWARD_LOSS_ONGOING_PENALTY = 0.03;
-    /** Sensitivity scalar translating excess macroeconomic inflation into fixed-price engineering overruns. */
-    public const FIXED_PRICE_INFLATION_DRAG_SCALAR = 0.50;
     /** Margin efficiency elasticity (Wright's Law) applied to mature FMS production volume scale. */
     public const PRODUCTION_LEARNING_CURVE_ELASTICITY = 0.020;
 
@@ -193,7 +205,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         ]);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = $this->createStreamContext($momentum, $mathUtility);
+        $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -224,12 +236,6 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $creditSpread = $macroState->macroCreditSpreadEma;
         $crDrag = $creditSpread > self::SOVEREIGN_STRESS_THRESHOLD
             ? ($creditSpread - self::SOVEREIGN_STRESS_THRESHOLD) * self::CR_BUDGET_DRAG_SCALAR
-            : 0.0;
-
-        // Excess inflation aggressively squeezes margins on fixed-price EMD contracts
-        $excessInflation = max(0.0, $inflation - MacroEngine::TARGET_INFLATION);
-        $fixedPriceInflationDrag = $excessInflation > 0.0
-            ? $excessInflation * self::FIXED_PRICE_INFLATION_DRAG_SCALAR
             : 0.0;
 
         // --- Program Execution, Forward Losses & Tail Shocks ---
@@ -277,8 +283,9 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
 
         // --- Clamped Revenue Streams ---
         $fxShift = ($macroState->exchangeRateIndexEma - 100.0) / 100.0;
-        $metalsShift = ($macroState->industrialMetalsIndexEma - 100.0) / 100.0;
-        $metalsCostDrag = max(0.0, $metalsShift) * 0.05 * $fixedPriceWeight;
+        // Input cost basket: titanium and specialty metals, electronics, engineering payroll. Cost-plus and FMS
+        // work recovers the move through escalators; the fixed-price development share eats it.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, 1.0 - $fixedPriceWeight, $realizedVariableMargin);
 
         // Contract awards fund a multi-year backlog; revenue is recognized on percentage of completion, so
         // appropriations, continuing resolutions and export bans hit ORDERS in full and revenue gradually.
@@ -310,10 +317,9 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $rawMargin = $realizedVariableMargin
             + $learningCurveShift
             + ($forwardLossPenalty * $fixedPriceWeight)
-            + ($fixedPriceInflationDrag * $fixedPriceWeight)
             + ($flagshipPenalty * $costPlusWeight)
             + ($wartimeSupplyDrag * $fmsWeight)
-            + $metalsCostDrag;
+            + $inputCostDrag;
 
         $clampedMargin = $this->clampMargin($rawMargin);
 
@@ -361,11 +367,14 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
     public function getOperatingMacroFields(): array
     {
         return [
+            'energy_cost_push_lag',
             'exchange_rate_index_ema',
             'government_spending_index_ema',
             'industrial_metals_index_ema',
             'inflation_ema',
             'macro_credit_spread_ema',
+            'producer_price_inflation_ema',
+            'wage_growth_ema',
         ];
     }
 }

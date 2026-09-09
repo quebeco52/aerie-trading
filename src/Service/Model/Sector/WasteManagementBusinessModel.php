@@ -28,6 +28,24 @@ use App\Service\Macro\MacroEngine;
  */
 class WasteManagementBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Residential collection is contracted; commercial roll-offs follow construction. */
+    public const OPERATING_CYCLICALITY = 0.60;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.30;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.50;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['energy' => 0.15, 'labor' => 0.35, 'ppi' => 0.05];
+    /** Municipal contracts carry CPI escalators: pricing tracks most of expected inflation. */
+    public const PRICING_ELASTICITY = 0.85;
+    /** Fuel surcharges reprice within a quarter or two. */
+    public const INPUT_PASS_THROUGH_LAG_YEARS = 0.25;
+    /** Landfill permitting oligopolies dictate price; diesel and crew wages are largely surcharged through. */
+    public const PRICING_POWER_INDEX = 0.70;
+
     /**
      * Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0: spring and summer construction and yard volumes.
      *
@@ -80,8 +98,6 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
     // --- Margin Squeeze & Inflation Physics ---
     /** Fraction of excess CPI inflation automatically captured by contract escalators. */
     public const CPI_ESCALATOR_CAPTURE = 0.85;
-    /** Margin penalty applied when energy prices spike faster than fuel surcharges can adjust. */
-    public const FUEL_SURCHARGE_LAG_PENALTY = 0.08;
 
     // --- Housing & Construction Waste Transmission ---
     /** Sensitivity of commercial roll-off construction and demolition (C&D) waste volume to housing starts. */
@@ -107,8 +123,6 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         // are handled discretely per-stream (Commercial vs. Residential) below.
         $physics['macro_demand_shift'] = 0.0;
 
-        // Massive pricing power: Waste management companies dictate prices to municipalities.
-        $physics['pricing_power_multiplier'] = 1.0 + ($macroState->tipsBreakevenEma * 0.85);
 
         return $physics;
     }
@@ -126,8 +140,8 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         $recyclingWeight   = $params[ModelParam::RecyclingWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = $this->createStreamContext($momentum, $mathUtility);
-        $beta = abs((float) $stock->getBeta());
+        $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
+        $beta = $this->getOperatingCyclicality($stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -168,6 +182,8 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
 
         // --- Clamped Tri-Stream Revenue Calculation ---
         $residentialRevenue = max(0.0, $expectedRevenue * $residentialWeight * (1.0 + ($residentialZ * $baselineVol * self::RESIDENTIAL_VARIANCE_SCALAR) + $cpiEscalatorBoost));
+        // Municipal CPI escalators reprice the same collection routes: pure price revenue.
+        $priceRevenue       = max(0.0, $expectedRevenue * $residentialWeight * $cpiEscalatorBoost);
         $commercialRevenue  = max(0.0, $expectedRevenue * $commercialWeight  * (1.0 + ($commercialZ * $baselineVol * self::COMMERCIAL_VARIANCE_SCALAR) + $macroBoost));
         $recyclingRevenue   = max(0.0, $expectedRevenue * $recyclingWeight   * (1.0 + ($recyclingZ * $baselineVol * self::RECYCLING_VARIANCE_SCALAR) + $recyclingCommodityBoost));
 
@@ -181,12 +197,12 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         $streams->recordStreamShares($streamRevenues);
 
         // --- Cost & Margin Physics ---
-        // Fuel Surcharge Lag: Waste trucks guzzle diesel. If energy prices spike suddenly (> 0), 
-        // there is a 30-90 day lag before fuel surcharges pass the cost to the customer.
-        $fuelLagDrag = $energyShift > 0.0 ? ($energyShift * self::FUEL_SURCHARGE_LAG_PENALTY * $beta) : 0.0;
+        // Fuel Surcharge Lag: diesel and crew wages reach the cost base at spot and are surcharged through
+        // to customers with a lag, so a spike squeezes margin for a quarter or two and a collapse pays a dividend.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
 
         // Apply structurally driven penalties directly to the baseline variable margin
-        $rawMargin = $realizedVariableMargin + $fuelLagDrag + $disasterPenalty;
+        $rawMargin = $realizedVariableMargin + $inputCostDrag + $disasterPenalty;
         $clampedMargin = $this->clampMargin($rawMargin);
 
         // Primary shock is whichever stream deviated the most, overridden by tail events
@@ -207,6 +223,7 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
+            priceRevenue: $priceRevenue,
         );
     }
 
@@ -237,7 +254,9 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
             'industrial_metals_index_ema',
             'inflation_ema',
             'output_gap_ema',
+            'producer_price_inflation_ema',
             'tips_breakeven_ema',
+            'wage_growth_ema',
         ];
     }
 }

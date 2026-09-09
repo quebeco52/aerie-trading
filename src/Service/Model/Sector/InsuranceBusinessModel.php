@@ -26,6 +26,10 @@ use App\Service\Math\FinancialConstants;
  */
 class InsuranceBusinessModel extends BaseFinancialBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Premium volume is sticky through the cycle. */
+    public const OPERATING_CYCLICALITY = 0.70;
+
     // --- Labor Intensity ---
     /** Labor share of the fixed cost base exposed to the Beveridge wage squeeze. Underwriting, claims and distribution payroll is roughly half of an insurer's overhead. */
     public const FIXED_COST_LABOR_SHARE = 0.50;
@@ -272,7 +276,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $outputGap = $macroState->outputGapEma;
-        $beta = (float) $stock->getBeta();
+        $beta = $this->getOperatingCyclicality($stock);
 
         $policyRate = $macroState->policyRateEma;
         $softMarketRateDiscount = max(0.0, ($policyRate - self::DEFAULT_POLICY_RATE_FALLBACK) * self::SOFT_MARKET_CYCLE_BETA);
@@ -310,17 +314,11 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         // 1. Premium Revenue Shock
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = $this->createStreamContext($momentum, $mathUtility);
+        $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // Independent stream Z-scores with AR(1) persistence (supporting subclass key aliases)
-        $prevRevenueZ = $momentum['revenue'] ?? $momentum['reinsurance_premiums'] ?? $momentum['property_casualty_premiums'] ?? 0.0;
-        $prevClaimZ   = $momentum['claim'] ?? $momentum['catastrophe_bonds'] ?? $momentum['life_insurance_premiums'] ?? 0.0;
-
-        $revenueZ = $mathUtility->generatePersistentZ($prevRevenueZ, 0.25);
-        $claimZ   = $mathUtility->generatePersistentZ($prevClaimZ, 0.05); // Claims are near i.i.d. random
-
-        $streams->registerZ('revenue', $revenueZ);
-        $streams->registerZ('claim', $claimZ);
+        // Premium volume loads on the firm and sector demand factors; claims are exogenous and near i.i.d.
+        $revenueZ = $streams->generateZ('revenue', 0.25);
+        $claimZ   = $streams->generateExogenousZ('claim', 0.05);
 
         $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));
 
@@ -670,7 +668,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         
         // Capacity should only boost positive market capture. It should not accelerate shrinkage during recessions.
         $effectiveSystemicGrowth = $systemicGrowthQuarterly > 0.0 ? $systemicGrowthQuarterly * $capacityMultiplier : $systemicGrowthQuarterly;
-        $baseGrowth = $effectiveSystemicGrowth * max(self::MIN_BETA_GROWTH_CLAMP, min(self::MAX_BETA_GROWTH_CLAMP, abs((float) $stock->getBeta())));
+        $baseGrowth = $effectiveSystemicGrowth * max(self::MIN_BETA_GROWTH_CLAMP, min(self::MAX_BETA_GROWTH_CLAMP, $this->getOperatingCyclicality($stock)));
         
         $effectiveNoise = ($mathUtility->generateStandardNormal() * self::FLOAT_GROWTH_NOISE_STD) * min(1.0, $capacityMultiplier);
         $liabilityChange = $currentLiabilities * max(self::MIN_FLOAT_CHANGE_CLAMP, min(self::MAX_FLOAT_CHANGE_CLAMP, $baseGrowth + $effectiveNoise));

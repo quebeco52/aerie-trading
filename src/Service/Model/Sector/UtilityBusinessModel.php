@@ -26,6 +26,26 @@ use App\Service\Macro\MacroEngine;
  */
 class UtilityBusinessModel extends StandardCorporateBusinessModel
 {
+    // --- Operating Cyclicality & Demand Structure ---
+    /** Elasticity of volumes and costs to the macro cycle (1.0 = one for one with the output gap). Essential service under regulated monopoly: no peer to take share from. */
+    public const OPERATING_CYCLICALITY = 0.30;
+    /** Own-price elasticity of demand: volume lost per unit of real price increase. */
+    public const PRICE_ELASTICITY_OF_DEMAND = 0.10;
+    /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */
+    public const INDUSTRY_SUBSTITUTABILITY = 0.00;
+
+    // --- Input Cost Basket ---
+    /** Shares of the variable cost base bought in tracked input markets (energy, metals, agri, freight, wholesale goods, variable payroll). */
+    public const INPUT_COST_EXPOSURES = ['energy' => 0.40, 'labor' => 0.15, 'ppi' => 0.05];
+    /** Fuel adjustment clauses and rate cases eventually recover costs in full: unit elasticity, but only after the regulatory lag. */
+    public const PRICING_ELASTICITY = 1.00;
+    /** Rate cases take 12 to 24 months: authorized tariffs follow costs with a long lag. */
+    public const PRICE_PASS_THROUGH_LAG_YEARS = 1.50;
+    /** Fuel and purchased-power costs are recoverable under fuel adjustment clauses, so pricing power on the basket is high. */
+    public const PRICING_POWER_INDEX = 0.90;
+    /** Fuel adjustment clauses true up quarterly to annually. */
+    public const INPUT_PASS_THROUGH_LAG_YEARS = 0.75;
+
     // --- Balance Sheet Realism ---
     /** Capitalized operating lease liabilities as a fraction of annual revenue (IFRS 16 / ASC 842). Rate-base assets are owned; leases are immaterial. */
     public const LEASE_LIABILITY_INTENSITY = 0.03;
@@ -70,12 +90,6 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
     // --- Regulatory Lag & Macro Physics ---
     /** Macroeconomic demand shift sensitivity to output gap (industrial power usage). */
     public const MACRO_DEMAND_SCALAR       = 0.15;
-    /** Pricing power multiplier applied to inflation reflecting delayed rate hike approvals. */
-    public const PRICING_POWER_LAG_SCALAR  = 0.25;
-    /** Inflation buffer above target inflation before regulatory lag penalties begin compressing margins. */
-    public const REGULATORY_LAG_BUFFER     = 0.01;
-    /** Variable margin penalty multiplier applied to inflation exceeding the lag threshold. */
-    public const REGULATORY_LAG_PENALTY    = 0.80;
 
     // --- Revenue & Shock Physics ---
     /** Volatility multiplier for weather-driven regulated volume (heatwaves/polar vortex). */
@@ -122,12 +136,10 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         // Regulated Utilities are virtually immune to economic output gaps (essential service).
         // Only industrial/commercial power load fluctuates slightly with GDP.
         $outputGap = $macroState->outputGapEma;
-        $beta = (float) $stock->getBeta();
+        $beta = $this->getOperatingCyclicality($stock);
         $physics['macro_demand_shift'] = $outputGap * $beta * self::MACRO_DEMAND_SCALAR;
 
-        // Regulatory Lag: Utilities do get rate hikes to cover inflation, but they lag by 12-24 months.
-        $inflation = $macroState->tipsBreakevenEma;
-        $physics['pricing_power_multiplier'] = 1.0 + ($inflation * self::PRICING_POWER_LAG_SCALAR);
+        // Regulatory lag: authorized tariffs follow costs in full, but only after the rate-case cycle (see PRICE_PASS_THROUGH_LAG_YEARS).
 
         return $physics;
     }
@@ -143,7 +155,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $unregulatedWeight = $params[ModelParam::UnregulatedMerchantWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $streams = $this->createStreamContext($momentum, $mathUtility);
+        $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         $activeWeights = $streams->resolveActiveStreamWeights([
@@ -192,13 +204,9 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         $scheduledCapex = $liabilityElapsed > 0 ? $expectedRevenue * 4.0 * self::GRID_HARDENING_CAPEX_RATIO : 0.0;
 
         // --- Regulatory Lag & Input Costs ---
-        $inflation = $macroState->inflationEma;
-        $lagThreshold = MacroEngine::TARGET_INFLATION + self::REGULATORY_LAG_BUFFER;
-
-        // Squeeze margin if CPI stays persistently above target + buffer
-        $regulatoryLagPenalty = $inflation > $lagThreshold
-            ? (($inflation - $lagThreshold) * self::REGULATORY_LAG_PENALTY * $regulatedWeight)
-            : 0.0;
+        // Fuel, purchased power and crew payroll reach the cost base at spot; fuel adjustment clauses recover
+        // most of it, but only after the true-up lag. The gap between the two is the regulatory-lag squeeze.
+        $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
 
         // --- Merchant Spark Spread Crush ---
         // Unregulated merchant power relies on the "spark spread" (wholesale electricity price minus fuel input cost).
@@ -209,7 +217,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         // --- Margin Aggregation ---
         // Apply all structurally driven operating cost penalties to the baseline margin. The rate-base debt
         // load reaches earnings through DebtEngine's maturity wall (getDebtMaturityRolloverRate), below EBIT.
-        $clampedMargin = $this->clampMargin($realizedVariableMargin + $regulatoryLagPenalty + $sparkSpreadCrush + $disasterPenalty);
+        $clampedMargin = $this->clampMargin($realizedVariableMargin + $inputCostDrag + $sparkSpreadCrush + $disasterPenalty);
 
         // Primary shock is whichever stream deviated the most, overridden by tail events
         $primaryShockZ = $streams->resolveDominantShockZ([$unregulatedZ, $weatherZ], $eventZ);
@@ -266,9 +274,10 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         return [
             'energy_cost_push_lag',
             'exchange_rate_index_ema',
-            'inflation_ema',
             'output_gap_ema',
+            'producer_price_inflation_ema',
             'tips_breakeven_ema',
+            'wage_growth_ema',
         ];
     }
 }
