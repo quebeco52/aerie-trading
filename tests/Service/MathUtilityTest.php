@@ -1120,6 +1120,20 @@ class MathUtilityTest extends TestCase
         );
         $this->assertLessThan(100.0, $panicIndex, 'Market panic and credit freeze must collapse deal activity index.');
         $this->assertGreaterThanOrEqual(20.0, $panicIndex);
+
+        // The full cycle is bounded at ~2x either way: iterate each regime to its target with no noise.
+        $trough = 100.0;
+        $peak = 100.0;
+        for ($i = 0; $i < 40; $i++) {
+            $trough = $this->mathUtility->calculateCapitalMarketsDealIndexStep($trough, 0.070, 0.150, 0.60, 0.25, 0.0);
+            $peak = $this->mathUtility->calculateCapitalMarketsDealIndexStep($peak, 0.025, 0.020, 0.09, 0.25, 0.0);
+        }
+        $floor = MacroEngine::DEAL_ACTIVITY_BASELINE * exp(-MacroEngine::DEAL_ACTIVITY_LOG_RANGE);
+        $ceiling = MacroEngine::DEAL_ACTIVITY_BASELINE * exp(MacroEngine::DEAL_ACTIVITY_LOG_RANGE);
+        $this->assertEqualsWithDelta($floor, $trough, 0.5, 'A 2008-type freeze bottoms at the capped log range, not at the hard floor.');
+        $this->assertGreaterThan(140.0, $peak, 'A 2007/2021-type boom runs about 1.5x baseline.');
+        $this->assertLessThan($ceiling, $peak, 'and does not need the cap to stay within a recorded cycle.');
+        $this->assertLessThan(2.8, $peak / $trough, 'Peak-to-trough deal volume stays near the 2.2x of the widest recorded cycle.');
     }
 
     public function testCalculateDiffusionIndex(): void

@@ -245,7 +245,7 @@ class MacroEngine
     // --- Nelson-Siegel-Svensson Term Structure Dynamics (Svensson 1994) ---
     /** Baseline ten-year term premium (Adrian-Crump-Moench 2013: ~115bps average over 1990-2019). Scaled down by duration for shorter tenors; the two-year note carries under a third of it. */
     public const NS_BASE_TERM_PREMIUM = 0.0115;
-    /** Duration over which the term premium saturates: a two-year note carries under 30% of the ten-year premium, a thirty-year bond half again as much. */
+    /** Duration over which the term premium saturates: a two-year note carries under 30% of the ten-year premium. Past ten years only the structural regime keeps rising (a thirty-year bond carries half again as much of it); transitory shocks, the inflation risk premium and the cyclical terms land on the long end one-for-one with the ten-year, since the 10s30s spread is stable through a taper tantrum. */
     public const TERM_PREMIUM_DURATION_HORIZON_YEARS = 10.0;
     /** Weight on the central bank target in the ten-year inflation expectation that anchors the curve's long end. Well-anchored expectations (surveys barely move) are what let the policy rate swing against a steady long end and invert the curve; a level that tracked the current breakeven would follow the short end up and never invert. */
     public const LONG_RUN_INFLATION_ANCHOR_WEIGHT = 0.75;
@@ -285,8 +285,8 @@ class MacroEngine
     // --- Term Premium Dynamics (ACM 2013 persistence, Campbell-Pflueger-Viceira 2020 regimes) ---
     /** Mean reversion of transitory term premium shocks (half-life ~8 months): ACM show the premium is persistent but not permanent. */
     public const TERM_PREMIUM_SHOCK_KAPPA = 1.0;
-    /** Annual volatility of transitory term premium shocks: a stationary spread of ~55bps and ~35bps quarterly moves, so a taper tantrum is a two-sigma quarter. */
-    public const TERM_PREMIUM_SHOCK_SIGMA = 0.0090;
+    /** Annual volatility of transitory term premium shocks: a stationary spread of ~50bps and ~35bps quarterly moves (ACM 2013 quarterly changes run 30-35bps), so a taper tantrum is a two-sigma quarter. */
+    public const TERM_PREMIUM_SHOCK_SIGMA = 0.0070;
     /** Cap on the transitory shock (200bps either way), the largest ACM swing on record. */
     public const TERM_PREMIUM_SHOCK_CAP = 0.02;
     /** Mean reversion of the structural term premium regime (half-life ~8 years): eras such as the 1990s at 2% and the 2010s near zero, set by the bond-stock correlation. */
@@ -355,8 +355,8 @@ class MacroEngine
     public const INFLATION_DIFFUSION_SIGMA = 0.002;
 
     // --- Merton Structural Corporate Credit Spreads (Merton 1974) ---
-    /** IG spread widening per unit of interbank stress. In 2008 a +430 bps TED move coincided with +450 bps of IG OAS, so ~1.0 is the empirical ceiling. */
-    public const INTERBANK_CREDIT_CONTAGION_SENSITIVITY = 1.0;
+    /** IG spread widening per unit of interbank stress (~0.6). TED and IG share a common factor, and with the reverse coupling below the loop gain stays under 0.25 so calm markets do not self-excite. */
+    public const INTERBANK_CREDIT_CONTAGION_SENSITIVITY = 0.6;
     /** Through-the-cycle investment-grade spread (130 bps), the long-run median of IG OAS. */
     public const BASE_CREDIT_SPREAD = 0.013;
     /** Log-elasticity of the IG spread to the output gap (distance-to-default): a -3% gap widens IG ~1.35x, a +3% gap tightens it to ~0.74x. */
@@ -367,8 +367,8 @@ class MacroEngine
     public const MIN_CREDIT_SPREAD = 0.008;
     /** Cap on the investment-grade spread (650 bps): ICE BofA US Corporate OAS peaked near 620 bps in Dec 2008. */
     public const MAX_CREDIT_SPREAD = 0.065;
-    /** Equity volatility level at which the vol premium on credit starts (the calm-market vol anchor). */
-    public const CREDIT_SPREAD_EXCESS_VOL_THRESHOLD = 0.15;
+    /** Equity volatility above which credit charges a vol premium (~20%, the long-run VIX median), so ordinary vol does not widen IG. */
+    public const CREDIT_SPREAD_EXCESS_VOL_THRESHOLD = 0.20;
 
     // --- Dual-Tranche Corporate Credit Spreads & Rating Migration (Jarrow-Lando-Turnbull 1997) ---
     /** Baseline multiple of HY over IG spread (~3.3x): 130 bps IG pairs with ~430 bps HY through the cycle. */
@@ -596,8 +596,8 @@ class MacroEngine
     public const INTERBANK_MIN_SPREAD = 0.0001;
     /** Cap on the interbank spread (500 bps): the TED spread's all-time high was 457 bps on 10 Oct 2008. */
     public const INTERBANK_MAX_SPREAD = 0.05;
-    /** Share of excess IG spread that lifts the interbank spread's mean (~0.5): a 470 bps IG blowout pulls TED toward ~250 bps, a mild recession toward ~110. */
-    public const INTERBANK_CREDIT_COUPLING = 0.50;
+    /** Share of excess IG spread that lifts the interbank spread's mean (~0.4): a 470 bps IG blowout pulls TED toward ~200 bps, a mild recession toward ~90. */
+    public const INTERBANK_CREDIT_COUPLING = 0.40;
     /** Poisson intensity of severe interbank credit freeze/panic events. */
     public const INTERBANK_JUMP_PROBABILITY = 0.05;
     /** Mean log-size of a panic jump: median 2.7x (1.65x to 4.5x at one sigma), so a 2008-scale 5x freeze is the tail, not the norm. */
@@ -636,8 +636,8 @@ class MacroEngine
     public const SOVEREIGN_DEBT_YIELD_SENSITIVITY = 0.01;
     /** Debt-to-GDP baseline level below which no excess fiscal term premium applies. */
     public const SOVEREIGN_DEBT_NEUTRAL_THRESHOLD = 0.70;
-    /** Sensitivity of Bohn (1998) primary fiscal surplus reaction to excess sovereign debt above neutral threshold. */
-    public const BOHN_FISCAL_REACTION_SENSITIVITY = 0.05;
+    /** Bohn (1998, 2008) fiscal reaction: primary surplus response per unit of debt above the neutral threshold (~0.10, the upper end of advanced-economy estimates), which stabilizes debt near 90% against a 2% structural deficit. */
+    public const BOHN_FISCAL_REACTION_SENSITIVITY = 0.10;
 
     // --- Financial Conditions Index (Goldman Sachs / Chicago Fed) ---
     /** Weight on corporate credit spread deviation in FCI composite. */
@@ -736,20 +736,28 @@ class MacroEngine
     public const DEAL_ACTIVITY_KAPPA = 1.60;
     /** Stochastic volatility of deal activity volume. */
     public const DEAL_ACTIVITY_SIGMA = 0.15;
+    /** Log-elasticity of deal flow to one cycle-standard-deviation (150bps) of equity risk premium. */
+    public const DEAL_ACTIVITY_ERP_BETA = 0.175;
+    /** Log-elasticity of deal flow to one cycle-standard-deviation (500bps) of high-yield OAS. */
+    public const DEAL_ACTIVITY_HY_BETA = 0.225;
+    /** Log-elasticity of deal flow to one cycle-standard-deviation (6 vol points) of equity volatility. */
+    public const DEAL_ACTIVITY_VOL_BETA = 0.10;
+    /** Cap on the log deviation of the deal flow target (~1.7x either way): global M&A volume ran 2.2x from the 2007 peak to the 2009 trough, the widest cycle on record, so a 2008 freeze against a 2007 boom stays under 3x. */
+    public const DEAL_ACTIVITY_LOG_RANGE = 0.55;
 
     // --- ISM Manufacturing Purchasing Managers' Index (PMI) ---
     /** Neutral diffusion baseline for ISM manufacturing PMI (50.0 = neutral growth). */
     public const PMI_BASELINE = 50.0;
-    /** PMI points per unit CU deviation (~1.4 per pp): CU at 67% maps to a mid-30s PMI, CU at 84% to ~58. */
-    public const PMI_CU_SENSITIVITY = 140.0;
-    /** Sensitivity of manufacturing PMI to macroeconomic output gap momentum. */
-    public const PMI_MOMENTUM_SENSITIVITY = 120.0;
+    /** PMI points per unit CU deviation (~0.5 per pp): the level of capacity strain feeds supplier deliveries and prices, a secondary channel next to growth. */
+    public const PMI_CU_SENSITIVITY = 50.0;
+    /** PMI points per unit of annualized real growth over potential (~3.3 per pp): ISM's published mapping of the headline index to annualized real GDP growth, ~0.3pp of growth per index point. A diffusion index measures change, so a V-shaped recovery reads in the high 50s while the level of activity is still below trend. */
+    public const PMI_GROWTH_SENSITIVITY = 330.0;
     /** Sensitivity of manufacturing PMI to Metzler inventory restocking demand (shortfall stimulates new orders). */
     public const PMI_INVENTORY_SENSITIVITY = 20.0;
     /** Sensitivity of manufacturing PMI to commercial banking credit standards tightening (SLOOS). */
     public const PMI_SLOOS_SENSITIVITY = 12.0;
-    /** Mean-reversion speed (kappa) of manufacturing PMI toward fundamental business conditions. */
-    public const PMI_KAPPA = 2.0;
+    /** Mean-reversion speed (kappa) of manufacturing PMI toward fundamental business conditions (half-life ~6 weeks): a monthly survey reprices within a month or two, so the index is coincident with quarterly growth; at a four-month half-life it trailed growth by two quarters. */
+    public const PMI_KAPPA = 6.0;
     /** Stochastic diffusion volatility of manufacturing PMI survey sentiment. */
     public const PMI_SIGMA = 1.2;
     /** Asymptotic lower bound floor for manufacturing PMI during severe industrial depressions. */

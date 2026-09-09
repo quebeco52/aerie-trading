@@ -1771,6 +1771,8 @@ class MathUtility
      * Simulates global investment banking, private equity LBO, and IPO advisory volume
      * as an exponential function of valuation liquidity (ERP compression, tight high-yield spreads, and low volatility):
      *   Target = 100 * exp(-betaErp * erpExcess - betaHy * hySpreadExcess - betaVol * volExcess)
+     * The log deviation is capped at ~1.7x either way: global M&A volume ran 2.2x from the 2007 peak to the 2009
+     * trough, so a target range much wider than that would not be a cycle any market has produced.
      *
      * @param float $currentDealIndex   Current deal flow index.
      * @param float $equityRiskPremium  Current equity risk premium.
@@ -1793,11 +1795,14 @@ class MathUtility
         float $sigma = 0.15
     ): float {
         $erpExcess = ($equityRiskPremium - MacroEngine::BASE_EQUITY_RISK_PREMIUM) / 0.015;
-        $hyExcess = ($hyCreditSpread - (MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER)) / 0.020;
+        // 500 bps is one cycle-standard-deviation of HY OAS (2000-2024), so a 2008-type +1,500 bps reads as three units of stress.
+        $hyExcess = ($hyCreditSpread - (MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER)) / 0.050;
         $volExcess = ($marketVolatility - MacroEngine::MACRO_VOL_BASE_ANCHOR) / 0.06;
 
-        $stressExponent = - (0.35 * $erpExcess + 0.45 * $hyExcess + 0.20 * $volExcess);
-        $targetIndex = 100.0 * exp(max(-2.0, min(1.5, $stressExponent)));
+        $stressExponent = - (MacroEngine::DEAL_ACTIVITY_ERP_BETA * $erpExcess)
+            - (MacroEngine::DEAL_ACTIVITY_HY_BETA * $hyExcess)
+            - (MacroEngine::DEAL_ACTIVITY_VOL_BETA * $volExcess);
+        $targetIndex = MacroEngine::DEAL_ACTIVITY_BASELINE * exp(max(-MacroEngine::DEAL_ACTIVITY_LOG_RANGE, min(MacroEngine::DEAL_ACTIVITY_LOG_RANGE, $stressExponent)));
 
         $drift = $kappa * ($targetIndex - $currentDealIndex) * $dt;
         $diffusion = $sigma * $currentDealIndex * sqrt($dt) * $dW;

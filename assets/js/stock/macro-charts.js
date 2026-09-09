@@ -44,7 +44,7 @@ function updateMacroHud(d) {
 
     setHud('hud-macroEconomyChart', `CPI: ${last(d.inflationData).toFixed(1)}% | Gap: ${last(d.outputGapData) >= 0 ? '+' : ''}${last(d.outputGapData).toFixed(1)}%`);
     setHud('hud-macroRatesChart', `PR: ${last(d.policyRateData).toFixed(2)}% | 10Y: ${last(d.yield10yData).toFixed(2)}%`);
-    setHud('hud-macroMortgageChart', `30Y: ${last(d.mortgageYieldData).toFixed(2)}% | Spr: ${last(d.spread30yData).toFixed(2)}%`);
+    setHud('hud-macroMortgageChart', `30Y: ${last(d.mortgageYieldData).toFixed(2)}% | vs PR: ${last(d.spread30yData).toFixed(2)}%`);
     setHud('hud-macroRiskChart', `VIX: ${last(d.volData).toFixed(1)}% | ERP: ${last(d.erpData).toFixed(1)}%`);
     setHud('hud-macroLaborCreditChart', `Unemp: ${last(d.unemploymentData).toFixed(1)}% | Wage: ${last(d.wageGrowthData).toFixed(1)}%`);
     const lastTed = [...d.interbankSpreadBpsData].reverse().find(v => v !== null);
@@ -165,7 +165,7 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         yield30yData.push(y30);
 
         spread2s10sData.push((y10 !== null && y2 !== null) ? y10 - y2 : null);
-        spread30yData.push((mortgageRate !== null && y10 !== null && !isNaN(y10)) ? mortgageRate - y10 : null);
+        spread30yData.push((mortgageRate !== null && pr !== null && !isNaN(pr)) ? mortgageRate - pr : null);
 
         erpData.push(parseFloat(report.equity_risk_premium) * 100);
         volData.push(parseFloat(report.market_volatility) * 100);
@@ -625,7 +625,7 @@ function renderMacroMortgageChart(labels, policyRateData, yield30yData, spread30
                 },
                 {
                     type: 'bar',
-                    label: 'Mortgage Spread (30Y Mtg - 10Y)',
+                    label: 'Mortgage Spread (30Y Mtg - PR)',
                     data: spread30yData,
                     backgroundColor: spread30yData.map(val => val !== null && val < 0 ? 'rgba(255, 179, 173, 0.4)' : 'rgba(251, 113, 133, 0.4)'),
                     borderRadius: 3,

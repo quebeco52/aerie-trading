@@ -418,6 +418,8 @@ class MonetaryPolicySubsystemTest extends TestCase
         $this->assertEqualsWithDelta($expectedSpread, $curve['yield_10y'] - $curve['yield_2y'], 0.0010, 'the neutral 2s10s slope is the premium the ten-year earns over the two-year');
         $this->assertEqualsWithDelta(MacroEngine::NS_BASE_TERM_PREMIUM, $curve['yield_10y'] - $state->policyRate, 0.0010, 'at neutral the ten-year sits one term premium over the policy rate');
         $this->assertGreaterThan($curve['yield_10y'], $curve['yield_30y'], 'the long end keeps rising');
+        $expectedLongEnd = MacroEngine::NS_BASE_TERM_PREMIUM * ($scale30y - 1.0);
+        $this->assertEqualsWithDelta($expectedLongEnd, $curve['yield_30y'] - $curve['yield_10y'], 0.0010, 'the 10s30s slope is the extra duration compensation the structural regime earns past ten years');
     }
 
     /**
@@ -549,6 +551,8 @@ class MonetaryPolicySubsystemTest extends TestCase
         $move2y = $curveTantrum['yield_2y'] - $curveCalm['yield_2y'];
         $this->assertEqualsWithDelta(0.01, $move10y, 0.00001, 'A 100bps premium shock lands in full on the ten-year.');
         $this->assertLessThan(0.35 * $move10y, $move2y, 'The two-year carries under a third of it, so the shock bear-steepens the curve.');
+        $move30y = $curveTantrum['yield_30y'] - $curveCalm['yield_30y'];
+        $this->assertEqualsWithDelta($move10y, $move30y, 0.00001, 'The thirty-year moves with the ten-year: the 10s30s spread is stable through a tantrum, not amplified half again.');
         $this->assertEqualsWithDelta($curveCalm['risk_neutral_10y'], $curveTantrum['risk_neutral_10y'], 0.00001, 'The expected policy path is untouched; the shock is all premium.');
     }
 

@@ -207,6 +207,45 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertLessThan(50.0, $stateBust->manufacturingPmi, 'Contractionary signals must depress PMI below neutral 50');
     }
 
+    /**
+     * A diffusion index measures change, not level. Two quarters into a V-shaped recovery the output gap is
+     * still negative and capacity utilization still slack, yet firms report improvement, so the index reads in
+     * the high 50s (1983, 2009-2010). The CU-level weighting that came before held it in the mid-40s for a year
+     * after the trough, lagging the cycle it is meant to lead.
+     */
+    public function testPmiLeadsTheRecoveryWhileTheLevelIsStillBelowTrend(): void
+    {
+        $recovery = new MacroState();
+        $recovery->capacityUtilizationRate = 0.77;
+        $recovery->outputGap = -0.009;
+        $recovery->outputGapEma = -0.018; // 3.6% annualized real growth over potential at the quarter EMA horizon
+        $recovery->inventoryStockGap = 0.0;
+        $recovery->sloosTighteningIndexEma = 0.10;
+        $recovery->manufacturingPmi = 44.0;
+
+        $this->subsystem->calculateManufacturingPmi($recovery, 0.25);
+        $this->assertGreaterThan(48.0, $recovery->manufacturingPmi, 'one quarter into a fast recovery the index is already off its lows');
+
+        for ($i = 0; $i < 8; $i++) {
+            $this->subsystem->calculateManufacturingPmi($recovery, 0.25);
+        }
+        $this->assertGreaterThan(55.0, $recovery->manufacturingPmi, 'a sustained 3.6% growth surplus reads in the high 50s despite slack capacity');
+        $this->assertLessThan(MacroEngine::MAX_PMI, $recovery->manufacturingPmi);
+
+        $slowdown = new MacroState();
+        $slowdown->capacityUtilizationRate = 0.81; // tight capacity, but growth has stalled
+        $slowdown->outputGap = 0.015;
+        $slowdown->outputGapEma = 0.020; // -2% annualized growth shortfall
+        $slowdown->inventoryStockGap = 0.0;
+        $slowdown->sloosTighteningIndexEma = 0.0;
+        $slowdown->manufacturingPmi = 50.0;
+
+        for ($i = 0; $i < 8; $i++) {
+            $this->subsystem->calculateManufacturingPmi($slowdown, 0.25);
+        }
+        $this->assertLessThan(48.0, $slowdown->manufacturingPmi, 'a stalling boom reads contractionary while the level of activity is still high (2022)');
+    }
+
     public function testCalculateProducerPriceInflation(): void
     {
         $dt = 0.25;

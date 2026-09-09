@@ -404,9 +404,12 @@ class MacroAggregateSubsystem
     /**
      * ISM / S&P Global Manufacturing Purchasing Managers' Index (PMI).
      *
-     * Evaluates the headline diffusion index centered at 50.0 based on real industrial capacity utilization,
-     * macroeconomic output gap momentum, Metzler inventory restocking demand, and SLOOS bank credit standards:
-     *   Target = 50 + beta_CU * (CU - CU*) + beta_gap * OutputGap + beta_inv * (-InventoryGap) - beta_sloos * SLOOS
+     * Evaluates the headline diffusion index centered at 50.0. A diffusion index counts the share of firms
+     * reporting improvement, so it tracks the rate of change of activity, not its level: ISM maps the headline
+     * to annualized real GDP growth at ~0.3pp per index point. Real growth over potential is the annualized
+     * output gap momentum, read off the gap's distance from its quarter-horizon EMA; capacity utilization,
+     * Metzler inventory restocking demand and SLOOS bank credit standards are secondary level channels:
+     *   Target = 50 + beta_g * (d(OutputGap)/dt) + beta_CU * (CU - CU*) + beta_inv * (-InventoryGap) - beta_sloos * SLOOS
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time step in years.
@@ -414,13 +417,15 @@ class MacroAggregateSubsystem
     public function calculateManufacturingPmi(MacroState $state, float $dt): void
     {
         $cuDeviation = $state->capacityUtilizationRate - MacroEngine::CU_BASELINE;
-        $gapMomentum = $state->outputGap - $state->outputGapEma;
+        // The gap's distance from its EMA is the EMA horizon times the gap's rate of change (Brown 1963), so
+        // dividing it out gives annualized real growth over potential.
+        $excessGrowth = ($state->outputGap - $state->outputGapEma) / MacroEngine::STANDARD_EMA_HORIZON_YEARS;
         $inventoryDemand = - $state->inventoryStockGap; // Shortfall stimulates orders
         $sloosStress = max(0.0, $state->sloosTighteningIndexEma);
 
         $drivers = [
+            ['deviation' => $excessGrowth, 'sensitivity' => MacroEngine::PMI_GROWTH_SENSITIVITY],
             ['deviation' => $cuDeviation, 'sensitivity' => MacroEngine::PMI_CU_SENSITIVITY],
-            ['deviation' => $gapMomentum + ($state->outputGap * 0.25), 'sensitivity' => MacroEngine::PMI_MOMENTUM_SENSITIVITY],
             ['deviation' => $inventoryDemand, 'sensitivity' => MacroEngine::PMI_INVENTORY_SENSITIVITY],
             ['deviation' => -$sloosStress, 'sensitivity' => MacroEngine::PMI_SLOOS_SENSITIVITY],
         ];
@@ -432,9 +437,12 @@ class MacroAggregateSubsystem
             max: MacroEngine::MAX_PMI
         );
 
+        // Exact Ornstein-Uhlenbeck discretization (Gillespie 1996) so the survey's adjustment is tick-rate
+        // invariant: a quarterly step with a six-week half-life lands near the target instead of overshooting it.
         $dW = $this->mathUtility->generateStandardNormal();
-        $drift = MacroEngine::PMI_KAPPA * ($targetPmi - $state->manufacturingPmi) * $dt;
-        $diffusion = MacroEngine::PMI_SIGMA * sqrt($dt) * $dW;
+        $decay = exp(-MacroEngine::PMI_KAPPA * $dt);
+        $drift = (1.0 - $decay) * ($targetPmi - $state->manufacturingPmi);
+        $diffusion = MacroEngine::PMI_SIGMA * sqrt((1.0 - ($decay ** 2)) / (2.0 * MacroEngine::PMI_KAPPA)) * $dW;
         $newPmi = $state->manufacturingPmi + $drift + $diffusion;
 
         $state->manufacturingPmi = max(MacroEngine::MIN_PMI, min(MacroEngine::MAX_PMI, $newPmi));

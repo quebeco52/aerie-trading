@@ -350,10 +350,15 @@ class MonetaryPolicySubsystem
         $debtCurvature = $excessDebt * MacroEngine::SOVEREIGN_DEBT_YIELD_SENSITIVITY;
         $nsBeta3 = (MacroEngine::SVENSSON_CURVATURE2_FISCAL_SCALE * $fiscalShift) + $debtCurvature;
 
-        $yield2y  = $this->calculateSvenssonTenor(2.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $totalBaseTermPremium);
-        $yield5y  = $this->calculateSvenssonTenor(5.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $totalBaseTermPremium);
-        $yield10y = $this->calculateSvenssonTenor(10.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $totalBaseTermPremium);
-        $yield30y = $this->calculateSvenssonTenor(30.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $totalBaseTermPremium);
+        // Past the ten-year point only the structural regime keeps earning duration compensation; the transitory
+        // shock, the inflation risk premium and the cyclical terms shift the whole long end together, so the
+        // 10s30s spread stays stable through a tantrum instead of amplifying it half again.
+        $longEndPremium = max(0.0, $state->termPremiumRegime);
+
+        $yield2y  = $this->calculateSvenssonTenor(2.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $totalBaseTermPremium, $longEndPremium);
+        $yield5y  = $this->calculateSvenssonTenor(5.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $totalBaseTermPremium, $longEndPremium);
+        $yield10y = $this->calculateSvenssonTenor(10.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $totalBaseTermPremium, $longEndPremium);
+        $yield30y = $this->calculateSvenssonTenor(30.0, $level, $nsBeta1, $nsBeta2, $nsBeta3, $state, $totalBaseTermPremium, $longEndPremium);
 
         $durationFactor10y = (1.0 - exp(-10.0 * MacroEngine::SVENSSON_SLOPE_LAMBDA)) / (10.0 * MacroEngine::SVENSSON_SLOPE_LAMBDA);
         $curvatureLoad10y = (1.0 - exp(-10.0 * MacroEngine::SVENSSON_LAMBDA_1)) / (10.0 * MacroEngine::SVENSSON_LAMBDA_1);
@@ -365,7 +370,7 @@ class MonetaryPolicySubsystem
         $riskNeutral10y = $level + ($nsBeta1 * $durationFactor10y) + ($nsBeta2 * $factor2_10y);
         $termPremium10y = $yield10y - $riskNeutral10y;
 
-        $structural10y = $this->calculateSvenssonTenor(10.0, $level, $nsBeta1, $nsBeta2, $debtCurvature, $state, $totalBaseTermPremium);
+        $structural10y = $this->calculateSvenssonTenor(10.0, $level, $nsBeta1, $nsBeta2, $debtCurvature, $state, $totalBaseTermPremium, $longEndPremium);
 
         return [
             'level' => $level,
@@ -423,10 +428,13 @@ class MonetaryPolicySubsystem
      * @return float Nominal sovereign yield for the specified tenor.
      */
     /**
-     * @param float $termPremium10y The ten-year term premium; each tenor carries the share of it its duration
-     *                              earns (ACM 2013), from nothing at zero maturity to half again as much at thirty years.
+     * @param float $termPremium10y The ten-year term premium; each tenor up to ten years carries the share of it
+     *                              its duration earns (ACM 2013), from nothing at zero maturity to all of it at ten.
+     *                              Beyond ten years it lands one-for-one, so the long end moves with the ten-year.
+     * @param float $longEndPremium The structural share of that premium which keeps rising with duration past
+     *                              ten years: a thirty-year bond carries half again as much of it.
      */
-    public function calculateSvenssonTenor(float $t, float $level, float $nsBeta1, float $nsBeta2, float $nsBeta3, MacroState $state, float $termPremium10y = 0.0): float
+    public function calculateSvenssonTenor(float $t, float $level, float $nsBeta1, float $nsBeta2, float $nsBeta3, MacroState $state, float $termPremium10y = 0.0, float $longEndPremium = 0.0): float
     {
         // Vayanos & Vila (2021) Preferred-Habitat Model: duration extraction under QE/QT compresses term premium by tenor duration
         $preferredHabitatShift = $this->mathUtility->calculatePreferredHabitatTermPremiumShift(
@@ -434,7 +442,8 @@ class MonetaryPolicySubsystem
             tau: $t,
             habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY
         );
-        $termPremium = $termPremium10y * MathUtility::calculateTermPremiumDurationScale($t, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        $durationScale = MathUtility::calculateTermPremiumDurationScale($t, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
+        $termPremium = ($termPremium10y * min(1.0, $durationScale)) + ($longEndPremium * max(0.0, $durationScale - 1.0));
 
         $yield = $this->mathUtility->calculateSvenssonYield(
             level: $level,
