@@ -33,7 +33,8 @@ class DashboardController extends AbstractController
         EntityManagerInterface $entityManager,
         \App\Service\User\CostBasisCalculator $costBasis,
         \App\Service\User\DividendIncomeCalculator $dividendIncome,
-        \App\Service\User\CouponIncomeCalculator $couponIncome
+        \App\Service\User\CouponIncomeCalculator $couponIncome,
+        \App\Service\Market\MarginEngine $marginEngine
     ): Response
     {
         /** @var User $user */
@@ -81,10 +82,15 @@ class DashboardController extends AbstractController
             $stock = $holding->getStock();
             $ticker = $stock->getTicker();
             $currentPrice = (float) $stock->getPrice();
-            $quantity = $holding->getQuantity();
-            if ($quantity <= 0) {
+            $quantity = (int) $holding->getQuantity();
+            if ($quantity === 0) {
                 continue;
             }
+
+            // Negative for a short, and the arithmetic below needs no special case: market value is the
+            // obligation, cost is the proceeds, and their difference is profit in either direction. What
+            // does need care is the denominator of the percentage and the exposure the allocation reads.
+            $isShort = $quantity < 0;
 
             $marketValue = $currentPrice * $quantity;
             $totalStocksValue += $marketValue;
@@ -94,10 +100,12 @@ class DashboardController extends AbstractController
             $totalInvestedCost += $positionCost;
 
             $unrealizedPnL = $marketValue - $positionCost;
-            $unrealizedPnLPercent = $positionCost > 0 ? ($unrealizedPnL / $positionCost) * 100 : 0.0;
+            $unrealizedPnLPercent = abs($positionCost) > 0.0 ? ($unrealizedPnL / abs($positionCost)) * 100 : 0.0;
 
+            // Gross, not net: a short is exposure to a sector, not an offset against a long in it, and a
+            // signed sum would let a paired book report itself as holding nothing at all.
             $sector = $stock->getSector() ?? 'General';
-            $sectorValues[$sector] = ($sectorValues[$sector] ?? 0.0) + $marketValue;
+            $sectorValues[$sector] = ($sectorValues[$sector] ?? 0.0) + abs($marketValue);
 
             $holdingsData[] = [
                 'type' => 'STOCK',
@@ -113,6 +121,8 @@ class DashboardController extends AbstractController
                 'unrealizedPnLPercent' => $unrealizedPnLPercent,
                 'dividendsReceived' => $dividendMap[$ticker] ?? 0.0,
                 'isBankrupt' => $stock->isBankrupt(),
+                'isShort' => $isShort,
+                'borrowAccrued' => (float) $holding->getBorrowAccrued(),
                 'weight' => 0.0, // Calculated after total portfolio value is known
             ];
         }
@@ -220,7 +230,9 @@ class DashboardController extends AbstractController
         $escrowedShareValue = (float) $escrowRow['escrowed_shares'];
         $escrowedTotal = $escrowedCash + $escrowedShareValue;
 
-        $totalPortfolioValue = $cashBalance + $totalStocksValue + $totalEtfsValue + $totalBondsValue + $escrowedTotal;
+        // Borrowed cash is spent but still owed, so it comes back out of the headline figure.
+        $marginDebit = (float) $user->getMarginDebit();
+        $totalPortfolioValue = $cashBalance - $marginDebit + $totalStocksValue + $totalEtfsValue + $totalBondsValue + $escrowedTotal;
         $totalUnrealizedPnL = ($totalStocksValue + $totalEtfsValue + $totalBondsValue) - $totalInvestedCost;
         $totalUnrealizedPnLPercent = $totalInvestedCost > 0 ? ($totalUnrealizedPnL / $totalInvestedCost) * 100 : 0.0;
 
@@ -245,7 +257,9 @@ class DashboardController extends AbstractController
 
         // Prepare Sector Diversification percentages
         $sectorBreakdown = [];
-        $investedTotal = $totalStocksValue + $totalEtfsValue + $totalBondsValue;
+        // Gross exposure, matching what the sector values were summed as. A net total would divide the
+        // sector shares by a smaller number than they were built from and push them past 100%.
+        $investedTotal = array_sum($sectorValues);
         foreach ($sectorValues as $sectorName => $val) {
             $sectorBreakdown[] = [
                 'name' => $sectorName,
@@ -281,6 +295,10 @@ class DashboardController extends AbstractController
             'cashBalance' => $cashBalance,
             'escrowedCash' => $escrowedCash,
             'escrowedShareValue' => $escrowedShareValue,
+            'marginDebit' => $marginDebit,
+            // Marked against live prices rather than the figures assembled above, so the risk panel and the
+            // sweep that acts on it are reading the same numbers.
+            'margin' => $marginEngine->status($user),
             'openOrders' => $openOrders,
             'tradeHistory' => $tradeHistory,
             'sectorBreakdown' => $sectorBreakdown,

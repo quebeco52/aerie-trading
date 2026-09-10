@@ -84,7 +84,7 @@ class Portfolio
         $snapshotSql = "
             INSERT INTO portfolio_history (user_id, total_value, recorded_at)
             SELECT u.id,
-                   (u.cash_balance + COALESCE(stock_totals.stock_val, 0) + COALESCE(etf_totals.etf_val, 0) + COALESCE(bond_totals.bond_val, 0) + COALESCE(escrow.escrow_val, 0)),
+                   (u.cash_balance - u.margin_debit + COALESCE(stock_totals.stock_val, 0) + COALESCE(etf_totals.etf_val, 0) + COALESCE(bond_totals.bond_val, 0) + COALESCE(escrow.escrow_val, 0)),
                    :now
             FROM users u
             LEFT JOIN (
@@ -146,7 +146,11 @@ class Portfolio
         ";
 
         $stockValue = (float) $conn->fetchOne($sql, ['user_id' => $user->getId()]);
-        $portfolioValue = (float) $user->getCashBalance() + $stockValue;
+
+        // Borrowed cash is spent but still owed, so it comes straight back out. A short needs no term of
+        // its own: its quantity is negative, so quantity times price already marks the obligation, and its
+        // proceeds are already sitting in the cash balance.
+        $portfolioValue = (float) $user->getCashBalance() - (float) $user->getMarginDebit() + $stockValue;
 
         $history = new PortfolioHistory();
         $history->setUser($user);

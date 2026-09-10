@@ -473,4 +473,58 @@ class FinancialConstants
     public const MAX_IMPACT_VARIANCE_DRAG_SHARE = 0.25;
     /** Half-life in years of the realized impact-variance estimate the budget is drawn from. */
     public const IMPACT_VARIANCE_EMA_YEARS = 0.25;
+    // --- Margin Accounts (Regulation T) ---
+    /** Equity a new position must be backed by: half of what it is worth, long or short. */
+    public const INITIAL_MARGIN_REQUIREMENT = 0.50;
+    /** Equity a long position must keep behind it before the account is called. */
+    public const MAINTENANCE_MARGIN_LONG = 0.25;
+    /** Higher for a short, because a short's loss is unbounded while a long's stops at zero. */
+    public const MAINTENANCE_MARGIN_SHORT = 0.30;
+    /** Extra equity a forced liquidation restores beyond the bare minimum, so the account is not called again on the next tick. */
+    public const LIQUIDATION_EQUITY_BUFFER = 0.05;
+    /** Ceiling on the fraction of a position that one margin call may liquidate. */
+    public const MAX_LIQUIDATION_FRACTION = 1.00;
+
+    // --- Securities Lending ---
+    /** Share of the public float that is actually lendable; the rest sits with holders who do not lend. */
+    public const DEFAULT_LENDABLE_SUPPLY_RATIO = 0.65;
+    /** General collateral borrow fee: what an easy-to-borrow name costs to short, annualized. */
+    public const GENERAL_COLLATERAL_BORROW_FEE = 0.0030;
+    /** Borrow fee on a name whose lendable supply is fully consumed. Hard-to-borrow specials really do reach these levels. */
+    public const MAX_BORROW_FEE = 1.00;
+    /** Convexity of the fee curve in utilization. Flat while supply is ample, then steepening sharply as the last of it is taken: general collateral holds past half utilization, and a name only turns special above roughly eighty-five percent. */
+    public const BORROW_FEE_CONVEXITY = 8.00;
+    /** Utilization past which lenders begin recalling stock and shorts are bought in. */
+    public const BUY_IN_UTILIZATION_THRESHOLD = 0.97;
+    /** Share of an outstanding short position recalled per buy-in. */
+    public const BUY_IN_FRACTION = 0.20;
+    // --- Agent Population (Brock & Hommes 1997, 1998 Adaptive Belief System) ---
+    /** Intensity of choice: how sharply capital chases whichever belief has been paying. At zero the population never moves; raising it is what tips the market from anchored to trending. */
+    public const AGENT_INTENSITY_OF_CHOICE = 3.00;
+    /** Memory in the fitness estimate, in years. Capital chases performance over months, not over the last print, and a horizon in time rather than in ticks keeps that true at any tick rate. */
+    public const AGENT_FITNESS_HORIZON_YEARS = 0.50;
+    /** Floor on any belief's population share, so a strategy that has been wrong for a long time can still come back when conditions turn. */
+    public const AGENT_MIN_POPULATION_SHARE = 0.05;
+
+    // --- Agent Capital & Positioning ---
+    /** Total agent capital per name, as a multiple of its average daily volume. Sets how large the simulated institutional book is relative to the market it trades in. */
+    public const AGENT_CAPITAL_ADV_MULTIPLE = 3.00;
+    /** Share of the gap to its target an agent closes each tick. Real books are worked over days, not fired in one print. */
+    public const AGENT_POSITION_ADJUSTMENT_SPEED = 0.04;
+    /** Overall dial on agent activity. The single number to turn when handing more of the market's variance from the diffusion to the agents. */
+    public const AGENT_FLOW_INTENSITY = 1.00;
+
+    // --- Agent Signals ---
+    /** Fundamentalist conviction per unit of log mispricing: fully committed at roughly a 40% discount to fair value. */
+    public const AGENT_FUNDAMENTALIST_GAIN = 2.50;
+    /** Chartist conviction per unit of accumulated price trend. */
+    public const AGENT_MOMENTUM_GAIN = 3.00;
+    /** Share of the other agents' net book a market maker stands against. It is the counterparty, so it is short when the market is long. */
+    public const AGENT_MAKER_ABSORPTION = 0.35;
+    /** Speed a market maker works its inventory back toward flat, independent of what it is absorbing. */
+    public const AGENT_MAKER_INVENTORY_DECAY = 0.10;
+    /** Sensitivity of index fund flows to financial conditions: money leaves passive vehicles when conditions tighten. */
+    public const AGENT_INDEX_FLOW_SENSITIVITY = 0.50;
+    /** Baseline share of agent capital that indexes rather than picking. */
+    public const AGENT_INDEX_BASE_SHARE = 0.30;
 }

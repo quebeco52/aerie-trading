@@ -13,6 +13,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Macro\MacroEngine;
 
@@ -304,6 +305,8 @@ class MarketResetCommand extends Command
                     price_momentum_trend = 0.0,
                     turnover_ratio = :turnover_ratio,
                     impact_variance_ema = 0.0,
+                    lendable_supply_ratio = :lendable_supply_ratio,
+                    short_interest_shares = 0.00,
                     reported_operating_margin = NULL,
                     quarterly_net_income_history = NULL,
                     earnings_surprise_history = NULL
@@ -316,6 +319,7 @@ class MarketResetCommand extends Command
                     // Structural, derived from the name's own volatility rather than stored per ticker, so
                     // a retuned volatility cannot leave a turnover behind that no longer matches it.
                     'turnover_ratio' => \App\Service\Market\LiquidityEngine::structuralTurnoverRatio((float) $stockData['volatility']),
+                    'lendable_supply_ratio' => FinancialConstants::DEFAULT_LENDABLE_SUPPLY_RATIO,
                     'current_vol' => $stockData['volatility'],
                     'beta' => $stockData['beta'],
                     'jump_int' => $stockData['jump_intensity'],

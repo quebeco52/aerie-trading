@@ -51,7 +51,8 @@ class StockTracker
         private MathUtility $mathUtility,
         private CorporateMetrics $corporateMetrics,
         private LiquidityEngine $liquidityEngine,
-        private OrderFlowStoreInterface $orderFlow
+        private OrderFlowStoreInterface $orderFlow,
+        private \App\Service\Market\Agent\AgentFlowEngine $agentFlow
     ) {}
 
     /**
@@ -354,6 +355,22 @@ class StockTracker
 
                 $stockUpdate['market_share'] = round($marketShare * 100, 2);
             }
+
+            // AGENT FLOW (Brock & Hommes 1997, 1998)
+            // The simulated institutional book reacts to the price that has just been published and its
+            // orders land on the next tick, through the same impact channel and the same variance budget a
+            // player's fill goes through. The one-tick lag is the causality, not a shortcut: a participant
+            // observes a price and then trades.
+            $this->agentFlow->trade(new \App\DTO\AgentMarketViewDTO(
+                ticker: $stock->getTicker(),
+                price: $finalPrice,
+                perceivedFairValue: (float) $calculation['perceived_fair_value'],
+                momentumTrend: (float) ($stock->getPriceMomentumTrend() ?? 0.0),
+                averageDailyVolume: $this->liquidityEngine->averageDailyVolume($stock),
+                logReturn: $priceAtTickStart > 0.0 && $finalPrice > 0.0 ? log($finalPrice / $priceAtTickStart) : 0.0,
+                financialConditions: $macroDTO->financialConditionsIndexEma,
+                dt: $dt
+            ));
 
             $stockUpdates[] = $stockUpdate;
 

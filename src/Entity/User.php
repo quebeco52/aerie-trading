@@ -27,6 +27,20 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(type: Types::DECIMAL, precision: 15, scale: 2)]
     private string $cashBalance = '10000.00';
 
+    /**
+     * Cash borrowed from the broker against the account's own collateral.
+     *
+     * Held separately from cashBalance rather than netted into it. Netting would make a leveraged account
+     * indistinguishable from a smaller unleveraged one at exactly the moment the difference matters, and
+     * there would be no balance to charge interest on.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 15, scale: 2, options: ['default' => '0.00'])]
+    private string $marginDebit = '0.00';
+
+    /** Whether this account may borrow and sell short at all. */
+    #[ORM\Column(type: 'boolean', options: ['default' => false])]
+    private bool $marginEnabled = false;
+
     #[ORM\Column(type: 'boolean')]
     private bool $isVerified = false;
 
@@ -35,6 +49,30 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function getCashBalance(): string
     {
         return $this->cashBalance;
+    }
+
+    public function getMarginDebit(): string
+    {
+        return $this->marginDebit;
+    }
+
+    public function setMarginDebit(string $marginDebit): static
+    {
+        $this->marginDebit = $marginDebit;
+
+        return $this;
+    }
+
+    public function isMarginEnabled(): bool
+    {
+        return $this->marginEnabled;
+    }
+
+    public function setMarginEnabled(bool $marginEnabled): static
+    {
+        $this->marginEnabled = $marginEnabled;
+
+        return $this;
     }
 
     public function setCashBalance(string $cashBalance): static

@@ -122,7 +122,13 @@ final class StockTrackerFactorWiringTest extends TestCase
             $this->createStub(MathUtility::class),
             $this->createStub(CorporateMetrics::class),
             new \App\Service\Market\LiquidityEngine(new MathUtility()),
-            new \App\Service\Market\Flow\InMemoryOrderFlowStore()
+            new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
+            new \App\Service\Market\Agent\AgentFlowEngine(
+                new \App\Service\Market\Agent\AgentPopulation(),
+                new \App\Service\Market\Agent\InMemoryAgentStateStore(),
+                new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
+                []
+            )
         );
     }
 

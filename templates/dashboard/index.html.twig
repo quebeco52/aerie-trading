@@ -166,6 +166,9 @@
                                                     {% else %}
                                                         <a href="/stock/{{ holding.ticker }}" class="font-bold text-on-surface text-sm group-hover:text-primary transition-colors outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:decoration-primary focus-visible:underline-offset-4">{{ holding.name }}</a>
                                                     {% endif %}
+                                                    {% if holding.isShort|default(false) %}
+                                                        <span class="relative z-10 px-1.5 py-0.2 rounded bg-tertiary/10 text-tertiary text-4xs font-bold border border-tertiary/25 uppercase tracking-wide" title="Sold short: the position profits when the price falls, and its loss has no ceiling">Short</span>
+                                                    {% endif %}
                                                     {% if holding.isBankrupt %}
                                                         <span class="relative z-10 px-1.5 py-0.2 rounded bg-tertiary/10 text-tertiary text-4xs font-bold border border-tertiary/25 uppercase tracking-wide">Bankrupt</span>
                                                     {% endif %}
@@ -187,6 +190,11 @@
                                     <td class="px-5 py-3 font-mono tabular-nums text-right font-bold {{ holding.unrealizedPnL >= 0 ? 'text-secondary' : 'text-tertiary' }}" id="pnl-{{ holding.ticker }}">
                                         <div>{{ holding.unrealizedPnL >= 0 ? '+' : '' }}${{ holding.unrealizedPnL|number_format(2) }}</div>
                                         <div class="text-2xs font-normal opacity-80">({{ holding.unrealizedPnL >= 0 ? '+' : '' }}{{ holding.unrealizedPnLPercent|number_format(2) }}%)</div>
+                                        {% if holding.borrowAccrued|default(0) > 0 %}
+                                            <div class="text-2xs font-normal text-tertiary mt-0.5" title="Borrow fees paid to keep this short open">
+                                                &minus;${{ holding.borrowAccrued|number_format(2) }} borrow
+                                            </div>
+                                        {% endif %}
                                         {% if holding.dividendsReceived > 0 %}
                                             <div class="text-2xs font-normal text-on-surface-variant mt-0.5" title="{{ holding.type == 'BOND' ? 'Coupon cash received from ' ~ holding.ticker : 'Dividend cash received from ' ~ holding.ticker ~ ', including from shares since sold' }}">
                                                 +${{ holding.dividendsReceived|number_format(2) }} {{ holding.type == 'BOND' ? 'cpn' : 'div' }}
@@ -441,9 +449,67 @@
                 </div>
                 <div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-5">
                     <span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Total Buying Power</span>
-                    <h3 class="text-2xl font-bold text-secondary font-mono tabular-nums mt-1">${{ (cashBalance + escrowedCash)|number_format(2) }}</h3>
-                    <p class="text-xs text-on-surface-variant mt-1.5">Total non-equity liquidity under user management.</p>
+                    <h3 class="text-2xl font-bold text-secondary font-mono tabular-nums mt-1">${{ margin.buyingPower|number_format(2) }}</h3>
+                    <p class="text-xs text-on-surface-variant mt-1.5">{{ app.user.marginEnabled ? 'Free equity geared by the initial requirement.' : 'Settled cash. Enable margin to borrow against the account.' }}</p>
                 </div>
+            </div>
+
+            {# --- MARGIN --- #}
+            <div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-5 space-y-4">
+                <div class="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                        <h3 class="text-sm font-bold text-on-surface">Margin</h3>
+                        <p class="text-xs text-on-surface-variant mt-1 max-w-xl">
+                            Borrowing lets a position lose more than the cash behind it. A short's loss has no
+                            ceiling at all, and stock that has been lent out can be recalled whether the
+                            position is winning or not.
+                        </p>
+                    </div>
+
+                    <form action="{{ path('app_trade_margin') }}" method="POST">
+                        <input type="hidden" name="_token" value="{{ csrf_token('toggle_margin') }}">
+                        <input type="hidden" name="enable" value="{{ app.user.marginEnabled ? '0' : '1' }}">
+                        <button type="submit" class="cursor-pointer px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-colors {{ app.user.marginEnabled ? 'bg-tertiary/10 text-tertiary border border-tertiary/25 hover:bg-tertiary/20' : 'bg-primary text-on-primary hover:brightness-110' }}">
+                            {{ app.user.marginEnabled ? 'Disable Margin' : 'Enable Margin' }}
+                        </button>
+                    </form>
+                </div>
+
+                {% if app.user.marginEnabled %}
+                    <dl class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+                        <div>
+                            <dt class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Margin Loan</dt>
+                            <dd class="text-lg font-bold font-mono tabular-nums mt-0.5 {{ marginDebit > 0 ? 'text-tertiary' : 'text-on-surface' }}">${{ marginDebit|number_format(2) }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Short Exposure</dt>
+                            <dd class="text-lg font-bold font-mono tabular-nums mt-0.5 text-on-surface">${{ margin.shortMarketValue|number_format(2) }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Account Equity</dt>
+                            <dd class="text-lg font-bold font-mono tabular-nums mt-0.5 text-on-surface">${{ margin.equity|number_format(2) }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Maintenance</dt>
+                            <dd class="text-lg font-bold font-mono tabular-nums mt-0.5 {{ margin.isCalled ? 'text-tertiary' : 'text-on-surface' }}">${{ margin.maintenanceRequirement|number_format(2) }}</dd>
+                        </div>
+                    </dl>
+
+                    {% if margin.isCalled %}
+                        <div class="rounded border border-tertiary/30 bg-tertiary/10 px-4 py-3">
+                            <p class="text-xs font-bold uppercase tracking-wide text-tertiary">Margin call</p>
+                            <p class="text-xs text-tertiary mt-1 leading-relaxed">
+                                Equity is ${{ margin.callAmount|number_format(2) }} below the maintenance requirement.
+                                Positions will be sold at the market on the next sweep unless the account is
+                                brought back into compliance.
+                            </p>
+                        </div>
+                    {% elseif margin.shortMarketValue > 0 or marginDebit > 0 %}
+                        <p class="text-2xs text-on-surface-variant">
+                            Equity is {{ (margin.equityRatio * 100)|number_format(1) }}% of gross exposure.
+                        </p>
+                    {% endif %}
+                {% endif %}
             </div>
         </div>
         </div>

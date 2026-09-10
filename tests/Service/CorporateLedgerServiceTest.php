@@ -35,8 +35,9 @@ class CorporateLedgerServiceTest extends TestCase
         $stock->setTicker('DIV_CORP');
         $paidAt = new \DateTimeImmutable('2026-09-10 14:30:00');
 
+        // Four statements: the holder ledger, the holder credit, then the short ledger and the short debit.
         $captured = [];
-        $this->connectionMock->expects($this->exactly(2))
+        $this->connectionMock->expects($this->exactly(4))
             ->method('executeStatement')
             ->willReturnCallback(function (string $sql, array $params) use (&$captured): int {
                 $captured[] = ['sql' => $sql, 'params' => $params];
@@ -46,7 +47,7 @@ class CorporateLedgerServiceTest extends TestCase
 
         $this->service->processDividendPayment($stock, 1.25, $paidAt);
 
-        [$insert, $update] = $captured;
+        [$insert, $update, $shortInsert, $shortUpdate] = $captured;
 
         // The ledger is written first, from the holdings snapshot.
         $this->assertStringContainsString('INSERT INTO dividend_payment', $insert['sql']);
@@ -76,11 +77,12 @@ class CorporateLedgerServiceTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('DIV_CORP');
 
-        $insertSql = null;
+        // Two inserts now: the holder ledger, then the short ledger. The escrow rule belongs to the first.
+        $inserts = [];
         $this->connectionMock->method('executeStatement')
-            ->willReturnCallback(function (string $sql) use (&$insertSql): int {
+            ->willReturnCallback(function (string $sql) use (&$inserts): int {
                 if (str_contains($sql, 'INSERT INTO dividend_payment')) {
-                    $insertSql = $sql;
+                    $inserts[] = $sql;
                 }
 
                 return 1;
@@ -88,9 +90,16 @@ class CorporateLedgerServiceTest extends TestCase
 
         $this->service->processDividendPayment($stock, 1.25, new \DateTimeImmutable());
 
-        $this->assertNotNull($insertSql);
-        $this->assertStringContainsString("status = 'OPEN' AND action = 'SELL'", $insertSql);
-        $this->assertStringNotContainsString("action = 'BUY'", $insertSql);
+        $this->assertCount(2, $inserts);
+
+        [$holders, $shorts] = $inserts;
+
+        $this->assertStringContainsString("status = 'OPEN' AND action = 'SELL'", $holders);
+        $this->assertStringNotContainsString("action = 'BUY'", $holders);
+
+        // A short borrowed the shares from someone still entitled to the distribution, so it pays rather
+        // than receives. Anything else makes a high-yield name free to be short.
+        $this->assertStringContainsString('us.quantity < 0', $shorts);
     }
 
     public function testProcessDividendPaymentSkipsHoldingsRoundingToZero(): void
@@ -98,10 +107,11 @@ class CorporateLedgerServiceTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('DIV_CORP');
 
+        // The holder ledger is the first of the two inserts; the short ledger has its own zero guard.
         $insertSql = null;
         $this->connectionMock->method('executeStatement')
             ->willReturnCallback(function (string $sql) use (&$insertSql): int {
-                if (str_contains($sql, 'INSERT INTO dividend_payment')) {
+                if ($insertSql === null && str_contains($sql, 'INSERT INTO dividend_payment')) {
                     $insertSql = $sql;
                 }
 

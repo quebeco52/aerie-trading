@@ -9,6 +9,7 @@ use App\Entity\User;
 use App\Entity\UserStock;
 use App\Entity\StockEvent;
 use App\Entity\EtfEvent;
+use App\Service\Market\PriceBarAggregator;
 use Doctrine\ORM\EntityManagerInterface;
 use Redis;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -41,7 +42,8 @@ class StockController extends AbstractController
         \App\Service\Market\PriceChangeFeed $priceChangeFeed,
         \App\Service\User\CostBasisCalculator $costBasis,
         \App\Service\User\DividendIncomeCalculator $dividendIncome,
-        \App\Service\Market\LiquidityEngine $liquidityEngine
+        \App\Service\Market\LiquidityEngine $liquidityEngine,
+        \App\Service\Market\SecuritiesLendingDesk $lendingDesk
     ): Response
     {
         $isEtf = false;
@@ -345,6 +347,10 @@ class StockController extends AbstractController
             'halfSpread' => $isEtf
                 ? \App\Service\Math\FinancialConstants::ETF_HALF_SPREAD
                 : $liquidityEngine->halfSpreadFraction($asset),
+            // What it costs to be short this name, and how much of it is left to borrow.
+            'borrowFee' => $isEtf ? 0.0 : $lendingDesk->borrowFee($asset),
+            'availableToBorrow' => $isEtf ? 0.0 : $lendingDesk->availableToBorrow($asset),
+            'shortUtilization' => $isEtf ? 0.0 : $lendingDesk->utilization($asset),
         ]);
     }
 
@@ -358,7 +364,7 @@ class StockController extends AbstractController
      * @return JsonResponse Returns a JSON array of historical data points.
      */
     #[Route('/api/history', name: 'api_history')]
-    public function history(Request $request, EntityManagerInterface $entityManager, \Redis $redis): JsonResponse
+    public function history(Request $request, EntityManagerInterface $entityManager, \Redis $redis, PriceBarAggregator $barAggregator): JsonResponse
     {
         $ticker = $request->query->get('ticker');
         $range = $request->query->get('range', '1y');
@@ -378,7 +384,9 @@ class StockController extends AbstractController
             foreach ($redisData as $jsonStr) {
                 $results[] = json_decode($jsonStr, true);
             }
-            return $this->json(array_reverse($results));
+
+            // Buffered points are single ticks, so the bar has to be built here or every candle is a doji.
+            return $this->json($barAggregator->aggregate($results, count($results)));
         }
 
         // A range button names a span of SIMULATED TIME, so the row limit behind it has to be derived from
@@ -393,7 +401,6 @@ class StockController extends AbstractController
             : (int) ceil(($rangeYears[$range] ?? 1.0) * $pointsPerYear);
 
         $dbLimit = min($limit, 500000);
-        $maxChartPoints = 5000;
         $conn = $entityManager->getConnection();
 
         // Fetch the target asset ID
@@ -425,7 +432,7 @@ class StockController extends AbstractController
             }
         }
 
-        // Count rows to determine step size
+        // Row count sets the bucket width the aggregator folds into bars.
         $countSql = sprintf(
             'SELECT COUNT(id) FROM (SELECT id FROM %s WHERE %s = :id ORDER BY id DESC LIMIT %d) as sub',
             $tableName,
@@ -436,11 +443,6 @@ class StockController extends AbstractController
 
         if ($actualCount === 0) return $this->json([]);
 
-        $step = 1;
-        if ($actualCount > $maxChartPoints) {
-            $step = (int) ceil($actualCount / $maxChartPoints);
-        }
-
         // Stocks carry a full bar; ETFs and bonds are a single series and select the close alone. Asking
         // for open_price on etf_history would be a SQL error rather than a null.
         $barColumns = $tableName === 'stock_history'
@@ -448,7 +450,9 @@ class StockController extends AbstractController
             : '';
 
         $sql = sprintf(
-            'SELECT id, %s AS price%s, recorded_at FROM %s WHERE %s = :id ORDER BY recorded_at DESC LIMIT %d',
+            // Ordered by id, not recorded_at: at a 100ms tick the timestamp has ten rows to a second and their
+            // relative order is undefined, which would scramble the open and close inside every bar.
+            'SELECT id, %s AS price%s, recorded_at FROM %s WHERE %s = :id ORDER BY id DESC LIMIT %d',
             $priceColumn,
             $barColumns,
             $tableName,
@@ -458,19 +462,10 @@ class StockController extends AbstractController
 
         $stmt = $conn->executeQuery($sql, ['id' => $targetId]);
 
-        $results = [];
-        $rowIndex = 0;
-
-        // Stream the rows one by one.
-        foreach ($stmt->iterateAssociative() as $row) {
-            // Keep the very first row (newest price), then every Nth row
-            if ($rowIndex === 0 || $rowIndex % $step === 0) {
-                $results[] = $row;
-            }
-            $rowIndex++;
-        }
-
-        return $this->json(array_reverse($results));
+        // Bucketed rather than decimated. Keeping every Nth row and discarding the rest is right for a line
+        // — it is a subsample of closes — but it throws away the extremes of every dropped bar and leaves
+        // each surviving candle opening nowhere near the previous close. The stream is consumed once.
+        return $this->json($barAggregator->aggregate($stmt->iterateAssociative(), $actualCount));
     }
 
     /**

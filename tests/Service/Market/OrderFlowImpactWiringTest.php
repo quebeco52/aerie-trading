@@ -130,7 +130,13 @@ class OrderFlowImpactWiringTest extends TestCase
             new MathUtility(),
             $this->createStub(CorporateMetrics::class),
             $this->liquidity,
-            $this->orderFlow
+            $this->orderFlow,
+            new \App\Service\Market\Agent\AgentFlowEngine(
+                new \App\Service\Market\Agent\AgentPopulation(),
+                new \App\Service\Market\Agent\InMemoryAgentStateStore(),
+                new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
+                []
+            )
         );
     }
 

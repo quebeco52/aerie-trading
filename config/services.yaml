@@ -42,5 +42,10 @@ services:
     # Redis is the real store. The in-memory one is for tests and headless harnesses.
     App\Service\Market\Flow\OrderFlowStoreInterface:
         alias: App\Service\Market\Flow\RedisOrderFlowStore
+
+    # The agent book is hot per-tick cache rather than a durable fact about a company, so it lives in Redis
+    # alongside the macro state; the in-memory store is for tests and harnesses.
+    App\Service\Market\Agent\AgentStateStoreInterface:
+        alias: App\Service\Market\Agent\RedisAgentStateStore
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

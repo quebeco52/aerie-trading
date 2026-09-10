@@ -98,7 +98,13 @@ class StockTrackerTest extends TestCase
             $this->mathUtilityMock,
             $this->corporateMetricsMock,
             new \App\Service\Market\LiquidityEngine(new \App\Service\Math\MathUtility()),
-            $this->orderFlow
+            $this->orderFlow,
+            new \App\Service\Market\Agent\AgentFlowEngine(
+                new \App\Service\Market\Agent\AgentPopulation(),
+                new \App\Service\Market\Agent\InMemoryAgentStateStore(),
+                new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
+                []
+            )
         );
     }
 

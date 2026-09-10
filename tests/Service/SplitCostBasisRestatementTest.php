@@ -9,6 +9,7 @@ use App\Service\Corporate\CorporateLedgerService;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
@@ -59,6 +60,112 @@ final class SplitCostBasisRestatementTest extends TestCase
         $this->assertCount(1, $matches, 'A split must restate filled trade orders exactly once.');
 
         return $matches[0];
+    }
+
+    /** The one statement that restates the price history table. */
+    private function historyStatement(): array
+    {
+        $matches = array_values(array_filter(
+            $this->statements,
+            static fn (array $s): bool => str_contains($s['sql'], 'stock_history')
+        ));
+
+        $this->assertCount(1, $matches, 'A split must restate price history exactly once.');
+
+        return $matches[0];
+    }
+
+    /**
+     * A history row is a whole bar, and all four of its prices are quoted in shares.
+     *
+     * Restating only the close leaves open, high and low in pre-split units, which draws every historical
+     * candle with a wick spanning the entire split factor — a chart that says the stock traded from $25 to
+     * $100 on a day it never moved. The columns arrived with the candle chart and this restatement did not
+     * learn about them.
+     *
+     * @param non-empty-list<string> $expected
+     */
+    #[DataProvider('barColumnRestatementCases')]
+    public function testASplitRestatesEveryPriceInTheBarNotJustTheClose(
+        float $factor,
+        bool $isReverse,
+        array $expected,
+    ): void {
+        $stock = new Stock();
+        $stock->setTicker('BAR_CORP');
+
+        $this->service->processStockSplit($stock, $factor, $isReverse, 2.50);
+
+        $sql = $this->historyStatement()['sql'];
+        foreach ($expected as $fragment) {
+            $this->assertStringContainsString($fragment, $sql);
+        }
+    }
+
+    /** @return array<string, array{float, bool, non-empty-list<string>}> */
+    public static function barColumnRestatementCases(): array
+    {
+        return [
+            'forward' => [4.0, false, [
+                'price = GREATEST(price / :factor',
+                'open_price = GREATEST(open_price / :factor',
+                'high_price = GREATEST(high_price / :factor',
+                'low_price = GREATEST(low_price / :factor',
+            ]],
+            'reverse' => [10.0, true, [
+                'price = LEAST(price * :factor',
+                'open_price = LEAST(open_price * :factor',
+                'high_price = LEAST(high_price * :factor',
+                'low_price = LEAST(low_price * :factor',
+            ]],
+        ];
+    }
+
+    /**
+     * Volume is a share count, so it moves against price. A forward split leaves the same consideration
+     * spread over more shares; restating price without it puts a step in the histogram at the split.
+     */
+    public function testSplitRestatementMovesVolumeAgainstPrice(): void
+    {
+        foreach ([[4.0, false, 'volume * :factor'], [10.0, true, 'FLOOR(volume / :factor)']] as [$factor, $isReverse, $fragment]) {
+            $this->statements = [];
+            $stock = new Stock();
+            $stock->setTicker('VOL_CORP');
+            $this->service->processStockSplit($stock, $factor, $isReverse, 2.50);
+
+            $this->assertStringContainsString($fragment, $this->historyStatement()['sql']);
+        }
+    }
+
+    /**
+     * Every price-bearing column the entity declares has to appear in the restatement. This is the guard
+     * that a column added later cannot quietly go unrestated the way the bar columns did.
+     */
+    public function testTheRestatementCoversEveryColumnStockHistoryDeclares(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('COVERAGE');
+        $this->service->processStockSplit($stock, 4.0, false, 2.50);
+
+        $sql = $this->historyStatement()['sql'];
+        $entity = file_get_contents(__DIR__ . '/../../src/Entity/StockHistory.php');
+        $this->assertIsString($entity);
+
+        preg_match_all('/private [^;]*\$(\w+)\s*=/', $entity, $matches);
+
+        $exempt = ['id', 'stock', 'recordedAt'];
+        foreach ($matches[1] as $property) {
+            if (in_array($property, $exempt, true)) {
+                continue;
+            }
+
+            $column = strtolower(preg_replace('/(?<!^)[A-Z]/', '_$0', $property) ?? $property);
+            $this->assertStringContainsString(
+                $column . ' =',
+                $sql,
+                sprintf('stock_history.%s is quoted in shares or money and is not restated by a split.', $column)
+            );
+        }
     }
 
     /** A forward split multiplies the executed quantities and divides the prices they were struck at. */

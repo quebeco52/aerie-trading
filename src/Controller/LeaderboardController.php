@@ -29,9 +29,11 @@ class LeaderboardController extends AbstractController
                    COALESCE(etf_totals.etf_val, 0) as etf_value,
                    COALESCE(bond_totals.bond_val, 0) as bond_value,
                    COALESCE(escrow.escrow_val, 0) as escrow_value,
-                   (u.cash_balance + COALESCE(stock_totals.stock_val, 0) + COALESCE(etf_totals.etf_val, 0) + COALESCE(bond_totals.bond_val, 0) + COALESCE(escrow.escrow_val, 0)) as total_value
+                   u.margin_debit,
+                   (u.cash_balance - u.margin_debit + COALESCE(stock_totals.stock_val, 0) + COALESCE(etf_totals.etf_val, 0) + COALESCE(bond_totals.bond_val, 0) + COALESCE(escrow.escrow_val, 0)) as total_value
             FROM users u
             LEFT JOIN (
+                -- A short's quantity is negative, so this one SUM marks longs and shorts alike.
                 SELECT us.user_id, SUM(us.quantity * s.price) as stock_val
                 FROM user_stocks us
                 JOIN stocks s ON us.stock_id = s.id

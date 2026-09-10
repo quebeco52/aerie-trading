@@ -326,7 +326,9 @@ class BankruptcyTest extends TestCase
             new \Psr\Log\NullLogger(),
             new \App\Service\Market\AssetResolver($this->entityManagerMock),
             new \App\Service\Market\LiquidityEngine(new \App\Service\Math\MathUtility()),
-            new \App\Service\Market\Flow\InMemoryOrderFlowStore()
+            new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
+            new \App\Service\Market\MarginEngine($this->entityManagerMock),
+            new \App\Service\Market\SecuritiesLendingDesk()
         );
 
         $this->expectException(\Exception::class);
@@ -365,7 +367,13 @@ class BankruptcyTest extends TestCase
             $this->mathUtilityMock,
             $corpMetrics,
             new \App\Service\Market\LiquidityEngine(new \App\Service\Math\MathUtility()),
-            new \App\Service\Market\Flow\InMemoryOrderFlowStore()
+            new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
+            new \App\Service\Market\Agent\AgentFlowEngine(
+                new \App\Service\Market\Agent\AgentPopulation(),
+                new \App\Service\Market\Agent\InMemoryAgentStateStore(),
+                new \App\Service\Market\Flow\InMemoryOrderFlowStore(),
+                []
+            )
         );
 
         $result = $tracker->updateStocks([$stock], 0.01, false);

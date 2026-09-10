@@ -15,6 +15,8 @@ use App\Entity\UserStock;
 use App\Service\Market\AssetResolver;
 use App\Service\Market\Flow\InMemoryOrderFlowStore;
 use App\Service\Market\LiquidityEngine;
+use App\Service\Market\MarginEngine;
+use App\Service\Market\SecuritiesLendingDesk;
 use App\Service\Math\MathUtility;
 use App\Service\Market\TradeExecutionService;
 use App\Service\User\Portfolio;
@@ -92,7 +94,9 @@ class TradeExecutionServiceTest extends TestCase
             new NullLogger(),
             new AssetResolver($this->emMock),
             new LiquidityEngine(new MathUtility()),
-            $this->orderFlow
+            $this->orderFlow,
+            new MarginEngine($this->emMock),
+            new SecuritiesLendingDesk()
         );
     }
 
@@ -609,5 +613,252 @@ class TradeExecutionServiceTest extends TestCase
 
         $this->assertSame('OPEN', $buyOrder->getStatus(), 'The order stays working rather than filling through its limit.');
         $this->assertSame('0.00', $buyer->getCashBalance(), 'Escrow is untouched when nothing fills.');
+    }
+    // --- Short selling and margin ---
+
+    private function marginUser(string $cash = '100000.00'): User
+    {
+        $user = new User();
+        $user->setCashBalance($cash);
+        $user->setMarginEnabled(true);
+
+        return $user;
+    }
+
+    private function shortableStock(): Stock
+    {
+        $stock = new Stock();
+        $stock->setTicker('APEX');
+        $stock->setPrice('50.00');
+        $stock->setSharesOutstanding('50000000');
+        $stock->setPublicFloatPercentage('0.90');
+        $stock->setVolatility('0.30');
+        $stock->setCurrentVolatility('0.30');
+        $stock->setShortInterestShares('0.00');
+
+        return $stock;
+    }
+
+    public function testAShortCreditsProceedsAndOpensANegativePosition(): void
+    {
+        $user = $this->marginUser();
+        $stock = $this->shortableStock();
+
+        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+
+        $holding = null;
+        $this->emMock->method('persist')->willReturnCallback(static function (object $entity) use (&$holding): void {
+            if ($entity instanceof UserStock) {
+                $holding = $entity;
+            }
+        });
+
+        $this->service->executeOrder($user, 'APEX', 'SHORT', 'MARKET', 100);
+
+        $this->assertNotNull($holding);
+        $this->assertSame(-100, (int) $holding->getQuantity());
+        $this->assertGreaterThan(100000.0, (float) $user->getCashBalance(), 'Proceeds are credited to cash.');
+
+        // Proceeds are not free money: the borrowed stock is registered against the name's lendable supply.
+        $this->assertSame(100.0, (float) $stock->getShortInterestShares());
+    }
+
+    public function testACashAccountCannotSellShort(): void
+    {
+        $user = new User();
+        $user->setCashBalance('100000.00');
+
+        $this->stockRepoStub->method('findOneBy')->willReturn($this->shortableStock());
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessageMatches('/requires a margin account/');
+
+        $this->service->executeOrder($user, 'APEX', 'SHORT', 'MARKET', 100);
+    }
+
+    public function testAShortIsRefusedWhenThereIsNotEnoughStockToBorrow(): void
+    {
+        $user = $this->marginUser('100000000.00');
+        $stock = $this->shortableStock();
+
+        // Lendable supply is 50m x 90% float x 65% lendable = 29.25m shares, nearly all of it already out
+        // on loan. 300k is comfortably inside what the desk will trade in one go but well past what is
+        // left to borrow, so the borrow check is what has to reject it.
+        $stock->setShortInterestShares('29000000.00');
+
+        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessageMatches('/available to borrow/');
+
+        $this->service->executeOrder($user, 'APEX', 'SHORT', 'MARKET', 300000);
+    }
+
+    public function testABondCannotBeSoldShort(): void
+    {
+        $user = $this->marginUser();
+
+        $bond = new Bond();
+        $bond->setTicker('G10-001')->setName('bond')->setTenorYears('10')->setPrice('1000');
+
+        $this->stockRepoStub->method('findOneBy')->willReturn(null);
+        $this->etfRepoStub->method('findOneBy')->willReturn(null);
+        $this->bondRepoStub->method('findOneBy')->willReturn($bond);
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessageMatches('/Only equities can be sold short/');
+
+        $this->service->executeOrder($user, 'G10-001', 'SHORT', 'MARKET', 1);
+    }
+
+    public function testCoveringReturnsTheBorrowAndReducesShortInterest(): void
+    {
+        $user = $this->marginUser();
+        $stock = $this->shortableStock();
+        $stock->setShortInterestShares('500.00');
+
+        $holding = new UserStock();
+        $holding->setUser($user);
+        $holding->setStock($stock);
+        $holding->setQuantity(-100);
+
+        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->userStockRepoStub->method('findOneBy')->willReturn($holding);
+
+        $this->service->executeOrder($user, 'APEX', 'COVER', 'MARKET', 40);
+
+        $this->assertSame(-60, (int) $holding->getQuantity());
+        $this->assertSame(460.0, (float) $stock->getShortInterestShares());
+    }
+
+    public function testCoveringMoreThanIsShortIsRefused(): void
+    {
+        $user = $this->marginUser();
+        $stock = $this->shortableStock();
+
+        $holding = new UserStock();
+        $holding->setUser($user);
+        $holding->setStock($stock);
+        $holding->setQuantity(-50);
+
+        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->userStockRepoStub->method('findOneBy')->willReturn($holding);
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessageMatches('/No short position of that size/');
+
+        $this->service->executeOrder($user, 'APEX', 'COVER', 'MARKET', 200);
+    }
+
+    public function testAnOversizedSellCannotQuietlyBecomeAShort(): void
+    {
+        // Opening a short by overselling would turn every fat-fingered sale into a borrowed position with
+        // unbounded downside, and nothing in the order would record that the trader meant it.
+        $user = $this->marginUser();
+        $stock = $this->shortableStock();
+
+        $holding = new UserStock();
+        $holding->setUser($user);
+        $holding->setStock($stock);
+        $holding->setQuantity(10);
+
+        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->userStockRepoStub->method('findOneBy')->willReturn($holding);
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessageMatches('/Insufficient shares/');
+
+        $this->service->executeOrder($user, 'APEX', 'SELL', 'MARKET', 500);
+    }
+
+    public function testABuyBeyondSettledCashBorrowsRatherThanFailing(): void
+    {
+        $user = $this->marginUser('1000.00');
+        $stock = $this->shortableStock();
+
+        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->userStockRepoStub->method('findOneBy')->willReturn(null);
+
+        // $1,000 of equity supports $2,000 of stock at a 50% initial requirement. 30 shares at $50 is
+        // $1,500: more than the settled cash, inside the buying power, so the difference is borrowed.
+        $this->service->executeOrder($user, 'APEX', 'BUY', 'MARKET', 30);
+
+        $this->assertSame('0.0000', $user->getCashBalance(), 'Cash is drawn to zero before anything is borrowed.');
+        $this->assertGreaterThan(400.0, (float) $user->getMarginDebit());
+        $this->assertLessThan(600.0, (float) $user->getMarginDebit());
+    }
+
+    public function testAMarginAccountIsStillHeldToItsBuyingPower(): void
+    {
+        // Leverage is bounded, not unlimited: $1,000 of equity supports $2,000 of stock and no more.
+        $user = $this->marginUser('1000.00');
+
+        $this->stockRepoStub->method('findOneBy')->willReturn($this->shortableStock());
+        $this->userStockRepoStub->method('findOneBy')->willReturn(null);
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessageMatches('/buying power/');
+
+        $this->service->executeOrder($user, 'APEX', 'BUY', 'MARKET', 100);
+    }
+
+    public function testACashAccountStillCannotOverspend(): void
+    {
+        $user = new User();
+        $user->setCashBalance('1000.00');
+
+        $this->stockRepoStub->method('findOneBy')->willReturn($this->shortableStock());
+        $this->userStockRepoStub->method('findOneBy')->willReturn(null);
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessageMatches('/Insufficient funds/');
+
+        $this->service->executeOrder($user, 'APEX', 'BUY', 'MARKET', 100);
+    }
+
+    public function testProceedsPayDownBorrowingBeforeTheyReachCash(): void
+    {
+        // Nobody pays margin interest while holding idle cash.
+        $user = $this->marginUser('0.00');
+        $user->setMarginDebit('3000.00');
+
+        $stock = $this->shortableStock();
+
+        $holding = new UserStock();
+        $holding->setUser($user);
+        $holding->setStock($stock);
+        $holding->setQuantity(100);
+
+        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->userStockRepoStub->method('findOneBy')->willReturn($holding);
+
+        $this->service->executeOrder($user, 'APEX', 'SELL', 'MARKET', 40);
+
+        // 40 shares sold just under $50 raises a little under $2,000 against a $3,000 debit, so all of it
+        // repays borrowing and none of it reaches the settled balance.
+        $this->assertGreaterThan(1000.0, (float) $user->getMarginDebit());
+        $this->assertLessThan(1100.0, (float) $user->getMarginDebit());
+        $this->assertSame('0.0000', $user->getCashBalance());
+    }
+
+    public function testACoverIsReportedToOrderFlowAsBuyingAndAShortAsSelling(): void
+    {
+        // Impact follows the side, not the label: a cover buys stock and pushes the price up.
+        $user = $this->marginUser();
+        $stock = $this->shortableStock();
+
+        $holding = new UserStock();
+        $holding->setUser($user);
+        $holding->setStock($stock);
+        $holding->setQuantity(-500);
+
+        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->userStockRepoStub->method('findOneBy')->willReturn($holding);
+
+        $this->service->executeOrder($user, 'APEX', 'COVER', 'MARKET', 100);
+        $this->assertSame(['APEX' => 100.0], $this->orderFlow->drain());
+
+        $this->service->executeOrder($user, 'APEX', 'SHORT', 'MARKET', 60);
+        $this->assertSame(['APEX' => -60.0], $this->orderFlow->drain());
     }
 }

@@ -68,6 +68,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private StockTracker $stockTracker,
         private EtfTracker $etfTracker,
         private BondTracker $bondTracker,
+        private \App\Service\Market\ForcedLiquidationService $liquidationService,
         private TreasuryAuctionService $treasuryAuction,
         private MacroEngine $macroEngine,
         private MarketOperator $marketOperator,
@@ -337,7 +338,15 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     // dirty price instead would splice an accrual sawtooth onto a flat historical series at
                     // the join between the two, and the chart would show a jump the instrument never made.
                     $chartPrice = $update['clean_price'] ?? $update['price'];
-                    $point = json_encode(['price' => $chartPrice, 'recorded_at' => $nowStr]);
+
+                    // Volume rides along so the short ranges can draw the same bar the history table does.
+                    // ETFs and bonds have no share volume; the key stays absent rather than zero, which is
+                    // what tells the chart to draw no histogram at all instead of an empty one.
+                    $point = ['price' => $chartPrice, 'recorded_at' => $nowStr];
+                    if (isset($update['volume'])) {
+                        $point['volume'] = $update['volume'];
+                    }
+                    $point = json_encode($point);
 
                     $pipeline->lPush($cacheKey, $point);
                     $pipeline->lTrim($cacheKey, 0,  $redisBufferSize - 1);
@@ -387,6 +396,13 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 }
 
                 $this->entityManager->commit();
+
+                // The margin sweep runs AFTER the tick commits, never inside it. A forced sale goes through
+                // the ordinary execution path, which opens its own transaction, and nesting one account's
+                // liquidation inside the whole market's tick would couple the two.
+                if ($tickCount % $snapshotInterval === 0) {
+                    $this->liquidationService->sweep($macroState->policyRate, $snapshotInterval * $dt);
+                }
             } catch (\Exception $e) {
                 if ($this->entityManager->getConnection()->isTransactionActive()) {
                     $this->entityManager->rollback();

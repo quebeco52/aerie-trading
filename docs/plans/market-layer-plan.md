@@ -162,6 +162,30 @@ impact before submit.
 
 **Effort: large.** This is the phase that pays for the other three.
 
+### Follow-up 2026-09-10 — the candle chart was drawing dojis
+
+Step 4 above says `historyIntervalTicks()` "is often >1". At the rate this project is configured to run
+(`SIM_TICKS_PER_YEAR=3600`) it is exactly 1, and at anything at or below `TARGET_HISTORY_POINTS_PER_YEAR`
+it always will be: the sampler writes one row per tick, so the stored bar spans a single observation and
+`open == high == low == close` on every row. Every candle was a doji — the chart read as a scatter of
+disconnected dashes beside a line chart that was continuous over the same rows.
+
+The bar interval belongs to the RANGE BEING VIEWED, not to the rate history was sampled at. A year is
+drawn as daily bars whatever resolution the ticks arrived at. `PriceBarAggregator` now buckets rows and
+aggregates OHLCV on read, which also replaces the endpoint's old reduction: it kept every Nth row and
+dropped the rest, which is right for a line (a subsample of closes is still a price path) and wrong for a
+bar (a statement about everything inside its interval). ETF and bond series get real bars from this too,
+having never had the columns at all.
+
+Three smaller defects fixed alongside, each of which showed up as a break in the same chart:
+
+- **Splits never restated the bar columns.** `CorporateLedgerService` scaled `price` alone, leaving open,
+  high and low in pre-split units — a wick spanning the whole split factor across all history. Volume also
+  moves against price, and did not move at all.
+- **`ORDER BY recorded_at DESC` is not deterministic.** At a 100ms tick the timestamp has ten rows to a
+  second and their order within it is undefined, scrambling the open and close inside every bar. Now `id`.
+- **The Redis chart buffer carried no volume**, so 1w and 1m had an empty histogram pane by construction.
+
 ---
 
 ## Phase 2 — Sovereign bond desk — SHIPPED 2026-09-10
@@ -271,7 +295,33 @@ and `calculateMertonCreditSpread()` (`MathUtility.php:910`) already exists. Disc
 
 ---
 
-## Phase 3 — Short selling and margin
+## Phase 3 — Short selling and margin — SHIPPED 2026-09-10
+
+Built as described below. Notes:
+
+- **The squeeze is emergent and there is no squeeze event anywhere in the code.** Four components each
+  built for their own reasons compose into the loop: a rally takes equity from shorts (`MarginEngine`),
+  covering pushes the price further (`LiquidityEngine` impact from Phase 1), utilization of the remaining
+  borrow rises so the fee rises (`SecuritiesLendingDesk`), and past 97% utilization stock is recalled
+  whether the account is solvent or not. `ShortSqueezeDynamicsTest` drives the loop end to end.
+- **Forced liquidations go through the ordinary execution path**, so they cross the spread and pay their
+  own impact. A liquidation that settled at mid would be a rescue, and it is forced selling into a falling
+  market that makes a cascade. The sweep runs AFTER the tick commits, never inside it.
+- **The liquidation formula was wrong on the first pass** — the buffer widened the divisor, which made it
+  sell LESS. Correct derivation: sell `LMV - equity/(maintenance + buffer)`.
+- **Signed quantity: two of the three predicted breakages were real, one was not.** NAV's
+  `SUM(quantity * price)` genuinely does mark a short correctly, as suspected; what was missing was
+  subtracting `margin_debit`, in all three NAV surfaces. Cost basis did need explicit SHORT/COVER handling.
+  Dividends already filtered `quantity > 0` so shorts were not wrongly credited, but they were not being
+  debited either — a short owes the distribution to the lender.
+- **The dashboard skipped `quantity <= 0`**, so shorts would have been invisible. Sector exposure is now
+  summed gross, since a short is exposure to a sector rather than an offset against a long in it.
+
+**Not built, and a correction to the plan above:** routing player margin interest into
+`BrokerageBusinessModel` revenue. The loop is elegant on paper but the magnitudes are wrong — a brokerage
+models its margin book off its own `wholesaleDebt`, against which aggregate player debits are negligible,
+and splitting them across brokerages would be arbitrary. Players pay the correct rate
+(`policyRate + MARGIN_LOAN_SPREAD`, the existing constant); the corporate side is left alone.
 
 ### Goal
 Leverage, risk of ruin, and squeezes that emerge from the mechanism rather than from a script.
@@ -344,7 +394,30 @@ Handle all three deliberately in this phase. Do not assume the arithmetic works 
 
 ---
 
-## Phase 4 — NPC capital and endogenous flow
+## Phase 4 — NPC capital and endogenous flow — SHIPPED 2026-09-10
+
+All four phases are now built. Notes from implementation:
+
+- **The variance handover needed no new machinery.** Agent flow goes into the same `OrderFlowStore` a
+  player's fill goes into, so it reaches the price through the same impact function and is measured by the
+  same `impactVarianceEma`. Phase 1's budget covers it automatically. Measured: realized volatility is
+  unchanged across three seeds with the population on versus off.
+- **Fitness had to be ANNUALIZED, and this was a real bug on the first pass.** A raw per-tick profit at a
+  14,400-tick year is ~1e-5, and no sane intensity of choice can tell two such numbers apart. The
+  population sat at exactly 50/50 forever while the code ran, allocated, and looked entirely correct.
+  `updateFitness()` now takes `dt` and scores an annualized rate over a horizon in years, which also makes
+  the configured beta mean the same thing at any tick rate. The population now swings 0.13–0.73.
+- **Only beliefs compete.** Fundamentalist and momentum switch by discrete choice — the canonical
+  Brock-Hommes two-type ABS. The index fund (a decision not to hold a view) and the market maker (an
+  intermediary) are outside the switching, because neither is chosen for having beaten the other side.
+- **`AgentMarketViewDTO` is a deliberate bottleneck.** Agents see a price, a published fair value, a trend
+  and the macro backdrop. Handing them the `Stock` entity would let a strategy read next quarter's
+  earnings off the balance sheet, which is a strategy that cannot lose rather than one that competes.
+- Agents act on the published price and their orders land next tick. That lag is the causality, not an
+  approximation.
+
+Still exogenous: the diffusion remains the dominant source of variance. `AGENT_FLOW_INTENSITY` is the
+single dial for handing more of it to the agents, and the invariance test is what makes turning it safe.
 
 ### Goal
 Give the order-flow channel from Phase 1 something to carry, so prices become partly endogenous

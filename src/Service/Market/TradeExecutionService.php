@@ -3,9 +3,13 @@
 namespace App\Service\Market;
 
 use App\DTO\ExecutionQuoteDTO;
+use App\DTO\ResolvedAssetDTO;
 use App\Entity\Stock;
 use App\Entity\TradeOrder;
 use App\Entity\User;
+use App\Entity\UserBond;
+use App\Entity\UserEtf;
+use App\Entity\UserStock;
 use App\Service\Market\Flow\OrderFlowStoreInterface;
 use App\Service\Math\MathUtility;
 use App\Service\User\Portfolio;
@@ -20,8 +24,18 @@ class TradeExecutionService
     /** Ceiling on a limit price. Escrow is stored at DECIMAL(18,4), so the price times the 1e9 quantity cap has to stay inside it. */
     public const MAX_LIMIT_PRICE = '100000000.0000';
 
-    /** The only two sides an order may be placed on. Anything else fell through to the SELL branch and escrowed shares against an order nothing would ever fill. */
-    public const VALID_ACTIONS = ['BUY', 'SELL'];
+    /**
+     * The sides an order may be placed on. Anything not listed here fell through to the SELL branch and
+     * escrowed shares against an order nothing would ever fill.
+     *
+     * SHORT and COVER are their own actions rather than a SELL that happens to exceed the position. Opening
+     * a short by overselling would turn every fat-fingered sale into a borrowed position with unbounded
+     * downside, and nothing in the order would record that the trader meant it.
+     */
+    public const VALID_ACTIONS = ['BUY', 'SELL', 'SHORT', 'COVER'];
+
+    /** Sides that acquire stock and pay cash out. */
+    private const BUY_SIDE_ACTIONS = ['BUY', 'COVER'];
 
     public function __construct(
         private EntityManagerInterface $em,
@@ -30,8 +44,16 @@ class TradeExecutionService
         private \Psr\Log\LoggerInterface $logger,
         private AssetResolver $assetResolver,
         private LiquidityEngine $liquidityEngine,
-        private OrderFlowStoreInterface $orderFlow
+        private OrderFlowStoreInterface $orderFlow,
+        private MarginEngine $marginEngine,
+        private SecuritiesLendingDesk $lendingDesk
     ) {}
+
+    /** Whether an action buys stock (and pays cash) or sells it (and receives cash). */
+    public static function isBuySide(string $action): bool
+    {
+        return in_array($action, self::BUY_SIDE_ACTIONS, true);
+    }
 
     public function executeOrder(User $user, string $ticker, string $action, string $orderType, int $quantity, ?string $limitPrice = null): void
     {
@@ -102,19 +124,7 @@ class TradeExecutionService
 
             if ($orderType === 'MARKET') {
                 // Execute immediately at market price
-                if ($action === 'BUY') {
-                    if (\bccomp($currentCashStr, $totalValueStr, 4) < 0) {
-                        throw new \Exception('Insufficient funds.');
-                    }
-                    $user->setCashBalance(\bcsub($currentCashStr, $totalValueStr, 4));
-                    $userAsset = $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
-                } else { // SELL
-                    if (!$userAsset || $userAsset->getQuantity() < $quantity) {
-                        throw new \Exception('Insufficient shares.');
-                    }
-                    $user->setCashBalance(\bcadd($currentCashStr, $totalValueStr, 4));
-                    $this->assetResolver->removeFromHolding($userAsset, $quantity);
-                }
+                $userAsset = $this->settlePosition($user, $asset, $userAsset, $action, $quantity, $totalValueStr, $stock);
 
                 $this->recordFill($order, $quote, $quantity, $action, $asset->ticker(), $assetType);
                 $this->em->persist($order);
@@ -127,36 +137,33 @@ class TradeExecutionService
                 // Tested against the price the order would actually fill at, not against mid. A limit is a
                 // promise about the worst price the trader will accept, and crossing on mid would break it
                 // the moment the spread or the order's own impact pushed the fill through the limit.
-                if ($action === 'BUY' && $limitPriceFloat >= $quote->executionPrice) {
+                if (self::isBuySide($action) && $limitPriceFloat >= $quote->executionPrice) {
                     $shouldFillImmediately = true;
-                } elseif ($action === 'SELL' && $limitPriceFloat <= $quote->executionPrice) {
+                } elseif (!self::isBuySide($action) && $limitPriceFloat <= $quote->executionPrice) {
                     $shouldFillImmediately = true;
                 }
 
                 if ($shouldFillImmediately) {
                     // Fill immediately at LIVE PRICE, not limit price (better execution)
-                    if ($action === 'BUY') {
-                        if (\bccomp($currentCashStr, $totalValueStr, 4) < 0) {
-                            throw new \Exception('Insufficient funds.');
-                        }
-                        $user->setCashBalance(\bcsub($currentCashStr, $totalValueStr, 4));
-                        $userAsset = $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
-                    } else { // SELL
-                        if (!$userAsset || $userAsset->getQuantity() < $quantity) {
-                            throw new \Exception('Insufficient shares.');
-                        }
-                        $user->setCashBalance(\bcadd($currentCashStr, $totalValueStr, 4));
-                        $this->assetResolver->removeFromHolding($userAsset, $quantity);
-                    }
+                    $userAsset = $this->settlePosition($user, $asset, $userAsset, $action, $quantity, $totalValueStr, $stock);
                     $this->recordFill($order, $quote, $quantity, $action, $asset->ticker(), $assetType);
                 } else {
                     // Escrow and save as OPEN
-                    if ($action === 'BUY') {
+                    if (self::isBuySide($action)) {
                         $escrowCashStr = \bcmul((string) $limitPrice, $quantityStr, 4);
-                        if (\bccomp($currentCashStr, $escrowCashStr, 4) < 0) {
-                            throw new \Exception('Insufficient funds for limit order.');
+                        $this->requireFunding($user, (float) $escrowCashStr, $action);
+                        $this->debitCash($user, $escrowCashStr);
+                    } elseif ($action === 'SHORT') {
+                        // A resting short escrows nothing. Borrow is located and margin is checked when it
+                        // fills, not when it is placed: reserving stock against an order that may never
+                        // cross would let a trader take a name hard-to-borrow for everyone else with an
+                        // offer nobody can hit.
+                        if ($stock === null) {
+                            throw new \Exception('Only equities can be sold short.');
                         }
-                        $user->setCashBalance(\bcsub($currentCashStr, $escrowCashStr, 4));
+                        if (!$user->isMarginEnabled()) {
+                            throw new \Exception('Short selling requires a margin account.');
+                        }
                     } else { // SELL
                         if (!$userAsset || $userAsset->getQuantity() < $quantity) {
                             throw new \Exception('Insufficient shares for limit order.');
@@ -190,6 +197,156 @@ class TradeExecutionService
     }
 
     /**
+     * Moves the stock and the cash for one fill, in whichever of the four directions the action names.
+     *
+     * One place for all of it, because the four actions differ in exactly two ways — which side of the
+     * position they move, and what has to be true beforehand — and spelling that out four times is how the
+     * pre-trade checks drift apart from each other.
+     *
+     * @param string $totalValue Consideration for the fill, as a bcmath string.
+     * @param Stock|null $stock  The instrument when it is an equity; short selling exists only for equities.
+     */
+    private function settlePosition(
+        User $user,
+        ResolvedAssetDTO $asset,
+        UserStock|UserEtf|UserBond|null $userAsset,
+        string $action,
+        int $quantity,
+        string $totalValue,
+        ?Stock $stock
+    ): UserStock|UserEtf|UserBond {
+        $held = $userAsset !== null ? (int) $userAsset->getQuantity() : 0;
+
+        if (self::isBuySide($action)) {
+            if ($action === 'COVER') {
+                if ($held >= 0 || abs($held) < $quantity) {
+                    throw new \Exception('No short position of that size to cover.');
+                }
+            }
+
+            $this->requireFunding($user, (float) $totalValue, $action);
+            $this->debitCash($user, $totalValue);
+
+            $userAsset = $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
+
+            if ($action === 'COVER' && $stock !== null) {
+                $this->adjustShortInterest($stock, -$quantity);
+            }
+
+            return $userAsset;
+        }
+
+        if ($action === 'SHORT') {
+            if ($stock === null) {
+                throw new \Exception('Only equities can be sold short.');
+            }
+            if (!$user->isMarginEnabled()) {
+                throw new \Exception('Short selling requires a margin account.');
+            }
+            if ($held < 0 && $userAsset === null) {
+                throw new \Exception('Position lookup failed.');
+            }
+
+            $available = $this->lendingDesk->availableToBorrow($stock);
+            if ($quantity > $available) {
+                throw new \Exception(sprintf(
+                    'Only %s shares of %s are available to borrow.',
+                    number_format(floor($available)),
+                    $stock->getTicker()
+                ));
+            }
+
+            $this->requireFunding($user, (float) $totalValue, $action);
+
+            // Proceeds are credited, then immediately collateralize the borrowed stock. They are not free
+            // cash: MarginEngine subtracts the position's market value straight back out of equity.
+            $this->creditCash($user, $totalValue);
+            $userAsset = $this->assetResolver->addToHolding($user, $asset, $userAsset, -$quantity);
+            $this->adjustShortInterest($stock, $quantity);
+
+            return $userAsset;
+        }
+
+        // SELL
+        if ($userAsset === null || $held < $quantity) {
+            throw new \Exception('Insufficient shares.');
+        }
+
+        $this->creditCash($user, $totalValue);
+        $this->assetResolver->removeFromHolding($userAsset, $quantity);
+
+        return $userAsset;
+    }
+
+    /**
+     * Rejects a trade the account cannot collateralize.
+     *
+     * A cash account is measured against settled cash; a margin account against buying power, which is what
+     * is left once the existing book is collateralized, geared by the initial requirement.
+     */
+    private function requireFunding(User $user, float $notional, string $action): void
+    {
+        if (!$user->isMarginEnabled()) {
+            if ($action === 'SHORT') {
+                throw new \Exception('Short selling requires a margin account.');
+            }
+
+            if ($notional > (float) $user->getCashBalance() + 1e-6) {
+                throw new \Exception('Insufficient funds.');
+            }
+
+            return;
+        }
+
+        if (!$this->marginEngine->canOpen($user, $notional)) {
+            throw new \Exception('Insufficient buying power for this order.');
+        }
+    }
+
+    /**
+     * Pays cash out, borrowing whatever the settled balance does not cover.
+     *
+     * Drawing the balance to zero before borrowing is the order a real account sweeps in: nobody pays
+     * margin interest while holding idle cash.
+     */
+    private function debitCash(User $user, string $amount): void
+    {
+        $cash = (string) $user->getCashBalance();
+        $fromCash = \bccomp($cash, $amount, 4) >= 0 ? $amount : $cash;
+
+        $user->setCashBalance(\bcsub($cash, $fromCash, 4));
+
+        $borrowed = \bcsub($amount, $fromCash, 4);
+        if (\bccomp($borrowed, '0.0000', 4) > 0) {
+            $user->setMarginDebit(\bcadd((string) $user->getMarginDebit(), $borrowed, 2));
+        }
+    }
+
+    /** Takes cash in, paying down any borrowing first. */
+    private function creditCash(User $user, string $amount): void
+    {
+        $debit = (string) $user->getMarginDebit();
+        $repaid = \bccomp($debit, $amount, 4) >= 0 ? $amount : $debit;
+
+        if (\bccomp($repaid, '0.0000', 4) > 0) {
+            $user->setMarginDebit(\bcsub($debit, $repaid, 2));
+        }
+
+        $user->setCashBalance(\bcadd((string) $user->getCashBalance(), \bcsub($amount, $repaid, 4), 4));
+    }
+
+    /**
+     * Moves a name's total short interest, which is what prices its borrow for everyone.
+     *
+     * @param int $delta Shares added to (positive) or removed from (negative) the total.
+     */
+    private function adjustShortInterest(Stock $stock, int $delta): void
+    {
+        $updated = max(0.0, (float) $stock->getShortInterestShares() + $delta);
+        $stock->setShortInterestShares(MathUtility::formatDecimal($updated, 2));
+    }
+
+    /**
      * Stamps a fill onto its order and reports the flow it generated.
      *
      * The signed quantity goes to the order flow store rather than moving the price here: impact is applied
@@ -207,7 +364,8 @@ class TradeExecutionService
         $order->setFilledAt(new \DateTime());
 
         if ($assetType === 'STOCK') {
-            $this->orderFlow->record($ticker, $action === 'BUY' ? (float) $quantity : -(float) $quantity);
+            // A cover buys stock and a short sells it, so flow follows the side rather than the label.
+            $this->orderFlow->record($ticker, self::isBuySide($action) ? (float) $quantity : -(float) $quantity);
         }
     }
 
@@ -255,12 +413,12 @@ class TradeExecutionService
             $ticker = $order->getTicker();
             $quantity = $order->getQuantity();
 
-            if ($order->getAction() === 'BUY') {
-                // Refund cash
-                $escrowCashStr = \bcmul((string) $order->getLimitPrice(), (string) $quantity, 4);
-                $user->setCashBalance(\bcadd((string) $user->getCashBalance(), $escrowCashStr, 4));
-            } else {
-                // Refund the escrowed units
+            if (self::isBuySide($order->getAction())) {
+                // Refund cash, paying down the borrowing it was drawn from first.
+                $this->creditCash($user, \bcmul((string) $order->getLimitPrice(), (string) $quantity, 4));
+            } elseif ($order->getAction() === 'SELL') {
+                // Refund the escrowed shares. A resting SHORT escrowed nothing, so there is nothing to give
+                // back and no branch for it.
                 $asset = $this->assetResolver->resolve($ticker);
                 if ($asset === null) {
                     throw new \Exception('Asset not found.');
@@ -295,9 +453,9 @@ class TradeExecutionService
             $limitPrice = (float) $order->getLimitPrice();
             $shouldFill = false;
 
-            if ($order->getAction() === 'BUY' && $currentPrice <= $limitPrice) {
+            if (self::isBuySide($order->getAction()) && $currentPrice <= $limitPrice) {
                 $shouldFill = true;
-            } elseif ($order->getAction() === 'SELL' && $currentPrice >= $limitPrice) {
+            } elseif (!self::isBuySide($order->getAction()) && $currentPrice >= $limitPrice) {
                 $shouldFill = true;
             }
 
@@ -347,11 +505,11 @@ class TradeExecutionService
             // A resting order fills at or better than its limit, never through it. The touch that triggered
             // this fill was the mid, and the spread and the order's own impact sit on top of it: without
             // this check a BUY resting at 100 could fill at 100.30 the moment the mid ticked to 100.
-            if ($order->getAction() === 'BUY' && $quote->executionPrice > $limitPrice) {
+            if (self::isBuySide($order->getAction()) && $quote->executionPrice > $limitPrice) {
                 $this->em->getConnection()->rollBack();
                 return;
             }
-            if ($order->getAction() === 'SELL' && $quote->executionPrice < $limitPrice) {
+            if (!self::isBuySide($order->getAction()) && $quote->executionPrice < $limitPrice) {
                 $this->em->getConnection()->rollBack();
                 return;
             }
@@ -359,22 +517,53 @@ class TradeExecutionService
             $fillPrice = $quote->executionPrice;
             $userAsset = $this->assetResolver->findHolding($user, $asset);
 
-            if ($order->getAction() === 'BUY') {
-                // Cash was already escrowed at limit price. If execution price is better (lower), refund the difference.
-                $escrowedCashStr = \bcmul((string) $limitPrice, (string) $quantity, 4);
-                $actualCostStr = \bcmul(MathUtility::formatDecimal($fillPrice, 4), (string) $quantity, 4);
-                $refundStr = \bcsub($escrowedCashStr, $actualCostStr, 4);
+            $action = $order->getAction();
+            $considerationStr = \bcmul(MathUtility::formatDecimal($fillPrice, 4), (string) $quantity, 4);
+
+            if (self::isBuySide($action)) {
+                // Cash was escrowed at the limit. A better fill refunds the difference, paying down any
+                // borrowing the escrow was drawn from before it reaches the settled balance.
+                $refundStr = \bcsub(\bcmul((string) $limitPrice, (string) $quantity, 4), $considerationStr, 4);
 
                 if (\bccomp($refundStr, '0.0000', 4) > 0) {
-                    $user->setCashBalance(\bcadd((string) $user->getCashBalance(), $refundStr, 4));
+                    $this->creditCash($user, $refundStr);
                 }
-                
+
+                if ($action === 'COVER') {
+                    $held = $userAsset !== null ? (int) $userAsset->getQuantity() : 0;
+                    if ($held >= 0 || abs($held) < $quantity) {
+                        $this->em->getConnection()->rollBack();
+                        return;
+                    }
+
+                    if ($stock !== null) {
+                        $this->adjustShortInterest($stock, -$quantity);
+                    }
+                }
+
                 $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
+
+            } elseif ($action === 'SHORT') {
+                // Nothing was escrowed, so the borrow is located and the margin checked now. Either can
+                // have gone against the order while it rested, and a short opened without a locate is a
+                // position the desk cannot actually deliver.
+                if ($stock === null || $quantity > $this->lendingDesk->availableToBorrow($stock)) {
+                    $this->em->getConnection()->rollBack();
+                    return;
+                }
+
+                if (!$this->marginEngine->canOpen($user, (float) $considerationStr)) {
+                    $this->em->getConnection()->rollBack();
+                    return;
+                }
+
+                $this->creditCash($user, $considerationStr);
+                $this->assetResolver->addToHolding($user, $asset, $userAsset, -$quantity);
+                $this->adjustShortInterest($stock, $quantity);
 
             } else { // SELL
                 // Shares were already escrowed. Just give them the cash from the sale.
-                $saleValueStr = \bcmul(MathUtility::formatDecimal($fillPrice, 4), (string) $quantity, 4);
-                $user->setCashBalance(\bcadd((string) $user->getCashBalance(), $saleValueStr, 4));
+                $this->creditCash($user, $considerationStr);
             }
 
             $this->recordFill($order, $quote, $quantity, $order->getAction(), $ticker, $asset->type);

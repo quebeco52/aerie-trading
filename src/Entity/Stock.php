@@ -422,6 +422,22 @@ class Stock
     private ?float $impactVarianceEma = 0.0;
 
     /**
+     * @var float|null Share of the public float that is actually available to borrow. The rest is held by
+     *                 owners who do not lend, which is what makes a name hard to borrow long before its
+     *                 whole float is shorted.
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $lendableSupplyRatio = null;
+
+    /**
+     * @var string Shares currently sold short across every account. Utilization against the lendable
+     *             supply is what prices the borrow, so this has to be a live total rather than derived on
+     *             demand from a scan of every position.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 20, scale: 2, options: ['default' => '0.00'])]
+    private string $shortInterestShares = '0.00';
+
+    /**
      * @var float|null Lagged pass-through of expected inflation into selling prices; null until the first report seeds it.
      */
     #[ORM\Column(type: 'float', nullable: true)]
@@ -1175,6 +1191,28 @@ class Stock
     public function getImpactVarianceEma(): ?float
     {
         return $this->impactVarianceEma;
+    }
+
+    public function setLendableSupplyRatio(?float $lendableSupplyRatio): static
+    {
+        $this->lendableSupplyRatio = $lendableSupplyRatio;
+        return $this;
+    }
+
+    public function getLendableSupplyRatio(): ?float
+    {
+        return $this->lendableSupplyRatio;
+    }
+
+    public function setShortInterestShares(string $shortInterestShares): static
+    {
+        $this->shortInterestShares = $shortInterestShares;
+        return $this;
+    }
+
+    public function getShortInterestShares(): string
+    {
+        return $this->shortInterestShares;
     }
 
     public function setInflationPassThrough(?float $inflationPassThrough): static

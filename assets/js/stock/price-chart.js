@@ -154,8 +154,8 @@ export async function loadPriceHistory(range) {
             const time = anchorTime - (((data.length - 1) - i) * currentStepSize);
             chartData.push({ time, value: close });
 
-            // Rows written before bars existed carry only a close. A flat candle is the honest rendering:
-            // the range genuinely is not known, and inventing a wick would be drawing data that never was.
+            // The server aggregates history rows into the bars this range renders, so a bar arrives whole.
+            // The fallback covers a payload from an older deploy, where a flat candle is the honest reading.
             const open = d.open_price != null ? parseFloat(d.open_price) : close;
             const high = d.high_price != null ? parseFloat(d.high_price) : close;
             const low = d.low_price != null ? parseFloat(d.low_price) : close;

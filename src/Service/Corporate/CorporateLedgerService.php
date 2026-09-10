@@ -88,6 +88,62 @@ class CorporateLedgerService
              SET u.cash_balance = u.cash_balance + d.amount",
             ['ticker' => $stock->getTicker(), 'paid_at' => $paidAtStr]
         );
+
+        $this->chargeShortDividends($stock, $dividendPerShare, $paidAtStr);
+    }
+
+    /**
+     * Debits the dividend from anyone short the stock.
+     *
+     * A short seller borrowed the shares from someone who is still entitled to the distribution, so the
+     * short makes them whole out of their own pocket. It is a real and sometimes decisive cost of holding
+     * a short through an ex-date, and silently skipping it would make a high-yield name free to be short.
+     *
+     * Written as its own negative ledger row rather than folded into the payment statement above, so the
+     * income feed can show it for what it is: cash that left the account because of a position, not a
+     * distribution that failed to arrive.
+     *
+     * @param float  $dividendPerShare Cash rate per share for this ex-date.
+     * @param string $paidAtStr        Ex-date, matching the credit leg exactly.
+     */
+    private function chargeShortDividends(Stock $stock, float $dividendPerShare, string $paidAtStr): void
+    {
+        $conn = $this->entityManager->getConnection();
+
+        $conn->executeStatement(
+            "INSERT INTO dividend_payment
+                 (user_id, asset_type, ticker, shares_held, dividend_per_share, amount, paid_at)
+             SELECT us.user_id,
+                    'STOCK',
+                    :ticker,
+                    us.quantity,
+                    :dividend,
+                    ROUND(us.quantity * :dividend, 2),
+                    :paid_at
+             FROM user_stocks us
+             WHERE us.stock_id = :stock_id
+               AND us.quantity < 0
+               AND ROUND(us.quantity * :dividend, 2) < 0",
+            [
+                'ticker' => $stock->getTicker(),
+                'dividend' => $dividendPerShare,
+                'stock_id' => $stock->getId(),
+                'paid_at' => $paidAtStr,
+            ]
+        );
+
+        // The rows just written carry a negative amount, so the same addition that credits a holder debits
+        // a short. Restricted to negative rows so a replay cannot re-apply the credit leg.
+        $conn->executeStatement(
+            "UPDATE users u
+             INNER JOIN dividend_payment d
+                     ON d.user_id = u.id
+                    AND d.ticker  = :ticker
+                    AND d.paid_at = :paid_at
+                    AND d.amount < 0
+             SET u.cash_balance = u.cash_balance + d.amount",
+            ['ticker' => $stock->getTicker(), 'paid_at' => $paidAtStr]
+        );
     }
 
     /**
@@ -179,8 +235,19 @@ class CorporateLedgerService
                     ['ticker' => $stock->getTicker()]
                 );
 
+                // The whole bar is restated, not just the close. Leaving open, high and low in pre-split
+                // units draws every historical candle with a wick spanning the split factor, and volume
+                // moves the opposite way to price because the same money changed hands over fewer shares.
+                // NULL columns stay NULL through the arithmetic, so rows written before bars existed are
+                // left alone rather than restated into zeroes.
                 $conn->executeStatement(
-                    'UPDATE stock_history SET price = LEAST(price * :factor, 900000000000.0) WHERE stock_id = :stock_id',
+                    'UPDATE stock_history
+                     SET price = LEAST(price * :factor, 900000000000.0),
+                         open_price = LEAST(open_price * :factor, 900000000000.0),
+                         high_price = LEAST(high_price * :factor, 900000000000.0),
+                         low_price = LEAST(low_price * :factor, 900000000000.0),
+                         volume = FLOOR(volume / :factor)
+                     WHERE stock_id = :stock_id',
                     ['factor' => $splitFactor, 'stock_id' => $stock->getId()]
                 );
 
@@ -212,7 +279,13 @@ class CorporateLedgerService
                 );
 
                 $conn->executeStatement(
-                    'UPDATE stock_history SET price = GREATEST(price / :factor, 0.00000001) WHERE stock_id = :stock_id',
+                    'UPDATE stock_history
+                     SET price = GREATEST(price / :factor, 0.00000001),
+                         open_price = GREATEST(open_price / :factor, 0.00000001),
+                         high_price = GREATEST(high_price / :factor, 0.00000001),
+                         low_price = GREATEST(low_price / :factor, 0.00000001),
+                         volume = IF(volume > 9223372036854775807 / :factor, 9223372036854775807, volume * :factor)
+                     WHERE stock_id = :stock_id',
                     ['factor' => $splitFactor, 'stock_id' => $stock->getId()]
                 );
 

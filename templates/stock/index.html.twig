@@ -366,6 +366,41 @@
 										</label>
 									</div>
 
+									{# Borrowed sides, shown only on a margin account and only for equities. #}
+									{% if not isEtf and app.user.marginEnabled %}
+										<div class="flex gap-2 bg-surface-container-lowest p-1 rounded border border-outline-variant/20">
+											<label class="flex-1 cursor-pointer">
+												<input type="radio" name="action" value="SHORT" class="peer sr-only">
+												<div class="py-1.5 text-center text-xs font-bold uppercase tracking-wider rounded text-on-surface-variant peer-checked:bg-tertiary peer-checked:text-on-tertiary transition-all">
+													Short
+												</div>
+											</label>
+											<label class="flex-1 cursor-pointer">
+												<input type="radio" name="action" value="COVER" class="peer sr-only">
+												<div class="py-1.5 text-center text-xs font-bold uppercase tracking-wider rounded text-on-surface-variant peer-checked:bg-secondary peer-checked:text-on-secondary transition-all">
+													Cover
+												</div>
+											</label>
+										</div>
+
+										<div class="p-3 rounded bg-surface-container-lowest/80 border border-outline-variant/20 space-y-1.5 text-xs">
+											<div class="flex justify-between items-center">
+												<span class="text-on-surface-variant uppercase tracking-wide text-2xs font-semibold">Borrow Fee</span>
+												<span class="font-mono tabular-nums font-bold {{ borrowFee > 0.05 ? 'text-tertiary' : 'text-on-surface' }}">{{ (borrowFee * 100)|number_format(2) }}%/yr</span>
+											</div>
+											<div class="flex justify-between items-center">
+												<span class="text-on-surface-variant uppercase tracking-wide text-2xs font-semibold">Available to Borrow</span>
+												<span class="font-mono tabular-nums font-bold text-on-surface">{{ availableToBorrow|format_large }}</span>
+											</div>
+											{% if shortUtilization >= 0.90 %}
+												<p class="text-2xs text-tertiary leading-relaxed pt-1 border-t border-outline-variant/15">
+													{{ (shortUtilization * 100)|number_format(0) }}% of lendable stock is out on loan.
+													{{ shortUtilization >= 0.97 ? 'Lenders are recalling: open shorts can be bought in whether or not the account is in good standing.' : 'The borrow is getting expensive.' }}
+												</p>
+											{% endif %}
+										</div>
+									{% endif %}
+
 									<div class="flex gap-2 bg-surface-container-lowest p-1 rounded border border-outline-variant/20">
 										<label class="flex-1 cursor-pointer">
 											<input type="radio" name="orderType" value="MARKET" class="peer sr-only" checked data-action="change->trade-form#onOrderTypeChange">
