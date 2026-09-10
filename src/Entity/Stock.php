@@ -447,6 +447,13 @@ class Stock
     private ?string $lastAnalystRevenue = null;
 
     /**
+     * @var string|null Variable cost ratio as it was last REPORTED, the anchor analysts forecast the next
+     *                  quarter's cost base from. Null until the first report.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, nullable: true)]
+    private ?string $lastReportedCostRatio = null;
+
+    /**
      * @var bool Whether the company has collapsed into bankruptcy and is permanently defunct.
      */
     #[ORM\Column(type: Types::BOOLEAN, options: ['default' => false])]
@@ -1559,6 +1566,17 @@ class Stock
     public function getLastAnalystRevenue(): ?string
     {
         return $this->lastAnalystRevenue;
+    }
+
+    public function getLastReportedCostRatio(): ?string
+    {
+        return $this->lastReportedCostRatio;
+    }
+
+    public function setLastReportedCostRatio(?string $lastReportedCostRatio): self
+    {
+        $this->lastReportedCostRatio = $lastReportedCostRatio !== null ? self::cleanBcStr($lastReportedCostRatio, 6) : null;
+        return $this;
     }
 
     public function setLastAnalystRevenue(?string $lastAnalystRevenue): self

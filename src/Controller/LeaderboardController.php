@@ -20,25 +20,29 @@ class LeaderboardController extends AbstractController
             
             $conn = $entityManager->getConnection();
             
+            // Value committed to open limit orders counts: it has left the cash balance (a BUY) or the
+            // holdings table (a SELL), so leaving it out ranked traders by how few orders they had working.
             $sql = "
             SELECT COALESCE(u.username, 'Anonymous Trader') as username,
                    u.cash_balance,
                    COALESCE(stock_totals.stock_val, 0) as stock_value,
                    COALESCE(etf_totals.etf_val, 0) as etf_value,
-                   (u.cash_balance + COALESCE(stock_totals.stock_val, 0) + COALESCE(etf_totals.etf_val, 0)) as total_value
+                   COALESCE(escrow.escrow_val, 0) as escrow_value,
+                   (u.cash_balance + COALESCE(stock_totals.stock_val, 0) + COALESCE(etf_totals.etf_val, 0) + COALESCE(escrow.escrow_val, 0)) as total_value
             FROM users u
             LEFT JOIN (
                 SELECT us.user_id, SUM(us.quantity * s.price) as stock_val
-                FROM user_stocks us 
+                FROM user_stocks us
                 JOIN stocks s ON us.stock_id = s.id
                 GROUP BY us.user_id
             ) stock_totals ON stock_totals.user_id = u.id
             LEFT JOIN (
                 SELECT ue.user_id, SUM(ue.quantity * e.price) as etf_val
-                FROM user_etfs ue 
+                FROM user_etfs ue
                 JOIN etfs e ON ue.etf_id = e.id
                 GROUP BY ue.user_id
             ) etf_totals ON etf_totals.user_id = u.id
+            LEFT JOIN (" . \App\Service\User\Portfolio::OPEN_ORDER_ESCROW_SQL . ") escrow ON escrow.user_id = u.id
             ORDER BY total_value DESC
             LIMIT 100
         ";

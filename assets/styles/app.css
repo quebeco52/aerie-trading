@@ -1,62 +1,83 @@
+/* `vendor` holds the Material Symbols stylesheet imported in base.html.twig. Stated here rather
+   than left to document order, so reshuffling <head> cannot promote it above the utilities. */
+@layer vendor, theme, base, components, utilities;
+
 @import "tailwindcss";
 
 @theme {
   --color-primary: #adc6ff;
   --color-primary-container: #4d8eff;
-  --color-secondary: #4edea3; 
-  --color-tertiary: #ffb3ad;  
-  
-  --color-surface: #0b1326;   
+  --color-secondary: #4edea3;
+  --color-tertiary: #ffb3ad;
+
+  --color-surface: #0b1326;
   --color-surface-container-lowest: #060e20;
-  --color-surface-container-low: #131b2e; 
+  --color-surface-container-low: #131b2e;
   --color-surface-container: #171f33;
   --color-surface-container-high: #222a3d;
-  /* Referenced by home, screener, dashboard, leaderboard, stock and district for raised header
-     bands, but never defined — every `bg-surface-container-highest` in the app silently rendered
-     nothing until this was added. */
   --color-surface-container-highest: #2a3348;
   --color-surface-bright: #31394d;
-  
-  --color-on-surface: #dae2fd; 
-  --color-on-surface-variant: #c2c6d6; 
-  --color-outline-variant: #424754; 
+
+  --color-on-surface: #dae2fd;
+  --color-on-surface-variant: #c2c6d6;
+  --color-outline-variant: #424754;
+
+  /* Text on a filled primary/secondary/tertiary surface. */
+  --color-on-primary: #001a42;
+  --color-on-secondary: #002111;
+  --color-on-tertiary: #370001;
 
   /* --- Typography ---
-     UI chrome (nav, prose, labels, buttons) is set in a sans; monospace is reserved for
-     figures — prices, tickers, table cells — where digit alignment carries meaning. Setting
-     both to the same face, as this file previously did, removes that distinction entirely
-     and leaves `font-mono` a no-op on the ~320 elements that ask for it. */
-  --font-headline: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+     Sans for chrome and prose, mono for figures — prices, tickers, table cells — where digit
+     alignment carries meaning. `tnum` rides on the family so `font-mono` gets fixed-width
+     digits without every call site having to remember `tabular-nums`. */
   --font-body: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --font-serif: "Times New Roman", Times, serif;
+  --font-mono--font-feature-settings: "tnum";
+  --font-serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+
+  /* Steps below `text-xs`, used heavily by the data tables and chart chrome. */
+  --text-2xs: 0.6875rem;
+  --text-3xs: 0.625rem;
+  --text-4xs: 0.5625rem;
 }
 
 @layer utilities {
-  .glass-panel {
-    background: rgba(19, 27, 46, 0.75);
-    border: 1px solid rgba(66, 71, 84, 0.25);
-  }
-
-  .tabular-nums {
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* Monospace is only ever applied to figures in this app, so give it fixed-width digits
-     unconditionally — a column of prices that does not align reads as broken, and many
-     `font-mono` call sites never paired it with `tabular-nums`. */
-  .font-mono {
-    font-variant-numeric: tabular-nums;
+  /* The WebKit pseudo-elements cover Chrome and Safari; Firefox needs the standard properties
+     or it draws its full-width default bar over the dark panels. */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-outline-variant) transparent;
   }
 
   .custom-scrollbar::-webkit-scrollbar { width: 4px; }
   .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-  .custom-scrollbar::-webkit-scrollbar-thumb { 
-    background: var(--color-outline-variant); 
-    border-radius: 4px; 
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--color-outline-variant);
+    border-radius: 4px;
   }
 
-  .material-symbols-outlined { 
-    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; 
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
+
+  /* Applied and cleared by assets/js/utils/tick-flash.js. */
+  .tick-up { color: var(--color-secondary); }
+  .tick-down { color: var(--color-tertiary); }
+
+  /* `list-none` covers the standards marker; Safari draws its own triangle regardless. */
+  summary.list-none::-webkit-details-marker { display: none; }
+}
+
+@layer base {
+  /* The pulses, tick flashes and transitions here are decorative — none of them carry
+     information on their own. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }

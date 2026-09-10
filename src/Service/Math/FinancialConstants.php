@@ -214,6 +214,8 @@ class FinancialConstants
     public const STATE_INPUT_COST_LEVEL = 'state:input_cost_level';
     /** Stream-state key: lagged share of the input cost level already recovered in selling prices. */
     public const STATE_INPUT_COST_RECOVERY = 'state:input_cost_recovery';
+    /** Stream-state key: unrecovered input cost ratio as it stood at the PREVIOUS report, so guidance can warn on the change rather than the standing level. */
+    public const STATE_PRIOR_UNRECOVERED_COST = 'state:prior_unrecovered_cost';
 
     // --- FX Exposure ---
     /** Base level of the trade-weighted exchange rate index, against which a move is measured as a relative deviation. */
@@ -231,6 +233,10 @@ class FinancialConstants
     /** Bound on the resulting forward revenue tilt, so a single blowout order quarter cannot run the estimate away. */
     public const MAX_BOOK_TO_BILL_CONSENSUS_TILT = 0.15;
 
+    // --- Analyst Cost-Base Visibility ---
+    /** Share of the realized variable cost ratio analysts forecast correctly: input prices are published series (commodity indices, PPI, wage prints) and pass-through terms disclosed, so only firm-specific execution is left unseen. */
+    public const ANALYST_COST_BASE_VISIBILITY = 0.75;
+
     // --- Earnings Pre-Announcements (Kasznik & Lev 1995) ---
     /** Share of a quarter before the scheduled report at which management closes the books far enough to know it will miss. */
     public const PREANNOUNCEMENT_LEAD_RATIO = 0.10;
@@ -240,6 +246,8 @@ class FinancialConstants
     public const PREANNOUNCEMENT_CONSENSUS_ABSORPTION = 0.80;
     /** Price reaction to a warning, as a fraction of the warned shortfall ratio. Warnings are punished on the day they are issued, not on the report. */
     public const PREANNOUNCEMENT_PRICE_REACTION = 0.35;
+    /** Ceiling on the single-tick repricing a warning may cause. One disclosure moves less than a whole quarter, so it sits inside the 40% MAX_QUARTERLY_PRICE_CIRCUIT_BREAKER that bounds the report around it. */
+    public const MAX_PREANNOUNCEMENT_PRICE_REACTION = 0.25;
 
     // --- Own-Price Demand Response ---
     /** Default own-price elasticity of demand for a producing firm (volume lost per unit of real price increase); mid-range of empirical estimates for differentiated goods. */

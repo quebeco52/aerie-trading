@@ -19,6 +19,7 @@ use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 
 #[AllowMockObjectsWithoutExpectations]
 class TradeExecutionServiceTest extends TestCase
@@ -69,7 +70,8 @@ class TradeExecutionServiceTest extends TestCase
         $this->service = new TradeExecutionService(
             $this->emMock,
             $this->portfolioStub,
-            $this->redisStub
+            $this->redisStub,
+            new NullLogger()
         );
     }
 
@@ -172,6 +174,121 @@ class TradeExecutionServiceTest extends TestCase
 
         $this->assertSame('CANCELLED', $order->getStatus());
         $this->assertEquals('750.0000', $user->getCashBalance());
+    }
+
+    /**
+     * A negative limit price used to invert the escrow arithmetic and mint cash.
+     *
+     * bcmul(-5, 10) is -50, which passes the funds check because the balance exceeds it, and the debit
+     * bcsub(cash, -50) then CREDITS the account. The order could afterwards be spent against and cancelled.
+     */
+    public function testExecuteLimitBuyRejectsNegativeLimitPriceRatherThanMintingCash(): void
+    {
+        $user = new User();
+        $user->setCashBalance('1000.00');
+
+        $stock = new Stock();
+        $stock->setTicker('APEX');
+        $stock->setPrice('100.00');
+        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+
+        try {
+            $this->service->executeOrder($user, 'APEX', 'BUY', 'LIMIT', 10, '-5.00');
+            $this->fail('A negative limit price must be rejected.');
+        } catch (\Exception $e) {
+            $this->assertStringContainsString('Limit price must be at least', $e->getMessage());
+        }
+
+        $this->assertEquals('1000.00', $user->getCashBalance(), 'A rejected order must not move cash.');
+    }
+
+    /** Zero is below the floor for the same reason: it escrows nothing and can never be a real bid. */
+    public function testExecuteLimitBuyRejectsZeroLimitPrice(): void
+    {
+        $user = new User();
+        $user->setCashBalance('1000.00');
+
+        $stock = new Stock();
+        $stock->setTicker('APEX');
+        $stock->setPrice('100.00');
+        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Limit price must be at least');
+
+        $this->service->executeOrder($user, 'APEX', 'BUY', 'LIMIT', 10, '0');
+    }
+
+    /**
+     * A non-numeric limit price reached bcmath, which throws a ValueError - an Error, not an Exception, so
+     * neither the service nor the controller caught it and the open transaction was left dangling.
+     */
+    public function testExecuteLimitOrderRejectsNonNumericLimitPrice(): void
+    {
+        $user = new User();
+        $user->setCashBalance('1000.00');
+
+        $stock = new Stock();
+        $stock->setTicker('APEX');
+        $stock->setPrice('100.00');
+        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+
+        foreach (['abc', '', '  '] as $bad) {
+            try {
+                $this->service->executeOrder($user, 'APEX', 'BUY', 'LIMIT', 10, $bad);
+                $this->fail(sprintf('Limit price "%s" must be rejected.', $bad));
+            } catch (\Exception $e) {
+                $this->assertStringContainsString('numeric limit price', $e->getMessage());
+            }
+        }
+    }
+
+    /** A LIMIT order with no price at all is not an order; it used to reach bcmath as an empty string. */
+    public function testExecuteLimitOrderRejectsMissingLimitPrice(): void
+    {
+        $user = new User();
+        $user->setCashBalance('1000.00');
+
+        $stock = new Stock();
+        $stock->setTicker('APEX');
+        $stock->setPrice('100.00');
+        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('numeric limit price');
+
+        $this->service->executeOrder($user, 'APEX', 'BUY', 'LIMIT', 10, null);
+    }
+
+    /**
+     * Exponent notation is numeric to PHP and not well-formed to bcmath, so it has to be rendered before it
+     * reaches the escrow arithmetic rather than passed through.
+     */
+    public function testExecuteLimitBuyNormalizesExponentNotation(): void
+    {
+        $user = new User();
+        $user->setCashBalance('10000.00');
+
+        $stock = new Stock();
+        $stock->setTicker('APEX');
+        $stock->setPrice('100.00');
+        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+
+        // 8e1 is $80: below the $100 live price, so the order rests and escrows 5 * $80 = $400.
+        $this->service->executeOrder($user, 'APEX', 'BUY', 'LIMIT', 5, '8e1');
+
+        $this->assertEquals('9600.0000', $user->getCashBalance());
+    }
+
+    /** Any side but BUY or SELL used to fall through to the SELL branch and escrow shares against it. */
+    public function testExecuteOrderRejectsUnknownAction(): void
+    {
+        $user = new User();
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Invalid order action.');
+
+        $this->service->executeOrder($user, 'APEX', 'HOLD', 'MARKET', 10);
     }
 
     public function testExecuteOrderThrowsOnInvalidQuantity(): void

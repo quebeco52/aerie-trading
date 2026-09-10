@@ -12,6 +12,32 @@ use Doctrine\ORM\EntityManagerInterface;
  */
 class Portfolio
 {
+    /**
+     * Per-user value sitting in open limit orders, which net asset value has to include.
+     *
+     * Placing a limit order moves the assets out of the balances a naive NAV sums: a BUY debits the cash to
+     * escrow and a SELL removes the shares from user_stocks (see TradeExecutionService). Without this join
+     * placing an order destroyed net worth on the chart and on the leaderboard, and cancelling it created
+     * net worth back — so every ranking was really a ranking of who had no orders working. A BUY is held at
+     * the price the cash was committed at; a SELL is held at the asset's live price, exactly as the shares
+     * would have been valued had they still been in the holdings table.
+     *
+     * The price joins are keyed on asset_type, not on the ticker alone: a ticker present in both tables
+     * would otherwise match twice and count its escrow twice over.
+     */
+    public const OPEN_ORDER_ESCROW_SQL = "
+        SELECT o.user_id,
+               SUM(CASE WHEN o.action = 'BUY'
+                        THEN COALESCE(o.limit_price, 0) * o.quantity
+                        ELSE o.quantity * COALESCE(s.price, e.price, 0)
+                   END) AS escrow_val
+        FROM trade_orders o
+        LEFT JOIN stocks s ON s.ticker = o.ticker AND o.asset_type = 'STOCK'
+        LEFT JOIN etfs   e ON e.ticker = o.ticker AND o.asset_type = 'ETF'
+        WHERE o.status = 'OPEN'
+        GROUP BY o.user_id
+    ";
+
     public function __construct(
         private EntityManagerInterface $entityManager
     ) {}
@@ -56,22 +82,23 @@ class Portfolio
         
         $snapshotSql = "
             INSERT INTO portfolio_history (user_id, total_value, recorded_at)
-            SELECT u.id, 
-                   (u.cash_balance + COALESCE(stock_totals.stock_val, 0) + COALESCE(etf_totals.etf_val, 0)), 
+            SELECT u.id,
+                   (u.cash_balance + COALESCE(stock_totals.stock_val, 0) + COALESCE(etf_totals.etf_val, 0) + COALESCE(escrow.escrow_val, 0)),
                    :now
             FROM users u
             LEFT JOIN (
                 SELECT us.user_id, SUM(us.quantity * s.price) as stock_val
-                FROM user_stocks us 
+                FROM user_stocks us
                 JOIN stocks s ON us.stock_id = s.id
                 GROUP BY us.user_id
             ) stock_totals ON stock_totals.user_id = u.id
             LEFT JOIN (
                 SELECT ue.user_id, SUM(ue.quantity * e.price) as etf_val
-                FROM user_etfs ue 
+                FROM user_etfs ue
                 JOIN etfs e ON ue.etf_id = e.id
                 GROUP BY ue.user_id
             ) etf_totals ON etf_totals.user_id = u.id
+            LEFT JOIN (" . self::OPEN_ORDER_ESCROW_SQL . ") escrow ON escrow.user_id = u.id
         ";
 
         $conn->executeStatement($snapshotSql, [
@@ -89,10 +116,23 @@ class Portfolio
     {
         $conn = $this->entityManager->getConnection();
 
+        // Same three components as the bulk sweep, but filtered to one user rather than grouped over all
+        // of them: this runs on every trade, so the escrow leg is an indexed aggregate rather than a
+        // derived table built for the whole roster and then thrown away.
         $sql = "
             SELECT (
                 COALESCE((SELECT SUM(us.quantity * s.price) FROM user_stocks us JOIN stocks s ON us.stock_id = s.id WHERE us.user_id = :user_id), 0) +
-                COALESCE((SELECT SUM(ue.quantity * e.price) FROM user_etfs ue JOIN etfs e ON ue.etf_id = e.id WHERE ue.user_id = :user_id), 0)
+                COALESCE((SELECT SUM(ue.quantity * e.price) FROM user_etfs ue JOIN etfs e ON ue.etf_id = e.id WHERE ue.user_id = :user_id), 0) +
+                COALESCE((
+                    SELECT SUM(CASE WHEN o.action = 'BUY'
+                                    THEN COALESCE(o.limit_price, 0) * o.quantity
+                                    ELSE o.quantity * COALESCE(s2.price, e2.price, 0)
+                               END)
+                    FROM trade_orders o
+                    LEFT JOIN stocks s2 ON s2.ticker = o.ticker AND o.asset_type = 'STOCK'
+                    LEFT JOIN etfs   e2 ON e2.ticker = o.ticker AND o.asset_type = 'ETF'
+                    WHERE o.user_id = :user_id AND o.status = 'OPEN'
+                ), 0)
             ) as total_val
         ";
 

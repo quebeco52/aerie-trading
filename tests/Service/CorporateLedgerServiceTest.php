@@ -60,8 +60,9 @@ class CorporateLedgerServiceTest extends TestCase
         $this->connectionMock->expects($this->once())->method('commit');
         $this->connectionMock->expects($this->never())->method('rollBack');
 
-        // Forward split executes 4 SQL statements (user_stocks, stock_history, corporate_report, trade_orders)
-        $this->connectionMock->expects($this->exactly(4))
+        // Forward split executes 5 SQL statements: user_stocks, stock_history, corporate_report, open
+        // trade_orders, and the filled trade_orders the cost basis is derived from.
+        $this->connectionMock->expects($this->exactly(5))
             ->method('executeStatement')
             ->with(
                 $this->stringContains('UPDATE'),
@@ -87,8 +88,9 @@ class CorporateLedgerServiceTest extends TestCase
                 ['id' => 2, 'user_id' => 102, 'quantity' => 20],
             ]);
 
-        // 1 cashout update + 7 bulk updates = 8 executeStatement calls
-        $this->connectionMock->expects($this->exactly(8))
+        // 1 holdings cashout + 9 bulk updates (escrow remnant refund, then the eight rewrites, the last
+        // of which restates filled trade_orders) = 10 calls
+        $this->connectionMock->expects($this->exactly(10))
             ->method('executeStatement');
 
         $this->service->processStockSplit($stock, 10.0, true, 2.50);

@@ -38,7 +38,8 @@ class StockController extends AbstractController
         \App\Service\Math\CorporateMetrics $corporateMetrics,
         \App\Service\Market\MarketEngine $marketEngine,
         \App\Service\Corporate\DebtEngine $debtEngine,
-        \App\Service\Market\PriceChangeFeed $priceChangeFeed
+        \App\Service\Market\PriceChangeFeed $priceChangeFeed,
+        \App\Service\User\CostBasisCalculator $costBasis
     ): Response
     {
         $isEtf = false;
@@ -223,7 +224,7 @@ class StockController extends AbstractController
             );
         }
 
-        $economicCycle = $redis->get('economy_state') ?: 'Expansion';
+        $economicCycle = $macroState->economicCycleLabel();
 
         $openOrders = [];
         $userTrades = [];
@@ -245,21 +246,13 @@ class StockController extends AbstractController
             ], ['createdAt' => 'DESC'], 20);
 
             if ($userQuantity > 0) {
-                $filledBuys = $entityManager->createQuery(
-                    'SELECT o FROM App\Entity\TradeOrder o WHERE o.user = :user AND o.ticker = :ticker AND o.action = :action AND o.status = :status ORDER BY o.createdAt ASC'
-                )->setParameter('user', $currentUser)->setParameter('ticker', $ticker)->setParameter('action', 'BUY')->setParameter('status', 'FILLED')->getResult();
+                // Same weighted-average basis the dashboard reports. Averaging BUYs alone and ignoring SELLs
+                // gave this page a different cost, and a different P&L, for the very same position.
+                $filledOrders = $entityManager->createQuery(
+                    'SELECT o FROM App\Entity\TradeOrder o WHERE o.user = :user AND o.ticker = :ticker AND o.status = :status ORDER BY o.createdAt ASC'
+                )->setParameter('user', $currentUser)->setParameter('ticker', $ticker)->setParameter('status', 'FILLED')->getResult();
 
-                $totalCost = 0.0;
-                $totalQty = 0;
-                foreach ($filledBuys as $fOrder) {
-                    $qty = $fOrder->getFilledQuantity() > 0 ? $fOrder->getFilledQuantity() : $fOrder->getQuantity();
-                    $execPrice = (float) ($fOrder->getExecutionPrice() ?? $fOrder->getLimitPrice() ?? $asset->getPrice());
-                    $totalCost += ($qty * $execPrice);
-                    $totalQty += $qty;
-                }
-                if ($totalQty > 0) {
-                    $userAvgCost = $totalCost / $totalQty;
-                }
+                $userAvgCost = $costBasis->calculateForTicker($filledOrders, $ticker) ?? $userAvgCost;
                 $userPositionCost = $userAvgCost * $userQuantity;
                 $currentVal = (float)$asset->getPrice() * $userQuantity;
                 $userUnrealizedPnL = $currentVal - $userPositionCost;
@@ -373,16 +366,16 @@ class StockController extends AbstractController
             return $this->json(array_reverse($results));
         }
 
-        $ranges = [
-            '3m'  => 1200,
-            '6m'  => 2400,
-            '1y'  => 4800,
-            '3y'  => 14400,
-            '5y'  => 24000,
-            '10y' => 48000,
-            'max' => 999999
-        ];
-        $limit = $ranges[$range] ?? 14400;
+        // A range button names a span of SIMULATED TIME, so the row limit behind it has to be derived from
+        // the configured tick rate and the rate history is actually sampled at. The counts here were
+        // hardcoded to a 4,800-row year, a figure the sampler never produces: it caps at 2,400 rows per
+        // year, so every span was off by whatever ratio the configured rate happened to differ by.
+        $pointsPerYear = \App\Command\MarketTickerCommand::historyPointsPerYear($ticksPerYear);
+        $rangeYears = ['3m' => 0.25, '6m' => 0.5, '1y' => 1.0, '3y' => 3.0, '5y' => 5.0, '10y' => 10.0];
+
+        $limit = $range === 'max'
+            ? 999999
+            : (int) ceil(($rangeYears[$range] ?? 1.0) * $pointsPerYear);
 
         $dbLimit = min($limit, 500000);
         $maxChartPoints = 5000;
@@ -499,45 +492,14 @@ class StockController extends AbstractController
 
         if (!$latestReport) return $this->json([]);
 
-        // Ensure everything is numeric
-        $revenue = (float)$latestReport['revenue'];
-        $interestIncome = (float)$latestReport['interest_income'];
-        $totalRevenue = $revenue + $interestIncome;
+        $flow = \App\Service\Corporate\EarningsFlowStatement::fromReport($latestReport);
 
-        if ($totalRevenue <= 0) {
+        if ($flow->totalRevenue <= 0) {
             // Can't draw a meaningful Sankey if there's no revenue
             return $this->json(['nodes' => [], 'links' => []]);
         }
 
-        // Fetch granular fields (fallback to 0 if migration hasn't run yet)
-        $operatingCostsRaw = max(0, (float)($latestReport['operating_costs'] ?? 0));
-        $depreciationRaw = max(0, (float)($latestReport['depreciation'] ?? 0));
-        $capexRaw = max(0, (float)$latestReport['capital_expenditures']);
-        $interestExpenseRaw = max(0, (float)$latestReport['interest_expense']);
-        $taxPaidRaw = max(0, (float)($latestReport['tax_paid'] ?? 0));
-        $divPaidRaw = max(0, (float)$latestReport['dividend_paid']);
-        $buybacksRaw = max(0, (float)$latestReport['stock_buybacks']);
-
-        // Balance the flows so the Sankey diagram is perfectly aligned. 
-        // Sankey diagrams require flow in = flow out.
-        $actualOperatingCosts = min($totalRevenue, $operatingCostsRaw);
-        $ebitda = $totalRevenue - $actualOperatingCosts;
-
-        // Operating costs are the cash cost base, so what is left is EBITDA. Depreciation is the non-cash
-        // charge struck below it; the operating profit that pays interest and tax is what remains.
-        $actualDepreciation = min($ebitda, $depreciationRaw);
-        $opProfit = $ebitda - $actualDepreciation;
-        
-        $actualInterest = min($opProfit, $interestExpenseRaw);
-        $preTax = $opProfit - $actualInterest;
-        
-        $actualTax = min($preTax, $taxPaidRaw);
-        $netIncomeFlow = $preTax - $actualTax;
-        
-        $actualCapex = min($netIncomeFlow, $capexRaw);
-        $actualDiv = min($netIncomeFlow - $actualCapex, $divPaidRaw);
-        $actualBuybacks = min($netIncomeFlow - $actualCapex - $actualDiv, $buybacksRaw);
-        $retained = $netIncomeFlow - $actualCapex - $actualDiv - $actualBuybacks;
+        $totalRevenue = $flow->totalRevenue;
 
         $nodes = [
             ['name' => 'Total Revenue', 'itemStyle' => ['color' => '#3b82f6']], // blue
@@ -550,9 +512,11 @@ class StockController extends AbstractController
             ['name' => 'Pre-Tax Income', 'itemStyle' => ['color' => '#14b8a6']], // teal
             ['name' => 'Taxes', 'itemStyle' => ['color' => '#f43f5e']], // rose
             ['name' => 'Net Income', 'itemStyle' => ['color' => '#22c55e']], // green
+            ['name' => 'Cash Generated', 'itemStyle' => ['color' => '#34d399']], // mint
+            ['name' => 'External Funding', 'itemStyle' => ['color' => '#fb923c']], // amber (debt raised or shares issued)
             ['name' => 'Dividends', 'itemStyle' => ['color' => '#0ea5e9']], // light blue
             ['name' => 'Stock Buybacks', 'itemStyle' => ['color' => '#d946ef']], // fuchsia
-            ['name' => 'Retained Earnings', 'itemStyle' => ['color' => '#10b981']], // emerald
+            ['name' => 'Retained Cash', 'itemStyle' => ['color' => '#10b981']], // emerald
         ];
 
         $links = [];
@@ -596,21 +560,27 @@ class StockController extends AbstractController
         }
 
 
-        $addLink('Total Revenue', 'Operating Costs', $actualOperatingCosts);
-        $addLink('Total Revenue', 'EBITDA', $ebitda);
-        $addLink('EBITDA', 'Depreciation', $actualDepreciation);
-        $addLink('EBITDA', 'Operating Profit', $opProfit);
-        
-        $addLink('Operating Profit', 'Interest Expense', $actualInterest);
-        $addLink('Operating Profit', 'Pre-Tax Income', $preTax);
-        
-        $addLink('Pre-Tax Income', 'Taxes', $actualTax);
-        $addLink('Pre-Tax Income', 'Net Income', $netIncomeFlow);
-        
-        $addLink('Net Income', 'Capital Expenditures', $actualCapex);
-        $addLink('Net Income', 'Dividends', $actualDiv);
-        $addLink('Net Income', 'Stock Buybacks', $actualBuybacks);
-        $addLink('Net Income', 'Retained Earnings', $retained);
+        $addLink('Total Revenue', 'Operating Costs', $flow->operatingCosts);
+        $addLink('Total Revenue', 'EBITDA', $flow->ebitda);
+        $addLink('EBITDA', 'Depreciation', $flow->depreciation);
+        $addLink('EBITDA', 'Operating Profit', $flow->operatingProfit);
+
+        $addLink('Operating Profit', 'Interest Expense', $flow->interestExpense);
+        $addLink('Operating Profit', 'Pre-Tax Income', $flow->preTaxIncome);
+
+        $addLink('Pre-Tax Income', 'Taxes', $flow->taxes);
+        $addLink('Pre-Tax Income', 'Net Income', $flow->netIncome);
+
+        // Sources of cash, then what it was spent on. Depreciation appears on both sides on purpose: it is
+        // struck against EBITDA and added straight back, which is exactly how a cash flow statement reads.
+        $addLink('Net Income', 'Cash Generated', max(0.0, $flow->netIncome));
+        $addLink('Depreciation', 'Cash Generated', $flow->depreciation);
+        $addLink('External Funding', 'Cash Generated', $flow->externalFunding);
+
+        $addLink('Cash Generated', 'Capital Expenditures', $flow->capitalExpenditures);
+        $addLink('Cash Generated', 'Dividends', $flow->dividends);
+        $addLink('Cash Generated', 'Stock Buybacks', $flow->buybacks);
+        $addLink('Cash Generated', 'Retained Cash', $flow->retainedCash);
 
         return $this->json(['nodes' => $nodes, 'links' => $links]);
     }

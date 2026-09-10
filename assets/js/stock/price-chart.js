@@ -1,4 +1,5 @@
 import { THEME_COLORS } from '../utils/colors.js';
+import { CHART_FONT_MONO } from '../utils/fonts.js';
 
 let lwChart = null;
 let areaSeries = null;
@@ -22,7 +23,7 @@ export function initPriceChart(container, ticker, ticksPerYear = 54000) {
         layout: {
             background: { type: 'solid', color: 'transparent' },
             textColor: THEME_COLORS.textMuted,
-            fontFamily: '"Courier Prime", monospace'
+            fontFamily: CHART_FONT_MONO
         },
         grid: {
             vertLines: { visible: false },
@@ -88,7 +89,7 @@ export async function loadPriceHistory(range) {
 
     document.querySelectorAll('.range-btn').forEach(btn => {
         btn.className = btn.dataset.range === range
-            ? 'range-btn px-4 py-1.5 text-xs font-bold rounded-md bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-colors'
+            ? 'range-btn px-4 py-1.5 text-xs font-bold rounded-md bg-primary text-on-primary shadow-lg shadow-primary/20 transition-colors'
             : 'range-btn px-4 py-1.5 text-xs font-bold rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors';
     });
 

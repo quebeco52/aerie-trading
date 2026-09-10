@@ -32,9 +32,9 @@
 	.plot[data-tick="up"] .roofline { fill: #4edea3; }
 	.plot[data-tick="down"] .roofline { fill: #ffb3ad; }
 
-	/* Kerb text is sized against the narrowest plot (100 units): a 5-character ticker at 30 is
-	   90 units, a price at 22 is 92, a change at 22 is 79 — each fits alone on its own centred
-	   line, and none of them fit paired left-and-right, which is what used to collide. */
+	/* Sized against the narrowest plot (100 units): a 5-character ticker at 30 is 90 units, a
+	   price at 22 is 92, a change at 22 is 79. Each fits alone on a centred line; no two fit
+	   side by side, so they are never paired. */
 	.plot-rank { fill: #7a8398; font-size: 24px; letter-spacing: 0.5px; }
 	.plot-label { fill: #dae2fd; font-size: 30px; letter-spacing: 1px; transition: fill 200ms; }
 	.plot-price { fill: #9aa3b8; font-size: 22px; letter-spacing: 0.5px; }
@@ -131,13 +131,17 @@
 		100% { stroke: #56617a; }
 	}
 
+	/* Labels drawn inside the map. CSS beats an SVG presentation attribute, so this is the
+	   single place the street's type is set — it tracks --font-mono in assets/styles/app.css. */
+	.district-map text { font-family: var(--font-mono); }
+
 	/* --- Hover tooltip --- */
 	/* Drawn in SVG rather than as an HTML bubble: the map card clips on overflow, which would
 	   cut an absolutely-positioned tooltip off at the card edge. */
 	#plot-tooltip { pointer-events: none; opacity: 0; transition: opacity 140ms; }
 	#plot-tooltip[data-visible="true"] { opacity: 1; }
 	#plot-tooltip .tooltip-bg { fill: #0f172a; stroke: #56617a; stroke-width: 2.5; rx: 10; }
-	#plot-tooltip text { font-family: "Courier Prime", monospace; }
+	#plot-tooltip text { font-family: var(--font-mono); }
 	#plot-tooltip .tt-ticker { fill: #adc6ff; font-size: 34px; font-weight: bold; }
 	#plot-tooltip .tt-rank { fill: #6b7690; font-size: 26px; }
 	#plot-tooltip .tt-name { fill: #dae2fd; font-size: 26px; }
@@ -172,7 +176,7 @@
 		<div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
 			<div>
 				<div class="flex items-center gap-2 mb-2">
-					<span class="text-[11px] font-semibold tracking-wide text-primary uppercase">Aerie Autonomous District</span>
+					<span class="text-2xs font-semibold tracking-wide text-primary uppercase">Aerie Autonomous District</span>
 					<span class="text-xs text-on-surface-variant/60 font-mono">/ Top {{ rosterSize }} by market cap</span>
 				</div>
 				<h1 class="text-2xl md:text-3xl font-bold text-on-surface tracking-tight">{{ wardName }}</h1>
@@ -190,11 +194,11 @@
 		{# Street summary — every figure read off plots already built, no extra query #}
 		<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-5">
 			<div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between">
-				<span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Street Cap</span>
+				<span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Street Cap</span>
 				<span class="text-sm font-bold text-on-surface font-mono tabular-nums mt-1">${{ summary.totalMarketCap|format_large }}</span>
 			</div>
 			<div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between">
-				<span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Street 1M</span>
+				<span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Street 1M</span>
 				{% if summary.changePercent is not null %}
 					<span class="text-sm font-bold font-mono tabular-nums mt-1 {{ summary.changePercent >= 0 ? 'text-secondary' : 'text-tertiary' }}">
 						{{ summary.changePercent >= 0 ? '+' : '' }}{{ (summary.changePercent * 100)|number_format(2) }}%
@@ -204,7 +208,7 @@
 				{% endif %}
 			</div>
 			<div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between">
-				<span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Biggest Mover</span>
+				<span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Biggest Mover</span>
 				{% if summary.biggestMover %}
 					<span class="text-sm font-bold font-mono tabular-nums mt-1 {{ summary.biggestMover.changePercent >= 0 ? 'text-secondary' : 'text-tertiary' }}">
 						{{ summary.biggestMover.ticker }}
@@ -215,14 +219,14 @@
 				{% endif %}
 			</div>
 			<div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between">
-				<span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Institutions</span>
+				<span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Institutions</span>
 				<span class="text-sm font-bold font-mono tabular-nums mt-1 {{ summary.stressedInstitutions > 0 ? 'text-tertiary' : 'text-on-surface' }}"
 					data-district-target="summaryStress">
 					{{ summary.stressedInstitutions }}/{{ summary.totalInstitutions }} stressed
 				</span>
 			</div>
 			<div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between">
-				<span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Next In Line</span>
+				<span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Next In Line</span>
 				{% if summary.nextInLine %}
 					<span class="text-sm font-bold text-on-surface font-mono tabular-nums mt-1"
 						title="{{ summary.nextInLine.name }} — first company below the cut">
@@ -255,15 +259,15 @@
 					<span class="text-xs font-mono text-on-surface-variant/60 hidden sm:block">Height &prop; market capitalisation (log scale)</span>
 					<div class="flex items-center gap-1">
 						<button type="button" data-action="click->district#zoomOut" title="Zoom out"
-							class="w-6 h-6 flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">
+							class="cursor-pointer w-6 h-6 flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">
 							<span class="material-symbols-outlined text-base">zoom_out</span>
 						</button>
 						<button type="button" data-action="click->district#fitToWidth" title="Fit whole street"
-							class="w-6 h-6 flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">
+							class="cursor-pointer w-6 h-6 flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">
 							<span class="material-symbols-outlined text-base">fit_screen</span>
 						</button>
 						<button type="button" data-action="click->district#zoomIn" title="Zoom in"
-							class="w-6 h-6 flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">
+							class="cursor-pointer w-6 h-6 flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">
 							<span class="material-symbols-outlined text-base">zoom_in</span>
 						</button>
 					</div>
@@ -274,7 +278,7 @@
 				<svg viewBox="0 0 {{ viewboxWidth }} {{ viewboxHeight }}"
 					data-district-target="svg"
 					data-action="click->district#deselect keydown.esc->district#deselect"
-					class="block min-w-250 w-full h-auto"
+					class="district-map block min-w-250 w-full h-auto"
 					role="img"
 					aria-label="Illustrated street elevation of {{ wardName }}">
 
@@ -308,7 +312,7 @@
 							<line class="gridline" x1="{{ gutterWidth - 8 }}" y1="{{ line.y }}"
 								x2="{{ viewboxWidth - frontageMargin }}" y2="{{ line.y }}"/>
 							<text class="gridline-label" x="{{ gutterWidth - 16 }}" y="{{ line.y + 11 }}"
-								text-anchor="end" font-family="Courier Prime, monospace">{{ line.label }}</text>
+								text-anchor="end">{{ line.label }}</text>
 						{% endfor %}
 					</g>
 
@@ -342,13 +346,13 @@
 								<circle class="institution-beacon" cx="{{ institution.x + institution.width / 2 }}" cy="{{ institutionBand.top }}" r="8"/>
 
 								<text class="institution-label" x="{{ institution.x + institution.width / 2 }}" y="{{ institutionBand.top + institutionBand.height + 28 }}"
-									text-anchor="middle" font-family="Courier Prime, monospace">{{ institution.shortLabel|upper }}</text>
+									text-anchor="middle">{{ institution.shortLabel|upper }}</text>
 
 								{# Live readout: the actual macro numbers behind the stress pulse, not just
 								   the pulse itself. One line per reading so the larger legible font size
 								   never overruns a narrower institution's width. #}
 								<text class="institution-readout" data-district-target="institutionReadout" data-institution-readout-for="{{ institution.id }}"
-									text-anchor="middle" font-family="Courier Prime, monospace">{%- for readout in institution.readouts -%}
+									text-anchor="middle">{%- for readout in institution.readouts -%}
 										{%- set raw = macroSnapshot[readout.field] ?? 0 -%}
 										<tspan x="{{ institution.x + institution.width / 2 }}"
 											{%- if loop.first %} y="{{ institutionBand.top + institutionBand.height + 58 }}"{% else %} dy="30"{% endif %}
@@ -451,18 +455,16 @@
 											{# Rank rides the roofline's west end, the event badge its east end — the
 											   kerb below has no width to spare for either alongside the ticker. #}
 											<text class="plot-rank" data-district-target="rank" data-rank-for="{{ plot.ticker }}"
-												x="{{ plot.x + 4 }}" y="{{ plot.y - 14 }}"
-												font-family="Courier Prime, monospace">#{{ plot.rank }}</text>
+												x="{{ plot.x + 4 }}" y="{{ plot.y - 14 }}">#{{ plot.rank }}</text>
 
-											{# Recent-events badge, on the roofline rather than the kerb — on a narrow
-											   plot it used to sit on top of the ticker plate. #}
+											{# On the roofline, not the kerb: a narrow plot has no room beside
+											   the ticker plate. #}
 											<g class="event-badge" data-district-target="badge" data-badge-for="{{ plot.ticker }}"
 												data-count="{{ events[plot.ticker]|default([])|length }}">
 												<circle cx="{{ plot.x + plot.width - 6 }}" cy="{{ plot.y - 18 }}" r="15"/>
 												<text data-district-target="badgeCount"
 													x="{{ plot.x + plot.width - 6 }}" y="{{ plot.y - 18 }}"
-													text-anchor="middle" dominant-baseline="central"
-													font-family="Courier Prime, monospace">{{ events[plot.ticker]|default([])|length }}</text>
+													text-anchor="middle" dominant-baseline="central">{{ events[plot.ticker]|default([])|length }}</text>
 											</g>
 										{% endif %}
 									</g>
@@ -500,15 +502,15 @@
 							{% set centre = plot.x + plot.width / 2 %}
 							<text class="plot-label" data-district-target="label" data-label-for="{{ plot.ticker }}"
 								x="{{ centre }}" y="{{ plot.groundLine + 30 }}"
-								text-anchor="middle" font-family="Courier Prime, monospace">{{ plot.ticker }}</text>
+								text-anchor="middle">{{ plot.ticker }}</text>
 
 							<text class="plot-price" data-district-target="kerbPrice" data-price-for="{{ plot.ticker }}"
 								x="{{ centre }}" y="{{ plot.groundLine + 60 }}"
-								text-anchor="middle" font-family="Courier Prime, monospace">${{ plot.price|number_format(2) }}</text>
+								text-anchor="middle">${{ plot.price|number_format(2) }}</text>
 
 							<text class="plot-change" data-district-target="kerbChange" data-change-for="{{ plot.ticker }}"
 								x="{{ centre }}" y="{{ plot.groundLine + 88 }}"
-								text-anchor="middle" font-family="Courier Prime, monospace"
+								text-anchor="middle"
 								data-direction="{{ plot.changePercent is null ? 'flat' : (plot.changePercent > 0 ? 'up' : (plot.changePercent < 0 ? 'down' : 'flat')) }}"
 								>{% if plot.changePercent is null %}&mdash;{% else %}{{ plot.changePercent > 0 ? '+' : '' }}{{ (plot.changePercent * 100)|number_format(1) }}%{% endif %}</text>
 						{% endfor %}
@@ -517,13 +519,13 @@
 					{# Tooltip last, so it paints above every other layer. #}
 					<g id="plot-tooltip" data-district-target="tooltip" data-visible="false">
 						<rect class="tooltip-bg" x="0" y="0" width="520" height="210"/>
-						<text class="tt-ticker" data-district-target="tooltipTicker" x="20" y="46" font-family="Courier Prime, monospace"></text>
-						<text class="tt-rank" data-district-target="tooltipRank" x="500" y="46" text-anchor="end" font-family="Courier Prime, monospace"></text>
-						<text class="tt-name" data-district-target="tooltipName" x="20" y="84" font-family="Courier Prime, monospace"></text>
-						<text class="tt-meta" data-district-target="tooltipMeta" x="20" y="118" font-family="Courier Prime, monospace"></text>
-						<text class="tt-value" data-district-target="tooltipPrice" x="20" y="158" font-family="Courier Prime, monospace"></text>
-						<text class="tt-value tt-change" data-district-target="tooltipChange" x="500" y="158" text-anchor="end" font-family="Courier Prime, monospace"></text>
-						<text class="tt-meta" data-district-target="tooltipCap" x="20" y="192" font-family="Courier Prime, monospace"></text>
+						<text class="tt-ticker" data-district-target="tooltipTicker" x="20" y="46"></text>
+						<text class="tt-rank" data-district-target="tooltipRank" x="500" y="46" text-anchor="end"></text>
+						<text class="tt-name" data-district-target="tooltipName" x="20" y="84"></text>
+						<text class="tt-meta" data-district-target="tooltipMeta" x="20" y="118"></text>
+						<text class="tt-value" data-district-target="tooltipPrice" x="20" y="158"></text>
+						<text class="tt-value tt-change" data-district-target="tooltipChange" x="500" y="158" text-anchor="end"></text>
+						<text class="tt-meta" data-district-target="tooltipCap" x="20" y="192"></text>
 					</g>
 				</svg>
 			</div>
@@ -552,19 +554,19 @@
 				<p class="text-xs text-on-surface-variant/70 mb-4" data-district-target="detailIndustry"></p>
 
 				<dl class="grid grid-cols-2 gap-x-3 gap-y-2.5 text-xs font-mono mb-4">
-					<div><dt class="text-on-surface-variant/60 uppercase tracking-wider text-[10px]">Price</dt>
+					<div><dt class="text-on-surface-variant/60 uppercase tracking-wider text-3xs">Price</dt>
 						<dd class="text-on-surface tabular-nums" data-district-target="detailPrice"></dd></div>
-					<div><dt class="text-on-surface-variant/60 uppercase tracking-wider text-[10px]">Change (1M)</dt>
+					<div><dt class="text-on-surface-variant/60 uppercase tracking-wider text-3xs">Change (1M)</dt>
 						<dd class="tabular-nums" data-district-target="detailChange"></dd></div>
-					<div><dt class="text-on-surface-variant/60 uppercase tracking-wider text-[10px]">Market Cap</dt>
+					<div><dt class="text-on-surface-variant/60 uppercase tracking-wider text-3xs">Market Cap</dt>
 						<dd class="text-on-surface tabular-nums" data-district-target="detailMcap"></dd></div>
-					<div><dt class="text-on-surface-variant/60 uppercase tracking-wider text-[10px]">Credit</dt>
+					<div><dt class="text-on-surface-variant/60 uppercase tracking-wider text-3xs">Credit</dt>
 						<dd class="text-on-surface" data-district-target="detailRating"></dd></div>
-					<div><dt class="text-on-surface-variant/60 uppercase tracking-wider text-[10px]">Return</dt>
+					<div><dt class="text-on-surface-variant/60 uppercase tracking-wider text-3xs">Return</dt>
 						<dd class="text-on-surface tabular-nums" data-district-target="detailRoc"></dd></div>
-					<div><dt class="text-on-surface-variant/60 uppercase tracking-wider text-[10px]">Street Rank</dt>
+					<div><dt class="text-on-surface-variant/60 uppercase tracking-wider text-3xs">Street Rank</dt>
 						<dd class="text-on-surface tabular-nums" data-district-target="detailRank"></dd></div>
-					<div class="col-span-2"><dt class="text-on-surface-variant/60 uppercase tracking-wider text-[10px]">Standing</dt>
+					<div class="col-span-2"><dt class="text-on-surface-variant/60 uppercase tracking-wider text-3xs">Standing</dt>
 						<dd class="text-on-surface" data-district-target="detailImportance"></dd></div>
 				</dl>
 
@@ -572,8 +574,8 @@
 				   sequential and year-on-year moves, a 100% mix bar, then one row per stream. #}
 				<div class="mb-4 border-t border-outline-variant/25 pt-3">
 					<div class="flex items-center justify-between mb-1.5">
-						<h3 class="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Segment Revenue</h3>
-						<span class="text-[10px] font-mono uppercase tracking-wider text-on-surface-variant/50"
+						<h3 class="text-2xs font-semibold uppercase tracking-wide text-on-surface-variant/70">Segment Revenue</h3>
+						<span class="text-3xs font-mono uppercase tracking-wider text-on-surface-variant/50"
 							data-district-target="detailRevenuePeriod"></span>
 					</div>
 
@@ -581,10 +583,10 @@
 						<div class="flex items-baseline gap-2 flex-wrap">
 							<span class="text-lg font-mono font-bold text-on-surface tabular-nums"
 								data-district-target="detailRevenueTotal"></span>
-							<span class="text-[11px] font-mono tabular-nums" data-district-target="detailRevenueQoq"></span>
-							<span class="text-[11px] font-mono tabular-nums" data-district-target="detailRevenueYoy"></span>
+							<span class="text-2xs font-mono tabular-nums" data-district-target="detailRevenueQoq"></span>
+							<span class="text-2xs font-mono tabular-nums" data-district-target="detailRevenueYoy"></span>
 						</div>
-						<p class="text-[10px] font-mono text-on-surface-variant/50 mt-0.5"
+						<p class="text-3xs font-mono text-on-surface-variant/50 mt-0.5"
 							data-district-target="detailRevenueMeta"></p>
 					</div>
 
@@ -595,7 +597,7 @@
 						<p class="text-xs text-on-surface-variant/50 italic" data-district-target="noRevenueMix">No quarterly report filed yet.</p>
 					</div>
 
-					<p class="text-[9px] text-on-surface-variant/40 mt-2.5 leading-relaxed"
+					<p class="text-4xs text-on-surface-variant/40 mt-2.5 leading-relaxed"
 						data-district-target="detailRevenueFootnote" hidden>
 						Unaudited. Figures in USD as reported for the period shown. Growth quoted against the
 						prior quarter and the year-ago quarter; &ldquo;n/m&rdquo; where no comparison period is on
@@ -607,7 +609,7 @@
 					data-district-target="detailBlurb"></p>
 
 				<div class="mb-4">
-					<h3 class="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant/70 mb-2">Recent Events</h3>
+					<h3 class="text-2xs font-semibold uppercase tracking-wide text-on-surface-variant/70 mb-2">Recent Events</h3>
 					<div class="space-y-2 max-h-56 overflow-y-auto custom-scrollbar pr-1" data-district-target="detailEvents">
 						<p class="text-xs text-on-surface-variant/50 italic" data-district-target="noEvents">No recent events logged.</p>
 					</div>
@@ -620,19 +622,19 @@
 				</a>
 			</div>
 
-			{# Institution detail — clicking a publisher used to fall back to the generic intro copy. #}
+			{# Institution detail, shown when a publisher is selected. #}
 			<div data-district-target="institutionDetail" class="hidden">
 				<div class="flex items-baseline justify-between gap-2 mb-1">
 					<span class="text-sm font-bold text-primary font-mono uppercase tracking-wider" data-district-target="institutionName"></span>
-					<span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border"
+					<span class="text-3xs font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border"
 						data-district-target="institutionStatus"></span>
 				</div>
 				<p class="text-xs text-on-surface-variant/70 mb-4">Macro publisher</p>
 
-				<h3 class="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant/70 mb-2">Published Readings</h3>
+				<h3 class="text-2xs font-semibold uppercase tracking-wide text-on-surface-variant/70 mb-2">Published Readings</h3>
 				<dl class="grid grid-cols-2 gap-x-3 gap-y-2.5 text-xs font-mono mb-4" data-district-target="institutionReadings"></dl>
 
-				<h3 class="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant/70 mb-2">
+				<h3 class="text-2xs font-semibold uppercase tracking-wide text-on-surface-variant/70 mb-2">
 					Feeds <span class="text-on-surface-variant/40" data-district-target="institutionFeedCount"></span>
 				</h3>
 				<div class="flex flex-wrap gap-1.5" data-district-target="institutionFeeds"></div>

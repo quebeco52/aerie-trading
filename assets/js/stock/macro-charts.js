@@ -1,5 +1,6 @@
 import { THEME_COLORS } from '../utils/colors.js';
 import { destroyChartInstance } from '../utils/chart-config.js';
+import { renderWhenVisible, resetLazyCharts } from '../utils/lazy-chart.js';
 
 let macroEconomyChartInstance = null;
 let macroRatesChartInstance = null;
@@ -365,34 +366,34 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         const btn = document.getElementById(`btn-macro-${tf}`);
         if (btn) {
             if (tf === currentMacroTimeframe) {
-                btn.className = 'macro-range-btn px-3 py-1 text-xs font-bold rounded-lg bg-primary text-[#001a42] shadow-md shadow-primary/20 transition-all cursor-pointer';
+                btn.className = 'macro-range-btn px-3 py-1 text-xs font-bold rounded-lg bg-primary text-on-primary shadow-md shadow-primary/20 transition-all cursor-pointer';
             } else {
                 btn.className = 'macro-range-btn px-3 py-1 text-xs font-bold rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-all cursor-pointer';
             }
         }
     });
 
-    renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOverhangData, tipsBreakevenData);
-    renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData, yield10yData, spread2s10sData, targetRateData);
-    renderMacroMortgageChart(labels, policyRateData, mortgageYieldData, spread30yData);
-    renderMacroRiskChart(labels, erpData, volData, creditSpreadBpsData, corpBorrowingData);
-    renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData, wageGrowthData, nairuData);
-    renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agriEmaData, crackSpreadData);
-    renderMacroPropertyChart(labels, creEmaData, residentialEmaData, housingStartsData);
-    renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData, gscpiData);
-    renderMacroSentimentChart(labels, sentimentData, retailDefaultData, dealActivityData, corporateDefaultPctData);
-    renderMacroGovtSpendingChart(labels, govtSpendingEmaData, sovereignDebtData);
-    renderMacroInterbankLiquidityChart(labels, interbankSpreadBpsData, creditSpreadBpsData);
-    renderMacroTermPremiumChart(labels, yield10yData, riskNeutralData, termPremiumData, naturalRateData);
-    renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthData, potentialGdpGrowthData, tfpGrowthData, recessionProbData);
-    renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceSheetData);
-    renderMacroFciChart(labels, fciData, fciEmaData, sloosData);
-    renderMacroCostPushChart(labels, agriLagData, energySupplyDragData, freightSupplyDragData);
-    renderMacroSectoralInflationChart(labels, inflationData, supercoreInflationData, coreGoodsInflationData, foodLagPctData, ppiData);
-    renderMacroCreditCliffChart(labels, creditSpreadBpsData, highYieldSpreadBpsData, creditCliffRatioData, corporateDefaultBpsData);
-    renderMacroInventoryCycleChart(labels, inventoryStockGapData, outputGapData, energyBufferData, capacityUtilizationData);
-    renderMacroFaitChart(labels, faitCumulativeGapData, faitOffsetBpsData, policyRateData, targetRateData);
-    renderMacroLeadingIndicatorsChart(labels, pmiData, housingStartsData, moneySupplyGrowthData, tradeBalanceData, ppiData);
+    renderWhenVisible('macroEconomyChart', () => renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOverhangData, tipsBreakevenData));
+    renderWhenVisible('macroRatesChart', () => renderMacroRatesChart(labels, policyRateData, yield2yData, yield5yData, yield10yData, spread2s10sData, targetRateData));
+    renderWhenVisible('macroMortgageChart', () => renderMacroMortgageChart(labels, policyRateData, mortgageYieldData, spread30yData));
+    renderWhenVisible('macroRiskChart', () => renderMacroRiskChart(labels, erpData, volData, creditSpreadBpsData, corpBorrowingData));
+    renderWhenVisible('macroLaborCreditChart', () => renderMacroLaborCreditChart(labels, unemploymentData, jobVacanciesData, wageGrowthData, nairuData));
+    renderWhenVisible('macroCommoditiesChart', () => renderMacroCommoditiesChart(labels, energyPriceData, metalsEmaData, agriEmaData, crackSpreadData));
+    renderWhenVisible('macroPropertyChart', () => renderMacroPropertyChart(labels, creEmaData, residentialEmaData, housingStartsData));
+    renderWhenVisible('macroTradeLogisticsChart', () => renderMacroTradeLogisticsChart(labels, fxEmaData, freightEmaData, gscpiData));
+    renderWhenVisible('macroSentimentChart', () => renderMacroSentimentChart(labels, sentimentData, retailDefaultData, dealActivityData, corporateDefaultPctData));
+    renderWhenVisible('macroGovtSpendingChart', () => renderMacroGovtSpendingChart(labels, govtSpendingEmaData, sovereignDebtData));
+    renderWhenVisible('macroInterbankLiquidityChart', () => renderMacroInterbankLiquidityChart(labels, interbankSpreadBpsData, creditSpreadBpsData));
+    renderWhenVisible('macroTermPremiumChart', () => renderMacroTermPremiumChart(labels, yield10yData, riskNeutralData, termPremiumData, naturalRateData));
+    renderWhenVisible('macroGdpGrowthChart', () => renderMacroGdpGrowthChart(labels, nominalGdpGrowthData, realGdpGrowthData, potentialGdpGrowthData, tfpGrowthData, recessionProbData));
+    renderWhenVisible('macroBalanceSheetChart', () => renderMacroBalanceSheetChart(labels, balanceSheetAssetsData, balanceSheetData));
+    renderWhenVisible('macroFciChart', () => renderMacroFciChart(labels, fciData, fciEmaData, sloosData));
+    renderWhenVisible('macroCostPushChart', () => renderMacroCostPushChart(labels, agriLagData, energySupplyDragData, freightSupplyDragData));
+    renderWhenVisible('macroSectoralInflationChart', () => renderMacroSectoralInflationChart(labels, inflationData, supercoreInflationData, coreGoodsInflationData, foodLagPctData, ppiData));
+    renderWhenVisible('macroCreditCliffChart', () => renderMacroCreditCliffChart(labels, creditSpreadBpsData, highYieldSpreadBpsData, creditCliffRatioData, corporateDefaultBpsData));
+    renderWhenVisible('macroInventoryCycleChart', () => renderMacroInventoryCycleChart(labels, inventoryStockGapData, outputGapData, energyBufferData, capacityUtilizationData));
+    renderWhenVisible('macroFaitChart', () => renderMacroFaitChart(labels, faitCumulativeGapData, faitOffsetBpsData, policyRateData, targetRateData));
+    renderWhenVisible('macroLeadingIndicatorsChart', () => renderMacroLeadingIndicatorsChart(labels, pmiData, housingStartsData, moneySupplyGrowthData, tradeBalanceData, ppiData));
 }
 
 function renderMacroEconomyChart(labels, inflationData, outputGapData, capitalOverhangData, tipsBreakevenData) {
@@ -2305,6 +2306,8 @@ export function resizeMacroCharts() {
 }
 
 export function destroyMacroCharts() {
+    // Charts that were never scrolled into view must not build themselves after teardown.
+    resetLazyCharts();
     macroEconomyChartInstance = destroyChartInstance(macroEconomyChartInstance);
     macroRatesChartInstance = destroyChartInstance(macroRatesChartInstance);
     macroMortgageChartInstance = destroyChartInstance(macroMortgageChartInstance);

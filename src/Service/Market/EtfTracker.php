@@ -128,7 +128,7 @@ class EtfTracker
             if ($direction === 'forward') {
                 if ($userEtfsTableExists) {
                     $conn->executeStatement(
-                        'UPDATE user_etfs SET quantity = quantity * :factor WHERE etf_id = :etf_id',
+                        'UPDATE user_etfs SET quantity = quantity * :factor, version = version + 1 WHERE etf_id = :etf_id',
                         ['factor' => $factor, 'etf_id' => $etfId]
                     );
                 }
@@ -137,6 +137,8 @@ class EtfTracker
                     'UPDATE etf_history SET price = price / :factor WHERE etf_id = :etf_id',
                     ['factor' => $factor, 'etf_id' => $etfId]
                 );
+
+                $this->restateOrderBook($conn, $ticker, $factor, false, $preSplitPrice);
                 
                 $desc = "{$etf->getName()} has executed a {$factor}-for-1 forward split to maintain liquidity.";
                 $this->marketEvent->publish($etf, 'SPLIT', $desc, 0.0);
@@ -144,6 +146,10 @@ class EtfTracker
                 $this->adjustRedisBuffer($ticker, $factor, 'divide');
 
             } else {
+                // Escrow first, on the pre-split book: the restatement below rescales the resting orders and
+                // the remnant has to be paid out at the price it was committed at.
+                $this->restateOrderBook($conn, $ticker, $factor, true, $preSplitPrice);
+
                 if ($userEtfsTableExists) {
                     // Compensate users for fractional shares to prevent wealth destruction
                     $conn->executeStatement(
@@ -155,7 +161,7 @@ class EtfTracker
                     );
 
                     $conn->executeStatement(
-                        'UPDATE user_etfs SET quantity = FLOOR(quantity / :factor) WHERE etf_id = :etf_id',
+                        'UPDATE user_etfs SET quantity = FLOOR(quantity / :factor), version = version + 1 WHERE etf_id = :etf_id',
                         ['factor' => $factor, 'etf_id' => $etfId]
                     );
 
@@ -181,6 +187,88 @@ class EtfTracker
             $conn->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * Restates resting and executed orders on a split ETF, the way CorporateLedgerService does for a stock.
+     *
+     * An ETF split used to touch only user_etfs and etf_history, which left the order book quoting against a
+     * book that had just halved or decupled: a resting BUY at $60 under a $100 ETF became an immediate fill
+     * the moment a forward split took the price to $50, and the escrow behind every open order was measured
+     * in units that no longer existed. Executed history is restated for the same reason a stock's is - the
+     * cost basis every portfolio surface prints is derived from it.
+     *
+     * @param bool $isReverse Whether quantities divide and prices multiply, rather than the other way round.
+     */
+    private function restateOrderBook(
+        \Doctrine\DBAL\Connection $conn,
+        string $ticker,
+        float $factor,
+        bool $isReverse,
+        float $preSplitPrice
+    ): void {
+        if ($isReverse) {
+            // Escrowed value that will not survive the FLOOR below, refunded before it is lost: a BUY holds
+            // cash at the limit it committed at, a SELL holds shares valued at the pre-split price.
+            $conn->executeStatement(
+                "UPDATE users u
+                 INNER JOIN (
+                     SELECT o.user_id,
+                            SUM(CASE WHEN o.action = 'BUY'
+                                     THEN COALESCE(o.limit_price, 0) * (o.quantity % :factor)
+                                     ELSE (o.quantity % :factor) * :pre_split_price
+                                END) AS remnant_value
+                     FROM trade_orders o
+                     WHERE o.ticker = :ticker AND o.status = 'OPEN'
+                     GROUP BY o.user_id
+                 ) remnants ON remnants.user_id = u.id
+                 SET u.cash_balance = u.cash_balance + remnants.remnant_value",
+                ['factor' => $factor, 'ticker' => $ticker, 'pre_split_price' => $preSplitPrice]
+            );
+
+            $conn->executeStatement(
+                "UPDATE trade_orders
+                 SET quantity = FLOOR(quantity / :factor),
+                     limit_price = ROUND(limit_price * :factor, 4)
+                 WHERE ticker = :ticker AND status = 'OPEN'",
+                ['factor' => $factor, 'ticker' => $ticker]
+            );
+
+            $conn->executeStatement(
+                "UPDATE trade_orders SET status = 'CANCELLED' WHERE ticker = :ticker AND status = 'OPEN' AND quantity = 0",
+                ['ticker' => $ticker]
+            );
+
+            $conn->executeStatement(
+                "UPDATE trade_orders
+                 SET quantity = GREATEST(FLOOR(quantity / :factor), 1),
+                     filled_quantity = GREATEST(FLOOR(filled_quantity / :factor), 1),
+                     execution_price = ROUND(execution_price * :factor, 4),
+                     limit_price = ROUND(limit_price * :factor, 4)
+                 WHERE ticker = :ticker AND status = 'FILLED'",
+                ['factor' => $factor, 'ticker' => $ticker]
+            );
+
+            return;
+        }
+
+        $conn->executeStatement(
+            "UPDATE trade_orders
+             SET quantity = IF(quantity > 9223372036854775807 / :factor, 9223372036854775807, quantity * :factor),
+                 limit_price = ROUND(limit_price / :factor, 4)
+             WHERE ticker = :ticker AND status = 'OPEN'",
+            ['factor' => $factor, 'ticker' => $ticker]
+        );
+
+        $conn->executeStatement(
+            "UPDATE trade_orders
+             SET quantity = IF(quantity > 9223372036854775807 / :factor, 9223372036854775807, quantity * :factor),
+                 filled_quantity = IF(filled_quantity > 9223372036854775807 / :factor, 9223372036854775807, filled_quantity * :factor),
+                 execution_price = ROUND(execution_price / :factor, 4),
+                 limit_price = ROUND(limit_price / :factor, 4)
+             WHERE ticker = :ticker AND status = 'FILLED'",
+            ['factor' => $factor, 'ticker' => $ticker]
+        );
     }
 
     /**

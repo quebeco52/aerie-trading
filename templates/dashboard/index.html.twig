@@ -12,7 +12,7 @@
                 <div class="lg:col-span-7 flex flex-col space-y-2">
                     <div class="flex items-center gap-2">
                         <span class="w-2 h-2 rounded-full bg-secondary"></span>
-                        <span class="text-[11px] font-semibold tracking-wide text-on-surface-variant uppercase">Total Portfolio Value (NAV)</span>
+                        <span class="text-2xs font-semibold tracking-wide text-on-surface-variant uppercase">Total Portfolio Value (NAV)</span>
                     </div>
                     <div class="flex flex-wrap items-baseline gap-4">
                         <h1 id="portfolio-total-value" class="text-3xl sm:text-4xl font-bold tracking-tight text-on-surface font-mono tabular-nums transition-colors duration-300">
@@ -24,7 +24,7 @@
                                 <span id="portfolio-pnl-val">{{ totalUnrealizedPnL >= 0 ? '+' : '' }}${{ totalUnrealizedPnL|number_format(2) }}</span>
                                 <span id="portfolio-pnl-pct">({{ totalUnrealizedPnL >= 0 ? '+' : '' }}{{ totalUnrealizedPnLPercent|number_format(2) }}%)</span>
                             </span>
-                            <span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide hidden sm:inline">Total Return</span>
+                            <span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide hidden sm:inline">Total Return</span>
                         </div>
                     </div>
                 </div>
@@ -32,15 +32,15 @@
                 {# Right: Key Account Stats #}
                 <div class="lg:col-span-5 grid grid-cols-2 sm:grid-cols-3 gap-3">
                     <div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between">
-                        <span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Cash</span>
+                        <span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Cash</span>
                         <span id="available-cash" class="text-sm font-bold text-on-surface font-mono tabular-nums mt-1">${{ cashBalance|number_format(2) }}</span>
                     </div>
                     <div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between">
-                        <span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Invested</span>
+                        <span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Invested</span>
                         <span id="total-invested" class="text-sm font-bold text-on-surface font-mono tabular-nums mt-1">${{ totalInvested|number_format(2) }}</span>
                     </div>
                     <div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between col-span-2 sm:col-span-1">
-                        <span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">In Orders</span>
+                        <span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">In Orders</span>
                         <span class="text-sm font-bold text-primary font-mono tabular-nums mt-1">${{ escrowedCash|number_format(2) }}</span>
                     </div>
                 </div>
@@ -56,10 +56,10 @@
                 </div>
 
                 <div class="flex items-center gap-1 bg-surface-container-lowest p-1 rounded border border-outline-variant/20 self-stretch sm:self-auto justify-between sm:justify-start">
-                    <button class="portfolio-range-btn px-2.5 py-1 text-xs font-bold rounded bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors" data-range="1w">1W</button>
-                    <button class="portfolio-range-btn px-2.5 py-1 text-xs font-bold rounded bg-primary text-[#001a42] transition-colors" data-range="1m">1M</button>
-                    <button class="portfolio-range-btn px-2.5 py-1 text-xs font-bold rounded bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors" data-range="1y">1Y</button>
-                    <button class="portfolio-range-btn px-2.5 py-1 text-xs font-bold rounded bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors" data-range="max">MAX</button>
+                    <button class="cursor-pointer portfolio-range-btn px-2.5 py-1 text-xs font-bold rounded bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors" data-range="1w">1W</button>
+                    <button class="cursor-pointer portfolio-range-btn px-2.5 py-1 text-xs font-bold rounded bg-primary text-on-primary transition-colors" data-range="1m">1M</button>
+                    <button class="cursor-pointer portfolio-range-btn px-2.5 py-1 text-xs font-bold rounded bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors" data-range="1y">1Y</button>
+                    <button class="cursor-pointer portfolio-range-btn px-2.5 py-1 text-xs font-bold rounded bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors" data-range="max">MAX</button>
                 </div>
             </div>
 
@@ -137,7 +137,7 @@
                 <div class="overflow-x-auto">
                     <table class="w-full text-left border-collapse min-w-175">
                         <thead>
-                            <tr class="bg-surface-container-highest/20 text-on-surface-variant text-[11px] uppercase tracking-wide font-semibold border-b border-outline-variant/15">
+                            <tr class="bg-surface-container-highest/20 text-on-surface-variant text-2xs uppercase tracking-wide font-semibold border-b border-outline-variant/15">
                                 <th class="px-5 py-3">Asset</th>
                                 <th class="px-4 py-3 text-right">Shares</th>
                                 <th class="px-4 py-3 text-right">Avg Cost</th>
@@ -158,7 +158,7 @@
                                                 <div class="flex items-center gap-2">
                                                     <a href="/stock/{{ holding.ticker }}" class="font-bold text-on-surface text-sm group-hover:text-primary transition-colors outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:decoration-primary focus-visible:underline-offset-4">{{ holding.name }}</a>
                                                     {% if holding.isBankrupt %}
-                                                        <span class="relative z-10 px-1.5 py-0.2 rounded bg-tertiary/10 text-tertiary text-[9px] font-bold border border-tertiary/25 uppercase tracking-wide">Bankrupt</span>
+                                                        <span class="relative z-10 px-1.5 py-0.2 rounded bg-tertiary/10 text-tertiary text-4xs font-bold border border-tertiary/25 uppercase tracking-wide">Bankrupt</span>
                                                     {% endif %}
                                                 </div>
                                                 <div class="flex items-center gap-2 mt-0.5">
@@ -174,7 +174,7 @@
                                     <td class="px-5 py-3 font-mono tabular-nums text-right font-bold text-on-surface" id="value-{{ holding.ticker }}">${{ holding.marketValue|number_format(2) }}</td>
                                     <td class="px-5 py-3 font-mono tabular-nums text-right font-bold {{ holding.unrealizedPnL >= 0 ? 'text-secondary' : 'text-tertiary' }}" id="pnl-{{ holding.ticker }}">
                                         <div>{{ holding.unrealizedPnL >= 0 ? '+' : '' }}${{ holding.unrealizedPnL|number_format(2) }}</div>
-                                        <div class="text-[11px] font-normal opacity-80">({{ holding.unrealizedPnL >= 0 ? '+' : '' }}{{ holding.unrealizedPnLPercent|number_format(2) }}%)</div>
+                                        <div class="text-2xs font-normal opacity-80">({{ holding.unrealizedPnL >= 0 ? '+' : '' }}{{ holding.unrealizedPnLPercent|number_format(2) }}%)</div>
                                     </td>
                                     <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant text-xs">{{ holding.weight|number_format(1) }}%</td>
                                     <td class="px-5 py-3 text-right">
@@ -211,7 +211,7 @@
                     <div class="overflow-x-auto">
                         <table class="w-full text-left border-collapse min-w-150">
                             <thead>
-                                <tr class="text-[11px] text-on-surface-variant uppercase tracking-wide border-b border-outline-variant/15 font-semibold">
+                                <tr class="text-2xs text-on-surface-variant uppercase tracking-wide border-b border-outline-variant/15 font-semibold">
                                     <th class="py-2.5">Order ID</th>
                                     <th class="py-2.5">Type</th>
                                     <th class="py-2.5">Action</th>
@@ -237,7 +237,7 @@
                                         <td class="py-2.5 text-right">
                                             <form action="{{ path('app_trade_cancel', {'id': order.id}) }}" method="POST" onsubmit="return confirm('Cancel this limit order?');">
                                                 <input type="hidden" name="_token" value="{{ csrf_token('cancel_trade_' ~ order.id) }}">
-                                                <button type="submit" class="px-2.5 py-1 rounded bg-tertiary/10 text-tertiary hover:bg-tertiary/20 text-xs font-bold transition-colors">
+                                                <button type="submit" class="cursor-pointer px-2.5 py-1 rounded bg-tertiary/10 text-tertiary hover:bg-tertiary/20 text-xs font-bold transition-colors">
                                                     Cancel
                                                 </button>
                                             </form>
@@ -265,7 +265,7 @@
                     <div class="overflow-x-auto">
                         <table class="w-full text-left border-collapse min-w-150">
                             <thead>
-                                <tr class="text-[11px] text-on-surface-variant uppercase tracking-wide border-b border-outline-variant/15 font-semibold">
+                                <tr class="text-2xs text-on-surface-variant uppercase tracking-wide border-b border-outline-variant/15 font-semibold">
                                     <th class="py-2.5">Execution Date</th>
                                     <th class="py-2.5">Type</th>
                                     <th class="py-2.5">Action</th>
@@ -369,17 +369,17 @@
         <div id="tab-content-account" class="portfolio-tab-panel hidden space-y-5" data-tabs-target="panel" data-tab-panel="account">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-5">
-                    <span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Available Cash</span>
+                    <span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Available Cash</span>
                     <h3 class="text-2xl font-bold text-on-surface font-mono tabular-nums mt-1">${{ cashBalance|number_format(2) }}</h3>
                     <p class="text-xs text-on-surface-variant mt-1.5">Liquid capital immediately available for market orders.</p>
                 </div>
                 <div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-5">
-                    <span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Escrowed in Limit Orders</span>
+                    <span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Escrowed in Limit Orders</span>
                     <h3 class="text-2xl font-bold text-primary font-mono tabular-nums mt-1">${{ escrowedCash|number_format(2) }}</h3>
                     <p class="text-xs text-on-surface-variant mt-1.5">Funds held in reserve pending execution of buy orders.</p>
                 </div>
                 <div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-5">
-                    <span class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide">Total Buying Power</span>
+                    <span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Total Buying Power</span>
                     <h3 class="text-2xl font-bold text-secondary font-mono tabular-nums mt-1">${{ (cashBalance + escrowedCash)|number_format(2) }}</h3>
                     <p class="text-xs text-on-surface-variant mt-1.5">Total non-equity liquidity under user management.</p>
                 </div>
@@ -393,29 +393,21 @@
 {% block javascripts %}
     {{ parent() }}
 
-    <script>
-        window.PORTFOLIO_HOLDINGS = {
-            {% for holding in holdings %}
-            "{{ holding.ticker }}" : {{ holding.quantity }}
-            {{ not loop.last ? ',' : '' }}
-            {% endfor %}
-        };
+    {# Portfolio value chart only — no Chart.js or ECharts on this page. #}
+    {% include 'partials/_chart_libraries.html.twig' with { lightweight: true } %}
 
-        window.HOLDING_AVG_COSTS = {
-            {% for holding in holdings %}
-            "{{ holding.ticker }}" : {{ holding.avgCost }}
-            {{ not loop.last ? ',' : '' }}
-            {% endfor %}
-        };
-        
-        window.USER_CASH = {{ cashBalance|default(0) }};
-        window.INITIAL_PORTFOLIO_VALUE = {{ portfolioValue|default(0) }};
-        window.TOTAL_INVESTED_COST = {{ totalInvestedCost|default(0) }};
-        window.LIVE_PRICES = {
-            {% for holding in holdings %}
-            "{{ holding.ticker }}" : {{ holding.price }}{{ not loop.last ? ',' : '' }}
-            {% endfor %}
-        };
+    {# Page data for assets/js/pages/dashboard.js. See the note in templates/stock/index.html.twig. #}
+    <script type="application/json" id="portfolio-data">
+        {{ {
+            holdings: holdings|reduce((carry, h) => carry|merge({ (h.ticker): {
+                quantity: h.quantity,
+                avgCost: h.avgCost,
+                price: h.price
+            } }), {}),
+            cash: cashBalance|default(0),
+            initialPortfolioValue: portfolioValue|default(0),
+            totalInvestedCost: totalInvestedCost|default(0)
+        }|json_encode|raw }}
     </script>
 
     <script type="module">

@@ -443,6 +443,29 @@ readonly class MacroStateDTO
         return ((int) floor($this->totalTime * 4.0) % 4 + 4) % 4;
     }
 
+    // --- Economic Cycle Label ---
+    /** Output gap above which the cycle reads as a boom to a player. */
+    public const CYCLE_BOOM_GAP = 0.01;
+    /** Output gap below which the cycle reads as a bust to a player. */
+    public const CYCLE_BUST_GAP = -0.01;
+
+    /**
+     * The economy's phase as the interface names it.
+     *
+     * Defined once because it is read in two places that must agree: the ticker publishes it on every
+     * live update, and the stock page renders it on load. The page used to read a Redis key
+     * (`economy_state`) that nothing has ever written, so it fell back to a hardcoded "Expansion" — a
+     * label the live feed does not even use — until the first WebSocket tick replaced it.
+     */
+    public function economicCycleLabel(): string
+    {
+        return match (true) {
+            $this->outputGap > self::CYCLE_BOOM_GAP => 'Boom',
+            $this->outputGap < self::CYCLE_BUST_GAP => 'Bust',
+            default => 'Neutral',
+        };
+    }
+
     public static function fromMacroState(MacroState $state): self
     {
         return new self(

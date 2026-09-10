@@ -10,7 +10,7 @@
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
                 <div class="flex items-center gap-2 mb-2">
-                    <span class="text-[11px] font-semibold tracking-wide text-primary uppercase">Market Intelligence</span>
+                    <span class="text-2xs font-semibold tracking-wide text-primary uppercase">Market Intelligence</span>
                 </div>
                 <h1 class="text-2xl md:text-3xl font-bold text-on-surface tracking-tight">Stock Screener</h1>
                 <p class="text-xs text-on-surface-variant mt-1">Filter, sort, and analyze corporate fundamentals across the entire exchange.</p>
@@ -27,7 +27,7 @@
 
     {# Sector Filter Pills #}
     <div class="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar" id="sector-filters">
-        <button class="sector-filter-btn px-3 py-1 rounded text-xs font-bold transition-all bg-primary text-[#001a42] whitespace-nowrap cursor-pointer uppercase tracking-wider" data-sector="ALL" data-screener-target="sectorBtn" data-action="click->screener#filterSector">
+        <button class="sector-filter-btn px-3 py-1 rounded text-xs font-bold transition-all bg-primary text-on-primary whitespace-nowrap cursor-pointer uppercase tracking-wider" data-sector="ALL" data-screener-target="sectorBtn" data-action="click->screener#filterSector">
             All Sectors
         </button>
         {% set sectors = [] %}
@@ -48,7 +48,7 @@
         <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse min-w-225" id="screener-table">
                 <thead>
-                    <tr class="bg-surface-container-highest/20 text-on-surface-variant text-[11px] uppercase tracking-wide font-semibold border-b border-outline-variant/15">
+                    <tr class="bg-surface-container-highest/20 text-on-surface-variant text-2xs uppercase tracking-wide font-semibold border-b border-outline-variant/15">
                         <th scope="col" class="px-5 py-3 cursor-pointer select-none hover:text-primary transition-colors" data-col="ticker" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Ticker</th>
                         <th scope="col" class="px-4 py-3 cursor-pointer select-none hover:text-primary transition-colors" data-col="name" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Company</th>
                         <th scope="col" class="px-4 py-3 cursor-pointer select-none hover:text-primary transition-colors" data-col="sector" role="columnheader" aria-sort="none" tabindex="0" data-screener-target="header" data-action="click->screener#sort">Sector</th>
@@ -71,7 +71,7 @@
                                 <div class="flex items-center gap-2">
                                     <a href="/stock/{{ stock.ticker }}" class="font-bold text-primary font-mono group-hover:underline outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:underline-offset-4">{{ stock.ticker }}</a>
                                     {% if stock.isBankrupt %}
-                                        <span class="relative z-10 px-1.5 py-0.2 rounded bg-tertiary/10 text-tertiary text-[9px] font-bold border border-tertiary/25 uppercase tracking-wide">Bankrupt</span>
+                                        <span class="relative z-10 px-1.5 py-0.2 rounded bg-tertiary/10 text-tertiary text-4xs font-bold border border-tertiary/25 uppercase tracking-wide">Bankrupt</span>
                                     {% endif %}
                                 </div>
                             </th>

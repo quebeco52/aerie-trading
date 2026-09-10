@@ -35,6 +35,7 @@ class BankruptcyTest extends TestCase
     private DebtEngine&MockObject $debtEngineMock;
     private MathUtility&Stub $mathUtilityMock;
     private Connection&MockObject $connectionMock;
+    /** @var EntityRepository<TradeOrder>&MockObject */
     private EntityRepository&MockObject $tradeOrderRepoMock;
 
     protected function setUp(): void
@@ -319,7 +320,8 @@ class BankruptcyTest extends TestCase
         $tradeService = new TradeExecutionService(
             $this->entityManagerMock,
             $portfolio,
-            $redis
+            $redis,
+            new \Psr\Log\NullLogger()
         );
 
         $this->expectException(\Exception::class);

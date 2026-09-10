@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Tests\Service;
+namespace App\Tests\Service\Math;
 
 use App\Service\Math\FinancialConstants;
 use App\Service\Macro\MacroEngine;
@@ -1422,5 +1422,310 @@ class MathUtilityTest extends TestCase
         $humpBliss = $this->mathUtility->calculateSvenssonYield($level, $slope, 0.02, 0.0, 2.5, $lambda1, 0.15, 0.30)
             - $this->mathUtility->calculateSvenssonYield($level, $slope, 0.0, 0.0, 2.5, $lambda1, 0.15, 0.30);
         $this->assertEqualsWithDelta($humpPlain, $humpBliss, 0.0000001, 'Curvature loading must depend only on lambda1.');
+    }
+
+    // --- Contract coverage for formulas whose only other exercise is a higher suite ---
+
+    /**
+     * The Theory of Storage curve: flat in contango, rising asymptotically as inventory nears the buffer floor.
+     */
+    public function testConvenienceYieldIsZeroInContangoAndRisesAsInventoryDepletes(): void
+    {
+        $this->assertSame(0.0, $this->mathUtility->calculateConvenienceYield(100.0), 'At neutral inventory the market is in contango.');
+        $this->assertSame(0.0, $this->mathUtility->calculateConvenienceYield(140.0), 'Ample inventory stays in contango.');
+
+        // Closed form below the neutral point: yieldScale * ((neutralSlack / bufferSlack)^exponent - 1).
+        $this->assertEqualsWithDelta(
+            0.10 * (pow(50.0 / 25.0, 1.8) - 1.0),
+            $this->mathUtility->calculateConvenienceYield(75.0),
+            0.0000001,
+            'Backwardation yield must follow the storage curve exactly.'
+        );
+
+        $previous = -1.0;
+        for ($level = 99.0; $level >= 51.0; $level -= 1.0) {
+            $yield = $this->mathUtility->calculateConvenienceYield($level);
+            $this->assertGreaterThan($previous, $yield, "Convenience yield must rise as inventory falls to {$level}.");
+            $previous = $yield;
+        }
+
+        // The buffer slack floors at 1.0, so the curve saturates rather than diverging to infinity.
+        $this->assertTrue(is_finite($this->mathUtility->calculateConvenienceYield(0.0)), 'A depleted inventory must not produce a non-finite yield.');
+        $this->assertSame(
+            $this->mathUtility->calculateConvenienceYield(51.0),
+            $this->mathUtility->calculateConvenienceYield(10.0),
+            'Below the buffer floor the curve saturates at its clamped value.'
+        );
+    }
+
+    /**
+     * The convex Phillips curve is piecewise: asymptotic in expansion, linearly rigid in contraction.
+     */
+    public function testConvexPhillipsCurvePiecewiseFormAndContinuityAtZero(): void
+    {
+        $this->assertSame(0.0, $this->mathUtility->calculateConvexPhillipsCurve(0.0), 'A closed output gap exerts no demand-pull pressure.');
+
+        // Expansion branch: kappa * (y / (yMax - y)).
+        $this->assertEqualsWithDelta(
+            0.020 * (0.04 / (0.08 - 0.04)),
+            $this->mathUtility->calculateConvexPhillipsCurve(0.04),
+            0.0000001,
+            'The expansion branch must follow the asymptotic form.'
+        );
+
+        // Contraction branch: (kappa / yMax) * rigidity * y — linear, so halving the gap halves the pressure.
+        $this->assertEqualsWithDelta(
+            (0.020 / 0.08) * 0.35 * -0.04,
+            $this->mathUtility->calculateConvexPhillipsCurve(-0.04),
+            0.0000001,
+            'The contraction branch must follow the rigid linear form.'
+        );
+        $this->assertEqualsWithDelta(
+            2.0 * $this->mathUtility->calculateConvexPhillipsCurve(-0.02),
+            $this->mathUtility->calculateConvexPhillipsCurve(-0.04),
+            0.0000001,
+            'Downward rigidity is linear: no curvature below the closed gap.'
+        );
+
+        // The ceiling denominator floors at 0.005, so the gap may exceed capacity without dividing by zero.
+        $this->assertTrue(is_finite($this->mathUtility->calculateConvexPhillipsCurve(0.08)), 'Reaching capacity must not divide by zero.');
+        $this->assertTrue(is_finite($this->mathUtility->calculateConvexPhillipsCurve(0.20)), 'Overheating past capacity must stay finite.');
+
+        // A stiffer rigidity factor deepens disinflation; it has no effect above the closed gap.
+        $this->assertLessThan(
+            $this->mathUtility->calculateConvexPhillipsCurve(-0.04, 0.08, 0.020, 0.35),
+            $this->mathUtility->calculateConvexPhillipsCurve(-0.04, 0.08, 0.020, 0.70),
+            'A weaker rigidity factor must let prices fall further.'
+        );
+        $this->assertSame(
+            $this->mathUtility->calculateConvexPhillipsCurve(0.04, 0.08, 0.020, 0.35),
+            $this->mathUtility->calculateConvexPhillipsCurve(0.04, 0.08, 0.020, 0.70),
+            'Downward rigidity must not touch the expansion branch.'
+        );
+    }
+
+    /**
+     * Mean absolute deviation recovers sigma without letting one outlier dominate, unlike a sum of squares.
+     */
+    public function testMeanAbsoluteScaleRecoversSigmaAndResistsOutliers(): void
+    {
+        $this->assertSame(0.0, $this->mathUtility->calculateMeanAbsoluteScale([]), 'An empty sample has nothing to estimate from.');
+        $this->assertSame(0.0, $this->mathUtility->calculateMeanAbsoluteScale([0.0, 0.0, 0.0]), 'A sample of exact forecasts has zero scale.');
+
+        // E|X| = sigma * sqrt(2/pi), so a constant absolute deviation recovers that deviation over the constant.
+        $this->assertEqualsWithDelta(
+            1.0 / MathUtility::MEAN_ABSOLUTE_DEVIATION_TO_SIGMA,
+            $this->mathUtility->calculateMeanAbsoluteScale([1.0, -1.0, 1.0, -1.0]),
+            0.0000001,
+            'The estimator must invert the normal mean-absolute-deviation constant.'
+        );
+
+        // Sign is discarded: only the magnitude of the surprise carries scale.
+        $this->assertSame(
+            $this->mathUtility->calculateMeanAbsoluteScale([0.4, -0.2, 0.6]),
+            $this->mathUtility->calculateMeanAbsoluteScale([-0.4, 0.2, -0.6]),
+            'The scale of a surprise must not depend on its direction.'
+        );
+
+        // The point of the estimator: one blow-up quarter must not dominate the other nine.
+        $quiet = array_fill(0, 9, 0.02);
+        $withOutlier = $quiet;
+        $withOutlier[] = 2.0;
+
+        $sumOfSquares = sqrt(array_sum(array_map(static fn (float $x): float => $x ** 2, $withOutlier)) / count($withOutlier));
+        $robust = $this->mathUtility->calculateMeanAbsoluteScale($withOutlier);
+
+        $this->assertLessThan($sumOfSquares, $robust, 'A fat tail must move the mean absolute estimate less than a root-mean-square.');
+    }
+
+    /**
+     * Persistence inflates integrated variance; the scale factor must give it back exactly.
+     */
+    public function testPersistenceVarianceScaleRestoresIntegratedVariance(): void
+    {
+        $this->assertSame(1.0, $this->mathUtility->calculatePersistenceVarianceScale(0.0), 'An i.i.d. driver needs no rescaling.');
+
+        // sqrt((1 - phi) / (1 + phi)) inverts the (1 + phi) / (1 - phi) variance inflation of an AR(1) sum.
+        foreach ([0.10, 0.50, 0.90, 0.99] as $phi) {
+            $scale = $this->mathUtility->calculatePersistenceVarianceScale($phi);
+            $inflation = (1.0 + $phi) / (1.0 - $phi);
+            $this->assertEqualsWithDelta(1.0, $scale ** 2 * $inflation, 0.0000001, "Scale must neutralise the variance inflation at phi={$phi}.");
+            $this->assertLessThan(1.0, $scale, "A persistent driver must be damped, not amplified, at phi={$phi}.");
+        }
+
+        // phi is bounded below 1 so the scale never collapses to zero or goes imaginary.
+        $this->assertGreaterThan(0.0, $this->mathUtility->calculatePersistenceVarianceScale(1.0), 'A unit root must clamp rather than annihilate the shock.');
+        $this->assertSame(1.0, $this->mathUtility->calculatePersistenceVarianceScale(-0.5), 'Negative persistence clamps to the i.i.d. case.');
+    }
+
+    /**
+     * Vayanos-Vila duration extraction: the premium shift is linear in tenor and flips sign between QE and QT.
+     */
+    public function testPreferredHabitatShiftScalesWithTenorAndFlipsBetweenQeAndQt(): void
+    {
+        // Delta TP(tau) = -lambda * (tau / 10) * intensity, so the ten-year is the unit of measure.
+        $this->assertEqualsWithDelta(-0.005, $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.005, 10.0), 0.0000001, 'QE must suppress the ten-year premium one-for-one with intensity.');
+        $this->assertEqualsWithDelta(-0.001, $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.005, 2.0), 0.0000001, 'The two-year absorbs a fifth of the ten-year shift.');
+        $this->assertEqualsWithDelta(-0.015, $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.005, 30.0), 0.0000001, 'The thirty-year absorbs three times the ten-year shift.');
+
+        // QT extracts negative duration: the same magnitude steepens instead of compressing.
+        $this->assertEqualsWithDelta(
+            -$this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.005, 10.0),
+            $this->mathUtility->calculatePreferredHabitatTermPremiumShift(-0.005, 10.0),
+            0.0000001,
+            'QT must mirror QE of the same intensity.'
+        );
+
+        $this->assertSame(0.0, $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.0, 10.0), 'A flat balance sheet shifts nothing.');
+        $this->assertSame(0.0, $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.005, 0.0), 'Overnight paper carries no duration to extract.');
+
+        // Because the shift grows with tenor, QE always compresses the 2s30s slope.
+        $twos = $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.004, 2.0);
+        $thirties = $this->mathUtility->calculatePreferredHabitatTermPremiumShift(0.004, 30.0);
+        $this->assertLessThan($twos, $thirties, 'QE must bite hardest at the long end.');
+    }
+
+    /**
+     * The three cash-conversion-cycle legs move on separate drivers and are not interchangeable.
+     */
+    public function testWorkingCapitalDayShiftsRespondToTheirOwnDriverOnly(): void
+    {
+        $neutral = $this->mathUtility->calculateWorkingCapitalDayShifts(
+            MacroEngine::BASE_CREDIT_SPREAD,
+            1.0,
+            MacroEngine::INTERBANK_BASELINE_SPREAD
+        );
+
+        $this->assertEqualsWithDelta(0.0, $neutral['dso'], 0.0000001, 'At the baseline spread receivables do not age.');
+        $this->assertEqualsWithDelta(0.0, $neutral['dio'], 0.0000001, 'At full capacity inventory does not build.');
+        $this->assertEqualsWithDelta(0.0, $neutral['dpo'], 0.0000001, 'At baseline liquidity payables do not contract.');
+
+        // Dear credit stretches customer payment: DSO rises with the spread over baseline.
+        $creditStress = $this->mathUtility->calculateWorkingCapitalDayShifts(
+            MacroEngine::BASE_CREDIT_SPREAD + 0.010,
+            1.0,
+            MacroEngine::INTERBANK_BASELINE_SPREAD
+        );
+        $this->assertEqualsWithDelta(0.010 * FinancialConstants::CCC_DSO_CREDIT_SPREAD_SENSITIVITY, $creditStress['dso'], 0.0000001, 'DSO must track the credit spread.');
+        $this->assertEqualsWithDelta(0.0, $creditStress['dio'], 0.0000001, 'A credit shock must not move inventory days.');
+        $this->assertEqualsWithDelta(0.0, $creditStress['dpo'], 0.0000001, 'A credit shock must not move payable days.');
+
+        // Slack plants pile up unsold goods: DIO rises as utilisation falls.
+        $slack = $this->mathUtility->calculateWorkingCapitalDayShifts(
+            MacroEngine::BASE_CREDIT_SPREAD,
+            0.80,
+            MacroEngine::INTERBANK_BASELINE_SPREAD
+        );
+        $this->assertEqualsWithDelta(0.20 * FinancialConstants::CCC_DIO_CAPACITY_SENSITIVITY, $slack['dio'], 0.0000001, 'DIO must track idle capacity.');
+        $this->assertEqualsWithDelta(0.0, $slack['dso'], 0.0000001, 'Idle capacity must not move receivable days.');
+
+        // Interbank stress makes vendors demand cash sooner, so DPO contracts (negative shift).
+        $liquidityStress = $this->mathUtility->calculateWorkingCapitalDayShifts(
+            MacroEngine::BASE_CREDIT_SPREAD,
+            1.0,
+            MacroEngine::INTERBANK_BASELINE_SPREAD + 0.004
+        );
+        $this->assertEqualsWithDelta(-0.004 * FinancialConstants::CCC_DPO_LIQUIDITY_SENSITIVITY, $liquidityStress['dpo'], 0.0000001, 'DPO must contract under interbank stress.');
+        $this->assertLessThan(0.0, $liquidityStress['dpo'], 'Vendors demanding faster payment shortens the payable cycle.');
+    }
+
+    /**
+     * Jarrow-Lando-Turnbull: the HY tranche gaps away from IG in a contraction rather than tracking it.
+     */
+    public function testDualTrancheCreditSpreadsWidenAsymmetricallyAndRespectTheirClamps(): void
+    {
+        // Neutral cycle, vol exactly at the threshold, no interbank stress: IG is the base spread untouched.
+        $neutral = $this->mathUtility->calculateDualTrancheCreditSpreads(
+            MacroEngine::BASE_CREDIT_SPREAD,
+            0.0,
+            MacroEngine::CREDIT_SPREAD_EXCESS_VOL_THRESHOLD,
+            0.0
+        );
+        $this->assertEqualsWithDelta(MacroEngine::BASE_CREDIT_SPREAD, $neutral['ig'], 0.0000001, 'A closed gap leaves the IG spread at its base.');
+        $this->assertEqualsWithDelta(
+            MacroEngine::BASE_CREDIT_SPREAD * MacroEngine::HY_BASE_SPREAD_MULTIPLIER,
+            $neutral['hy'],
+            0.0000001,
+            'With no contraction the HY tranche is a flat multiple of IG.'
+        );
+
+        // Vol below the threshold contributes nothing: the excess term is one-sided.
+        $lowVol = $this->mathUtility->calculateDualTrancheCreditSpreads(MacroEngine::BASE_CREDIT_SPREAD, 0.0, 0.05, 0.0);
+        $this->assertEqualsWithDelta($neutral['ig'], $lowVol['ig'], 0.0000001, 'Calm markets must not tighten spreads below base.');
+
+        // Excess vol and interbank stress are additive on the IG leg.
+        $stressed = $this->mathUtility->calculateDualTrancheCreditSpreads(
+            MacroEngine::BASE_CREDIT_SPREAD,
+            0.0,
+            MacroEngine::CREDIT_SPREAD_EXCESS_VOL_THRESHOLD + 0.10,
+            0.05
+        );
+        $this->assertEqualsWithDelta(
+            MacroEngine::BASE_CREDIT_SPREAD
+                + 0.10 * MacroEngine::MERTON_VOL_SENSITIVITY
+                + 0.05 * MacroEngine::INTERBANK_CREDIT_CONTAGION_SENSITIVITY,
+            $stressed['ig'],
+            0.0000001,
+            'Vol and contagion must add linearly onto the cycle spread.'
+        );
+
+        // The fallen-angel cliff: in a contraction HY widens by proportionally more than IG.
+        $recession = $this->mathUtility->calculateDualTrancheCreditSpreads(MacroEngine::BASE_CREDIT_SPREAD, -0.04, 0.10, 0.0);
+        $this->assertGreaterThan($neutral['ig'], $recession['ig'], 'A contraction must widen investment grade.');
+        $this->assertGreaterThan(
+            $recession['ig'] / $neutral['ig'],
+            $recession['hy'] / $neutral['hy'],
+            'High yield must gap away from investment grade, not track it.'
+        );
+
+        // Both legs clamp: a depression cannot produce an unbounded spread.
+        $depression = $this->mathUtility->calculateDualTrancheCreditSpreads(MacroEngine::BASE_CREDIT_SPREAD, -1.0, 2.0, 1.0);
+        $this->assertSame(MacroEngine::MAX_CREDIT_SPREAD, $depression['ig'], 'The IG spread must clamp at its ceiling.');
+        $this->assertSame(MacroEngine::MAX_HY_CREDIT_SPREAD, $depression['hy'], 'The HY spread must clamp at its ceiling.');
+
+        // A boom floors IG, and HY never compresses inside its minimum multiple of IG.
+        $boom = $this->mathUtility->calculateDualTrancheCreditSpreads(MacroEngine::BASE_CREDIT_SPREAD, 0.50, 0.0, 0.0);
+        $this->assertSame(MacroEngine::MIN_CREDIT_SPREAD, $boom['ig'], 'The IG spread must floor at its minimum.');
+        $this->assertGreaterThanOrEqual(
+            $boom['ig'] * MacroEngine::HY_MIN_SPREAD_MULTIPLIER,
+            $boom['hy'],
+            'HY must never compress inside its minimum multiple of IG.'
+        );
+    }
+
+    /**
+     * Metzler inventory dynamics: an involuntary build on a demand miss, then correction toward a cyclical target.
+     */
+    public function testInventoryCycleStepBuildsOnDemandMissesAndRevertsToTheCyclicalTarget(): void
+    {
+        // Closed form: (surpriseSens * (ema - gap) + -speed * (current - -cyclicalSens * gap)) * dt, added to current.
+        $this->assertEqualsWithDelta(
+            0.006,
+            $this->mathUtility->calculateInventoryCycleStep(0.0, -0.03, 0.0, 0.5, 0.4, 0.25),
+            0.0000001,
+            'An unexpected demand miss must build inventory by the closed form.'
+        );
+
+        // A demand surprise to the upside draws inventory down instead.
+        $this->assertLessThan(
+            0.0,
+            $this->mathUtility->calculateInventoryCycleStep(0.0, 0.03, 0.0, 0.5, 0.4, 0.25),
+            'Unexpectedly strong demand must deplete inventory.'
+        );
+
+        // With no surprise and a closed gap the target is zero, so any overhang decays toward it.
+        $decayed = $this->mathUtility->calculateInventoryCycleStep(0.10, 0.0, 0.0, 0.5, 0.4, 0.25);
+        $this->assertLessThan(0.10, $decayed, 'An overhang must dissipate when demand is at trend.');
+        $this->assertGreaterThan(0.0, $decayed, 'Dissipation must be gradual, not instant.');
+
+        // The cyclical target is signed against the output gap: contractions raise the desired inventory-to-sales ratio.
+        $contraction = $this->mathUtility->calculateInventoryCycleStep(0.0, -0.05, -0.05, 0.5, 0.4, 0.25);
+        $expansion = $this->mathUtility->calculateInventoryCycleStep(0.0, 0.05, 0.05, 0.5, 0.4, 0.25);
+        $this->assertGreaterThan(0.0, $contraction, 'A contraction must lift the inventory target.');
+        $this->assertLessThan(0.0, $expansion, 'An expansion must lean inventories out.');
+
+        // The gap is hard-clamped so a violent step cannot run away.
+        $this->assertSame(0.15, $this->mathUtility->calculateInventoryCycleStep(0.14, -0.20, 0.20, 0.5, 1.0, 1.0), 'The overhang must clamp at its ceiling.');
+        $this->assertSame(-0.15, $this->mathUtility->calculateInventoryCycleStep(-0.14, 0.20, -0.20, 0.5, 1.0, 1.0), 'The shortage must clamp at its floor.');
     }
 }

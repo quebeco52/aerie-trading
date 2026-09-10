@@ -281,6 +281,7 @@ class MarketResetCommand extends Command
                     -- firms on a cost base they were not reverting toward.
                     structural_variable_margin = NULL,
                     pre_announced_shortfall = 0.0,
+                    last_reported_cost_ratio = NULL,
                     last_book_to_bill = NULL,
                     lagged_demand_gap = NULL,
                     managed_accrual_bank = 0.0000,

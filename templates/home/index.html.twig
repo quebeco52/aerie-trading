@@ -11,7 +11,7 @@
 			<div class="w-full">
 				<div class="flex items-center gap-2 mb-2">
 					<span class="w-2 h-2 rounded-full bg-secondary"></span>
-					<span class="text-[11px] font-semibold tracking-wide text-secondary uppercase">Live Market Feed</span>
+					<span class="text-2xs font-semibold tracking-wide text-secondary uppercase">Live Market Feed</span>
 				</div>
 				<h1 class="text-2xl md:text-3xl font-bold text-on-surface tracking-tight mb-1">The Aerie Exchange</h1>
 				<p class="text-on-surface-variant text-xs">Live prices, valuations and macroeconomic conditions across the Aerie Autonomous District.</p>
@@ -23,28 +23,28 @@
 		<div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
 			{# Economic Cycle #}
 			<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/25">
-				<p class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide mb-2">Economic cycle</p>
+				<p class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide mb-2">Economic cycle</p>
 				<p id="macro-cycle" class="text-2xl font-bold text-on-surface tracking-tight">{{ macro.output_gap > 0.01 ? 'Boom' : (macro.output_gap < -0.01 ? 'Bust' : 'Neutral') }}</p>
 				<p class="text-xs text-on-surface-variant mt-1 font-mono">Output gap {{ macro.output_gap >= 0 ? '+' : '' }}{{ (macro.output_gap * 100)|number_format(2) }}%</p>
 			</div>
 
 			{# Inflation #}
 			<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/25">
-				<p class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide mb-2">Inflation</p>
+				<p class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide mb-2">Inflation</p>
 				<p class="text-2xl font-bold text-on-surface tracking-tight font-mono">{{ (macro.inflation|default(0) * 100)|number_format(2) }}%</p>
 				<p class="text-xs text-on-surface-variant mt-1 font-mono">Target 2.00%</p>
 			</div>
 
 			{# Policy Rate #}
 			<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/25">
-				<p class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide mb-2">Policy rate</p>
+				<p class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide mb-2">Policy rate</p>
 				<p class="text-2xl font-bold text-on-surface tracking-tight font-mono">{{ (macro.policy_rate|default(0) * 100)|number_format(2) }}%</p>
 				<p class="text-xs text-on-surface-variant mt-1 font-mono">Overnight target</p>
 			</div>
 
 			{# 10Y Yield #}
 			<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/25">
-				<p class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide mb-2">10Y yield</p>
+				<p class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide mb-2">10Y yield</p>
 				<p class="text-2xl font-bold text-on-surface tracking-tight font-mono">{{ (macro.yield_10y|default(0) * 100)|number_format(2) }}%</p>
 				{% set spread = (macro.yield_10y|default(0) - macro.policy_rate|default(0)) * 10000 %}
 				<p class="text-xs mt-1 font-mono {{ spread < 0 ? 'text-tertiary' : 'text-on-surface-variant' }}">
@@ -65,7 +65,7 @@
 						</span>
 					</div>
 					<div class="md:text-right">
-						<p class="text-[11px] font-semibold text-on-surface-variant uppercase tracking-wide mb-1">Live Valuation</p>
+						<p class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide mb-1">Live Valuation</p>
 						<p id="etf-price" class="text-3xl md:text-4xl font-bold text-on-surface tracking-tight font-mono tabular-nums">${{ etf.price|number_format(2) }}</p>
 					</div>
 				</div>
@@ -84,7 +84,7 @@
 			<div class="overflow-x-auto">
 				<table class="w-full text-left border-collapse">
 					<thead>
-						<tr class="bg-surface-container-highest/20 text-on-surface-variant text-[11px] font-semibold uppercase tracking-wide border-b border-outline-variant/15">
+						<tr class="bg-surface-container-highest/20 text-on-surface-variant text-2xs font-semibold uppercase tracking-wide border-b border-outline-variant/15">
 							<th scope="col" class="px-5 py-3">Asset</th>
 							<th scope="col" class="px-4 py-3 hidden sm:table-cell">Sector</th>
 							<th scope="col" class="px-4 py-3 text-right">Price</th>
@@ -98,11 +98,10 @@
 								<th scope="row" class="px-5 py-3 text-left font-normal">
 									<div class="flex flex-col">
 										<div class="flex items-center gap-2">
-											{# The row's single real link: reachable by keyboard, and stretched over the
-											   row so the whole band stays clickable without an onclick handler. #}
+											{# Stretched over the row, so the whole band is clickable without an onclick. #}
 											<a href="/stock/{{ stock.ticker }}" class="font-bold text-on-surface text-sm group-hover:text-primary transition-colors outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:decoration-primary focus-visible:underline-offset-4">{{ stock.name }}</a>
 											{% if stock.isBankrupt %}
-												<span class="relative z-10 inline-flex items-center rounded bg-tertiary/10 px-1.5 py-0.5 text-[9px] font-bold text-tertiary border border-tertiary/25 uppercase tracking-widest">Bankrupt</span>
+												<span class="relative z-10 inline-flex items-center rounded bg-tertiary/10 px-1.5 py-0.5 text-4xs font-bold text-tertiary border border-tertiary/25 uppercase tracking-widest">Bankrupt</span>
 											{% endif %}
 										</div>
 										<div class="text-on-surface-variant text-xs tracking-wide font-mono mt-0.5">{{ stock.ticker }}</div>
@@ -137,12 +136,11 @@
 {% block javascripts %}
 	{{ parent() }}
 
-	{# Pass the shares to Javascript so we can calculate live Market Caps #}
-	<script>
-		window.MARKET_SHARES = {
-{% for stock in stocks|default([]) %}
-"{{ stock.ticker }}" : {{ stock.shares }},{% endfor %}
-};
+	{# Share counts, so live market caps can be recomputed as prices tick. #}
+	<script type="application/json" id="market-data">
+		{{ {
+			shares: stocks|default([])|reduce((carry, stock) => carry|merge({ (stock.ticker): stock.shares }), {})
+		}|json_encode|raw }}
 	</script>
 
     <script type="module">

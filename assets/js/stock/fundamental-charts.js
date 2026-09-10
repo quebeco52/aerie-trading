@@ -1,6 +1,7 @@
 import { THEME_COLORS } from '../utils/colors.js';
 import { formatLarge } from '../utils/formatters.js';
 import { destroyChartInstance } from '../utils/chart-config.js';
+import { renderWhenVisible, resetLazyCharts } from '../utils/lazy-chart.js';
 
 let profitEngineChartInstance = null;
 let revenueStreamsChartInstance = null;
@@ -29,37 +30,23 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
         currentPrice = 0
     } = context;
 
-    // Update button styles across both local and global toolbars
-    const btn12Q = document.getElementById('btn-12Q');
-    const btn12Y = document.getElementById('btn-12Y') || document.getElementById('btn-5Y');
+    // Toolbar button styles.
     const btnGlobal12Q = document.getElementById('btn-global-12Q');
     const btnGlobal12Y = document.getElementById('btn-global-12Y');
 
-    const activeClass = 'px-4 py-1.5 text-xs font-bold rounded-lg bg-primary text-[#001a42] shadow-lg shadow-primary/20 transition-all uppercase tracking-widest';
+    const activeClass = 'px-4 py-1.5 text-xs font-bold rounded-lg bg-primary text-on-primary shadow-lg shadow-primary/20 transition-all uppercase tracking-widest';
     const inactiveClass = 'px-4 py-1.5 text-xs font-bold rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-all uppercase tracking-widest';
 
     if (timeframe === '12Q') {
-        if (btn12Q) btn12Q.className = activeClass;
-        if (btn12Y) btn12Y.className = inactiveClass;
         if (btnGlobal12Q) btnGlobal12Q.className = activeClass;
         if (btnGlobal12Y) btnGlobal12Y.className = inactiveClass;
     } else {
-        if (btn12Y) btn12Y.className = activeClass;
-        if (btn12Q) btn12Q.className = inactiveClass;
         if (btnGlobal12Y) btnGlobal12Y.className = activeClass;
         if (btnGlobal12Q) btnGlobal12Q.className = inactiveClass;
     }
 
     const latest = rawReports[rawReports.length - 1];
     renderFinancialStatements(latest);
-    const spreadEl = document.getElementById('stat-bank-spread');
-    if (spreadEl && latest) {
-        const bRate = parseFloat(latest.blended_rate || 0) * 100;
-        const depOrCash = parseFloat(latest.deposit_apy || latest.cash_yield || 0) * 100;
-        const spreadVal = bRate - depOrCash;
-        spreadEl.innerText = spreadVal.toFixed(2) + '%';
-        spreadEl.className = 'font-mono ' + (spreadVal >= 0 ? 'text-positive' : 'text-negative');
-    }
 
     let labels = [];
 
@@ -379,48 +366,48 @@ export function updateFundamentalCharts(timeframe, rawReports, context = {}) {
         ltmInc += parseFloat(r.net_income || 0);
     });
 
-    renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, displayMarginData, marginLabel);
-    renderRevenueStreamsChart(labels, revenueStreamsKeys, revenueStreamsDataRaw, streamDetailsDataRaw);
-    renderDebtEquityChart(labels, debtData, equityData, treasuryData);
-    renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData, cashYieldData, depositApyData, businessModel);
-    renderCapitalReturnChart(labels, dividendData, buybackData, dividendYieldData);
-    renderPayoutRatioChart(ltmDiv, ltmInc);
+    renderWhenVisible('netIncomeChart', () => renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, displayMarginData, marginLabel));
+    renderWhenVisible('revenueStreamsChart', () => renderRevenueStreamsChart(labels, revenueStreamsKeys, revenueStreamsDataRaw, streamDetailsDataRaw));
+    renderWhenVisible('debtEquityChart', () => renderDebtEquityChart(labels, debtData, equityData, treasuryData));
+    renderWhenVisible('creditHealthChart', () => renderCreditHealthChart(labels, spreadData, blendedRateData, expenseRatioData, cashYieldData, depositApyData, businessModel));
+    renderWhenVisible('capitalReturnChart', () => renderCapitalReturnChart(labels, dividendData, buybackData, dividendYieldData));
+    renderWhenVisible('payoutRatioChart', () => renderPayoutRatioChart(ltmDiv, ltmInc));
 
     if (isFinancial) {
-        renderCapitalEfficiencyChart(labels, roeData, coeData, evaData, 'ROE', 'Cost of Equity');
+        renderWhenVisible('capitalEfficiencyChart', () => renderCapitalEfficiencyChart(labels, roeData, coeData, evaData, 'ROE', 'Cost of Equity'));
 
         if (businessModel === 'commercial_bank' || businessModel === 'credit_services') {
-            renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData, 'Customer Deposit Ratio');
+            renderWhenVisible('regulatoryRatiosChart', () => renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData, 'Customer Deposit Ratio'));
         } else if (businessModel === 'insurance') {
-            renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData, 'Float Ratio (0% Interest)');
+            renderWhenVisible('regulatoryRatiosChart', () => renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData, 'Float Ratio (0% Interest)'));
         } else if (businessModel === 'shadow_bank') {
-            renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData, 'Wholesale Funding / Deposit Ratio');
+            renderWhenVisible('regulatoryRatiosChart', () => renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData, 'Wholesale Funding / Deposit Ratio'));
         } else if (businessModel === 'clearing_house') {
-            renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData, 'Member Initial Margin Ratio');
+            renderWhenVisible('regulatoryRatiosChart', () => renderRegulatoryRatiosChart(labels, capitalRatioData, customerDepositRatioData, 'Member Initial Margin Ratio'));
         } else {
             const hasDeposits = customerDepositRatioData && customerDepositRatioData.some(val => val !== 0 && val !== null && !isNaN(val));
-            renderRegulatoryRatiosChart(labels, capitalRatioData, hasDeposits ? customerDepositRatioData : null, hasDeposits ? 'Client Float / Funding Ratio' : null);
+            renderWhenVisible('regulatoryRatiosChart', () => renderRegulatoryRatiosChart(labels, capitalRatioData, hasDeposits ? customerDepositRatioData : null, hasDeposits ? 'Client Float / Funding Ratio' : null));
         }
     } else if (businessModel === 'reit') {
-        renderCapitalEfficiencyChart(labels, roicData, waccData, evaData, 'Cap Rate', 'WACC');
+        renderWhenVisible('capitalEfficiencyChart', () => renderCapitalEfficiencyChart(labels, roicData, waccData, evaData, 'Cap Rate', 'WACC'));
     } else {
-        renderCapitalEfficiencyChart(labels, roicData, waccData, evaData, 'ROIC', 'WACC');
+        renderWhenVisible('capitalEfficiencyChart', () => renderCapitalEfficiencyChart(labels, roicData, waccData, evaData, 'ROIC', 'WACC'));
     }
 
-    renderValuationMultiplesChart(labels, peData, pbData, psData);
-    renderShareholderValueChart(labels, epsData, bvpsData, sharesData);
-    renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retainedCashData);
+    renderWhenVisible('valuationMultiplesChart', () => renderValuationMultiplesChart(labels, peData, pbData, psData));
+    renderWhenVisible('shareholderValueChart', () => renderShareholderValueChart(labels, epsData, bvpsData, sharesData));
+    renderWhenVisible('cashFlowSummaryChart', () => renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retainedCashData, operatingCashFlowData, investingCashFlowData, financingCashFlowData));
 
     if (['commercial_bank', 'credit_services', 'shadow_bank'].includes(businessModel)) {
-        renderNetInterestEngineChart(labels, interestIncomeData, interestExpenseData, netInterestSpreadData);
+        renderWhenVisible('netInterestEngineChart', () => renderNetInterestEngineChart(labels, interestIncomeData, interestExpenseData, netInterestSpreadData));
     } else if (businessModel === 'insurance') {
-        renderInsuranceDualEngineChart(labels, underwritingProfitData, interestIncomeData, displayMarginData);
+        renderWhenVisible('insuranceDualEngineChart', () => renderInsuranceDualEngineChart(labels, underwritingProfitData, interestIncomeData, displayMarginData));
     } else if (businessModel === 'reit') {
-        renderReitCoverageChart(labels, reitPayoutRatioData, reitLtvData, reitSpreadData);
+        renderWhenVisible('reitCoverageChart', () => renderReitCoverageChart(labels, reitPayoutRatioData, reitLtvData, reitSpreadData));
     } else if (['tech', 'semiconductor', 'biotech', 'defense_contractor'].includes(businessModel)) {
-        renderReinvestmentIntensityChart(labels, capexRevenueRatioData, operatingMarginData, roicData);
+        renderWhenVisible('reinvestmentIntensityChart', () => renderReinvestmentIntensityChart(labels, capexRevenueRatioData, operatingMarginData, roicData));
     } else if (['commodity', 'shipping'].includes(businessModel)) {
-        renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, treasuryData);
+        renderWhenVisible('cyclicalDynamicsChart', () => renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, treasuryData));
     }
 
     let payoutRatio = 0;
@@ -466,16 +453,16 @@ function updateFinancialHud(m) {
     const lastRev = last(m.revenueData);
     const lastNet = last(m.netIncomeData);
     const lastMargin = last(m.operatingMarginData);
-    setHud('hud-netIncomeChart', `Rev: $${formatLarge(lastRev)} | Net: $${formatLarge(lastNet)} (${lastMargin.toFixed(1)}%)`);
-    setHud('hud-profitEngineChart', `Rev: $${formatLarge(lastRev)} | Net: $${formatLarge(lastNet)} (${lastMargin.toFixed(1)}%)`);
+    setHud('hud-netIncomeChart', `Rev: ${formatLarge(lastRev, '$')} | Net: ${formatLarge(lastNet, '$')} (${lastMargin.toFixed(1)}%)`);
+    setHud('hud-profitEngineChart', `Rev: ${formatLarge(lastRev, '$')} | Net: ${formatLarge(lastNet, '$')} (${lastMargin.toFixed(1)}%)`);
 
     const streamsCount = m.revenueStreamsKeys ? m.revenueStreamsKeys.size : 0;
-    setHud('hud-revenueStreamsChart', `Streams: ${streamsCount} | Rev: $${formatLarge(lastRev)}`);
+    setHud('hud-revenueStreamsChart', `Streams: ${streamsCount} | Rev: ${formatLarge(lastRev, '$')}`);
 
     const lastDebt = last(m.debtData);
     const lastEq = last(m.equityData);
     const deRatio = lastEq > 0 ? (lastDebt / lastEq) : 0;
-    setHud('hud-debtEquityChart', `Debt: $${formatLarge(lastDebt)} | Eq: $${formatLarge(lastEq)} (D/E: ${deRatio.toFixed(2)}x)`);
+    setHud('hud-debtEquityChart', `Debt: ${formatLarge(lastDebt, '$')} | Eq: ${formatLarge(lastEq, '$')} (D/E: ${deRatio.toFixed(2)}x)`);
 
     const lastRate = last(m.blendedRateData);
     const lastSpread = last(m.spreadData);
@@ -484,12 +471,12 @@ function updateFinancialHud(m) {
     const lastRet = last(m.returnData);
     const lastHurd = last(m.hurdleData);
     const lastEva = last(m.evaData);
-    setHud('hud-capitalEfficiencyChart', `${m.returnLabel || 'ROIC'}: ${lastRet.toFixed(1)}% | ${m.hurdleLabel || 'WACC'}: ${lastHurd.toFixed(1)}% | EVA: $${formatLarge(lastEva)}`);
+    setHud('hud-capitalEfficiencyChart', `${m.returnLabel || 'ROIC'}: ${lastRet.toFixed(1)}% | ${m.hurdleLabel || 'WACC'}: ${lastHurd.toFixed(1)}% | EVA: ${formatLarge(lastEva, '$')}`);
 
     const lastDiv = last(m.dividendData);
     const lastBuyback = last(m.buybackData);
     const lastYield = last(m.dividendYieldData);
-    setHud('hud-capitalReturnChart', `Div: $${formatLarge(lastDiv)} | Buyback: $${formatLarge(lastBuyback)} | Yield: ${lastYield.toFixed(2)}%`);
+    setHud('hud-capitalReturnChart', `Div: ${formatLarge(lastDiv, '$')} | Buyback: ${formatLarge(lastBuyback, '$')} | Yield: ${lastYield.toFixed(2)}%`);
 
     setHud('hud-payoutRatioChart', `Payout: ${m.payoutRatio.toFixed(1)}% | Retained: ${m.retainedRatio.toFixed(1)}%`);
 
@@ -503,12 +490,12 @@ function updateFinancialHud(m) {
 
     const lastFcf = last(m.fcfData);
     const lastConv = last(m.fcfConversionData);
-    setHud('hud-cashFlowSummaryChart', `FCF: $${formatLarge(lastFcf)} | FCF/NI: ${lastConv.toFixed(0)}%`);
+    setHud('hud-cashFlowSummaryChart', `FCF: ${formatLarge(lastFcf, '$')} | FCF/NI: ${lastConv.toFixed(0)}%`);
 
     if (['commercial_bank', 'credit_services', 'shadow_bank'].includes(m.businessModel)) {
         const lastNii = last(m.interestIncomeData) - last(m.interestExpenseData);
         const lastNim = last(m.netInterestSpreadData);
-        setHud('hud-netInterestEngineChart', `NII: $${formatLarge(lastNii)} | NIM: ${lastNim.toFixed(2)}%`);
+        setHud('hud-netInterestEngineChart', `NII: ${formatLarge(lastNii, '$')} | NIM: ${lastNim.toFixed(2)}%`);
     }
     if (m.isFinancial) {
         const lastCap = last(m.capitalRatioData);
@@ -519,7 +506,7 @@ function updateFinancialHud(m) {
         const lastUw = last(m.underwritingProfitData);
         const lastFloat = last(m.interestIncomeData);
         const lastComb = last(m.displayMarginData);
-        setHud('hud-insuranceDualEngineChart', `UW: $${formatLarge(lastUw)} | Float: $${formatLarge(lastFloat)} | CR: ${lastComb.toFixed(1)}%`);
+        setHud('hud-insuranceDualEngineChart', `UW: ${formatLarge(lastUw, '$')} | Float: ${formatLarge(lastFloat, '$')} | CR: ${lastComb.toFixed(1)}%`);
     }
     if (m.businessModel === 'reit') {
         const lastCov = last(m.reitPayoutRatioData);
@@ -534,7 +521,7 @@ function updateFinancialHud(m) {
     if (['commodity', 'shipping'].includes(m.businessModel)) {
         const lastMargin = last(m.operatingMarginData);
         const lastCash = last(m.treasuryData);
-        setHud('hud-cyclicalDynamicsChart', `Margin: ${lastMargin.toFixed(1)}% | Cash: $${formatLarge(lastCash)}`);
+        setHud('hud-cyclicalDynamicsChart', `Margin: ${lastMargin.toFixed(1)}% | Cash: ${formatLarge(lastCash, '$')}`);
     }
 }
 
@@ -606,7 +593,7 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
                             if (ctx.dataset.label === marginLabel) {
                                 return `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`;
                             }
-                            return `${ctx.dataset.label}: $${formatLarge(ctx.raw)}`;
+                            return `${ctx.dataset.label}: ${formatLarge(ctx.raw, '$')}`;
                         }
                     }
                 }
@@ -620,7 +607,7 @@ function renderProfitEngineChart(labels, revenueData, netIncomeData, capexData, 
                     type: 'linear',
                     position: 'left',
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { callback: (val) => '$' + formatLarge(val) }
+                    ticks: { callback: (val) => formatLarge(val, '$') }
                 },
                 y1: {
                     type: 'linear',
@@ -679,14 +666,14 @@ function renderRevenueStreamsChart(labels, streamsKeysSet, rawStreamsData, strea
                 y: {
                     stacked: true,
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { callback: (val) => '$' + formatLarge(val) }
+                    ticks: { callback: (val) => formatLarge(val, '$') }
                 }
             },
             plugins: {
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => `${ctx.dataset.label}: $${formatLarge(ctx.raw)}`,
+                        label: (ctx) => `${ctx.dataset.label}: ${formatLarge(ctx.raw, '$')}`,
                         afterLabel: (ctx) => {
                             const idx = ctx.dataIndex;
                             const streamKey = ctx.dataset.streamKey;
@@ -804,7 +791,7 @@ function renderDebtEquityChart(labels, debtData, equityData, treasuryData) {
             interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true } },
-                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: $${formatLarge(ctx.raw)}` } }
+                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatLarge(ctx.raw, '$')}` } }
             },
             scales: {
                 x: {
@@ -813,7 +800,7 @@ function renderDebtEquityChart(labels, debtData, equityData, treasuryData) {
                 },
                 y: {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { callback: (val) => '$' + formatLarge(val) }
+                    ticks: { callback: (val) => formatLarge(val, '$') }
                 }
             }
         }
@@ -960,7 +947,7 @@ function renderCapitalEfficiencyChart(labels, returnData, hurdleData, evaData, r
                     callbacks: {
                         label: (ctx) => {
                             if (ctx.dataset.label === 'EVA ($)') {
-                                return `EVA: $${formatLarge(ctx.raw)}`;
+                                return `EVA: ${formatLarge(ctx.raw, '$')}`;
                             }
                             return `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`;
                         }
@@ -983,7 +970,7 @@ function renderCapitalEfficiencyChart(labels, returnData, hurdleData, evaData, r
                     type: 'linear',
                     position: 'right',
                     grid: { drawOnChartArea: false },
-                    ticks: { callback: (val) => '$' + formatLarge(val) },
+                    ticks: { callback: (val) => formatLarge(val, '$') },
                 }
             }
         }
@@ -1046,7 +1033,7 @@ function renderCapitalReturnChart(labels, dividendData, buybackData, dividendYie
                             if (ctx.dataset.type === 'line' || ctx.dataset.label.includes('Yield')) {
                                 return `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`;
                             }
-                            return `${ctx.dataset.label}: $${formatLarge(ctx.raw)}`;
+                            return `${ctx.dataset.label}: ${formatLarge(ctx.raw, '$')}`;
                         }
                     }
                 }
@@ -1060,7 +1047,7 @@ function renderCapitalReturnChart(labels, dividendData, buybackData, dividendYie
                     type: 'linear',
                     position: 'left',
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { callback: (val) => '$' + formatLarge(val) },
+                    ticks: { callback: (val) => formatLarge(val, '$') },
                     beginAtZero: true,
                     suggestedMax: 100000000
                 },
@@ -1284,7 +1271,8 @@ function renderShareholderValueChart(labels, epsData, bvpsData, sharesData) {
     });
 }
 
-function renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retainedCashData) {
+/** The three statement cash-flow lines are parameters: this scope cannot see the caller's locals. */
+function renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retainedCashData, operatingCashFlowData, investingCashFlowData, financingCashFlowData) {
     const canvas = document.getElementById('cashFlowSummaryChart');
     if (!canvas) return;
     cashFlowSummaryChartInstance = destroyChartInstance(cashFlowSummaryChartInstance);
@@ -1357,7 +1345,7 @@ function renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retained
                             if (ctx.dataset.label === 'FCF Conversion Rate') {
                                 return `${ctx.dataset.label}: ${ctx.raw !== null ? ctx.raw.toFixed(1) + '%' : '0%'}`;
                             }
-                            return `${ctx.dataset.label}: $${formatLarge(ctx.raw)}`;
+                            return `${ctx.dataset.label}: ${formatLarge(ctx.raw, '$')}`;
                         }
                     }
                 }
@@ -1371,7 +1359,7 @@ function renderCashFlowSummaryChart(labels, fcfData, fcfConversionData, retained
                     type: 'linear',
                     position: 'left',
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { callback: (val) => '$' + formatLarge(val) }
+                    ticks: { callback: (val) => formatLarge(val, '$') }
                 },
                 y1: {
                     type: 'linear',
@@ -1439,7 +1427,7 @@ function renderNetInterestEngineChart(labels, interestIncomeData, interestExpens
                             if (ctx.dataset.label === 'Net Interest Spread') {
                                 return `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`;
                             }
-                            return `${ctx.dataset.label}: $${formatLarge(ctx.raw)}`;
+                            return `${ctx.dataset.label}: ${formatLarge(ctx.raw, '$')}`;
                         }
                     }
                 }
@@ -1453,7 +1441,7 @@ function renderNetInterestEngineChart(labels, interestIncomeData, interestExpens
                     type: 'linear',
                     position: 'left',
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { callback: (val) => '$' + formatLarge(val) }
+                    ticks: { callback: (val) => formatLarge(val, '$') }
                 },
                 y1: {
                     type: 'linear',
@@ -1521,7 +1509,7 @@ function renderInsuranceDualEngineChart(labels, underwritingProfitData, interest
                             if (ctx.dataset.label === 'Combined Ratio') {
                                 return `${ctx.dataset.label}: ${ctx.raw.toFixed(1)}%`;
                             }
-                            return `${ctx.dataset.label}: $${formatLarge(ctx.raw)}`;
+                            return `${ctx.dataset.label}: ${formatLarge(ctx.raw, '$')}`;
                         }
                     }
                 }
@@ -1535,7 +1523,7 @@ function renderInsuranceDualEngineChart(labels, underwritingProfitData, interest
                     type: 'linear',
                     position: 'left',
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { callback: (val) => '$' + formatLarge(val) }
+                    ticks: { callback: (val) => formatLarge(val, '$') }
                 },
                 y1: {
                     type: 'linear',
@@ -1739,7 +1727,7 @@ function renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, trea
                             if (ctx.dataset.label === 'Operating Margin (%)') {
                                 return `${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`;
                             }
-                            return `${ctx.dataset.label}: $${formatLarge(ctx.raw)}`;
+                            return `${ctx.dataset.label}: ${formatLarge(ctx.raw, '$')}`;
                         }
                     }
                 }
@@ -1753,7 +1741,7 @@ function renderCyclicalDynamicsChart(labels, operatingMarginData, debtData, trea
                     type: 'linear',
                     position: 'left',
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { callback: (val) => '$' + formatLarge(val) }
+                    ticks: { callback: (val) => formatLarge(val, '$') }
                 },
                 y1: {
                     type: 'linear',
@@ -1938,6 +1926,8 @@ function renderFinancialStatements(latest) {
 }
 
 export function destroyFundamentalCharts() {
+    // Charts that were never scrolled into view must not build themselves after teardown.
+    resetLazyCharts();
     profitEngineChartInstance = destroyChartInstance(profitEngineChartInstance);
     revenueStreamsChartInstance = destroyChartInstance(revenueStreamsChartInstance);
     debtEquityChartInstance = destroyChartInstance(debtEquityChartInstance);

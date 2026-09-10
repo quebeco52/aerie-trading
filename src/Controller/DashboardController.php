@@ -5,7 +5,6 @@ namespace App\Controller;
 
 use App\Entity\Etf;
 use App\Entity\Stock;
-use App\Entity\TradeOrder;
 use App\Entity\User;
 use App\Entity\UserEtf;
 use App\Entity\UserStock;
@@ -28,7 +27,7 @@ class DashboardController extends AbstractController
      * asset allocations, active orders, and trade execution history.
      */
     #[Route('/dashboard', name: 'app_dashboard')]
-    public function index(EntityManagerInterface $entityManager): Response
+    public function index(EntityManagerInterface $entityManager, \App\Service\User\CostBasisCalculator $costBasis): Response
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -47,7 +46,7 @@ class DashboardController extends AbstractController
             'SELECT o FROM App\Entity\TradeOrder o WHERE o.user = :user AND o.status = :status ORDER BY o.createdAt ASC'
         )->setParameter('user', $user)->setParameter('status', 'FILLED')->getResult();
 
-        $costBasisMap = $this->calculateCostBasisMap($filledOrders);
+        $costBasisMap = $costBasis->calculate($filledOrders);
 
         $cashBalance = (float) $user->getCashBalance();
         $totalStocksValue = 0.0;
@@ -133,7 +132,26 @@ class DashboardController extends AbstractController
             ];
         }
 
-        $totalPortfolioValue = $cashBalance + $totalStocksValue + $totalEtfsValue;
+        // Value working in open limit orders. A BUY has already debited the cash to escrow and a SELL has
+        // already removed the shares from the holdings above, so both have to be added back or the headline
+        // net worth falls the moment an order is placed and jumps back when it is cancelled.
+        $conn = $entityManager->getConnection();
+        $escrowRow = $conn->fetchAssociative(
+            "SELECT
+                COALESCE(SUM(CASE WHEN o.action = 'BUY' THEN COALESCE(o.limit_price, 0) * o.quantity ELSE 0 END), 0) AS escrowed_cash,
+                COALESCE(SUM(CASE WHEN o.action = 'SELL' THEN o.quantity * COALESCE(s.price, e.price, 0) ELSE 0 END), 0) AS escrowed_shares
+             FROM trade_orders o
+             LEFT JOIN stocks s ON s.ticker = o.ticker AND o.asset_type = 'STOCK'
+             LEFT JOIN etfs   e ON e.ticker = o.ticker AND o.asset_type = 'ETF'
+             WHERE o.user_id = :user_id AND o.status = 'OPEN'",
+            ['user_id' => $user->getId()]
+        ) ?: ['escrowed_cash' => 0.0, 'escrowed_shares' => 0.0];
+
+        $escrowedCash = (float) $escrowRow['escrowed_cash'];
+        $escrowedShareValue = (float) $escrowRow['escrowed_shares'];
+        $escrowedTotal = $escrowedCash + $escrowedShareValue;
+
+        $totalPortfolioValue = $cashBalance + $totalStocksValue + $totalEtfsValue + $escrowedTotal;
         $totalUnrealizedPnL = ($totalStocksValue + $totalEtfsValue) - $totalInvestedCost;
         $totalUnrealizedPnLPercent = $totalInvestedCost > 0 ? ($totalUnrealizedPnL / $totalInvestedCost) * 100 : 0.0;
 
@@ -145,13 +163,6 @@ class DashboardController extends AbstractController
 
         // Sort holdings by market value descending
         usort($holdingsData, fn($a, $b) => $b['marketValue'] <=> $a['marketValue']);
-
-        // Calculate Escrowed Cash in open BUY limit orders
-        $conn = $entityManager->getConnection();
-        $escrowedCash = (float) $conn->fetchOne(
-            "SELECT COALESCE(SUM(CAST(limit_price AS DECIMAL(18,4)) * quantity), 0) FROM trade_orders WHERE user_id = :user_id AND action = 'BUY' AND status = 'OPEN'",
-            ['user_id' => $user->getId()]
-        );
 
         // Query Open Limit Orders
         $openOrders = $entityManager->createQuery(
@@ -184,6 +195,8 @@ class DashboardController extends AbstractController
             'etfsPercent' => $totalPortfolioValue > 0 ? ($totalEtfsValue / $totalPortfolioValue) * 100 : 0.0,
             'cash' => $cashBalance,
             'cashPercent' => $totalPortfolioValue > 0 ? ($cashBalance / $totalPortfolioValue) * 100 : 0.0,
+            'escrow' => $escrowedTotal,
+            'escrowPercent' => $totalPortfolioValue > 0 ? ($escrowedTotal / $totalPortfolioValue) * 100 : 0.0,
         ];
 
         return $this->render('dashboard/index.html.twig', [
@@ -196,6 +209,7 @@ class DashboardController extends AbstractController
             'totalUnrealizedPnLPercent' => $totalUnrealizedPnLPercent,
             'cashBalance' => $cashBalance,
             'escrowedCash' => $escrowedCash,
+            'escrowedShareValue' => $escrowedShareValue,
             'openOrders' => $openOrders,
             'tradeHistory' => $tradeHistory,
             'sectorBreakdown' => $sectorBreakdown,
@@ -246,48 +260,5 @@ class DashboardController extends AbstractController
         }
 
         return $this->json(array_reverse($results));
-    }
-
-    /**
-     * Computes the weighted average cost basis (Avg Cost) per ticker from chronological filled trade orders.
-     *
-     * @param TradeOrder[] $orders
-     * @return array<string, float>
-     */
-    private function calculateCostBasisMap(array $orders): array
-    {
-        $basis = []; // [ticker => ['qty' => int, 'cost' => float]]
-
-        foreach ($orders as $order) {
-            $ticker = $order->getTicker();
-            if (!$ticker) continue;
-
-            $qty = $order->getFilledQuantity() > 0 ? $order->getFilledQuantity() : $order->getQuantity();
-            $price = (float) ($order->getExecutionPrice() ?? $order->getLimitPrice() ?? 0.0);
-
-            if (!isset($basis[$ticker])) {
-                $basis[$ticker] = ['qty' => 0, 'cost' => 0.0];
-            }
-
-            if ($order->getAction() === 'BUY') {
-                $basis[$ticker]['cost'] += ($qty * $price);
-                $basis[$ticker]['qty'] += $qty;
-            } elseif ($order->getAction() === 'SELL') {
-                if ($basis[$ticker]['qty'] > 0) {
-                    $currentAvg = $basis[$ticker]['cost'] / $basis[$ticker]['qty'];
-                    $basis[$ticker]['qty'] = max(0, $basis[$ticker]['qty'] - $qty);
-                    $basis[$ticker]['cost'] = $basis[$ticker]['qty'] * $currentAvg;
-                }
-            }
-        }
-
-        $result = [];
-        foreach ($basis as $ticker => $data) {
-            if ($data['qty'] > 0) {
-                $result[$ticker] = round($data['cost'] / $data['qty'], 2);
-            }
-        }
-
-        return $result;
     }
 }

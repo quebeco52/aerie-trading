@@ -16,7 +16,7 @@ const DRIVER_STRENGTH_PIPS = 3;
 
 /**
  * What kind of driver a row is, as a text tag. Emoji were unreadable here: the panel is set in
- * Courier Prime, which has no colour-emoji fallback in this stack, so they rendered as tofu.
+ * IBM Plex Mono, which has no colour-emoji fallback in this stack, so they rendered as tofu.
  */
 const DRIVER_TYPE_TAGS = { macro: 'macro', momentum: 'ops', company: 'co' };
 
@@ -378,7 +378,7 @@ export default class extends Controller {
         this.tooltipNameTarget.textContent = truncate(plot.dataset.name || '', 30);
         this.tooltipMetaTarget.textContent = `${plot.dataset.sector || ''} · ${plot.dataset.rating || '—'}`;
         this.tooltipPriceTarget.textContent = formatCurrency(parseFloat(plot.dataset.price) || 0);
-        this.tooltipCapTarget.textContent = 'CAP $' + formatLarge(parseFloat(plot.dataset.mcap) || 0);
+        this.tooltipCapTarget.textContent = 'CAP ' + formatLarge(parseFloat(plot.dataset.mcap) || 0, '$');
 
         this.tooltipChangeTarget.textContent = hasChange ? formatPercent(change, 2, false, true) : '—';
         this.tooltipChangeTarget.setAttribute(
@@ -444,7 +444,7 @@ export default class extends Controller {
 
         this.institutionNameTarget.textContent = config ? config.label : institutionId;
         this.institutionStatusTarget.textContent = stressed ? 'Stressed' : 'Calm';
-        this.institutionStatusTarget.className = 'text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border '
+        this.institutionStatusTarget.className = 'text-3xs font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border '
             + (stressed
                 ? 'bg-tertiary/10 text-tertiary border-tertiary/30'
                 : 'bg-secondary/10 text-secondary border-secondary/30');
@@ -467,7 +467,7 @@ export default class extends Controller {
             const wrap = document.createElement('div');
 
             const label = document.createElement('dt');
-            label.className = 'text-on-surface-variant/60 uppercase tracking-wider text-[10px]';
+            label.className = 'text-on-surface-variant/60 uppercase tracking-wider text-3xs';
             label.textContent = readout.label;
 
             const value = document.createElement('dd');
@@ -492,7 +492,7 @@ export default class extends Controller {
 
         tickers.forEach(ticker => {
             const chip = document.createElement('span');
-            chip.className = 'px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant text-[10px] font-mono border border-outline-variant/15';
+            chip.className = 'px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant text-3xs font-mono border border-outline-variant/15';
             chip.textContent = ticker;
             container.appendChild(chip);
         });
@@ -545,7 +545,7 @@ export default class extends Controller {
         const roc = parseFloat(plot.dataset.roc) || 0;
 
         this.detailPriceTarget.innerText = formatCurrency(price);
-        this.detailMcapTarget.innerText = '$' + formatLarge(mcap);
+        this.detailMcapTarget.innerText = formatLarge(mcap, '$');
         this.detailRocTarget.innerText = formatPercent(roc);
 
         const change = parseFloat(plot.dataset.change);
@@ -601,7 +601,7 @@ export default class extends Controller {
         header.className = 'flex items-center justify-between gap-2';
 
         const badge = document.createElement('span');
-        badge.className = 'inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-bold font-mono uppercase tracking-wider border';
+        badge.className = 'inline-flex items-center rounded px-1.5 py-0.5 text-4xs font-bold font-mono uppercase tracking-wider border';
         badge.textContent = evt.badge || evt.type || 'EVENT';
         if (evt.badgeClass) {
             badge.className += ' ' + evt.badgeClass;
@@ -613,13 +613,13 @@ export default class extends Controller {
         header.appendChild(badge);
 
         const time = document.createElement('span');
-        time.className = 'text-[9px] font-mono text-on-surface-variant/50 shrink-0';
+        time.className = 'text-4xs font-mono text-on-surface-variant/50 shrink-0';
         time.textContent = evt.recordedAt || '';
         header.appendChild(time);
         body.appendChild(header);
 
         const headline = document.createElement('p');
-        headline.className = 'text-[11px] text-on-surface leading-snug';
+        headline.className = 'text-2xs text-on-surface leading-snug';
         headline.textContent = evt.headline || '';
         body.appendChild(headline);
 
@@ -682,7 +682,7 @@ export default class extends Controller {
     applyGrowth(node, label, value) {
         const isMeaningful = value !== null && value !== undefined;
         node.textContent = `${label} ${formatGrowth(value)}`;
-        node.className = 'text-[11px] font-mono tabular-nums ' + (
+        node.className = 'text-2xs font-mono tabular-nums ' + (
             !isMeaningful ? 'text-on-surface-variant/40' : (value >= 0 ? 'text-secondary' : 'text-tertiary')
         );
     }
@@ -719,7 +719,7 @@ export default class extends Controller {
         row.className = 'district-stream-row';
 
         const header = document.createElement('div');
-        header.className = 'flex items-baseline justify-between gap-2 text-[11px] mb-1';
+        header.className = 'flex items-baseline justify-between gap-2 text-2xs mb-1';
 
         const name = document.createElement('span');
         name.className = 'flex items-center gap-1.5 min-w-0';
@@ -745,14 +745,14 @@ export default class extends Controller {
         // Letting all five figures share a wrapping flex row orphaned whichever one ran out of
         // width onto a line of its own, which read as though it belonged to the next segment.
         const growth = document.createElement('div');
-        growth.className = 'flex items-center gap-2 text-[10px] font-mono mb-0.5 pl-3';
+        growth.className = 'flex items-center gap-2 text-3xs font-mono mb-0.5 pl-3';
         growth.appendChild(this.buildSparkline(stream.history));
         growth.appendChild(this.buildMetric('QoQ', formatGrowth(stream.qoqDelta), stream.qoqDelta));
         growth.appendChild(this.buildMetric('YoY', formatGrowth(stream.yoyDelta), stream.yoyDelta));
         row.appendChild(growth);
 
         const attribution = document.createElement('div');
-        attribution.className = 'flex items-center gap-2 text-[10px] font-mono mb-1.5 pl-3';
+        attribution.className = 'flex items-center gap-2 text-3xs font-mono mb-1.5 pl-3';
 
         if (stream.contribution !== null && stream.contribution !== undefined) {
             const contribution = stream.contribution;
@@ -780,7 +780,7 @@ export default class extends Controller {
             const eventLine = document.createElement('div');
             eventLine.className = 'pl-3 mb-1';
             const eventBadge = document.createElement('span');
-            eventBadge.className = 'text-[10px] font-bold uppercase tracking-wider text-amber-400 bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-500/30';
+            eventBadge.className = 'text-3xs font-bold uppercase tracking-wider text-amber-400 bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-500/30';
             eventBadge.textContent = stream.event;
             eventLine.appendChild(eventBadge);
             row.appendChild(eventLine);
@@ -797,7 +797,7 @@ export default class extends Controller {
      * A driver's direction and strength, drawn rather than typed.
      *
      * The pips are elements with an explicit size, not box-drawing characters: the panel is set in
-     * Courier Prime, which carries no glyph for them, so a typed meter rendered as tofu boxes.
+     * IBM Plex Mono, which carries no glyph for them, so a typed meter rendered as tofu boxes.
      */
     buildStrengthMeter(strength, isPositive) {
         const meter = document.createElement('span');
@@ -807,7 +807,7 @@ export default class extends Controller {
         meter.title = (isPositive ? 'Tailwind' : 'Headwind') + ` (${pips}/${DRIVER_STRENGTH_PIPS})`;
 
         const arrow = document.createElement('span');
-        arrow.className = 'text-[8px] leading-none mr-0.5';
+        arrow.className = 'text-4xs leading-none mr-0.5';
         arrow.textContent = isPositive ? '\u25B2' : '\u25BC';
         meter.appendChild(arrow);
 
@@ -899,12 +899,12 @@ export default class extends Controller {
             entry.className = 'pl-2';
 
             const head = document.createElement('div');
-            head.className = 'flex items-baseline justify-between gap-2 text-[10px]';
+            head.className = 'flex items-baseline justify-between gap-2 text-3xs';
 
             const driverLabel = document.createElement('span');
             driverLabel.className = 'min-w-0 flex items-baseline gap-1.5';
             const typeTag = document.createElement('span');
-            typeTag.className = 'text-[9px] uppercase tracking-wider text-on-surface-variant/35 shrink-0';
+            typeTag.className = 'text-4xs uppercase tracking-wider text-on-surface-variant/35 shrink-0';
             typeTag.textContent = DRIVER_TYPE_TAGS[driver.type] || DRIVER_TYPE_TAGS.company;
             const driverName = document.createElement('span');
             driverName.className = 'text-on-surface-variant/70';
@@ -918,13 +918,13 @@ export default class extends Controller {
             const readings = Array.isArray(driver.readings) ? driver.readings : [];
             if (readings.length > 0) {
                 const readingLine = document.createElement('div');
-                readingLine.className = 'text-[10px] font-mono tabular-nums text-on-surface-variant/45';
+                readingLine.className = 'text-3xs font-mono tabular-nums text-on-surface-variant/45';
                 readingLine.textContent = readings.map(r => `${r.label} ${formatReading(r)}`).join('  ·  ');
                 entry.appendChild(readingLine);
             } else if (driver.type === 'momentum' && driver.z !== undefined) {
                 // Sigma is how a standardised deviation is quoted; a bare "Z=" is model notation.
                 const momentumLine = document.createElement('div');
-                momentumLine.className = 'text-[10px] font-mono tabular-nums text-on-surface-variant/45';
+                momentumLine.className = 'text-3xs font-mono tabular-nums text-on-surface-variant/45';
                 const z = Number(driver.z);
                 momentumLine.textContent = `Operating momentum ${z >= 0 ? '+' : '−'}${Math.abs(z).toFixed(1)}σ `
                     + (z >= 0 ? 'above trend' : 'below trend');
@@ -1116,10 +1116,9 @@ export default class extends Controller {
     }
 
     /**
-     * Applies the log-scale height envelope to a facade. Mirrors
-     * DistrictMapBuilder::calculateFacadeHeight()'s logistic curve exactly — the two used to
-     * disagree (this was a plain clamped linear map), so a facade would visibly jump in height
-     * on the very first live tick after page load; see MathUtility::logisticUnitInterval().
+     * Applies the log-scale height envelope to a facade. Must mirror
+     * DistrictMapBuilder::calculateFacadeHeight() exactly or a facade jumps on the first live
+     * tick after load; see MathUtility::logisticUnitInterval().
      */
     resizeFacade(plot, marketCap) {
         const env = this.envelopeValue;

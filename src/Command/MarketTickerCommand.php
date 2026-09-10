@@ -31,6 +31,27 @@ use Symfony\Component\Console\Output\OutputInterface;
  */
 class MarketTickerCommand extends Command implements SignalableCommandInterface
 {
+    // --- History Sampling ---
+    /** Target price history rows written per simulated year; the actual rate is this or one row per tick, whichever is coarser. */
+    public const TARGET_HISTORY_POINTS_PER_YEAR = 2400;
+
+    /** Ticks between price history rows: one per tick until the tick rate outruns the target sampling rate. */
+    public static function historyIntervalTicks(int $ticksPerYear): int
+    {
+        return max(1, (int) ($ticksPerYear / self::TARGET_HISTORY_POINTS_PER_YEAR));
+    }
+
+    /**
+     * Price history rows actually written per simulated year at a given tick rate.
+     *
+     * Anything converting a chart range into a row LIMIT has to ask this rather than assume a tick rate:
+     * the range buttons used to carry hardcoded row counts that only matched a 4,800-tick year, so every
+     * span on the stock page was wrong by whatever ratio the configured rate differed by.
+     */
+    public static function historyPointsPerYear(int $ticksPerYear): int
+    {
+        return max(1, (int) ($ticksPerYear / self::historyIntervalTicks($ticksPerYear)));
+    }
 
     private bool $keepRunning = true;
 
@@ -98,7 +119,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         $dt = 1.0 / $this->ticksPerYear;
         $tickCount = (int) ($this->redis->get('simulation_tick_count') ?: 0);
 
-        $historyInterval = (int) max(1, $this->ticksPerYear / 2400); // 2400 points per year
+        $historyInterval = self::historyIntervalTicks($this->ticksPerYear);
         $operatorInterval = (int) max(1, $this->ticksPerYear / 24);  // Operator audits once a game "month"
         $snapshotInterval = (int) max(1, $this->ticksPerYear / 52);  // Snapshots once a game "week"
         $quarterlyInterval = (int) max(1, $this->ticksPerYear / 4);   // Snapshots once a game "quarter"
@@ -170,11 +191,19 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     $price = $update['price'];
 
                     $boundsJson = $this->redis->get("limit_bounds:$ticker");
-                    if ($boundsJson) {
-                        $bounds = json_decode($boundsJson, true);
-                        if ($price <= ($bounds['buy'] ?? 0.0) || $price >= ($bounds['sell'] ?? 999999999.0)) {
-                            $this->messageBus->dispatch(new \App\Message\ProcessLimitOrdersMessage($ticker, $price));
-                        }
+
+                    if (!$boundsJson) {
+                        // No cached book for this ticker. That is either genuinely no orders or a Redis that
+                        // has been flushed since they were placed, and the two are indistinguishable from
+                        // here — so check once. The handler rewrites the bounds either way, which means the
+                        // uncertainty costs exactly one dispatch rather than stranding resting orders.
+                        $this->messageBus->dispatch(new \App\Message\ProcessLimitOrdersMessage($ticker, $price));
+                        continue;
+                    }
+
+                    $bounds = json_decode($boundsJson, true);
+                    if ($price <= ($bounds['buy'] ?? 0.0) || $price >= ($bounds['sell'] ?? 999999999.0)) {
+                        $this->messageBus->dispatch(new \App\Message\ProcessLimitOrdersMessage($ticker, $price));
                     }
                 }
 
@@ -231,7 +260,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     'stocks' => $allUpdates,
                     'events' => $events,
                     'market_vol' => $marketVol,
-                    'economic_cycle' => $macroState->outputGap > 0.01 ? 'Boom' : ($macroState->outputGap < -0.01 ? 'Bust' : 'Neutral'),
+                    'economic_cycle' => $macroState->economicCycleLabel(),
                     'council_rate' => $macroState->policyRate,
                     'macro' => $macroState->toArray(),
                 ]));

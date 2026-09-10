@@ -36,7 +36,8 @@ class MarketConsensusEngine
      *   analystError        = N(0,1) * coverage.errorStdDev
      *   dynamicVisibility   = clamp(baseVisibility + analystError, minVisibility, 1.0)
      *   analystExpectedRev  = BayesianUpdate(priorAnchor, freshEstimate) * (1 - walkdownBias)
-     *   analystExpectedVarC = analystExpectedRev * expectedVariableMargin
+     *   expectedCostRatio   = blend(expectedVariableMargin, realized cost ratio) by ANALYST_COST_BASE_VISIBILITY
+     *   analystExpectedVarC = analystExpectedRev * volumeShare * expectedCostRatio
      *   estimateDispersion  = coverage.errorStdDev * volatilityScale
      *
      * @param ActualFinancialsDTO    $actuals                What the company actually produced this quarter.
@@ -45,7 +46,7 @@ class MarketConsensusEngine
      * @param MathUtility            $mathUtility            PRNG for analyst estimation noise.
      * @param \App\Entity\Stock      $stock                  The stock entity for anchor history.
      * @param float                  $marketVolatility       Prevailing market volatility (VIX proxy).
-     * @param float|null             $expectedVariableMargin Ex-ante variable margin before physical shocks.
+     * @param float|null             $expectedVariableMargin Ex-ante variable cost ratio before the sector physics move it.
      * @param float                  $seasonalRatio          Seasonality adjustment ratio (Factor_t / Factor_{t-1}).
      */
     public function generateConsensus(
@@ -115,8 +116,34 @@ class MarketConsensusEngine
 
         $stock->setLastAnalystRevenue((string) $analystExpectedRevenue);
 
-        $marginForCosts = $expectedVariableMargin !== null ? $expectedVariableMargin : $actuals->clampedMargin;
-        $analystExpectedVariableCosts = $analystExpectedRevenue * $marginForCosts;
+        // Cost base. The ex-ante margin is the structural cost ratio BEFORE the sector physics move it, so an
+        // estimate built on it alone was blind to the input-cost basket, the pass-through lag and every other
+        // cost term the models apply — and because the consensus anchor remembers revenue and not margin, a
+        // standing cost shock was re-discovered as a fresh miss every quarter for as long as it lasted.
+        // Analysts are not blind to it: input prices are published series and pass-through terms are
+        // disclosed, so the systematic part of the realized ratio is forecastable and only firm-specific
+        // execution is not. The blend is the same visibility device already applied to revenue above.
+        // The estimate anchors on the ratio the firm last REPORTED — a disclosed, public number — and moves
+        // from it toward the realized one by that visibility. Anchoring matters as much as the blend does:
+        // a flat blend against the level would miss a permanently elevated cost base by the same amount
+        // every quarter forever, which is the level-versus-news error in another place. With the anchor a
+        // lasting shock is missed once, when it arrives, and is in the estimate from the next quarter on.
+        $priorCostRatio = $stock->getLastReportedCostRatio();
+        $anchorCostRatio = $priorCostRatio !== null
+            ? (float) $priorCostRatio
+            : ($expectedVariableMargin ?? $actuals->clampedMargin);
+
+        $expectedCostRatio = $anchorCostRatio
+            + (FinancialConstants::ANALYST_COST_BASE_VISIBILITY * ($actuals->clampedMargin - $anchorCostRatio));
+        $stock->setLastReportedCostRatio((string) $actuals->clampedMargin);
+
+        // Price is not produced, so the cost ratio bites on the volume part of revenue only — exactly as the
+        // physics applies it. Charging the ratio against the whole estimate instead left every firm with a
+        // price-driven revenue stream looking permanently cheaper to run than the analysts assumed.
+        $volumeShare = $actuals->actualRevenue > 0.0
+            ? max(0.0, min(1.0, ($actuals->actualRevenue - $actuals->priceRevenue) / $actuals->actualRevenue))
+            : 1.0;
+        $analystExpectedVariableCosts = $analystExpectedRevenue * $volumeShare * $expectedCostRatio;
 
         // Analyst disagreement is regime-dependent: forecasts fan out when the macro outlook is volatile and
         // converge when it is calm. Holding dispersion at the sector's calm-market constant made the SUE

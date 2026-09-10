@@ -39,15 +39,21 @@
             <directory>tests/Security</directory>
             <directory>tests/Financial</directory>
             <directory>tests/Service</directory>
+            <directory>tests/Support</directory>
             <directory>tests/Controller</directory>
         </testsuite>
 
+        <!-- Unit: no I/O, no kernel, no database. Pure collaborator-free logic. -->
         <testsuite name="Unit">
             <directory>tests/DTO</directory>
             <directory>tests/Data</directory>
             <directory>tests/Twig</directory>
             <directory>tests/Service/Model</directory>
             <directory>tests/Service/Math</directory>
+            <file>tests/Service/CapExEngineTest.php</file>
+            <file>tests/Service/MarketEngineTest.php</file>
+            <file>tests/Service/PortfolioCalculationTest.php</file>
+            <directory>tests/Support</directory>
         </testsuite>
 
         <testsuite name="Integration">
@@ -58,6 +64,10 @@
             <directory>tests/Security</directory>
             <exclude>tests/Service/Model</exclude>
             <exclude>tests/Service/Math</exclude>
+            <!-- Collaborator-free; owned by the Unit suite. -->
+            <exclude>tests/Service/CapExEngineTest.php</exclude>
+            <exclude>tests/Service/MarketEngineTest.php</exclude>
+            <exclude>tests/Service/PortfolioCalculationTest.php</exclude>
         </testsuite>
 
         <testsuite name="Functional">

@@ -13,16 +13,35 @@ use Doctrine\ORM\EntityManagerInterface;
 
 class TradeExecutionService
 {
+    // --- Order Validation ---
+    /** Lowest limit price an order may rest at, matching the $0.01 floor the price process itself clamps to. */
+    public const MIN_LIMIT_PRICE = '0.01';
+
+    /** Ceiling on a limit price. Escrow is stored at DECIMAL(18,4), so the price times the 1e9 quantity cap has to stay inside it. */
+    public const MAX_LIMIT_PRICE = '100000000.0000';
+
+    /** The only two sides an order may be placed on. Anything else fell through to the SELL branch and escrowed shares against an order nothing would ever fill. */
+    public const VALID_ACTIONS = ['BUY', 'SELL'];
+
     public function __construct(
         private EntityManagerInterface $em,
         private Portfolio $portfolio,
-        private \Redis $redis
+        private \Redis $redis,
+        private \Psr\Log\LoggerInterface $logger
     ) {}
 
     public function executeOrder(User $user, string $ticker, string $action, string $orderType, int $quantity, ?string $limitPrice = null): void
     {
         if ($quantity <= 0) {
             throw new \Exception('Invalid quantity.');
+        }
+
+        if (!in_array($action, self::VALID_ACTIONS, true)) {
+            throw new \Exception('Invalid order action.');
+        }
+
+        if ($orderType === 'LIMIT') {
+            $limitPrice = $this->validateLimitPrice($limitPrice);
         }
 
         $this->em->getConnection()->beginTransaction();
@@ -153,12 +172,41 @@ class TradeExecutionService
                 $this->updateRedisBounds($ticker);
             }
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             if ($this->em->getConnection()->isTransactionActive()) {
                 $this->em->getConnection()->rollBack();
             }
             throw $e;
         }
+    }
+
+    /**
+     * Normalizes a limit price, rejecting anything the escrow arithmetic cannot safely hold.
+     *
+     * The price arrives straight off the request. Unvalidated, a NEGATIVE limit inverted the escrow: the
+     * funds check passed against a negative requirement and the debit became a credit, so placing a BUY at
+     * -5 minted cash. A non-numeric one reached bcmath, which throws a ValueError — an Error, not an
+     * Exception, so neither this class nor the controller caught it and the open transaction leaked.
+     */
+    private function validateLimitPrice(?string $limitPrice): string
+    {
+        if ($limitPrice === null || !is_numeric(trim($limitPrice))) {
+            throw new \Exception('A limit order requires a numeric limit price.');
+        }
+
+        // Rendered rather than passed through: is_numeric accepts "1e5", and bcmath rejects exponent
+        // notation outright. %F never emits one, so this is the form the escrow arithmetic can consume.
+        $normalized = sprintf('%.4F', (float) trim($limitPrice));
+
+        if (\bccomp($normalized, self::MIN_LIMIT_PRICE, 4) < 0) {
+            throw new \Exception('Limit price must be at least $' . self::MIN_LIMIT_PRICE . '.');
+        }
+
+        if (\bccomp($normalized, self::MAX_LIMIT_PRICE, 4) > 0) {
+            throw new \Exception('Limit price is above the maximum accepted value.');
+        }
+
+        return $normalized;
     }
 
     public function cancelOrder(User $user, int $orderId): void
@@ -206,7 +254,7 @@ class TradeExecutionService
 
             $this->updateRedisBounds($ticker);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             if ($this->em->getConnection()->isTransactionActive()) {
                 $this->em->getConnection()->rollBack();
             }
@@ -233,6 +281,12 @@ class TradeExecutionService
                 $this->fillOpenOrder($order, $currentPrice);
             }
         }
+
+        // Always leave the book's bounds in Redis, even when nothing filled and even when there is nothing
+        // open. The ticker only checks a ticker whose bounds key exists, so a flushed or evicted Redis
+        // otherwise left every resting order un-checked forever — this call is what heals that, and writing
+        // the empty case too stops a ticker with no orders from being re-checked on every tick.
+        $this->updateRedisBounds($ticker);
     }
 
     private function fillOpenOrder(TradeOrder $order, float $executionPrice): void
@@ -243,7 +297,12 @@ class TradeExecutionService
             $this->em->lock($user, \Doctrine\DBAL\LockMode::PESSIMISTIC_WRITE);
             $this->em->refresh($user);
 
-            // Re-check status in case it was cancelled while in queue
+            // Re-check status in case it was cancelled while in queue. The entity has to be refreshed to
+            // read it: $order came out of the identity map before the lock was taken, so a cancel committed
+            // by the web process in the meantime is invisible here and the order would fill a second time
+            // against escrow that has already been refunded.
+            $this->em->refresh($order);
+
             if ($order->getStatus() !== 'OPEN') {
                 $this->em->getConnection()->rollBack();
                 return;
@@ -298,11 +357,19 @@ class TradeExecutionService
 
             $this->updateRedisBounds($ticker);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             if ($this->em->getConnection()->isTransactionActive()) {
                 $this->em->getConnection()->rollBack();
             }
-            // Log error
+
+            // The order stays OPEN with its escrow still held, so this has to be visible: silently swallowing
+            // it left a user's money committed to an order that would never be reported as having failed.
+            $this->logger->error('Limit order fill failed; order left open with escrow held.', [
+                'order_id' => $order->getId(),
+                'ticker' => $order->getTicker(),
+                'execution_price' => $executionPrice,
+                'exception' => $e,
+            ]);
         }
     }
 

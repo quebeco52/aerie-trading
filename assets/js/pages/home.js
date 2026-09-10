@@ -1,13 +1,19 @@
 import { formatLarge } from '../utils/formatters.js';
-import { THEME_COLORS } from '../utils/colors.js';
+import { readPageData } from '../utils/page-data.js';
+import { flashTick } from '../utils/tick-flash.js';
 
 const previousPrices = {};
+
+/** Shares outstanding per ticker, for recomputing market caps as prices tick. */
+let sharesByTicker = {};
 
 function initHome() {
     const etfEl = document.getElementById('etf-price');
     if (!etfEl) return;
     if (etfEl.dataset.initialized) return;
     etfEl.dataset.initialized = 'true';
+
+    sharesByTicker = readPageData('market-data').shares || {};
 
     function onMarketUpdate(event) {
         const payload = event.detail;
@@ -18,12 +24,9 @@ function initHome() {
             const macroCycleEl = document.getElementById('macro-cycle');
             if (macroCycleEl) {
                 const cycleText = payload.macro.output_gap > 0.01 ? 'Boom' : (payload.macro.output_gap < -0.01 ? 'Bust' : 'Neutral');
-                if (macroCycleEl.innerText !== cycleText) {
-                    macroCycleEl.innerText = cycleText;
-                    macroCycleEl.style.color = THEME_COLORS.secondary;
-                    setTimeout(() => {
-                        if (macroCycleEl) macroCycleEl.style.color = THEME_COLORS.textPrimary;
-                    }, 500);
+                if (macroCycleEl.textContent !== cycleText) {
+                    macroCycleEl.textContent = cycleText;
+                    flashTick(macroCycleEl, 1);
                 }
             }
         }
@@ -32,7 +35,7 @@ function initHome() {
         const lbiStock = payload.stocks ? payload.stocks.find(s => s.ticker === 'LBI') : null;
         if (lbiStock) {
             const etfElLive = document.getElementById('etf-price');
-            if (etfElLive) etfElLive.innerText = '$' + parseFloat(lbiStock.price).toFixed(2);
+            if (etfElLive) etfElLive.textContent = '$' + parseFloat(lbiStock.price).toFixed(2);
         }
 
         // Loop through live prices and update DOM
@@ -47,12 +50,13 @@ function initHome() {
                     if (stock.is_bankrupt) {
                         rowEl.setAttribute('data-bankrupt', 'true');
                         rowEl.setAttribute('data-mcap', '0');
-                        priceEl.innerText = '$0.00';
+                        priceEl.textContent = '$0.00';
                         priceEl.classList.add('text-tertiary', 'line-through');
-                        mcapEl.innerText = '$0.00';
+                        mcapEl.textContent = '$0.00';
                         if (chgEl) {
-                            chgEl.innerText = '\u2014';
-                            chgEl.style.color = THEME_COLORS.textMuted;
+                            chgEl.textContent = '\u2014';
+                            chgEl.classList.remove('text-secondary', 'text-tertiary');
+                            chgEl.classList.add('text-on-surface-variant');
                         }
                         rowEl.classList.add('opacity-50', 'bg-tertiary/10');
                         return;
@@ -61,41 +65,33 @@ function initHome() {
                     const newPrice = parseFloat(stock.price);
                     const oldPrice = previousPrices[stock.ticker] || newPrice;
 
-                    priceEl.innerText = '$' + newPrice.toFixed(2);
+                    priceEl.textContent = '$' + newPrice.toFixed(2);
 
-                    const sharesCount = (window.MARKET_SHARES && window.MARKET_SHARES[stock.ticker]) ? window.MARKET_SHARES[stock.ticker] : 0;
+                    const sharesCount = sharesByTicker[stock.ticker] || 0;
                     const newMcap = stock.market_cap !== undefined ? stock.market_cap : (newPrice * sharesCount);
 
-                    mcapEl.innerText = '$' + formatLarge(newMcap);
+                    mcapEl.textContent = formatLarge(newMcap, '$');
                     rowEl.setAttribute('data-mcap', newMcap);
 
                     // A ticker with nothing buffered yet reports no change at all, which is a
                     // different fact from "flat" and has to keep printing as an em dash.
                     if (chgEl) {
                         const chg = stock.changePercent;
+                        // Steady state, not a flash: the day's direction, held until it changes.
+                        chgEl.classList.remove('text-secondary', 'text-tertiary', 'text-on-surface-variant');
                         if (chg === null || chg === undefined) {
-                            chgEl.innerText = '\u2014';
-                            chgEl.style.color = THEME_COLORS.textMuted;
+                            chgEl.textContent = '\u2014';
+                            chgEl.classList.add('text-on-surface-variant');
                         } else {
-                            chgEl.innerText = (chg >= 0 ? '+' : '') + (chg * 100).toFixed(2) + '%';
-                            chgEl.style.color = chg >= 0 ? THEME_COLORS.positive : THEME_COLORS.negative;
+                            chgEl.textContent = (chg >= 0 ? '+' : '') + (chg * 100).toFixed(2) + '%';
+                            chgEl.classList.add(chg >= 0 ? 'text-secondary' : 'text-tertiary');
                         }
                     }
 
-                    if (newPrice > oldPrice) {
-                        priceEl.style.color = THEME_COLORS.secondary;
-                        mcapEl.style.color = THEME_COLORS.secondary;
-                    } else if (newPrice < oldPrice) {
-                        priceEl.style.color = THEME_COLORS.tertiary;
-                        mcapEl.style.color = THEME_COLORS.tertiary;
-                    }
+                    flashTick(priceEl, newPrice - oldPrice);
+                    flashTick(mcapEl, newPrice - oldPrice);
 
                     previousPrices[stock.ticker] = newPrice;
-
-                    setTimeout(() => {
-                        if (priceEl) priceEl.style.color = THEME_COLORS.textPrimary;
-                        if (mcapEl) mcapEl.style.color = THEME_COLORS.textMuted;
-                    }, 500);
                 }
             });
         }
@@ -130,5 +126,9 @@ function initHome() {
     }, { once: true });
 }
 
+
+/* Bound to `turbo:load` only. It fires on first load as well as on every Turbo navigation,
+   and it is the load-bearing path: on a repeat visit this module is already in the module
+   registry and its top level never runs again, so a direct call here would fire only on
+   the very first evaluation and be pure duplication on that one. */
 document.addEventListener('turbo:load', initHome);
-initHome();

@@ -198,20 +198,38 @@ class EarningsEngine
             return [];
         }
 
-        $industry = $stock->getIndustry() ?: 'General';
-        $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
-        $strategy = \App\Data\Sectors::getBusinessModelStrategy($businessModel);
-
-        // Owed back to earlier quarters that were papered over.
+        // Owed back to earlier quarters that were papered over. Accruals are firm-private, so the whole
+        // reversal is news: nothing on the street can have anticipated it.
         $reversalDue = $stock->getManagedAccrualBank() * FinancialConstants::EARNINGS_MANAGEMENT_REVERSAL_RATE;
 
-        // Costs already in the base that selling prices have not caught up with. Both halves of the lag are
-        // persisted by the input-cost basket, so the squeeze is known before the quarter is closed.
+        // Costs already in the base that selling prices have not caught up with. Only the CHANGE is news: a
+        // squeeze the firm has been carrying for a year was disclosed a year ago and sits in every estimate on
+        // the street, and warning on the standing level instead had a firm in a lasting cost shock issue a
+        // guidance cut every single quarter for as long as the shock lasted.
+        //
+        // The change available here is the one booked at the LAST report, not one measured against the quarter
+        // being warned about: the cost stream advances only inside computeActualFinancials, so nothing has
+        // moved it since. Management guides on the squeeze it is carrying INTO the quarter — the most recent
+        // increment it can honestly know. Reading the current quarter would mean reading draws not yet made.
         $streamState = $stock->getEarningsMomentumZ() ?? [];
-        $costLevel = (float) ($streamState[FinancialConstants::STATE_INPUT_COST_LEVEL] ?? 0.0);
-        $recovered = (float) ($streamState[FinancialConstants::STATE_INPUT_COST_RECOVERY] ?? 0.0);
+        $unrecovered = max(0.0,
+            (float) ($streamState[FinancialConstants::STATE_INPUT_COST_LEVEL] ?? 0.0)
+            - (float) ($streamState[FinancialConstants::STATE_INPUT_COST_RECOVERY] ?? 0.0)
+        );
+        $priorUnrecovered = max(0.0, (float) ($streamState[FinancialConstants::STATE_PRIOR_UNRECOVERED_COST] ?? 0.0));
+        $deterioration = max(0.0, $unrecovered - $priorUnrecovered);
+
+        // The squeeze reaches earnings through the VARIABLE COST BASE: the drag is a shift in the cost ratio
+        // charged against volume, so the dollars at risk are that shift times the cost base. Measuring it
+        // against revenue instead overstated it by the reciprocal of the cost ratio.
         $quarterlyRevenue = max(0.0, (float) $stock->getTotalRevenue()) / 4.0;
-        $costSqueeze = max(0.0, $costLevel - $recovered) * $quarterlyRevenue;
+
+        // Analysts already carry the published part of an input move (MarketConsensusEngine reads the realized
+        // cost base at ANALYST_COST_BASE_VISIBILITY), so only the share they cannot see is worth warning about.
+        $costSqueeze = $deterioration
+            * $this->resolveVariableCostRatio($stock)
+            * $quarterlyRevenue
+            * (1.0 - FinancialConstants::ANALYST_COST_BASE_VISIBILITY);
 
         $knownShortfall = $reversalDue + $costSqueeze;
         if ($knownShortfall <= 0.0) {
@@ -229,7 +247,11 @@ class EarningsEngine
         // which is exactly why managements warn.
         $stock->setPreAnnouncedShortfall($knownShortfall * FinancialConstants::PREANNOUNCEMENT_CONSENSUS_ABSORPTION);
 
-        $reaction = -min(0.25, $shortfallRatio * FinancialConstants::PREANNOUNCEMENT_PRICE_REACTION);
+        // A warning is repriced on the day it is issued. The published figure has to BE the move, not a
+        // number beside an unchanged price: every surface that renders an event reads change_percent as a
+        // realized return, so a headline reaction the price never took was simply a false print.
+        $reaction = -min(FinancialConstants::MAX_PREANNOUNCEMENT_PRICE_REACTION, $shortfallRatio * FinancialConstants::PREANNOUNCEMENT_PRICE_REACTION);
+        $stock->setPrice(number_format(max(0.01, (float) $stock->getPrice() * (1.0 + $reaction)), 8, '.', ''));
 
         return [$this->marketEvent->publish(
             $stock,
@@ -237,6 +259,28 @@ class EarningsEngine
             sprintf('Guidance cut: management expects to miss consensus by roughly %d%% on cost and accrual pressure already incurred.', (int) round($shortfallRatio * 100)),
             $reaction * 100
         )];
+    }
+
+    /**
+     * The firm's variable cost ratio: the CIR state the margin process actually carries, falling back before
+     * the first report has opened that state to the same construction the seeder builds it from.
+     *
+     * The complement of the operating margin on its own is the TOTAL cost ratio — it still carries fixed costs
+     * and depreciation — so charging it against volume overstated the squeeze by the reciprocal of the
+     * fixed-cost complement: 0.85 rather than 0.5525 at seeded defaults, a factor of 1.54.
+     */
+    private function resolveVariableCostRatio(Stock $stock): float
+    {
+        $structural = $stock->getStructuralVariableMargin();
+        if ($structural !== null) {
+            return max(0.01, min(0.99, (float) $structural));
+        }
+
+        // MarketResetCommand's construction: the cost base implied by the operating margin, net of the share
+        // of it that does not scale with volume.
+        $totalCostRatio = 1.0 - (float) $stock->getOperatingMargin();
+
+        return max(0.01, min(0.99, $totalCostRatio * (1.0 - $stock->getFixedCostRatio())));
     }
 
     private function checkReportingEligibility(Stock $stock, int $tickCount, int $ticksPerYear): bool
@@ -617,7 +661,18 @@ class EarningsEngine
         $ctx->primaryShockZ = $actuals->primaryShockZ;
         $ctx->eventType = $actuals->eventType;
         $ctx->eventContext = $actuals->eventContext;
-        $ctx->stock->setEarningsMomentumZ($actuals->streamZ);
+        // Guidance warns on the CHANGE in the cost squeeze, so the level the firm entered this quarter
+        // carrying has to survive the report that replaces the stream state. Read here because the physics
+        // above has already advanced STATE_INPUT_COST_* to this quarter's values, and the map is overwritten
+        // on the next line; the stream context only persists keys a model re-registered, so it is re-seeded
+        // explicitly rather than left to survive on its own.
+        $openingState = $ctx->stock->getEarningsMomentumZ() ?? [];
+        $streamState = $actuals->streamZ;
+        $streamState[FinancialConstants::STATE_PRIOR_UNRECOVERED_COST] = max(0.0,
+            (float) ($openingState[FinancialConstants::STATE_INPUT_COST_LEVEL] ?? 0.0)
+            - (float) ($openingState[FinancialConstants::STATE_INPUT_COST_RECOVERY] ?? 0.0)
+        );
+        $ctx->stock->setEarningsMomentumZ($streamState);
         $ctx->streamRevenue = $actuals->streamRevenue;
         $ctx->scheduledCapex = max(0.0, $actuals->scheduledCapex);
         $ctx->kpis = $actuals->kpis;
