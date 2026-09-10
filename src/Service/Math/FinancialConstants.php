@@ -404,6 +404,73 @@ class FinancialConstants
     public const MAX_SECTOR_TAM_CAPACITY_RATIO = 1.50;
     /** Maximum structural capacity and revenue multiplier for financial intermediaries relative to dynamic TAM (250%). */
     public const MAX_FINANCIAL_SECTOR_TAM_CAPACITY_RATIO = 2.50;
+    // --- Sovereign Bond Desk ---
+    /** Face value of a single sovereign bond, redeemed at maturity and the base every coupon is struck against. */
+    public const BOND_FACE_VALUE = 1000.0;
+    /** Coupon payments per year. Sovereign convention is semi-annual. */
+    public const BOND_COUPON_FREQUENCY = 2;
+    /** Auctions per year: each one rotates a fresh on-the-run issue into every tenor and retires the previous one to off-the-run. */
+    public const BOND_AUCTIONS_PER_YEAR = 4;
+    /** Coupons are struck in eighths of a percent, the auction convention, so the issue prices near par rather than exactly at it. */
+    public const BOND_COUPON_RATE_INCREMENT = 0.00125;
+    /** Original maturities offered at auction, in years; the same benchmark points the macro engine publishes. */
+    public const BOND_AUCTION_TENORS = [2.0, 5.0, 10.0, 30.0];
+    /** Floor on a struck coupon. A zero-coupon issue is legitimate at the lower bound; a negative one is not. */
+    public const BOND_MIN_COUPON_RATE = 0.0;
+    /** Face amount issued per tenor per auction, in currency units. Sets the size of the tradable float. */
+    public const BOND_ISSUE_SIZE = 5.0e9;
+    /** Ceiling on years-to-maturity treated as outstanding; past it the issue is redeemed and stops trading. */
+    public const BOND_MATURITY_EPSILON = 1.0e-6;
+    /** Tenors the curve is sampled at for display. Dense at the front, where the curve actually bends. */
+    public const BOND_CURVE_SAMPLE_TENORS = [0.25, 0.5, 1.0, 2.0, 3.0, 5.0, 7.0, 10.0, 15.0, 20.0, 30.0];
+    // --- Market Microstructure: Volume & Liquidity ---
+    /** Trading days a simulated year is divided into when expressing average daily volume. */
+    public const TRADING_DAYS_PER_YEAR = 252.0;
+    /** Baseline annual share turnover as a fraction of the public float; the median large cap turns over a little more than its float each year. */
+    public const BASELINE_ANNUAL_TURNOVER = 1.20;
+    /** Floor on average daily volume in shares. sqrt(Q/ADV) diverges as ADV approaches zero, so a dead name must be illiquid rather than untradable. */
+    public const MIN_ADV_SHARES = 1000.0;
+    /** Shares in a typical print, used to turn daily volume into the trade count the spread relation needs. */
+    public const TYPICAL_TRADE_SIZE_SHARES = 200.0;
+    /** Elasticity of traded volume to volatility (Karpoff 1987): both are driven by the same information arrivals, so a volatile tape is a busy one. */
+    public const VOLUME_VOLATILITY_ELASTICITY = 0.70;
+    /** Lower bound on the volatility-driven activity multiplier applied to structural ADV. */
+    public const MIN_ADV_ACTIVITY_MULTIPLIER = 0.40;
+    /** Upper bound on that multiplier, so a crash does not manufacture unlimited liquidity. */
+    public const MAX_ADV_ACTIVITY_MULTIPLIER = 3.00;
+    /** Lognormal dispersion of realized volume around its conditional mean (Clark 1973 mixture-of-distributions). */
+    public const VOLUME_LOGNORMAL_SIGMA = 0.45;
+    /** Reference single-name annual volatility that BASELINE_ANNUAL_TURNOVER is quoted against. */
+    public const TURNOVER_REFERENCE_VOLATILITY = 0.18;
+    /** Cross-sectional elasticity of turnover to volatility: volatile names change hands more often than quiet ones. */
+    public const TURNOVER_VOLATILITY_ELASTICITY = 0.60;
+    /** Bounds on the structural turnover ratio, keeping even the quietest utility and the wildest speculative name inside a plausible range. */
+    public const MIN_ANNUAL_TURNOVER = 0.35;
+    public const MAX_ANNUAL_TURNOVER = 4.00;
+
+    // --- Market Microstructure: Spread (Wyart, Bouchaud, Kockelkoren, Potters & Vettorazzo 2008) ---
+    /** Coefficient c in S = c * sigma_daily / sqrt(N), the observed relation between spread, volatility and trade count. Near unity in real order-driven markets. */
+    public const SPREAD_VOLATILITY_COEFFICIENT = 1.00;
+    /** Floor on the quoted half-spread as a fraction of price (0.5bp): crossing a mega-cap is cheap, never free. */
+    public const MIN_HALF_SPREAD = 0.00005;
+    /** Ceiling on the quoted half-spread (2%), so even a distressed name stays tradable at a price. */
+    public const MAX_HALF_SPREAD = 0.02;
+
+    // --- Market Microstructure: Impact (Almgren & Chriss 2005) ---
+    /** Square-root law coefficient. At 1.0 the canonical statement holds: trading one full day's volume moves the price by about one daily standard deviation. */
+    public const PERMANENT_IMPACT_GAMMA = 1.00;
+    /** Temporary impact as a share of the permanent move. The price walks to its new level while the order fills, so the taker's average fill is the midpoint of that walk: exactly one half. */
+    public const TEMPORARY_IMPACT_ETA = 0.50;
+    /** Largest multiple of average daily volume a single order may consume. Past it the square-root law is extrapolation, and a capped impact would be a free lunch for size. */
+    public const MAX_ORDER_ADV_MULTIPLE = 2.00;
+    /** Flat half-spread on a broad index ETF. Creation and redemption keep it pinned to the basket, so it quotes tighter than any single constituent. */
+    public const ETF_HALF_SPREAD = 0.0001;
+    /** Flat half-spread on a sovereign bond, the deepest instrument on the desk. */
+    public const BOND_HALF_SPREAD = 0.00005;
+
+    // --- Market Microstructure: Order Flow Variance Budget ---
+    /** Ceiling on the share of long-run variance order flow may reclaim from the diffusion. */
+    public const MAX_IMPACT_VARIANCE_DRAG_SHARE = 0.25;
+    /** Half-life in years of the realized impact-variance estimate the budget is drawn from. */
+    public const IMPACT_VARIANCE_EMA_YEARS = 0.25;
 }
-
-

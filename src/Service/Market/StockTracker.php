@@ -10,7 +10,9 @@ use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\MergerAndAcquisitionEngine;
 use App\Service\Event\MarketEventPublisher;
+use App\Service\Market\Flow\OrderFlowStoreInterface;
 use App\Service\Math\CorporateMetrics;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 
 /**
@@ -47,7 +49,9 @@ class StockTracker
         private MarketEventPublisher $eventService,
         private DebtEngine $debtEngine,
         private MathUtility $mathUtility,
-        private CorporateMetrics $corporateMetrics
+        private CorporateMetrics $corporateMetrics,
+        private LiquidityEngine $liquidityEngine,
+        private OrderFlowStoreInterface $orderFlow
     ) {}
 
     /**
@@ -79,6 +83,11 @@ class StockTracker
         $macroDTO = $macroState ?? new \App\DTO\MacroStateDTO();
         $marketZ = $macroDTO->marketZ;
         $marketVol = $macroDTO->marketVolatility;
+
+        // Everything that traded since the last tick, netted per ticker. Drained once for the whole book
+        // rather than per stock: it is one round trip, and a quantity that has already moved the price must
+        // not be able to move it again on the next tick.
+        $netOrderFlow = $this->orderFlow->drain();
 
         foreach ($stocks as $stock) {
             $sectorName = $stock->getSector();
@@ -197,7 +206,8 @@ class StockTracker
                 baselineRoic: (float) ($stock->getBaselineRoic() ?? 0.10),
                 baselineMargin: (float) ($stock->getOperatingMargin() ?? 0.20),
                 accrualsRatio: (float) ($stock->getAccrualsRatio() ?? 0.0),
-                investedCapitalPerShare: $stock->getInvestedCapital() / max(1.0, (float) $stock->getSharesOutstanding())
+                investedCapitalPerShare: $stock->getInvestedCapital() / max(1.0, (float) $stock->getSharesOutstanding()),
+                orderFlowVariance: (float) ($stock->getImpactVarianceEma() ?? 0.0)
             );
 
             // Calculate new price (GBM + SVJJ)
@@ -209,6 +219,35 @@ class StockTracker
             if ($calculation['shock'] !== null) {
                 $events[] = $this->eventService->publish($stock, 'SHOCK', "Sudden market shock detected.", $calculation['shock']);
             }
+
+            // ORDER FLOW IMPACT (Almgren & Chriss 2005)
+            // The permanent leg only. The temporary leg was already paid by whoever traded, as slippage on
+            // their own fill, and putting it here would charge it twice and leave it in the quote besides.
+            //
+            // Applied after the diffusion rather than inside it because it is not a random draw: it is a
+            // known quantity of stock that changed hands, and the price it leaves behind is a fact rather
+            // than a distribution. The variance it supplies is handed back through the budget in
+            // MarketEngine, using the EMA maintained below.
+            $tickFlow = $netOrderFlow[$stock->getTicker()] ?? 0.0;
+            $impactLogReturn = 0.0;
+
+            if ($tickFlow !== 0.0) {
+                $impactLogReturn = $this->liquidityEngine->permanentImpact($stock, $tickFlow);
+                $newPrice = max(0.01, $newPrice * exp($impactLogReturn));
+            }
+
+            // Realized impact variance, annualized, as an exponentially weighted mean. This is what the
+            // budget draws on, so it has to decay: a name that was heavily traded a year ago must not keep
+            // reclaiming variance it no longer supplies.
+            if ($dt > 0.0) {
+                $impactPhi = exp(-$dt / FinancialConstants::IMPACT_VARIANCE_EMA_YEARS);
+                $annualizedTickVariance = ($impactLogReturn * $impactLogReturn) / $dt;
+
+                $stock->setImpactVarianceEma(
+                    (($stock->getImpactVarianceEma() ?? 0.0) * $impactPhi) + ($annualizedTickVariance * (1.0 - $impactPhi))
+                );
+            }
+
             $stock->setPrice((string) $newPrice);
             $stock->setCurrentVolatility((string) $nextVolatility);
 
@@ -269,6 +308,10 @@ class StockTracker
             $currentMarketCap = $finalPrice * $newShares;
             $totalMarketCap += $currentMarketCap;
 
+            // Shares printed this tick. The players' own fills are prints too, so they are added rather than
+            // assumed away: a name nobody but the players trades still shows the volume they generated.
+            $tickVolume = $this->liquidityEngine->simulateTickVolume($stock, $dt, abs($tickFlow));
+
             // Determine if a fundamental corporate event occurred this tick
             $isFundamentalTick = !empty($generatedEvents) || $maResult || (isset($divestResult) && $divestResult);
 
@@ -291,6 +334,9 @@ class StockTracker
                 'credit_rating' => $stock->getCreditRating(),
                 'analyst_targets' => $calculation['analyst_targets'],
                 'perceived_fair_value' => $calculation['perceived_fair_value'],
+                'volume' => $tickVolume,
+                'adv_shares' => $this->liquidityEngine->averageDailyVolume($stock),
+                'half_spread_bps' => round($this->liquidityEngine->halfSpreadFraction($stock) * 20000.0, 2),
                 'is_bankrupt' => false,
             ];
 
@@ -315,7 +361,8 @@ class StockTracker
 
                 $historyData[] = [
                     'stock_id' => $stock->getId(),
-                    'price' => $finalPrice
+                    'price' => $finalPrice,
+                    'ticker' => $stock->getTicker(),
                 ];
             }
         }

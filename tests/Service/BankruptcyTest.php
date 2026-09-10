@@ -317,11 +317,16 @@ class BankruptcyTest extends TestCase
         $portfolio = $this->createStub(Portfolio::class);
         $redis = $this->createStub(\Redis::class);
 
+        // Ticker resolution now lives in AssetResolver, sharing the same EntityManager, so the single
+        // getRepository(Stock::class) lookup asserted above is the resolver's.
         $tradeService = new TradeExecutionService(
             $this->entityManagerMock,
             $portfolio,
             $redis,
-            new \Psr\Log\NullLogger()
+            new \Psr\Log\NullLogger(),
+            new \App\Service\Market\AssetResolver($this->entityManagerMock),
+            new \App\Service\Market\LiquidityEngine(new \App\Service\Math\MathUtility()),
+            new \App\Service\Market\Flow\InMemoryOrderFlowStore()
         );
 
         $this->expectException(\Exception::class);
@@ -358,7 +363,9 @@ class BankruptcyTest extends TestCase
             $this->marketEventMock,
             $this->debtEngineMock,
             $this->mathUtilityMock,
-            $corpMetrics
+            $corpMetrics,
+            new \App\Service\Market\LiquidityEngine(new \App\Service\Math\MathUtility()),
+            new \App\Service\Market\Flow\InMemoryOrderFlowStore()
         );
 
         $result = $tracker->updateStocks([$stock], 0.01, false);

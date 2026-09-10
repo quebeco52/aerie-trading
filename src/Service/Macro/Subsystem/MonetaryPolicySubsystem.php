@@ -376,6 +376,9 @@ class MonetaryPolicySubsystem
             'level' => $level,
             'curvature' => $nsBeta2,
             'curvature2' => $nsBeta3,
+            'beta1' => $nsBeta1,
+            'base_term_premium' => $totalBaseTermPremium,
+            'long_end_premium' => $longEndPremium,
             'structural_10y' => $structural10y,
             'yield_2y'  => $yield2y,
             'yield_5y'  => $yield5y,
@@ -437,26 +440,22 @@ class MonetaryPolicySubsystem
     public function calculateSvenssonTenor(float $t, float $level, float $nsBeta1, float $nsBeta2, float $nsBeta3, MacroState $state, float $termPremium10y = 0.0, float $longEndPremium = 0.0): float
     {
         // Vayanos & Vila (2021) Preferred-Habitat Model: duration extraction under QE/QT compresses term premium by tenor duration
-        $preferredHabitatShift = $this->mathUtility->calculatePreferredHabitatTermPremiumShift(
-            balanceSheetIntensity: $state->balanceSheetIntensity,
+        return $this->mathUtility->calculateSovereignZeroYield(
             tau: $t,
-            habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY
-        );
-        $durationScale = MathUtility::calculateTermPremiumDurationScale($t, MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS);
-        $termPremium = ($termPremium10y * min(1.0, $durationScale)) + ($longEndPremium * max(0.0, $durationScale - 1.0));
-
-        $yield = $this->mathUtility->calculateSvenssonYield(
             level: $level,
             slope: $nsBeta1,
             curvature1: $nsBeta2,
             curvature2: $nsBeta3,
-            tau: $t,
             lambda1: MacroEngine::SVENSSON_LAMBDA_1,
             lambda2: MacroEngine::SVENSSON_LAMBDA_2,
-            slopeLambda: MacroEngine::SVENSSON_SLOPE_LAMBDA
+            slopeLambda: MacroEngine::SVENSSON_SLOPE_LAMBDA,
+            termPremium10y: $termPremium10y,
+            longEndPremium: $longEndPremium,
+            termPremiumHorizonYears: MacroEngine::TERM_PREMIUM_DURATION_HORIZON_YEARS,
+            balanceSheetIntensity: $state->balanceSheetIntensity,
+            habitatSensitivity: MacroEngine::PREFERRED_HABITAT_DURATION_SENSITIVITY,
+            effectiveLowerBound: MacroEngine::EFFECTIVE_LOWER_BOUND
         );
-
-        return max(MacroEngine::EFFECTIVE_LOWER_BOUND, $yield + $termPremium + $preferredHabitatShift);
     }
 
     /**

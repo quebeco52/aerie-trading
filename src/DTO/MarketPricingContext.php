@@ -45,6 +45,14 @@ class MarketPricingContext
         public float $baselineMargin = 0.20,
         public float $accrualsRatio = 0.0,
         /** Capital actually employed per share (equity + debt + deferred tax - cash); 0 when the caller has no balance sheet. */
-        public float $investedCapitalPerShare = 0.0
+        public float $investedCapitalPerShare = 0.0,
+        /**
+         * Annualized variance this name's order flow has actually been supplying, from the measured EMA.
+         *
+         * The diffusion gives back exactly this much, so real flow and the reduced-form process it stands
+         * in for are not both counted. Zero for a name nobody trades, which is the correct answer: its
+         * calibrated volatility is left alone.
+         */
+        public float $orderFlowVariance = 0.0
     ) {}
 }

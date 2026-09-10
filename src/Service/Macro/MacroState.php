@@ -77,6 +77,9 @@ class MacroState
     public float $structuralSlope = -0.0150;
     public float $nsCurvature = 0.0;
     public float $nsCurvature2 = 0.0;
+    public float $nsBeta1 = -0.0175;
+    public float $nsBaseTermPremium = MacroEngine::NS_BASE_TERM_PREMIUM;
+    public float $nsLongEndPremium = MacroEngine::NS_BASE_TERM_PREMIUM;
 
     public float $yield2y = 0.0275;
     public float $yield2yEma = 0.0275;
@@ -269,6 +272,9 @@ class MacroState
         $state->structuralSlope = $data['structural_slope'] ?? -0.0150;
         $state->nsCurvature = $data['ns_curvature'] ?? 0.0;
         $state->nsCurvature2 = (float) ($data['ns_curvature2'] ?? 0.0);
+        $state->nsBeta1 = (float) ($data['ns_beta1'] ?? ($state->policyRate - $state->nsLevel));
+        $state->nsBaseTermPremium = (float) ($data['ns_base_term_premium'] ?? MacroEngine::NS_BASE_TERM_PREMIUM);
+        $state->nsLongEndPremium = (float) ($data['ns_long_end_premium'] ?? MacroEngine::NS_BASE_TERM_PREMIUM);
 
         $state->yield2y = $data['yield_2y'] ?? 0.0275;
         $state->yield2yEma = $data['yield_2y_ema'] ?? $state->yield2y;
@@ -448,6 +454,9 @@ class MacroState
             'structural_slope' => $this->structuralSlope,
             'ns_curvature' => $this->nsCurvature,
             'ns_curvature2' => $this->nsCurvature2,
+            'ns_beta1' => $this->nsBeta1,
+            'ns_base_term_premium' => $this->nsBaseTermPremium,
+            'ns_long_end_premium' => $this->nsLongEndPremium,
             'yield_2y' => $this->yield2y,
             'yield_2y_ema' => $this->yield2yEma,
             'yield_5y' => $this->yield5y,

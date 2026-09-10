@@ -982,6 +982,13 @@ class MacroEngine
         $state->nsCurvature = $yieldData['curvature'];
         $state->nsCurvature2 = $yieldData['curvature2'];
 
+        // The factors the curve was actually fitted with, kept so the bond desk discounts an off-benchmark
+        // maturity off the same function that produced the quoted 2y/5y/10y/30y rather than off a curve
+        // reverse-engineered from those four points.
+        $state->nsBeta1 = $yieldData['beta1'];
+        $state->nsBaseTermPremium = $yieldData['base_term_premium'];
+        $state->nsLongEndPremium = $yieldData['long_end_premium'];
+
         $state->termPremium10y = $yieldData['term_premium_10y'];
         $state->riskNeutral10y = $yieldData['risk_neutral_10y'];
 

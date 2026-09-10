@@ -112,7 +112,7 @@ function initStockPage() {
                 console.error('Error updating price UI:', err);
             }
             try {
-                updateLivePricePoint(newPrice);
+                updateLivePricePoint(newPrice, stockUpdate.volume);
             } catch (err) {
                 console.error('Error updating live chart:', err);
             }

@@ -43,6 +43,20 @@ class TradeOrder
     #[ORM\Column(type: Types::DECIMAL, precision: 18, scale: 4, nullable: true)]
     private ?string $executionPrice = null;
 
+    /**
+     * Currency paid crossing the bid-ask spread on this fill.
+     *
+     * Recorded rather than derived so a fill can be explained after the fact. Without the breakdown, an
+     * order that filled three percent above the last quote is indistinguishable from a bug; with it, the
+     * spread and the size are each accounted for separately.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 18, scale: 4, nullable: true)]
+    private ?string $spreadCost = null;
+
+    /** Currency paid to this order's own temporary market impact. */
+    #[ORM\Column(type: Types::DECIMAL, precision: 18, scale: 4, nullable: true)]
+    private ?string $impactCost = null;
+
     #[ORM\Column(length: 20)]
     private ?string $status = 'OPEN'; // 'OPEN', 'FILLED', 'CANCELLED'
 
@@ -147,6 +161,30 @@ class TradeOrder
     public function setLimitPrice(?string $limitPrice): static
     {
         $this->limitPrice = $limitPrice;
+        return $this;
+    }
+
+    public function getSpreadCost(): ?string
+    {
+        return $this->spreadCost;
+    }
+
+    public function setSpreadCost(?string $spreadCost): static
+    {
+        $this->spreadCost = $spreadCost;
+
+        return $this;
+    }
+
+    public function getImpactCost(): ?string
+    {
+        return $this->impactCost;
+    }
+
+    public function setImpactCost(?string $impactCost): static
+    {
+        $this->impactCost = $impactCost;
+
         return $this;
     }
 

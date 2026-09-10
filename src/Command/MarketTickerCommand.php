@@ -2,8 +2,11 @@
 
 namespace App\Command;
 
+use App\Entity\Bond;
 use App\Entity\Stock;
+use App\Service\Market\BondTracker;
 use App\Service\Market\StockTracker;
+use App\Service\Market\TreasuryAuctionService;
 use App\Service\Market\EtfTracker;
 use App\Service\Macro\MacroEngine;
 use App\Service\Market\MarketOperator;
@@ -64,6 +67,8 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         private EntityManagerInterface $entityManager,
         private StockTracker $stockTracker,
         private EtfTracker $etfTracker,
+        private BondTracker $bondTracker,
+        private TreasuryAuctionService $treasuryAuction,
         private MacroEngine $macroEngine,
         private MarketOperator $marketOperator,
         private Portfolio $portfolio,
@@ -115,6 +120,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         // Fetch the stocks ONCE into RAM before the loop starts!
         $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
         $lbiEtf = $this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
+        $bonds = $this->entityManager->getRepository(Bond::class)->findBy(['status' => Bond::STATUS_ACTIVE]);
 
         $dt = 1.0 / $this->ticksPerYear;
         $tickCount = (int) ($this->redis->get('simulation_tick_count') ?: 0);
@@ -123,8 +129,21 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
         $operatorInterval = (int) max(1, $this->ticksPerYear / 24);  // Operator audits once a game "month"
         $snapshotInterval = (int) max(1, $this->ticksPerYear / 52);  // Snapshots once a game "week"
         $quarterlyInterval = (int) max(1, $this->ticksPerYear / 4);   // Snapshots once a game "quarter"
+        $auctionInterval = TreasuryAuctionService::auctionIntervalTicks($this->ticksPerYear);
 
         $conn = $this->entityManager->getConnection();
+
+        /**
+         * Open, high, low and volume accumulating between history writes, keyed by ticker.
+         *
+         * A history tick is one bar and many ticks fall inside it, so the extremes have to be carried
+         * rather than sampled: the close alone cannot show that a name traded eight percent lower at some
+         * point in the bar and recovered. Plain arrays, deliberately — this has to survive the
+         * EntityManager clear that happens on every history tick.
+         *
+         * @var array<string, array{open: float, high: float, low: float, volume: float}>
+         */
+        $bars = [];
 
         while ($this->keepRunning) {
 
@@ -179,7 +198,54 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                 $etfUpdate = $this->etfTracker->updateIndex($totalMarketCap, $isHistoryTick, 'LBI', $lbiEtf);
 
-                $allUpdates = array_merge($stockUpdates, [$etfUpdate]);
+                // The bond desk. Coupons, redemptions and the mark all happen inside the same tick
+                // transaction as the equity book, so a crash mid-tick cannot leave a coupon credited
+                // against a mark that was rolled back.
+                $bondResult = $this->bondTracker->updateBonds($bonds, $macroState, $isHistoryTick);
+
+                // A matured issue stops trading, so drop it from the working set immediately rather than
+                // waiting for the next reload: it would otherwise be re-marked and re-redeemed every tick
+                // until the next history tick refreshed the list.
+                if ($bondResult['matured'] !== []) {
+                    $maturedIds = array_map(static fn (Bond $b): ?int => $b->getId(), $bondResult['matured']);
+                    $bonds = array_values(array_filter(
+                        $bonds,
+                        static fn (Bond $b): bool => !in_array($b->getId(), $maturedIds, true)
+                    ));
+                }
+
+                // Quarterly refunding: a fresh on-the-run at every tenor, so a benchmark maturity is always
+                // available to trade rather than ageing out of existence.
+                if ($tickCount % $auctionInterval === 0) {
+                    $newIssues = $this->treasuryAuction->conductAuction(
+                        $macroState->sovereignCurve(),
+                        $macroState->totalTime,
+                        $bonds
+                    );
+
+                    foreach ($newIssues as $newIssue) {
+                        $bonds[] = $newIssue;
+                    }
+                }
+
+                $allUpdates = array_merge($stockUpdates, [$etfUpdate], $bondResult['updates']);
+
+                foreach ($stockUpdates as $update) {
+                    if (!empty($update['is_bankrupt'])) {
+                        continue;
+                    }
+
+                    $ticker = $update['ticker'];
+                    $price = (float) $update['price'];
+
+                    if (!isset($bars[$ticker])) {
+                        $bars[$ticker] = ['open' => $price, 'high' => $price, 'low' => $price, 'volume' => 0.0];
+                    }
+
+                    $bars[$ticker]['high'] = max($bars[$ticker]['high'], $price);
+                    $bars[$ticker]['low'] = min($bars[$ticker]['low'], $price);
+                    $bars[$ticker]['volume'] += (float) ($update['volume'] ?? 0.0);
+                }
 
                 // Limit Order Check
                 foreach ($allUpdates as $update) {
@@ -213,15 +279,29 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
 
                     $historyData = $result['history'];
                     if (!empty($historyData)) {
-                        $sql = "INSERT INTO stock_history (stock_id, price, recorded_at) VALUES ";
+                        $sql = "INSERT INTO stock_history (stock_id, price, open_price, high_price, low_price, volume, recorded_at) VALUES ";
                         $insertValues = [];
                         $params = [];
                         $now = (new \DateTime())->format('Y-m-d H:i:s');
 
                         foreach ($historyData as $row) {
-                            $insertValues[] = "(?, ?, ?)";
+                            // The bar the closing price belongs to. Absent only for a name that appeared
+                            // mid-bar, in which case a one-tick bar is the honest answer rather than a
+                            // fabricated range.
+                            $bar = $bars[$row['ticker']] ?? [
+                                'open' => $row['price'],
+                                'high' => $row['price'],
+                                'low' => $row['price'],
+                                'volume' => 0.0,
+                            ];
+
+                            $insertValues[] = "(?, ?, ?, ?, ?, ?, ?)";
                             $params[] = $row['stock_id'];
                             $params[] = $row['price'];
+                            $params[] = $bar['open'];
+                            $params[] = max($bar['high'], (float) $row['price']);
+                            $params[] = min($bar['low'], (float) $row['price']);
+                            $params[] = (int) round($bar['volume']);
                             $params[] = $now;
                         }
 
@@ -230,9 +310,15 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                         $conn->executeStatement($sql, $params);
                     }
 
+                    // The bar is written; the next one opens at the next tick's price.
+                    $bars = [];
+
+                    $this->bondTracker->recordHistory($bondResult['history']);
+
                     $this->entityManager->clear();
                     $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
                     $lbiEtf = $this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
+                    $bonds = $this->entityManager->getRepository(Bond::class)->findBy(['status' => Bond::STATUS_ACTIVE]);
                 }
 
                 $nowStr = (new \DateTime())->format('Y-m-d H:i:s');
@@ -246,7 +332,12 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     }
 
                     $cacheKey = "chart_buffer:{$update['ticker']}";
-                    $point = json_encode(['price' => $update['price'], 'recorded_at' => $nowStr]);
+
+                    // Bonds buffer the CLEAN price, because that is what bond_history stores. Buffering the
+                    // dirty price instead would splice an accrual sawtooth onto a flat historical series at
+                    // the join between the two, and the chart would show a jump the instrument never made.
+                    $chartPrice = $update['clean_price'] ?? $update['price'];
+                    $point = json_encode(['price' => $chartPrice, 'recorded_at' => $nowStr]);
 
                     $pipeline->lPush($cacheKey, $point);
                     $pipeline->lTrim($cacheKey, 0,  $redisBufferSize - 1);
@@ -263,10 +354,12 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                     'economic_cycle' => $macroState->economicCycleLabel(),
                     'council_rate' => $macroState->policyRate,
                     'macro' => $macroState->toArray(),
+                    'bond_curve' => $bondResult['curve'],
                 ]));
 
                 $this->redis->set('stocks_live_data', json_encode($stockUpdates));
                 $this->redis->set('etf_live_data', json_encode([$etfUpdate]));
+                $this->redis->set('bond_live_data', json_encode($bondResult['updates']));
                 $this->redis->set('simulation_tick_count', $tickCount);
 
                 // Save Portfolio Snapshots once a "Simulation Week"
@@ -310,6 +403,7 @@ class MarketTickerCommand extends Command implements SignalableCommandInterface
                 $this->entityManager->clear();
                 $stocks = $this->entityManager->getRepository(Stock::class)->findAll();
                 $lbiEtf = $this->entityManager->getRepository(Etf::class)->findOneBy(['ticker' => 'LBI']);
+                $bonds = $this->entityManager->getRepository(Bond::class)->findBy(['status' => Bond::STATUS_ACTIVE]);
 
                 sleep(5);
             }

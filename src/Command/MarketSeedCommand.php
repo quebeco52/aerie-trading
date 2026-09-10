@@ -29,7 +29,8 @@ class MarketSeedCommand extends Command
         private UserPasswordHasherInterface $passwordHasher,
         private MathUtility $mathUtility,
         private \App\Service\Corporate\DebtEngine $debtEngine,
-        private \App\Service\Market\MarketEngine $marketEngine
+        private \App\Service\Market\MarketEngine $marketEngine,
+        private \App\Service\Market\TreasuryAuctionService $treasuryAuction
     ) {
         parent::__construct();
     }
@@ -50,8 +51,15 @@ class MarketSeedCommand extends Command
             macroCreditSpreadEma: 0.02,
             marketVolatilityEma: 0.15,
             corporateTaxRate: MacroEngine::BASE_CORPORATE_TAX_RATE,
-            equityRiskPremium: 0.045
+            equityRiskPremium: 0.045,
 
+            // The fitted curve factors the bond ladder is struck off. beta1 is the policy rate minus the
+            // level, which is what the curve function expects; the yield fields above are outputs of a
+            // curve, not inputs to one, and cannot reconstruct it.
+            nsLevel: MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION,
+            nsBeta1: 0.04 - (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION),
+            nsBaseTermPremium: MacroEngine::NS_BASE_TERM_PREMIUM,
+            nsLongEndPremium: MacroEngine::NS_BASE_TERM_PREMIUM
         );
 
         // Loop through ETFs
@@ -81,6 +89,13 @@ class MarketSeedCommand extends Command
                 $stock->setJumpIntensity((string) $stockData['jump_intensity']);
                 $stock->setJumpVol((string) $stockData['jump_vol']);
                 $stock->setSystemicImportance($stockData['systemic_importance'] ?? 'none');
+
+                // How much of the float changes hands in a year: the structural input behind this name's
+                // depth, its spread, and how far a given order size moves it.
+                $stock->setTurnoverRatio(
+                    \App\Service\Market\LiquidityEngine::structuralTurnoverRatio((float) $stockData['volatility'])
+                );
+                $stock->setImpactVarianceEma(0.0);
 
                 $businessModel = \App\Data\Sectors::INDUSTRY_METRICS[$stockData['industry'] ?? 'General']['business_model'] ?? 'none';
                 $isFinancial = \App\Data\Sectors::isFinancial($businessModel);
@@ -329,6 +344,17 @@ class MarketSeedCommand extends Command
         */
 
         $this->entityManager->flush();
+
+        // Open the bond desk with one on-the-run at each tenor. Only the benchmarks are sold here; the rest
+        // of the ladder fills in as the quarterly refunding runs, which is also how a real curve gets its
+        // off-the-run issues rather than having them appear fully formed.
+        $existingBonds = (int) $this->entityManager->getConnection()->fetchOne('SELECT COUNT(*) FROM bonds');
+        if ($existingBonds === 0) {
+            $issued = $this->treasuryAuction->conductAuction($dummyMacro->sovereignCurve(), 0.0);
+            $this->entityManager->flush();
+            $io->text(sprintf('Opened the bond desk with %d benchmark issues.', count($issued)));
+        }
+
         $io->success('Database successfully seeded with full fundamental physics!');
 
         return Command::SUCCESS;

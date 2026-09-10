@@ -28,7 +28,8 @@ class MarketResetCommand extends Command
         private UserPasswordHasherInterface $passwordHasher,
         private MathUtility $mathUtility,
         private \App\Service\Market\MarketEngine $marketEngine,
-        private \App\Service\Corporate\DebtEngine $debtEngine
+        private \App\Service\Corporate\DebtEngine $debtEngine,
+        private \App\Service\Market\TreasuryAuctionService $treasuryAuction
     ) {
         parent::__construct();
     }
@@ -48,6 +49,14 @@ class MarketResetCommand extends Command
         $conn->executeStatement('TRUNCATE TABLE etf_events');
         $conn->executeStatement('TRUNCATE TABLE user_stocks');
         $conn->executeStatement('TRUNCATE TABLE user_etfs');
+        $conn->executeStatement('TRUNCATE TABLE user_bonds');
+        $conn->executeStatement('TRUNCATE TABLE bond_history');
+        $conn->executeStatement('TRUNCATE TABLE coupon_payment');
+
+        // The whole ladder goes, not just its history. A bond's economics are anchored to simulation time,
+        // so an issue sold at year 15 of the old timeline becomes a 25-year bond the moment the clock is
+        // reset to zero, with a coupon struck off a curve that no longer exists.
+        $conn->executeStatement('TRUNCATE TABLE bonds');
         $conn->executeStatement('TRUNCATE TABLE portfolio_history');
         $conn->executeStatement('TRUNCATE TABLE corporate_report');
         $conn->executeStatement('TRUNCATE TABLE macro_report');
@@ -96,8 +105,15 @@ class MarketResetCommand extends Command
             macroCreditSpreadEma: 0.02,
             marketVolatilityEma: 0.15,
             corporateTaxRate: MacroEngine::BASE_CORPORATE_TAX_RATE,
-            equityRiskPremium: 0.045
+            equityRiskPremium: 0.045,
 
+            // The fitted curve factors the bond ladder is struck off. beta1 is the policy rate minus the
+            // level, which is what the curve function expects; the yield fields above are outputs of a
+            // curve, not inputs to one, and cannot reconstruct it.
+            nsLevel: MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION,
+            nsBeta1: 0.04 - (MacroEngine::BASE_NATURAL_RATE + MacroEngine::TARGET_INFLATION),
+            nsBaseTermPremium: MacroEngine::NS_BASE_TERM_PREMIUM,
+            nsLongEndPremium: MacroEngine::NS_BASE_TERM_PREMIUM
         );
 
         foreach (InitialMarket::STOCKS as $stockData) {
@@ -286,6 +302,8 @@ class MarketResetCommand extends Command
                     lagged_demand_gap = NULL,
                     managed_accrual_bank = 0.0000,
                     price_momentum_trend = 0.0,
+                    turnover_ratio = :turnover_ratio,
+                    impact_variance_ema = 0.0,
                     reported_operating_margin = NULL,
                     quarterly_net_income_history = NULL,
                     earnings_surprise_history = NULL
@@ -295,6 +313,9 @@ class MarketResetCommand extends Command
                     'price' => $neutralPrice,
                     'shares' => $stockData['shares_outstanding'],
                     'vol' => $stockData['volatility'],
+                    // Structural, derived from the name's own volatility rather than stored per ticker, so
+                    // a retuned volatility cannot leave a turnover behind that no longer matches it.
+                    'turnover_ratio' => \App\Service\Market\LiquidityEngine::structuralTurnoverRatio((float) $stockData['volatility']),
                     'current_vol' => $stockData['volatility'],
                     'beta' => $stockData['beta'],
                     'jump_int' => $stockData['jump_intensity'],
@@ -438,6 +459,10 @@ class MarketResetCommand extends Command
         
         $this->entityManager->flush();
         */
+
+        // Reopen the bond desk on the fresh timeline.
+        $this->treasuryAuction->conductAuction($dummyMacro->sovereignCurve(), 0.0);
+        $this->entityManager->flush();
 
         $io->success('Market Reset Complete! You can now start the ticker.');
         return Command::SUCCESS;

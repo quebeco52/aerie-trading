@@ -28,6 +28,14 @@ return [
         'path' => './assets/js/pages/stock.js',
         'entrypoint' => true,
     ],
+    'pages/bond' => [
+        'path' => './assets/js/pages/bond.js',
+        'entrypoint' => true,
+    ],
+    'pages/bond-ladder' => [
+        'path' => './assets/js/pages/bond-ladder.js',
+        'entrypoint' => true,
+    ],
     '@hotwired/stimulus' => [
         'version' => '3.2.2',
     ],

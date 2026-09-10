@@ -30,6 +30,18 @@ export function updatePriceUI(newPrice, stockUpdate, config = {}) {
     if (!config.isEtf) {
         const currentEps = stockUpdate.eps !== undefined ? stockUpdate.eps : config.eps;
 
+        const advEl = document.getElementById('stat-adv');
+        if (advEl && stockUpdate.adv_shares !== undefined) {
+            advEl.textContent = formatLarge(stockUpdate.adv_shares);
+        }
+
+        // The spread moves with volatility, so it has to be repriced with everything else. Left static it
+        // would keep quoting a calm-market cost through a crash.
+        const spreadEl = document.getElementById('stat-spread');
+        if (spreadEl && stockUpdate.half_spread_bps !== undefined) {
+            spreadEl.textContent = `${Number(stockUpdate.half_spread_bps).toFixed(1)} bps`;
+        }
+
         const mktCapEl = document.getElementById('stat-mkt-cap');
         if (mktCapEl && stockUpdate.market_cap !== undefined) {
             mktCapEl.textContent = formatLarge(stockUpdate.market_cap, '$');

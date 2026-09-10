@@ -29,11 +29,12 @@ class Portfolio
         SELECT o.user_id,
                SUM(CASE WHEN o.action = 'BUY'
                         THEN COALESCE(o.limit_price, 0) * o.quantity
-                        ELSE o.quantity * COALESCE(s.price, e.price, 0)
+                        ELSE o.quantity * COALESCE(s.price, e.price, b.price, 0)
                    END) AS escrow_val
         FROM trade_orders o
         LEFT JOIN stocks s ON s.ticker = o.ticker AND o.asset_type = 'STOCK'
         LEFT JOIN etfs   e ON e.ticker = o.ticker AND o.asset_type = 'ETF'
+        LEFT JOIN bonds  b ON b.ticker = o.ticker AND o.asset_type = 'BOND'
         WHERE o.status = 'OPEN'
         GROUP BY o.user_id
     ";
@@ -83,7 +84,7 @@ class Portfolio
         $snapshotSql = "
             INSERT INTO portfolio_history (user_id, total_value, recorded_at)
             SELECT u.id,
-                   (u.cash_balance + COALESCE(stock_totals.stock_val, 0) + COALESCE(etf_totals.etf_val, 0) + COALESCE(escrow.escrow_val, 0)),
+                   (u.cash_balance + COALESCE(stock_totals.stock_val, 0) + COALESCE(etf_totals.etf_val, 0) + COALESCE(bond_totals.bond_val, 0) + COALESCE(escrow.escrow_val, 0)),
                    :now
             FROM users u
             LEFT JOIN (
@@ -98,6 +99,12 @@ class Portfolio
                 JOIN etfs e ON ue.etf_id = e.id
                 GROUP BY ue.user_id
             ) etf_totals ON etf_totals.user_id = u.id
+            LEFT JOIN (
+                SELECT ub.user_id, SUM(ub.quantity * b.price) as bond_val
+                FROM user_bonds ub
+                JOIN bonds b ON ub.bond_id = b.id
+                GROUP BY ub.user_id
+            ) bond_totals ON bond_totals.user_id = u.id
             LEFT JOIN (" . self::OPEN_ORDER_ESCROW_SQL . ") escrow ON escrow.user_id = u.id
         ";
 
@@ -123,14 +130,16 @@ class Portfolio
             SELECT (
                 COALESCE((SELECT SUM(us.quantity * s.price) FROM user_stocks us JOIN stocks s ON us.stock_id = s.id WHERE us.user_id = :user_id), 0) +
                 COALESCE((SELECT SUM(ue.quantity * e.price) FROM user_etfs ue JOIN etfs e ON ue.etf_id = e.id WHERE ue.user_id = :user_id), 0) +
+                COALESCE((SELECT SUM(ub.quantity * b.price) FROM user_bonds ub JOIN bonds b ON ub.bond_id = b.id WHERE ub.user_id = :user_id), 0) +
                 COALESCE((
                     SELECT SUM(CASE WHEN o.action = 'BUY'
                                     THEN COALESCE(o.limit_price, 0) * o.quantity
-                                    ELSE o.quantity * COALESCE(s2.price, e2.price, 0)
+                                    ELSE o.quantity * COALESCE(s2.price, e2.price, b2.price, 0)
                                END)
                     FROM trade_orders o
                     LEFT JOIN stocks s2 ON s2.ticker = o.ticker AND o.asset_type = 'STOCK'
                     LEFT JOIN etfs   e2 ON e2.ticker = o.ticker AND o.asset_type = 'ETF'
+                    LEFT JOIN bonds  b2 ON b2.ticker = o.ticker AND o.asset_type = 'BOND'
                     WHERE o.user_id = :user_id AND o.status = 'OPEN'
                 ), 0)
             ) as total_val

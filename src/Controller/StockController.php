@@ -40,7 +40,8 @@ class StockController extends AbstractController
         \App\Service\Corporate\DebtEngine $debtEngine,
         \App\Service\Market\PriceChangeFeed $priceChangeFeed,
         \App\Service\User\CostBasisCalculator $costBasis,
-        \App\Service\User\DividendIncomeCalculator $dividendIncome
+        \App\Service\User\DividendIncomeCalculator $dividendIncome,
+        \App\Service\Market\LiquidityEngine $liquidityEngine
     ): Response
     {
         $isEtf = false;
@@ -338,6 +339,12 @@ class StockController extends AbstractController
             'lifecycleStage' => $lifecycleStage,
             'lifecycleStages' => \App\Data\LifecycleStage::cases(),
             'dividendYield' => $dividendYield,
+            // Depth and the cost of crossing it. Shown because a page that quotes a price without saying
+            // what size costs is only telling half of what a trade is going to do.
+            'advShares' => $isEtf ? 0.0 : $liquidityEngine->averageDailyVolume($asset),
+            'halfSpread' => $isEtf
+                ? \App\Service\Math\FinancialConstants::ETF_HALF_SPREAD
+                : $liquidityEngine->halfSpreadFraction($asset),
         ]);
     }
 
@@ -395,13 +402,27 @@ class StockController extends AbstractController
             $targetId = $stock->getId();
             $tableName = 'stock_history';
             $foreignKey = 'stock_id';
+            $priceColumn = 'price';
         } else {
             $etf = $entityManager->getRepository(Etf::class)->findOneBy(['ticker' => $ticker]);
-            if (!$etf) return $this->json([]);
+            if ($etf) {
+                $targetId = $etf->getId();
+                $tableName = 'etf_history';
+                $foreignKey = 'etf_id';
+                $priceColumn = 'price';
+            } else {
+                $bond = $entityManager->getRepository(\App\Entity\Bond::class)->findOneBy(['ticker' => $ticker]);
+                if (!$bond) return $this->json([]);
 
-            $targetId = $etf->getId();
-            $tableName = 'etf_history';
-            $foreignKey = 'etf_id';
+                $targetId = $bond->getId();
+                $tableName = 'bond_history';
+                $foreignKey = 'bond_id';
+
+                // Bonds chart CLEAN, matching what the ticker buffers into Redis for the short ranges.
+                // Charting the dirty price would draw the coupon accrual sawtooth as if it were price
+                // movement, and the series would jump at the join between the buffer and the table.
+                $priceColumn = 'clean_price';
+            }
         }
 
         // Count rows to determine step size
@@ -420,9 +441,16 @@ class StockController extends AbstractController
             $step = (int) ceil($actualCount / $maxChartPoints);
         }
 
-        // simple query
+        // Stocks carry a full bar; ETFs and bonds are a single series and select the close alone. Asking
+        // for open_price on etf_history would be a SQL error rather than a null.
+        $barColumns = $tableName === 'stock_history'
+            ? ', open_price, high_price, low_price, volume'
+            : '';
+
         $sql = sprintf(
-            'SELECT id, price, recorded_at FROM %s WHERE %s = :id ORDER BY recorded_at DESC LIMIT %d',
+            'SELECT id, %s AS price%s, recorded_at FROM %s WHERE %s = :id ORDER BY recorded_at DESC LIMIT %d',
+            $priceColumn,
+            $barColumns,
             $tableName,
             $foreignKey,
             (int)$dbLimit

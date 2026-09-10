@@ -167,6 +167,15 @@
 								<button class="range-btn flex-1 sm:flex-none shrink-0 px-1.5 sm:px-3 py-1 text-xs font-bold rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-center cursor-pointer" data-range="max">MAX</button>
 							</div>
 
+							{# Line or candles over the same bars. Candles only carry a real range on rows written
+							   since bars existed; older rows render flat, which is what actually happened. #}
+							{% if not isEtf %}
+								<div class="flex gap-1 mb-4 bg-surface-container-lowest p-1.5 rounded border border-outline-variant/15 w-max" role="group" aria-label="Chart style">
+									<button type="button" class="chart-style-btn shrink-0 px-3 py-1 text-xs font-bold rounded-lg bg-primary text-on-primary transition-colors cursor-pointer" data-style="area">Line</button>
+									<button type="button" class="chart-style-btn shrink-0 px-3 py-1 text-xs font-bold rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors cursor-pointer" data-style="candles">Candles</button>
+								</div>
+							{% endif %}
+
 							<div class="w-full h-75 md:h-112.5 relative rounded overflow-hidden">
 								<div id="chart-spinner" class="hidden absolute inset-0 z-50 items-center justify-center bg-surface-container-low/80 transition-opacity duration-300">
 									<svg class="animate-spin h-8 w-8 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -419,6 +428,14 @@
 									<div class="py-2 flex justify-between items-center">
 										<dt class="text-sm font-semibold text-on-surface-variant">Dividend Yield</dt>
 										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-div-yield">{{ dividendYield > 0 ? (dividendYield * 100)|number_format(2) ~ '%' : '-' }}</dd>
+									</div>
+									<div class="py-2 flex justify-between items-center">
+										<dt class="text-sm font-semibold text-on-surface-variant">Avg Daily Volume</dt>
+										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-adv">{{ advShares|format_large }}</dd>
+									</div>
+									<div class="py-2 flex justify-between items-center">
+										<dt class="text-sm font-semibold text-on-surface-variant">Bid-Ask Spread</dt>
+										<dd class="font-bold text-on-surface font-mono tabular-nums" id="stat-spread">{{ (halfSpread * 20000)|number_format(1) }} bps</dd>
 									</div>
 									<div class="py-2 flex justify-between items-center">
 										<dt class="text-sm font-semibold text-on-surface-variant">Volatility</dt>

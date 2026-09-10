@@ -37,5 +37,10 @@ services:
     # Zero-sum industry share ledger persists in Redis; the in-memory store is for tests and harnesses.
     App\Service\Corporate\Industry\IndustryShareStoreInterface:
         alias: App\Service\Corporate\Industry\RedisIndustryShareStore
+
+    # Order flow crosses a process boundary — the web process records fills, the ticker drains them — so
+    # Redis is the real store. The in-memory one is for tests and headless harnesses.
+    App\Service\Market\Flow\OrderFlowStoreInterface:
+        alias: App\Service\Market\Flow\RedisOrderFlowStore
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

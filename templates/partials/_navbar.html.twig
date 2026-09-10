@@ -5,6 +5,7 @@
     { href: '/dashboard', label: 'Portfolio', match: 'exact' },
     { href: '/leaderboard', label: 'Leaderboard', match: 'exact' },
     { href: '/screener', label: 'Screener', match: 'exact' },
+    { href: '/bonds', label: 'Bonds', match: 'starts_with', prefix: '/bond' },
     { href: '/district/glasswater-row', label: 'District', match: 'starts_with', prefix: '/district' }
 ] %}
 {% set current_path = app.request.pathInfo %}

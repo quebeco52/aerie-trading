@@ -2,12 +2,12 @@
 
 namespace App\Service\Market;
 
-use App\Entity\Etf;
+use App\DTO\ExecutionQuoteDTO;
 use App\Entity\Stock;
 use App\Entity\TradeOrder;
 use App\Entity\User;
-use App\Entity\UserEtf;
-use App\Entity\UserStock;
+use App\Service\Market\Flow\OrderFlowStoreInterface;
+use App\Service\Math\MathUtility;
 use App\Service\User\Portfolio;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -27,7 +27,10 @@ class TradeExecutionService
         private EntityManagerInterface $em,
         private Portfolio $portfolio,
         private \Redis $redis,
-        private \Psr\Log\LoggerInterface $logger
+        private \Psr\Log\LoggerInterface $logger,
+        private AssetResolver $assetResolver,
+        private LiquidityEngine $liquidityEngine,
+        private OrderFlowStoreInterface $orderFlow
     ) {}
 
     public function executeOrder(User $user, string $ticker, string $action, string $orderType, int $quantity, ?string $limitPrice = null): void
@@ -50,34 +53,43 @@ class TradeExecutionService
             $this->em->lock($user, \Doctrine\DBAL\LockMode::PESSIMISTIC_WRITE);
             $this->em->refresh($user);
 
-            $stock = $this->em->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);
-            $etf = null;
-            if (!$stock) {
-                $etf = $this->em->getRepository(Etf::class)->findOneBy(['ticker' => $ticker]);
-            }
+            $asset = $this->assetResolver->resolve($ticker);
 
-            if (!$stock && !$etf) {
+            if ($asset === null) {
                 throw new \Exception('Asset not found.');
             }
 
-            if ($stock && $stock->isBankrupt()) {
-                throw new \Exception("Trading is halted for {$stock->getTicker()}. The company is bankrupt.");
+            $haltReason = $asset->haltReason();
+            if ($haltReason !== null) {
+                throw new \Exception($haltReason);
             }
 
-            $asset = $stock ?? $etf;
-            $assetType = $stock ? 'STOCK' : 'ETF';
-            $livePrice = (float) $asset->getPrice();
-            $livePriceStr = (string) $asset->getPrice();
+            $assetType = $asset->type;
+            $livePrice = (float) $asset->price();
             $quantityStr = (string) $quantity;
-            $totalValueStr = \bcmul($livePriceStr, $quantityStr, 4);
             $currentCashStr = (string) $user->getCashBalance();
 
-            $userAsset = null;
-            if ($stock) {
-                $userAsset = $this->em->getRepository(UserStock::class)->findOneBy(['user' => $user, 'stock' => $stock]);
-            } else {
-                $userAsset = $this->em->getRepository(UserEtf::class)->findOneBy(['user' => $user, 'etf' => $etf]);
+            $stock = $asset->entity instanceof Stock ? $asset->entity : null;
+
+            // Size has to be checked against depth before anything else: past a couple of days' volume the
+            // square-root law is extrapolation, and quoting an extrapolated price would be a made-up number
+            // presented as a fill.
+            if ($stock !== null) {
+                $maximum = $this->liquidityEngine->maximumOrderSize($stock);
+                if ($quantity > $maximum) {
+                    throw new \Exception(sprintf(
+                        'Order exceeds available liquidity in %s. The desk will take up to %s shares at once; work larger positions in pieces.',
+                        $asset->ticker(),
+                        number_format(floor($maximum))
+                    ));
+                }
             }
+
+            $quote = $this->liquidityEngine->quoteAsset($stock, $assetType, $action, $quantity, $livePrice);
+            $livePriceStr = MathUtility::formatDecimal($quote->executionPrice, 4);
+            $totalValueStr = \bcmul($livePriceStr, $quantityStr, 4);
+
+            $userAsset = $this->assetResolver->findHolding($user, $asset);
 
             $order = new TradeOrder();
             $order->setUser($user);
@@ -95,19 +107,16 @@ class TradeExecutionService
                         throw new \Exception('Insufficient funds.');
                     }
                     $user->setCashBalance(\bcsub($currentCashStr, $totalValueStr, 4));
-                    $userAsset = $this->addAssetToUser($user, $stock, $etf, $userAsset, $quantity);
+                    $userAsset = $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
                 } else { // SELL
                     if (!$userAsset || $userAsset->getQuantity() < $quantity) {
                         throw new \Exception('Insufficient shares.');
                     }
                     $user->setCashBalance(\bcadd($currentCashStr, $totalValueStr, 4));
-                    $this->removeAssetFromUser($userAsset, $quantity);
+                    $this->assetResolver->removeFromHolding($userAsset, $quantity);
                 }
 
-                $order->setFilledQuantity($quantity);
-                $order->setExecutionPrice($livePriceStr);
-                $order->setStatus('FILLED');
-                $order->setFilledAt(new \DateTime());
+                $this->recordFill($order, $quote, $quantity, $action, $asset->ticker(), $assetType);
                 $this->em->persist($order);
 
             } else if ($orderType === 'LIMIT') {
@@ -115,9 +124,12 @@ class TradeExecutionService
                 $shouldFillImmediately = false;
                 $limitPriceFloat = (float) $limitPrice;
 
-                if ($action === 'BUY' && $limitPriceFloat >= $livePrice) {
+                // Tested against the price the order would actually fill at, not against mid. A limit is a
+                // promise about the worst price the trader will accept, and crossing on mid would break it
+                // the moment the spread or the order's own impact pushed the fill through the limit.
+                if ($action === 'BUY' && $limitPriceFloat >= $quote->executionPrice) {
                     $shouldFillImmediately = true;
-                } elseif ($action === 'SELL' && $limitPriceFloat <= $livePrice) {
+                } elseif ($action === 'SELL' && $limitPriceFloat <= $quote->executionPrice) {
                     $shouldFillImmediately = true;
                 }
 
@@ -128,18 +140,15 @@ class TradeExecutionService
                             throw new \Exception('Insufficient funds.');
                         }
                         $user->setCashBalance(\bcsub($currentCashStr, $totalValueStr, 4));
-                        $userAsset = $this->addAssetToUser($user, $stock, $etf, $userAsset, $quantity);
+                        $userAsset = $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
                     } else { // SELL
                         if (!$userAsset || $userAsset->getQuantity() < $quantity) {
                             throw new \Exception('Insufficient shares.');
                         }
                         $user->setCashBalance(\bcadd($currentCashStr, $totalValueStr, 4));
-                        $this->removeAssetFromUser($userAsset, $quantity);
+                        $this->assetResolver->removeFromHolding($userAsset, $quantity);
                     }
-                    $order->setFilledQuantity($quantity);
-                    $order->setExecutionPrice($livePriceStr);
-                    $order->setStatus('FILLED');
-                    $order->setFilledAt(new \DateTime());
+                    $this->recordFill($order, $quote, $quantity, $action, $asset->ticker(), $assetType);
                 } else {
                     // Escrow and save as OPEN
                     if ($action === 'BUY') {
@@ -152,7 +161,7 @@ class TradeExecutionService
                         if (!$userAsset || $userAsset->getQuantity() < $quantity) {
                             throw new \Exception('Insufficient shares for limit order.');
                         }
-                        $this->removeAssetFromUser($userAsset, $quantity);
+                        $this->assetResolver->removeFromHolding($userAsset, $quantity);
                     }
                     $order->setStatus('OPEN');
                 }
@@ -177,6 +186,28 @@ class TradeExecutionService
                 $this->em->getConnection()->rollBack();
             }
             throw $e;
+        }
+    }
+
+    /**
+     * Stamps a fill onto its order and reports the flow it generated.
+     *
+     * The signed quantity goes to the order flow store rather than moving the price here: impact is applied
+     * once per tick, on the ticker, against the net of everything that traded in that window. Applying it
+     * per order would let a trader split a position into a hundred pieces and pay a hundred separate
+     * square roots, which is cheaper than the one they should have paid.
+     */
+    private function recordFill(TradeOrder $order, ExecutionQuoteDTO $quote, int $quantity, string $action, string $ticker, string $assetType): void
+    {
+        $order->setFilledQuantity($quantity);
+        $order->setExecutionPrice(MathUtility::formatDecimal($quote->executionPrice, 4));
+        $order->setSpreadCost(MathUtility::formatDecimal($quote->spreadCost, 4));
+        $order->setImpactCost(MathUtility::formatDecimal($quote->impactCost, 4));
+        $order->setStatus('FILLED');
+        $order->setFilledAt(new \DateTime());
+
+        if ($assetType === 'STOCK') {
+            $this->orderFlow->record($ticker, $action === 'BUY' ? (float) $quantity : -(float) $quantity);
         }
     }
 
@@ -229,21 +260,14 @@ class TradeExecutionService
                 $escrowCashStr = \bcmul((string) $order->getLimitPrice(), (string) $quantity, 4);
                 $user->setCashBalance(\bcadd((string) $user->getCashBalance(), $escrowCashStr, 4));
             } else {
-                // Refund shares
-                $stock = $this->em->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);
-                $etf = null;
-                if (!$stock) {
-                    $etf = $this->em->getRepository(Etf::class)->findOneBy(['ticker' => $ticker]);
+                // Refund the escrowed units
+                $asset = $this->assetResolver->resolve($ticker);
+                if ($asset === null) {
+                    throw new \Exception('Asset not found.');
                 }
 
-                $userAsset = null;
-                if ($stock) {
-                    $userAsset = $this->em->getRepository(UserStock::class)->findOneBy(['user' => $user, 'stock' => $stock]);
-                } else {
-                    $userAsset = $this->em->getRepository(UserEtf::class)->findOneBy(['user' => $user, 'etf' => $etf]);
-                }
-
-                $this->addAssetToUser($user, $stock, $etf, $userAsset, $quantity);
+                $userAsset = $this->assetResolver->findHolding($user, $asset);
+                $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
             }
 
             $order->setStatus('CANCELLED');
@@ -312,41 +336,48 @@ class TradeExecutionService
             $quantity = $order->getQuantity();
             $limitPrice = (float) $order->getLimitPrice();
 
-            $stock = $this->em->getRepository(Stock::class)->findOneBy(['ticker' => $ticker]);
-            $etf = null;
-            if (!$stock) {
-                $etf = $this->em->getRepository(Etf::class)->findOneBy(['ticker' => $ticker]);
+            $asset = $this->assetResolver->resolve($ticker);
+            if ($asset === null) {
+                throw new \Exception('Asset not found.');
             }
 
-            $userAsset = null;
-            if ($stock) {
-                $userAsset = $this->em->getRepository(UserStock::class)->findOneBy(['user' => $user, 'stock' => $stock]);
-            } else {
-                $userAsset = $this->em->getRepository(UserEtf::class)->findOneBy(['user' => $user, 'etf' => $etf]);
+            $stock = $asset->entity instanceof Stock ? $asset->entity : null;
+            $quote = $this->liquidityEngine->quoteAsset($stock, $asset->type, $order->getAction(), $quantity, $executionPrice);
+
+            // A resting order fills at or better than its limit, never through it. The touch that triggered
+            // this fill was the mid, and the spread and the order's own impact sit on top of it: without
+            // this check a BUY resting at 100 could fill at 100.30 the moment the mid ticked to 100.
+            if ($order->getAction() === 'BUY' && $quote->executionPrice > $limitPrice) {
+                $this->em->getConnection()->rollBack();
+                return;
             }
+            if ($order->getAction() === 'SELL' && $quote->executionPrice < $limitPrice) {
+                $this->em->getConnection()->rollBack();
+                return;
+            }
+
+            $fillPrice = $quote->executionPrice;
+            $userAsset = $this->assetResolver->findHolding($user, $asset);
 
             if ($order->getAction() === 'BUY') {
                 // Cash was already escrowed at limit price. If execution price is better (lower), refund the difference.
                 $escrowedCashStr = \bcmul((string) $limitPrice, (string) $quantity, 4);
-                $actualCostStr = \bcmul((string) $executionPrice, (string) $quantity, 4);
+                $actualCostStr = \bcmul(MathUtility::formatDecimal($fillPrice, 4), (string) $quantity, 4);
                 $refundStr = \bcsub($escrowedCashStr, $actualCostStr, 4);
 
                 if (\bccomp($refundStr, '0.0000', 4) > 0) {
                     $user->setCashBalance(\bcadd((string) $user->getCashBalance(), $refundStr, 4));
                 }
                 
-                $this->addAssetToUser($user, $stock, $etf, $userAsset, $quantity);
+                $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
 
             } else { // SELL
                 // Shares were already escrowed. Just give them the cash from the sale.
-                $saleValueStr = \bcmul((string) $executionPrice, (string) $quantity, 4);
+                $saleValueStr = \bcmul(MathUtility::formatDecimal($fillPrice, 4), (string) $quantity, 4);
                 $user->setCashBalance(\bcadd((string) $user->getCashBalance(), $saleValueStr, 4));
             }
 
-            $order->setFilledQuantity($quantity);
-            $order->setExecutionPrice((string)$executionPrice);
-            $order->setStatus('FILLED');
-            $order->setFilledAt(new \DateTime());
+            $this->recordFill($order, $quote, $quantity, $order->getAction(), $ticker, $asset->type);
 
             $this->em->persist($order);
             $this->em->persist($user);
@@ -392,31 +423,4 @@ class TradeExecutionService
         ]));
     }
 
-    private function addAssetToUser(User $user, ?Stock $stock, ?Etf $etf, UserStock|UserEtf|null $userAsset, int $quantity): UserStock|UserEtf
-    {
-        if (!$userAsset) {
-            if ($stock) {
-                $userAsset = new UserStock();
-                $userAsset->setUser($user);
-                $userAsset->setStock($stock);
-            } else {
-                $userAsset = new UserEtf();
-                $userAsset->setUser($user);
-                $userAsset->setEtf($etf);
-            }
-            $userAsset->setQuantity(0);
-            $this->em->persist($userAsset);
-        }
-        $userAsset->setQuantity($userAsset->getQuantity() + $quantity);
-        return $userAsset;
-    }
-
-    private function removeAssetFromUser(UserStock|UserEtf $userAsset, int $quantity): void
-    {
-        $newQuantity = $userAsset->getQuantity() - $quantity;
-        $userAsset->setQuantity($newQuantity);
-        if ($newQuantity === 0) {
-            $this->em->remove($userAsset);
-        }
-    }
 }

@@ -3,6 +3,10 @@ import { CHART_FONT_MONO } from '../utils/fonts.js';
 
 let lwChart = null;
 let areaSeries = null;
+let candleSeries = null;
+let volumeSeries = null;
+let chartStyle = 'area';
+let lastBar = null;
 let chartResizeObserver = null;
 let currentRange = '1y';
 let currentSimTime = 0;
@@ -52,6 +56,29 @@ export function initPriceChart(container, ticker, ticksPerYear = 54000) {
         priceFormat: { type: 'price', precision: 2, minMove: 0.01 }
     });
 
+    // Candles are created up front and left empty until asked for. Adding a series after the chart has
+    // data forces a full relayout, which is visible as a jump when toggling.
+    candleSeries = lwChart.addSeries(LightweightCharts.CandlestickSeries, {
+        upColor: THEME_COLORS.positive,
+        downColor: THEME_COLORS.negative,
+        borderVisible: false,
+        wickUpColor: THEME_COLORS.positive,
+        wickDownColor: THEME_COLORS.negative,
+        priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+        visible: false
+    });
+
+    // Volume sits in the bottom fifth of the same pane on its own scale, so a mega-cap's share count
+    // cannot flatten the price axis it shares.
+    volumeSeries = lwChart.addSeries(LightweightCharts.HistogramSeries, {
+        priceFormat: { type: 'volume' },
+        priceScaleId: 'volume',
+        color: 'rgba(173, 198, 255, 0.35)'
+    });
+    lwChart.priceScale('volume').applyOptions({
+        scaleMargins: { top: 0.82, bottom: 0.0 }
+    });
+
     chartResizeObserver = new ResizeObserver(entries => {
         if (entries.length > 0 && entries[0].target === container && lwChart) {
             lwChart.applyOptions({
@@ -63,6 +90,8 @@ export function initPriceChart(container, ticker, ticksPerYear = 54000) {
     chartResizeObserver.observe(container);
 
     setupRangeButtons();
+    setupChartStyleButtons();
+    setChartStyle(chartStyle);
     loadPriceHistory('1y');
 
     return lwChart;
@@ -114,15 +143,45 @@ export async function loadPriceHistory(range) {
         const anchorTime = Math.floor(Date.now() / 1000);
         currentStepSize = Math.max(1, Math.floor((rangeSpans[range] || 31536000) / data.length));
 
-        const chartData = data.map((d, i) => {
-            const pointsFromEnd = (data.length - 1) - i;
-            return {
-                time: anchorTime - (pointsFromEnd * currentStepSize),
-                value: parseFloat(d.price)
-            };
-        }).filter(d => !isNaN(d.value)).sort((a, b) => a.time - b.time);
+        const chartData = [];
+        const candleData = [];
+        const volumeData = [];
+
+        data.forEach((d, i) => {
+            const close = parseFloat(d.price);
+            if (isNaN(close)) return;
+
+            const time = anchorTime - (((data.length - 1) - i) * currentStepSize);
+            chartData.push({ time, value: close });
+
+            // Rows written before bars existed carry only a close. A flat candle is the honest rendering:
+            // the range genuinely is not known, and inventing a wick would be drawing data that never was.
+            const open = d.open_price != null ? parseFloat(d.open_price) : close;
+            const high = d.high_price != null ? parseFloat(d.high_price) : close;
+            const low = d.low_price != null ? parseFloat(d.low_price) : close;
+
+            candleData.push({ time, open, high, low, close });
+
+            if (d.volume != null) {
+                volumeData.push({
+                    time,
+                    value: parseFloat(d.volume),
+                    color: close >= open ? 'rgba(78, 222, 163, 0.35)' : 'rgba(255, 179, 173, 0.35)'
+                });
+            }
+        });
+
+        chartData.sort((a, b) => a.time - b.time);
+        candleData.sort((a, b) => a.time - b.time);
+        volumeData.sort((a, b) => a.time - b.time);
+
+        if (chartData.length === 0) return;
 
         areaSeries.setData(chartData);
+        if (candleSeries) candleSeries.setData(candleData);
+        if (volumeSeries) volumeSeries.setData(volumeData);
+
+        lastBar = candleData.length > 0 ? { ...candleData[candleData.length - 1] } : null;
         if (lwChart) {
             setTimeout(() => {
                 if (lwChart) lwChart.timeScale().fitContent();
@@ -141,15 +200,69 @@ export async function loadPriceHistory(range) {
     }
 }
 
-export function updateLivePricePoint(newPrice) {
+export function updateLivePricePoint(newPrice, volume = 0) {
     if (document.visibilityState !== 'visible' || isNaN(newPrice) || currentSimTime <= 0 || !areaSeries) return;
 
     currentSimTime += secondsPerTick;
-    if (currentSimTime >= lastChartPointTime + currentStepSize) {
+
+    const openedNewBar = currentSimTime >= lastChartPointTime + currentStepSize;
+    if (openedNewBar) {
         lastChartPointTime += currentStepSize;
     }
 
     areaSeries.update({ time: lastChartPointTime, value: newPrice });
+
+    if (!candleSeries) return;
+
+    // The live bar is extended tick by tick rather than replaced, so its high and low accumulate the way
+    // the server's do. Replacing it each tick would draw every bar as a doji.
+    if (!lastBar || openedNewBar || lastBar.time !== lastChartPointTime) {
+        lastBar = {
+            time: lastChartPointTime,
+            open: newPrice,
+            high: newPrice,
+            low: newPrice,
+            close: newPrice,
+            volume: 0
+        };
+    } else {
+        lastBar.high = Math.max(lastBar.high, newPrice);
+        lastBar.low = Math.min(lastBar.low, newPrice);
+        lastBar.close = newPrice;
+    }
+
+    lastBar.volume = (lastBar.volume || 0) + (Number(volume) || 0);
+    candleSeries.update(lastBar);
+
+    if (volumeSeries && lastBar.volume > 0) {
+        volumeSeries.update({
+            time: lastBar.time,
+            value: lastBar.volume,
+            color: lastBar.close >= lastBar.open ? 'rgba(78, 222, 163, 0.35)' : 'rgba(255, 179, 173, 0.35)'
+        });
+    }
+}
+
+/** Switches between the line and candle renderings of the same series. */
+export function setChartStyle(style) {
+    chartStyle = style === 'candles' ? 'candles' : 'area';
+
+    if (areaSeries) areaSeries.applyOptions({ visible: chartStyle === 'area' });
+    if (candleSeries) candleSeries.applyOptions({ visible: chartStyle === 'candles' });
+
+    document.querySelectorAll('.chart-style-btn').forEach(btn => {
+        const active = btn.dataset.style === chartStyle;
+        btn.classList.toggle('bg-primary', active);
+        btn.classList.toggle('text-on-primary', active);
+        btn.classList.toggle('bg-surface-container', !active);
+        btn.classList.toggle('text-on-surface-variant', !active);
+    });
+}
+
+export function setupChartStyleButtons() {
+    document.querySelectorAll('.chart-style-btn').forEach(btn => {
+        btn.onclick = (e) => setChartStyle(e.currentTarget.dataset.style);
+    });
 }
 
 export function resizePriceChart() {
@@ -170,5 +283,8 @@ export function destroyPriceChart() {
         try { lwChart.remove(); } catch (e) {}
         lwChart = null;
         areaSeries = null;
+        candleSeries = null;
+        volumeSeries = null;
+        lastBar = null;
     }
 }

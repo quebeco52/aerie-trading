@@ -45,17 +45,38 @@ final class PortfolioEscrowTest extends TestCase
         $this->assertStringContainsString("o.status = 'OPEN'", $sql);
         $this->assertStringContainsString("WHEN o.action = 'BUY'", $sql);
         $this->assertStringContainsString('o.limit_price', $sql, 'A resting BUY is held at the price the cash was committed at.');
-        $this->assertStringContainsString('COALESCE(s.price, e.price, 0)', $sql, 'Escrowed shares are held at the live price.');
+        $this->assertStringContainsString('COALESCE(s.price, e.price, b.price, 0)', $sql, 'Escrowed units are held at the live price.');
         $this->assertStringContainsString('GROUP BY o.user_id', $sql);
     }
 
-    /** Both stocks and ETFs resolve, since one order table serves both and the ticker is the only key. */
-    public function testEscrowFragmentResolvesStocksAndEtfs(): void
+    /** Every asset class resolves, since one order table serves them all and the ticker is the only key. */
+    public function testEscrowFragmentResolvesEveryAssetClass(): void
     {
         $sql = Portfolio::OPEN_ORDER_ESCROW_SQL;
 
         $this->assertStringContainsString('LEFT JOIN stocks s ON s.ticker = o.ticker', $sql);
         $this->assertStringContainsString('LEFT JOIN etfs   e ON e.ticker = o.ticker', $sql);
+        $this->assertStringContainsString('LEFT JOIN bonds  b ON b.ticker = o.ticker', $sql);
+    }
+
+    /**
+     * Every surface that totals net worth values every asset class.
+     *
+     * The escrow bug this class was written for was one omission repeated across three files. Adding an
+     * asset class is the same shape of mistake: a holding the snapshot counts but the leaderboard does not
+     * ranks a bond investor below where their money actually is, and nothing reports a discrepancy.
+     */
+    public function testEveryNetWorthQueryValuesBondHoldings(): void
+    {
+        foreach (self::NAV_SOURCES as $source) {
+            // Either spelling counts: the snapshot and leaderboard queries are raw SQL against user_bonds,
+            // while the dashboard reaches the same table through DQL on the entity.
+            $this->assertMatchesRegularExpression(
+                '/user_bonds|UserBond/',
+                $this->read($source),
+                "{$source} totals a user's net worth and must value bond holdings."
+            );
+        }
     }
 
     /** Every surface that totals net worth accounts for the open book. */

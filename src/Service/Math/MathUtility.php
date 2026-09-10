@@ -25,6 +25,14 @@ class MathUtility
     /** Ratio of a zero-mean normal variable's mean absolute deviation to its sigma, sqrt(2 / pi). */
     public const MEAN_ABSOLUTE_DEVIATION_TO_SIGMA = 0.7978845608028654;
 
+    // --- Yield To Maturity Solver ---
+
+    /** Newton-Raphson iteration cap; a well-bracketed bond converges in well under ten. */
+    public const YTM_MAX_ITERATIONS = 64;
+
+    /** Price convergence tolerance, in currency units on a 100-face bond (0.01 = one cent). */
+    public const YTM_PRICE_TOLERANCE = 1.0e-9;
+
     private float $randMaxInverse;
     private float $twoPi;
 
@@ -2151,5 +2159,266 @@ class MathUtility
         int $periodsPerYear = 4
     ): float {
         return ($periodValue / max(0.01, $seasonalFactor)) * $periodsPerYear;
+    }
+    // --- Sovereign Term Structure Evaluation ---
+
+    /**
+     * Nominal sovereign zero-coupon yield at an arbitrary tenor, term premium and central-bank duration
+     * extraction included, floored at the effective lower bound.
+     *
+     * This is the single evaluation of the sovereign curve. MonetaryPolicySubsystem calls it to publish the
+     * benchmark 2y/5y/10y/30y points, and the bond desk calls it to discount a cash flow that falls between
+     * them. A second implementation would price a seven-year note off a curve that the macro dashboard never
+     * quoted, and the gap between the two would be a risk-free arbitrage for anyone who noticed.
+     *
+     * @param float $tau                     Maturity in years.
+     * @param float $level                   Asymptotic long-term yield level (beta0).
+     * @param float $slope                   Short-rate slope parameter (beta1).
+     * @param float $curvature1              Medium-term hump parameter (beta2).
+     * @param float $curvature2              Long-term secondary hump parameter (beta3).
+     * @param float $lambda1                 Decay of the primary hump.
+     * @param float $lambda2                 Decay of the secondary hump.
+     * @param float $slopeLambda             Bliss (1997) slope decay.
+     * @param float $termPremium10y          Ten-year term premium, scaled down by duration below ten years.
+     * @param float $longEndPremium          Structural premium that keeps accruing past the ten-year point.
+     * @param float $termPremiumHorizonYears Horizon of the ACM (2013) duration scale.
+     * @param float $balanceSheetIntensity   QE (positive) or QT (negative) duration extraction intensity.
+     * @param float $habitatSensitivity      Vayanos-Vila preferred-habitat sensitivity.
+     * @param float $effectiveLowerBound     Nominal floor on the resulting yield.
+     * @return float The nominal zero-coupon yield at the requested tenor.
+     */
+    public function calculateSovereignZeroYield(
+        float $tau,
+        float $level,
+        float $slope,
+        float $curvature1,
+        float $curvature2,
+        float $lambda1,
+        float $lambda2,
+        float $slopeLambda,
+        float $termPremium10y,
+        float $longEndPremium,
+        float $termPremiumHorizonYears,
+        float $balanceSheetIntensity,
+        float $habitatSensitivity,
+        float $effectiveLowerBound
+    ): float {
+        $preferredHabitatShift = $this->calculatePreferredHabitatTermPremiumShift(
+            balanceSheetIntensity: $balanceSheetIntensity,
+            tau: $tau,
+            habitatSensitivity: $habitatSensitivity
+        );
+
+        $durationScale = self::calculateTermPremiumDurationScale($tau, $termPremiumHorizonYears);
+        $termPremium = ($termPremium10y * min(1.0, $durationScale)) + ($longEndPremium * max(0.0, $durationScale - 1.0));
+
+        $yield = $this->calculateSvenssonYield(
+            level: $level,
+            slope: $slope,
+            curvature1: $curvature1,
+            curvature2: $curvature2,
+            tau: $tau,
+            lambda1: $lambda1,
+            lambda2: $lambda2,
+            slopeLambda: $slopeLambda
+        );
+
+        return max($effectiveLowerBound, $yield + $termPremium + $preferredHabitatShift);
+    }
+
+    // --- Fixed Income Pricing & Risk ---
+
+    /**
+     * Present value of a bond's cash flows under continuous compounding against a zero-coupon curve.
+     *
+     * Each flow is discounted at the zero rate for its own settlement distance rather than at a single
+     * yield to maturity, so a steep curve prices a long bond differently from a flat curve at the same
+     * average level. Continuous compounding matches the Nelson-Siegel-Svensson curve the rates come from,
+     * which is quoted as a continuously compounded zero curve.
+     *
+     * @param array<int, array{time: float, amount: float}> $cashFlows Flows in years from settlement, ascending.
+     * @param callable(float): float                        $zeroYield Zero-coupon yield at a tenor in years.
+     * @return float The dirty price: present value including accrued interest.
+     */
+    public function calculateBondPresentValue(array $cashFlows, callable $zeroYield): float
+    {
+        $presentValue = 0.0;
+
+        foreach ($cashFlows as $flow) {
+            $time = (float) $flow['time'];
+            if ($time <= 0.0) {
+                continue;
+            }
+
+            $presentValue += ((float) $flow['amount']) * exp(-$zeroYield($time) * $time);
+        }
+
+        return $presentValue;
+    }
+
+    /**
+     * Macaulay duration: the present-value-weighted average time to a bond's cash flows, in years.
+     *
+     * @param array<int, array{time: float, amount: float}> $cashFlows Flows in years from settlement.
+     * @param float                                         $yieldToMaturity Continuously compounded YTM.
+     * @return float Weighted average time to cash flow, in years.
+     */
+    public function calculateMacaulayDuration(array $cashFlows, float $yieldToMaturity): float
+    {
+        $weightedTime = 0.0;
+        $presentValue = 0.0;
+
+        foreach ($cashFlows as $flow) {
+            $time = (float) $flow['time'];
+            if ($time <= 0.0) {
+                continue;
+            }
+
+            $discounted = ((float) $flow['amount']) * exp(-$yieldToMaturity * $time);
+            $presentValue += $discounted;
+            $weightedTime += $discounted * $time;
+        }
+
+        if ($presentValue <= 0.0) {
+            return 0.0;
+        }
+
+        return $weightedTime / $presentValue;
+    }
+
+    /**
+     * Modified duration: the first-order price sensitivity to a parallel yield shift, -(1/P)(dP/dy).
+     *
+     * Under continuous compounding modified duration equals Macaulay duration exactly; the periodic
+     * 1/(1 + y/k) adjustment belongs to discrete compounding and applying it here would understate the
+     * sensitivity of every bond on the desk.
+     *
+     * @param float $macaulayDuration Macaulay duration in years.
+     * @return float Modified duration in years.
+     */
+    public function calculateModifiedDuration(float $macaulayDuration): float
+    {
+        return $macaulayDuration;
+    }
+
+    /**
+     * Convexity: the second-order price sensitivity, (1/P)(d2P/dy2), in years squared.
+     *
+     * The term that makes a duration estimate accurate for a large yield move. Price change over a shift
+     * dy is -D_mod * dy + 0.5 * C * dy^2, and without the convexity leg a 100bp move on a thirty-year
+     * bond misprices by enough to be visible in a portfolio.
+     *
+     * @param array<int, array{time: float, amount: float}> $cashFlows Flows in years from settlement.
+     * @param float                                         $yieldToMaturity Continuously compounded YTM.
+     * @return float Convexity in years squared.
+     */
+    public function calculateConvexity(array $cashFlows, float $yieldToMaturity): float
+    {
+        $weighted = 0.0;
+        $presentValue = 0.0;
+
+        foreach ($cashFlows as $flow) {
+            $time = (float) $flow['time'];
+            if ($time <= 0.0) {
+                continue;
+            }
+
+            $discounted = ((float) $flow['amount']) * exp(-$yieldToMaturity * $time);
+            $presentValue += $discounted;
+            $weighted += $discounted * $time * $time;
+        }
+
+        if ($presentValue <= 0.0) {
+            return 0.0;
+        }
+
+        return $weighted / $presentValue;
+    }
+
+    /**
+     * Yield to maturity: the single continuously compounded rate that reproduces a bond's dirty price.
+     *
+     * Newton-Raphson on the price function, whose derivative with respect to yield is the negative
+     * PV-weighted time, so each step is price error divided by a quantity the duration calculation already
+     * needs. Falls back to bisection bounds if a step leaves the bracket, which a deeply distressed or
+     * very long zero can do from a poor starting guess.
+     *
+     * @param array<int, array{time: float, amount: float}> $cashFlows Flows in years from settlement.
+     * @param float                                         $dirtyPrice Target present value.
+     * @param float                                         $guess Starting yield.
+     * @return float The continuously compounded yield to maturity.
+     */
+    public function calculateYieldToMaturity(array $cashFlows, float $dirtyPrice, float $guess = 0.04): float
+    {
+        if ($dirtyPrice <= 0.0 || $cashFlows === []) {
+            return 0.0;
+        }
+
+        $yield = $guess;
+        $lowerBound = -0.99;
+        $upperBound = 5.0;
+
+        for ($iteration = 0; $iteration < self::YTM_MAX_ITERATIONS; $iteration++) {
+            $presentValue = 0.0;
+            $derivative = 0.0;
+
+            foreach ($cashFlows as $flow) {
+                $time = (float) $flow['time'];
+                if ($time <= 0.0) {
+                    continue;
+                }
+
+                $discounted = ((float) $flow['amount']) * exp(-$yield * $time);
+                $presentValue += $discounted;
+                $derivative -= $discounted * $time;
+            }
+
+            $error = $presentValue - $dirtyPrice;
+            if (abs($error) < self::YTM_PRICE_TOLERANCE) {
+                return $yield;
+            }
+
+            if ($error > 0.0) {
+                $lowerBound = $yield;
+            } else {
+                $upperBound = $yield;
+            }
+
+            if ($derivative === 0.0) {
+                break;
+            }
+
+            $step = $error / $derivative;
+            $next = $yield - $step;
+
+            if ($next <= $lowerBound || $next >= $upperBound || !is_finite($next)) {
+                $next = ($lowerBound + $upperBound) / 2.0;
+            }
+
+            $yield = $next;
+        }
+
+        return $yield;
+    }
+
+    /**
+     * Accrued interest on an actual/actual basis: the share of the current coupon period already earned.
+     *
+     * Separates the dirty price a buyer pays from the clean price a desk quotes. Without it the quoted
+     * price of a coupon bond saws upward through every period and drops at each payment, which reads as
+     * volatility that the instrument does not actually have.
+     *
+     * @param float $couponAmount   Cash paid at the end of the current coupon period.
+     * @param float $periodElapsed  Years elapsed since the last coupon.
+     * @param float $periodLength   Full length of the coupon period in years.
+     * @return float Interest accrued to the seller.
+     */
+    public function calculateAccruedInterest(float $couponAmount, float $periodElapsed, float $periodLength): float
+    {
+        if ($periodLength <= 0.0 || $periodElapsed <= 0.0) {
+            return 0.0;
+        }
+
+        return $couponAmount * min(1.0, $periodElapsed / $periodLength);
     }
 }

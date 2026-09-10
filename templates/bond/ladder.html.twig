@@ -1,0 +1,165 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Sovereign Bond Desk - Aerie Exchange{% endblock %}
+
+{% block meta %}
+	<meta name="description" content="The outstanding sovereign bond ladder: benchmark yields, coupons, duration and every issue currently trading on the Aerie Exchange.">
+	<meta property="og:title" content="Sovereign Bond Desk | Aerie Exchange">
+	<meta property="og:description" content="Live sovereign yield curve and the full outstanding bond ladder.">
+	<meta property="og:type" content="website">
+{% endblock %}
+
+{% block body %}
+	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-5 w-full space-y-5">
+
+		{# --- HEADER: THE CURVE --- #}
+		<div class="bg-surface-container-low rounded-lg p-6 lg:p-7 border border-outline-variant/15">
+			<div class="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-6">
+				<div class="min-w-0">
+					<h1 class="text-xl sm:text-2xl md:text-3xl font-bold text-on-surface tracking-tight leading-tight">Sovereign Bond Desk</h1>
+					<p class="text-sm text-on-surface-variant mt-2 max-w-2xl">
+						Fixed coupons and fixed redemption dates. An issue ages toward its maturity, so its duration
+						falls and its price pulls to par whatever the curve does in the meantime.
+					</p>
+				</div>
+
+				{# Benchmark readout: the four points the macro engine publishes. #}
+				<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0">
+					{% for point in benchmarks %}
+						<div class="bg-surface-container-lowest rounded border border-outline-variant/20 px-4 py-3 text-center">
+							<div class="text-2xs font-bold uppercase tracking-wider text-on-surface-variant">{{ point.label }}</div>
+							<div class="text-lg font-bold font-mono tabular-nums text-on-surface mt-0.5">{{ (point.yield * 100)|number_format(2) }}%</div>
+						</div>
+					{% endfor %}
+				</div>
+			</div>
+
+			<div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+				<div class="lg:col-span-2">
+					<h2 class="text-sm font-semibold text-on-surface mb-2">Zero-coupon yield curve</h2>
+					<div class="relative h-64 w-full">
+						<canvas id="curveChart" aria-label="Sovereign zero-coupon yield curve by maturity" role="img"></canvas>
+					</div>
+				</div>
+
+				<div class="space-y-3">
+					<h2 class="text-sm font-semibold text-on-surface">Curve shape</h2>
+					<dl class="divide-y divide-outline-variant/15 text-xs">
+						{% set slope2s10s = macro.yield10y - macro.yield2y %}
+						<div class="py-2 flex justify-between items-center">
+							<dt class="text-sm font-semibold text-on-surface-variant">2s10s spread</dt>
+							<dd class="font-bold font-mono tabular-nums {{ slope2s10s >= 0 ? 'text-secondary' : 'text-tertiary' }}">
+								{{ slope2s10s >= 0 ? '+' : '' }}{{ (slope2s10s * 10000)|number_format(0) }} bps
+							</dd>
+						</div>
+						<div class="py-2 flex justify-between items-center">
+							<dt class="text-sm font-semibold text-on-surface-variant">Policy rate</dt>
+							<dd class="font-bold font-mono tabular-nums text-on-surface">{{ (macro.policyRate * 100)|number_format(2) }}%</dd>
+						</div>
+						<div class="py-2 flex justify-between items-center">
+							<dt class="text-sm font-semibold text-on-surface-variant">10Y term premium</dt>
+							<dd class="font-bold font-mono tabular-nums text-on-surface">{{ (macro.termPremium10y * 10000)|number_format(0) }} bps</dd>
+						</div>
+						<div class="py-2 flex justify-between items-center">
+							<dt class="text-sm font-semibold text-on-surface-variant">Inflation</dt>
+							<dd class="font-bold font-mono tabular-nums text-on-surface">{{ (macro.inflation * 100)|number_format(2) }}%</dd>
+						</div>
+					</dl>
+
+					{% if slope2s10s < 0 %}
+						<div class="rounded border border-tertiary/25 bg-tertiary/10 px-3 py-2 text-2xs text-tertiary leading-relaxed">
+							<span class="font-bold uppercase tracking-wide">Inverted.</span>
+							The front end out-yields the long end, which historically leads a downturn rather than
+							following one.
+						</div>
+					{% endif %}
+				</div>
+			</div>
+		</div>
+
+		{# --- THE LADDER --- #}
+		{% for tenor, rows in rowsByTenor %}
+			<div class="bg-surface-container-low rounded-lg border border-outline-variant/15 overflow-hidden">
+				<div class="px-5 py-3 border-b border-outline-variant/15 flex items-center justify-between">
+					<h2 class="text-sm font-bold text-on-surface">{{ tenor|number_format(0) }}-Year Issues</h2>
+					<span class="text-2xs font-semibold uppercase tracking-wider text-on-surface-variant">{{ rows|length }} outstanding</span>
+				</div>
+
+				<div class="overflow-x-auto">
+					<table class="w-full text-left">
+						<thead class="text-2xs uppercase tracking-wider text-on-surface-variant bg-surface-container-lowest/60">
+							<tr>
+								<th scope="col" class="px-5 py-2 font-bold">Issue</th>
+								<th scope="col" class="px-4 py-2 font-bold text-right">Coupon</th>
+								<th scope="col" class="px-4 py-2 font-bold text-right">Maturity</th>
+								<th scope="col" class="px-4 py-2 font-bold text-right">Price</th>
+								<th scope="col" class="px-4 py-2 font-bold text-right">1M</th>
+								<th scope="col" class="px-4 py-2 font-bold text-right">Yield</th>
+								<th scope="col" class="px-4 py-2 font-bold text-right">Duration</th>
+								<th scope="col" class="px-5 py-2 font-bold text-right">Held</th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-outline-variant/10 text-xs sm:text-sm">
+							{% for row in rows %}
+								{% set bond = row.bond %}
+								<tr class="relative hover:bg-surface-container-high/30 focus-within:bg-surface-container-high/30 transition-colors group">
+									<td class="px-5 py-3">
+										<div class="flex items-center gap-2">
+											<a href="{{ path('app_bond_view', { ticker: bond.ticker }) }}" class="font-bold text-primary font-mono tracking-wider outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:underline-offset-4">{{ bond.ticker }}</a>
+											{% if bond.isOnTheRun %}
+												<span class="relative z-10 px-1.5 py-0.2 rounded bg-primary/10 text-primary text-4xs font-bold border border-primary/25 uppercase tracking-wide" title="The newest issue at this tenor, and the one the benchmark yield is quoted from">On the run</span>
+											{% endif %}
+										</div>
+									</td>
+									<td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant">{{ (bond.couponRate * 100)|number_format(3) }}%</td>
+									<td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant" title="Simulation year {{ bond.maturesAtTime|number_format(2) }}">
+										{{ row.yearsToMaturity|number_format(2) }}y
+									</td>
+									<td class="px-4 py-3 font-mono tabular-nums text-right font-bold text-on-surface" id="clean-{{ bond.ticker }}" title="Clean price, per {{ bond.faceValue|number_format(0) }} of face">
+										{{ bond.cleanPrice|number_format(2) }}
+									</td>
+									<td class="px-4 py-3 font-mono tabular-nums text-right font-semibold {{ row.change is null ? 'text-on-surface-variant/50' : (row.change >= 0 ? 'text-secondary' : 'text-tertiary') }}">
+										{% if row.change is null %}
+											&mdash;
+										{% else %}
+											{{ row.change >= 0 ? '+' : '' }}{{ (row.change * 100)|number_format(2) }}%
+										{% endif %}
+									</td>
+									<td class="px-4 py-3 font-mono tabular-nums text-right font-bold text-on-surface" id="ytm-{{ bond.ticker }}">{{ (bond.yieldToMaturity * 100)|number_format(2) }}%</td>
+									<td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant" title="Modified duration: the percentage price move per 1% parallel yield shift">{{ bond.modifiedDuration|number_format(2) }}</td>
+									<td class="px-5 py-3 font-mono tabular-nums text-right">
+										{% if holdings[bond.ticker] is defined %}
+											<span class="font-bold text-secondary">{{ holdings[bond.ticker]|number_format }}</span>
+										{% else %}
+											<span class="text-on-surface-variant/40">&mdash;</span>
+										{% endif %}
+									</td>
+								</tr>
+							{% endfor %}
+						</tbody>
+					</table>
+				</div>
+			</div>
+		{% else %}
+			<div class="bg-surface-container-low rounded-lg p-10 border border-outline-variant/15 text-center">
+				<p class="text-sm text-on-surface-variant">No issues are outstanding. The desk opens at the first auction.</p>
+			</div>
+		{% endfor %}
+	</div>
+{% endblock %}
+
+{% block javascripts %}
+	{{ parent() }}
+
+	{% include 'partials/_chart_libraries.html.twig' with { chartjs: true } %}
+
+	{# Page data for assets/js/pages/bond-ladder.js. JSON rather than a JavaScript object literal,
+	   for the same reason the stock page uses one: Twig's HTML escaper mangles a literal. #}
+	<script type="application/json" id="aerie-data">
+		{{ { curve: curve }|json_encode|raw }}
+	</script>
+
+	<script type="module">
+		import 'pages/bond-ladder';
+	</script>
+{% endblock %}

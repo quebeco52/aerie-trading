@@ -160,7 +160,12 @@
                                             <img class="w-7 h-7 rounded shrink-0 border border-outline-variant/20 p-0.5 bg-surface-container-lowest" src="{{ asset('icons/' ~ holding.ticker ~ '.svg') }}" onerror="this.onerror=null; this.src='{{ asset('icons/default.svg') }}';" alt="{{ holding.ticker }} logo">
                                             <div>
                                                 <div class="flex items-center gap-2">
-                                                    <a href="/stock/{{ holding.ticker }}" class="font-bold text-on-surface text-sm group-hover:text-primary transition-colors outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:decoration-primary focus-visible:underline-offset-4">{{ holding.name }}</a>
+                                                    {% if holding.type == 'BOND' %}
+                                                        <a href="{{ path('app_bond_view', { ticker: holding.ticker }) }}" class="font-bold text-on-surface text-sm group-hover:text-primary transition-colors outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:decoration-primary focus-visible:underline-offset-4">{{ holding.name }}</a>
+                                                        <span class="relative z-10 px-1.5 py-0.2 rounded bg-primary/10 text-primary text-4xs font-bold border border-primary/25 uppercase tracking-wide">Bond</span>
+                                                    {% else %}
+                                                        <a href="/stock/{{ holding.ticker }}" class="font-bold text-on-surface text-sm group-hover:text-primary transition-colors outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:decoration-primary focus-visible:underline-offset-4">{{ holding.name }}</a>
+                                                    {% endif %}
                                                     {% if holding.isBankrupt %}
                                                         <span class="relative z-10 px-1.5 py-0.2 rounded bg-tertiary/10 text-tertiary text-4xs font-bold border border-tertiary/25 uppercase tracking-wide">Bankrupt</span>
                                                     {% endif %}
@@ -168,6 +173,9 @@
                                                 <div class="flex items-center gap-2 mt-0.5">
                                                     <span class="text-xs text-primary font-bold tracking-wider font-mono">{{ holding.ticker }}</span>
                                                     <span class="text-xs text-on-surface-variant">{{ holding.sector }}</span>
+                                                    {% if holding.type == 'BOND' %}
+                                                        <span class="text-xs text-on-surface-variant font-mono" title="Yield to maturity and modified duration">{{ (holding.yieldToMaturity * 100)|number_format(2) }}% YTM · {{ holding.modifiedDuration|number_format(1) }}y dur</span>
+                                                    {% endif %}
                                                 </div>
                                             </div>
                                         </div>
@@ -180,14 +188,14 @@
                                         <div>{{ holding.unrealizedPnL >= 0 ? '+' : '' }}${{ holding.unrealizedPnL|number_format(2) }}</div>
                                         <div class="text-2xs font-normal opacity-80">({{ holding.unrealizedPnL >= 0 ? '+' : '' }}{{ holding.unrealizedPnLPercent|number_format(2) }}%)</div>
                                         {% if holding.dividendsReceived > 0 %}
-                                            <div class="text-2xs font-normal text-on-surface-variant mt-0.5" title="Dividend cash received from {{ holding.ticker }}, including from shares since sold">
-                                                +${{ holding.dividendsReceived|number_format(2) }} div
+                                            <div class="text-2xs font-normal text-on-surface-variant mt-0.5" title="{{ holding.type == 'BOND' ? 'Coupon cash received from ' ~ holding.ticker : 'Dividend cash received from ' ~ holding.ticker ~ ', including from shares since sold' }}">
+                                                +${{ holding.dividendsReceived|number_format(2) }} {{ holding.type == 'BOND' ? 'cpn' : 'div' }}
                                             </div>
                                         {% endif %}
                                     </td>
                                     <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant text-xs">{{ holding.weight|number_format(1) }}%</td>
                                     <td class="px-5 py-3 text-right">
-                                        <a href="/stock/{{ holding.ticker }}" class="relative z-10 inline-flex items-center px-2.5 py-1 rounded bg-surface-container hover:bg-primary/20 text-primary border border-primary/25 text-xs font-semibold transition-colors">
+                                        <a href="{{ holding.type == 'BOND' ? path('app_bond_view', { ticker: holding.ticker }) : '/stock/' ~ holding.ticker }}" class="relative z-10 inline-flex items-center px-2.5 py-1 rounded bg-surface-container hover:bg-primary/20 text-primary border border-primary/25 text-xs font-semibold transition-colors">
                                             Trade
                                         </a>
                                     </td>

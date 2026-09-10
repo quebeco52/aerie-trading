@@ -117,6 +117,9 @@ readonly class MacroStateDTO
         public float $structuralSlope = 0.0,
         public float $nsCurvature = 0.0,
         public float $nsCurvature2 = 0.0,
+        public float $nsBeta1 = 0.0,
+        public float $nsBaseTermPremium = MacroEngine::NS_BASE_TERM_PREMIUM,
+        public float $nsLongEndPremium = MacroEngine::NS_BASE_TERM_PREMIUM,
         public float $potentialGdpIndex = 1.0,
         public float $nominalGdpIndex = 1.0,
         public float $gdpDeflator = 1.0,
@@ -277,6 +280,9 @@ readonly class MacroStateDTO
         $structuralSlope = (float) ($data['structural_slope'] ?? $nsSlope);
         $nsCurvature = (float) ($data['ns_curvature'] ?? 0.0);
         $nsCurvature2 = (float) ($data['ns_curvature2'] ?? 0.0);
+        $nsBeta1 = (float) ($data['ns_beta1'] ?? ($policyRate - $nsLevel));
+        $nsBaseTermPremium = (float) ($data['ns_base_term_premium'] ?? MacroEngine::NS_BASE_TERM_PREMIUM);
+        $nsLongEndPremium = (float) ($data['ns_long_end_premium'] ?? MacroEngine::NS_BASE_TERM_PREMIUM);
 
         $nominalGdpIndex = (float) ($data['nominal_gdp_index'] ?? 1.0);
         $potentialGdpIndex = (float) ($data['potential_gdp_index'] ?? ($nominalGdpIndex / (1.0 + $outputGap)));
@@ -386,6 +392,9 @@ readonly class MacroStateDTO
             structuralSlope: $structuralSlope,
             nsCurvature: $nsCurvature,
             nsCurvature2: $nsCurvature2,
+            nsBeta1: $nsBeta1,
+            nsBaseTermPremium: $nsBaseTermPremium,
+            nsLongEndPremium: $nsLongEndPremium,
             potentialGdpIndex: $potentialGdpIndex,
             nominalGdpIndex: $nominalGdpIndex,
             gdpDeflator: $gdpDeflator,
@@ -433,6 +442,26 @@ readonly class MacroStateDTO
     /**
      * Creates a MacroStateDTO from a MacroState entity/model object.
      */
+    /**
+     * The fitted term structure, ready for the bond desk to discount an arbitrary maturity against.
+     *
+     * Assembled rather than stored so there is one authority on which slope belongs in the curve function:
+     * $nsSlope on this DTO is the 10y-minus-policy reporting metric and would produce a curve that reprices
+     * nothing, while $nsBeta1 is the beta1 the macro engine actually fitted with.
+     */
+    public function sovereignCurve(): SovereignCurveDTO
+    {
+        return new SovereignCurveDTO(
+            level: $this->nsLevel,
+            slope: $this->nsBeta1,
+            curvature1: $this->nsCurvature,
+            curvature2: $this->nsCurvature2,
+            baseTermPremium: $this->nsBaseTermPremium,
+            longEndPremium: $this->nsLongEndPremium,
+            balanceSheetIntensity: $this->balanceSheetIntensity,
+        );
+    }
+
     /**
      * Calendar quarter index [0..3] implied by elapsed simulation time. Derived rather than published:
      * it is not a macro series any institution reports, so it draws no district conduit. Matches the
@@ -570,6 +599,9 @@ readonly class MacroStateDTO
             structuralSlope: $state->structuralSlope,
             nsCurvature: $state->nsCurvature,
             nsCurvature2: $state->nsCurvature2,
+            nsBeta1: $state->nsBeta1,
+            nsBaseTermPremium: $state->nsBaseTermPremium,
+            nsLongEndPremium: $state->nsLongEndPremium,
             potentialGdpIndex: $state->potentialGdpIndex,
             nominalGdpIndex: $state->nominalGdpIndex,
             gdpDeflator: $state->gdpDeflator,
@@ -721,6 +753,9 @@ readonly class MacroStateDTO
             'structural_slope' => $this->structuralSlope,
             'ns_curvature' => $this->nsCurvature,
             'ns_curvature2' => $this->nsCurvature2,
+            'ns_beta1' => $this->nsBeta1,
+            'ns_base_term_premium' => $this->nsBaseTermPremium,
+            'ns_long_end_premium' => $this->nsLongEndPremium,
             'potential_gdp_index' => $this->potentialGdpIndex,
             'nominal_gdp_index' => $this->nominalGdpIndex,
             'gdp_deflator' => $this->gdpDeflator,

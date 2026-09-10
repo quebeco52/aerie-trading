@@ -22,8 +22,8 @@ class PruneHistoryCommandTest extends TestCase
         $connectionMock = $this->createMock(Connection::class);
         $emMock->method('getConnection')->willReturn($connectionMock);
 
-        // Expect two executeStatement calls (one for stock_history, one for etf_history)
-        $connectionMock->expects($this->exactly(2))
+        // One executeStatement per history table: stock_history, etf_history, bond_history.
+        $connectionMock->expects($this->exactly(3))
             ->method('executeStatement')
             ->willReturn(150);
 
@@ -40,5 +40,6 @@ class PruneHistoryCommandTest extends TestCase
         $this->assertStringContainsString('Downsampling Market History', $output);
         $this->assertStringContainsString('Cleared 150 redundant rows from stock_history', $output);
         $this->assertStringContainsString('Cleared 150 redundant rows from etf_history', $output);
+        $this->assertStringContainsString('Cleared 150 redundant rows from bond_history', $output);
     }
 }

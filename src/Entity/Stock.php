@@ -404,6 +404,24 @@ class Stock
     private ?float $priceMomentumTrend = 0.0;
 
     /**
+     * @var float|null Annual share turnover as a fraction of the public float: a structural property of the
+     *                 name, not a draw. Sets how much volume the market carries and therefore how much size
+     *                 costs. Null falls back to the baseline.
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $turnoverRatio = null;
+
+    /**
+     * @var float|null Exponentially weighted realized variance of permanent order-flow impact, annualized.
+     *
+     * The diffusion gives back exactly what order flow supplies, so the budget has to be drawn from what
+     * flow ACTUALLY did rather than from an assumption about what it might do. Measured, so a name nobody
+     * trades reclaims nothing and a heavily traded one reclaims in proportion.
+     */
+    #[ORM\Column(type: 'float', nullable: true, options: ['default' => 0.0])]
+    private ?float $impactVarianceEma = 0.0;
+
+    /**
      * @var float|null Lagged pass-through of expected inflation into selling prices; null until the first report seeds it.
      */
     #[ORM\Column(type: 'float', nullable: true)]
@@ -1135,6 +1153,28 @@ class Stock
     public function getPriceMomentumTrend(): ?float
     {
         return $this->priceMomentumTrend;
+    }
+
+    public function setTurnoverRatio(?float $turnoverRatio): static
+    {
+        $this->turnoverRatio = $turnoverRatio;
+        return $this;
+    }
+
+    public function getTurnoverRatio(): ?float
+    {
+        return $this->turnoverRatio;
+    }
+
+    public function setImpactVarianceEma(?float $impactVarianceEma): static
+    {
+        $this->impactVarianceEma = $impactVarianceEma;
+        return $this;
+    }
+
+    public function getImpactVarianceEma(): ?float
+    {
+        return $this->impactVarianceEma;
     }
 
     public function setInflationPassThrough(?float $inflationPassThrough): static

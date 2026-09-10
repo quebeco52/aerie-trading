@@ -118,6 +118,7 @@ class MarketEngine
         $baselineRoic = $ctx->baselineRoic;
         $baselineMargin = $ctx->baselineMargin;
         $accrualsRatio = $ctx->accrualsRatio;
+        $orderFlowVariance = $ctx->orderFlowVariance;
 
         // CAPM & MACRO TRANSMISSION MECHANISM
 
@@ -170,7 +171,21 @@ class MarketEngine
             $longTermVar * self::MAX_SYSTEMIC_VARIANCE_DRAG_SHARE
         );
 
-        $adjustedTheta = max(0.0001, ($longTermVar * $cycleVolModifier) - $systemicJumpVariance);
+        // Order-Flow Variance Budget:
+        // The same accounting, for the same reason. The diffusion is a reduced-form stand-in for the order
+        // flow nobody was simulating, so once real flow moves the price the diffusion is modelling it twice
+        // and the name simply gets more volatile. What flow supplies, the diffusion gives back.
+        //
+        // Drawn from MEASURED impact variance rather than an assumed participation rate: a name nobody
+        // trades reclaims nothing and keeps its calibrated diffusion intact, while a heavily traded one
+        // reclaims in proportion to what its flow actually did. An assumption would quietly suppress the
+        // volatility of every untraded name in the market.
+        $impactVariance = min(
+            max(0.0, $orderFlowVariance),
+            $longTermVar * FinancialConstants::MAX_IMPACT_VARIANCE_DRAG_SHARE
+        );
+
+        $adjustedTheta = max(0.0001, ($longTermVar * $cycleVolModifier) - $systemicJumpVariance - $impactVariance);
 
         // Variance Process via Quadratic-Exponential (QE) Scheme
         $nextVar = $this->mathUtility->calculateQEVarianceStep(
