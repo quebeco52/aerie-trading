@@ -18,23 +18,75 @@ class CorporateLedgerService
     ) {}
 
     /**
-     * Distributes dividend payments to all users holding the stock or having open SELL orders.
+     * Distributes a cash dividend to every user holding the stock, and records what each one received.
+     *
+     * Runs inside the tick transaction opened by MarketTickerCommand, so the ledger write and the cash
+     * credit are already atomic together; opening another one here would only nest.
+     *
+     * Two statements rather than one because the credit is derived FROM the ledger rows: rounding then
+     * happens once, at write time, and the sum of dividend_payment.amount equals the cash actually paid
+     * by construction. Running the holdings subquery twice and rounding independently lets the two drift
+     * apart at the third decimal on every payment, with nothing to detect it.
+     *
+     * @param Stock              $stock            The paying company.
+     * @param float              $dividendPerShare Cash rate per share for this ex-date.
+     * @param \DateTimeInterface $paidAt           Ex-date. Passed in, not NOW(), because it is the join key
+     *                                             between the two statements and must be identical in both.
      */
-    public function processDividendPayment(Stock $stock, float $dividendPerShare): void
+    public function processDividendPayment(Stock $stock, float $dividendPerShare, \DateTimeInterface $paidAt): void
     {
-        $this->entityManager->getConnection()->executeStatement(
-            "UPDATE users u
-             INNER JOIN (
+        $conn = $this->entityManager->getConnection();
+        $paidAtStr = $paidAt->format('Y-m-d H:i:s');
+
+        // Holdings are user_stocks plus the shares sitting in escrow behind an open SELL, and nothing else.
+        // A SELL has already had its shares removed from user_stocks by the trade engine, so it has to be
+        // added back or the seller is underpaid for shares they still own until the order fills. An open BUY
+        // is deliberately excluded: it has escrowed CASH, not shares, and the user does not own them yet.
+        // Paying on it would let anyone park a limit buy far below market and collect dividends indefinitely
+        // on stock they never bought, with the escrow still refundable on cancel.
+        $conn->executeStatement(
+            "INSERT INTO dividend_payment
+                 (user_id, asset_type, ticker, shares_held, dividend_per_share, amount, paid_at)
+             SELECT holdings.user_id,
+                    'STOCK',
+                    :ticker,
+                    holdings.total_shares,
+                    :dividend,
+                    ROUND(holdings.total_shares * :dividend, 2),
+                    :paid_at
+             FROM (
                  SELECT user_id, SUM(total_qty) AS total_shares
                  FROM (
-                     SELECT user_id, quantity AS total_qty FROM user_stocks WHERE stock_id = :stock_id
+                     SELECT user_id, quantity AS total_qty
+                     FROM user_stocks
+                     WHERE stock_id = :stock_id AND quantity > 0
                      UNION ALL
-                     SELECT user_id, quantity AS total_qty FROM trade_orders WHERE ticker = :ticker AND status = 'OPEN' AND action = 'SELL'
+                     SELECT user_id, quantity AS total_qty
+                     FROM trade_orders
+                     WHERE ticker = :ticker AND status = 'OPEN' AND action = 'SELL'
                  ) combined_shares
                  GROUP BY user_id
-             ) holdings ON u.id = holdings.user_id
-             SET u.cash_balance = u.cash_balance + (holdings.total_shares * :dividend)",
-            ['dividend' => $dividendPerShare, 'stock_id' => $stock->getId(), 'ticker' => $stock->getTicker()]
+             ) holdings
+             WHERE ROUND(holdings.total_shares * :dividend, 2) > 0",
+            [
+                'ticker' => $stock->getTicker(),
+                'dividend' => $dividendPerShare,
+                'stock_id' => $stock->getId(),
+                'paid_at' => $paidAtStr,
+            ]
+        );
+
+        // Credit cash from the rows just written. The unique index on (user_id, ticker, paid_at) both makes
+        // this join an index lookup and turns an accidental replay of the same ex-date into a constraint
+        // violation rather than a silent double credit.
+        $conn->executeStatement(
+            "UPDATE users u
+             INNER JOIN dividend_payment d
+                     ON d.user_id = u.id
+                    AND d.ticker  = :ticker
+                    AND d.paid_at = :paid_at
+             SET u.cash_balance = u.cash_balance + d.amount",
+            ['ticker' => $stock->getTicker(), 'paid_at' => $paidAtStr]
         );
     }
 
@@ -50,7 +102,7 @@ class CorporateLedgerService
     {
         $conn = $this->entityManager->getConnection();
         $conn->beginTransaction();
-        
+
         try {
             if ($isReverse) {
                 // 1. Fetch all user stock holdings for this ticker before mutating

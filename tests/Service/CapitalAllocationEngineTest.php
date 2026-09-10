@@ -129,7 +129,11 @@ class CapitalAllocationEngineTest extends TestCase
         $mockLedger = $this->createMock(CorporateLedgerService::class);
         $mockLedger->expects($this->once())
             ->method('processDividendPayment')
-            ->with($this->isInstanceOf(Stock::class), $this->greaterThan(0.0));
+            ->with(
+                $this->isInstanceOf(Stock::class),
+                $this->greaterThan(0.0),
+                $this->isInstanceOf(\DateTimeInterface::class)
+            );
 
         $engine = new CapitalAllocationEngine(
             $mockLedger,

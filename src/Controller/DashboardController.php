@@ -27,7 +27,11 @@ class DashboardController extends AbstractController
      * asset allocations, active orders, and trade execution history.
      */
     #[Route('/dashboard', name: 'app_dashboard')]
-    public function index(EntityManagerInterface $entityManager, \App\Service\User\CostBasisCalculator $costBasis): Response
+    public function index(
+        EntityManagerInterface $entityManager,
+        \App\Service\User\CostBasisCalculator $costBasis,
+        \App\Service\User\DividendIncomeCalculator $dividendIncome
+    ): Response
     {
         /** @var User $user */
         $user = $this->getUser();
@@ -47,6 +51,12 @@ class DashboardController extends AbstractController
         )->setParameter('user', $user)->setParameter('status', 'FILLED')->getResult();
 
         $costBasisMap = $costBasis->calculate($filledOrders);
+
+        // Dividend cash received, per ticker and for the lifetime of the account. Keyed by ticker rather
+        // than by position because it includes income from shares since sold: the cash was received and
+        // belongs in total P&L even though the position behind it is gone.
+        $dividendMap = $dividendIncome->totalsByTicker($user);
+        $totalDividendIncome = array_sum($dividendMap);
 
         $cashBalance = (float) $user->getCashBalance();
         $totalStocksValue = 0.0;
@@ -89,6 +99,7 @@ class DashboardController extends AbstractController
                 'marketValue' => $marketValue,
                 'unrealizedPnL' => $unrealizedPnL,
                 'unrealizedPnLPercent' => $unrealizedPnLPercent,
+                'dividendsReceived' => $dividendMap[$ticker] ?? 0.0,
                 'isBankrupt' => $stock->isBankrupt(),
                 'weight' => 0.0, // Calculated after total portfolio value is known
             ];
@@ -127,6 +138,7 @@ class DashboardController extends AbstractController
                 'marketValue' => $marketValue,
                 'unrealizedPnL' => $unrealizedPnL,
                 'unrealizedPnLPercent' => $unrealizedPnLPercent,
+                'dividendsReceived' => $dividendMap[$ticker] ?? 0.0,
                 'isBankrupt' => false,
                 'weight' => 0.0,
             ];
@@ -214,6 +226,8 @@ class DashboardController extends AbstractController
             'tradeHistory' => $tradeHistory,
             'sectorBreakdown' => $sectorBreakdown,
             'allocation' => $allocation,
+            'totalDividendIncome' => $totalDividendIncome,
+            'dividendPayments' => $dividendIncome->recentPayments($user),
         ]);
     }
 

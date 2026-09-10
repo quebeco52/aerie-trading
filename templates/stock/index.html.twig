@@ -300,27 +300,37 @@
 									</p>
 								</div>
 							{% else %}
-								{% if userQuantity > 0 %}
+								{# Shown when the user holds shares OR has ever been paid by this ticker: dividend cash
+								   received survives selling out of the position, so it stays visible afterwards. #}
+								{% if userQuantity > 0 or userDividendIncome > 0 %}
 									<div class="mb-4 p-3 bg-surface-container-lowest/80 rounded border border-outline-variant/20 space-y-1.5">
-										<div class="flex justify-between items-center text-xs">
-											<span class="text-on-surface-variant uppercase tracking-wide text-2xs font-semibold">Your Position</span>
-											<span class="font-bold text-on-surface font-mono tabular-nums">{{ userQuantity|number_format }} Shares</span>
-										</div>
-										<div class="flex justify-between items-center text-xs">
-											<span class="text-on-surface-variant uppercase tracking-wide text-2xs font-semibold">Avg Cost Basis</span>
-											<span class="font-mono tabular-nums text-on-surface-variant">${{ userAvgCost|number_format(2) }}</span>
-										</div>
-										<div class="flex justify-between items-center text-xs">
-											<span class="text-on-surface-variant uppercase tracking-wide text-2xs font-semibold">Market Value</span>
-											<span class="font-bold text-on-surface font-mono tabular-nums" id="user-holding-value">${{ (userQuantity * asset.price)|number_format(2) }}</span>
-										</div>
-										<div class="flex justify-between items-center text-xs pt-1.5 border-t border-outline-variant/15">
-											<span class="text-on-surface-variant uppercase tracking-wide text-2xs font-semibold">Unrealized Return</span>
-											<span class="font-mono tabular-nums font-bold {{ userUnrealizedPnL >= 0 ? 'text-secondary' : 'text-tertiary' }}">
-												{{ userUnrealizedPnL >= 0 ? '+' : '' }}${{ userUnrealizedPnL|number_format(2) }}
-												({{ userUnrealizedPnL >= 0 ? '+' : '' }}{{ userUnrealizedPnLPercent|number_format(2) }}%)
-											</span>
-										</div>
+										{% if userQuantity > 0 %}
+											<div class="flex justify-between items-center text-xs">
+												<span class="text-on-surface-variant uppercase tracking-wide text-2xs font-semibold">Your Position</span>
+												<span class="font-bold text-on-surface font-mono tabular-nums">{{ userQuantity|number_format }} Shares</span>
+											</div>
+											<div class="flex justify-between items-center text-xs">
+												<span class="text-on-surface-variant uppercase tracking-wide text-2xs font-semibold">Avg Cost Basis</span>
+												<span class="font-mono tabular-nums text-on-surface-variant">${{ userAvgCost|number_format(2) }}</span>
+											</div>
+											<div class="flex justify-between items-center text-xs">
+												<span class="text-on-surface-variant uppercase tracking-wide text-2xs font-semibold">Market Value</span>
+												<span class="font-bold text-on-surface font-mono tabular-nums" id="user-holding-value">${{ (userQuantity * asset.price)|number_format(2) }}</span>
+											</div>
+											<div class="flex justify-between items-center text-xs pt-1.5 border-t border-outline-variant/15">
+												<span class="text-on-surface-variant uppercase tracking-wide text-2xs font-semibold">Unrealized Return</span>
+												<span class="font-mono tabular-nums font-bold {{ userUnrealizedPnL >= 0 ? 'text-secondary' : 'text-tertiary' }}">
+													{{ userUnrealizedPnL >= 0 ? '+' : '' }}${{ userUnrealizedPnL|number_format(2) }}
+													({{ userUnrealizedPnL >= 0 ? '+' : '' }}{{ userUnrealizedPnLPercent|number_format(2) }}%)
+												</span>
+											</div>
+										{% endif %}
+										{% if userDividendIncome > 0 %}
+											<div class="flex justify-between items-center text-xs {{ userQuantity > 0 ? 'pt-1.5 border-t border-outline-variant/15' : '' }}">
+												<span class="text-on-surface-variant uppercase tracking-wide text-2xs font-semibold">Dividends Received</span>
+												<span class="font-mono tabular-nums font-bold text-secondary">+${{ userDividendIncome|number_format(2) }}</span>
+											</div>
+										{% endif %}
 									</div>
 								{% endif %}
 

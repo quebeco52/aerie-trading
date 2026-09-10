@@ -29,26 +29,108 @@ class CorporateLedgerServiceTest extends TestCase
         $this->service = new CorporateLedgerService($this->entityManagerMock);
     }
 
-    public function testProcessDividendPaymentExecutesCombinedHoldingsQuery(): void
+    public function testProcessDividendPaymentWritesLedgerThenCreditsCashFromIt(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('DIV_CORP');
+        $paidAt = new \DateTimeImmutable('2026-09-10 14:30:00');
+
+        $captured = [];
+        $this->connectionMock->expects($this->exactly(2))
+            ->method('executeStatement')
+            ->willReturnCallback(function (string $sql, array $params) use (&$captured): int {
+                $captured[] = ['sql' => $sql, 'params' => $params];
+
+                return 1;
+            });
+
+        $this->service->processDividendPayment($stock, 1.25, $paidAt);
+
+        [$insert, $update] = $captured;
+
+        // The ledger is written first, from the holdings snapshot.
+        $this->assertStringContainsString('INSERT INTO dividend_payment', $insert['sql']);
+        $this->assertStringContainsString('user_stocks', $insert['sql']);
+        $this->assertStringContainsString("trade_orders", $insert['sql']);
+        $this->assertSame(1.25, $insert['params']['dividend']);
+        $this->assertSame('DIV_CORP', $insert['params']['ticker']);
+        $this->assertSame('2026-09-10 14:30:00', $insert['params']['paid_at']);
+
+        // Cash is then credited FROM those rows, not from a second copy of the subquery. If this join ever
+        // becomes an independent recomputation the ledger stops reconciling to the cash it explains.
+        $this->assertStringContainsString('UPDATE users u', $update['sql']);
+        $this->assertStringContainsString('INNER JOIN dividend_payment d', $update['sql']);
+        $this->assertStringContainsString('u.cash_balance + d.amount', $update['sql']);
+        $this->assertSame($insert['params']['paid_at'], $update['params']['paid_at']);
+        $this->assertSame($insert['params']['ticker'], $update['params']['ticker']);
+    }
+
+    /**
+     * An open BUY has escrowed cash, not shares. Paying a dividend on it would let anyone park a limit buy
+     * far below market and collect income indefinitely on stock they never bought, with the escrow still
+     * refundable on cancel. Only the SELL leg belongs in the union, because a SELL has already had its
+     * shares removed from user_stocks and would otherwise go unpaid.
+     */
+    public function testProcessDividendPaymentPaysOpenSellEscrowButNotOpenBuyOrders(): void
     {
         $stock = new Stock();
         $stock->setTicker('DIV_CORP');
 
-        $this->connectionMock->expects($this->once())
-            ->method('executeStatement')
-            ->with(
-                $this->callback(function (string $sql) {
-                    return str_contains($sql, 'UPDATE users u')
-                        && str_contains($sql, 'user_stocks WHERE stock_id = :stock_id')
-                        && str_contains($sql, "trade_orders WHERE ticker = :ticker AND status = 'OPEN' AND action = 'SELL'");
-                }),
-                $this->callback(function (array $params) {
-                    return $params['dividend'] === 1.25
-                        && $params['ticker'] === 'DIV_CORP';
-                })
-            );
+        $insertSql = null;
+        $this->connectionMock->method('executeStatement')
+            ->willReturnCallback(function (string $sql) use (&$insertSql): int {
+                if (str_contains($sql, 'INSERT INTO dividend_payment')) {
+                    $insertSql = $sql;
+                }
 
-        $this->service->processDividendPayment($stock, 1.25);
+                return 1;
+            });
+
+        $this->service->processDividendPayment($stock, 1.25, new \DateTimeImmutable());
+
+        $this->assertNotNull($insertSql);
+        $this->assertStringContainsString("status = 'OPEN' AND action = 'SELL'", $insertSql);
+        $this->assertStringNotContainsString("action = 'BUY'", $insertSql);
+    }
+
+    public function testProcessDividendPaymentSkipsHoldingsRoundingToZero(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('DIV_CORP');
+
+        $insertSql = null;
+        $this->connectionMock->method('executeStatement')
+            ->willReturnCallback(function (string $sql) use (&$insertSql): int {
+                if (str_contains($sql, 'INSERT INTO dividend_payment')) {
+                    $insertSql = $sql;
+                }
+
+                return 1;
+            });
+
+        $this->service->processDividendPayment($stock, 0.0001, new \DateTimeImmutable());
+
+        // WHERE, not HAVING: total_shares is a plain column of the derived table by that point, and HAVING
+        // without a GROUP BY in the outer query would collapse every holder into one group.
+        $this->assertNotNull($insertSql);
+        $this->assertStringContainsString('WHERE ROUND(holdings.total_shares * :dividend, 2) > 0', $insertSql);
+        $this->assertStringNotContainsString('HAVING', $insertSql);
+    }
+
+    /**
+     * The tick transaction in MarketTickerCommand already spans both statements. Opening another one here
+     * would only nest, and a nested rollBack would mark the whole tick rollback-only.
+     */
+    public function testProcessDividendPaymentDoesNotOpenItsOwnTransaction(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('DIV_CORP');
+
+        $this->connectionMock->expects($this->never())->method('beginTransaction');
+        $this->connectionMock->expects($this->never())->method('commit');
+        $this->connectionMock->method('executeStatement')->willReturn(1);
+
+        $this->service->processDividendPayment($stock, 1.25, new \DateTimeImmutable());
     }
 
     public function testProcessForwardStockSplitExecutesUpdatesAndCommits(): void

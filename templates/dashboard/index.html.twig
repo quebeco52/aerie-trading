@@ -30,7 +30,7 @@
                 </div>
 
                 {# Right: Key Account Stats #}
-                <div class="lg:col-span-5 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div class="lg:col-span-5 grid grid-cols-2 gap-3">
                     <div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between">
                         <span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Cash</span>
                         <span id="available-cash" class="text-sm font-bold text-on-surface font-mono tabular-nums mt-1">${{ cashBalance|number_format(2) }}</span>
@@ -39,9 +39,13 @@
                         <span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Invested</span>
                         <span id="total-invested" class="text-sm font-bold text-on-surface font-mono tabular-nums mt-1">${{ totalInvested|number_format(2) }}</span>
                     </div>
-                    <div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between col-span-2 sm:col-span-1">
+                    <div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between">
                         <span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">In Orders</span>
                         <span class="text-sm font-bold text-primary font-mono tabular-nums mt-1">${{ escrowedCash|number_format(2) }}</span>
+                    </div>
+                    <div class="bg-surface-container-lowest/80 border border-outline-variant/20 rounded p-3 flex flex-col justify-between">
+                        <span class="text-2xs font-semibold text-on-surface-variant uppercase tracking-wide">Dividends</span>
+                        <span id="dividend-income" class="text-sm font-bold {{ totalDividendIncome > 0 ? 'text-secondary' : 'text-on-surface' }} font-mono tabular-nums mt-1">${{ totalDividendIncome|number_format(2) }}</span>
                     </div>
                 </div>
             </div>
@@ -175,6 +179,11 @@
                                     <td class="px-5 py-3 font-mono tabular-nums text-right font-bold {{ holding.unrealizedPnL >= 0 ? 'text-secondary' : 'text-tertiary' }}" id="pnl-{{ holding.ticker }}">
                                         <div>{{ holding.unrealizedPnL >= 0 ? '+' : '' }}${{ holding.unrealizedPnL|number_format(2) }}</div>
                                         <div class="text-2xs font-normal opacity-80">({{ holding.unrealizedPnL >= 0 ? '+' : '' }}{{ holding.unrealizedPnLPercent|number_format(2) }}%)</div>
+                                        {% if holding.dividendsReceived > 0 %}
+                                            <div class="text-2xs font-normal text-on-surface-variant mt-0.5" title="Dividend cash received from {{ holding.ticker }}, including from shares since sold">
+                                                +${{ holding.dividendsReceived|number_format(2) }} div
+                                            </div>
+                                        {% endif %}
                                     </td>
                                     <td class="px-4 py-3 font-mono tabular-nums text-right text-on-surface-variant text-xs">{{ holding.weight|number_format(1) }}%</td>
                                     <td class="px-5 py-3 text-right">
@@ -303,6 +312,50 @@
                 {% else %}
                     <div class="py-6 text-center text-on-surface-variant text-xs">
                         No previous trade executions recorded.
+                    </div>
+                {% endif %}
+            </div>
+
+            {# Dividend Income Card #}
+            <div class="bg-surface-container-low border border-outline-variant/25 rounded-lg p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <div>
+                        <h3 class="text-sm font-semibold text-on-surface">Dividend Income</h3>
+                        <p class="text-xs text-on-surface-variant mt-0.5">Cash distributions credited to your balance</p>
+                    </div>
+                    <span class="text-xs font-mono font-bold {{ totalDividendIncome > 0 ? 'text-secondary' : 'text-on-surface-variant' }}">${{ totalDividendIncome|number_format(2) }} lifetime</span>
+                </div>
+
+                {% if dividendPayments|length > 0 %}
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse min-w-100">
+                            <thead>
+                                <tr class="text-2xs text-on-surface-variant uppercase tracking-wide border-b border-outline-variant/15 font-semibold">
+                                    <th class="py-2.5">Ex-Date</th>
+                                    <th class="py-2.5">Asset</th>
+                                    <th class="py-2.5 text-right">Shares Held</th>
+                                    <th class="py-2.5 text-right">Rate/Share</th>
+                                    <th class="py-2.5 text-right">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-outline-variant/10 text-xs sm:text-sm">
+                                {% for payment in dividendPayments %}
+                                    <tr>
+                                        <td class="py-2.5 text-xs text-on-surface-variant font-mono">{{ payment.paidAt|date('Y-m-d H:i') }}</td>
+                                        <td class="py-2.5">
+                                            <a href="/stock/{{ payment.ticker }}" class="font-bold text-on-surface hover:text-primary transition-colors">{{ payment.ticker }}</a>
+                                        </td>
+                                        <td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">{{ payment.sharesHeld|number_format }}</td>
+                                        <td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">${{ payment.dividendPerShare|number_format(4) }}</td>
+                                        <td class="py-2.5 text-right font-mono tabular-nums font-bold text-secondary">+${{ payment.amount|number_format(2) }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="py-6 text-center text-on-surface-variant text-xs">
+                        No dividends received yet. Distributions are credited automatically for any dividend-paying stock you hold on its ex-date.
                     </div>
                 {% endif %}
             </div>

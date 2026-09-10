@@ -230,10 +230,13 @@ class CapitalAllocationEngine
         $maxLegalDividendPerShare = $ctx->sharesOutstanding > 0 ? ($distributableSurplus / $ctx->sharesOutstanding) : 0.0;
 
         $ctx->newDividend = min($ctx->newDividend, $maxCashDividendPerShare, $maxLegalDividendPerShare);
+        // Every share outstanding is paid, so the treasury debit below covers the whole register. Only
+        // player-held shares are credited to a cash balance by the ledger service; the remainder is the
+        // notional public float and simply leaves the company. The two are not meant to reconcile.
         $ctx->totalPaid = $ctx->newDividend * $ctx->sharesOutstanding;
 
         if ($ctx->newDividend > 0.0) {
-            $this->corporateLedgerService->processDividendPayment($stock, $ctx->newDividend);
+            $this->corporateLedgerService->processDividendPayment($stock, $ctx->newDividend, new \DateTime());
 
             $stock->setLastDividend((string) $ctx->newDividend);
             $yield = (($ctx->newDividend * 4) / max($ctx->currentPrice, 0.01)) * 100;

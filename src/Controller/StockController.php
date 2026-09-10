@@ -39,7 +39,8 @@ class StockController extends AbstractController
         \App\Service\Market\MarketEngine $marketEngine,
         \App\Service\Corporate\DebtEngine $debtEngine,
         \App\Service\Market\PriceChangeFeed $priceChangeFeed,
-        \App\Service\User\CostBasisCalculator $costBasis
+        \App\Service\User\CostBasisCalculator $costBasis,
+        \App\Service\User\DividendIncomeCalculator $dividendIncome
     ): Response
     {
         $isEtf = false;
@@ -231,8 +232,14 @@ class StockController extends AbstractController
         $userAvgCost = (float) $asset->getPrice();
         $userUnrealizedPnL = 0.0;
         $userUnrealizedPnLPercent = 0.0;
+        $userDividendIncome = 0.0;
 
         if ($currentUser) {
+            // Lifetime dividend cash this ticker has paid the viewer. Read outside the userQuantity > 0
+            // branch below: income already received survives selling out of the position, and zeroing it
+            // for a closed position would hide cash the user actually holds.
+            $userDividendIncome = $dividendIncome->totalsByTicker($currentUser)[$ticker] ?? 0.0;
+
             $openOrders = $entityManager->getRepository(\App\Entity\TradeOrder::class)->findBy([
                 'user' => $currentUser,
                 'ticker' => $ticker,
@@ -308,6 +315,7 @@ class StockController extends AbstractController
             'userAvgCost' => $userAvgCost,
             'userUnrealizedPnL' => $userUnrealizedPnL,
             'userUnrealizedPnLPercent' => $userUnrealizedPnLPercent,
+            'userDividendIncome' => $userDividendIncome,
             'marketCap' => $marketCap,
             'peRatio' => $peRatio,
             'targetPE' => $targetPE,
