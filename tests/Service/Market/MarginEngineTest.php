@@ -97,6 +97,55 @@ class MarginEngineTest extends TestCase
         $this->assertSame(0.0, $status->buyingPower);
     }
 
+    /**
+     * Working a buy order must not call the account that placed it.
+     *
+     * Escrow moves cash out of cash_balance, and the margin surface read that as a loss while the holdings
+     * it was committed to buy had not arrived yet — so equity fell by the full notional and nothing offset
+     * it. An account with $80k of equity against $100k of stock could place a $60k limit order that was
+     * within its own buying power and be called the instant it rested, with ForcedLiquidationService then
+     * selling the longs. Placing an order does not change what an account owns.
+     */
+    public function testWorkingABuyOrderDoesNotCallTheAccountThatPlacedIt(): void
+    {
+        // $30k cash, $100k of stock against $50k borrowed: $80k of equity, $25k required, $60k of capacity.
+        $before = $this->engine->evaluate(cash: 30000.0, longMarketValue: 100000.0, shortMarketValue: 0.0, marginDebit: 50000.0);
+        $this->assertSame(60000.0, $before->buyingPower);
+        $this->assertFalse($before->isCalled());
+
+        // The whole $60k is committed to a resting buy: cash goes to zero and the rest is borrowed.
+        $after = $this->engine->evaluate(
+            cash: 0.0 + 60000.0,
+            longMarketValue: 100000.0,
+            shortMarketValue: 0.0,
+            marginDebit: 80000.0,
+            openBuyCommitment: 60000.0
+        );
+
+        $this->assertSame($before->equity, $after->equity, 'Escrowed cash is still the account\'s cash.');
+        $this->assertFalse($after->isCalled());
+    }
+
+    /**
+     * The same free equity cannot back two resting orders.
+     *
+     * This is the reason escrow cannot simply be added back and left there. Equity has to include it or the
+     * account is called for placing an order; capacity has to exclude it or the account can work ten orders
+     * against the money for one, and every one of them fills.
+     */
+    public function testTheSameFreeEquityCannotBackTwoRestingOrders(): void
+    {
+        $status = $this->engine->evaluate(
+            cash: 60000.0,
+            longMarketValue: 100000.0,
+            shortMarketValue: 0.0,
+            marginDebit: 80000.0,
+            openBuyCommitment: 60000.0
+        );
+
+        $this->assertSame(0.0, $status->buyingPower);
+    }
+
     public function testACallFiresExactlyAtTheMaintenanceThresholdAndNotBefore(): void
     {
         // Off-by-one here is the difference between calling an account a tick early and letting it go

@@ -639,6 +639,217 @@ class TradeExecutionServiceTest extends TestCase
         return $stock;
     }
 
+    /**
+     * Makes the stubbed connection report a real book, so the margin gate is measured against something.
+     *
+     * Without this every account looks unlevered and empty: a bare Connection stub returns null from
+     * fetchAssociative and fetchOne, MarginEngine::status() reads that as a flat book, and buying power
+     * comes back as twice the cash whatever the account is actually carrying. Every margin assertion in
+     * this class that does not call this is passing against a fiction.
+     *
+     * MarginEngine::status() asks two questions of fetchAssociative — the holdings and the open order book
+     * — so the stub answers on the query rather than returning one row to both. Returning the positions row
+     * to the escrow query would have read its missing columns as an empty book and passed by luck.
+     */
+    private function bookIs(float $longValue, float $shortValue, float $escrowCash = 0.0, float $escrowLong = 0.0): void
+    {
+        $this->connectionMock->method('fetchAssociative')
+            ->willReturnCallback(static function (string $sql) use ($longValue, $shortValue, $escrowCash, $escrowLong): array {
+                if (str_contains($sql, 'escrow_cash')) {
+                    return ['escrow_cash' => $escrowCash, 'escrow_long' => $escrowLong];
+                }
+
+                return ['long_value' => $longValue, 'short_value' => $shortValue];
+            });
+        $this->connectionMock->method('fetchOne')->willReturn(0.0);
+    }
+
+    /**
+     * Closing a borrow must never be gated on buying power.
+     *
+     * A short carried at the Reg-T initial requirement has zero buying power by construction — that is what
+     * "fully margined" means — so gating COVER on it refused the trade on a perfectly healthy account, and
+     * refused it harder the deeper the position went. Every forced buy-in in ForcedLiquidationService runs
+     * through this path, so the recall leg of a squeeze could not complete.
+     */
+    public function testAFullyMarginedShortCanStillCover(): void
+    {
+        $user = $this->marginUser('75000.00');
+        $stock = $this->shortableStock();
+        $stock->setShortInterestShares('1000.00');
+
+        $holding = new UserStock();
+        $holding->setUser($user);
+        $holding->setStock($stock);
+        $holding->setQuantity(-1000);
+
+        // $50k short against $75k of cash: exactly the Reg-T initial requirement, so buying power is zero.
+        $this->bookIs(longValue: 0.0, shortValue: 50000.0);
+        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->userStockRepoStub->method('findOneBy')->willReturn($holding);
+
+        $this->service->executeOrder($user, 'APEX', 'COVER', 'MARKET', 400);
+
+        $this->assertSame(-600, (int) $holding->getQuantity());
+    }
+
+    /** The same account, now underwater, still has to be able to buy its way out. */
+    public function testAShortThatIsAlreadyCalledCanStillCover(): void
+    {
+        $user = $this->marginUser('75000.00');
+        $stock = $this->shortableStock();
+        $stock->setShortInterestShares('1000.00');
+
+        $holding = new UserStock();
+        $holding->setUser($user);
+        $holding->setStock($stock);
+        $holding->setQuantity(-1000);
+
+        // The price has run: equity is now well under the 30% maintenance requirement on the short.
+        $this->bookIs(longValue: 0.0, shortValue: 70000.0);
+        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->userStockRepoStub->method('findOneBy')->willReturn($holding);
+
+        $this->service->executeOrder($user, 'APEX', 'COVER', 'MARKET', 1000);
+
+        $this->assertSame(0, (int) $holding->getQuantity());
+    }
+
+    /**
+     * A resting COVER escrows nothing, so working one cannot call the account it exists to save.
+     *
+     * Escrow was applied to every buy-side action, and for a COVER that is backwards. The cash leaves while
+     * the borrow stays open, so short market value and the requirement do not move and equity falls by the
+     * full notional — the opposite of what the fill does. On a short carried near the maintenance rate, a
+     * resting cover was therefore enough to trigger the call, and ForcedLiquidationService would then sell
+     * the account's longs to clear a shortfall the order itself had manufactured.
+     */
+    public function testARestingCoverEscrowsNothingRatherThanDrainingTheAccountItIsSaving(): void
+    {
+        $user = $this->marginUser('75000.00');
+        $stock = $this->shortableStock();
+        $stock->setShortInterestShares('1000.00');
+
+        $holding = new UserStock();
+        $holding->setUser($user);
+        $holding->setStock($stock);
+        $holding->setQuantity(-1000);
+
+        $this->bookIs(longValue: 0.0, shortValue: 50000.0);
+        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->userStockRepoStub->method('findOneBy')->willReturn($holding);
+
+        // Bidding $40 for stock trading at $50: nowhere near crossing, so it rests.
+        $this->service->executeOrder($user, 'APEX', 'COVER', 'LIMIT', 400, '40.00');
+
+        $this->assertEquals('75000.00', $user->getCashBalance(), 'A resting cover must not take the cash.');
+        $this->assertEquals('0.00', $user->getMarginDebit(), 'Nor borrow to escrow what it has not bought.');
+        $this->assertSame(-1000, (int) $holding->getQuantity(), 'The borrow is still open until it fills.');
+    }
+
+    /**
+     * Nothing rests as a cover unless there is a borrow to close.
+     *
+     * The immediate path checks this in settlePosition, which a resting order never reaches, so with the
+     * escrow gone the placement path has to make the same check itself. Without it an account with no
+     * short at all could work covers, and each one was a pure withdrawal from equity.
+     */
+    public function testARestingCoverIsRefusedWhenThereIsNoShortToClose(): void
+    {
+        $user = $this->marginUser('75000.00');
+        $stock = $this->shortableStock();
+
+        $this->bookIs(longValue: 0.0, shortValue: 0.0);
+        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->userStockRepoStub->method('findOneBy')->willReturn(null);
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessageMatches('/No short position/');
+
+        $this->service->executeOrder($user, 'APEX', 'COVER', 'LIMIT', 400, '40.00');
+    }
+
+    /** Nothing was escrowed, so cancelling gives nothing back. Refunding it would have minted cash. */
+    public function testCancellingARestingCoverRefundsNothing(): void
+    {
+        $user = $this->marginUser('75000.00');
+
+        $order = new TradeOrder();
+        $order->setUser($user);
+        $order->setTicker('APEX');
+        $order->setAction('COVER');
+        $order->setOrderType('LIMIT');
+        $order->setQuantity(400);
+        $order->setLimitPrice('40.00');
+        $order->setStatus('OPEN');
+
+        $this->tradeOrderRepoStub->method('findOneBy')->willReturn($order);
+
+        $this->service->cancelOrder($user, 1);
+
+        $this->assertSame('CANCELLED', $order->getStatus());
+        $this->assertEquals('75000.00', $user->getCashBalance());
+    }
+
+    /** The purchase is paid for when it fills, and that is where the borrow is returned. */
+    public function testARestingCoverPaysForItselfAndReturnsTheBorrowWhenItFills(): void
+    {
+        $user = $this->marginUser('75000.00');
+        $stock = $this->shortableStock();
+        $stock->setPrice('40.00');
+        $stock->setShortInterestShares('1000.00');
+
+        $holding = new UserStock();
+        $holding->setUser($user);
+        $holding->setStock($stock);
+        $holding->setQuantity(-1000);
+
+        $order = new TradeOrder();
+        $order->setUser($user);
+        $order->setTicker('APEX');
+        $order->setAction('COVER');
+        $order->setOrderType('LIMIT');
+        $order->setQuantity(400);
+        $order->setLimitPrice('45.00');
+        $order->setStatus('OPEN');
+
+        $resultStatementMock = $this->createStub(\Doctrine\DBAL\Result::class);
+        $resultStatementMock->method('fetchOne')->willReturn(null);
+        $this->connectionMock->method('executeQuery')->willReturn($resultStatementMock);
+
+        $this->bookIs(longValue: 0.0, shortValue: 40000.0);
+        $this->tradeOrderRepoStub->method('findBy')->willReturn([$order]);
+        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->userStockRepoStub->method('findOneBy')->willReturn($holding);
+
+        $this->service->processLimitOrders('APEX', 40.0);
+
+        $this->assertSame('FILLED', $order->getStatus());
+        $this->assertSame(-600, (int) $holding->getQuantity());
+        $this->assertSame(600.0, (float) $stock->getShortInterestShares());
+
+        $fill = (float) $order->getExecutionPrice();
+        $this->assertLessThanOrEqual(45.0, $fill, 'A limit order must never fill above its own limit.');
+        $this->assertEqualsWithDelta(75000.0 - 400.0 * $fill, (float) $user->getCashBalance(), 0.01);
+        $this->assertEquals('0.00', $user->getMarginDebit());
+    }
+
+    /** The gate still has to bite on the side that actually adds exposure. */
+    public function testOpeningNewExposureIsStillRefusedWithoutBuyingPower(): void
+    {
+        $user = $this->marginUser('75000.00');
+        $stock = $this->shortableStock();
+
+        $this->bookIs(longValue: 0.0, shortValue: 50000.0);
+        $this->stockRepoStub->method('findOneBy')->willReturn($stock);
+        $this->userStockRepoStub->method('findOneBy')->willReturn(null);
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessageMatches('/buying power/');
+
+        $this->service->executeOrder($user, 'APEX', 'BUY', 'MARKET', 500);
+    }
+
     public function testAShortCreditsProceedsAndOpensANegativePosition(): void
     {
         $user = $this->marginUser();

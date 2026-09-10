@@ -24,19 +24,39 @@ class Portfolio
      *
      * The price joins are keyed on asset_type, not on the ticker alone: a ticker present in both tables
      * would otherwise match twice and count its escrow twice over.
+     *
+     * Only BUY and SELL appear. A resting SHORT escrows nothing — the borrow is located at the fill — and
+     * neither does a resting COVER, which is the closing leg of a position already collateralized. Valuing
+     * either of them added an asset the account does not have, so working an offer inflated net worth.
      */
-    public const OPEN_ORDER_ESCROW_SQL = "
+    public const OPEN_ORDER_ESCROW_DETAIL_SQL = "
         SELECT o.user_id,
                SUM(CASE WHEN o.action = 'BUY'
                         THEN COALESCE(o.limit_price, 0) * o.quantity
-                        ELSE o.quantity * COALESCE(s.price, e.price, b.price, 0)
-                   END) AS escrow_val
+                        ELSE 0
+                   END) AS escrow_cash,
+               SUM(CASE WHEN o.action = 'SELL'
+                        THEN o.quantity * COALESCE(s.price, e.price, b.price, 0)
+                        ELSE 0
+                   END) AS escrow_long
         FROM trade_orders o
         LEFT JOIN stocks s ON s.ticker = o.ticker AND o.asset_type = 'STOCK'
         LEFT JOIN etfs   e ON e.ticker = o.ticker AND o.asset_type = 'ETF'
         LEFT JOIN bonds  b ON b.ticker = o.ticker AND o.asset_type = 'BOND'
         WHERE o.status = 'OPEN'
         GROUP BY o.user_id
+    ";
+
+    /**
+     * The same book as one number, for the surfaces that only need net worth.
+     *
+     * Built from the detail fragment rather than written out again: the margin sweep needs the two legs
+     * apart and every NAV query needs them together, and two hand-written copies of the same CASE is how
+     * one of them ends up counting a side the other does not.
+     */
+    public const OPEN_ORDER_ESCROW_SQL = "
+        SELECT d.user_id, d.escrow_cash + d.escrow_long AS escrow_val
+        FROM (" . self::OPEN_ORDER_ESCROW_DETAIL_SQL . ") d
     ";
 
     public function __construct(

@@ -10,13 +10,13 @@ namespace App\DTO;
 final readonly class MarginStatusDTO
 {
     /**
-     * @param float $cash                   Settled cash, short sale proceeds included.
-     * @param float $longMarketValue        Market value of long positions.
+     * @param float $cash                   Settled cash, short sale proceeds and cash escrowed on resting buys included.
+     * @param float $longMarketValue        Market value of long positions, shares escrowed on resting sells included.
      * @param float $shortMarketValue       Market value owed on short positions, as a positive number.
      * @param float $marginDebit            Cash borrowed from the broker.
      * @param float $equity                 What the account would be worth if everything closed at mid.
      * @param float $maintenanceRequirement Equity the account must keep before it is called.
-     * @param float $buyingPower            Additional position value the account can still open.
+     * @param float $buyingPower            Additional position value the account can still open, net of resting buys.
      */
     public function __construct(
         public float $cash,

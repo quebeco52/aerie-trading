@@ -434,7 +434,7 @@ class StockController extends AbstractController
 
         // Row count sets the bucket width the aggregator folds into bars.
         $countSql = sprintf(
-            'SELECT COUNT(id) FROM (SELECT id FROM %s WHERE %s = :id ORDER BY id DESC LIMIT %d) as sub',
+            'SELECT COUNT(id) FROM (SELECT id FROM %s WHERE %s = :id ORDER BY recorded_at DESC, id DESC LIMIT %d) as sub',
             $tableName,
             $foreignKey,
             (int)$dbLimit
@@ -450,9 +450,11 @@ class StockController extends AbstractController
             : '';
 
         $sql = sprintf(
-            // Ordered by id, not recorded_at: at a 100ms tick the timestamp has ten rows to a second and their
-            // relative order is undefined, which would scramble the open and close inside every bar.
-            'SELECT id, %s AS price%s, recorded_at FROM %s WHERE %s = :id ORDER BY id DESC LIMIT %d',
+            // The id tie-break is not decoration: at a 100ms tick the timestamp has ten rows to a second
+            // and their order within it is undefined, which scrambles the open and close inside every bar.
+            // Leading with recorded_at keeps the idx_stock_recorded backward scan — ordering by id alone
+            // cannot use that index and filesorts the name's whole history on every chart load.
+            'SELECT id, %s AS price%s, recorded_at FROM %s WHERE %s = :id ORDER BY recorded_at DESC, id DESC LIMIT %d',
             $priceColumn,
             $barColumns,
             $tableName,

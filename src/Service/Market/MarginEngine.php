@@ -7,6 +7,7 @@ namespace App\Service\Market;
 use App\DTO\MarginStatusDTO;
 use App\Entity\User;
 use App\Service\Math\FinancialConstants;
+use App\Service\User\Portfolio;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -18,6 +19,9 @@ use Doctrine\ORM\EntityManagerInterface;
  * Equity is cash plus long market value, less the borrowed cash and less what is owed on shorts. Short
  * sale proceeds are already in cash, which is why they do not appear as a separate term: crediting them
  * again would show a short as free money at the instant it is opened.
+ *
+ * Assets working in open orders count. They have left the balances the holdings tables report, but they
+ * have not left the account, and treating the move as a loss called accounts for placing an order.
  */
 final class MarginEngine
 {
@@ -54,19 +58,43 @@ final class MarginEngine
             ['user_id' => $user->getId()]
         );
 
+        // The open book, on the same definition net asset value uses. Working an order moves the assets out
+        // of the balances the queries above sum, and reading that as a loss is how placing a legal order
+        // called an account that had not moved: a resting BUY has already left cash_balance, a resting SELL
+        // has already left user_stocks, and neither has changed what the account owns.
+        $escrow = $this->entityManager->getConnection()->fetchAssociative(
+            'SELECT d.escrow_cash, d.escrow_long FROM (' . Portfolio::OPEN_ORDER_ESCROW_DETAIL_SQL . ') d WHERE d.user_id = :user_id',
+            ['user_id' => $user->getId()]
+        ) ?: [];
+
+        $escrowCash = (float) ($escrow['escrow_cash'] ?? 0.0);
+        $escrowLong = (float) ($escrow['escrow_long'] ?? 0.0);
+
         return $this->evaluate(
-            cash: (float) $user->getCashBalance(),
-            longMarketValue: (float) $row['long_value'] + $etfValue + $bondValue,
+            cash: (float) $user->getCashBalance() + $escrowCash,
+            longMarketValue: (float) $row['long_value'] + $etfValue + $bondValue + $escrowLong,
             shortMarketValue: (float) $row['short_value'],
-            marginDebit: (float) $user->getMarginDebit()
+            marginDebit: (float) $user->getMarginDebit(),
+            openBuyCommitment: $escrowCash
         );
     }
 
     /**
      * The same arithmetic against explicit balances, so a prospective trade can be tested before it is done.
+     *
+     * Cash and long market value are the account's, reserved orders included: escrowed cash is still cash
+     * and escrowed shares are still shares, so an open order changes neither equity nor the requirement.
+     * What it does change is capacity, which is what $openBuyCommitment carries.
+     *
+     * @param float $openBuyCommitment Cash already committed to resting buy orders.
      */
-    public function evaluate(float $cash, float $longMarketValue, float $shortMarketValue, float $marginDebit): MarginStatusDTO
-    {
+    public function evaluate(
+        float $cash,
+        float $longMarketValue,
+        float $shortMarketValue,
+        float $marginDebit,
+        float $openBuyCommitment = 0.0
+    ): MarginStatusDTO {
         $equity = $cash + $longMarketValue - $marginDebit - $shortMarketValue;
 
         $maintenance = (FinancialConstants::MAINTENANCE_MARGIN_LONG * $longMarketValue)
@@ -74,8 +102,12 @@ final class MarginEngine
 
         // What is left after the current book is collateralized, geared up by the initial requirement. At a
         // 50% requirement a dollar of free equity supports two dollars of new position.
+        //
+        // Resting buys come off the top. They are not positions yet, so they do not consume equity, but the
+        // capacity behind them is spoken for: without this the same free equity backs every order placed
+        // against it, and an account can work ten orders it can only afford one of.
         $initialRequirement = FinancialConstants::INITIAL_MARGIN_REQUIREMENT * ($longMarketValue + $shortMarketValue);
-        $buyingPower = max(0.0, ($equity - $initialRequirement) / FinancialConstants::INITIAL_MARGIN_REQUIREMENT);
+        $buyingPower = max(0.0, ($equity - $initialRequirement) / FinancialConstants::INITIAL_MARGIN_REQUIREMENT - $openBuyCommitment);
 
         return new MarginStatusDTO(
             cash: $cash,

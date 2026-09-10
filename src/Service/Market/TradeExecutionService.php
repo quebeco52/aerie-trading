@@ -37,6 +37,9 @@ class TradeExecutionService
     /** Sides that acquire stock and pay cash out. */
     private const BUY_SIDE_ACTIONS = ['BUY', 'COVER'];
 
+    /** Sides that take on new exposure, and so have to be collateralized before they are allowed. */
+    private const EXPOSURE_INCREASING_ACTIONS = ['BUY', 'SHORT'];
+
     public function __construct(
         private EntityManagerInterface $em,
         private Portfolio $portfolio,
@@ -149,10 +152,21 @@ class TradeExecutionService
                     $this->recordFill($order, $quote, $quantity, $action, $asset->ticker(), $assetType);
                 } else {
                     // Escrow and save as OPEN
-                    if (self::isBuySide($action)) {
+                    if ($action === 'BUY') {
                         $escrowCashStr = \bcmul((string) $limitPrice, $quantityStr, 4);
                         $this->requireFunding($user, (float) $escrowCashStr, $action);
                         $this->debitCash($user, $escrowCashStr);
+                    } elseif ($action === 'COVER') {
+                        // A resting COVER escrows nothing, for the same reason it is not gated on buying
+                        // power: it is the closing leg of a position that is already collateralized. Holding
+                        // the cash here would do the opposite of what the fill does — the borrow stays open
+                        // while the cash leaves, so equity falls by the full notional while the requirement
+                        // does not move, and the account can be called for placing the one order that would
+                        // have saved it. The purchase is paid for when it fills.
+                        $held = $userAsset !== null ? (int) $userAsset->getQuantity() : 0;
+                        if ($held >= 0 || abs($held) < $quantity) {
+                            throw new \Exception('No short position of that size to cover.');
+                        }
                     } elseif ($action === 'SHORT') {
                         // A resting short escrows nothing. Borrow is located and margin is checked when it
                         // fills, not when it is placed: reserving stock against an order that may never
@@ -298,6 +312,16 @@ class TradeExecutionService
             return;
         }
 
+        // Buying power gates new exposure only. COVER closes a borrow: it releases the collateral standing
+        // behind the position, so the maintenance requirement falls by more than the cash the purchase
+        // consumes and the account ends up safer than it started. Gating it would block the one trade that
+        // repairs a distressed short — and since buying power at the Reg-T initial requirement is zero by
+        // construction, it blocked covering on healthy accounts too, which silently disabled every forced
+        // buy-in in ForcedLiquidationService and left the recall leg of a squeeze unable to complete.
+        if (!in_array($action, self::EXPOSURE_INCREASING_ACTIONS, true)) {
+            return;
+        }
+
         if (!$this->marginEngine->canOpen($user, $notional)) {
             throw new \Exception('Insufficient buying power for this order.');
         }
@@ -413,12 +437,12 @@ class TradeExecutionService
             $ticker = $order->getTicker();
             $quantity = $order->getQuantity();
 
-            if (self::isBuySide($order->getAction())) {
+            if ($order->getAction() === 'BUY') {
                 // Refund cash, paying down the borrowing it was drawn from first.
                 $this->creditCash($user, \bcmul((string) $order->getLimitPrice(), (string) $quantity, 4));
             } elseif ($order->getAction() === 'SELL') {
-                // Refund the escrowed shares. A resting SHORT escrowed nothing, so there is nothing to give
-                // back and no branch for it.
+                // Refund the escrowed shares. A resting SHORT and a resting COVER escrowed nothing, so
+                // there is nothing to give back and no branch for either.
                 $asset = $this->assetResolver->resolve($ticker);
                 if ($asset === null) {
                     throw new \Exception('Asset not found.');
@@ -520,25 +544,35 @@ class TradeExecutionService
             $action = $order->getAction();
             $considerationStr = \bcmul(MathUtility::formatDecimal($fillPrice, 4), (string) $quantity, 4);
 
-            if (self::isBuySide($action)) {
+            if ($action === 'COVER') {
+                // Nothing was escrowed when this rested, so the purchase is paid for now. It needs no
+                // funding gate for the same reason the immediate path does not: the cash out and the borrow
+                // released cancel in equity, and the requirement falls by the short's maintenance rate.
+                //
+                // The position is re-checked here rather than trusted from placement: the short can have
+                // been closed by another order, by a buy-in, or by this same order filling in pieces while
+                // this one rested, and covering stock the account no longer owes would open a long.
+                $held = $userAsset !== null ? (int) $userAsset->getQuantity() : 0;
+                if ($held >= 0 || abs($held) < $quantity) {
+                    $this->em->getConnection()->rollBack();
+                    return;
+                }
+
+                $this->debitCash($user, $considerationStr);
+
+                if ($stock !== null) {
+                    $this->adjustShortInterest($stock, -$quantity);
+                }
+
+                $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);
+
+            } elseif ($action === 'BUY') {
                 // Cash was escrowed at the limit. A better fill refunds the difference, paying down any
                 // borrowing the escrow was drawn from before it reaches the settled balance.
                 $refundStr = \bcsub(\bcmul((string) $limitPrice, (string) $quantity, 4), $considerationStr, 4);
 
                 if (\bccomp($refundStr, '0.0000', 4) > 0) {
                     $this->creditCash($user, $refundStr);
-                }
-
-                if ($action === 'COVER') {
-                    $held = $userAsset !== null ? (int) $userAsset->getQuantity() : 0;
-                    if ($held >= 0 || abs($held) < $quantity) {
-                        $this->em->getConnection()->rollBack();
-                        return;
-                    }
-
-                    if ($stock !== null) {
-                        $this->adjustShortInterest($stock, -$quantity);
-                    }
                 }
 
                 $this->assetResolver->addToHolding($user, $asset, $userAsset, $quantity);

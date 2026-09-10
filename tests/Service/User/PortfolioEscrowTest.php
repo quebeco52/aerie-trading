@@ -49,6 +49,37 @@ final class PortfolioEscrowTest extends TestCase
         $this->assertStringContainsString('GROUP BY o.user_id', $sql);
     }
 
+    /**
+     * Only the two sides that actually reserve something are valued.
+     *
+     * A resting SHORT escrows nothing — the borrow is located when it fills — and a resting COVER escrows
+     * nothing either, so valuing them at the live price credited an account for an asset it does not have.
+     * Working an offer inflated net worth, and cancelling it took the phantom back.
+     */
+    public function testTheSidesThatReserveNothingAreValuedAtNothing(): void
+    {
+        $sql = Portfolio::OPEN_ORDER_ESCROW_DETAIL_SQL;
+
+        $this->assertStringNotContainsString("'SHORT'", $sql, 'A resting short reserves nothing to value.');
+        $this->assertStringNotContainsString("'COVER'", $sql, 'Neither does a resting cover.');
+        $this->assertStringContainsString("WHEN o.action = 'SELL'", $sql, 'Escrowed shares are named explicitly, not left to an ELSE.');
+    }
+
+    /**
+     * The margin surface reads the open book from the same fragment net asset value does.
+     *
+     * The two disagreeing is what let a legal limit order call the account that placed it: NAV counted the
+     * escrow, MarginEngine did not, and the surface that triggers liquidation was the one that was short.
+     */
+    public function testTheMarginSurfaceReadsTheSameOpenBook(): void
+    {
+        $this->assertStringContainsString(
+            'Portfolio::OPEN_ORDER_ESCROW_DETAIL_SQL',
+            $this->read('src/Service/Market/MarginEngine.php'),
+            'MarginEngine must value the open book on the same definition as net asset value.'
+        );
+    }
+
     /** Every asset class resolves, since one order table serves them all and the ticker is the only key. */
     public function testEscrowFragmentResolvesEveryAssetClass(): void
     {

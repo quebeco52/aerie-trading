@@ -153,7 +153,7 @@ class MarketResetCommand extends Command
             $preTaxYield = $operatingYield / (1.0 - $taxRate);
             $revenue = $margin > 0 ? ($investedCapital * ($preTaxYield / $margin)) : 0.0;
 
-            $impliedPricingRoic = $isFinancial 
+            $impliedPricingRoic = $isFinancial
                 ? max(0.01, (float) $tempStock->getBaselineRoe())
                 : $operatingYield;
 
