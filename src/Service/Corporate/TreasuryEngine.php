@@ -27,6 +27,16 @@ class TreasuryEngine
     /** Cash held above the operating target before a lender treats the rest as deployable funding (same buffer the expansion path uses). */
     private const LIQUIDITY_BUFFER_MULTIPLIER = 1.20;
 
+    // --- Committed Revolving Credit Facility ---
+    /**
+     * Committed revolver sized as a multiple of the firm's minimum operating cash. That base is what each
+     * business model already scales its liquidity needs on, so a lender's facility is struck on its funding
+     * book rather than on net interest income, which is a small number attached to an enormous balance sheet.
+     */
+    private const REVOLVER_COMMITMENT_OPERATING_CASH_MULTIPLE = 5.0;
+    /** Drawn-revolver spread (+100 bps) over the issuer's market rate; a pre-negotiated facility prices inside emergency paper. */
+    private const REVOLVER_DRAW_SPREAD_PENALTY = 0.01;
+
     // --- Physical Capacity Limits (Growth Speed Limits) ---
     private const FIN_MEGA_HOARDER_GROWTH_LIMIT = 0.35;
     private const FIN_HOARDER_GROWTH_LIMIT = 0.20;
@@ -113,6 +123,9 @@ class TreasuryEngine
         // THE DEBT TRAP (Liquidity Crisis)
         $this->processEmergencyBorrowing($ctx);
 
+        // COMMITTED REVOLVER (the facility a bank contracted to fund whatever the bond market is doing)
+        $this->processRevolverDraw($ctx);
+
         // EQUITY ISSUANCE (Secondary Offerings / Death Spirals)
         $this->processEquityIssuance($ctx);
 
@@ -134,7 +147,11 @@ class TreasuryEngine
             $stock->setRetainedEarnings(\bcsub($this->formatBc($stock->getRetainedEarnings()), $lossStr, 4));
         }
 
-        // SAVE FINAL TREASURY
+        // SAVE FINAL TREASURY. Cash is an asset and cannot be negative; the revolver draw above is what
+        // closes an overdraft, and this is the failsafe behind it. Carrying a negative balance put a
+        // liability in the asset column, where it flowed on into the Altman working-capital term, net asset
+        // value and every screener built on the treasury.
+        $ctx->newTreasury = max(0.0, $ctx->newTreasury);
         $stock->setCorporateTreasury((string) $ctx->newTreasury);
     }
 
@@ -448,7 +465,12 @@ class TreasuryEngine
             return;
         }
 
-        $roll = $this->debtEngine->rollMaturities($ctx->stock, $ctx->health, $ctx->newTreasury);
+        $roll = $this->debtEngine->rollMaturities(
+            $ctx->stock,
+            $ctx->health,
+            $ctx->newTreasury,
+            $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)
+        );
         if ($roll->maturingPrincipal <= 0.0) {
             return;
         }
@@ -580,6 +602,67 @@ class TreasuryEngine
 
                 $ctx->failedEmergencyBorrow = false;
             }
+        }
+    }
+
+    /**
+     * Draws on the committed revolving credit facility to close a negative cash balance.
+     *
+     * A revolver is contractually committed: the bank must fund a draw whatever the primary market is doing,
+     * which is exactly why firms drew their facilities in March 2020 when commercial paper shut. So this runs
+     * even for an issuer the bond market has refused, and it is the reason a cash balance cannot simply go
+     * negative. The commitment is sized to the business, though: past it the bank is no longer bound, the
+     * money prices at distress rates, and the firm is flagged into the death-spiral financing path.
+     */
+    private function processRevolverDraw(CapitalAllocationContext $ctx): void
+    {
+        if ($ctx->newTreasury >= 0.0) {
+            return;
+        }
+
+        $stock = $ctx->stock;
+        $overdraft = -$ctx->newTreasury;
+
+        $commitment = max(
+            FinancialConstants::MIN_OPERATING_BASE_CASH,
+            $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt)
+                * self::REVOLVER_COMMITMENT_OPERATING_CASH_MULTIPLE
+        );
+        $drawn = min($overdraft, $commitment);
+        if ($drawn <= 0.0) {
+            return;
+        }
+
+        $currentMarketRate = $ctx->health->rawMetrics->currentMarketRate
+            ?? ($ctx->macroState->yield5yEma + (float) $stock->getCreditSpread());
+
+        $this->debtEngine->issueDebt($stock, $drawn, $currentMarketRate + self::REVOLVER_DRAW_SPREAD_PENALTY);
+        $ctx->wholesaleDebt = (float) $stock->getWholesaleDebt();
+        $ctx->newTreasury += $drawn;
+        $ctx->debtActionTaken = true;
+
+        // Past the commitment the bank is no longer contractually bound and the money costs what distress
+        // costs. It is still funded - the cash was already spent, and booking it anywhere but the liability
+        // side would balance the sheet by inventing money - but the firm is now visibly out of liquidity, so
+        // it is flagged into the death-spiral path the equity issuance step already runs on.
+        $overCommitment = max(0.0, $overdraft - $drawn);
+        if ($overCommitment > 0.0) {
+            $this->debtEngine->issueDebt(
+                $stock,
+                $overCommitment,
+                $currentMarketRate + FinancialConstants::EMERGENCY_DEBT_SPREAD_PENALTY
+            );
+            $ctx->wholesaleDebt = (float) $stock->getWholesaleDebt();
+            $ctx->newTreasury += $overCommitment;
+            $ctx->failedEmergencyBorrow = true;
+        }
+
+        if ($drawn > 500_000_000.0) {
+            $amtB = number_format($drawn / 1_000_000_000, 2);
+            $ctx->events[] = [
+                'description' => "Drew \${$amtB}B on its committed revolving credit facility to cover a cash shortfall.",
+                'shock' => -3.0
+            ];
         }
     }
 

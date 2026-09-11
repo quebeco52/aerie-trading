@@ -911,6 +911,47 @@ class MathUtility
     }
 
     /**
+     * Averages a mean-reverting volatility over a horizon, giving the single volatility a T-year model
+     * should be struck on.
+     *
+     * Spot volatility answers "how much is this moving today"; a T-year default probability asks "how much
+     * will this move between now and T", which under a mean-reverting variance process is the expected
+     * integrated variance, E[(1/T) * int_0^T v_t dt]. For the Heston / GARCH family that expectation is
+     * closed form:
+     *
+     *     sigmaBar^2(T) = theta + (v0 - theta) * (1 - e^(-kappa*T)) / (kappa*T)
+     *
+     * which returns spot variance as T -> 0 and the long-run level as T -> infinity. Feeding raw spot
+     * volatility into a five-year horizon instead asserts that today's shock persists undiminished for five
+     * years, and since the Merton d2 carries a -sigma*sqrt(T) term that assertion alone can consume the whole
+     * distance to default on a firm whose balance sheet never moved.
+     *
+     * @param float $spotVolatility     Today's annualized volatility (sqrt of v0).
+     * @param float $longRunVolatility  The structural volatility the process reverts to (sqrt of theta).
+     * @param float $reversionSpeed     Mean-reversion speed kappa, in reversions per year.
+     * @param float $horizonYears       The horizon T being modelled, in years.
+     * @return float The annualized volatility to use over the horizon.
+     */
+    public function averageMeanRevertingVolatility(
+        float $spotVolatility,
+        float $longRunVolatility,
+        float $reversionSpeed,
+        float $horizonYears
+    ): float {
+        $spotVariance = $spotVolatility ** 2.0;
+        $longRunVariance = $longRunVolatility ** 2.0;
+
+        if ($reversionSpeed <= 0.0 || $horizonYears <= 0.0) {
+            return sqrt(max(0.0, $spotVariance));
+        }
+
+        $decay = $reversionSpeed * $horizonYears;
+        $weight = (1.0 - exp(-$decay)) / $decay;
+
+        return sqrt(max(0.0, $longRunVariance + (($spotVariance - $longRunVariance) * $weight)));
+    }
+
+    /**
      * Calculates the Distance to Default (DD) using Merton's Structural Model.
      *
      * @param float $assetValue      The total value of the firm's assets (V).

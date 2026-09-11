@@ -40,6 +40,16 @@ class DebtEngine
     /** 15% of debt retired per quarter if early refinancing is triggered. */
     private const ACCELERATED_DEBT_TURNOVER = 0.15;
 
+    // --- Merton Default Horizon ---
+    /** Horizon the structural default model is struck on; 5 years is the standard tenor for corporate credit spreads. */
+    private const MERTON_HORIZON_YEARS = 5.0;
+    /**
+     * Mean-reversion speed of idiosyncratic equity volatility, in reversions per year. Derived from the rate
+     * the earnings engine itself cools a shock, -ln(1 - VOLATILITY_COOLING_FACTOR) * 4 quarters, so the credit
+     * model and the volatility process agree on how long a surprise is expected to last.
+     */
+    private const EQUITY_VOL_REVERSION_SPEED = 1.1507;
+
     // --- Maturity Wall & Primary Market Access ---
     /** Dynamic credit spread above which the primary market is shut to the issuer; high-yield spreads reached this in 2008 and 2020. */
     private const PRIMARY_MARKET_CLOSURE_SPREAD = 0.10;
@@ -172,7 +182,22 @@ class DebtEngine
 
         // MERTON'S STRUCTURAL MODEL OF DEFAULT
         // Prices corporate credit spreads dynamically based on Default Probability
-        $equityVolatility = (float) ($stock->getCurrentVolatility() ?? $stock->getVolatility());
+        // The default probability runs to MERTON_HORIZON_YEARS, so the volatility it is struck on has to be
+        // the volatility expected to prevail over that horizon, not today's. Spot volatility here is ratcheted
+        // by every material earnings surprise and capped at MAX_VOLATILITY_MULTIPLIER times baseline, so a
+        // cyclical firm whose earnings routinely surprise sat permanently at 3x its structural volatility.
+        // Carried undiminished through a five-year d2, that alone drove an issuer with a Safe Altman score,
+        // 6x interest coverage and compounding equity to a D rating, which shut it out of the primary market
+        // and defaulted it on the next maturity. Averaging the mean-reverting process over the horizon prices
+        // the shock for as long as it is actually expected to last.
+        $spotVolatility = max(0.05, (float) ($stock->getCurrentVolatility() ?? $stock->getVolatility()));
+        $structuralVolatility = max(0.05, (float) ($stock->getVolatility() ?: $spotVolatility));
+        $equityVolatility = $this->mathUtility->averageMeanRevertingVolatility(
+            $spotVolatility,
+            $structuralVolatility,
+            self::EQUITY_VOL_REVERSION_SPEED,
+            self::MERTON_HORIZON_YEARS
+        );
         $equityVolatility = max(0.05, $equityVolatility); // Minimum vol failsafe
 
         $marketCap = max(1.0, (float) $stock->getPrice() * max(1.0, (float) $stock->getSharesOutstanding()));
@@ -191,7 +216,7 @@ class DebtEngine
         $policyRate = $macroState->policyRateEma;
 
         // Debt maturity is approximated at 5 years for standard corporate credit spreads
-        $timeToMaturity = 5.0;
+        $timeToMaturity = self::MERTON_HORIZON_YEARS;
 
         $lossGivenDefault = $strategy->getLossGivenDefault();
 
@@ -590,8 +615,21 @@ class DebtEngine
      * levels, the rating is below the market's floor, or the firm cannot cover the interest it already owes.
      * When it closes the principal must be repaid in cash, and whatever cash cannot cover is a shortfall the
      * treasury has to fund with emergency financing or default on.
+     *
+     * Only cash above the operating floor can be handed to a bondholder. A firm does not pay its last dollar
+     * of working capital against principal and then fail to make payroll; it defaults on the bond with cash
+     * still in the bank, and that cash is what funds the restructuring. Sweeping the treasury to zero instead
+     * both destroyed the going concern and removed the means to cure the default.
+     *
+     * @param float $availableCash Cash on hand before the repayment.
+     * @param float $cashFloor     Operating cash that cannot be spent on principal.
      */
-    public function rollMaturities(Stock $stock, \App\DTO\DebtHealthDTO $health, float $availableCash): \App\DTO\MaturityRollDTO
+    public function rollMaturities(
+        Stock $stock,
+        \App\DTO\DebtHealthDTO $health,
+        float $availableCash,
+        float $cashFloor = 0.0
+    ): \App\DTO\MaturityRollDTO
     {
         $wholesaleDebt = (float) $stock->getWholesaleDebt();
         if ($wholesaleDebt <= 0.0) {
@@ -613,7 +651,7 @@ class DebtEngine
             return new \App\DTO\MaturityRollDTO($maturing, true, 0.0, 0.0);
         }
 
-        $repaid = min($maturing, max(0.0, $availableCash));
+        $repaid = min($maturing, max(0.0, $availableCash - max(0.0, $cashFloor)));
         $shortfall = $maturing - $repaid;
 
         $stock->setWholesaleDebt((string) max(0.0, $wholesaleDebt - $repaid));

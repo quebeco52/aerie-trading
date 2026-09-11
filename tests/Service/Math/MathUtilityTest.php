@@ -1817,4 +1817,96 @@ class MathUtilityTest extends TestCase
         $this->assertSame(0.15, $this->mathUtility->calculateInventoryCycleStep(0.14, -0.20, 0.20, 0.5, 1.0, 1.0), 'The overhang must clamp at its ceiling.');
         $this->assertSame(-0.15, $this->mathUtility->calculateInventoryCycleStep(-0.14, 0.20, -0.20, 0.5, 1.0, 1.0), 'The shortage must clamp at its floor.');
     }
+
+    /**
+     * Over a vanishing horizon there is no time to revert, so the horizon volatility is spot volatility.
+     */
+    public function testHorizonVolatilityCollapsesToSpotOverAVanishingHorizon(): void
+    {
+        $this->assertEqualsWithDelta(
+            1.05,
+            $this->mathUtility->averageMeanRevertingVolatility(1.05, 0.35, 1.1507, 0.0001),
+            0.005
+        );
+    }
+
+    /**
+     * Over a long horizon almost the whole path is spent at the long-run level, so that is what the
+     * average converges to. This is the property that stops a transient shock from being priced as if it
+     * lasted for the entire life of the debt.
+     */
+    public function testHorizonVolatilityConvergesToTheLongRunLevelOverALongHorizon(): void
+    {
+        $this->assertEqualsWithDelta(
+            0.35,
+            $this->mathUtility->averageMeanRevertingVolatility(1.05, 0.35, 1.1507, 400.0),
+            0.01
+        );
+    }
+
+    /**
+     * The closed form for the Heston / GARCH family, sigmaBar^2 = theta + (v0 - theta)(1 - e^-kT)/(kT),
+     * evaluated against a hand-computed case so a regression in the algebra cannot pass silently.
+     */
+    public function testHorizonVolatilityMatchesTheIntegratedVarianceClosedForm(): void
+    {
+        $spot = 1.05;
+        $longRun = 0.35;
+        $kappa = 1.1507;
+        $horizon = 5.0;
+
+        $decay = $kappa * $horizon;
+        $expected = sqrt(($longRun ** 2) + ((($spot ** 2) - ($longRun ** 2)) * ((1.0 - exp(-$decay)) / $decay)));
+
+        $this->assertEqualsWithDelta(
+            $expected,
+            $this->mathUtility->averageMeanRevertingVolatility($spot, $longRun, $kappa, $horizon),
+            1.0e-9
+        );
+        $this->assertEqualsWithDelta(0.5406, $expected, 0.001, 'the closed form itself must not drift');
+    }
+
+    /**
+     * A shock is damped toward the long-run level, never below it and never above the shock itself.
+     */
+    public function testHorizonVolatilityStaysBetweenTheLongRunLevelAndTheShock(): void
+    {
+        $horizonVol = $this->mathUtility->averageMeanRevertingVolatility(1.05, 0.35, 1.1507, 5.0);
+
+        $this->assertGreaterThan(0.35, $horizonVol);
+        $this->assertLessThan(1.05, $horizonVol);
+    }
+
+    /**
+     * A firm sitting at its structural volatility has nothing to revert from, so the horizon average is
+     * that same level whatever the horizon.
+     */
+    public function testHorizonVolatilityIsUnchangedWhenSpotAlreadySitsAtTheLongRunLevel(): void
+    {
+        $this->assertEqualsWithDelta(
+            0.28,
+            $this->mathUtility->averageMeanRevertingVolatility(0.28, 0.28, 1.1507, 5.0),
+            1.0e-9
+        );
+    }
+
+    /**
+     * A volatility below its long-run level reverts upward, which is the same formula read the other way.
+     */
+    public function testHorizonVolatilityPullsAQuietFirmBackUpTowardItsLongRunLevel(): void
+    {
+        $horizonVol = $this->mathUtility->averageMeanRevertingVolatility(0.10, 0.35, 1.1507, 5.0);
+
+        $this->assertGreaterThan(0.10, $horizonVol);
+        $this->assertLessThan(0.35, $horizonVol);
+    }
+
+    /**
+     * A degenerate reversion speed or horizon cannot divide by zero; it falls back to spot.
+     */
+    public function testHorizonVolatilityFallsBackToSpotOnADegenerateProcess(): void
+    {
+        $this->assertEqualsWithDelta(0.42, $this->mathUtility->averageMeanRevertingVolatility(0.42, 0.20, 0.0, 5.0), 1.0e-9);
+        $this->assertEqualsWithDelta(0.42, $this->mathUtility->averageMeanRevertingVolatility(0.42, 0.20, 1.15, 0.0), 1.0e-9);
+    }
 }
