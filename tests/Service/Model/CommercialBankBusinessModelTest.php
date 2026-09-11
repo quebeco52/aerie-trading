@@ -630,6 +630,65 @@ class CommercialBankBusinessModelTest extends TestCase
     }
 
     /**
+     * Underwriting posture has to reach the loss physics, or two banks funded identically are priced as
+     * though they lend identically. CreditRiskAppetite scales the Vasicek long-run default probability
+     * around a neutral 0.50, so the tuned regional lender carries a materially heavier through-the-cycle
+     * charge and a heavier lifetime allowance than the tuned universal bank.
+     */
+    public function testCreditRiskAppetiteScalesTheThroughTheCycleLossRate(): void
+    {
+        $conservative = (new Stock())->setTicker('LAKE'); // appetite 0.40
+        $aggressive   = (new Stock())->setTicker('RIVR'); // appetite 0.60
+        $untuned      = (new Stock())->setTicker('NO_OVERRIDES_FOR_THIS_TICKER');
+
+        $conservativeLoss = $this->model->getThroughTheCycleCreditLossRate($conservative);
+        $aggressiveLoss   = $this->model->getThroughTheCycleCreditLossRate($aggressive);
+        $neutralLoss      = $this->model->getThroughTheCycleCreditLossRate($untuned);
+
+        $this->assertGreaterThan($conservativeLoss, $neutralLoss, 'A 0.40 appetite must underwrite below the sector rate.');
+        $this->assertGreaterThan($neutralLoss, $aggressiveLoss, 'A 0.60 appetite must underwrite above the sector rate.');
+
+        // Expected loss is convex in the default probability, so a 1.5x appetite gap widens in loss terms.
+        $this->assertGreaterThan(1.5, $aggressiveLoss / $conservativeLoss);
+
+        // An absent firm falls back to the sector rate rather than silently resolving to zero.
+        $sectorLoss = $this->mathUtility->calculateVasicekExpectedLoss(
+            0.0,
+            CommercialBankBusinessModel::LRA_DEFAULT_RATE,
+            CommercialBankBusinessModel::ASSET_CORRELATION_RHO,
+            CommercialBankBusinessModel::LGD_BASELINE
+        );
+        $this->assertEqualsWithDelta($sectorLoss, $this->model->getThroughTheCycleCreditLossRate(), 1e-9);
+        $this->assertEqualsWithDelta($sectorLoss, $neutralLoss, 1e-9);
+    }
+
+    /** An appetite outside the viable commercial envelope is clamped, not passed through to the loss model. */
+    public function testCreditRiskAppetiteIsClampedToTheViableUnderwritingEnvelope(): void
+    {
+        $stock = (new Stock())->setTicker('CLAMP_TEST');
+
+        $floorLoss = $this->mathUtility->calculateVasicekExpectedLoss(
+            0.0,
+            CommercialBankBusinessModel::LRA_DEFAULT_RATE
+                * (CommercialBankBusinessModel::MIN_CREDIT_RISK_APPETITE / CommercialBankBusinessModel::NEUTRAL_CREDIT_RISK_APPETITE),
+            CommercialBankBusinessModel::ASSET_CORRELATION_RHO,
+            CommercialBankBusinessModel::LGD_BASELINE
+        );
+        $ceilingLoss = $this->mathUtility->calculateVasicekExpectedLoss(
+            0.0,
+            CommercialBankBusinessModel::LRA_DEFAULT_RATE
+                * (CommercialBankBusinessModel::MAX_CREDIT_RISK_APPETITE / CommercialBankBusinessModel::NEUTRAL_CREDIT_RISK_APPETITE),
+            CommercialBankBusinessModel::ASSET_CORRELATION_RHO,
+            CommercialBankBusinessModel::LGD_BASELINE
+        );
+
+        $this->assertGreaterThan(0.0, $floorLoss);
+        $this->assertGreaterThan($floorLoss, $ceilingLoss);
+        $this->assertGreaterThanOrEqual($floorLoss, $this->model->getThroughTheCycleCreditLossRate($stock));
+        $this->assertLessThanOrEqual($ceilingLoss, $this->model->getThroughTheCycleCreditLossRate($stock));
+    }
+
+    /**
      * Once the earning-asset ledger is open the physics is struck on the book it carries, net of the losses
      * already reserved, and the quarter's credit entries come back in dollars: what went bad, and what was
      * charged beyond the through-the-cycle loss the cost base already holds.

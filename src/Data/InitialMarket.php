@@ -176,7 +176,9 @@ class InitialMarket
             'historical_fixed_rate' => 0.060,
             'credit_spread' => 0.0200,
             'depreciation_rate' => 0.02,
-            'corporate_treasury' => 75_000_000_000.00,
+            // 15% of the wholesale book, the prime-brokerage target cash backing. The old 75bn sat exactly
+            // on the model's minimum, leaving a 2.5x-covered dealer with no buffer against a funding squeeze.
+            'corporate_treasury' => 112_500_000_000.00,
             'total_equity' => 200_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 750_000_000_000.00,
@@ -205,7 +207,8 @@ class InitialMarket
             'historical_fixed_rate' => 0.045,
             'credit_spread' => 0.0150,
             'depreciation_rate' => 0.02,
-            'corporate_treasury' => 85_000_000_000.00,
+            // 15% of the wholesale book, the prime-brokerage target cash backing.
+            'corporate_treasury' => 102_000_000_000.00,
             'total_equity' => 210_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 680_000_000_000.00,
@@ -234,7 +237,10 @@ class InitialMarket
             'historical_fixed_rate' => 0.035,
             'credit_spread' => 0.0200,
             'depreciation_rate' => 0.02,
-            'corporate_treasury' => 8_000_000_000.00,
+            // 10% of deposits, the commercial-bank target cash reserve. The old 8bn was a quarter of the
+            // model's MINIMUM, which opened the bank in permanent critical-cash distress: no dividend, no
+            // growth lending, from the first quarter.
+            'corporate_treasury' => 65_000_000_000.00,
             'total_equity'      => 85_000_000_000.00,
             'customer_deposits' => 650_000_000_000.00,
             'wholesale_debt'    => 30_000_000_000.00,
@@ -242,6 +248,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'SAFE',
+            'management_style' => 'fortress', // Solvency is the product: reserves are held against the tail rather than distributed
             'name' => 'Safe Harbor Reinsurance',
             'sector' => 'Financials',
             'industry' => 'Insurance - Reinsurance',
@@ -258,7 +265,10 @@ class InitialMarket
             'fixed_cost_ratio' => 0.20,
             'operating_margin' => 0.08,
             'public_float' => 0.70,
-            'sam_ratio' => 2.50,
+            // 3.5T addressable retrocession market. At 2.5T the firm's own equity was 60% of its market,
+            // past the 50% Penrose diseconomy threshold, so the district's backstop opened its first
+            // quarter already paying a saturation penalty on capital it is supposed to hold.
+            'sam_ratio' => 3.50,
             'floating_debt_ratio' => 0.05,
             'historical_fixed_rate' => 0.025,
             'credit_spread' => 0.0030,
@@ -271,6 +281,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'DOVE',
+            'management_style' => 'fortress', // Strict underwriting and conservative float investment ahead of growth
             'name' => 'White Dove Insurance',
             'sector' => 'Financials',
             'industry' => 'Insurance - Diversified',
@@ -292,7 +303,9 @@ class InitialMarket
             'historical_fixed_rate' => 0.030,
             'credit_spread' => 0.0080,
             'depreciation_rate' => 0.02,
-            'corporate_treasury' => 750_000_000_000.00,
+            // Float fully backed by liquid assets, as SAFE is. A retail carrier that sheds its tail risk
+            // upward has no excuse to run its policyholder float short of cash.
+            'corporate_treasury' => 850_000_000_000.00,
             'total_equity'      => 170_000_000_000.00,
             'customer_deposits' => 850_000_000_000.00,
             'wholesale_debt'    => 22_000_000_000.00,
@@ -300,6 +313,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'SHRK',
+            'management_style' => 'steward', // A statutory monopoly running near-zero capex has no use for retained capital
             'name' => 'Shrike Standard Ratings',
             'sector' => 'Financials',
             'industry' => 'Financial Data & Stock Exchanges',
@@ -503,6 +517,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'GRIP',
+            'management_style' => 'steward', // Cost-plus programmes fund themselves, so the cash returns to shareholders
             'name' => 'Gryphon Defense Systems',
             'sector' => 'Industrials',
             'industry' => 'Aerospace & Defense',
@@ -636,7 +651,9 @@ class InitialMarket
             'dividendSpeed' => 0.15,
             'fixed_cost_ratio' => 0.60,
             'operating_margin' => 0.09,
-            'public_float' => 0.92,
+            // LAKE and SWAN hold the control block, so barely half the register trades. Float is liquidity
+            // only: it sets daily volume and borrowable supply, not the price.
+            'public_float' => 0.45,
             'sam_ratio' => 0.50,
             'floating_debt_ratio' => 0.35,
             'historical_fixed_rate' => 0.055,
@@ -650,6 +667,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'TICK',
+            'management_style' => 'empire_builder', // Predatory acquisitions to swallow rivals before they become a legitimate threat
             'name' => 'Tickbird Data Systems',
             'sector' => 'Information Technology',
             'industry' => 'Financial Data & Stock Exchanges',
@@ -737,6 +755,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'GULL',
+            'management_style' => 'empire_builder', // Leveraged the balance sheet to buy the entire shoreline, not for return on capital
             'name' => 'Silver Gull Resorts',
             'sector' => 'Consumer Discretionary',
             'industry' => 'Resorts & Casinos',
@@ -766,6 +785,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'WADE',
+            'management_style' => 'steward', // Regulated returns are distributed, not reinvested past the approved rate base
             'name' => 'Heron Regional Water',
             'sector' => 'Utilities',
             'industry' => 'Utilities - Regulated Water',
@@ -795,6 +815,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'CORM',
+            'management_style' => 'steward', // Unbreakable municipal contracts require no growth capital to renew
             'name' => 'Cormorant Environmental',
             'sector' => 'Industrials',
             'industry' => 'Waste Management',
@@ -911,6 +932,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'SGRB',
+            'management_style' => 'steward', // Asset-light packaging lines convert operating profit straight into distributable cash
             'name' => 'Sugarbird Confectionery',
             'sector' => 'Consumer Staples',
             'industry' => 'Packaged Foods',
@@ -998,6 +1020,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'CLAW',
+            'management_style' => 'steward', // Partnership economics: settlement windfalls are drawn down, not banked
             'name' => 'Clear Rivers Law',
             'sector' => 'Industrials',
             'industry' => 'Legal Services',
@@ -1056,6 +1079,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'PLZA',
+            'management_style' => 'steward', // Century-long municipal leases leave nothing to reinvest in; the rent goes out as yield
             'name' => 'Plaza Civic River Trust',
             'sector' => 'Real Estate',
             'industry' => 'REIT - Office',
@@ -1143,6 +1167,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'WEAV',
+            'management_style' => 'empire_builder', // Buys out its own successful vendors to absorb their volume into the platform
             'name' => 'Weaver Marketplace',
             'sector' => 'Consumer Discretionary',
             'industry' => 'Internet Retail',
@@ -1201,8 +1226,12 @@ class InitialMarket
         ],
         [
             'ticker' => 'BRKW',
+            'management_style' => 'fortress', // Hoards unencumbered reserves through the cycle to dictate terms in a panic
             'name' => 'Breakwater Trust',
-            'sector' => 'Financials',
+            // Rail sidings, utility concessions, foundries and staples: an industrial holding company that
+            // happens to be family-controlled. It was taking Financials sector shocks while running the
+            // conglomerate (non-financial) physics, unlike TRIV in the same industry.
+            'sector' => 'Industrials',
             'industry' => 'Conglomerates',
             'systemic_importance' => 'titan',
             'shares_outstanding' => 1_000_000_000,
@@ -1222,7 +1251,11 @@ class InitialMarket
             'historical_fixed_rate' => 0.030,
             'credit_spread' => 0.0040,
             'depreciation_rate' => 0.03,
-            'corporate_treasury' => 100_000_000_000.00,
+            // The hoard is the whole thesis: a trust that "shifts from fortress to apex contrarian acquirer"
+            // when spreads blow out has to be carrying the dry powder beforehand. At 100bn it held less
+            // cash relative to equity than the average operating company and priced at 2.6x book, which is
+            // the opposite of the holding-company discount it is described as trading at.
+            'corporate_treasury' => 250_000_000_000.00,
             'total_equity' => 700_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 220_000_000_000.00,
@@ -1230,6 +1263,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'ELDE',
+            'management_style' => 'steward', // Securitised pension streams are passed through to holders by design
             'name' => 'Elderbird Retirement Services',
             'sector' => 'Real Estate',
             'industry' => 'REIT - Healthcare Facilities',
@@ -1259,6 +1293,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'SWFT',
+            'management_style' => 'steward', // Master-franchise royalties grow the estate on the franchisees capital, not its own
             'name' => 'Golden Swift Holdings',
             'sector' => 'Consumer Staples',
             'industry' => 'Restaurants',
@@ -1288,6 +1323,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'VULT',
+            'management_style' => 'fortress', // Stockpiles dry powder through expansions to deploy it into the bust
             'name' => 'Vulture Capital Recovery',
             'sector' => 'Financials',
             'industry' => 'Distressed Debt',
@@ -1317,6 +1353,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'FALC',
+            'management_style' => 'empire_builder', // Sells the mass-market fleet at a loss to take the market; returns come later
             'name' => 'Falconet Motor Group',
             'sector' => 'Consumer Discretionary',
             'industry' => 'Auto Manufacturers',
@@ -1404,6 +1441,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'CNDR',
+            'management_style' => 'empire_builder', // Conquers new mineral territory with debt whenever a sovereign borrower defaults
             'name' => 'Condor Extraction',
             'sector' => 'Materials',
             'industry' => 'Copper',
@@ -1419,7 +1457,9 @@ class InitialMarket
             'dividendSpeed' => 0.50,
             'fixed_cost_ratio' => 0.80,
             'operating_margin' => 0.16,
-            'public_float' => 0.92,
+            // Majority owned by LAKE and SWAN, per its own description. A thin float is what makes a
+            // high-volatility miner genuinely hard to trade in size and hard to borrow.
+            'public_float' => 0.45,
             'sam_ratio' => 0.50,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.055,
@@ -1433,6 +1473,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'SILC',
+            'management_style' => 'empire_builder', // Debt-fuelled fab construction priced to deny rivals scale, not to clear a hurdle
             'name' => 'Silicon Creek Foundries',
             'sector' => 'Information Technology',
             'industry' => 'Semiconductors',
@@ -1520,6 +1561,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'ACC',
+            'management_style' => 'fortress', // The default waterfall must stay funded before any capital leaves the clearinghouse
             'name' => 'Aerie Central Clearing',
             'sector' => 'Financials',
             'industry' => 'Financial Clearinghouses',
@@ -1636,6 +1678,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'LARK',
+            'management_style' => 'steward', // Mature staples brands defend shelf space with marketing spend, not capital
             'name' => 'Lark & Crest Brands',
             'sector' => 'Consumer Staples',
             'industry' => 'Household & Personal Products',
@@ -1671,7 +1714,10 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.18,
-            'beta' => 1.10,
+            // A tollbooth that "completely bypasses the traditional boom-and-bust cycles of standard
+            // manufacturing" cannot carry a cyclical beta. At 1.10 the CAPM charged it a cyclical cost of
+            // equity and priced its 37% return on equity below the tools sector multiple.
+            'beta' => 0.60,
             'jump_intensity' => 0.50,
             'jump_vol' => 0.09,
             'baseline_roic' => 0.28,
@@ -1723,6 +1769,7 @@ class InitialMarket
         ],
         [
             'ticker' => 'KITE',
+            'management_style' => 'steward', // Statutory trust distribution on a sub-2% vacancy portfolio leaves little to retain
             'name' => 'Kite Logistics Trust',
             'sector' => 'Real Estate',
             'industry' => 'REIT - Industrial',

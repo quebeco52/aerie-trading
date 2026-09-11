@@ -108,6 +108,14 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /** Baseline Loss Given Default (LGD) for senior secured / collateralized bank credit facilities. */
     public const LGD_BASELINE                  = 0.45;
 
+    // --- Underwriting Risk Appetite ---
+    /** Neutral appetite: a bank here books exactly the sector's through-the-cycle default probability. */
+    public const NEUTRAL_CREDIT_RISK_APPETITE  = 0.50;
+    /** Appetite floor (~30bps PD): a book this clean is sovereign paper wearing a loan's clothes. */
+    public const MIN_CREDIT_RISK_APPETITE      = 0.10;
+    /** Appetite ceiling (~3% PD): the edge of a viable commercial book before it is subprime lending. */
+    public const MAX_CREDIT_RISK_APPETITE      = 1.00;
+
     // --- CECL Forward Provisioning (Credit Spread Channel) ---
     /** Baseline investment-grade corporate credit spread (macro through-the-cycle IG). Widening above this triggers proactive reserve builds. */
     public const CECL_BASELINE_CREDIT_SPREAD   = MacroEngine::BASE_CREDIT_SPREAD;
@@ -520,8 +528,9 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
         // Basel II/III Vasicek ASRF Credit Risk Physics:
         // Expected loss on the loan portfolio under macroeconomic credit shock $defaultZ.
-        $baselineEl = $mathUtility->calculateVasicekExpectedLoss(0.0, self::LRA_DEFAULT_RATE, self::ASSET_CORRELATION_RHO, self::LGD_BASELINE);
-        $conditionalEl = $mathUtility->calculateVasicekExpectedLoss($defaultZ, self::LRA_DEFAULT_RATE, self::ASSET_CORRELATION_RHO, self::LGD_BASELINE);
+        $longRunDefaultRate = $this->resolveLongRunDefaultRate($stock);
+        $baselineEl = $mathUtility->calculateVasicekExpectedLoss(0.0, $longRunDefaultRate, self::ASSET_CORRELATION_RHO, self::LGD_BASELINE);
+        $conditionalEl = $mathUtility->calculateVasicekExpectedLoss($defaultZ, $longRunDefaultRate, self::ASSET_CORRELATION_RHO, self::LGD_BASELINE);
         $annualLossDelta = $conditionalEl - $baselineEl;
 
         // Convert annual loan loss rate delta to quarterly dollar credit provision shock
@@ -619,10 +628,40 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         );
     }
 
-    /** Through-the-cycle loss on a prime loan book: long-run default probability at its loss given default. */
-    public function getThroughTheCycleCreditLossRate(): float
+    /**
+     * Firm-specific long-run (through-the-cycle) default probability. Two banks funded identically do not
+     * underwrite identically: a universal lender syndicating investment-grade corporate paper runs a cleaner
+     * book than a regional lender competing on speed for contractor and developer credit. CreditRiskAppetite
+     * scales the sector's long-run PD around a neutral 0.50, which is the only place a bank's stated
+     * underwriting posture can reach the Vasicek loss physics.
+     */
+    protected function resolveLongRunDefaultRate(?Stock $stock): float
     {
-        return MathUtility::getInstance()->calculateVasicekExpectedLoss(0.0, self::LRA_DEFAULT_RATE, self::ASSET_CORRELATION_RHO, self::LGD_BASELINE);
+        if (!$stock instanceof Stock) {
+            return self::LRA_DEFAULT_RATE;
+        }
+
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::CreditRiskAppetite->value => self::NEUTRAL_CREDIT_RISK_APPETITE,
+        ]);
+
+        $appetite = max(
+            self::MIN_CREDIT_RISK_APPETITE,
+            min(self::MAX_CREDIT_RISK_APPETITE, (float) $params[ModelParam::CreditRiskAppetite])
+        );
+
+        return self::LRA_DEFAULT_RATE * ($appetite / self::NEUTRAL_CREDIT_RISK_APPETITE);
+    }
+
+    /** Through-the-cycle loss on this bank's loan book: its long-run default probability at its loss given default. */
+    public function getThroughTheCycleCreditLossRate(?Stock $stock = null): float
+    {
+        return MathUtility::getInstance()->calculateVasicekExpectedLoss(
+            0.0,
+            $this->resolveLongRunDefaultRate($stock),
+            self::ASSET_CORRELATION_RHO,
+            self::LGD_BASELINE
+        );
     }
 
     public function getCreditLossHorizonYears(): float

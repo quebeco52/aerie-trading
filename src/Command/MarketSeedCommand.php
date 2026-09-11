@@ -198,14 +198,23 @@ class MarketSeedCommand extends Command
                     // the lifetime loss it expects so the first report books no phantom provision.
                     \App\Service\Math\CorporateMetrics::getInstance()->seedEarningAssetLedger(
                         $stock,
-                        $strategy->getThroughTheCycleCreditLossRate() * $strategy->getCreditLossHorizonYears()
+                        $strategy->getThroughTheCycleCreditLossRate($stock) * $strategy->getCreditLossHorizonYears()
                     );
                 }
 
-                $impliedPricingRoic = $isFinancial 
+                $impliedPricingRoic = $isFinancial
                     ? max(0.01, (float) $stock->getBaselineRoe())
                     : $impliedRoic;
                 $bookValuePerShare = $shares > 0 ? ((float) ($stockData['total_equity'] ?? 0.0)) / $shares : 0.0;
+
+                // The opening price must be struck on the SAME fundamentals StockTracker feeds the engine on
+                // tick 1, or the market re-rates the instant it starts. Both of these default inside the DTO
+                // (2% growth, zero net debt), so leaving them out priced every firm as a median-growth,
+                // debt-free business and handed a low-growth utility the same multiple as a compounder.
+                $seedSecularGrowth = $strategy->getSecularGrowthRate($stock);
+                $seedNetDebtPerShare = $shares > 0
+                    ? max(0.0, ((float) $stock->getTotalDebt() - (float) $stock->getCorporateTreasury()) / $shares)
+                    : 0.0;
 
                 $pricingCtx = new \App\DTO\MarketPricingContext(
                     currentPrice: $bookValuePerShare,
@@ -230,6 +239,8 @@ class MarketSeedCommand extends Command
                     revenuePerShare: $shares > 0 ? $revenue / $shares : 0.0,
                     businessModel: $businessModel,
                     liveCostOfEquity: $debtHealth->costOfEquity ?? 0.10,
+                    netDebtPerShare: $seedNetDebtPerShare,
+                    secularGrowth: $seedSecularGrowth,
                     baselineRoic: $impliedPricingRoic,
                     baselineMargin: (float) ($stockData['operating_margin'] ?? 0.20),
                     investedCapitalPerShare: $stock->getInvestedCapital() / max(1.0, (float) $stock->getSharesOutstanding())

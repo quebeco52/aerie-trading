@@ -42,7 +42,7 @@ class DistrictMap
      */
     public const FRONTAGE_ORDER = [
         // Financials — the historical core of the row.
-        'credit_services', 'commercial_bank', 'insurance', 'reinsurance', 'shadow_bank',
+        'credit_services', 'commercial_bank', 'insurance', 'retail_insurance', 'reinsurance', 'shadow_bank',
         'investment_bank', 'clearing_house', 'financial_data', 'asset_manager', 'hedge_fund',
         'brokerage', 'distressed_debt',
         // Industrials & Materials.

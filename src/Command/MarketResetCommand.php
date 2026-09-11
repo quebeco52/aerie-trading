@@ -183,6 +183,18 @@ class MarketResetCommand extends Command
             $targetPayout = $stockData['target_payout_ratio'] ?? 0.30;
             $startingDividend = ($annualEps / 4.0) * ($targetPayout * 0.50);
 
+            // The reset price must be struck on the SAME fundamentals StockTracker feeds the engine on the
+            // next tick, or the market re-rates immediately. Both default inside the DTO (2% growth, zero
+            // net debt), which priced every firm as a median-growth, debt-free business.
+            $resetSecularGrowth = $strategy->getSecularGrowthRate($tempStock);
+            $resetNetDebtPerShare = $shares > 0
+                ? max(0.0, (
+                    (float) ($stockData['wholesale_debt'] ?? 0.0)
+                    + (float) ($stockData['customer_deposits'] ?? 0.0)
+                    - (float) ($stockData['corporate_treasury'] ?? 1000000000.00)
+                ) / $shares)
+                : 0.0;
+
             $pricingCtx = new \App\DTO\MarketPricingContext(
                 currentPrice: $bookValuePerShare,
                 currentVolatility: (float) ($stockData['volatility'] ?? 0.15),
@@ -206,6 +218,8 @@ class MarketResetCommand extends Command
                 revenuePerShare: $shares > 0 ? $revenue / $shares : 0.0,
                 businessModel: $businessModel,
                 liveCostOfEquity: $debtHealth->costOfEquity ?? 0.10,
+                netDebtPerShare: $resetNetDebtPerShare,
+                secularGrowth: $resetSecularGrowth,
                 baselineRoic: $impliedPricingRoic,
                 baselineMargin: (float) ($stockData['operating_margin'] ?? 0.20),
                 // The reset writes the balance sheet by SQL rather than through the entity, so capital per share

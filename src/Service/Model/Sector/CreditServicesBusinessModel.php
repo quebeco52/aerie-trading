@@ -400,7 +400,7 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     }
 
     /** Unsecured consumer credit loses far more through the cycle than a prime bank loan book. */
-    public function getThroughTheCycleCreditLossRate(): float
+    public function getThroughTheCycleCreditLossRate(?Stock $stock = null): float
     {
         return self::CARD_CHARGE_OFF_RATE;
     }

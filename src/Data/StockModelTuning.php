@@ -51,7 +51,6 @@ class StockModelTuning
         'ROOK' => [
             ModelParam::AdvisoryRevenueWeight->value => 0.15,
             ModelParam::TradingRevenueWeight->value  => 0.85,
-            ModelParam::VixArbitrageScalar->value    => 1.80,
         ],
 
         // --- Corvid Strategic Arbitrage (CORV) ---
@@ -111,8 +110,6 @@ class StockModelTuning
         'POOL' => [
             ModelParam::MortgageOriginationWeight->value => 0.60,
             ModelParam::DirectLendingWeight->value       => 0.40,
-            ModelParam::RateSensitivityScalar->value     => 2.50,
-            ModelParam::PricingPowerIndex->value         => 0.40,
         ],
 
         // =====================================================================
@@ -128,7 +125,6 @@ class StockModelTuning
             ModelParam::CatastropheZThreshold->value     => -1.55,
             ModelParam::CatastropheLossScalar->value     => 0.20,
             ModelParam::FloatEquityWeight->value         => 0.05,
-            ModelParam::EquityPortfolioVol->value        => 0.08,
         ],
 
         // --- White Dove Insurance (DOVE) ---
@@ -139,7 +135,6 @@ class StockModelTuning
             ModelParam::CatastropheZThreshold->value     => -1.80,
             ModelParam::CatastropheLossScalar->value     => 0.08,
             ModelParam::FloatEquityWeight->value         => 0.10,
-            ModelParam::EquityPortfolioVol->value        => 0.10,
         ],
 
         // =====================================================================
@@ -285,6 +280,11 @@ class StockModelTuning
         'TICK' => [
             ModelParam::SubscriptionRevenueWeight->value => 0.90,
             ModelParam::TransactionRevenueWeight->value  => 0.10,
+            // Two different sensitivities, deliberately split. The EARNINGS are near-immune to the cycle:
+            // a trading desk cancels its terminals last, whether the market is crashing or soaring. The
+            // PRICE is not, because a 26x multiple de-rates hard in any technology selloff. Equity beta
+            // stays at 1.45 to carry the second; this dial carries the first.
+            ModelParam::OperatingCyclicality->value      => 0.35,
         ],
 
         // =====================================================================
@@ -363,6 +363,10 @@ class StockModelTuning
         'CBIL' => [
             ModelParam::ConsumerWeight->value   => 0.10, // Retail secondary market liquidations (volatile)
             ModelParam::CommercialWeight->value => 0.90, // Unbreakable industrial fortress / premium tooling (sticky)
+            // A shattered drill bit halts an assembly line, so the tooling spend survives the downturn that
+            // cancels the line's expansion. Volumes track maintenance, not the capital cycle the sector
+            // default (1.00) assumes.
+            ModelParam::OperatingCyclicality->value => 0.55,
         ],
 
         // --- Three Rivers Manufacturing (TRIV) ---
@@ -393,7 +397,6 @@ class StockModelTuning
             ModelParam::CostPlusWeight->value             => 0.60,
             ModelParam::FixedPriceDevWeight->value        => 0.20,
             ModelParam::ForeignMilitarySalesWeight->value => 0.20,
-            ModelParam::DomesticProcurementWeight->value  => 0.80,
         ],
 
         // --- Bird Watch Security (WATCH) ---

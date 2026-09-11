@@ -123,7 +123,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     // --- Analyst Visibility & Error ---
     // Moved to getCoverageProfile() — see MarketConsensusEngine.
 
-    public function getThroughTheCycleCreditLossRate(): float
+    public function getThroughTheCycleCreditLossRate(?Stock $stock = null): float
     {
         return self::PORTFOLIO_CHARGE_OFF_RATE;
     }

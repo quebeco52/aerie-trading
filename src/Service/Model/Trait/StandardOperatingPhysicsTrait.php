@@ -81,7 +81,7 @@ trait StandardOperatingPhysicsTrait
     }
 
     /** An operating company's assets are plant and a trade cycle, not credit: nothing to charge off. */
-    public function getThroughTheCycleCreditLossRate(): float
+    public function getThroughTheCycleCreditLossRate(?Stock $stock = null): float
     {
         return 0.0;
     }

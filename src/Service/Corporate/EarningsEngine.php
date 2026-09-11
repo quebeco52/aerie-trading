@@ -337,7 +337,7 @@ class EarningsEngine
     /** Lifetime expected loss rate on gross earning assets: the annual through-the-cycle rate over the CECL horizon. */
     private function resolveLifetimeCreditLossRate(EarningsSimulationContext $ctx): float
     {
-        return max(0.0, $ctx->strategy->getThroughTheCycleCreditLossRate()) * max(0.0, $ctx->strategy->getCreditLossHorizonYears());
+        return max(0.0, $ctx->strategy->getThroughTheCycleCreditLossRate($ctx->stock)) * max(0.0, $ctx->strategy->getCreditLossHorizonYears());
     }
 
     /**
@@ -1382,7 +1382,7 @@ class EarningsEngine
         // A model whose credit physics is expressed only as a margin shock reports no dollar charge-offs;
         // its realized losses then run at the through-the-cycle rate, or the allowance would be built every
         // quarter by a charge nothing ever consumed and released back as income that was never earned.
-        $throughTheCycleCharge = max(0.0, $ctx->strategy->getThroughTheCycleCreditLossRate()) / 4.0 * $grossBook;
+        $throughTheCycleCharge = max(0.0, $ctx->strategy->getThroughTheCycleCreditLossRate($ctx->stock)) / 4.0 * $grossBook;
         $chargeOffs = min($grossBook, $ctx->netChargeOffs > 0.0 ? $ctx->netChargeOffs : $throughTheCycleCharge);
 
         // Loans that went bad leave the book and consume the reserve held against them. No earnings effect:

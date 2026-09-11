@@ -115,8 +115,11 @@ interface OperatingStrategyInterface
     /**
      * Annual through-the-cycle expected credit loss on gross earning assets: the charge-off rate the
      * stable cost base already carries. Zero for any business whose assets are not credit.
+     *
+     * Pass the firm whenever one is in hand: a lender whose underwriting posture is tuned per company
+     * resolves a firm-specific long-run default rate, and falls back to the sector rate without it.
      */
-    public function getThroughTheCycleCreditLossRate(): float;
+    public function getThroughTheCycleCreditLossRate(?Stock $stock = null): float;
     /** Years of expected loss the credit-loss allowance covers (ASC 326 lifetime horizon). */
     public function getCreditLossHorizonYears(): float;
     /**
