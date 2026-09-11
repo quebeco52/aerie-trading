@@ -20,6 +20,8 @@ class DistrictInstitutionDTO
         public readonly string $shortLabel,
         public readonly int $x,
         public readonly int $width,
+        /** Absolute y of the conduit lane this institution owns — see DistrictMap::CONDUIT_LANE_PITCH. */
+        public readonly float $laneY,
         /** @var list<string> */
         public readonly array $fields,
         /** @var list<array{field: string, label: string, unit: string}> */

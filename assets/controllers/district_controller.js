@@ -67,7 +67,7 @@ function ruleTriggered(rule, macro) {
         case 'gte': return value >= rule.value;
         case 'lte': return value <= rule.value;
         case 'lt': return value < rule.value;
-        case 'index_deviation': return Math.abs(value - 100.0) / 100.0 >= rule.value;
+        case 'index_drop': return (100.0 - value) / 100.0 >= rule.value;
         default: return false;
     }
 }
@@ -87,22 +87,13 @@ function truncate(text, maxLength) {
 }
 
 /**
- * The `d` for one conduit, from an institution's outlet down to a tenant's roofline. Mirrors the
- * two forms the Twig template renders on first paint — keep the two in step, the way the logistic
- * facade curve already is.
- *
- * The upper row takes a symmetric S. The lower row cannot: that curve's horizontal traverse sits
- * at the midpoint between outlet and target, which for a lower-row tenant lands in the middle of
- * the upper row's buildings and would show only through the few clear units between them. So it
- * traverses a corridor above every possible upper-row roofline first, then drops straight down.
+ * The `d` for one conduit: from an institution's outlet down to its lane, along the lane, and
+ * down onto the tenant's roofline. Mirrors the path the Twig template renders on first paint —
+ * keep the two in step, the way the facade height mapping already is. Only the last drop's end
+ * (ty) ever changes on a live tick; the outlet, lane and drop x are fixed by the canvas.
  */
-function conduitPath(sx, sy, tx, ty, row, corridorY) {
-    if (row === 0) {
-        const mid = sy + (ty - sy) / 2;
-        return `M ${sx} ${sy} C ${sx} ${mid}, ${tx} ${mid}, ${tx} ${ty}`;
-    }
-
-    return `M ${sx} ${sy} C ${sx} ${sy + 20}, ${tx} ${corridorY - 20}, ${tx} ${corridorY} L ${tx} ${ty}`;
+function conduitPath(sx, sy, tx, ty, laneY) {
+    return `M ${sx} ${sy} V ${laneY} H ${tx} V ${ty}`;
 }
 
 /** Formats one readout value to match the server-rendered `number_format` precision exactly. */
@@ -194,12 +185,24 @@ export default class extends Controller {
         'detailRevenueMixBar', 'detailRevenueFootnote',
         'institutionDetail', 'institutionName', 'institutionStatus', 'institutionReadings',
         'institutionFeeds', 'institutionFeedCount',
+        'sectorChip', 'sectorRun',
     ];
 
-    static values = { shares: Object, envelope: Object, events: Object, revenueMix: Object, institutions: Array };
+    static values = {
+        shares: Object, envelope: Object, events: Object, revenueMix: Object, institutions: Array,
+        /** Wall-clock seconds one simulated month lasts — App\Service\District\DistrictEventFeed::badgeWindowSeconds(). */
+        eventBadgeWindowSeconds: Number,
+    };
 
     /** Maximum recent events kept per ticker client-side, oldest dropped first. */
     static MAX_EVENTS_PER_TICKER = 8;
+
+    /**
+     * How often the badges are re-counted so an event ages out of its window while the page
+     * stays open. Coarse on purpose: a badge is a "something happened here lately" cue, and
+     * nothing else on the street changes on this clock.
+     */
+    static BADGE_REFRESH_MS = 5000;
 
     /** Zoom multiplier bounds — 1 is the fit-to-width state (natural container width). */
     static MIN_ZOOM = 1;
@@ -218,6 +221,7 @@ export default class extends Controller {
         this.badgesByTicker = new Map();
         this.badgeCountsByTicker = new Map();
         this.currentSelectedTicker = null;
+        this.activeSector = null;
 
         // Recent-history backfill from App\Service\District\DistrictEventFeed, newest first —
         // the same App\Service\Event\EventPresenter output the stock page's own event feed uses.
@@ -280,6 +284,11 @@ export default class extends Controller {
         this.onMarketUpdate = this.onMarketUpdate.bind(this);
         this.flushPending = this.flushPending.bind(this);
         document.addEventListener('market:update', this.onMarketUpdate);
+
+        // The server counted each badge at render time; from here on the client owns the count,
+        // so events fall out of the window on schedule rather than only on the next page load.
+        this.refreshBadges = this.refreshBadges.bind(this);
+        this.badgeRefreshHandle = setInterval(this.refreshBadges, this.constructor.BADGE_REFRESH_MS);
     }
 
     /** Appends `value` to the array at `map[key]`, creating it on first use. */
@@ -294,6 +303,7 @@ export default class extends Controller {
         Object.values(this.tickTimers).forEach(clearTimeout);
         Object.values(this.flareTimers).forEach(clearTimeout);
         Object.values(this.badgeTimers).forEach(clearTimeout);
+        clearInterval(this.badgeRefreshHandle);
 
         if (this.frameHandle !== null) {
             cancelAnimationFrame(this.frameHandle);
@@ -336,10 +346,11 @@ export default class extends Controller {
         this.renderRevenueMix(plot.dataset.ticker);
     }
 
-    /** Drops any current selection and returns the panel to its resting copy. */
+    /** Drops any current selection (and sector filter) and returns the panel to its resting copy. */
     deselect() {
         this.clearSelection();
         this.highlightConduits([]);
+        this.applySectorFilter(null);
         this.currentSelectedTicker = null;
 
         this.detailTarget.classList.add('hidden');
@@ -388,10 +399,71 @@ export default class extends Controller {
 
         this.positionTooltip(plot);
         tooltip.setAttribute('data-visible', 'true');
+
+        this.hoverConduits(this.conduitsByBuilding.get(plot.dataset.ticker) || []);
     }
 
     hideTooltip() {
         this.tooltipTarget.setAttribute('data-visible', 'false');
+        this.hoverConduits([]);
+    }
+
+    /** Lights every conduit an institution feeds while the pointer rests on it. */
+    hoverInstitution(event) {
+        this.hoverConduits(this.conduitsByInstitution.get(event.currentTarget.dataset.institution) || []);
+    }
+
+    unhoverInstitution() {
+        this.hoverConduits([]);
+    }
+
+    /**
+     * Marks exactly the given conduits as hovered. Separate from the click highlight so moving
+     * the pointer away never clears a selection.
+     */
+    hoverConduits(conduits) {
+        this.conduitTargets.forEach(c => c.removeAttribute('data-hover'));
+        conduits.forEach(c => c.setAttribute('data-hover', 'true'));
+    }
+
+    /** A legend chip toggles its sector as the street's filter; the same chip again clears it. */
+    toggleSector(event) {
+        const sector = event.currentTarget.dataset.sector || null;
+        this.applySectorFilter(this.activeSector === sector ? null : sector);
+    }
+
+    /**
+     * Dims every tenant outside the given sector — facade, kerb plate and bracket alike — or
+     * clears the dimming when given null. Pure presentation: nothing is hidden, so hover, click
+     * and live ticks keep working on a dimmed building.
+     */
+    applySectorFilter(sector) {
+        this.activeSector = sector;
+
+        const mark = (node, nodeSector) => {
+            if (sector !== null && nodeSector !== sector) {
+                node.setAttribute('data-dimmed', 'true');
+            } else {
+                node.removeAttribute('data-dimmed');
+            }
+        };
+
+        this.plotTargets.forEach(plot => mark(plot, plot.dataset.sector));
+        this.sectorRunTargets.forEach(run => mark(run, run.dataset.sector));
+
+        const sectorByTicker = new Map();
+        this.plotTargets.forEach(plot => sectorByTicker.set(plot.dataset.ticker, plot.dataset.sector));
+        this.labelTargets.forEach(node => mark(node, sectorByTicker.get(node.dataset.labelFor)));
+        this.rankTargets.forEach(node => mark(node, sectorByTicker.get(node.dataset.rankFor)));
+        this.kerbPriceTargets.forEach(node => mark(node, sectorByTicker.get(node.dataset.priceFor)));
+        this.kerbChangeTargets.forEach(node => mark(node, sectorByTicker.get(node.dataset.changeFor)));
+
+        this.sectorChipTargets.forEach(chip => {
+            const active = chip.dataset.sector === sector;
+            chip.setAttribute('aria-pressed', active ? 'true' : 'false');
+            chip.setAttribute('data-active', active ? 'true' : 'false');
+            chip.setAttribute('data-muted', sector !== null && !active ? 'true' : 'false');
+        });
     }
 
     /**
@@ -543,10 +615,14 @@ export default class extends Controller {
         const price = parseFloat(plot.dataset.price) || 0;
         const mcap = parseFloat(plot.dataset.mcap) || 0;
         const roc = parseFloat(plot.dataset.roc) || 0;
+        const baselineRoc = parseFloat(plot.dataset.baselineRoc);
 
         this.detailPriceTarget.innerText = formatCurrency(price);
         this.detailMcapTarget.innerText = formatLarge(mcap, '$');
-        this.detailRocTarget.innerText = formatPercent(roc);
+        // The same ratio that lights the windows, printed as the two figures behind it.
+        this.detailRocTarget.innerText = Number.isFinite(baselineRoc) && baselineRoc > 0
+            ? `${formatPercent(roc)} vs ${formatPercent(baselineRoc)}`
+            : formatPercent(roc);
 
         const change = parseFloat(plot.dataset.change);
         if (Number.isFinite(change)) {
@@ -1005,17 +1081,6 @@ export default class extends Controller {
             this.flareTimers[ticker] = setTimeout(() => flare.removeAttribute('data-flash'), 900);
         }
 
-        const badge = this.badgesByTicker.get(ticker);
-        const badgeCount = this.badgeCountsByTicker.get(ticker);
-        if (badge && badgeCount) {
-            const count = (parseInt(badge.dataset.count, 10) || 0) + 1;
-            badge.dataset.count = String(count);
-            badgeCount.textContent = String(count);
-            badge.setAttribute('data-flash', 'true');
-            clearTimeout(this.badgeTimers[ticker]);
-            this.badgeTimers[ticker] = setTimeout(() => badge.removeAttribute('data-flash'), 500);
-        }
-
         const entry = {
             type: evt.type,
             category: style.category,
@@ -1025,6 +1090,7 @@ export default class extends Controller {
             headline: evt.description || '',
             changePercent: Number.isFinite(parseFloat(evt.change_percent)) ? parseFloat(evt.change_percent) : null,
             recordedAt: nowStamp(),
+            recordedAtTs: Date.now() / 1000,
         };
 
         const history = this.eventsByTicker.get(ticker) || [];
@@ -1032,9 +1098,42 @@ export default class extends Controller {
         history.length = Math.min(history.length, this.constructor.MAX_EVENTS_PER_TICKER);
         this.eventsByTicker.set(ticker, history);
 
+        this.updateBadge(ticker);
+
+        const badge = this.badgesByTicker.get(ticker);
+        if (badge) {
+            badge.setAttribute('data-flash', 'true');
+            clearTimeout(this.badgeTimers[ticker]);
+            this.badgeTimers[ticker] = setTimeout(() => badge.removeAttribute('data-flash'), 500);
+        }
+
         if (this.currentSelectedTicker === ticker) {
             this.renderEventsList(ticker);
         }
+    }
+
+    /** Events for a ticker that still fall inside the badge window, oldest already dropped. */
+    countRecentEvents(ticker) {
+        const windowOpensAt = Date.now() / 1000 - (this.eventBadgeWindowSecondsValue || 0);
+        const events = this.eventsByTicker.get(ticker) || [];
+
+        return events.filter(evt => Number.isFinite(evt.recordedAtTs) && evt.recordedAtTs >= windowOpensAt).length;
+    }
+
+    /** Rewrites one building's badge from its current in-window count. */
+    updateBadge(ticker) {
+        const badge = this.badgesByTicker.get(ticker);
+        const badgeCount = this.badgeCountsByTicker.get(ticker);
+        if (!badge || !badgeCount) return;
+
+        const count = this.countRecentEvents(ticker);
+        badge.dataset.count = String(count);
+        badgeCount.textContent = String(count);
+    }
+
+    /** Re-counts every badge so events age out of the window while the page stays open. */
+    refreshBadges() {
+        this.badgesByTicker.forEach((badge, ticker) => this.updateBadge(ticker));
     }
 
     /** Recomputes institution stress from a live macro snapshot and toggles matching conduits. */
@@ -1116,17 +1215,15 @@ export default class extends Controller {
     }
 
     /**
-     * Applies the log-scale height envelope to a facade. Must mirror
-     * DistrictMapBuilder::calculateFacadeHeight() exactly or a facade jumps on the first live
-     * tick after load; see MathUtility::logisticUnitInterval().
+     * Applies the height envelope to a facade: linear in log10 across the window the server
+     * fitted to this roster, clamped at both ends. Must mirror
+     * DistrictMapBuilder::calculateFacadeHeight() and App\DTO\DistrictHeightEnvelope::normalise()
+     * exactly or a facade jumps on the first live tick after load.
      */
     resizeFacade(plot, marketCap) {
         const env = this.envelopeValue;
         const logCap = Math.log10(Math.max(marketCap, 1));
-        const midpoint = (env.logCeiling + env.logFloor) / 2;
-        const halfSpan = (env.logCeiling - env.logFloor) / 2;
-        const steepness = Math.log((1 - env.edgeTolerance) / env.edgeTolerance) / halfSpan;
-        const normalised = 1 / (1 + Math.exp(-steepness * (logCap - midpoint)));
+        const normalised = Math.max(0, Math.min(1, (logCap - env.logFloor) / (env.logCeiling - env.logFloor)));
         const height = env.minHeight + normalised * (env.maxHeight - env.minHeight);
         // Each row stands on its own ground line, carried per plot — reading one shared value
         // here would drop every lower-row facade onto the upper row on the first live tick.
@@ -1148,7 +1245,7 @@ export default class extends Controller {
         }
 
         // Conduits terminate at the roofline, so they must be redrawn every time it moves —
-        // their source end (sx, sy) is fixed (institutions don't move), only ty changes.
+        // outlet, lane and drop x are fixed by the canvas, only ty changes.
         const ty = y - 7;
         (this.conduitsByBuilding.get(plot.dataset.ticker) || []).forEach(conduit => {
             conduit.setAttribute('d', conduitPath(
@@ -1156,8 +1253,7 @@ export default class extends Controller {
                 parseFloat(conduit.dataset.sy),
                 parseFloat(conduit.dataset.tx),
                 ty,
-                parseInt(conduit.dataset.conduitRow, 10) || 0,
-                env.corridorY,
+                parseFloat(conduit.dataset.laneY),
             ));
         });
 

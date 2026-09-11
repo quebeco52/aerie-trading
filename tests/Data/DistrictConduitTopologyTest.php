@@ -169,7 +169,7 @@ class DistrictConduitTopologyTest extends TestCase
     public function testEveryStressRuleReferencesARealFieldAndOperator(): void
     {
         $dtoFields = array_keys((new MacroStateDTO())->toArray());
-        $validOps = [DistrictMap::OP_GTE, DistrictMap::OP_LTE, DistrictMap::OP_LT, DistrictMap::OP_INDEX_DEVIATION];
+        $validOps = [DistrictMap::OP_GTE, DistrictMap::OP_LTE, DistrictMap::OP_LT, DistrictMap::OP_INDEX_DROP];
 
         foreach (DistrictMap::INSTITUTIONS as $institutionId => $institution) {
             foreach ($institution['stress_rules'] ?? [] as $rule) {

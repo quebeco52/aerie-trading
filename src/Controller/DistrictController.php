@@ -61,9 +61,14 @@ class DistrictController extends AbstractController
 
         $changeByTicker = $priceChangeFeed->changeByTicker($onStreet);
 
-        $plots = $mapBuilder->buildWard($frontage['slots'], $stocks, $changeByTicker);
+        // One envelope for the facades, the gutter rules and the client's live resize alike —
+        // fitted to this request's roster, not to a fixed window a long-running market outgrows.
+        // The canvas then gives each row the sky that envelope says it needs.
+        $envelope = $mapBuilder->resolveEnvelope($frontage['slots'], $stocks);
+        $canvas = $mapBuilder->resolveCanvas($frontage['slots'], $stocks, $envelope, $frontage['rowCount']);
+        $plots = $mapBuilder->buildWard($frontage['slots'], $stocks, $envelope, $canvas, $changeByTicker);
         $viewboxWidth = $mapBuilder->resolveViewboxWidth($plots, $frontage['viewboxWidth']);
-        $institutions = $mapBuilder->buildInstitutions($plots, $viewboxWidth);
+        $institutions = $mapBuilder->buildInstitutions($plots, $viewboxWidth, $canvas);
 
         $shares = [];
         foreach ($onStreet as $stock) {
@@ -73,24 +78,33 @@ class DistrictController extends AbstractController
         $macroState = $this->readMacroState($redis);
         $institutionStress = $stressEvaluator->evaluate($macroState);
 
-        $rowGroundLines = array_slice(DistrictMap::ROW_GROUND_LINES, 0, $frontage['rowCount']);
-
         return $this->render('district/index.html.twig', [
             'wardName' => DistrictMap::WARD_NAME,
             'wardTagline' => DistrictMap::WARD_TAGLINE,
             'rosterSize' => DistrictMap::STREET_ROSTER_SIZE,
             'viewboxWidth' => $viewboxWidth,
-            'viewboxHeight' => DistrictMap::VIEWBOX_HEIGHT,
-            'rowGroundLines' => $rowGroundLines,
+            'viewboxHeight' => $canvas->viewboxHeight,
+            'rowGroundLines' => $canvas->rowGroundLines,
             // The lowest row is the only one standing on the water, so it is the only one that reflects.
-            'waterLine' => $rowGroundLines[count($rowGroundLines) - 1],
+            'waterLine' => $canvas->waterLine(),
             'kerbDepth' => DistrictMap::KERB_DEPTH,
             'gutterWidth' => DistrictMap::FRONTAGE_GUTTER,
             'frontageMargin' => DistrictMap::FRONTAGE_MARGIN,
             'floorHeight' => DistrictMap::FLOOR_HEIGHT,
             'firstFloorInset' => DistrictMap::FIRST_FLOOR_INSET,
-            'gridlines' => $mapBuilder->buildGridlines($frontage['rowCount']),
+            'window' => [
+                'pitch' => DistrictMap::WINDOW_PITCH,
+                'width' => DistrictMap::WINDOW_WIDTH,
+                'height' => DistrictMap::WINDOW_HEIGHT,
+            ],
+            'gridlines' => $mapBuilder->buildGridlines($envelope, $canvas),
             'sectorPalette' => DistrictMap::SECTOR_PALETTE,
+            'sectorRuns' => $mapBuilder->buildSectorRuns($plots),
+            'sectorBracket' => [
+                'ruleOffset' => DistrictMap::SECTOR_BRACKET_RULE_OFFSET,
+                'labelOffset' => DistrictMap::SECTOR_BRACKET_LABEL_OFFSET,
+                'labelSize' => DistrictMap::SECTOR_BRACKET_LABEL_SIZE,
+            ],
             'plots' => $plots,
             'shares' => $shares,
             'institutions' => $institutions,
@@ -102,18 +116,16 @@ class DistrictController extends AbstractController
                 'top' => DistrictMap::INSTITUTION_BAND_TOP,
                 'height' => DistrictMap::INSTITUTION_BAND_HEIGHT,
                 'outletY' => DistrictMap::INSTITUTION_OUTLET_Y,
-                'corridorY' => DistrictMap::CONDUIT_CORRIDOR_Y,
             ],
             'events' => $eventFeed->recentEventsByTicker($onStreet),
+            // Wall-clock seconds one simulated month currently lasts: what the client needs to
+            // let a building's event badge age out while the page stays open.
+            'eventBadgeWindowSeconds' => $eventFeed->badgeWindowSeconds(),
             'revenueMix' => $revenueFeed->latestRevenueMixByTicker($onStreet),
             'summary' => $this->buildSummary($plots, $institutionStress, $frontage['nextInLine']),
-            'envelope' => [
+            'envelope' => $envelope->toArray() + [
                 'minHeight' => DistrictMap::MIN_FACADE_HEIGHT,
                 'maxHeight' => DistrictMap::MAX_FACADE_HEIGHT,
-                'logFloor' => DistrictMap::MARKET_CAP_LOG_FLOOR,
-                'logCeiling' => DistrictMap::MARKET_CAP_LOG_CEILING,
-                'edgeTolerance' => DistrictMap::MARKET_CAP_LOG_EDGE_TOLERANCE,
-                'corridorY' => DistrictMap::CONDUIT_CORRIDOR_Y,
             ],
         ]);
     }

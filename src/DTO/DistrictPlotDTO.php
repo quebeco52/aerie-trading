@@ -20,9 +20,17 @@ class DistrictPlotDTO
         public readonly float $y,
         /** Which frontage row this plot stands on, 0 being the upper one. A grouping key only — every coordinate here is already absolute. */
         public readonly int $row,
-        /** Absolute y of this row's kerb line. Carried rather than re-derived so nothing downstream has to index DistrictMap::ROW_GROUND_LINES. */
+        /** Absolute y of this row's kerb line. Carried rather than re-derived so nothing downstream has to consult the canvas. */
         public readonly float $groundLine,
         public readonly int $floors,
+        /** Window columns that fit across the facade — see DistrictMap::WINDOW_PITCH. */
+        public readonly int $windowColumns,
+        /** Inset from the facade's west edge to the first window column, centring the band. */
+        public readonly float $windowInset,
+        /** Which windows are lit, indexed [floor][column]; see DistrictMap::WINDOW_LIT_SHARE_AT_BASELINE. @var list<list<bool>> */
+        public readonly array $litWindows,
+        /** Fraction of windows lit, the figure the lighting was drawn from. */
+        public readonly float $litShare,
         public readonly string $ticker,
         public readonly string $name,
         /** Market-cap position on the street, 1 being the largest tenant. */
@@ -35,10 +43,14 @@ class DistrictPlotDTO
         public readonly float $price = 0.0,
         public readonly float $marketCap = 0.0,
         public readonly float $returnOnCapital = 0.0,
+        /** The return the tenant is expected to earn at rest (baseline ROIC, or ROE for financials); what lights the windows. */
+        public readonly float $baselineReturnOnCapital = 0.0,
         /** Fractional price change over the district's lookback window, or null when no history is buffered yet. */
         public readonly ?float $changePercent = null,
         public readonly ?string $blurb = null,
         /** @var list<string> institution ids this tenant draws a macro conduit from */
         public readonly array $conduits = [],
+        /** Absolute x where each conduit's drop lands on the roof, keyed by institution id; spread across the roof so they never overlay. @var array<string, float> */
+        public readonly array $conduitDropX = [],
     ) {}
 }

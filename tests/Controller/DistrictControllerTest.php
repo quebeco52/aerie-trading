@@ -77,6 +77,9 @@ class DistrictControllerTest extends WebTestCase
             $this->assertNotEmpty($node->attr('data-conduit-institution'));
             $this->assertNotEmpty($node->attr('data-conduit-building'));
             $this->assertArrayHasKey($node->attr('data-conduit-institution'), DistrictMap::INSTITUTIONS);
+            // Orthogonal routing: the client redraws the last drop from these on every tick.
+            $this->assertIsNumeric($node->attr('data-lane-y'));
+            $this->assertIsNumeric($node->attr('data-tx'));
         });
     }
 
@@ -216,11 +219,36 @@ class DistrictControllerTest extends WebTestCase
         $this->assertResponseIsSuccessful();
 
         $rows = count($crawler->filter('svg g[id^="skyline-row-"]'));
+        $gridlines = $crawler->filter('svg .gridline')->count();
+
+        // The rules are generated from the roster's own cap window, so their number is not
+        // fixed — but every row carries the same set, and a street with tenants always has some.
+        $this->assertGreaterThan(0, $rows);
+        $this->assertGreaterThan(0, $gridlines);
+        $this->assertSame(
+            0,
+            $gridlines % $rows,
+            'A cap maps to a facade height, so each row needs its own identical set of reference rules'
+        );
+    }
+
+    public function testSectorBracketsRunAlongTheKerb(): void
+    {
+        $client = static::createClient();
+        $crawler = $client->request('GET', '/district/glasswater-row');
+
+        $this->assertResponseIsSuccessful();
+
+        $runs = $crawler->filter('[data-district-target="sectorRun"]');
+        $this->assertGreaterThan(0, $runs->count(), 'A street with tenants has at least one sector run');
+        $runs->each(function ($node) {
+            $this->assertArrayHasKey($node->attr('data-sector'), DistrictMap::SECTOR_PALETTE);
+        });
 
         $this->assertCount(
-            $rows * count(DistrictMap::MARKET_CAP_GRIDLINES),
-            $crawler->filter('svg .gridline'),
-            'A cap maps to a facade height, so each row needs its own set of reference rules'
+            count(DistrictMap::SECTOR_PALETTE),
+            $crawler->filter('[data-district-target="sectorChip"]'),
+            'Every sector in the legend is a filter chip'
         );
     }
 

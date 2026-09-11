@@ -12,22 +12,37 @@
 		transition: y 600ms ease-out, height 600ms ease-out, fill 300ms ease-out;
 	}
 	.plot-windows { transition: transform 600ms ease-out; }
-	.window { opacity: 0.42; }
+	/* Lit share tracks return on capital against baseline — see DistrictMap::WINDOW_LIT_SHARE_AT_BASELINE.
+	   Dark windows stay faintly visible so the facade keeps its texture. */
+	.window { opacity: 0.08; }
+	.window[data-lit="true"] { opacity: 0.5; }
 	.roofline { transition: y 600ms ease-out, fill 300ms ease-out; fill: #4a5266; }
 
 	/* Condition outranks the sector hue — solvency is the more urgent fact. */
+	/* Condition recolours the windows but leaves the lit pattern alone — a distressed tenant
+	   that still earns its baseline keeps its lights on, in the condition's hue. */
 	.plot[data-condition="distressed"] .facade { fill: #37291d !important; stroke: #a37b3d !important; }
-	.plot[data-condition="distressed"] .window { fill: #ffd9a0 !important; opacity: 0.30; }
+	.plot[data-condition="distressed"] .window { fill: #ffd9a0 !important; }
+	.plot[data-condition="distressed"] .window[data-lit="true"] { opacity: 0.30; }
 	.plot[data-condition="distressed"] .roofline { fill: #6b5a3d; }
 
 	.plot[data-condition="ruin"] .facade { fill: #241a24 !important; stroke: #8c4b4b !important; stroke-dasharray: 10 7; }
-	.plot[data-condition="ruin"] .window { fill: #ffb3ad !important; opacity: 0.10; }
+	.plot[data-condition="ruin"] .window { fill: #ffb3ad !important; opacity: 0.04; }
+	.plot[data-condition="ruin"] .window[data-lit="true"] { opacity: 0.10; }
 	.plot[data-condition="ruin"] .roofline { fill: #5c3030; }
 
 	.plot:hover .facade { fill: #2c3854 !important; }
-	.plot:hover .window { opacity: 0.85; }
+	.plot:hover .window[data-lit="true"] { opacity: 0.85; }
+	.plot:hover .window:not([data-lit="true"]) { opacity: 0.18; }
 	.plot[data-selected="true"] .facade { stroke: #adc6ff !important; stroke-width: 5; }
-	.plot[data-selected="true"] .window { opacity: 0.95; }
+	.plot[data-selected="true"] .window[data-lit="true"] { opacity: 0.95; }
+
+	/* Sector filter: a legend chip dims every tenant outside its sector, plates and brackets included. */
+	.plot[data-dimmed="true"], .plot-label[data-dimmed="true"], .plot-rank[data-dimmed="true"],
+	.plot-price[data-dimmed="true"], .plot-change[data-dimmed="true"], .sector-run[data-dimmed="true"] {
+		opacity: 0.18;
+		transition: opacity 200ms;
+	}
 
 	.plot[data-tick="up"] .roofline { fill: #4edea3; }
 	.plot[data-tick="down"] .roofline { fill: #ffb3ad; }
@@ -43,6 +58,10 @@
 	.plot-change[data-direction="down"] { fill: #ffb3ad; }
 	.plot-change[data-direction="flat"] { fill: #838da3; }
 	.plot-label[data-selected="true"], .plot-rank[data-selected="true"] { fill: #adc6ff; }
+
+	/* Sector brackets along the kerb — one rule per run of adjacent same-sector plots. */
+	.sector-run .sector-rule { stroke-width: 3; opacity: 0.7; }
+	.sector-run .sector-label { font-size: 20px; letter-spacing: 1.5px; opacity: 0.75; }
 
 	.gridline { stroke: #2b3550; stroke-width: 2; stroke-dasharray: 4 12; opacity: 0.55; }
 	.gridline-label { fill: #6b7690; font-size: 32px; letter-spacing: 0.5px; opacity: 0.75; }
@@ -90,15 +109,23 @@
 	.institution[data-stressed="true"] .readout-value { fill: #ffb3ad; }
 
 	/* --- Conduits --- */
-	/* Faintly visible at rest: two institutions carry no stress rules at all, so an opacity-0
-	   resting state made their conduits permanently unreachable on a calm market. */
+	/* Routed orthogonally along one lane per institution (see DistrictMap::CONDUIT_LANE_PITCH).
+	   Barely there at rest — the lane structure shows, the wiring does not — and revealed by
+	   hovering either end: an institution lights everything it feeds, a building everything it
+	   draws. A stressed institution's lines stay lit on their own. The two institutions with no
+	   stress rules are reachable through hover, which is why the resting state need not be. */
 	.conduit {
 		fill: none;
 		stroke: #3a4260;
 		stroke-width: 3;
+		stroke-linejoin: round;
 		stroke-dasharray: 10 9;
-		opacity: 0.30;
+		opacity: 0.12;
 		transition: opacity 300ms, stroke 300ms;
+	}
+	.conduit[data-hover="true"] {
+		opacity: 0.85;
+		stroke: #8fa5d6;
 	}
 	.conduit[data-stressed="true"] {
 		opacity: 0.75;
@@ -168,6 +195,7 @@
 	data-district-shares-value="{{ shares|json_encode|e('html_attr') }}"
 	data-district-envelope-value="{{ envelope|json_encode|e('html_attr') }}"
 	data-district-events-value="{{ events|json_encode|e('html_attr') }}"
+	data-district-event-badge-window-seconds-value="{{ eventBadgeWindowSeconds }}"
 	data-district-revenue-mix-value="{{ revenueMix|json_encode|e('html_attr') }}"
 	data-district-institutions-value="{{ institutions|map(i => {id: i.id, label: i.label, readouts: i.readouts, stressRules: i.stressRules, fields: i.fields})|json_encode|e('html_attr') }}">
 
@@ -239,12 +267,19 @@
 			</div>
 		</div>
 
-		{# Sector legend — the street's primary colour signal #}
+		{# Sector legend — the street's primary colour signal. Each chip is a filter: click to dim
+		   every other sector, click again (or press Escape) to clear. #}
 		<div class="flex flex-wrap gap-x-4 gap-y-1.5 mt-4 pt-4 border-t border-outline-variant/15">
 			{% for sector, colours in sectorPalette %}
-				<span class="flex items-center gap-1.5 text-xs font-mono text-on-surface-variant/80">
+				<button type="button"
+					class="cursor-pointer flex items-center gap-1.5 text-xs font-mono text-on-surface-variant/80 rounded px-1 -mx-1 hover:text-on-surface data-[active=true]:text-on-surface data-[active=true]:bg-surface-container-high data-[muted=true]:opacity-40"
+					data-district-target="sectorChip"
+					data-sector="{{ sector }}"
+					data-action="click->district#toggleSector"
+					aria-pressed="false"
+					title="Show only {{ sector }}">
 					<span class="w-2.5 h-2.5 rounded-full" style="background:{{ colours.window }}"></span>{{ sector }}
-				</span>
+				</button>
 			{% endfor %}
 		</div>
 	</div>
@@ -256,7 +291,7 @@
 			<div class="flex items-center justify-between px-4 py-2 border-b border-outline-variant/15 bg-surface-container-high/20">
 				<span class="text-sm font-semibold text-on-surface-variant">Street Elevation &mdash; facing north</span>
 				<div class="flex items-center gap-3">
-					<span class="text-xs font-mono text-on-surface-variant/60 hidden sm:block">Height &prop; market capitalisation (log scale)</span>
+					<span class="text-xs font-mono text-on-surface-variant/60 hidden sm:block">Height &prop; log market capitalisation, scaled to this street</span>
 					<div class="flex items-center gap-1">
 						<button type="button" data-action="click->district#zoomOut" title="Zoom out"
 							class="cursor-pointer w-6 h-6 flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">
@@ -325,27 +360,28 @@
 								data-district-target="institution"
 								data-institution="{{ institution.id }}"
 								data-stressed="{{ institutionStress[institution.id] ? 'true' : 'false' }}"
-								data-action="click->district#selectInstitution keydown.enter->district#selectInstitution"
+								data-action="click->district#selectInstitution keydown.enter->district#selectInstitution mouseenter->district#hoverInstitution mouseleave->district#unhoverInstitution focus->district#hoverInstitution blur->district#unhoverInstitution"
 								tabindex="0"
 								role="button"
 								aria-label="{{ institution.label }}">
 
+								{% set top = institutionBand.top %}
 								<polygon class="pediment" points="
-									{{ institution.x }},{{ institutionBand.top + 26 }}
-									{{ institution.x + institution.width / 2 }},{{ institutionBand.top }}
-									{{ institution.x + institution.width }},{{ institutionBand.top + 26 }}
+									{{ institution.x }},{{ top + 26 }}
+									{{ institution.x + institution.width / 2 }},{{ top }}
+									{{ institution.x + institution.width }},{{ top + 26 }}
 								"/>
 								<rect class="body"
-									x="{{ institution.x }}" y="{{ institutionBand.top + 26 }}"
+									x="{{ institution.x }}" y="{{ top + 26 }}"
 									width="{{ institution.width }}" height="{{ institutionBand.height - 26 }}"/>
 								{% for c in 0..5 %}
 									<line class="column"
-										x1="{{ institution.x + 16 + c * ((institution.width - 32) / 5) }}" y1="{{ institutionBand.top + 34 }}"
-										x2="{{ institution.x + 16 + c * ((institution.width - 32) / 5) }}" y2="{{ institutionBand.top + institutionBand.height - 8 }}"/>
+										x1="{{ institution.x + 16 + c * ((institution.width - 32) / 5) }}" y1="{{ top + 34 }}"
+										x2="{{ institution.x + 16 + c * ((institution.width - 32) / 5) }}" y2="{{ top + institutionBand.height - 8 }}"/>
 								{% endfor %}
-								<circle class="institution-beacon" cx="{{ institution.x + institution.width / 2 }}" cy="{{ institutionBand.top }}" r="8"/>
+								<circle class="institution-beacon" cx="{{ institution.x + institution.width / 2 }}" cy="{{ top }}" r="8"/>
 
-								<text class="institution-label" x="{{ institution.x + institution.width / 2 }}" y="{{ institutionBand.top + institutionBand.height + 28 }}"
+								<text class="institution-label" x="{{ institution.x + institution.width / 2 }}" y="{{ top + institutionBand.height + 28 }}"
 									text-anchor="middle">{{ institution.shortLabel|upper }}</text>
 
 								{# Live readout: the actual macro numbers behind the stress pulse, not just
@@ -355,17 +391,17 @@
 									text-anchor="middle">{%- for readout in institution.readouts -%}
 										{%- set raw = macroSnapshot[readout.field] ?? 0 -%}
 										<tspan x="{{ institution.x + institution.width / 2 }}"
-											{%- if loop.first %} y="{{ institutionBand.top + institutionBand.height + 58 }}"{% else %} dy="30"{% endif %}
+											{%- if loop.first %} y="{{ top + institutionBand.height + 58 }}"{% else %} dy="30"{% endif %}
 											><tspan class="readout-label">{{ readout.label }}</tspan> <tspan class="readout-value" data-readout-field="{{ readout.field }}">{% if readout.unit == 'pct' %}{{ (raw * 100)|number_format(2) }}%{% else %}{{ raw|number_format(1) }}{% endif %}</tspan></tspan>
 									{%- endfor -%}</text>
 							</g>
 						{% endfor %}
 					</g>
 
-					{# Conduits: institution outlet to a wired tenant's roofline, drawn behind the skyline.
-					   The upper row takes a symmetric S; the lower row traverses the corridor band above
-					   every possible upper-row roofline first, then drops — see
-					   App\Data\DistrictMap::CONDUIT_CORRIDOR_Y for why the S cannot be used there. #}
+					{# Conduits: institution outlet down to its lane, along the lane, and down onto the
+					   tenant's roofline — see App\Data\DistrictMap::CONDUIT_LANE_PITCH. Drawn behind the
+					   skyline, so a lower-row drop passes through the upper row's gaps and behind its
+					   kerb, which is the one depth cue the elevation allows itself. #}
 					<g id="conduits">
 						{% set institutionsById = {} %}
 						{% for institution in institutions %}
@@ -376,16 +412,15 @@
 								{% set institution = institutionsById[institutionId] %}
 								{% set sx = institution.x + institution.width / 2 %}
 								{% set sy = institutionBand.outletY %}
-								{% set tx = plot.x + plot.width / 2 %}
+								{% set tx = plot.conduitDropX[institutionId] %}
 								{% set ty = plot.y - 7 %}
 								<path class="conduit"
 									data-district-target="conduit"
 									data-conduit-institution="{{ institutionId }}"
 									data-conduit-building="{{ plot.ticker }}"
-									data-conduit-row="{{ plot.row }}"
 									data-stressed="{{ institutionStress[institutionId] ? 'true' : 'false' }}"
-									data-sx="{{ sx }}" data-sy="{{ sy }}" data-tx="{{ tx }}"
-									d="{% if plot.row == 0 %}M {{ sx }} {{ sy }} C {{ sx }} {{ sy + (ty - sy) / 2 }}, {{ tx }} {{ ty - (ty - sy) / 2 }}, {{ tx }} {{ ty }}{% else %}M {{ sx }} {{ sy }} C {{ sx }} {{ sy + 20 }}, {{ tx }} {{ institutionBand.corridorY - 20 }}, {{ tx }} {{ institutionBand.corridorY }} L {{ tx }} {{ ty }}{% endif %}"/>
+									data-sx="{{ sx }}" data-sy="{{ sy }}" data-tx="{{ tx }}" data-lane-y="{{ institution.laneY }}"
+									d="M {{ sx }} {{ sy }} V {{ institution.laneY }} H {{ tx }} V {{ ty }}"/>
 							{% endfor %}
 						{% endfor %}
 					</g>
@@ -395,9 +430,7 @@
 							<g id="skyline-row-{{ rowIndex }}">
 								{% for plot in plots|filter(p => p.row == rowIndex) %}
 									{% set palette = sectorPalette[plot.sector] ?? {'facade': '#1b2439', 'stroke': '#424754', 'window': '#adc6ff'} %}
-									{% set cols = ((plot.width - 20) // 34) %}
-									{% set band = cols * 34 - 14 %}
-									{% set inset = (plot.width - band) / 2 %}
+									{% set cols = plot.windowColumns %}
 									<g class="plot"
 										data-district-target="plot"
 										data-plot="{{ plot.plotId }}"
@@ -414,6 +447,8 @@
 										data-price="{{ plot.price }}"
 										data-mcap="{{ plot.marketCap }}"
 										data-roc="{{ plot.returnOnCapital }}"
+										data-baseline-roc="{{ plot.baselineReturnOnCapital }}"
+										data-lit-share="{{ plot.litShare }}"
 										data-change="{{ plot.changePercent is null ? '' : plot.changePercent }}"
 										data-blurb="{{ plot.blurb|e('html_attr') }}"
 										data-action="click->district#select keydown.enter->district#select mouseenter->district#showTooltip mouseleave->district#hideTooltip"
@@ -436,8 +471,9 @@
 												{% for row in 0..(plot.floors - 1) %}
 													{% for col in 0..(cols - 1) %}
 														<rect class="window" fill="{{ palette.window }}"
-															x="{{ inset + col * 34 }}" y="{{ firstFloorInset + row * floorHeight }}"
-															width="20" height="22"/>
+															data-lit="{{ plot.litWindows[row][col] ? 'true' : 'false' }}"
+															x="{{ plot.windowInset + col * window.pitch }}" y="{{ firstFloorInset + row * floorHeight }}"
+															width="{{ window.width }}" height="{{ window.height }}"/>
 													{% endfor %}
 												{% endfor %}
 											</g>
@@ -458,13 +494,16 @@
 												x="{{ plot.x + 4 }}" y="{{ plot.y - 14 }}">#{{ plot.rank }}</text>
 
 											{# On the roofline, not the kerb: a narrow plot has no room beside
-											   the ticker plate. #}
+											   the ticker plate. Counts only the events inside the badge window
+											   (DistrictEventFeed marks them `recent`), not the whole backfill —
+											   the client re-counts on a timer so the badge ages out. #}
+											{% set recentCount = events[plot.ticker]|default([])|filter(e => e.recent)|length %}
 											<g class="event-badge" data-district-target="badge" data-badge-for="{{ plot.ticker }}"
-												data-count="{{ events[plot.ticker]|default([])|length }}">
+												data-count="{{ recentCount }}">
 												<circle cx="{{ plot.x + plot.width - 6 }}" cy="{{ plot.y - 18 }}" r="15"/>
 												<text data-district-target="badgeCount"
 													x="{{ plot.x + plot.width - 6 }}" y="{{ plot.y - 18 }}"
-													text-anchor="middle" dominant-baseline="central">{{ events[plot.ticker]|default([])|length }}</text>
+													text-anchor="middle" dominant-baseline="central">{{ recentCount }}</text>
 											</g>
 										{% endif %}
 									</g>
@@ -473,9 +512,10 @@
 						{% endfor %}
 					</g>
 
-					{# Upper row's kerb: dry stone, no water beneath it. #}
+					{# Upper row's kerb: dry stone, no water beneath it. Opaque, so a lower-row conduit
+					   drop passes behind it rather than showing through the pavement. #}
 					{% if rowGroundLines|length > 1 %}
-						<rect x="0" y="{{ rowGroundLines[0] }}" width="{{ viewboxWidth }}" height="{{ kerbDepth }}" fill="#0b1120" opacity="0.94"/>
+						<rect x="0" y="{{ rowGroundLines[0] }}" width="{{ viewboxWidth }}" height="{{ kerbDepth }}" fill="#0b1120"/>
 						<line x1="0" y1="{{ rowGroundLines[0] }}" x2="{{ viewboxWidth }}" y2="{{ rowGroundLines[0] }}" stroke="#424754" stroke-width="3"/>
 						<line x1="0" y1="{{ rowGroundLines[0] + kerbDepth }}" x2="{{ viewboxWidth }}" y2="{{ rowGroundLines[0] + kerbDepth }}"
 							stroke="#424754" stroke-width="1.5" opacity="0.35"/>
@@ -488,7 +528,7 @@
 						<use href="#skyline-row-{{ rowGroundLines|length - 1 }}" transform="translate(0 {{ waterLine * 2 }}) scale(1 -1)"/>
 					</g>
 
-					<rect x="0" y="{{ waterLine }}" width="{{ viewboxWidth }}" height="{{ kerbDepth }}" fill="#0b1120" opacity="0.94"/>
+					<rect x="0" y="{{ waterLine }}" width="{{ viewboxWidth }}" height="{{ kerbDepth }}" fill="#0b1120"/>
 					<line x1="0" y1="{{ waterLine }}" x2="{{ viewboxWidth }}" y2="{{ waterLine }}" stroke="#424754" stroke-width="3"/>
 					<line x1="0" y1="{{ waterLine + kerbDepth }}" x2="{{ viewboxWidth }}" y2="{{ waterLine + kerbDepth }}"
 						stroke="#424754" stroke-width="1.5" opacity="0.35"/>
@@ -516,6 +556,26 @@
 						{% endfor %}
 					</g>
 
+					{# Sector brackets: a rule in the sector's colour under each run of adjacent
+					   same-sector plots, named where the run is wide enough to carry it — see
+					   App\Service\District\DistrictMapBuilder::buildSectorRuns(). #}
+					<g id="sector-runs" aria-hidden="true">
+						{% for run in sectorRuns %}
+							{% set palette = sectorPalette[run.sector] ?? {'facade': '#1b2439', 'stroke': '#424754', 'window': '#adc6ff'} %}
+							{% set groundLine = rowGroundLines[run.row] %}
+							<g class="sector-run" data-district-target="sectorRun" data-sector="{{ run.sector }}">
+								<line class="sector-rule" stroke="{{ palette.window }}"
+									x1="{{ run.x }}" y1="{{ groundLine + sectorBracket.ruleOffset }}"
+									x2="{{ run.x + run.width }}" y2="{{ groundLine + sectorBracket.ruleOffset }}"/>
+								{% if run.label %}
+									<text class="sector-label" fill="{{ palette.window }}"
+										x="{{ run.x + run.width / 2 }}" y="{{ groundLine + sectorBracket.labelOffset }}"
+										text-anchor="middle">{{ run.label|upper }}</text>
+								{% endif %}
+							</g>
+						{% endfor %}
+					</g>
+
 					{# Tooltip last, so it paints above every other layer. #}
 					<g id="plot-tooltip" data-district-target="tooltip" data-visible="false">
 						<rect class="tooltip-bg" x="0" y="0" width="520" height="210"/>
@@ -538,10 +598,12 @@
 				<p class="text-xs text-on-surface-variant leading-relaxed">
 					{{ plots|length }} listed houses hold frontage on {{ wardName }}, ranked by market
 					capitalisation and reshuffled as it moves. Facade height tracks that capitalisation;
-					lit windows carry the sector; masonry condition tracks credit standing. The structures
-					along the top are the institutions publishing the macro conditions this street trades
-					on &mdash; a conduit reddens on its own once the variable it carries turns adverse.
-					Hover any building for its file, or click an institution to see everyone it feeds.
+					the windows carry the sector's colour, and how many are lit tracks the return on capital
+					against the house's own baseline; masonry condition tracks credit standing. The
+					structures along the top are the institutions publishing the macro conditions this
+					street trades on &mdash; hover one to see everyone it feeds, hover a building to see
+					what it draws, and a conduit reddens on its own once the variable it carries turns
+					adverse. Click a sector in the legend to pick that sector out of the street.
 				</p>
 			</div>
 
@@ -562,7 +624,7 @@
 						<dd class="text-on-surface tabular-nums" data-district-target="detailMcap"></dd></div>
 					<div><dt class="text-on-surface-variant/60 uppercase tracking-wider text-3xs">Credit</dt>
 						<dd class="text-on-surface" data-district-target="detailRating"></dd></div>
-					<div><dt class="text-on-surface-variant/60 uppercase tracking-wider text-3xs">Return</dt>
+					<div><dt class="text-on-surface-variant/60 uppercase tracking-wider text-3xs">Return <span class="normal-case tracking-normal">vs baseline</span></dt>
 						<dd class="text-on-surface tabular-nums" data-district-target="detailRoc"></dd></div>
 					<div><dt class="text-on-surface-variant/60 uppercase tracking-wider text-3xs">Street Rank</dt>
 						<dd class="text-on-surface tabular-nums" data-district-target="detailRank"></dd></div>

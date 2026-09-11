@@ -61,44 +61,17 @@ class DistrictMapTest extends TestCase
         $this->assertGreaterThan(0, DistrictMap::STREET_ROSTER_SIZE);
     }
 
-    public function testEveryRowsFacadeEnvelopeFitsAboveItsGroundLine(): void
+    public function testRowSpacingLeavesRoomForTheRoofFurniture(): void
     {
-        foreach (DistrictMap::ROW_GROUND_LINES as $row => $groundLine) {
-            $this->assertLessThanOrEqual(
-                $groundLine,
-                DistrictMap::MAX_FACADE_HEIGHT,
-                sprintf('Tallest facade on row %d would overflow the top of the canvas', $row)
-            );
-        }
-
-        $this->assertLessThan(
-            DistrictMap::VIEWBOX_HEIGHT,
-            DistrictMap::ROW_GROUND_LINES[count(DistrictMap::ROW_GROUND_LINES) - 1] + DistrictMap::KERB_DEPTH,
-            'The lowest row leaves no room for its kerb and the water below it'
-        );
+        // Rank label at y-14, titan beacon at y-20, event badge at y-18 with r=15: all inside ROW_GAP.
+        $this->assertGreaterThanOrEqual(40, DistrictMap::ROW_GAP);
+        $this->assertGreaterThan(DistrictMap::SECTOR_BRACKET_LABEL_OFFSET, DistrictMap::KERB_DEPTH, 'The sector bracket label must sit inside the kerb band');
+        $this->assertGreaterThan(DistrictMap::SECTOR_BRACKET_RULE_OFFSET, DistrictMap::SECTOR_BRACKET_LABEL_OFFSET);
+        $this->assertGreaterThan(88, DistrictMap::SECTOR_BRACKET_RULE_OFFSET, 'The bracket rule must clear the change line printed at +88');
+        $this->assertGreaterThan(0, DistrictMap::REFLECTION_DEPTH);
     }
 
-    /**
-     * The spacing rule the two-row canvas rests on: the tallest possible facade on a row must
-     * clear the kerb of the row above it, or buildings would grow through the pavement.
-     */
-    public function testEachRowClearsTheKerbOfTheRowAbove(): void
-    {
-        $groundLines = DistrictMap::ROW_GROUND_LINES;
-
-        for ($row = 1; $row < count($groundLines); $row++) {
-            $tallestRooftop = $groundLines[$row] - DistrictMap::MAX_FACADE_HEIGHT;
-            $kerbAbove = $groundLines[$row - 1] + DistrictMap::KERB_DEPTH;
-
-            $this->assertGreaterThanOrEqual(
-                $kerbAbove,
-                $tallestRooftop,
-                sprintf('A full-height facade on row %d would grow through row %d\'s kerb', $row, $row - 1)
-            );
-        }
-    }
-
-    public function testInstitutionBandSitsAboveTheConduitCorridorAndTallestFacade(): void
+    public function testInstitutionBandSitsAboveItsOwnOutletAndLanes(): void
     {
         $institutionBottom = DistrictMap::INSTITUTION_BAND_TOP + DistrictMap::INSTITUTION_BAND_HEIGHT;
 
@@ -108,21 +81,31 @@ class DistrictMapTest extends TestCase
             'Institution structures must not extend below their own conduit outlet.'
         );
 
-        $this->assertGreaterThan(
-            DistrictMap::INSTITUTION_OUTLET_Y,
-            DistrictMap::CONDUIT_CORRIDOR_Y,
-            'The corridor conduits traverse must sit below the outlet they leave from.'
-        );
-
-        // The corridor only works if it clears every possible rooftop on the upper row —
-        // otherwise a lower-row conduit's horizontal run would cut through buildings.
-        $tallestRooftop = DistrictMap::ROW_GROUND_LINES[0] - DistrictMap::MAX_FACADE_HEIGHT - 7;
-
+        // A 3-unit dashed stroke needs clear space either side to read as its own lane.
+        $this->assertGreaterThanOrEqual(10, DistrictMap::CONDUIT_LANE_PITCH);
+        $this->assertGreaterThan(0, DistrictMap::CONDUIT_LANE_TOP_INSET);
+        $this->assertGreaterThan(0, DistrictMap::CONDUIT_DROP_INSET);
         $this->assertLessThan(
-            $tallestRooftop,
-            DistrictMap::CONDUIT_CORRIDOR_Y,
-            'Conduits must traverse above the tallest possible rooftop on the upper row.'
+            min(DistrictMap::PLOT_WIDTH_BY_IMPORTANCE) / 2,
+            DistrictMap::CONDUIT_DROP_INSET,
+            'The drop inset must leave the narrowest roof some width to spread drops across'
         );
+    }
+
+    public function testWindowGeometryFitsAtLeastOneColumnOnTheNarrowestPlot(): void
+    {
+        $narrowest = min(DistrictMap::PLOT_WIDTH_BY_IMPORTANCE);
+
+        $this->assertGreaterThanOrEqual(1, intdiv($narrowest - DistrictMap::WINDOW_WALL_ALLOWANCE, DistrictMap::WINDOW_PITCH));
+        $this->assertLessThan(DistrictMap::WINDOW_PITCH, DistrictMap::WINDOW_WIDTH);
+        $this->assertLessThan(DistrictMap::FLOOR_HEIGHT, DistrictMap::WINDOW_HEIGHT);
+    }
+
+    public function testWindowLightingSharesAreOrderedAndInsideTheUnitInterval(): void
+    {
+        $this->assertGreaterThan(0.0, DistrictMap::WINDOW_LIT_SHARE_FLOOR);
+        $this->assertGreaterThan(DistrictMap::WINDOW_LIT_SHARE_FLOOR, DistrictMap::WINDOW_LIT_SHARE_AT_BASELINE);
+        $this->assertLessThan(1.0, DistrictMap::WINDOW_LIT_SHARE_AT_BASELINE, 'A tenant beating its baseline must have windows left to light');
     }
 
     public function testEveryMacroSectorHasAPaletteEntry(): void
@@ -159,32 +142,36 @@ class DistrictMapTest extends TestCase
         $this->assertSame(DistrictMap::SECTOR_PALETTE['Financials'], DistrictMap::paletteForSector('Financials'));
     }
 
-    public function testGridlineCapsFallInsideTheFacadeEnvelope(): void
+    /**
+     * The height window is fitted per request, so what the cartography pins is the shape of the
+     * fit: headroom that actually pads, a minimum span that is a real span, and an empty-street
+     * floor that lands in the capitalisations the street is built for.
+     */
+    public function testHeightWindowParametersAreWellFormed(): void
     {
-        $this->assertNotEmpty(DistrictMap::MARKET_CAP_GRIDLINES);
-
-        foreach (DistrictMap::MARKET_CAP_GRIDLINES as $label => $marketCap) {
-            $logCap = log10($marketCap);
-            $this->assertGreaterThan(
-                DistrictMap::MARKET_CAP_LOG_FLOOR,
-                $logCap,
-                sprintf('Gridline %s sits below the envelope floor and would pin to the shortest facade', $label)
-            );
-            $this->assertLessThan(
-                DistrictMap::MARKET_CAP_LOG_CEILING,
-                $logCap,
-                sprintf('Gridline %s sits above the envelope ceiling and would pin to the tallest facade', $label)
-            );
-        }
+        $this->assertGreaterThan(0.0, DistrictMap::MARKET_CAP_LOG_HEADROOM);
+        $this->assertLessThan(1.0, DistrictMap::MARKET_CAP_LOG_HEADROOM, 'More than a decade of headroom would waste most of the envelope');
+        $this->assertGreaterThan(2.0 * DistrictMap::MARKET_CAP_LOG_HEADROOM, DistrictMap::MARKET_CAP_LOG_MIN_SPAN);
+        $this->assertGreaterThanOrEqual(9.0, DistrictMap::MARKET_CAP_LOG_EMPTY_FLOOR);
     }
 
-    public function testGroundLineForRowClampsRatherThanFailing(): void
+    public function testGridlineMantissasAreAscendingWithinOneDecade(): void
     {
-        $this->assertSame(DistrictMap::ROW_GROUND_LINES[0], DistrictMap::groundLineForRow(0));
-        $this->assertSame(
-            DistrictMap::ROW_GROUND_LINES[count(DistrictMap::ROW_GROUND_LINES) - 1],
-            DistrictMap::groundLineForRow(99)
-        );
+        $this->assertNotEmpty(DistrictMap::GRIDLINE_MANTISSAS);
+        $previous = 0.0;
+        foreach (DistrictMap::GRIDLINE_MANTISSAS as $mantissa) {
+            $this->assertGreaterThan($previous, $mantissa);
+            $this->assertLessThan(10.0, $mantissa);
+            $previous = $mantissa;
+        }
+        $this->assertSame(1.0, DistrictMap::GRIDLINE_MANTISSAS[0], 'Every decade must start on its round figure');
+        $this->assertGreaterThan((float) DistrictMap::GRIDLINE_LABEL_SIZE, DistrictMap::GRIDLINE_MIN_SPACING);
+    }
+
+    public function testEventBadgeWindowIsAFractionOfAYear(): void
+    {
+        $this->assertGreaterThan(0.0, DistrictMap::EVENT_BADGE_WINDOW_YEARS);
+        $this->assertLessThanOrEqual(1.0, DistrictMap::EVENT_BADGE_WINDOW_YEARS);
     }
 
     public function testPlotWidthForImportanceCoversEveryTierInUse(): void
