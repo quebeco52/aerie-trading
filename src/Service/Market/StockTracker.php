@@ -165,13 +165,11 @@ class StockTracker
             $secularGrowth = $strategy->getSecularGrowthRate($stock);
 
             // Leverage re-levers the magnitude of a firm's systematic exposure, never its sign. DebtEngine
-            // computes the Hamada beta from max(0.5, |beta|), which would turn an inverse hedge into a
-            // market-following name and inflate a 0.10-beta defensive to 0.50, so only the leverage
-            // multiplier is recovered and applied to the firm's own beta.
-            $rawBeta = (float) $stock->getBeta();
-            $hamadaBaseBeta = max(0.5, abs($rawBeta));
-            $leverageMultiplier = max(1.0, ($health->leveredBeta ?? $hamadaBaseBeta) / $hamadaBaseBeta);
-            $leveredBeta = $rawBeta * $leverageMultiplier;
+            // now levers the firm's own signed beta through Hamada, so its result is already the beta this
+            // diffusion wants and is used directly. This previously had to reconstruct the multiplier and
+            // reapply it, because DebtEngine levered max(0.5, |beta|) and would otherwise have turned an
+            // inverse hedge into a market-following name.
+            $leveredBeta = $health->leveredBeta ?? (float) $stock->getBeta();
 
             $priceAtTickStart = (float) $stock->getPrice();
             $sectorZ = (float) ($macroDTO->sectorZ[$sectorName] ?? 0.0);

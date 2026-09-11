@@ -180,20 +180,23 @@ final class StockTrackerFactorWiringTest extends TestCase
         $this->assertSame(0.0, $captured->sectorZ);
     }
 
-    public function testLeverageAmplifiesBetaWithoutFlippingAnInverseHedge(): void
+    /**
+     * The debt engine levers the firm's own signed beta through Hamada, so the beta it reports is already
+     * the one this diffusion wants and reaches the price engine untouched. The sign invariant itself is
+     * enforced where the levering happens, in DebtEngineTest.
+     */
+    public function testTheDebtEnginesLeveredBetaReachesThePriceEngineIntact(): void
     {
         $captured = null;
 
-        // The debt engine levers from max(0.5, |beta|), so a 0.5 base returning 0.75 is a 1.5x re-levering.
-        $tracker = $this->buildTracker(0.75, [100.0], $captured);
+        // A -0.10 hedge re-levered 1.5x by its own debt: still a hedge, just a bigger one.
+        $tracker = $this->buildTracker(-0.15, [100.0], $captured);
 
         $tracker->updateStocks([$this->stock(beta: '-0.10')], 1.0 / 252.0, false, new MacroStateDTO());
 
         $this->assertInstanceOf(MarketPricingContext::class, $captured);
-
-        // Handing the debt engine's levered beta straight through would give +0.75: the sign inverted and the
-        // magnitude inflated seven and a half times, turning a defensive hedge into a leveraged market bet.
         $this->assertEqualsWithDelta(-0.15, $captured->beta, 1e-9);
+        $this->assertLessThan(0.0, $captured->beta, 'An inverse hedge must never reach the price engine as a market-following name.');
     }
 
     public function testLeverageLeavesAnUnleveredFirmsBetaUntouched(): void

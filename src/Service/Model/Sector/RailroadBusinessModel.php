@@ -75,6 +75,8 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     public const BULK_COMMODITIES_WEIGHT = 0.40;
     /** Baseline fraction of revenue derived from heavy industrial and automotive carloads. */
     public const INDUSTRIAL_CARLOAD_WEIGHT = 0.20;
+    /** Baseline fraction of revenue from commuter transit subscriptions; zero for a pure freight hauler. */
+    public const TRANSIT_SUBSCRIPTION_WEIGHT = 0.00;
 
     // --- Physics & Variances ---
     /** Idiosyncratic revenue variance scalar for cyclical intermodal container shipping. */
@@ -83,6 +85,14 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     public const BULK_VARIANCE_SCALAR       = 0.15;
     /** Idiosyncratic revenue variance scalar for industrial and automotive carloads. */
     public const INDUSTRIAL_VARIANCE_SCALAR = 0.25;
+    /** Idiosyncratic revenue variance scalar for commuter subscriptions: the steadiest line on the network. */
+    public const TRANSIT_VARIANCE_SCALAR    = 0.08;
+    /**
+     * Elasticity of commuter ridership to the output gap. Employment drives journeys, so a recession thins
+     * the carriages, but an auto-renewing season ticket is cancelled long after the commute stops, which is
+     * why this is a fraction of the freight betas rather than a peer of them.
+     */
+    public const TRANSIT_EMPLOYMENT_ELASTICITY = 0.25;
 
 
     // --- Manufacturing PMI & Trade Transmission ---
@@ -119,26 +129,35 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
             ModelParam::IntermodalFreightWeight->value  => self::INTERMODAL_WEIGHT,
             ModelParam::BulkCommoditiesWeight->value    => self::BULK_COMMODITIES_WEIGHT,
             ModelParam::IndustrialCarloadsWeight->value => self::INDUSTRIAL_CARLOAD_WEIGHT,
+            ModelParam::SubscriptionWeight->value       => self::TRANSIT_SUBSCRIPTION_WEIGHT,
         ]);
-
-        $intermodalWeight = $params[ModelParam::IntermodalFreightWeight];
-        $bulkWeight       = $params[ModelParam::BulkCommoditiesWeight];
-        $industrialWeight = $params[ModelParam::IndustrialCarloadsWeight];
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
         $beta     = $this->getOperatingCyclicality($stock);
 
+        // A passenger operator is a different business wearing the same track. Freight sells capacity to
+        // shippers and rises and falls with trade and manufacturing; a commuter network sells an
+        // auto-renewing season ticket to people who have to get to work. The stream only exists for
+        // operators that carry passengers, so a pure freight hauler never sees it.
+        $rawTransitWeight = $params[ModelParam::SubscriptionWeight];
+
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
-        $activeWeights = $streams->resolveActiveStreamWeights([
+        $targetWeights = [
             'intermodal_freight'  => $params[ModelParam::IntermodalFreightWeight],
             'bulk_commodities'    => $params[ModelParam::BulkCommoditiesWeight],
             'industrial_carloads' => $params[ModelParam::IndustrialCarloadsWeight],
-        ]);
+        ];
+        if ($rawTransitWeight > 0.0) {
+            $targetWeights['transit_subscriptions'] = $rawTransitWeight;
+        }
+
+        $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
 
         $intermodalWeight = $activeWeights['intermodal_freight'];
         $bulkWeight       = $activeWeights['bulk_commodities'];
         $industrialWeight = $activeWeights['industrial_carloads'];
+        $transitWeight    = $activeWeights['transit_subscriptions'] ?? 0.0;
 
         // Independent stream Z-scores
         $intermodalZ = $streams->generateZ('intermodal_freight', 0.20);
@@ -164,6 +183,16 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
             'bulk_commodities'    => $bulkRevenue,
             'industrial_carloads' => $industrialRevenue,
         ];
+
+        if ($transitWeight > 0.0) {
+            // Ridership follows employment rather than trade, and a subscription lags the decision to stop
+            // commuting, so the output gap reaches this stream at a fraction of the freight elasticity.
+            $transitZ = $streams->generateZ('transit_subscriptions', 0.55);
+            $transitMacroShift = $macroState->outputGapEma * self::TRANSIT_EMPLOYMENT_ELASTICITY * $beta;
+
+            $streamRevenues['transit_subscriptions'] = max(0.0, $expectedRevenue * $transitWeight
+                * (1.0 + ($transitZ * ($baselineVol * self::TRANSIT_VARIANCE_SCALAR)) + $transitMacroShift));
+        }
 
         $actualRevenue = array_sum($streamRevenues);
         $streams->recordStreamShares($streamRevenues);

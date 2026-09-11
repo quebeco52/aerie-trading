@@ -166,7 +166,9 @@ class StockModelTuningTest extends TestCase
             'biotech' => [ModelParam::CommercialTherapeuticsWeight, ModelParam::PipelineMilestonesWeight],
             'biotech_drug_mix' => [ModelParam::EstablishedDrugWeight, ModelParam::PipelineDrugWeight],
             'logistics' => [ModelParam::DedicatedFleetWeight, ModelParam::SpotBrokerageWeight, ModelParam::Warehousing3plWeight],
-            'railroad' => [ModelParam::IntermodalFreightWeight, ModelParam::IndustrialCarloadsWeight, ModelParam::BulkCommoditiesWeight],
+            // SubscriptionWeight carries commuter transit for a passenger operator; a pure freight hauler
+            // leaves it at zero and the other three still have to account for the whole network.
+            'railroad' => [ModelParam::IntermodalFreightWeight, ModelParam::IndustrialCarloadsWeight, ModelParam::BulkCommoditiesWeight, ModelParam::SubscriptionWeight],
             'restaurant' => [ModelParam::CompanyStoresWeight, ModelParam::FranchiseRoyaltiesWeight, ModelParam::FranchiseLeaseWeight],
             'education' => [ModelParam::DegreeTuitionWeight, ModelParam::EnterpriseTrainingWeight, ModelParam::LmsLicensingWeight],
             'advertising' => [ModelParam::BrandRetainerWeight, ModelParam::MartechConsultingWeight, ModelParam::MediaBuyingWeight],
@@ -297,10 +299,11 @@ class StockModelTuningTest extends TestCase
         $this->assertSame(0.25, StockModelTuning::get('CANV', ModelParam::SpotBrokerageWeight, 0.0));
         $this->assertSame(0.20, StockModelTuning::get('CANV', ModelParam::Warehousing3plWeight, 0.0));
 
-        // Kestrel Civic Lines (KSTL)
-        $this->assertSame(0.50, StockModelTuning::get('KSTL', ModelParam::IntermodalFreightWeight, 0.0));
-        $this->assertSame(0.30, StockModelTuning::get('KSTL', ModelParam::IndustrialCarloadsWeight, 0.0));
-        $this->assertSame(0.20, StockModelTuning::get('KSTL', ModelParam::BulkCommoditiesWeight, 0.0));
+        // Kestrel Civic Lines (KSTL) — a commuter monopoly that also hauls freight, not a freight hauler.
+        $this->assertSame(0.50, StockModelTuning::get('KSTL', ModelParam::SubscriptionWeight, 0.0));
+        $this->assertSame(0.25, StockModelTuning::get('KSTL', ModelParam::IntermodalFreightWeight, 0.0));
+        $this->assertSame(0.15, StockModelTuning::get('KSTL', ModelParam::IndustrialCarloadsWeight, 0.0));
+        $this->assertSame(0.10, StockModelTuning::get('KSTL', ModelParam::BulkCommoditiesWeight, 0.0));
 
         // Copperhead Coffee (BREW)
         $this->assertSame(0.70, StockModelTuning::get('BREW', ModelParam::CompanyStoresWeight, 0.0));

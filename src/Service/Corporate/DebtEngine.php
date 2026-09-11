@@ -330,8 +330,13 @@ class DebtEngine
         $netDebtCapital = $strategy->getNetDebtCapital($currentDebt, $wholesaleDebt, $treasury);
 
         // Levered Beta (The Penalty for Greed)
-        // Use abs() to capture high inverse volatility, floored at 0.5 for baseline risk
-        $baseBeta = max(0.5, abs((float) $stock->getBeta()));
+        // The firm's own signed beta goes into Hamada. Leverage multiplies systematic exposure, so it
+        // amplifies the magnitude and can never flip the sign: a levered hedge is a bigger hedge, not a
+        // market-following asset. The previous max(0.5, abs(beta)) did two ad-hoc jobs at once and did both
+        // badly. abs() erased the very sign that makes an inverse-beta name a hedge, and the 0.5 floor
+        // handed every firm below it an identical cost of equity, so a water utility at 0.15 and an
+        // industrial REIT at 0.50 were discounted at exactly the same rate.
+        $baseBeta = (float) $stock->getBeta();
 
         // For Beta Levering and WACC weights, we MUST use Market Value of Equity, not Book Value!
         // Use Net Debt Capital so Cash Hoarders aren't penalized with fake risk.
@@ -345,6 +350,19 @@ class DebtEngine
         // Cost of Equity (CAPM) - Unified to Policy Rate to perfectly match MarketEngine valuation physics
         $equityRiskPremium = $macroState->equityRiskPremium;
         $costOfEquity = $this->mathUtility->calculateCAPM($policyRate, $leveredBeta, $equityRiskPremium);
+
+        // Absolute priority. CAPM on its own is happy to hand a negative-beta hedge a required return below
+        // the risk-free rate, which is defensible as portfolio theory and indefensible as a hurdle rate: no
+        // board funds projects below what its own lenders charge. Equity is the junior claim on the same
+        // cash flows, so it cannot require less than the debt ranking above it.
+        //
+        // The floor is the MARGINAL rate the firm would borrow at today, not its blended book cost. A firm
+        // carrying cheap legacy fixed-rate debt has a funding advantage, not less risk, and discounting its
+        // equity at that stale rate would capitalise the advantage twice. Using the current market rate also
+        // makes the floor carry the firm's own credit risk, so a distressed fund is floored at its junk
+        // yield while a fortress utility is floored just over the policy rate. The distress premium below is
+        // added on top of this structural minimum.
+        $costOfEquity = max($debtMetrics->currentMarketRate, $costOfEquity);
 
         // Weighted Average Cost of Capital (WACC)
         $totalCapital = $netDebtCapital + $marketCap;

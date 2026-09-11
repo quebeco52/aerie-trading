@@ -791,4 +791,118 @@ class DebtEngineTest extends TestCase
         $this->assertLessThan($plain['z_score'], $restaurant['z_score']);
     }
 
+    /** Cost-of-capital tests need the real CAPM and Hamada arithmetic, not the class stub. */
+    private function costOfCapitalEngine(): DebtEngine
+    {
+        return new DebtEngine(new MathUtility(), new CorporateMetrics(), $this->creditRatingAgency);
+    }
+
+    private function leveredFirm(string $ticker, string $beta, string $creditSpread): Stock
+    {
+        $stock = new Stock();
+        $stock->setTicker($ticker);
+        $stock->setIndustry('General');
+        $stock->setBeta($beta);
+        $stock->setCreditSpread($creditSpread);
+        $stock->setHistoricalFixedRate('0.04');
+        $stock->setFloatingDebtRatio('0.30');
+        $stock->setVolatility('0.20');
+        $stock->setTotalEquity('1000000000');
+        $stock->setWholesaleDebt('500000000');
+        $stock->setCorporateTreasury('50000000');
+        $stock->setSharesOutstanding('100000000');
+        $stock->setPrice('10.00');
+        $stock->setTotalRevenue('800000000');
+        $stock->setOperatingMargin('0.15');
+
+        return $stock;
+    }
+
+    private function neutralMacro(): MacroStateDTO
+    {
+        return new MacroStateDTO(
+            inflationEma: 0.02,
+            policyRateEma: 0.04,
+            yield5yEma: 0.045,
+            macroCreditSpreadEma: 0.02,
+            corporateTaxRate: 0.21,
+            equityRiskPremium: 0.045
+        );
+    }
+
+    /**
+     * Hamada multiplies, so leverage scales the magnitude of systematic exposure and can never flip its
+     * sign. A levered hedge is a bigger hedge. The engine previously levered max(0.5, |beta|), which handed
+     * every inverse-beta name a positive exposure and made it look like a leveraged market bet.
+     */
+    public function testLeverageAmplifiesAnInverseBetaWithoutFlippingIt(): void
+    {
+        $health = $this->costOfCapitalEngine()->analyzeDebtHealth($this->leveredFirm('HEDG', '-0.60', '0.02'), $this->neutralMacro());
+
+        $this->assertLessThan(0.0, $health->leveredBeta, 'A hedge must stay a hedge after re-levering.');
+        $this->assertGreaterThan(0.60, abs($health->leveredBeta), 'Leverage must amplify the magnitude of the exposure.');
+    }
+
+    /**
+     * Absolute priority: equity is the junior claim on the same cash flows, so it cannot require a lower
+     * return than the debt ranking above it. CAPM alone hands a negative-beta name a rate below the
+     * risk-free rate, which is sound portfolio theory and an unusable hurdle rate.
+     */
+    public function testCostOfEquityIsNeverBelowTheFirmsOwnBorrowingRate(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = $this->neutralMacro();
+
+        foreach ([['HEDG', '-0.60'], ['FLAT', '0.05'], ['MID', '0.80'], ['HIGH', '2.00']] as [$ticker, $beta]) {
+            $stock = $this->leveredFirm($ticker, $beta, '0.02');
+            $health = $engine->analyzeDebtHealth($stock, $macro);
+            $marketRate = $engine->calculateInterestExpense($stock, $macro)->currentMarketRate;
+
+            $this->assertGreaterThanOrEqual(
+                $marketRate,
+                $health->costOfEquity,
+                sprintf('%s prices its equity below its own debt.', $ticker)
+            );
+            $this->assertGreaterThan(0.0, $health->costOfEquity);
+        }
+    }
+
+    /**
+     * The floor carries the firm's OWN credit risk, so two hedges are not priced alike: a clearinghouse on a
+     * 40bp spread funds far more cheaply than a distressed-debt shop on 320bp, even though CAPM would put
+     * both below the risk-free rate. The old flat beta floor gave them an identical cost of equity.
+     */
+    public function testTheEquityFloorCarriesTheFirmsOwnCreditRisk(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = $this->neutralMacro();
+
+        $fortress = $engine->analyzeDebtHealth($this->leveredFirm('SAFE', '-0.10', '0.004'), $macro);
+        $distressed = $engine->analyzeDebtHealth($this->leveredFirm('JUNK', '-0.10', '0.032'), $macro);
+
+        $this->assertGreaterThan(
+            $fortress->costOfEquity,
+            $distressed->costOfEquity,
+            'Two hedges with the same beta must still separate by their own credit risk.'
+        );
+    }
+
+    /**
+     * Below the old 0.5 floor every firm was discounted identically, which is why a water utility and an
+     * industrial REIT carried the same multiple. Betas below it must now produce distinct costs of equity.
+     */
+    public function testLowBetaFirmsNoLongerShareOneCostOfEquity(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = $this->neutralMacro();
+
+        $veryDefensive = $engine->analyzeDebtHealth($this->leveredFirm('UTIL', '0.10', '0.006'), $macro);
+        $defensive = $engine->analyzeDebtHealth($this->leveredFirm('REIT', '0.45', '0.006'), $macro);
+
+        $this->assertGreaterThan(
+            $veryDefensive->costOfEquity,
+            $defensive->costOfEquity,
+            'A 0.45 beta must cost more equity capital than a 0.10 beta.'
+        );
+    }
 }

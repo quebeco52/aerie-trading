@@ -180,13 +180,14 @@ class StockModelTuning
         // =====================================================================
 
         // --- Owl Capital Partners (OWLS) ---
-        // Disciplined value-investing conglomerate with sticky recurring management fees.
+        // Permanent-capital value holding company. Earns the operating cash flow of wholly-owned
+        // subsidiaries, not a management fee on third-party assets, so it runs the conglomerate physics
+        // alongside BRKW and TRIV rather than the asset-manager fee model it used to be priced on.
         'OWLS' => [
-            ModelParam::BaseFeeWeight->value         => 0.85,
-            ModelParam::PerformanceFeeWeight->value  => 0.15,
-            ModelParam::AumMarketBetaScalar->value  => 0.20,
-            ModelParam::PerformanceFeeZFloor->value => 1.60,
-            ModelParam::PerformanceFeeScalar->value  => 0.06,
+            ModelParam::IndustrialConglomerateWeight->value => 0.45, // Heavy rail and industrial manufacturing
+            ModelParam::DefensiveStaplesWeight->value       => 0.35, // Utility infrastructure and consumer goods
+            ModelParam::ContrarianFloatWeight->value        => 0.20, // Cash and short-term sovereign paper awaiting a panic
+            ModelParam::PricingPowerIndex->value            => 0.80, // Buys structural moats by mandate, never price takers
         ],
 
         // --- Crowfall Capital (CROW) ---
@@ -437,11 +438,16 @@ class StockModelTuning
 
         // --- Kestrel Civic Lines (KSTL) ---
         // Class 1 freight & municipal rail transit operator. Preemptive track monopoly with intermodal & industrial carload focus.
+        // Half the network is the commuter monopoly its description is actually about: punitive single
+        // fares herding millions onto auto-renewing 'Kestrel Link' subscriptions. The other half is the
+        // freight that shares the same preemptively laid track. It was tuned 100% freight, so none of the
+        // inescapable baseline tax reached the physics.
         'KSTL' => [
-            ModelParam::IntermodalFreightWeight->value => 0.50,
-            ModelParam::IndustrialCarloadsWeight->value => 0.30,
-            ModelParam::BulkCommoditiesWeight->value   => 0.20,
-            ModelParam::PricingPowerIndex->value       => 0.80,
+            ModelParam::SubscriptionWeight->value       => 0.50, // Kestrel Link commuter subscriptions
+            ModelParam::IntermodalFreightWeight->value  => 0.25,
+            ModelParam::IndustrialCarloadsWeight->value => 0.15,
+            ModelParam::BulkCommoditiesWeight->value    => 0.10,
+            ModelParam::PricingPowerIndex->value        => 0.80,
         ],
 
         // =====================================================================

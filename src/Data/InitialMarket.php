@@ -98,15 +98,23 @@ class InitialMarket
             'ticker' => 'OWLS',
             'management_style' => 'fortress', // Sits on towering cash for years and refuses to overpay; deploys only in panics
             'name' => 'Owl Capital Partners',
+            // Sector stays Financials, as Berkshire Hathaway's own GICS classification does, because the
+            // firm is read as an investment house. The INDUSTRY carries the economics, and those are a
+            // holding company's: permanent capital and wholly-owned subsidiaries upstreaming cash, not a
+            // manager charging a fee on somebody else's assets. It was priced on fee weights it does not earn.
             'sector' => 'Financials',
-            'industry' => 'Asset Management',
+            'industry' => 'Conglomerates',
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.12,
             'beta' => 0.20,
             'jump_intensity' => 0.20,
             'jump_vol' => 0.08,
-            'baseline_roe' => 0.19,
+            // A holding company is measured on the capital actually deployed, not on equity. More than half
+            // of OWLS's book sits in cash and sovereign paper, so its return on invested capital is strong
+            // while its return on EQUITY is dragged down by the hoard, which is exactly what the description
+            // means by lagging through frothy bull markets.
+            'baseline_roic' => 0.22,
             'capex_ratio' => 0.02,
             'target_payout_ratio' => 0.40,
             'dividendSpeed' => 0.02,
@@ -1418,7 +1426,11 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.24,
-            'beta' => -0.50,
+            // Defensive, not inverse. A short book marks up in a selloff, but the fee base underneath it is
+            // still assets under management: it swells through a bull run and shrinks on redemptions after
+            // one. Its performance fees are idiosyncratic campaign wins with no link to the cycle at all.
+            // At -0.50 the price claimed a hedge the earnings never delivered; 0.20 is what they support.
+            'beta' => 0.20,
             'jump_intensity' => 1.25,
             'jump_vol' => 0.11,
             'baseline_roe' => 0.20,
