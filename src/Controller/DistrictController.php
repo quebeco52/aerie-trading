@@ -9,6 +9,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\District\DistrictEventFeed;
 use App\Service\District\DistrictMapBuilder;
+use App\Service\Market\CreditRatingAgency;
 use App\Service\Market\PriceChangeFeed;
 use App\Service\District\DistrictRevenueFeed;
 use App\Service\District\DistrictStressEvaluator;
@@ -85,8 +86,6 @@ class DistrictController extends AbstractController
             'viewboxWidth' => $viewboxWidth,
             'viewboxHeight' => $canvas->viewboxHeight,
             'rowGroundLines' => $canvas->rowGroundLines,
-            // The lowest row is the only one standing on the water, so it is the only one that reflects.
-            'waterLine' => $canvas->waterLine(),
             'kerbDepth' => DistrictMap::KERB_DEPTH,
             'gutterWidth' => DistrictMap::FRONTAGE_GUTTER,
             'frontageMargin' => DistrictMap::FRONTAGE_MARGIN,
@@ -96,6 +95,26 @@ class DistrictController extends AbstractController
                 'pitch' => DistrictMap::WINDOW_PITCH,
                 'width' => DistrictMap::WINDOW_WIDTH,
                 'height' => DistrictMap::WINDOW_HEIGHT,
+                'twinklePeriod' => DistrictMap::WINDOW_TWINKLE_PERIOD_SECONDS,
+            ],
+            // What the client needs to relight windows and recolour masonry on a live tick — the
+            // same rule DistrictMapBuilder applied on first paint, never a second copy of it.
+            'lighting' => [
+                'floor' => DistrictMap::WINDOW_LIT_SHARE_FLOOR,
+                'atBaseline' => DistrictMap::WINDOW_LIT_SHARE_AT_BASELINE,
+            ],
+            'condition' => [
+                'ratingRanks' => CreditRatingAgency::RATING_RANKS,
+                'investmentGradeRank' => DistrictMap::INVESTMENT_GRADE_RANK,
+            ],
+            'roofFurniture' => [
+                'width' => DistrictMap::ROOF_FURNITURE_WIDTH,
+                'height' => DistrictMap::ROOF_FURNITURE_HEIGHT,
+                'eastMargin' => DistrictMap::ROOF_FURNITURE_EAST_MARGIN,
+            ],
+            'kerbLight' => [
+                'depth' => DistrictMap::KERB_LIGHT_DEPTH,
+                'opacity' => DistrictMap::KERB_LIGHT_OPACITY,
             ],
             'gridlines' => $mapBuilder->buildGridlines($envelope, $canvas),
             'sectorPalette' => DistrictMap::SECTOR_PALETTE,
@@ -116,6 +135,12 @@ class DistrictController extends AbstractController
                 'top' => DistrictMap::INSTITUTION_BAND_TOP,
                 'height' => DistrictMap::INSTITUTION_BAND_HEIGHT,
                 'outletY' => DistrictMap::INSTITUTION_OUTLET_Y,
+                'labelOffset' => DistrictMap::INSTITUTION_LABEL_OFFSET,
+                'readoutTopOffset' => DistrictMap::INSTITUTION_READOUT_TOP_OFFSET,
+                'readoutPitch' => DistrictMap::INSTITUTION_READOUT_PITCH,
+                'sparklineWidth' => DistrictMap::INSTITUTION_SPARKLINE_WIDTH,
+                'sparklineHeight' => DistrictMap::INSTITUTION_SPARKLINE_HEIGHT,
+                'sparklineGap' => DistrictMap::INSTITUTION_SPARKLINE_GAP,
             ],
             'events' => $eventFeed->recentEventsByTicker($onStreet),
             // Wall-clock seconds one simulated month currently lasts: what the client needs to

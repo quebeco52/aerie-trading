@@ -78,8 +78,9 @@ class DistrictMap
     public const ROW_SPLIT_THRESHOLD = 8;
     /**
      * Clear sky in user units between one row's kerb (or the conduit lane band) and the tallest
-     * facade of the row below, allowing for the roof furniture that rides above a roofline — the
-     * rank label, the titan beacon and the event badge.
+     * facade of the row below, allowing for everything that rides above a roofline: the rank
+     * label, the titan beacon, the event badge and the roof furniture (ROOF_FURNITURE_HEIGHT) —
+     * see DistrictMapTest::testRowSpacingLeavesRoomForTheRoofFurniture.
      *
      * Every row's ground line, and with it the viewBox height, is derived per request by
      * App\Service\District\DistrictMapBuilder::resolveCanvas(): each row is given exactly the
@@ -100,8 +101,8 @@ class DistrictMap
      * base-tier plot.
      */
     public const KERB_DEPTH = 130;
-    /** Depth in user units of Glasswater below the lowest kerb: the fading reflection of the lowest row. */
-    public const REFLECTION_DEPTH = 150;
+    /** Air in user units below the lowest kerb, so its bottom rule is not clipped by the canvas edge. */
+    public const CANVAS_BOTTOM_MARGIN = 8;
     // --- Frontage Layout ---
     /**
      * West gutter before the first plot on every row. Wider than the east margin because the
@@ -188,6 +189,104 @@ class DistrictMap
     public const WINDOW_LIT_SHARE_AT_BASELINE = 0.6;
     /** Fewest windows lit however poor the return — a dark facade still has to read as occupied, and a ruin is styled separately. */
     public const WINDOW_LIT_SHARE_FLOOR = 0.2;
+    /**
+     * Decimal places a window's lighting priority is rounded to before it is compared with the
+     * lit share. The priority ships to the client on every window so a live tick can relight the
+     * facade without the client owning a hash function; rounding on both sides to the same
+     * precision is what guarantees the two runtimes light exactly the same windows.
+     */
+    public const WINDOW_KEY_PRECISION = 4;
+    /**
+     * Share of a facade's windows that flicker slowly while lit. A static grid of lit windows
+     * reads as a diagram; a few drifting ones read as a city. Which windows flicker, and where
+     * in the cycle each one starts, is a second stable hash of the window's address, so the
+     * street never changes its mind between renders.
+     */
+    public const WINDOW_TWINKLE_SHARE = 0.12;
+    /** Seconds one flicker cycle lasts. Slow, so it never competes with the roofline tick flashes. */
+    public const WINDOW_TWINKLE_PERIOD_SECONDS = 5.5;
+
+    // --- Roof Furniture ---
+    /**
+     * One rooftop glyph per tenant, so a row of same-height facades still tells a bank from a
+     * refinery at a glance. Resolved by industry first (ROOF_FURNITURE_BY_INDUSTRY) and then by
+     * business model (ROOF_FURNITURE), so an oil explorer and a refiner — one accounting model,
+     * two trades — dress differently while every model still has a glyph. Both are authored,
+     * like FRONTAGE_ORDER; DistrictMapTest keeps them complete. Each value names a
+     * `<symbol id="roof-…">` the street template defines (ROOF_FURNITURE_SYMBOLS).
+     *
+     * The glyphs are drawn to survive the street's rendered scale (~0.45px per unit, so a
+     * ROOF_FURNITURE_WIDTH box is ~14px): filled silhouettes with one bold feature each,
+     * chosen from the pictograms people already read on signage.
+     */
+    public const ROOF_FURNITURE_BY_INDUSTRY = [
+        'Oil & Gas E&P' => 'derrick', 'Oil & Gas Equipment & Services' => 'derrick', 'Oil & Gas Integrated' => 'derrick',
+        'Oil & Gas Midstream' => 'flare_stack', 'Oil & Gas Refining & Marketing' => 'flare_stack',
+        'Aluminum' => 'ingot', 'Copper' => 'ingot', 'Gold' => 'ingot',
+        'Utilities - Regulated Water' => 'drop', 'Utilities - Regulated Gas' => 'flare_stack',
+        'Beverages - Brewers' => 'bottle', 'Beverages - Non-Alcoholic' => 'bottle', 'Beverages - Wineries & Distilleries' => 'bottle',
+        'Insurance Brokers' => 'umbrella',
+    ];
+    /** Business-model fallback for any industry ROOF_FURNITURE_BY_INDUSTRY does not single out. */
+    public const ROOF_FURNITURE = [
+        // Capital houses: a coin.
+        'credit_services' => 'coin', 'commercial_bank' => 'coin', 'shadow_bank' => 'coin',
+        'investment_bank' => 'coin', 'clearing_house' => 'coin', 'asset_manager' => 'coin',
+        'hedge_fund' => 'coin', 'brokerage' => 'coin', 'distressed_debt' => 'coin', 'private_equity' => 'coin',
+        // Underwriters: an umbrella. Market data: a bar chart.
+        'insurance' => 'umbrella', 'reinsurance' => 'umbrella', 'retail_insurance' => 'umbrella',
+        'financial_data' => 'chart',
+        // Process industry: a factory; commodities: a derrick; chemistry: a flask.
+        'steel_manufacturing' => 'factory', 'specialty_industrial_machinery' => 'factory',
+        'tools_and_accessories' => 'factory', 'heavy_manufacturing' => 'factory',
+        'commodity' => 'derrick', 'chemical' => 'flask',
+        // Movers and builders.
+        'construction' => 'crane', 'shipping' => 'anchor', 'logistics' => 'truck',
+        'railroad' => 'train', 'waste_management' => 'bin',
+        // Guardians and the professions.
+        'defense_contractor' => 'shield', 'security_protection' => 'lock',
+        'law_firm' => 'scales', 'education' => 'cap', 'advertising_agency' => 'megaphone',
+        // Consumer houses.
+        'consumer_staples' => 'cart', 'restaurant' => 'fork', 'apparel_manufacturing' => 'shirt',
+        'auto_manufacturer' => 'car', 'internet_retail' => 'bag', 'resorts_casinos' => 'dice',
+        'luxury' => 'gem',
+        // Power, silicon and signal.
+        'utility' => 'bolt', 'tech' => 'cloud', 'computer_hardware' => 'chip',
+        'semiconductor' => 'chip', 'telecom' => 'signal',
+        // Care, cures, property and the conglomerates.
+        'medical_care_facility' => 'cross', 'biotech' => 'pill', 'reit' => 'house',
+        'conglomerate' => 'blocks',
+    ];
+    /** Every symbol the template must define; every furniture value must be one of these. */
+    public const ROOF_FURNITURE_SYMBOLS = [
+        'coin', 'umbrella', 'chart', 'derrick', 'flare_stack', 'ingot', 'factory', 'flask', 'bolt', 'drop',
+        'crane', 'anchor', 'truck', 'train', 'bin', 'shield', 'lock', 'cart', 'bottle', 'fork', 'shirt',
+        'car', 'bag', 'gem', 'dice', 'megaphone', 'cap', 'scales', 'chip', 'cloud', 'signal', 'cross',
+        'pill', 'house', 'blocks',
+    ];
+    /** Symbol for a tenant neither map dressed — defensive only, the tests forbid the case for listed companies. */
+    public const ROOF_FURNITURE_DEFAULT = 'blocks';
+    /** Width in user units of a furniture symbol's box. As wide as the band between the rank plate and the badge on the narrowest roof allows. */
+    public const ROOF_FURNITURE_WIDTH = 30;
+    /** Height in user units of a furniture symbol's box; its base sits on the roofline. */
+    public const ROOF_FURNITURE_HEIGHT = 36;
+    /**
+     * Distance from a plot's east edge to the furniture's east edge. Right-anchored rather than
+     * centred: the rank plate rides the roof's west end (~47 units for "#30") and the badge its
+     * east end (r=15, 6 in from the edge), and on a 100-unit roof only the band between them is
+     * free. 22 clears the badge on every tier and leaves 48 units for the rank on the narrowest.
+     */
+    public const ROOF_FURNITURE_EAST_MARGIN = 22;
+
+    // --- Kerb Lights ---
+    /**
+     * A pool of light on the pavement under each frontage plate, in the tenant's sector colour,
+     * as if cast by a street lamp on the kerb. Ties the plate to the building above it and
+     * softens the hard kerb band. Depth in user units the pool reaches below the ground line.
+     */
+    public const KERB_LIGHT_DEPTH = 46;
+    /** Peak opacity of a kerb light at the ground line; it fades to nothing at KERB_LIGHT_DEPTH. */
+    public const KERB_LIGHT_OPACITY = 0.16;
 
     // --- Market Capitalisation Gridlines ---
     /**
@@ -282,12 +381,32 @@ class DistrictMap
      * a tenant competing with it for visual weight.
      */
     public const INSTITUTION_BAND_HEIGHT = 90;
+    /** Baseline of an institution's name below the bottom of its structure. */
+    public const INSTITUTION_LABEL_OFFSET = 28;
+    /** Baseline of the first readout line below the bottom of the structure. */
+    public const INSTITUTION_READOUT_TOP_OFFSET = 58;
+    /** Vertical distance between readout baselines — a line of text plus the sparkline strip under it. */
+    public const INSTITUTION_READOUT_PITCH = 44;
+    /** Most readouts an institution may print; the outlet below is placed for exactly this many. */
+    public const INSTITUTION_READOUT_LINES = 2;
     /**
-     * Y-coordinate conduits emanate from — below the structure, its name, and its two-line
-     * readout. The street's viewBox is almost always rendered well under 1:1 scale in a browser,
-     * so text throughout this street is sized well above what it would need at 1:1.
+     * Each readout carries a sparkline of its recent readings beneath the printed value, so a
+     * viewer can see whether a variable is heading toward its stress threshold rather than only
+     * that it crossed. Drawn client-side from the ticks the page has seen; empty on first paint.
      */
-    public const INSTITUTION_OUTLET_Y = 250;
+    /** Width in user units of a readout's sparkline strip. */
+    public const INSTITUTION_SPARKLINE_WIDTH = 140;
+    /** Height in user units of a readout's sparkline strip. */
+    public const INSTITUTION_SPARKLINE_HEIGHT = 12;
+    /** Air between a readout's baseline and the top of its sparkline strip. */
+    public const INSTITUTION_SPARKLINE_GAP = 8;
+    /**
+     * Y-coordinate conduits emanate from — below the structure, its name, and its readouts with
+     * their sparklines (DistrictMapTest pins that arithmetic). The street's viewBox is almost
+     * always rendered well under 1:1 scale in a browser, so text throughout this street is sized
+     * well above what it would need at 1:1.
+     */
+    public const INSTITUTION_OUTLET_Y = 270;
 
     // --- Conduit Lanes ---
     /**

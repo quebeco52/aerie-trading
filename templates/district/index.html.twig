@@ -16,6 +16,10 @@
 	   Dark windows stay faintly visible so the facade keeps its texture. */
 	.window { opacity: 0.08; }
 	.window[data-lit="true"] { opacity: 0.5; }
+	/* A few lit windows drift slowly — see DistrictMap::WINDOW_TWINKLE_SHARE. Animated on
+	   fill-opacity, not opacity, so the hover and condition rules still apply on top. */
+	.window[data-lit="true"][data-twinkle="true"] { animation: window-twinkle ease-in-out infinite; }
+	@keyframes window-twinkle { 0%, 100% { fill-opacity: 1; } 50% { fill-opacity: 0.35; } }
 	.roofline { transition: y 600ms ease-out, fill 300ms ease-out; fill: #4a5266; }
 
 	/* Condition outranks the sector hue — solvency is the more urgent fact. */
@@ -50,7 +54,10 @@
 	/* Sized against the narrowest plot (100 units): a 5-character ticker at 30 is 90 units, a
 	   price at 22 is 92, a change at 22 is 79. Each fits alone on a centred line; no two fit
 	   side by side, so they are never paired. */
-	.plot-rank { fill: #7a8398; font-size: 24px; letter-spacing: 0.5px; }
+	.plot-rank { fill: #7a8398; font-size: 24px; letter-spacing: 0.5px; transition: fill 300ms; }
+	/* Street rank is re-ranked from live caps; a plate that just moved shows its direction for a moment. */
+	.plot-rank[data-rank-move="up"] { fill: #4edea3; }
+	.plot-rank[data-rank-move="down"] { fill: #ffb3ad; }
 	.plot-label { fill: #dae2fd; font-size: 30px; letter-spacing: 1px; transition: fill 200ms; }
 	.plot-price { fill: #9aa3b8; font-size: 22px; letter-spacing: 0.5px; }
 	.plot-change { font-size: 22px; font-weight: bold; letter-spacing: 0.5px; }
@@ -66,11 +73,23 @@
 	.gridline { stroke: #2b3550; stroke-width: 2; stroke-dasharray: 4 12; opacity: 0.55; }
 	.gridline-label { fill: #6b7690; font-size: 32px; letter-spacing: 0.5px; opacity: 0.75; }
 
+	/* Roof furniture: one pictogram per trade (DistrictMap::ROOF_FURNITURE_BY_INDUSTRY), in the
+	   sector's window colour so it is legible at the street's scale; condition recolours it the
+	   way it recolours the windows. */
+	.roof-furniture { transition: y 600ms ease-out, color 300ms; opacity: 0.85; }
+	.plot[data-condition="distressed"] .roof-furniture { color: #ffd9a0 !important; }
+	.plot[data-condition="ruin"] .roof-furniture { color: #ffb3ad !important; opacity: 0.3; }
+
 	/* Titan marker. Scoped to .plot so it cannot leak onto the institution beacons — an earlier
 	   version shared one .beacon rule, and a running animation outranks a plain opacity:0, so
 	   every institution pulsed an alarm-coloured dot permanently whether stressed or not. */
 	.plot .beacon { fill: #ffd9a0; animation: beacon-pulse 2.4s ease-in-out infinite; }
 	@keyframes beacon-pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+
+	/* Kerb lights: a pool in the sector colour under each plate — see DistrictMap::KERB_LIGHT_DEPTH. */
+	.kerb-light { pointer-events: none; }
+	.kerb-light[data-dimmed="true"] { opacity: 0.18; transition: opacity 200ms; }
+
 
 	/* --- Institutions --- */
 	.institution { cursor: pointer; }
@@ -92,6 +111,11 @@
 	.institution-readout { font-size: 26px; }
 	.readout-label { fill: #838da3; letter-spacing: 0.5px; }
 	.readout-value { fill: #adc6ff; font-weight: bold; }
+	/* Recent readings under each value, drawn client-side from the ticks seen — see
+	   DistrictMap::INSTITUTION_SPARKLINE_WIDTH. Empty until a second sample lands. */
+	.readout-spark { fill: none; stroke: #56617a; stroke-width: 2; stroke-linejoin: round; opacity: 0.8; }
+	.readout-spark-base { stroke: #2b3550; stroke-width: 1.5; opacity: 0.6; }
+	.institution[data-stressed="true"] .readout-spark { stroke: #ffb3ad; }
 
 	.institution:hover .pediment, .institution:hover .body { fill: #2c3854; }
 	.institution[data-selected="true"] .pediment, .institution[data-selected="true"] .body {
@@ -180,6 +204,8 @@
 
 	@media (prefers-reduced-motion: reduce) {
 		.plot .beacon { animation: none; opacity: 0.75; }
+		.window[data-lit="true"][data-twinkle="true"] { animation: none; }
+		.roof-furniture { transition: none; }
 		.institution[data-stressed="true"] .institution-beacon { animation: none; opacity: 1; }
 		.facade, .plot-windows, .roofline, .institution .pediment, .institution .body, .conduit,
 		#plot-tooltip { transition: none; animation: none; }
@@ -194,6 +220,8 @@
 	data-controller="district"
 	data-district-shares-value="{{ shares|json_encode|e('html_attr') }}"
 	data-district-envelope-value="{{ envelope|json_encode|e('html_attr') }}"
+	data-district-lighting-value="{{ lighting|json_encode|e('html_attr') }}"
+	data-district-condition-value="{{ condition|json_encode|e('html_attr') }}"
 	data-district-events-value="{{ events|json_encode|e('html_attr') }}"
 	data-district-event-badge-window-seconds-value="{{ eventBadgeWindowSeconds }}"
 	data-district-revenue-mix-value="{{ revenueMix|json_encode|e('html_attr') }}"
@@ -324,19 +352,201 @@
 								<rect x="0" y="0" width="{{ viewboxWidth }}" height="{{ rowGroundLine }}"/>
 							</clipPath>
 						{% endfor %}
-						<linearGradient id="water-fade" x1="0" y1="0" x2="0" y2="1">
-							<stop offset="0%" stop-color="#ffffff" stop-opacity="0.42"/>
-							<stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
-						</linearGradient>
-						<mask id="water-mask">
-							<rect x="0" y="{{ waterLine }}" width="{{ viewboxWidth }}" height="{{ viewboxHeight - waterLine }}" fill="url(#water-fade)"/>
-						</mask>
 						<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
 							<stop offset="0%" stop-color="#050b1a"/>
 							<stop offset="55%" stop-color="#0d1526"/>
 							<stop offset="100%" stop-color="#161f36"/>
 						</linearGradient>
-					</defs>
+
+						{# One kerb clip per row: a light pool is a full ellipse centred on the ground
+						   line, and only its lower half belongs on the pavement. #}
+						{% for rowIndex, rowGroundLine in rowGroundLines %}
+							<clipPath id="kerb-band-{{ rowIndex }}">
+								<rect x="0" y="{{ rowGroundLine }}" width="{{ viewboxWidth }}" height="{{ kerbDepth }}"/>
+							</clipPath>
+						{% endfor %}
+
+						{# One kerb-light gradient per sector colour, plus the fallback. #}
+						{% set kerbGlowIds = {} %}
+						{% for sector, colours in sectorPalette %}
+							{% set kerbGlowIds = kerbGlowIds|merge({(sector): loop.index}) %}
+							<radialGradient id="kerb-glow-{{ loop.index }}">
+								<stop offset="0%" stop-color="{{ colours.window }}" stop-opacity="{{ kerbLight.opacity }}"/>
+								<stop offset="100%" stop-color="{{ colours.window }}" stop-opacity="0"/>
+							</radialGradient>
+						{% endfor %}
+						<radialGradient id="kerb-glow-0">
+							<stop offset="0%" stop-color="#adc6ff" stop-opacity="{{ kerbLight.opacity }}"/>
+							<stop offset="100%" stop-color="#adc6ff" stop-opacity="0"/>
+						</radialGradient>
+
+						{# Roof furniture, one symbol per DistrictMap::ROOF_FURNITURE_SYMBOLS, each drawn in a
+						   30×36 box with its base on the bottom edge (DistrictMapTest pins the set). Bold, filled
+						   pictograms: the street renders at ~0.45px per unit, so a box is ~14px wide on screen and
+						   anything finer than a 3-unit stroke vanishes. #}
+						<symbol id="roof-coin" viewBox="0 0 30 36">
+							<circle cx="15" cy="20" r="14" fill="currentColor"/>
+							<text x="15" y="28" text-anchor="middle" font-size="22" font-weight="bold" fill="#0b1120">$</text>
+						</symbol>
+						<symbol id="roof-umbrella" viewBox="0 0 30 36">
+							<path d="M 1 19 A 14 14 0 0 1 29 19 Z" fill="currentColor"/>
+							<path d="M 15 19 V 30 A 4 4 0 0 1 7 30" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/>
+						</symbol>
+						<symbol id="roof-chart" viewBox="0 0 30 36">
+							<rect x="2" y="22" width="7" height="14" fill="currentColor"/>
+							<rect x="11.5" y="13" width="7" height="23" fill="currentColor"/>
+							<rect x="21" y="3" width="7" height="33" fill="currentColor"/>
+						</symbol>
+						<symbol id="roof-derrick" viewBox="0 0 30 36">
+							<path d="M 6 36 L 14 12 L 22 36" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/>
+							<line x1="2" y1="18" x2="28" y2="9" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+							<rect x="24" y="8" width="6" height="9" fill="currentColor"/>
+							<circle cx="4" cy="19" r="3.5" fill="currentColor"/>
+							<rect x="2" y="32" width="26" height="4" fill="currentColor"/>
+						</symbol>
+						<symbol id="roof-flare_stack" viewBox="0 0 30 36">
+							<rect x="10" y="15" width="10" height="21" fill="currentColor"/>
+							<path d="M 15 1 C 8 8, 7 12, 15 15 C 23 12, 22 8, 15 1 Z" fill="currentColor"/>
+							<rect x="7" y="33" width="16" height="3" fill="currentColor"/>
+						</symbol>
+						<symbol id="roof-ingot" viewBox="0 0 30 36">
+							<path d="M 1 36 L 5 27 H 14 L 17 36 Z" fill="currentColor"/>
+							<path d="M 13 36 L 16 27 H 25 L 29 36 Z" fill="currentColor"/>
+							<path d="M 7 26 L 11 17 H 20 L 23 26 Z" fill="currentColor"/>
+						</symbol>
+						<symbol id="roof-factory" viewBox="0 0 30 36">
+							<path d="M 1 36 V 19 L 10 13 V 19 L 19 13 V 19 L 28 13 V 36 Z" fill="currentColor"/>
+							<rect x="22" y="3" width="6" height="12" fill="currentColor"/>
+						</symbol>
+						<symbol id="roof-flask" viewBox="0 0 30 36">
+							<path d="M 10 2 H 20 V 13 L 29 31 A 3 3 0 0 1 26 36 H 4 A 3 3 0 0 1 1 31 L 10 13 Z" fill="currentColor"/>
+						</symbol>
+						<symbol id="roof-bolt" viewBox="0 0 30 36">
+							<polygon points="18,1 4,20 13,20 10,36 26,15 17,15 20,1" fill="currentColor"/>
+						</symbol>
+						<symbol id="roof-drop" viewBox="0 0 30 36">
+							<path d="M 15 2 C 15 2, 3 17, 3 24 A 12 12 0 0 0 27 24 C 27 17, 15 2, 15 2 Z" fill="currentColor"/>
+						</symbol>
+						<symbol id="roof-crane" viewBox="0 0 30 36">
+							<line x1="7" y1="36" x2="7" y2="5" stroke="currentColor" stroke-width="4"/>
+							<line x1="1" y1="5" x2="29" y2="5" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+							<line x1="24" y1="5" x2="24" y2="20" stroke="currentColor" stroke-width="2.5"/>
+							<rect x="20" y="20" width="8" height="6" fill="currentColor"/>
+							<rect x="2" y="31" width="10" height="5" fill="currentColor"/>
+						</symbol>
+						<symbol id="roof-anchor" viewBox="0 0 30 36">
+							<circle cx="15" cy="6" r="4" fill="none" stroke="currentColor" stroke-width="3"/>
+							<line x1="15" y1="10" x2="15" y2="34" stroke="currentColor" stroke-width="4"/>
+							<line x1="7" y1="15" x2="23" y2="15" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+							<path d="M 2 22 A 13 13 0 0 0 28 22" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+						</symbol>
+						<symbol id="roof-truck" viewBox="0 0 30 36">
+							<rect x="12" y="10" width="17" height="19" fill="currentColor"/>
+							<path d="M 1 29 V 18 L 5 13 H 12 V 29 Z" fill="currentColor"/>
+							<circle cx="7" cy="32" r="4" fill="currentColor"/>
+							<circle cx="22" cy="32" r="4" fill="currentColor"/>
+						</symbol>
+						<symbol id="roof-train" viewBox="0 0 30 36">
+							<rect x="2" y="15" width="26" height="15" fill="currentColor"/>
+							<rect x="18" y="6" width="9" height="9" fill="currentColor"/>
+							<rect x="6" y="5" width="5" height="10" fill="currentColor"/>
+							<circle cx="8" cy="32" r="4" fill="currentColor"/>
+							<circle cx="22" cy="32" r="4" fill="currentColor"/>
+						</symbol>
+						<symbol id="roof-bin" viewBox="0 0 30 36">
+							<rect x="11" y="4" width="8" height="5" fill="currentColor"/>
+							<rect x="2" y="9" width="26" height="5" fill="currentColor"/>
+							<path d="M 5 16 H 25 L 22 36 H 8 Z" fill="currentColor"/>
+						</symbol>
+						<symbol id="roof-shield" viewBox="0 0 30 36">
+							<path d="M 15 1 L 28 7 V 18 C 28 27, 22 33, 15 36 C 8 33, 2 27, 2 18 V 7 Z" fill="currentColor"/>
+						</symbol>
+						<symbol id="roof-lock" viewBox="0 0 30 36">
+							<path d="M 7 17 V 11 A 8 8 0 0 1 23 11 V 17" fill="none" stroke="currentColor" stroke-width="4"/>
+							<rect x="2" y="17" width="26" height="19" rx="3" fill="currentColor"/>
+						</symbol>
+						<symbol id="roof-cart" viewBox="0 0 30 36">
+							<path d="M 1 6 H 7 L 11 24 H 26 L 29 11 H 9" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+							<circle cx="13" cy="32" r="3.5" fill="currentColor"/>
+							<circle cx="24" cy="32" r="3.5" fill="currentColor"/>
+						</symbol>
+						<symbol id="roof-bottle" viewBox="0 0 30 36">
+							<rect x="11" y="1" width="8" height="9" fill="currentColor"/>
+							<path d="M 11 10 H 19 L 24 17 V 33 A 3 3 0 0 1 21 36 H 9 A 3 3 0 0 1 6 33 V 17 Z" fill="currentColor"/>
+						</symbol>
+						<symbol id="roof-fork" viewBox="0 0 30 36">
+							<path d="M 4 1 V 11 A 5 5 0 0 0 14 11 V 1 M 9 14 V 36" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/>
+							<path d="M 25 1 C 18 8, 18 16, 25 20 V 36" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/>
+						</symbol>
+						<symbol id="roof-shirt" viewBox="0 0 30 36">
+							<path d="M 1 10 L 10 3 C 12 8, 18 8, 20 3 L 29 10 L 25 17 L 23 15 V 36 H 7 V 15 L 5 17 Z" fill="currentColor"/>
+						</symbol>
+						<symbol id="roof-car" viewBox="0 0 30 36">
+							<path d="M 1 30 V 20 L 7 11 H 23 L 29 20 V 30 Z" fill="currentColor"/>
+							<circle cx="8" cy="31" r="4.5" fill="currentColor"/>
+							<circle cx="22" cy="31" r="4.5" fill="currentColor"/>
+						</symbol>
+						<symbol id="roof-bag" viewBox="0 0 30 36">
+							<path d="M 4 12 H 26 L 29 36 H 1 Z" fill="currentColor"/>
+							<path d="M 10 12 V 8 A 5 5 0 0 1 20 8 V 12" fill="none" stroke="currentColor" stroke-width="3.5"/>
+						</symbol>
+						<symbol id="roof-gem" viewBox="0 0 30 36">
+							<polygon points="15,36 1,15 7,5 23,5 29,15" fill="currentColor"/>
+						</symbol>
+						<symbol id="roof-dice" viewBox="0 0 30 36">
+							<rect x="2" y="6" width="26" height="26" rx="5" fill="currentColor"/>
+							<circle cx="9" cy="13" r="3" fill="#0b1120"/>
+							<circle cx="15" cy="19" r="3" fill="#0b1120"/>
+							<circle cx="21" cy="25" r="3" fill="#0b1120"/>
+						</symbol>
+						<symbol id="roof-megaphone" viewBox="0 0 30 36">
+							<path d="M 1 14 H 9 L 27 3 V 31 L 9 20 H 1 Z" fill="currentColor"/>
+							<rect x="8" y="21" width="6" height="12" fill="currentColor"/>
+						</symbol>
+						<symbol id="roof-cap" viewBox="0 0 30 36">
+							<polygon points="15,4 29,12 15,20 1,12" fill="currentColor"/>
+							<path d="M 7 16 V 25 C 7 30, 23 30, 23 25 V 16" fill="none" stroke="currentColor" stroke-width="4"/>
+							<line x1="29" y1="12" x2="29" y2="24" stroke="currentColor" stroke-width="2.5"/>
+						</symbol>
+						<symbol id="roof-scales" viewBox="0 0 30 36">
+							<line x1="15" y1="3" x2="15" y2="32" stroke="currentColor" stroke-width="3.5"/>
+							<rect x="6" y="32" width="18" height="4" fill="currentColor"/>
+							<line x1="2" y1="9" x2="28" y2="9" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/>
+							<path d="M 1 21 A 6 5 0 0 0 13 21 Z" fill="currentColor"/>
+							<path d="M 17 21 A 6 5 0 0 0 29 21 Z" fill="currentColor"/>
+							<path d="M 7 9 L 1 21 M 7 9 L 13 21 M 23 9 L 17 21 M 23 9 L 29 21" fill="none" stroke="currentColor" stroke-width="1.5"/>
+						</symbol>
+						<symbol id="roof-chip" viewBox="0 0 30 36">
+							<rect x="7" y="10" width="16" height="16" fill="currentColor"/>
+							<path d="M 10 4 V 10 M 15 4 V 10 M 20 4 V 10 M 10 26 V 32 M 15 26 V 32 M 20 26 V 32 M 1 13 H 7 M 1 18 H 7 M 1 23 H 7 M 23 13 H 29 M 23 18 H 29 M 23 23 H 29" fill="none" stroke="currentColor" stroke-width="2.5"/>
+						</symbol>
+						<symbol id="roof-cloud" viewBox="0 0 30 36">
+							<path d="M 8 32 A 7 7 0 0 1 8 18 A 9 9 0 0 1 24 15 A 7 7 0 0 1 24 32 Z" fill="currentColor"/>
+						</symbol>
+						<symbol id="roof-signal" viewBox="0 0 30 36">
+							<line x1="15" y1="36" x2="15" y2="17" stroke="currentColor" stroke-width="4"/>
+							<circle cx="15" cy="17" r="3.5" fill="currentColor"/>
+							<path d="M 7 15 A 10 10 0 0 1 23 15" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/>
+							<path d="M 1 9 A 17 17 0 0 1 29 9" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/>
+						</symbol>
+						<symbol id="roof-cross" viewBox="0 0 30 36">
+							<rect x="10" y="2" width="10" height="32" fill="currentColor"/>
+							<rect x="1" y="13" width="28" height="10" fill="currentColor"/>
+						</symbol>
+						<symbol id="roof-pill" viewBox="0 0 30 36">
+							<rect x="1" y="11" width="28" height="14" rx="7" fill="none" stroke="currentColor" stroke-width="3.5"/>
+							<path d="M 8 11 A 7 7 0 0 0 8 25 H 15 V 11 Z" fill="currentColor"/>
+						</symbol>
+						<symbol id="roof-house" viewBox="0 0 30 36">
+							<polygon points="15,3 29,17 24,17 24,36 6,36 6,17 1,17" fill="currentColor"/>
+							<rect x="12" y="25" width="6" height="11" fill="#0b1120"/>
+						</symbol>
+						<symbol id="roof-blocks" viewBox="0 0 30 36">
+							<rect x="2" y="22" width="12" height="12" fill="currentColor"/>
+							<rect x="16" y="22" width="12" height="12" fill="currentColor"/>
+							<rect x="9" y="8" width="12" height="12" fill="currentColor"/>
+						</symbol>
+						</defs>
 
 					<rect x="0" y="0" width="{{ viewboxWidth }}" height="{{ viewboxHeight }}" fill="url(#sky)"/>
 
@@ -381,7 +591,9 @@
 								{% endfor %}
 								<circle class="institution-beacon" cx="{{ institution.x + institution.width / 2 }}" cy="{{ top }}" r="8"/>
 
-								<text class="institution-label" x="{{ institution.x + institution.width / 2 }}" y="{{ top + institutionBand.height + 28 }}"
+								{% set centreX = institution.x + institution.width / 2 %}
+								{% set structureBottom = top + institutionBand.height %}
+								<text class="institution-label" x="{{ centreX }}" y="{{ structureBottom + institutionBand.labelOffset }}"
 									text-anchor="middle">{{ institution.shortLabel|upper }}</text>
 
 								{# Live readout: the actual macro numbers behind the stress pulse, not just
@@ -390,10 +602,24 @@
 								<text class="institution-readout" data-district-target="institutionReadout" data-institution-readout-for="{{ institution.id }}"
 									text-anchor="middle">{%- for readout in institution.readouts -%}
 										{%- set raw = macroSnapshot[readout.field] ?? 0 -%}
-										<tspan x="{{ institution.x + institution.width / 2 }}"
-											{%- if loop.first %} y="{{ top + institutionBand.height + 58 }}"{% else %} dy="30"{% endif %}
+										<tspan x="{{ centreX }}" y="{{ structureBottom + institutionBand.readoutTopOffset + loop.index0 * institutionBand.readoutPitch }}"
 											><tspan class="readout-label">{{ readout.label }}</tspan> <tspan class="readout-value" data-readout-field="{{ readout.field }}">{% if readout.unit == 'pct' %}{{ (raw * 100)|number_format(2) }}%{% else %}{{ raw|number_format(1) }}{% endif %}</tspan></tspan>
 									{%- endfor -%}</text>
+
+								{# One sparkline strip under each readout — the reading's recent path, drawn by
+								   district_controller.js from the ticks this page has seen. #}
+								{% for readout in institution.readouts %}
+									{% set sparkTop = structureBottom + institutionBand.readoutTopOffset + loop.index0 * institutionBand.readoutPitch + institutionBand.sparklineGap %}
+									{% set sparkLeft = centreX - institutionBand.sparklineWidth / 2 %}
+									<line class="readout-spark-base"
+										x1="{{ sparkLeft }}" y1="{{ sparkTop + institutionBand.sparklineHeight }}"
+										x2="{{ sparkLeft + institutionBand.sparklineWidth }}" y2="{{ sparkTop + institutionBand.sparklineHeight }}"/>
+									<polyline class="readout-spark" data-district-target="readoutSpark"
+										data-spark-field="{{ readout.field }}"
+										data-spark-left="{{ sparkLeft }}" data-spark-top="{{ sparkTop }}"
+										data-spark-width="{{ institutionBand.sparklineWidth }}" data-spark-height="{{ institutionBand.sparklineHeight }}"
+										points=""/>
+								{% endfor %}
 							</g>
 						{% endfor %}
 					</g>
@@ -448,6 +674,7 @@
 										data-mcap="{{ plot.marketCap }}"
 										data-roc="{{ plot.returnOnCapital }}"
 										data-baseline-roc="{{ plot.baselineReturnOnCapital }}"
+										data-return-field="{{ plot.returnField }}"
 										data-lit-share="{{ plot.litShare }}"
 										data-change="{{ plot.changePercent is null ? '' : plot.changePercent }}"
 										data-blurb="{{ plot.blurb|e('html_attr') }}"
@@ -470,14 +697,25 @@
 											<g class="plot-windows" transform="translate({{ plot.x }} {{ plot.y }})">
 												{% for row in 0..(plot.floors - 1) %}
 													{% for col in 0..(cols - 1) %}
+														{% set phase = plot.twinklePhases[row][col] %}
 														<rect class="window" fill="{{ palette.window }}"
 															data-lit="{{ plot.litWindows[row][col] ? 'true' : 'false' }}"
+															data-key="{{ plot.windowKeys[row][col] }}"
+															{%- if phase is not null %} data-twinkle="true" style="animation-duration:{{ window.twinklePeriod }}s;animation-delay:-{{ (phase * window.twinklePeriod)|number_format(2, '.', '') }}s"{% endif %}
 															x="{{ plot.windowInset + col * window.pitch }}" y="{{ firstFloorInset + row * floorHeight }}"
 															width="{{ window.width }}" height="{{ window.height }}"/>
 													{% endfor %}
 												{% endfor %}
 											</g>
 											</g>
+
+											{# Roof furniture by business model, right-anchored clear of the badge —
+											   see App\Data\DistrictMap::ROOF_FURNITURE_EAST_MARGIN. #}
+											{% set furnitureX = plot.x + plot.width - roofFurniture.eastMargin - roofFurniture.width %}
+											<use class="roof-furniture" href="#roof-{{ plot.roofFurniture }}"
+												x="{{ furnitureX }}" y="{{ plot.y - 7 - roofFurniture.height }}"
+												width="{{ roofFurniture.width }}" height="{{ roofFurniture.height }}"
+												style="color: {{ palette.window }}"/>
 
 											{% if plot.systemicImportance == 'titan' and plot.condition != 'ruin' %}
 												<circle class="beacon" cx="{{ plot.x + plot.width / 2 }}" cy="{{ plot.y - 20 }}" r="9"/>
@@ -512,28 +750,28 @@
 						{% endfor %}
 					</g>
 
-					{# Upper row's kerb: dry stone, no water beneath it. Opaque, so a lower-row conduit
-					   drop passes behind it rather than showing through the pavement. #}
-					{% if rowGroundLines|length > 1 %}
-						<rect x="0" y="{{ rowGroundLines[0] }}" width="{{ viewboxWidth }}" height="{{ kerbDepth }}" fill="#0b1120"/>
-						<line x1="0" y1="{{ rowGroundLines[0] }}" x2="{{ viewboxWidth }}" y2="{{ rowGroundLines[0] }}" stroke="#424754" stroke-width="3"/>
-						<line x1="0" y1="{{ rowGroundLines[0] + kerbDepth }}" x2="{{ viewboxWidth }}" y2="{{ rowGroundLines[0] + kerbDepth }}"
+					{# Every row's kerb. Opaque, so a lower-row conduit drop passes behind the upper
+					   kerb rather than showing through the pavement. #}
+					{% for rowGroundLine in rowGroundLines %}
+						<rect x="0" y="{{ rowGroundLine }}" width="{{ viewboxWidth }}" height="{{ kerbDepth }}" fill="#0b1120"/>
+						<line x1="0" y1="{{ rowGroundLine }}" x2="{{ viewboxWidth }}" y2="{{ rowGroundLine }}" stroke="#424754" stroke-width="3"/>
+						<line x1="0" y1="{{ rowGroundLine + kerbDepth }}" x2="{{ viewboxWidth }}" y2="{{ rowGroundLine + kerbDepth }}"
 							stroke="#424754" stroke-width="1.5" opacity="0.35"/>
-					{% endif %}
+					{% endfor %}
 
-					{# Glasswater itself: only the lowest row stands on the water, so only it reflects. #}
-					<rect x="0" y="{{ waterLine }}" width="{{ viewboxWidth }}" height="{{ viewboxHeight - waterLine }}" fill="#070d1c"/>
-
-					<g mask="url(#water-mask)">
-						<use href="#skyline-row-{{ rowGroundLines|length - 1 }}" transform="translate(0 {{ waterLine * 2 }}) scale(1 -1)"/>
+					{# Kerb lights: a pool in the sector colour on the pavement under each plate,
+					   clipped to the kerb band — see App\Data\DistrictMap::KERB_LIGHT_DEPTH. #}
+					<g id="kerb-lights" aria-hidden="true">
+						{% for plot in plots %}
+							<ellipse class="kerb-light" data-district-target="kerbLight" data-light-for="{{ plot.ticker }}"
+								clip-path="url(#kerb-band-{{ plot.row }})"
+								cx="{{ plot.x + plot.width / 2 }}" cy="{{ plot.groundLine }}"
+								rx="{{ plot.width / 2 + 10 }}" ry="{{ kerbLight.depth }}"
+								fill="url(#kerb-glow-{{ kerbGlowIds[plot.sector] ?? 0 }})"/>
+						{% endfor %}
 					</g>
 
-					<rect x="0" y="{{ waterLine }}" width="{{ viewboxWidth }}" height="{{ kerbDepth }}" fill="#0b1120"/>
-					<line x1="0" y1="{{ waterLine }}" x2="{{ viewboxWidth }}" y2="{{ waterLine }}" stroke="#424754" stroke-width="3"/>
-					<line x1="0" y1="{{ waterLine + kerbDepth }}" x2="{{ viewboxWidth }}" y2="{{ waterLine + kerbDepth }}"
-						stroke="#424754" stroke-width="1.5" opacity="0.35"/>
-
-					{# Frontage plates sit on each row's kerb so they are never mirrored.
+					{# Frontage plates sit on each row's kerb.
 					   Three stacked, centred lines rather than two left/right pairs: the narrowest
 					   plot is 100 units, and a price and a change set side by side run to ~218,
 					   so the pairs collided on every base-tier plot. #}

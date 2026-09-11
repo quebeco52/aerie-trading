@@ -29,8 +29,16 @@ class DistrictPlotDTO
         public readonly float $windowInset,
         /** Which windows are lit, indexed [floor][column]; see DistrictMap::WINDOW_LIT_SHARE_AT_BASELINE. @var list<list<bool>> */
         public readonly array $litWindows,
+        /** Each window's lighting priority in [0, 1), indexed [floor][column]; lit when it falls under the lit share. Shipped so a live tick can relight the facade client-side. @var list<list<float>> */
+        public readonly array $windowKeys,
+        /** Flicker phase in [0, 1) for each window that twinkles while lit, null where it burns steady, indexed [floor][column] — see DistrictMap::WINDOW_TWINKLE_SHARE. @var list<list<float|null>> */
+        public readonly array $twinklePhases,
         /** Fraction of windows lit, the figure the lighting was drawn from. */
         public readonly float $litShare,
+        /** Live payload field the lit share is read from on a tick: current_roe for financials, current_roic otherwise. */
+        public readonly string $returnField,
+        /** Rooftop symbol for the tenant's business model — see DistrictMap::ROOF_FURNITURE. */
+        public readonly string $roofFurniture,
         public readonly string $ticker,
         public readonly string $name,
         /** Market-cap position on the street, 1 being the largest tenant. */

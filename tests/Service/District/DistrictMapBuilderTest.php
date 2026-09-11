@@ -103,7 +103,7 @@ class DistrictMapBuilderTest extends TestCase
     {
         $groundLine = 320.0 + DistrictMap::ROW_GAP + DistrictMap::MAX_FACADE_HEIGHT;
 
-        return new DistrictCanvasDTO([$groundLine], [], 320.0, $groundLine + DistrictMap::KERB_DEPTH + DistrictMap::REFLECTION_DEPTH);
+        return new DistrictCanvasDTO([$groundLine], [], 320.0, $groundLine + DistrictMap::KERB_DEPTH + DistrictMap::CANVAS_BOTTOM_MARGIN);
     }
 
     /** Reads "$500B" / "$2T" back into the capitalisation it labels. */
@@ -359,7 +359,7 @@ class DistrictMapBuilderTest extends TestCase
 
         $this->assertEqualsWithDelta($expectedUpper, $canvas->rowGroundLines[0], 1.0e-6);
         $this->assertEqualsWithDelta($expectedLower, $canvas->rowGroundLines[1], 1.0e-6);
-        $this->assertEqualsWithDelta($expectedLower + DistrictMap::KERB_DEPTH + DistrictMap::REFLECTION_DEPTH, $canvas->viewboxHeight, 1.0e-6);
+        $this->assertEqualsWithDelta($expectedLower + DistrictMap::KERB_DEPTH + DistrictMap::CANVAS_BOTTOM_MARGIN, $canvas->viewboxHeight, 1.0e-6);
     }
 
     /** The largest tenant sits exactly one headroom below the ceiling, so its row is given the full envelope. */
@@ -385,8 +385,8 @@ class DistrictMapBuilderTest extends TestCase
 
         foreach ($plots as $plot) {
             $skyTop = $plot->row === 0 ? $canvas->laneBandBottom : $canvas->rowGroundLines[$plot->row - 1] + DistrictMap::KERB_DEPTH;
-            // Flare at y-34 is the highest thing that rides a roofline.
-            $this->assertGreaterThanOrEqual($skyTop, $plot->y - 34, sprintf('%s pokes into the sky above its row', $plot->ticker));
+            // The roof furniture, on the 7-unit roofline, is the highest thing that rides it.
+            $this->assertGreaterThanOrEqual($skyTop, $plot->y - 7 - DistrictMap::ROOF_FURNITURE_HEIGHT, sprintf('%s pokes into the sky above its row', $plot->ticker));
         }
     }
 
@@ -468,9 +468,10 @@ class DistrictMapBuilderTest extends TestCase
 
     public function testWindowLightingIsDeterministicAndMonotoneInTheShare(): void
     {
-        $dim = $this->builder->lightWindows('LAKE', 6, 4, 0.3);
-        $again = $this->builder->lightWindows('LAKE', 6, 4, 0.3);
-        $bright = $this->builder->lightWindows('LAKE', 6, 4, 0.8);
+        $keys = $this->builder->windowKeys('LAKE', 6, 4);
+        $dim = $this->builder->lightWindows($keys, 0.3);
+        $again = $this->builder->lightWindows($this->builder->windowKeys('LAKE', 6, 4), 0.3);
+        $bright = $this->builder->lightWindows($keys, 0.8);
 
         $this->assertSame($dim, $again, 'The same building must light the same windows on every render');
         $this->assertCount(6, $dim);
@@ -488,16 +489,58 @@ class DistrictMapBuilderTest extends TestCase
             }
         }
         $this->assertGreaterThan($litDim, $litBright);
-        $this->assertNotSame($this->builder->lightWindows('SWAN', 6, 4, 0.3), $dim, 'Different buildings light differently');
+        $this->assertNotSame($this->builder->lightWindows($this->builder->windowKeys('SWAN', 6, 4), 0.3), $dim, 'Different buildings light differently');
     }
 
     public function testLitShareTracksTheShareOfWindowsActuallyLitAcrossTheStreet(): void
     {
         // Over many windows the hash scatter converges on the share it was drawn from.
-        $lit = $this->builder->lightWindows('LAKE', 200, 50, 0.6);
+        $lit = $this->builder->lightWindows($this->builder->windowKeys('LAKE', 200, 50), 0.6);
         $count = array_sum(array_map(static fn (array $row) => array_sum(array_map('intval', $row)), $lit));
 
         $this->assertEqualsWithDelta(0.6, $count / 10000, 0.03);
+    }
+
+    /**
+     * The keys ship to the client, which compares them against a live lit share with the same
+     * `<`; both sides must therefore hold the very same rounded figure — see
+     * DistrictMap::WINDOW_KEY_PRECISION.
+     */
+    public function testWindowKeysAreUnitIntervalDrawsRoundedToTheShippedPrecision(): void
+    {
+        foreach ($this->builder->windowKeys('LAKE', 40, 5) as $row) {
+            foreach ($row as $key) {
+                $this->assertGreaterThanOrEqual(0.0, $key);
+                $this->assertLessThan(1.0, $key);
+                $this->assertSame(round($key, DistrictMap::WINDOW_KEY_PRECISION), $key);
+            }
+        }
+    }
+
+    public function testTwinklePhasesPickAStableMinorityIndependentOfTheLighting(): void
+    {
+        $phases = $this->builder->twinklePhases('LAKE', 200, 50);
+        $this->assertSame($phases, $this->builder->twinklePhases('LAKE', 200, 50), 'The same windows must flicker on every render');
+
+        $keys = $this->builder->windowKeys('LAKE', 200, 50);
+        $twinklers = 0;
+        $twinklersLitLate = 0;
+        foreach ($phases as $floor => $row) {
+            foreach ($row as $column => $phase) {
+                if ($phase === null) {
+                    continue;
+                }
+                $twinklers++;
+                $this->assertGreaterThanOrEqual(0.0, $phase);
+                $this->assertLessThan(1.0, $phase);
+                if ($keys[$floor][$column] > DistrictMap::WINDOW_TWINKLE_SHARE) {
+                    $twinklersLitLate++;
+                }
+            }
+        }
+
+        $this->assertEqualsWithDelta(DistrictMap::WINDOW_TWINKLE_SHARE, $twinklers / 10000, 0.02);
+        $this->assertGreaterThan(0, $twinklersLitLate, 'Flicker must not be the same draw as lighting priority, or only the first-lit windows would ever flicker');
     }
 
     public function testPlotsCarryTheirWindowGridAndLighting(): void
@@ -516,6 +559,38 @@ class DistrictMapBuilderTest extends TestCase
         foreach ($plot->litWindows as $row) {
             $this->assertNotContains(false, $row);
         }
+        $this->assertSame($plot->litWindows, $this->builder->lightWindows($plot->windowKeys, $plot->litShare), 'The shipped keys must reproduce the lighting');
+        $this->assertCount($plot->floors, $plot->twinklePhases);
+        $this->assertCount($plot->windowColumns, $plot->twinklePhases[0]);
+        $this->assertSame(DistrictMapBuilder::RETURN_FIELD_FINANCIAL, $plot->returnField, 'A bank lights from ROE on a live tick');
+        $this->assertSame(DistrictMap::ROOF_FURNITURE['commercial_bank'], $plot->roofFurniture);
+        $this->assertSame('coin', $plot->roofFurniture);
+    }
+
+    public function testNonFinancialTenantsLightFromRoicAndDressTheirOwnRoof(): void
+    {
+        $stock = $this->makeStock('STEL');
+        $stock->setIndustry('Steel');
+        $stock->setBaselineRoic('0.10');
+        $stock->setCurrentRoic('0.05');
+        $plot = $this->findPlot('STEL', [$stock]);
+
+        $this->assertSame(DistrictMapBuilder::RETURN_FIELD_OPERATING, $plot->returnField);
+        $this->assertSame(DistrictMap::ROOF_FURNITURE['steel_manufacturing'], $plot->roofFurniture);
+        $this->assertEqualsWithDelta($this->builder->calculateLitShare(0.05, 0.10), $plot->litShare, 1.0e-9);
+    }
+
+    public function testRoofFurnitureIsResolvedByIndustryBeforeBusinessModel(): void
+    {
+        $this->assertSame('derrick', $this->builder->roofFurnitureFor('Oil & Gas E&P', 'commodity'));
+        $this->assertSame('flare_stack', $this->builder->roofFurnitureFor('Oil & Gas Refining & Marketing', 'commodity'));
+        $this->assertSame('coin', $this->builder->roofFurnitureFor('Banks - Regional', 'commercial_bank'), 'An industry with no entry of its own falls back to its model');
+        $this->assertSame(DistrictMap::ROOF_FURNITURE_DEFAULT, $this->builder->roofFurnitureFor('General', 'none'));
+
+        $refiner = $this->makeStock('REFN');
+        $refiner->setIndustry('Oil & Gas Refining & Marketing');
+        $refiner->setBaselineRoic('0.10');
+        $this->assertSame('flare_stack', $this->findPlot('REFN', [$refiner])->roofFurniture);
     }
 
     // --- Sector runs ---

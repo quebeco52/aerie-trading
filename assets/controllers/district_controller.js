@@ -102,6 +102,44 @@ function formatReadoutValue(rawValue, unit) {
     return unit === 'pct' ? (value * 100).toFixed(2) + '%' : value.toFixed(1);
 }
 
+/**
+ * Share of a facade's windows to light for a return against its baseline. Mirrors
+ * App\Service\District\DistrictMapBuilder::calculateLitShare() exactly — floor + (atBaseline −
+ * floor) × ratio, clamped to [floor, 1], a non-positive baseline read as earning it exactly —
+ * with the two figures shipped as the `lighting` value rather than restated here.
+ */
+function litShareFor(returnOnCapital, baselineReturn, lighting) {
+    const ratio = baselineReturn > 0 ? returnOnCapital / baselineReturn : 1;
+    const share = lighting.floor + (lighting.atBaseline - lighting.floor) * ratio;
+    return Math.max(lighting.floor, Math.min(1, share));
+}
+
+/**
+ * A facade's condition from solvency and credit standing. Mirrors
+ * App\Service\District\DistrictMapBuilder::determineCondition(): the rating ladder and the
+ * investment-grade cut both ship as the `condition` value, so no rank is written down here.
+ */
+function conditionFor(isBankrupt, rating, condition) {
+    if (isBankrupt) return 'ruin';
+    const ranks = condition.ratingRanks || {};
+    const rank = ranks[rating] !== undefined ? ranks[rating] : ranks.BBB;
+    return rank < condition.investmentGradeRank ? 'distressed' : 'sound';
+}
+
+/** The `points` of a sparkline for a series, scaled into a box; a flat series runs along its middle. */
+function sparklinePoints(series, left, top, width, height) {
+    if (series.length < 2) return '';
+    const min = Math.min(...series);
+    const max = Math.max(...series);
+    const range = max - min;
+    const stepX = width / (series.length - 1);
+    return series.map((value, i) => {
+        const x = left + i * stepX;
+        const y = range > 0 ? top + height - ((value - min) / range) * height : top + height / 2;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+}
+
 const EVENT_COLORS = {
     primary: '#adc6ff',
     secondary: '#4edea3',
@@ -173,8 +211,8 @@ function nowStamp() {
 export default class extends Controller {
     static targets = [
         'plot', 'label', 'rank', 'kerbPrice', 'kerbChange',
-        'institution', 'conduit', 'institutionReadout', 'svg', 'summaryStress',
-        'flare', 'badge', 'badgeCount',
+        'institution', 'conduit', 'institutionReadout', 'readoutSpark', 'svg', 'summaryStress',
+        'flare', 'badge', 'badgeCount', 'kerbLight',
         'tooltip', 'tooltipTicker', 'tooltipRank', 'tooltipName', 'tooltipMeta',
         'tooltipPrice', 'tooltipChange', 'tooltipCap',
         'empty', 'detail', 'detailTicker', 'detailPlot', 'detailName', 'detailIndustry',
@@ -190,6 +228,10 @@ export default class extends Controller {
 
     static values = {
         shares: Object, envelope: Object, events: Object, revenueMix: Object, institutions: Array,
+        /** Lit-share floor and at-baseline share — DistrictMap::WINDOW_LIT_SHARE_FLOOR / _AT_BASELINE. */
+        lighting: Object,
+        /** Credit rating ladder and the investment-grade cut — CreditRatingAgency::RATING_RANKS, DistrictMap::INVESTMENT_GRADE_RANK. */
+        condition: Object,
         /** Wall-clock seconds one simulated month lasts — App\Service\District\DistrictEventFeed::badgeWindowSeconds(). */
         eventBadgeWindowSeconds: Number,
     };
@@ -203,6 +245,17 @@ export default class extends Controller {
      * nothing else on the street changes on this clock.
      */
     static BADGE_REFRESH_MS = 5000;
+
+    /** How long a rank plate shows the direction it just moved in. */
+    static RANK_MOVE_MS = 1600;
+
+    /**
+     * How often an institution's readings are sampled for its sparklines, and how many samples
+     * each keeps. Macro arrives on every tick; sampling once a second keeps a minute of history
+     * per strip, which is enough to see a reading's direction without the strip becoming noise.
+     */
+    static READOUT_SAMPLE_MS = 1000;
+    static READOUT_HISTORY_LENGTH = 60;
 
     /** Zoom multiplier bounds — 1 is the fit-to-width state (natural container width). */
     static MIN_ZOOM = 1;
@@ -241,13 +294,30 @@ export default class extends Controller {
         this.pendingEvents = [];
         this.frameHandle = null;
 
+        this.rankMoveTimers = {};
+        // Each window's lighting priority, parsed once — a live tick compares ~50 of them per
+        // facade against the new lit share (see relightWindows()).
+        this.windowsByTicker = new Map();
         this.plotTargets.forEach(plot => {
             const ticker = plot.dataset.ticker;
             if (ticker) {
                 this.plotsByTicker.set(ticker, plot);
                 this.previousPrices[ticker] = parseFloat(plot.dataset.price) || 0;
+                this.windowsByTicker.set(ticker, Array.from(plot.querySelectorAll('.window')).map(el => ({
+                    el,
+                    key: parseFloat(el.dataset.key),
+                })));
             }
         });
+
+        this.kerbLightByTicker = new Map();
+        this.kerbLightTargets.forEach(light => this.kerbLightByTicker.set(light.dataset.lightFor, light));
+
+        // Sparkline strips keyed by macro field, and the sampled history behind each.
+        this.sparksByField = new Map();
+        this.readoutSparkTargets.forEach(spark => this.indexBy(this.sparksByField, spark.dataset.sparkField, spark));
+        this.readingHistory = new Map();
+        this.lastReadingSampleAt = 0;
 
         this.conduitTargets.forEach(conduit => {
             this.indexBy(this.conduitsByBuilding, conduit.dataset.conduitBuilding, conduit);
@@ -301,6 +371,7 @@ export default class extends Controller {
     disconnect() {
         document.removeEventListener('market:update', this.onMarketUpdate);
         Object.values(this.tickTimers).forEach(clearTimeout);
+        Object.values(this.rankMoveTimers).forEach(clearTimeout);
         Object.values(this.flareTimers).forEach(clearTimeout);
         Object.values(this.badgeTimers).forEach(clearTimeout);
         clearInterval(this.badgeRefreshHandle);
@@ -457,6 +528,7 @@ export default class extends Controller {
         this.rankTargets.forEach(node => mark(node, sectorByTicker.get(node.dataset.rankFor)));
         this.kerbPriceTargets.forEach(node => mark(node, sectorByTicker.get(node.dataset.priceFor)));
         this.kerbChangeTargets.forEach(node => mark(node, sectorByTicker.get(node.dataset.changeFor)));
+        this.kerbLightTargets.forEach(node => mark(node, sectorByTicker.get(node.dataset.lightFor)));
 
         this.sectorChipTargets.forEach(chip => {
             const active = chip.dataset.sector === sector;
@@ -1055,6 +1127,9 @@ export default class extends Controller {
             const plot = this.plotsByTicker.get(ticker);
             if (plot) this.applyUpdate(plot, update);
         });
+        if (this.pendingStockUpdates.size > 0) {
+            this.rerank();
+        }
         this.pendingStockUpdates.clear();
 
         if (this.pendingMacro) {
@@ -1136,8 +1211,42 @@ export default class extends Controller {
         this.badgesByTicker.forEach((badge, ticker) => this.updateBadge(ticker));
     }
 
+    /**
+     * Re-ranks the street from live caps and rewrites the plates that moved. The server's rank
+     * is the tenant's position in the whole listed universe; on the client only the roster is
+     * known, so this is a ranking among the tenants on the street — the same figures at load,
+     * since the roster is exactly the top of that universe, and only ever off by a company that
+     * overtook one from below the cut, which the next page load corrects.
+     */
+    rerank() {
+        const order = Array.from(this.plotsByTicker.values())
+            .map(plot => ({ plot, cap: parseFloat(plot.dataset.mcap) || 0 }))
+            .sort((a, b) => b.cap - a.cap);
+
+        order.forEach(({ plot }, index) => {
+            const rank = index + 1;
+            const previous = parseInt(plot.dataset.rank, 10);
+            if (rank === previous) return;
+
+            plot.dataset.rank = String(rank);
+            const ticker = plot.dataset.ticker;
+            const plate = plot.querySelector('.plot-rank');
+            if (plate) {
+                plate.textContent = `#${rank}`;
+                plate.setAttribute('data-rank-move', rank < previous ? 'up' : 'down');
+                clearTimeout(this.rankMoveTimers[ticker]);
+                this.rankMoveTimers[ticker] = setTimeout(() => plate.removeAttribute('data-rank-move'), this.constructor.RANK_MOVE_MS);
+            }
+
+            if (this.currentSelectedTicker === ticker) {
+                this.detailRankTarget.innerText = `#${rank}`;
+            }
+        });
+    }
+
     /** Recomputes institution stress from a live macro snapshot and toggles matching conduits. */
     applyStress(macro) {
+        this.sampleReadings(macro);
         let stressedCount = 0;
 
         this.institutionTargets.forEach(institution => {
@@ -1166,6 +1275,37 @@ export default class extends Controller {
         }
     }
 
+    /**
+     * Appends one sample per sparkline field, at most every READOUT_SAMPLE_MS, and redraws the
+     * strips. Only the fields an institution actually prints are kept — the snapshot carries
+     * far more than that.
+     */
+    sampleReadings(macro) {
+        const now = Date.now();
+        if (now - this.lastReadingSampleAt < this.constructor.READOUT_SAMPLE_MS) return;
+        this.lastReadingSampleAt = now;
+
+        this.sparksByField.forEach((sparks, field) => {
+            const value = macro[field];
+            if (typeof value !== 'number' || !Number.isFinite(value)) return;
+
+            const history = this.readingHistory.get(field) || [];
+            history.push(value);
+            if (history.length > this.constructor.READOUT_HISTORY_LENGTH) history.shift();
+            this.readingHistory.set(field, history);
+
+            sparks.forEach(spark => {
+                spark.setAttribute('points', sparklinePoints(
+                    history,
+                    parseFloat(spark.dataset.sparkLeft),
+                    parseFloat(spark.dataset.sparkTop),
+                    parseFloat(spark.dataset.sparkWidth),
+                    parseFloat(spark.dataset.sparkHeight),
+                ));
+            });
+        });
+    }
+
     /** Rewrites an institution's printed values from a live macro snapshot, matched by field name. */
     updateReadout(institutionId, macro) {
         const config = this.institutionsById.get(institutionId);
@@ -1190,17 +1330,49 @@ export default class extends Controller {
         plot.dataset.price = newPrice;
         plot.dataset.mcap = marketCap;
 
-        if (update.is_bankrupt) {
-            plot.dataset.condition = 'ruin';
-        }
-
+        this.applyCondition(plot, update);
+        this.relightWindows(plot, update);
         this.resizeFacade(plot, update.is_bankrupt ? 0 : marketCap);
         this.flashTick(plot, ticker, newPrice);
         this.updateKerbPlate(ticker, newPrice);
 
         if (plot.getAttribute('data-selected') === 'true') {
             this.renderFigures(plot);
+            this.detailRatingTarget.innerText = plot.dataset.rating || '—';
         }
+    }
+
+    /**
+     * Recolours the masonry from a live tick's solvency and rating — the same verdict the server
+     * drew on first paint (see conditionFor()). A downgrade to junk used to wait for a reload.
+     */
+    applyCondition(plot, update) {
+        if (typeof update.credit_rating === 'string' && update.credit_rating !== '') {
+            plot.dataset.rating = update.credit_rating;
+        }
+        plot.dataset.condition = conditionFor(Boolean(update.is_bankrupt), plot.dataset.rating, this.conditionValue || {});
+    }
+
+    /**
+     * Relights a facade from a live tick's return on capital. The tick carries both ROIC and ROE;
+     * which one lights this tenant was decided server-side (data-return-field), and each window's
+     * priority came down with the markup, so this is only the comparison the server made —
+     * see DistrictMapBuilder::lightWindows(). Touches only the windows whose state flips.
+     */
+    relightWindows(plot, update) {
+        const current = parseFloat(update[plot.dataset.returnField]);
+        if (!Number.isFinite(current)) return;
+
+        const baseline = parseFloat(plot.dataset.baselineRoc);
+        const share = litShareFor(current, Number.isFinite(baseline) ? baseline : 0, this.lightingValue || {});
+        plot.dataset.roc = current;
+        if (share === parseFloat(plot.dataset.litShare)) return;
+        plot.dataset.litShare = share;
+
+        (this.windowsByTicker.get(plot.dataset.ticker) || []).forEach(({ el, key }) => {
+            const lit = key < share ? 'true' : 'false';
+            if (el.dataset.lit !== lit) el.dataset.lit = lit;
+        });
     }
 
     /**
@@ -1257,9 +1429,16 @@ export default class extends Controller {
             ));
         });
 
-        // The rank, badge and flare all ride the roofline, so they move with it.
+        // The rank, badge, flare, beacon and roof furniture all ride the roofline, so they move
+        // with it.
         const flare = this.flaresByTicker.get(plot.dataset.ticker);
         if (flare) flare.setAttribute('cy', y - 34);
+
+        const beacon = plot.querySelector('.beacon');
+        if (beacon) beacon.setAttribute('cy', y - 20);
+
+        const furniture = plot.querySelector('.roof-furniture');
+        if (furniture) furniture.setAttribute('y', y - 7 - parseFloat(furniture.getAttribute('height')));
 
         const rank = plot.querySelector('.plot-rank');
         if (rank) rank.setAttribute('y', y - 14);

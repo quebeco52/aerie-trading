@@ -27,6 +27,12 @@ use App\Service\Market\CreditRatingAgency;
  */
 class DistrictMapBuilder
 {
+    // --- Live Payload Fields ---
+    /** Field of a live stock tick carrying return on equity — what lights a financial's windows (StockTracker publishes it). */
+    public const RETURN_FIELD_FINANCIAL = 'current_roe';
+    /** Field of a live stock tick carrying return on invested capital — what lights every other tenant's windows. */
+    public const RETURN_FIELD_OPERATING = 'current_roic';
+
     public function __construct(
         private readonly DistrictConduitResolver $conduitResolver,
     ) {
@@ -154,7 +160,7 @@ class DistrictMapBuilder
             rowGroundLines: $rowGroundLines,
             laneYByInstitution: $laneYByInstitution,
             laneBandBottom: $laneBandBottom,
-            viewboxHeight: $skyTop + DistrictMap::REFLECTION_DEPTH,
+            viewboxHeight: $skyTop + DistrictMap::CANVAS_BOTTOM_MARGIN,
         );
     }
 
@@ -420,7 +426,8 @@ class DistrictMapBuilder
         $groundLine = $canvas->groundLineForRow($slot['row']);
 
         $businessModel = $this->businessModelOf($stock);
-        [$returnOnCapital, $baselineReturn] = Sectors::isFinancial($businessModel)
+        $isFinancial = Sectors::isFinancial($businessModel);
+        [$returnOnCapital, $baselineReturn] = $isFinancial
             ? [(float) $stock->getCurrentRoe() ?: (float) $stock->getBaselineRoe(), (float) $stock->getBaselineRoe()]
             : [(float) $stock->getCurrentRoic() ?: (float) $stock->getBaselineRoic(), (float) $stock->getBaselineRoic()];
 
@@ -428,6 +435,7 @@ class DistrictMapBuilder
         $windowColumns = intdiv($slot['width'] - DistrictMap::WINDOW_WALL_ALLOWANCE, DistrictMap::WINDOW_PITCH);
         $band = $windowColumns * DistrictMap::WINDOW_PITCH - (DistrictMap::WINDOW_PITCH - DistrictMap::WINDOW_WIDTH);
         $litShare = $this->calculateLitShare($returnOnCapital, $baselineReturn);
+        $windowKeys = $this->windowKeys($stock->getTicker(), $floors, $windowColumns);
         $conduits = $this->conduitsOf($stock);
 
         return new DistrictPlotDTO(
@@ -441,8 +449,12 @@ class DistrictMapBuilder
             floors: $floors,
             windowColumns: $windowColumns,
             windowInset: ($slot['width'] - $band) / 2.0,
-            litWindows: $this->lightWindows($stock->getTicker(), $floors, $windowColumns, $litShare),
+            litWindows: $this->lightWindows($windowKeys, $litShare),
+            windowKeys: $windowKeys,
+            twinklePhases: $this->twinklePhases($stock->getTicker(), $floors, $windowColumns),
             litShare: $litShare,
+            returnField: $isFinancial ? self::RETURN_FIELD_FINANCIAL : self::RETURN_FIELD_OPERATING,
+            roofFurniture: $this->roofFurnitureFor($stock->getIndustry() ?? '', $businessModel),
             ticker: $stock->getTicker(),
             name: (string) $stock->getName(),
             rank: $slot['rank'],
@@ -490,27 +502,85 @@ class DistrictMapBuilder
     }
 
     /**
-     * Decides which windows are lit, [floor][column]. Each window draws a stable pseudo-random
-     * priority from a hash of its address, and is lit when that priority falls under the share:
-     * the scatter reads as a building at night rather than a bar filling from the bottom, it is
-     * identical on every render so the street never flickers, and raising the share only ever
-     * adds windows to the ones already lit.
+     * Each window's lighting priority, [floor][column]: a stable pseudo-random draw from a hash
+     * of the window's address, rounded to DistrictMap::WINDOW_KEY_PRECISION so the client can
+     * compare the very same figure against a live lit share. Identical on every render, so the
+     * street never flickers between requests.
      *
-     * @return list<list<bool>>
+     * @return list<list<float>>
      */
-    public function lightWindows(string $ticker, int $floors, int $columns, float $litShare): array
+    public function windowKeys(string $ticker, int $floors, int $columns): array
     {
-        $lit = [];
+        $keys = [];
         for ($floor = 0; $floor < $floors; $floor++) {
             $row = [];
             for ($column = 0; $column < $columns; $column++) {
-                $priority = crc32(sprintf('%s:%d:%d', $ticker, $floor, $column)) / 0xFFFFFFFF;
-                $row[] = $priority < $litShare;
+                $row[] = $this->addressHash(sprintf('%s:%d:%d', $ticker, $floor, $column));
             }
-            $lit[] = $row;
+            $keys[] = $row;
         }
 
-        return $lit;
+        return $keys;
+    }
+
+    /**
+     * Decides which windows are lit, [floor][column]: a window is lit when its priority falls
+     * under the share. The scatter reads as a building at night rather than a bar filling from
+     * the bottom, and raising the share only ever adds windows to the ones already lit.
+     * Mirrored by district_controller.js relightWindows(), which applies the same comparison
+     * to the same keys on a live tick.
+     *
+     * @param  list<list<float>> $windowKeys
+     * @return list<list<bool>>
+     */
+    public function lightWindows(array $windowKeys, float $litShare): array
+    {
+        return array_map(
+            static fn (array $row): array => array_map(static fn (float $key): bool => $key < $litShare, $row),
+            $windowKeys,
+        );
+    }
+
+    /**
+     * Which windows flicker while lit, and where in the cycle each starts, [floor][column]:
+     * null for a window that burns steady. A second hash of the address, salted so it is
+     * independent of the lighting priority — otherwise the flickering windows would always be
+     * the ones lit first. See DistrictMap::WINDOW_TWINKLE_SHARE.
+     *
+     * @return list<list<float|null>>
+     */
+    public function twinklePhases(string $ticker, int $floors, int $columns): array
+    {
+        $phases = [];
+        for ($floor = 0; $floor < $floors; $floor++) {
+            $row = [];
+            for ($column = 0; $column < $columns; $column++) {
+                $draw = $this->addressHash(sprintf('%s:%d:%d:twinkle', $ticker, $floor, $column));
+                $row[] = $draw < DistrictMap::WINDOW_TWINKLE_SHARE
+                    ? round($draw / DistrictMap::WINDOW_TWINKLE_SHARE, DistrictMap::WINDOW_KEY_PRECISION)
+                    : null;
+            }
+            $phases[] = $row;
+        }
+
+        return $phases;
+    }
+
+    /** A stable draw in [0, 1) from a string, rounded to DistrictMap::WINDOW_KEY_PRECISION. */
+    private function addressHash(string $address): float
+    {
+        return round(crc32($address) / 0x100000000, DistrictMap::WINDOW_KEY_PRECISION);
+    }
+
+    /**
+     * The rooftop symbol for a tenant: its industry's, else its business model's, else the
+     * default — see DistrictMap::ROOF_FURNITURE_BY_INDUSTRY.
+     */
+    public function roofFurnitureFor(string $industry, string $businessModel): string
+    {
+        return DistrictMap::ROOF_FURNITURE_BY_INDUSTRY[$industry]
+            ?? DistrictMap::ROOF_FURNITURE[$businessModel]
+            ?? DistrictMap::ROOF_FURNITURE_DEFAULT;
     }
 
     /**

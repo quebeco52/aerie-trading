@@ -37,12 +37,6 @@ final class DistrictCanvasDTO
         return $this->rowGroundLines[$row] ?? $this->rowGroundLines[count($this->rowGroundLines) - 1];
     }
 
-    /** The lowest row is the only one standing on the water, so it is the only one that reflects. */
-    public function waterLine(): float
-    {
-        return $this->rowGroundLines[count($this->rowGroundLines) - 1];
-    }
-
     public function rowCount(): int
     {
         return count($this->rowGroundLines);

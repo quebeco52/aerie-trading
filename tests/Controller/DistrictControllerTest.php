@@ -83,6 +83,36 @@ class DistrictControllerTest extends WebTestCase
         });
     }
 
+    public function testEveryPlotCarriesRoofFurnitureAKerbLightAndKeyedWindows(): void
+    {
+        $client = static::createClient();
+        $crawler = $client->request('GET', '/district/glasswater-row');
+
+        $this->assertResponseIsSuccessful();
+
+        $plots = $crawler->filter('[data-district-target="plot"]');
+        $this->assertGreaterThan(0, $plots->count());
+        $this->assertCount($plots->count(), $crawler->filter('.roof-furniture'), 'Every plot should carry one roof furniture symbol');
+        $this->assertCount($plots->count(), $crawler->filter('[data-district-target="kerbLight"]'), 'Every plot should carry one kerb light');
+
+        $plots->each(function ($node) {
+            $this->assertContains($node->attr('data-return-field'), ['current_roe', 'current_roic']);
+        });
+
+        $windows = $crawler->filter('.window');
+        $this->assertGreaterThan(0, $windows->count());
+        $windows->each(function ($node) {
+            $this->assertIsNumeric($node->attr('data-key'));
+        });
+        $this->assertGreaterThan(0, $crawler->filter('.window[data-twinkle="true"]')->count(), 'Some windows should flicker');
+
+        $this->assertCount(
+            $crawler->filter('[data-district-target="institutionReadout"] .readout-value')->count(),
+            $crawler->filter('[data-district-target="readoutSpark"]'),
+            'Every readout should carry a sparkline strip',
+        );
+    }
+
     public function testEveryPlotRendersAFlareAndABadge(): void
     {
         $client = static::createClient();
